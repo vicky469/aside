@@ -2,7 +2,7 @@
 
 Development notes for `SideNote2`. The main [README.md](./README.md) stays product-level; this file is for setup, internals, and testing.
 
-Release and deployment steps live in [deployment.md](./deployment.md). Beta rollout steps live in [beta-testing.md](./beta-testing.md).
+Release and deployment steps live in [deployment.md](./deployment.md). Beta rollout steps live in [beta-testing.md](./beta-testing.md). QA steps live in [qa.md](./qa.md).
 
 ## Architecture
 

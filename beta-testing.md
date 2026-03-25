@@ -11,6 +11,8 @@
 
 This reduces review risk and catches cross-platform issues before the plugin is listed in Obsidian.
 
+Use [qa.md](./qa.md) for tester setup and the platform-by-platform verification checklist.
+
 ## Current Beta Path
 
 - Current beta repo: `vicky469/SideNote2`
