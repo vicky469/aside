@@ -7,6 +7,7 @@ import { parsePromptDeleteSetting } from "./core/appConfig";
 import { ALL_COMMENTS_NOTE_PATH, buildAllCommentsNoteContent, isAllCommentsNotePath, LEGACY_ALL_COMMENTS_NOTE_PATH } from "./core/allCommentsNote";
 import { pickExactTextMatch, resolveAnchorRange } from "./core/anchorResolver";
 import { buildEditorHighlightRanges } from "./core/editorHighlightRanges";
+import { chooseCommentStateForOpenEditor, shouldDeferManagedCommentPersist } from "./core/commentSyncPolicy";
 import { AggregateCommentIndex } from "./index/AggregateCommentIndex";
 import { ParsedNoteCache } from "./cache/ParsedNoteCache";
 import { getManagedSectionEdit, getManagedSectionLineRange, getManagedSectionStartLine, parseNoteComments, ParsedNoteComments, serializeNoteComments, sortCommentsByPosition } from "./core/noteCommentStorage";
@@ -45,6 +46,7 @@ export default class SideNote2 extends Plugin {
     private aggregateIndexInitializationPromise: Promise<void> | null = null;
     private aggregateCommentIndex = new AggregateCommentIndex();
     private parsedNoteCache = new ParsedNoteCache(20);
+    private readonly pendingCommentPersistTimers: Record<string, number> = {};
     private showResolvedComments = false;
 
     async onload() {
@@ -233,13 +235,27 @@ export default class SideNote2 extends Plugin {
                     await this.commentManager.updateCommentCoordinatesForFile(parsed.mainContent, file.path);
 
                     const syncedComments = this.commentManager.getCommentsForFile(file.path);
+                    this.aggregateCommentIndex.updateFile(file.path, syncedComments.map((comment) => ({ ...comment })));
                     const rewrittenContent = serializeNoteComments(parsed.mainContent, syncedComments);
+
+                    if (shouldDeferManagedCommentPersist({
+                        isEditorFocused: this.isMarkdownEditorFocused(file),
+                        fileContent,
+                        rewrittenContent,
+                    })) {
+                        this.scheduleDeferredCommentPersist(file);
+                        await this.refreshCommentViews();
+                        this.refreshEditorDecorations();
+                        this.scheduleAggregateNoteRefresh();
+                        return;
+                    }
 
                     if (rewrittenContent !== fileContent) {
                         await this.writeCommentsForFile(file);
                         return;
                     }
 
+                    this.clearPendingCommentPersistTimer(file.path);
                     await this.refreshCommentViews();
                     this.refreshEditorDecorations();
                     this.scheduleAggregateNoteRefresh();
@@ -383,6 +399,52 @@ export default class SideNote2 extends Plugin {
         });
 
         return matchedView;
+    }
+
+    private clearPendingCommentPersistTimer(filePath: string) {
+        const timer = this.pendingCommentPersistTimers[filePath];
+        if (timer === undefined) {
+            return;
+        }
+
+        window.clearTimeout(timer);
+        delete this.pendingCommentPersistTimers[filePath];
+    }
+
+    private isMarkdownEditorFocused(file: TFile): boolean {
+        const openView = this.getMarkdownViewForFile(file);
+        if (!openView) {
+            return false;
+        }
+
+        const cm = (openView.editor as { cm?: EditorView } | null)?.cm;
+        if (cm?.hasFocus === true) {
+            return true;
+        }
+
+        return !!document.activeElement && openView.contentEl.contains(document.activeElement);
+    }
+
+    private scheduleDeferredCommentPersist(file: TFile) {
+        this.clearPendingCommentPersistTimer(file.path);
+        this.pendingCommentPersistTimers[file.path] = window.setTimeout(() => {
+            delete this.pendingCommentPersistTimers[file.path];
+            void this.flushDeferredCommentPersist(file.path);
+        }, 750);
+    }
+
+    private async flushDeferredCommentPersist(filePath: string): Promise<void> {
+        const file = this.getMarkdownFileByPath(filePath);
+        if (!file) {
+            return;
+        }
+
+        if (this.isMarkdownEditorFocused(file)) {
+            this.scheduleDeferredCommentPersist(file);
+            return;
+        }
+
+        await this.writeCommentsForFile(file);
     }
 
     private isCommentableFile(file: TFile | null): file is TFile {
@@ -529,6 +591,7 @@ export default class SideNote2 extends Plugin {
     }
 
     private async writeCommentsForFile(file: TFile): Promise<string> {
+        this.clearPendingCommentPersistTimer(file.path);
         const comments = this.commentManager.getCommentsForFile(file.path);
         const openView = this.getMarkdownViewForFile(file);
 
@@ -1182,8 +1245,10 @@ export default class SideNote2 extends Plugin {
                 const parsed = plugin.getParsedNoteComments(filePath, currentNoteText);
                 const searchableText = parsed.mainContent;
                 const decorations: Range<Decoration>[] = [];
-                const storedComments = parsed.comments;
-                plugin.commentManager.replaceCommentsForFile(filePath, storedComments);
+                const storedComments = chooseCommentStateForOpenEditor(
+                    plugin.commentManager.getCommentsForFile(filePath),
+                    parsed.comments,
+                );
                 const draftComment = plugin.getDraftForFile(filePath);
                 const showResolved = plugin.shouldShowResolvedComments();
                 const ranges = buildEditorHighlightRanges(
