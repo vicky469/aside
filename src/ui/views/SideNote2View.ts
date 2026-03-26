@@ -5,7 +5,7 @@ import type { DraftComment } from "../../domain/drafts";
 import { sortCommentsByPosition } from "../../core/noteCommentStorage";
 import type SideNote2 from "../../main";
 import { copyTextToClipboard } from "../copyTextToClipboard";
-import { continueMarkdownList, type TextEditResult } from "../editor/commentEditorFormatting";
+import type { TextEditResult } from "../editor/commentEditorFormatting";
 import { findOpenWikiLinkQuery, replaceOpenWikiLinkQuery } from "../editor/commentEditorLinks";
 import { findOpenTagQuery, replaceOpenTagQuery } from "../editor/commentEditorTags";
 import ConfirmDeleteModal from "../modals/ConfirmDeleteModal";
@@ -759,20 +759,6 @@ export default class SideNote2View extends ItemView {
                     return;
                 }
             }
-
-            if (!(event.metaKey || event.ctrlKey) && !event.altKey && event.key === "Enter" && !event.shiftKey) {
-                const listEdit = continueMarkdownList(
-                    textarea.value,
-                    textarea.selectionStart,
-                    textarea.selectionEnd,
-                );
-                if (listEdit) {
-                    consumeShortcut();
-                    this.applyDraftEditorEdit(comment.id, textarea, listEdit);
-                }
-                return;
-            }
-
             if (event.key === "Escape") {
                 event.preventDefault();
                 void this.plugin.cancelDraft(comment.id);
