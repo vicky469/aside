@@ -1,6 +1,6 @@
 {
 	"name": "side-note2",
-	"version": "1.0.4",
+	"version": "1.0.5",
 	"description": "Side comments for both humans and agents.",
 	"main": "main.js",
 	"bin": {
@@ -11,10 +11,9 @@
 		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
 		"comment:update": "node bin/sidenote2.mjs comment:update",
 		"skill:install": "node bin/sidenote2.mjs install-skill",
-		"skill:link": "node bin/sidenote2.mjs link-skill",
 		"test": "rm -rf .test-dist && tsc -p tsconfig.test.json && find .test-dist/tests -type f -name '*.test.js' -exec node --test {} +",
 		"release:check": "npm run test && npm run build",
-		"version": "node version-bump.mjs && git add manifest.json versions.json"
+		"version": "node version-bump.mjs && git add manifest.json versions.json README-beta-release.md README-qa.md"
 	},
 	"keywords": [],
 	"author": "vicky",

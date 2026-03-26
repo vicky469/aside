@@ -59,29 +59,3 @@ test("install-skill replaces an existing installed skill directory", async () =>
     const sourceSkill = await readFile(sourceSkillPath, "utf8");
     assert.equal(installedSkill, sourceSkill);
 });
-
-test("link-skill symlinks the canonical repo skill into the target Codex skills directory", async () => {
-    const tempDir = await mkdtemp(path.join(tmpdir(), "sidenote2-skill-link-"));
-    const skillsRoot = path.join(tempDir, "skills");
-    const cliPath = path.resolve(process.cwd(), "bin/sidenote2.mjs");
-    const sourceSkillDir = path.resolve(process.cwd(), "skills/side-note2-note-comments");
-
-    const { stdout } = await execFile("node", [
-        cliPath,
-        "link-skill",
-        "--dest",
-        skillsRoot,
-    ], {
-        cwd: process.cwd(),
-    });
-
-    assert.match(stdout, /Linked skill side-note2-note-comments/);
-    assert.match(stdout, /Restart Codex to pick up new skills/);
-
-    const installedSkillPath = path.join(skillsRoot, "side-note2-note-comments", "SKILL.md");
-    const installedSkill = await readFile(installedSkillPath, "utf8");
-    const sourceSkill = await readFile(path.join(sourceSkillDir, "SKILL.md"), "utf8");
-    assert.equal(installedSkill, sourceSkill);
-    const resolvedInstalledSkillPath = await import("node:fs/promises").then(({ realpath }) => realpath(installedSkillPath));
-    assert.equal(resolvedInstalledSkillPath, path.join(sourceSkillDir, "SKILL.md"));
-});

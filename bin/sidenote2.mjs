@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import * as esbuild from "esbuild";
-import { access, copyFile, lstat, mkdir, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { access, copyFile, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -21,7 +21,6 @@ function printMainUsage(stream = process.stderr) {
             "Commands:",
             "  comment:update  Update one stored SideNote2 comment body in a note",
             "  install-skill   Copy the SideNote2 Codex skill into the Codex skills directory",
-            "  link-skill      Symlink the SideNote2 Codex skill into the Codex skills directory",
             "",
             "Run `sidenote2 <command> --help` for command-specific usage.",
         ].join("\n") + "\n",
@@ -270,44 +269,6 @@ async function runInstallSkill(argv, streamOut, streamErr) {
     return 0;
 }
 
-async function runLinkSkill(argv, streamOut, streamErr) {
-    let options;
-    try {
-        options = parseSkillArgs(argv);
-    } catch (error) {
-        streamErr.write(`${error instanceof Error ? error.message : String(error)}\n`);
-        printSkillUsage("link-skill", streamErr);
-        return 1;
-    }
-
-    if (options === null) {
-        printSkillUsage("link-skill", streamOut);
-        return 0;
-    }
-
-    const { sourceDir } = await getSkillDirectories();
-
-    const destinationRoot = options.destRoot;
-    const destinationDir = path.join(destinationRoot, SKILL_NAME);
-    const exists = await pathExists(destinationDir);
-    if (exists) {
-        const stat = await lstat(destinationDir);
-        if (stat.isSymbolicLink()) {
-            await rm(destinationDir, { recursive: true, force: true });
-        } else {
-            streamErr.write(`Destination already exists and is not a symlink: ${destinationDir}\n`);
-            streamErr.write("Use install-skill for a regular user install, or remove it manually before linking the developer skill.\n");
-            return 1;
-        }
-    }
-
-    await mkdir(destinationRoot, { recursive: true });
-    await symlink(sourceDir, destinationDir, "dir");
-    streamOut.write(`Linked skill ${SKILL_NAME} to ${destinationDir}\n`);
-    streamOut.write("Restart Codex to pick up new skills.\n");
-    return 0;
-}
-
 export async function runCli(argv, io = { stdout: process.stdout, stderr: process.stderr }) {
     const [command, ...rest] = argv;
     switch (command) {
@@ -315,8 +276,6 @@ export async function runCli(argv, io = { stdout: process.stdout, stderr: proces
             return runCommentUpdate(rest, io.stdout, io.stderr);
         case "install-skill":
             return runInstallSkill(rest, io.stdout, io.stderr);
-        case "link-skill":
-            return runLinkSkill(rest, io.stdout, io.stderr);
         case "--help":
         case "-h":
         case undefined:

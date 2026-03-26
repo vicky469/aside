@@ -15,7 +15,7 @@ Use this guide for:
 - Plugins are installed per vault, not globally.
 - Each tester should repeat these steps in their own vault on their own device.
 - Current beta repo: `vicky469/SideNote2`
-- Current beta release line: `1.0.4` or newer
+- Current beta release line: `1.0.5` or newer
 
 ## Prerequisites
 
