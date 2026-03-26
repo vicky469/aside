@@ -16,7 +16,7 @@ Use [README-qa.md](./README-qa.md) for tester setup and the platform-by-platform
 ## Current Beta Track
 
 - Current beta repo: `vicky469/SideNote2`
-- Current beta tag: `1.0.9`
+- Current beta tag: `1.0.10`
 - Beta install source: published GitHub releases
 
 BRAT does not install from a draft release. The GitHub release must be published.
@@ -37,7 +37,7 @@ Use [README-release.md](./README-release.md) for the shared release mechanics. T
 6. Share the repo path `vicky469/SideNote2` with testers.
 7. Ask testers to install through BRAT.
 8. Collect bug reports and platform feedback.
-9. Ship fixes as new patch releases, for example `1.0.9`, `1.0.10`, and so on.
+9. Ship fixes as new patch releases, for example `1.0.10`, `1.0.11`, and so on.
 10. After the beta is stable, publish the final release and submit the plugin to the community directory.
 
 ## What Testers Should Verify
