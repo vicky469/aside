@@ -1,7 +1,11 @@
 import * as assert from "node:assert/strict";
 import test from "node:test";
-import type { Comment } from "../src/commentManager";
-import { chooseCommentStateForOpenEditor, shouldDeferManagedCommentPersist } from "../src/core/commentSyncPolicy";
+import { CommentManager, type Comment } from "../src/commentManager";
+import {
+    chooseCommentStateForOpenEditor,
+    shouldDeferManagedCommentPersist,
+    syncLoadedCommentsForCurrentNote,
+} from "../src/core/commentSyncPolicy";
 
 function createComment(overrides: Partial<Comment> = {}): Comment {
     return {
@@ -57,4 +61,44 @@ test("fall back to parsed comments when no live in-memory comments exist yet", (
     const chosen = chooseCommentStateForOpenEditor([], parsedComments);
 
     assert.deepEqual(chosen, parsedComments);
+});
+
+test("syncLoadedCommentsForCurrentNote re-resolves stale parsed coordinates before returning them", async () => {
+    const manager = new CommentManager([]);
+    let indexedFilePath = "";
+    let indexedComments: Comment[] = [];
+
+    const syncedComments = await syncLoadedCommentsForCurrentNote(
+        "note.md",
+        "preamble\nAlpha target omega\n",
+        [createComment({
+            startLine: 0,
+            startChar: 6,
+            endLine: 0,
+            endChar: 12,
+            selectedText: "target",
+            selectedTextHash: "hash-target",
+        })],
+        manager,
+        {
+            updateFile(filePath, comments) {
+                indexedFilePath = filePath;
+                indexedComments = comments.map((comment) => ({ ...comment }));
+            },
+        },
+    );
+
+    assert.equal(syncedComments.length, 1);
+    assert.equal(syncedComments[0].startLine, 1);
+    assert.equal(syncedComments[0].startChar, 6);
+    assert.equal(syncedComments[0].endLine, 1);
+    assert.equal(syncedComments[0].endChar, 12);
+
+    const managerComments = manager.getCommentsForFile("note.md");
+    assert.equal(managerComments.length, 1);
+    assert.equal(managerComments[0].startLine, 1);
+
+    assert.equal(indexedFilePath, "note.md");
+    assert.equal(indexedComments.length, 1);
+    assert.equal(indexedComments[0].startLine, 1);
 });

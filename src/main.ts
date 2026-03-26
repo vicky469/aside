@@ -7,7 +7,7 @@ import { parsePromptDeleteSetting } from "./core/appConfig";
 import { ALL_COMMENTS_NOTE_PATH, buildAllCommentsNoteContent, isAllCommentsNotePath, LEGACY_ALL_COMMENTS_NOTE_PATH } from "./core/allCommentsNote";
 import { pickExactTextMatch, resolveAnchorRange } from "./core/anchorResolver";
 import { buildEditorHighlightRanges } from "./core/editorHighlightRanges";
-import { chooseCommentStateForOpenEditor, shouldDeferManagedCommentPersist } from "./core/commentSyncPolicy";
+import { chooseCommentStateForOpenEditor, shouldDeferManagedCommentPersist, syncLoadedCommentsForCurrentNote } from "./core/commentSyncPolicy";
 import { AggregateCommentIndex } from "./index/AggregateCommentIndex";
 import { ParsedNoteCache } from "./cache/ParsedNoteCache";
 import { getManagedSectionEdit, getManagedSectionLineRange, getManagedSectionStartLine, parseNoteComments, ParsedNoteComments, serializeNoteComments, sortCommentsByPosition } from "./core/noteCommentStorage";
@@ -232,10 +232,7 @@ export default class SideNote2 extends Plugin {
                 try {
                     const fileContent = await this.getCurrentNoteContent(file);
                     const parsed = await this.syncFileCommentsFromContent(file, fileContent);
-                    await this.commentManager.updateCommentCoordinatesForFile(parsed.mainContent, file.path);
-
-                    const syncedComments = this.commentManager.getCommentsForFile(file.path);
-                    this.aggregateCommentIndex.updateFile(file.path, syncedComments.map((comment) => ({ ...comment })));
+                    const syncedComments = parsed.comments;
                     const rewrittenContent = serializeNoteComments(parsed.mainContent, syncedComments);
 
                     if (shouldDeferManagedCommentPersist({
@@ -538,11 +535,16 @@ export default class SideNote2 extends Plugin {
 
     private async syncFileCommentsFromContent(file: TFile, noteContent: string): Promise<{ mainContent: string; comments: Comment[] }> {
         const parsed = await this.parseAndNormalizeFileComments(file.path, noteContent);
-        this.commentManager.replaceCommentsForFile(file.path, parsed.comments.map((comment) => ({ ...comment })));
-        this.aggregateCommentIndex.updateFile(file.path, parsed.comments);
+        const syncedComments = await syncLoadedCommentsForCurrentNote(
+            file.path,
+            parsed.mainContent,
+            parsed.comments,
+            this.commentManager,
+            this.aggregateCommentIndex,
+        );
         return {
             mainContent: parsed.mainContent,
-            comments: parsed.comments.map((comment) => ({ ...comment })),
+            comments: syncedComments,
         };
     }
 
