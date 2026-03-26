@@ -31,25 +31,15 @@ function syncBetaDocs(version) {
 	const nextBetaReleaseContent = replaceRequired(
 		replaceRequired(
 			betaReleaseContent,
-			/- Current release line: `[^`]+` or newer/,
-			`- Current release line: \`${version}\` or newer`,
-			`${betaReleasePath} current release line`,
+			/- Current beta tag: `[^`]+`/,
+			`- Current beta tag: \`${version}\``,
+			`${betaReleasePath} current beta tag`,
 		),
 		/Ship fixes as new patch releases, for example `[^`]+`, `[^`]+`, and so on\./,
 		`Ship fixes as new patch releases, for example \`${version}\`, \`${nextPatchVersion}\`, and so on.`,
 		`${betaReleasePath} patch example line`,
 	);
 	writeFileSync(betaReleasePath, nextBetaReleaseContent);
-
-	const qaPath = "README-qa.md";
-	const qaContent = readFileSync(qaPath, "utf8");
-	const nextQaContent = replaceRequired(
-		qaContent,
-		/- Current beta release line: `[^`]+` or newer/,
-		`- Current beta release line: \`${version}\` or newer`,
-		`${qaPath} current beta release line`,
-	);
-	writeFileSync(qaPath, nextQaContent);
 }
 
 const manifest = JSON.parse(readFileSync("manifest.json", "utf8"));

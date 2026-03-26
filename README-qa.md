@@ -12,10 +12,11 @@ Use this guide for:
 ## Scope
 
 - Beta installs should use the published GitHub beta release, not the dev symlink setup.
+- Optional Codex skill installs should use the published GitHub repo and beta tag, not a local repo checkout.
 - Plugins are installed per vault, not globally.
 - Each tester should repeat these steps in their own vault on their own device.
 - Current beta repo: `vicky469/SideNote2`
-- Current beta release line: `1.0.5` or newer
+- Current beta tag: see [README-beta-release.md](./README-beta-release.md)
 
 ## Prerequisites
 
@@ -91,7 +92,14 @@ obsidian://brat?plugin=vicky469/SideNote2
 12. Reopen the comment.
 13. Delete a test comment.
 14. Confirm `SideNote2 index.md` updates.
-15. Optional Codex check: install the `sidenote2` CLI and run `sidenote2 install-skill`.
+15. Optional desktop Codex check: install the SideNote2 skill from GitHub instead of from a local checkout. On macOS or Ubuntu, for example:
+
+```bash
+python ~/.codex/skills/.system/skill-installer/scripts/install-skill-from-github.py \
+  --url https://github.com/vicky469/SideNote2/tree/<current-beta-tag>/skills/side-note2-note-comments
+```
+
+Use the current beta tag from [README-beta-release.md](./README-beta-release.md).
 16. Restart Codex and confirm it can pick up the SideNote2 skill.
 17. Ask Codex to update the side comment for the selected text by note path, then confirm the note file updates correctly.
 18. Close and reopen Obsidian, or reopen the vault.

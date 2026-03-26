@@ -16,7 +16,7 @@ Use [README-qa.md](./README-qa.md) for tester setup and the platform-by-platform
 ## Current Beta Track
 
 - Current beta repo: `vicky469/SideNote2`
-- Current release line: `1.0.5` or newer
+- Current beta tag: `1.0.5`
 - Beta install source: published GitHub releases
 
 BRAT does not install from a draft release. The GitHub release must be published.
@@ -49,7 +49,7 @@ During this beta phase, make sure the tester checklist covers:
 - the core side comment workflow,
 - `[[wikilinks]]` inside side comments,
 - `SideNote2 index.md` updates,
-- the optional Codex CLI skill install and prompt-driven side comment update flow,
+- the optional Codex GitHub skill install and prompt-driven side comment update flow,
 - reload and persistence behavior.
 
 ## Updating During Beta
