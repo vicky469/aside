@@ -364,8 +364,6 @@
 
 .sidenote2-comment-draft.is-edit .sidenote2-inline-textarea {
     min-height: 0;
-    overflow-y: hidden;
-    resize: none;
 }
 
 .sidenote2-inline-textarea:focus {

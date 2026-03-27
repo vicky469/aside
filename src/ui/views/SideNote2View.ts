@@ -66,6 +66,18 @@ function getSidebarComments(
         }) as Array<Comment | DraftComment>;
 }
 
+function estimateDraftTextareaRows(commentText: string, isEditMode: boolean): number {
+    const minRows = isEditMode ? 6 : 4;
+    const maxRows = isEditMode ? 18 : 10;
+    const approximateCharsPerRow = 48;
+    const lines = commentText.split("\n");
+    const estimatedRows = lines.reduce((total, line) => (
+        total + Math.max(1, Math.ceil(Math.max(line.length, 1) / approximateCharsPerRow))
+    ), 0);
+
+    return Math.min(maxRows, Math.max(minRows, estimatedRows));
+}
+
 export default class SideNote2View extends ItemView {
     private file: TFile | null = null;
     private plugin: SideNote2;
@@ -415,20 +427,12 @@ export default class SideNote2View extends ItemView {
         edit: TextEditResult,
     ): void {
         textarea.value = edit.value;
-        this.syncDraftTextareaHeight(textarea);
+        textarea.rows = estimateDraftTextareaRows(
+            edit.value,
+            textarea.closest(".sidenote2-comment-draft")?.classList.contains("is-edit") ?? false,
+        );
         textarea.setSelectionRange(edit.selectionStart, edit.selectionEnd);
         this.plugin.updateDraftCommentText(commentId, edit.value);
-    }
-
-    private syncDraftTextareaHeight(textarea: HTMLTextAreaElement): void {
-        const isEditDraft = textarea.closest(".sidenote2-comment-draft")?.classList.contains("is-edit");
-        if (!isEditDraft) {
-            textarea.style.height = "";
-            return;
-        }
-
-        textarea.style.height = "auto";
-        textarea.style.height = `${Math.max(textarea.scrollHeight, 72)}px`;
     }
 
     private openDraftLinkSuggest(
@@ -892,7 +896,7 @@ export default class SideNote2View extends ItemView {
         });
         textarea.value = comment.comment;
         textarea.setAttribute("placeholder", "Write a side note. Type [[ for links or # for tags.");
-        this.syncDraftTextareaHeight(textarea);
+        textarea.rows = estimateDraftTextareaRows(comment.comment, comment.mode === "edit");
 
         const actionRow = editorWrap.createDiv("sidenote2-inline-editor-actions");
         const cancelButton = actionRow.createEl("button", {
@@ -918,7 +922,7 @@ export default class SideNote2View extends ItemView {
         textarea.addEventListener("input", (event) => {
             const target = event.target as HTMLTextAreaElement;
             this.plugin.updateDraftCommentText(comment.id, target.value);
-            this.syncDraftTextareaHeight(target);
+            target.rows = estimateDraftTextareaRows(target.value, comment.mode === "edit");
 
             if (!(event instanceof InputEvent) || event.inputType !== "insertText" || !event.data) {
                 return;
