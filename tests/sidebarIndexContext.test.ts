@@ -12,10 +12,18 @@ interface MockDraftComment {
     filePath: string;
 }
 
+interface MockComment {
+    id: string;
+    filePath: string;
+    anchorKind?: "selection" | "page";
+}
+
 class MockPlugin {
     public activeMarkdownFile: MockFile | null = { path: "last-note.md", extension: "md" };
     public draftComment: MockDraftComment | null = null;
     public draftHostFilePath: string | null = null;
+    public commentManagerComments: MockComment[] = [];
+    public aggregateComments: MockComment[] = [];
 
     getSidebarTargetFileOld(activeFile: MockFile | null): MockFile | null {
         if (activeFile && activeFile.extension === "md" && activeFile.path !== ALL_COMMENTS_NOTE_PATH) {
@@ -62,6 +70,20 @@ class MockPlugin {
         return this.draftComment && this.draftHostFilePath === filePath
             ? this.draftComment
             : null;
+    }
+
+    getKnownCommentById(commentId: string): MockComment | null {
+        return this.commentManagerComments.find((comment) => comment.id === commentId)
+            ?? this.aggregateComments.find((comment) => comment.id === commentId)
+            ?? null;
+    }
+
+    getDeleteTargetOld(commentId: string): MockComment | null {
+        return this.commentManagerComments.find((comment) => comment.id === commentId) ?? null;
+    }
+
+    getDeleteTargetFixed(commentId: string): MockComment | null {
+        return this.getKnownCommentById(commentId);
     }
 }
 
@@ -110,4 +132,20 @@ test("draft can stay tied to the source file while rendering in SideNote2 index"
         filePath: "Folder/Note.md",
     });
     assert.equal(plugin.getDraftForView("Folder/Note.md"), null);
+});
+
+test("fixed index actions can target a page note that only exists in the aggregate index", () => {
+    const plugin = new MockPlugin();
+    plugin.aggregateComments = [{
+        id: "page-note-1",
+        filePath: "Folder/Note.md",
+        anchorKind: "page",
+    }];
+
+    assert.equal(plugin.getDeleteTargetOld("page-note-1"), null);
+    assert.deepEqual(plugin.getDeleteTargetFixed("page-note-1"), {
+        id: "page-note-1",
+        filePath: "Folder/Note.md",
+        anchorKind: "page",
+    });
 });

@@ -1109,7 +1109,7 @@ export default class SideNote2 extends Plugin {
     async editComment(commentId: string, newCommentText: string): Promise<boolean> {
         debugCount("editComment");
         debugLog("editComment", { id: commentId, length: newCommentText.length });
-        const existingComment = this.commentManager.getCommentById(commentId);
+        const existingComment = this.getKnownCommentById(commentId);
         const file = existingComment ? this.getMarkdownFileByPath(existingComment.filePath) : null;
         if (!existingComment || !file) {
             new Notice("Unable to find that side note.");
@@ -1117,6 +1117,11 @@ export default class SideNote2 extends Plugin {
         }
 
         await this.loadCommentsForFile(file);
+        const latestComment = this.commentManager.getCommentById(commentId);
+        if (!latestComment) {
+            new Notice("Unable to find that side note.");
+            return false;
+        }
         this.commentManager.editComment(commentId, newCommentText);
         await this.persistCommentsForFile(file);
         return true;
@@ -1125,7 +1130,7 @@ export default class SideNote2 extends Plugin {
     async deleteComment(commentId: string) {
         debugCount("deleteComment");
         debugLog("deleteComment", { id: commentId });
-        const existingComment = this.commentManager.getCommentById(commentId);
+        const existingComment = this.getKnownCommentById(commentId);
         const file = existingComment ? this.getMarkdownFileByPath(existingComment.filePath) : null;
         if (!existingComment || !file) {
             new Notice("Unable to find that side note.");
@@ -1133,6 +1138,11 @@ export default class SideNote2 extends Plugin {
         }
 
         await this.loadCommentsForFile(file);
+        const latestComment = this.commentManager.getCommentById(commentId);
+        if (!latestComment) {
+            new Notice("Unable to find that side note.");
+            return;
+        }
         this.commentManager.deleteComment(commentId);
         await this.persistCommentsForFile(file);
     }
@@ -1140,7 +1150,7 @@ export default class SideNote2 extends Plugin {
     async resolveComment(commentId: string) {
         debugCount("resolveComment");
         debugLog("resolveComment", { id: commentId });
-        const existingComment = this.commentManager.getCommentById(commentId);
+        const existingComment = this.getKnownCommentById(commentId);
         const file = existingComment ? this.getMarkdownFileByPath(existingComment.filePath) : null;
         if (!existingComment || !file) {
             new Notice("Unable to find that side note.");
@@ -1148,6 +1158,11 @@ export default class SideNote2 extends Plugin {
         }
 
         await this.loadCommentsForFile(file);
+        const latestComment = this.commentManager.getCommentById(commentId);
+        if (!latestComment) {
+            new Notice("Unable to find that side note.");
+            return;
+        }
         this.commentManager.resolveComment(commentId);
         await this.persistCommentsForFile(file);
     }
@@ -1155,7 +1170,7 @@ export default class SideNote2 extends Plugin {
     async unresolveComment(commentId: string) {
         debugCount("unresolveComment");
         debugLog("unresolveComment", { id: commentId });
-        const existingComment = this.commentManager.getCommentById(commentId);
+        const existingComment = this.getKnownCommentById(commentId);
         const file = existingComment ? this.getMarkdownFileByPath(existingComment.filePath) : null;
         if (!existingComment || !file) {
             new Notice("Unable to find that side note.");
@@ -1163,6 +1178,11 @@ export default class SideNote2 extends Plugin {
         }
 
         await this.loadCommentsForFile(file);
+        const latestComment = this.commentManager.getCommentById(commentId);
+        if (!latestComment) {
+            new Notice("Unable to find that side note.");
+            return;
+        }
         this.commentManager.unresolveComment(commentId);
         await this.persistCommentsForFile(file);
     }
