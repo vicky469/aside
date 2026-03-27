@@ -1,8 +1,9 @@
-import { ItemView, MarkdownRenderer, Notice, TFile, WorkspaceLeaf, setIcon, type ViewStateResult } from "obsidian";
+import { ItemView, MarkdownRenderer, MarkdownView, TFile, WorkspaceLeaf, setIcon, type ViewStateResult } from "obsidian";
 import type { Comment } from "../../commentManager";
+import { isAllCommentsNotePath } from "../../core/allCommentsNote";
+import { isOrphanedComment, isPageComment } from "../../core/commentAnchors";
 import { extractTagsFromText } from "../../core/commentTags";
 import type { DraftComment } from "../../domain/drafts";
-import { sortCommentsByPosition } from "../../core/noteCommentStorage";
 import type SideNote2 from "../../main";
 import { copyTextToClipboard } from "../copyTextToClipboard";
 import type { TextEditResult } from "../editor/commentEditorFormatting";
@@ -13,22 +14,10 @@ import SideNoteLinkSuggestModal from "../modals/SideNoteLinkSuggestModal";
 import SideNoteTagSuggestModal from "../modals/SideNoteTagSuggestModal";
 import { SIDE_NOTE2_ICON_ID } from "../sideNote2Icon";
 import { decideEditDismissal } from "./editDismissal";
+import { shouldActivateSidebarComment } from "./commentPointerAction";
+import { buildSidebarSections, formatSidebarCommentMeta, type SidebarSectionKey } from "./sidebarCommentSections";
+import { getSelectedSidebarClipboardText } from "./sidebarClipboardSelection";
 import type { CustomViewState } from "./viewState";
-
-function formatCommentTimestamp(timestamp: number): string {
-    return new Date(timestamp).toLocaleTimeString([], {
-        hour: "numeric",
-        minute: "2-digit",
-    });
-}
-
-function formatCommentMeta(comment: Comment): string {
-    const segments = [formatCommentTimestamp(comment.timestamp)];
-    if (comment.resolved) {
-        segments.push("resolved");
-    }
-    return segments.join(" · ");
-}
 
 function isDraftComment(comment: Comment | DraftComment): comment is DraftComment {
     return "mode" in comment;
@@ -61,7 +50,20 @@ function getSidebarComments(
         ? visibleComments.concat(draftComment)
         : visibleComments;
 
-    return sortCommentsByPosition(mergedComments) as Array<Comment | DraftComment>;
+    return mergedComments
+        .slice()
+        .sort((left, right) => {
+            if (left.filePath !== right.filePath) {
+                return left.filePath.localeCompare(right.filePath);
+            }
+            if (left.startLine !== right.startLine) {
+                return left.startLine - right.startLine;
+            }
+            if (left.startChar !== right.startChar) {
+                return left.startChar - right.startChar;
+            }
+            return left.timestamp - right.timestamp;
+        }) as Array<Comment | DraftComment>;
 }
 
 export default class SideNote2View extends ItemView {
@@ -71,7 +73,33 @@ export default class SideNote2View extends ItemView {
     private renderVersion = 0;
     private pendingDraftFocusFrame: number | null = null;
     private activeInlineSuggest: "link" | "tag" | null = null;
+    private readonly sectionExpandedState: Record<SidebarSectionKey, boolean> = {
+        page: true,
+        anchored: true,
+    };
+    private readonly documentSelectionChangeHandler = () => {
+        if (this.isSelectionInsideSidebarContent()) {
+            this.claimSidebarInteractionOwnership();
+        }
+    };
+    private shouldSaveDraftFromEnter(event: KeyboardEvent): boolean {
+        return event.key === "Enter" && !event.shiftKey && !event.altKey && !event.isComposing;
+    }
     private readonly documentKeydownHandler = (event: KeyboardEvent) => {
+        const consumeShortcut = () => {
+            event.preventDefault();
+            event.stopPropagation();
+            event.stopImmediatePropagation();
+        };
+
+        const selectedSidebarText = this.getSelectedSidebarText();
+        if (selectedSidebarText && isModShortcut(event, "KeyC", "c")) {
+            this.claimSidebarInteractionOwnership();
+            consumeShortcut();
+            void copyTextToClipboard(selectedSidebarText);
+            return;
+        }
+
         const activeElement = document.activeElement;
         if (!(activeElement instanceof HTMLTextAreaElement)) {
             return;
@@ -87,16 +115,28 @@ export default class SideNote2View extends ItemView {
             return;
         }
 
-        const consumeShortcut = () => {
-            event.preventDefault();
-            event.stopPropagation();
-            event.stopImmediatePropagation();
-        };
-
-        if (isModShortcut(event, "Enter")) {
+        if (this.shouldSaveDraftFromEnter(event)) {
             consumeShortcut();
             void this.plugin.saveDraft(draftId);
         }
+    };
+    private readonly documentCopyHandler = (event: ClipboardEvent) => {
+        const selectedText = this.getSelectedSidebarText();
+        if (!selectedText) {
+            return;
+        }
+
+        this.claimSidebarInteractionOwnership();
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+
+        if (event.clipboardData) {
+            event.clipboardData.setData("text/plain", selectedText);
+            return;
+        }
+
+        void copyTextToClipboard(selectedText);
     };
     private readonly sidebarClickHandler = (event: MouseEvent) => {
         const file = this.file;
@@ -104,33 +144,41 @@ export default class SideNote2View extends ItemView {
             return;
         }
 
-        const draft = this.plugin.getDraftForFile(file.path);
-        if (!draft || draft.mode !== "edit") {
-            return;
-        }
-
-        const draftEl = this.containerEl.querySelector(`[data-draft-id="${draft.id}"]`);
-        if (!draftEl) {
-            return;
-        }
-
         const target = event.target as Node | null;
         const clickedComment = target instanceof HTMLElement
             ? target.closest(".sidenote2-comment-item")
             : null;
-        const decision = decideEditDismissal(
-            !!(target && draftEl.contains(target)),
-            !!clickedComment,
-        );
-        if (!decision.shouldCancelDraft) {
+        const clickedSectionChrome = target instanceof HTMLElement
+            ? target.closest(".sidenote2-comment-section-header, .sidenote2-sidebar-toolbar")
+            : null;
+
+        const draft = this.plugin.getDraftForFile(file.path);
+        if (draft && draft.mode === "edit") {
+            const draftEl = this.containerEl.querySelector(`[data-draft-id="${draft.id}"]`);
+            if (!draftEl) {
+                return;
+            }
+
+            const decision = decideEditDismissal(
+                !!(target && draftEl.contains(target)),
+                !!clickedComment,
+            );
+            if (!decision.shouldCancelDraft) {
+                return;
+            }
+
+            if (decision.shouldClearActiveState) {
+                this.clearActiveState();
+            }
+
+            void this.plugin.cancelDraft(draft.id);
             return;
         }
 
-        if (decision.shouldClearActiveState) {
+        if (!clickedComment && !clickedSectionChrome) {
             this.clearActiveState();
+            this.plugin.clearRevealedCommentSelection();
         }
-
-        void this.plugin.cancelDraft(draft.id);
     };
 
     constructor(leaf: WorkspaceLeaf, plugin: SideNote2, file: TFile | null = null) {
@@ -154,10 +202,12 @@ export default class SideNote2View extends ItemView {
     async onOpen() {
         await Promise.resolve();
         if (!this.file) {
-            this.file = this.plugin.getPinnedMarkdownFile();
+            this.file = this.plugin.getSidebarTargetFile();
         }
         await this.renderComments();
         document.addEventListener("keydown", this.documentKeydownHandler, true);
+        document.addEventListener("copy", this.documentCopyHandler, true);
+        document.addEventListener("selectionchange", this.documentSelectionChangeHandler);
         this.containerEl.addEventListener("click", this.sidebarClickHandler);
     }
 
@@ -222,6 +272,107 @@ export default class SideNote2View extends ItemView {
         this.containerEl.querySelectorAll(".sidenote2-comment-item.active").forEach((el) => {
             el.removeClass("active");
         });
+    }
+
+    private setActiveComment(commentId: string): void {
+        this.activeCommentId = commentId;
+        this.containerEl.querySelectorAll(".sidenote2-comment-item.active").forEach((el) => {
+            if (
+                el.getAttribute("data-comment-id") !== commentId &&
+                el.getAttribute("data-draft-id") !== commentId
+            ) {
+                el.removeClass("active");
+            }
+        });
+
+        const commentEl = this.containerEl.querySelector(`[data-comment-id="${commentId}"], [data-draft-id="${commentId}"]`);
+        if (commentEl) {
+            commentEl.addClass("active");
+        }
+    }
+
+    private claimSidebarInteractionOwnership(focusTarget?: HTMLElement | null): void {
+        if (this.app.workspace.activeLeaf !== this.leaf) {
+            this.app.workspace.setActiveLeaf(this.leaf, { focus: false });
+        }
+
+        if (focusTarget?.isConnected && document.activeElement !== focusTarget) {
+            focusTarget.focus({ preventScroll: true });
+        }
+    }
+
+    private getEventTargetElement(target: EventTarget | null): HTMLElement | null {
+        if (target instanceof HTMLElement) {
+            return target;
+        }
+
+        return target instanceof Node ? target.parentElement : null;
+    }
+
+    private getSidebarOwner(node: Node | null): HTMLElement | null {
+        if (!node) {
+            return null;
+        }
+
+        const element = node instanceof HTMLElement ? node : node.parentElement;
+        const owner = element?.closest(".sidenote2-comment-content");
+        return owner instanceof HTMLElement && this.containerEl.contains(owner) ? owner : null;
+    }
+
+    private isSelectionInsideSidebarContent(selection: Selection | null = window.getSelection()): boolean {
+        if (!selection) {
+            return false;
+        }
+
+        return !!this.getSidebarOwner(selection.anchorNode) || !!this.getSidebarOwner(selection.focusNode);
+    }
+
+    private getPreferredMarkdownLeaf(filePath: string): WorkspaceLeaf | null {
+        let matchedLeaf: WorkspaceLeaf | null = null;
+        this.app.workspace.iterateAllLeaves((leaf) => {
+            if (matchedLeaf) {
+                return;
+            }
+
+            if (leaf.view instanceof MarkdownView && leaf.view.file?.path === filePath) {
+                matchedLeaf = leaf;
+            }
+        });
+        if (matchedLeaf) {
+            return matchedLeaf;
+        }
+
+        const recentLeaf = this.app.workspace.getMostRecentLeaf(this.app.workspace.rootSplit);
+        if (recentLeaf?.view instanceof MarkdownView) {
+            return recentLeaf;
+        }
+
+        this.app.workspace.iterateAllLeaves((leaf) => {
+            if (!matchedLeaf && leaf.view instanceof MarkdownView) {
+                matchedLeaf = leaf;
+            }
+        });
+
+        return matchedLeaf;
+    }
+
+    private async openSidebarInternalLink(
+        href: string,
+        sourcePath: string,
+        focusTarget: HTMLElement,
+    ): Promise<void> {
+        const targetLeaf = this.getPreferredMarkdownLeaf(sourcePath);
+        if (targetLeaf) {
+            this.app.workspace.setActiveLeaf(targetLeaf, { focus: false });
+        }
+
+        await this.app.workspace.openLinkText(
+            href,
+            sourcePath,
+            targetLeaf ? false : "tab",
+        );
+
+        this.claimSidebarInteractionOwnership(focusTarget);
     }
 
     private scheduleDraftFocus(commentId: string, attempts = 6): void {
@@ -386,48 +537,81 @@ export default class SideNote2View extends ItemView {
     public async renderComments() {
         const renderVersion = ++this.renderVersion;
         const file = this.file;
+        const isAllCommentsView = !!file && isAllCommentsNotePath(file.path);
 
         this.containerEl.empty();
         this.containerEl.addClass("sidenote2-view-container");
         if (file) {
-            await this.plugin.loadCommentsForFile(file);
+            if (isAllCommentsView) {
+                await this.plugin.ensureIndexedCommentsLoaded();
+            } else {
+                await this.plugin.loadCommentsForFile(file);
+            }
             if (renderVersion !== this.renderVersion || this.file?.path !== file.path) {
                 return;
             }
 
             this.containerEl.empty();
             this.containerEl.addClass("sidenote2-view-container");
-            const persistedComments = this.plugin.commentManager.getCommentsForFile(file.path);
-            const draftComment = this.plugin.getDraftForFile(file.path);
+            const persistedComments = isAllCommentsView
+                ? this.plugin.getAllIndexedComments()
+                : this.plugin.commentManager.getCommentsForFile(file.path);
+            const draftComment = isAllCommentsView
+                ? null
+                : this.plugin.getDraftForFile(file.path);
             const resolvedCount = persistedComments.filter((comment) => comment.resolved).length;
             const hasResolvedComments = resolvedCount > 0;
             const showResolved = this.plugin.shouldShowResolvedComments();
             const commentsForFile = getSidebarComments(persistedComments, draftComment, showResolved);
             const commentsContainer = this.containerEl.createDiv("sidenote2-comments-container");
 
-            if (hasResolvedComments) {
-                this.renderSidebarToolbar(commentsContainer, resolvedCount);
-            }
+            this.renderSidebarToolbar(commentsContainer, resolvedCount, hasResolvedComments);
 
-            if (commentsForFile.length > 0) {
-                const renderPromises = commentsForFile.map(async (comment) => {
+            const sections = buildSidebarSections(commentsForFile);
+            for (const section of sections) {
+                const sectionBody = this.renderCommentSection(
+                    commentsContainer,
+                    section.key,
+                    section.title,
+                    section.key === "page" && !isAllCommentsView
+                        ? {
+                            icon: "plus",
+                            ariaLabel: "Add page side note",
+                            title: "Add page side note",
+                            onClick: () => {
+                                void this.plugin.startPageCommentDraft(file);
+                            },
+                        }
+                        : undefined,
+                );
+                const renderPromises = section.comments.map(async (comment) => {
                     if (isDraftComment(comment)) {
-                        this.renderDraftComment(commentsContainer, comment);
+                        this.renderDraftComment(sectionBody, comment);
                         return;
                     }
 
-                    await this.renderPersistedComment(commentsContainer, comment);
+                    await this.renderPersistedComment(sectionBody, comment);
                 });
                 await Promise.all(renderPromises);
-            } else {
-                const emptyStateEl = commentsContainer.createDiv("sidenote2-empty-state");
-                if (hasResolvedComments && !showResolved) {
-                    emptyStateEl.createEl("p", { text: "No active comments for this file." });
-                    emptyStateEl.createEl("p", { text: "Turn on Show resolved to review archived comments." });
-                    return;
+            }
+
+            if (commentsForFile.length === 0) {
+                const anchoredSectionBody = commentsContainer.querySelector(
+                    '[data-section-key="anchored"] .sidenote2-comment-section-body',
+                );
+                if (anchoredSectionBody instanceof HTMLDivElement) {
+                    const emptyStateEl = anchoredSectionBody.createDiv("sidenote2-empty-state sidenote2-section-empty-state");
+                    if (isAllCommentsView) {
+                        emptyStateEl.createEl("p", { text: "No side notes in the index yet." });
+                        emptyStateEl.createEl("p", { text: "Add side notes in markdown files to populate SideNote2 index." });
+                    } else if (hasResolvedComments && !showResolved) {
+                        emptyStateEl.createEl("p", { text: "No active comments for this file." });
+                        emptyStateEl.createEl("p", { text: "Turn on Show resolved to review archived comments." });
+                    } else {
+                        emptyStateEl.createEl("p", { text: "No comments for this file yet." });
+                        emptyStateEl.createEl("p", { text: "Select text and use the add comment command to start a side comment in the sidebar." });
+                    }
                 }
-                emptyStateEl.createEl("p", { text: "No comments for this file yet." });
-                emptyStateEl.createEl("p", { text: "Select text and use the add comment command to start a side comment in the sidebar." });
             }
         } else {
             const emptyStateEl = this.containerEl.createDiv("sidenote2-empty-state");
@@ -436,7 +620,15 @@ export default class SideNote2View extends ItemView {
         }
     }
 
-    private renderSidebarToolbar(container: HTMLElement, resolvedCount: number) {
+    private renderSidebarToolbar(
+        container: HTMLElement,
+        resolvedCount: number,
+        hasResolvedComments: boolean,
+    ) {
+        if (!hasResolvedComments) {
+            return;
+        }
+
         const toolbarEl = container.createDiv("sidenote2-sidebar-toolbar");
         const showResolved = this.plugin.shouldShowResolvedComments();
         const toggleButton = toolbarEl.createEl("button", {
@@ -472,11 +664,79 @@ export default class SideNote2View extends ItemView {
         };
     }
 
+    private renderCommentSection(
+        container: HTMLElement,
+        key: SidebarSectionKey,
+        title: string,
+        action?: {
+            icon: string;
+            ariaLabel: string;
+            title: string;
+            onClick: () => void;
+        },
+    ): HTMLDivElement {
+        const sectionEl = container.createDiv("sidenote2-comment-section");
+        sectionEl.setAttribute("data-section-key", key);
+        const sectionHeader = sectionEl.createDiv("sidenote2-comment-section-header");
+
+        const toggleButton = sectionHeader.createEl("button", {
+            cls: "sidenote2-comment-section-toggle",
+        });
+        toggleButton.setAttribute("type", "button");
+
+        const toggleIconEl = toggleButton.createSpan("sidenote2-comment-section-toggle-icon");
+        toggleButton.createSpan({
+            text: title,
+            cls: "sidenote2-comment-section-title",
+        });
+
+        const sectionBody = sectionEl.createDiv("sidenote2-comment-section-body");
+        const syncExpandedState = () => {
+            const expanded = this.sectionExpandedState[key];
+            toggleButton.setAttribute("aria-expanded", expanded ? "true" : "false");
+            toggleButton.setAttribute(
+                "title",
+                `${expanded ? "Collapse" : "Expand"} ${title.toLowerCase()}`,
+            );
+            setIcon(toggleIconEl, expanded ? "chevron-down" : "chevron-right");
+            sectionEl.classList.toggle("is-collapsed", !expanded);
+        };
+
+        toggleButton.onclick = (event) => {
+            event.stopPropagation();
+            this.sectionExpandedState[key] = !this.sectionExpandedState[key];
+            syncExpandedState();
+        };
+
+        if (action) {
+            const actionButton = sectionHeader.createEl("button", {
+                cls: "sidenote2-comment-section-add-button",
+            });
+            actionButton.setAttribute("type", "button");
+            actionButton.setAttribute("aria-label", action.ariaLabel);
+            actionButton.setAttribute("title", action.title);
+            setIcon(actionButton, action.icon);
+            actionButton.onclick = (event) => {
+                event.stopPropagation();
+                action.onClick();
+            };
+        }
+
+        syncExpandedState();
+        return sectionBody;
+    }
+
     private async renderPersistedComment(commentsContainer: HTMLDivElement, comment: Comment) {
         const commentEl = commentsContainer.createDiv("sidenote2-comment-item");
         commentEl.setAttribute("data-comment-id", comment.id);
         commentEl.setAttribute("data-start-line", String(comment.startLine));
 
+        if (isPageComment(comment)) {
+            commentEl.addClass("page-note");
+        }
+        if (isOrphanedComment(comment)) {
+            commentEl.addClass("orphaned");
+        }
         if (comment.resolved) {
             commentEl.addClass("resolved");
         }
@@ -486,27 +746,29 @@ export default class SideNote2View extends ItemView {
 
         const headerEl = commentEl.createDiv("sidenote2-comment-header");
         headerEl.createEl("small", {
-            text: formatCommentMeta(comment),
+            text: formatSidebarCommentMeta(comment),
             cls: "sidenote2-timestamp",
         });
 
         const actionsEl = headerEl.createDiv("sidenote2-comment-actions");
 
-        commentEl.onclick = async () => {
-            await this.openCommentInEditor(comment);
-        };
-        commentEl.addEventListener("dblclick", async (event: MouseEvent) => {
-            const target = event.target as HTMLElement | null;
-            if (target?.closest("button, a")) {
+        commentEl.addEventListener("click", async (event: MouseEvent) => {
+            const target = this.getEventTargetElement(event.target);
+            const selection = window.getSelection();
+            if (!shouldActivateSidebarComment({
+                clickedInteractiveElement: !!target?.closest("button, a"),
+                clickedInsideCommentContent: !!target?.closest(".sidenote2-comment-content"),
+                selection,
+                selectionInsideSidebarCommentContent: this.isSelectionInsideSidebarContent(selection),
+            })) {
                 return;
             }
 
-            event.preventDefault();
-            event.stopPropagation();
-            await this.plugin.startEditDraft(comment.id);
+            void this.openCommentInEditor(comment);
         });
 
         const contentWrapper = commentEl.createDiv({ cls: "sidenote2-comment-content" });
+        contentWrapper.tabIndex = -1;
         await MarkdownRenderer.renderMarkdown(
             comment.comment || "",
             contentWrapper,
@@ -514,146 +776,80 @@ export default class SideNote2View extends ItemView {
             this.plugin
         );
 
+        const focusContentWrapper = () => {
+            this.claimSidebarInteractionOwnership(contentWrapper);
+        };
+        const stopContentPointerPropagation = (event: MouseEvent) => {
+            focusContentWrapper();
+            event.stopPropagation();
+        };
+
+        contentWrapper.addEventListener("mousedown", stopContentPointerPropagation);
+        contentWrapper.addEventListener("mouseup", stopContentPointerPropagation);
+        contentWrapper.addEventListener("dblclick", stopContentPointerPropagation);
         contentWrapper.addEventListener("click", (event: MouseEvent) => {
-            const target = event.target as HTMLElement | null;
-            const link = target?.closest("a.internal-link") as HTMLElement | null;
-            if (!link) return;
+            const target = this.getEventTargetElement(event.target);
+            const link = target?.closest("a") as HTMLAnchorElement | null;
 
-            event.preventDefault();
+            focusContentWrapper();
             event.stopPropagation();
-
-            const href = link.getAttribute("href") || link.getAttribute("data-href") || link.innerText;
-            if (href) {
-                this.app.workspace.openLinkText(href, comment.filePath, false);
-            }
-        });
-
-        const menuButton = actionsEl.createEl("button", {
-            cls: "sidenote2-menu-button",
-        });
-        setIcon(menuButton, "more-horizontal");
-        menuButton.setAttribute("aria-label", "Comment actions");
-        menuButton.setAttribute("aria-expanded", "false");
-        const menuContainer = actionsEl.createDiv("sidenote2-action-menu");
-        menuContainer.setAttribute("role", "menu");
-
-        const createMenuOption = (
-            label: string,
-            icon: string,
-            extraClass: string,
-            onClick: (event: MouseEvent) => void
-        ) => {
-            const option = menuContainer.createEl("button", {
-                cls: `sidenote2-menu-option ${extraClass}`,
-            });
-            option.setAttribute("type", "button");
-            option.setAttribute("role", "menuitem");
-            option.setAttribute("data-shortcut-key", label.charAt(0).toLowerCase());
-
-            const iconEl = option.createSpan("sidenote2-menu-option-icon");
-            setIcon(iconEl, icon);
-            const labelEl = option.createSpan("sidenote2-menu-option-label");
-            labelEl.createSpan({
-                text: label.charAt(0),
-                cls: "sidenote2-menu-option-shortcut",
-            });
-            labelEl.appendText(label.slice(1));
-            option.onclick = onClick;
-            return option;
-        };
-
-        createMenuOption("Edit", "pencil", "sidenote2-menu-edit", (e) => {
-            e.stopPropagation();
-            menuContainer.classList.remove("visible");
-            void this.plugin.startEditDraft(comment.id);
-        });
-
-        createMenuOption("Copy", "copy", "sidenote2-menu-copy", (e) => {
-            e.stopPropagation();
-            menuContainer.classList.remove("visible");
-            void this.copyCommentBody(comment);
-        });
-
-        createMenuOption(
-            comment.resolved ? "Reopen" : "Resolve",
-            comment.resolved ? "rotate-ccw" : "check",
-            "sidenote2-menu-option-accent sidenote2-menu-resolve",
-            (e) => {
-                e.stopPropagation();
-                menuContainer.classList.remove("visible");
-                if (comment.resolved) {
-                    void this.plugin.unresolveComment(comment.id);
-                } else {
-                    void this.plugin.resolveComment(comment.id);
-                }
-            }
-        );
-
-        createMenuOption("Delete", "trash-2", "sidenote2-menu-option-danger sidenote2-menu-delete", (e) => {
-            e.stopPropagation();
-            menuContainer.classList.remove("visible");
-            void this.deleteCommentFromMenu(comment.id);
-        });
-
-        const handleMenuKeydown = (event: KeyboardEvent) => {
-            if (!menuContainer.classList.contains("visible")) {
-                return;
-            }
-            if (event.metaKey || event.ctrlKey || event.altKey) {
+            if (!link) {
                 return;
             }
 
-            if (event.key === "Escape") {
+            if (link.classList.contains("internal-link")) {
                 event.preventDefault();
-                menuContainer.classList.remove("visible");
-                menuButton.setAttribute("aria-expanded", "false");
-                document.removeEventListener("click", closeMenu);
-                document.removeEventListener("keydown", handleMenuKeydown);
-                return;
-            }
-
-            const shortcutKey = event.key.toLowerCase();
-            const shortcutOption = menuContainer.querySelector(
-                `[data-shortcut-key="${shortcutKey}"]`
-            ) as HTMLButtonElement | null;
-            if (!shortcutOption) {
-                return;
-            }
-
-            event.preventDefault();
-            event.stopPropagation();
-            shortcutOption.click();
-        };
-
-        const closeMenu = (event?: MouseEvent) => {
-            if (event) {
-                const target = event.target as Node | null;
-                if (target && (menuContainer.contains(target) || menuButton.contains(target))) {
-                    return;
+                const href = link.getAttribute("href") || link.getAttribute("data-href") || link.innerText;
+                if (href) {
+                    void this.openSidebarInternalLink(href, comment.filePath, contentWrapper);
                 }
             }
-            menuContainer.classList.remove("visible");
-            menuButton.setAttribute("aria-expanded", "false");
-            document.removeEventListener("click", closeMenu);
-            document.removeEventListener("keydown", handleMenuKeydown);
+        });
+
+        const resolveButton = actionsEl.createEl("button", {
+            cls: "sidenote2-comment-action-button sidenote2-comment-action-resolve",
+        });
+        resolveButton.setAttribute("type", "button");
+        resolveButton.setAttribute(
+            "aria-label",
+            comment.resolved ? "Reopen side note" : "Resolve side note",
+        );
+        resolveButton.setAttribute(
+            "title",
+            comment.resolved ? "Reopen side note" : "Resolve side note",
+        );
+        setIcon(resolveButton, comment.resolved ? "rotate-ccw" : "check");
+        resolveButton.onclick = (event) => {
+            event.stopPropagation();
+            if (comment.resolved) {
+                void this.plugin.unresolveComment(comment.id);
+            } else {
+                void this.plugin.resolveComment(comment.id);
+            }
         };
 
-        menuButton.onclick = (e) => {
-            e.stopPropagation();
-            const nextVisible = !menuContainer.classList.contains("visible");
-            commentsContainer.querySelectorAll(".sidenote2-action-menu.visible").forEach((menuEl) => {
-                menuEl.classList.remove("visible");
-            });
-            menuContainer.classList.toggle("visible", nextVisible);
-            menuButton.setAttribute("aria-expanded", nextVisible ? "true" : "false");
-            document.removeEventListener("click", closeMenu);
-            document.removeEventListener("keydown", handleMenuKeydown);
-            if (nextVisible) {
-                window.setTimeout(() => {
-                    document.addEventListener("click", closeMenu);
-                    document.addEventListener("keydown", handleMenuKeydown);
-                }, 0);
-            }
+        const editButton = actionsEl.createEl("button", {
+            cls: "sidenote2-comment-action-button sidenote2-comment-action-edit",
+        });
+        editButton.setAttribute("type", "button");
+        editButton.setAttribute("aria-label", "Edit side note");
+        editButton.setAttribute("title", "Edit side note");
+        setIcon(editButton, "pencil");
+        editButton.onclick = (event) => {
+            event.stopPropagation();
+            void this.plugin.startEditDraft(comment.id);
+        };
+
+        const deleteButton = actionsEl.createEl("button", {
+            cls: "sidenote2-comment-action-button sidenote2-comment-action-delete",
+        });
+        deleteButton.setAttribute("type", "button");
+        deleteButton.setAttribute("aria-label", "Delete side note");
+        deleteButton.setAttribute("title", "Delete side note");
+        setIcon(deleteButton, "trash-2");
+        deleteButton.onclick = (event) => {
+            event.stopPropagation();
+            void this.deleteCommentWithConfirm(comment.id);
         };
     }
 
@@ -662,6 +858,12 @@ export default class SideNote2View extends ItemView {
         commentEl.setAttribute("data-draft-id", comment.id);
         commentEl.setAttribute("data-start-line", String(comment.startLine));
 
+        if (isPageComment(comment)) {
+            commentEl.addClass("page-note");
+        }
+        if (isOrphanedComment(comment)) {
+            commentEl.addClass("orphaned");
+        }
         if (comment.resolved) {
             commentEl.addClass("resolved");
         }
@@ -671,7 +873,7 @@ export default class SideNote2View extends ItemView {
 
         const headerEl = commentEl.createDiv("sidenote2-comment-header");
         headerEl.createEl("small", {
-            text: formatCommentMeta(comment),
+            text: formatSidebarCommentMeta(comment),
             cls: "sidenote2-timestamp",
         });
 
@@ -691,7 +893,7 @@ export default class SideNote2View extends ItemView {
             text: comment.mode === "new" ? "Add" : "Save",
             cls: "mod-cta sidenote2-inline-save-button",
         });
-        saveButton.setAttribute("title", "Save (Cmd/Ctrl+Enter)");
+        saveButton.setAttribute("title", "Save (Enter; Shift+Enter for newline)");
 
         const saving = this.plugin.isSavingDraft(comment.id);
         textarea.disabled = saving;
@@ -745,7 +947,7 @@ export default class SideNote2View extends ItemView {
                 event.stopImmediatePropagation();
             };
 
-            if (isModShortcut(event, "Enter")) {
+            if (this.shouldSaveDraftFromEnter(event)) {
                 consumeShortcut();
                 void this.plugin.saveDraft(comment.id);
                 return;
@@ -775,13 +977,23 @@ export default class SideNote2View extends ItemView {
         };
     }
 
-    private async openCommentInEditor(comment: Comment) {
-        await this.plugin.revealComment(comment);
+    private getSelectedSidebarText(): string | null {
+        const selection = window.getSelection();
+        if (!selection) {
+            return null;
+        }
+
+        return getSelectedSidebarClipboardText({
+            isCollapsed: selection.isCollapsed,
+            selectedText: selection.toString(),
+            anchorInsideSidebar: !!this.getSidebarOwner(selection.anchorNode),
+            focusInsideSidebar: !!this.getSidebarOwner(selection.focusNode),
+        });
     }
 
-    private async copyCommentBody(comment: Comment) {
-        const copied = await copyTextToClipboard(comment.comment ?? "");
-        new Notice(copied ? "Side note copied." : "Unable to copy side note.");
+    private async openCommentInEditor(comment: Comment) {
+        this.setActiveComment(comment.id);
+        await this.plugin.revealComment(comment);
     }
 
     getState(): CustomViewState {
@@ -792,6 +1004,8 @@ export default class SideNote2View extends ItemView {
 
     onunload() {
         document.removeEventListener("keydown", this.documentKeydownHandler, true);
+        document.removeEventListener("copy", this.documentCopyHandler, true);
+        document.removeEventListener("selectionchange", this.documentSelectionChangeHandler);
         this.containerEl.removeEventListener("click", this.sidebarClickHandler);
         if (this.pendingDraftFocusFrame !== null) {
             window.cancelAnimationFrame(this.pendingDraftFocusFrame);
@@ -799,7 +1013,7 @@ export default class SideNote2View extends ItemView {
         }
     }
 
-    private async deleteCommentFromMenu(commentId: string) {
+    private async deleteCommentWithConfirm(commentId: string) {
         if (await this.plugin.shouldConfirmDelete()) {
             new ConfirmDeleteModal(this.app, () => {
                 void this.plugin.deleteComment(commentId);

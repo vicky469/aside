@@ -1,4 +1,5 @@
 import type { TFile } from "obsidian";
+import type { CommentAnchorKind } from "../commentManager";
 import type { Comment } from "../commentManager";
 
 export interface DraftComment extends Comment {
@@ -12,4 +13,5 @@ export interface DraftSelection {
     startChar: number;
     endLine: number;
     endChar: number;
+    anchorKind?: CommentAnchorKind;
 }

@@ -104,6 +104,29 @@ test("buildAllCommentsNoteContent includes extracted comment tags for search", (
     assert.match(content, /-\s+\[hello\]\(obsidian:\/\/side-note2-comment\?vault=dev&file=Folder%2FNote\.md&commentId=comment-1\)  #hi #follow\/up/);
 });
 
+test("buildAllCommentsNoteContent labels page notes and orphaned notes", () => {
+    const content = buildAllCommentsNoteContent("dev", [
+        createComment({
+            id: "page-note",
+            anchorKind: "page",
+            selectedText: "Note",
+            startLine: 0,
+            startChar: 0,
+            endLine: 0,
+            endChar: 0,
+        }),
+        createComment({
+            id: "orphan-note",
+            orphaned: true,
+            selectedText: "missing text",
+            startLine: 10,
+        }),
+    ]);
+
+    assert.match(content, /\[page note · Note\]\(obsidian:\/\/side-note2-comment\?vault=dev&file=Folder%2FNote\.md&commentId=page-note\)/);
+    assert.match(content, /\[orphaned · missing text\]\(obsidian:\/\/side-note2-comment\?vault=dev&file=Folder%2FNote\.md&commentId=orphan-note\)/);
+});
+
 test("isAllCommentsNotePath matches the generated note path", () => {
     assert.equal(isAllCommentsNotePath(ALL_COMMENTS_NOTE_PATH), true);
     assert.equal(isAllCommentsNotePath(LEGACY_ALL_COMMENTS_NOTE_PATH), true);

@@ -13,6 +13,8 @@ interface StoredNoteComment {
     selectedTextHash: string;
     comment: string;
     timestamp: number;
+    anchorKind?: "selection" | "page";
+    orphaned?: boolean;
     resolved?: boolean;
 }
 
@@ -101,6 +103,8 @@ function toStoredNoteComment(comment: Comment): StoredNoteComment {
         selectedTextHash: comment.selectedTextHash,
         comment: comment.comment,
         timestamp: comment.timestamp,
+        anchorKind: comment.anchorKind === "page" ? "page" : undefined,
+        orphaned: comment.orphaned === true ? true : undefined,
         resolved: comment.resolved === true ? true : undefined,
     };
 }
@@ -136,6 +140,8 @@ function fromStoredNoteComment(candidate: unknown, filePath: string): Comment | 
         selectedTextHash: item.selectedTextHash,
         comment: normalizeCommentBody(item.comment),
         timestamp: item.timestamp,
+        anchorKind: item.anchorKind === "page" ? "page" : undefined,
+        orphaned: item.orphaned === true,
         resolved: item.resolved === true,
     };
 }

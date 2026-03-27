@@ -100,6 +100,30 @@ test("serializeNoteComments replaces an existing managed appendix instead of dup
     assert.equal(parsed.comments[0].resolved, true);
 });
 
+test("serializeNoteComments preserves page-note and orphaned anchor metadata", () => {
+    const serialized = serializeNoteComments("Body", [
+        createComment({
+            id: "comment-page",
+            anchorKind: "page",
+            selectedText: "Note",
+            orphaned: false,
+        }),
+        createComment({
+            id: "comment-orphaned",
+            orphaned: true,
+            timestamp: 1710000001000,
+        }),
+    ]);
+
+    assert.match(serialized, /"anchorKind": "page"/);
+    assert.match(serialized, /"orphaned": true/);
+
+    const parsed = parseNoteComments(serialized, "note.md");
+    assert.equal(parsed.comments[0].anchorKind, "page");
+    assert.equal(parsed.comments[0].orphaned, false);
+    assert.equal(parsed.comments[1].orphaned, true);
+});
+
 test("serializeNoteComments removes the managed appendix when there are no comments", () => {
     const withComments = serializeNoteComments("Body", [createComment()]);
     const withoutComments = serializeNoteComments(withComments, []);

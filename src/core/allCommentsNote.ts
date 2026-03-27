@@ -1,4 +1,5 @@
 import type { Comment } from "../commentManager";
+import { getCommentSelectionLabel, getCommentStatusLabel, isAnchoredComment } from "./commentAnchors";
 import { extractTagsFromText } from "./commentTags";
 import { sortCommentsByPosition } from "./noteCommentStorage";
 
@@ -27,12 +28,15 @@ function escapeMarkdownText(value: string): string {
 }
 
 function formatCommentLinkLabel(comment: Comment): string {
-    const selectedPreview = escapeMarkdownText(toInlinePreview(comment.selectedText));
+    const selectedPreview = escapeMarkdownText(toInlinePreview(getCommentSelectionLabel(comment)));
+    const prefixedPreview = isAnchoredComment(comment)
+        ? selectedPreview
+        : `${getCommentStatusLabel(comment)} · ${selectedPreview}`;
     if (comment.resolved) {
-        return `~~${selectedPreview}~~`;
+        return `~~${prefixedPreview}~~`;
     }
 
-    return selectedPreview;
+    return prefixedPreview;
 }
 
 function formatCommentTags(comment: Comment): string | null {

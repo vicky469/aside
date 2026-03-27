@@ -2,6 +2,7 @@ import { addIcon, WorkspaceLeaf, TFile, MarkdownView, Notice, Plugin, normalizeP
 import { Decoration, DecorationSet, EditorView, ViewPlugin, ViewUpdate } from "@codemirror/view";
 import { Range, StateEffect } from "@codemirror/state";
 import { Comment, CommentManager } from "./commentManager";
+import { getPageCommentLabel, isAnchoredComment, isPageComment } from "./core/commentAnchors";
 import { DraftComment, DraftSelection } from "./domain/drafts";
 import { parsePromptDeleteSetting } from "./core/appConfig";
 import { ALL_COMMENTS_NOTE_PATH, buildAllCommentsNoteContent, isAllCommentsNotePath, LEGACY_ALL_COMMENTS_NOTE_PATH } from "./core/allCommentsNote";
@@ -48,6 +49,7 @@ export default class SideNote2 extends Plugin {
     private parsedNoteCache = new ParsedNoteCache(20);
     private readonly pendingCommentPersistTimers: Record<string, number> = {};
     private showResolvedComments = false;
+    private revealedCommentState: { filePath: string; commentId: string } | null = null;
 
     async onload() {
         initializeDebug();
@@ -149,13 +151,20 @@ export default class SideNote2 extends Plugin {
         // Listen for active leaf changes to update the comment view
         this.registerEvent(
             this.app.workspace.on('file-open', (file) => {
-                if (!(file instanceof TFile) || file.extension !== "md" || isAllCommentsNotePath(file.path)) {
+                if (!(file instanceof TFile) || file.extension !== "md") {
                     return;
                 }
 
-                this.activeMarkdownFile = file;
-                void this.loadCommentsForFile(file).finally(async () => {
-                    await this.refreshCommentViews();
+                if (!isAllCommentsNotePath(file.path)) {
+                    this.activeMarkdownFile = file;
+                }
+
+                const syncPromise = isAllCommentsNotePath(file.path)
+                    ? this.ensureIndexedCommentsLoaded()
+                    : this.loadCommentsForFile(file);
+
+                void syncPromise.finally(async () => {
+                    await this.updateSidebarViews(file);
                     this.refreshEditorDecorations();
                 });
             })
@@ -169,21 +178,23 @@ export default class SideNote2 extends Plugin {
                     return;
                 }
 
-                const file = leaf && leaf.view instanceof MarkdownView && leaf.view.file && !isAllCommentsNotePath(leaf.view.file.path)
+                const file = leaf && leaf.view instanceof MarkdownView && leaf.view.file
                     ? leaf.view.file
                     : null;
                 if (!file) {
                     return;
                 }
 
-                this.activeMarkdownFile = file;
-                void this.loadCommentsForFile(file).finally(async () => {
-                    const leaves = this.app.workspace.getLeavesOfType("sidenote2-view");
-                    for (const sideNoteLeaf of leaves) {
-                        if (sideNoteLeaf.view instanceof SideNote2View) {
-                            await sideNoteLeaf.view.updateActiveFile(file);
-                        }
-                    }
+                if (!isAllCommentsNotePath(file.path)) {
+                    this.activeMarkdownFile = file;
+                }
+
+                const syncPromise = isAllCommentsNotePath(file.path)
+                    ? this.ensureIndexedCommentsLoaded()
+                    : this.loadCommentsForFile(file);
+
+                void syncPromise.finally(async () => {
+                    await this.updateSidebarViews(file);
                     this.refreshEditorDecorations();
                 });
             })
@@ -325,10 +336,36 @@ export default class SideNote2 extends Plugin {
         }
     }
 
+    private setRevealedCommentState(filePath: string, commentId: string): void {
+        if (
+            this.revealedCommentState?.filePath === filePath &&
+            this.revealedCommentState.commentId === commentId
+        ) {
+            return;
+        }
+
+        this.revealedCommentState = { filePath, commentId };
+        this.refreshEditorDecorations();
+        this.refreshMarkdownPreviews();
+    }
+
+    public getRevealedCommentId(filePath: string): string | null {
+        return this.revealedCommentState?.filePath === filePath
+            ? this.revealedCommentState.commentId
+            : null;
+    }
+
     /**
      * Activate the SideNote2 view, highlight a specific comment, and focus the draft
      */
     async activateViewAndHighlightComment(commentId: string) {
+        const comment = this.draftComment?.id === commentId
+            ? this.draftComment
+            : this.commentManager.getCommentById(commentId);
+        if (comment) {
+            this.setRevealedCommentState(comment.filePath, comment.id);
+        }
+
         // Skip view update if we have a draft (view was just refreshed by setDraftComment)
         const skipViewUpdate = this.draftComment !== null;
         await this.activateView(skipViewUpdate);
@@ -354,6 +391,15 @@ export default class SideNote2 extends Plugin {
     public getPinnedMarkdownFile(): TFile | null {
         const activeFile = this.app.workspace.getActiveFile();
         if (activeFile instanceof TFile && activeFile.extension === "md" && !isAllCommentsNotePath(activeFile.path)) {
+            return activeFile;
+        }
+
+        return this.activeMarkdownFile;
+    }
+
+    public getSidebarTargetFile(): TFile | null {
+        const activeFile = this.app.workspace.getActiveFile();
+        if (activeFile instanceof TFile && activeFile.extension === "md") {
             return activeFile;
         }
 
@@ -521,6 +567,15 @@ export default class SideNote2 extends Plugin {
             if (!comment.id) {
                 comment.id = generateCommentId();
             }
+            comment.anchorKind = comment.anchorKind === "page" ? "page" : "selection";
+            if (comment.anchorKind === "page") {
+                comment.orphaned = false;
+                if (!comment.selectedText) {
+                    comment.selectedText = getPageCommentLabel(filePath);
+                }
+            } else {
+                comment.orphaned = comment.orphaned === true;
+            }
             if (!comment.selectedTextHash && comment.selectedText) {
                 comment.selectedTextHash = await generateHash(comment.selectedText);
             }
@@ -556,6 +611,19 @@ export default class SideNote2 extends Plugin {
         const noteContent = await this.getCurrentNoteContent(file);
         const parsed = await this.syncFileCommentsFromContent(file, noteContent);
         return parsed.comments;
+    }
+
+    public async ensureIndexedCommentsLoaded(): Promise<void> {
+        await this.ensureAggregateCommentIndexInitialized();
+    }
+
+    private async updateSidebarViews(file: TFile | null): Promise<void> {
+        const leaves = this.app.workspace.getLeavesOfType("sidenote2-view");
+        for (const leaf of leaves) {
+            if (leaf.view instanceof SideNote2View) {
+                await leaf.view.updateActiveFile(file);
+            }
+        }
     }
 
     private async refreshCommentViews() {
@@ -702,19 +770,73 @@ export default class SideNote2 extends Plugin {
 
         this.app.workspace.setActiveLeaf(targetLeaf, { focus: true });
         const editor = targetLeaf.view.editor;
-        editor.setSelection(
-            { line: comment.startLine, ch: comment.startChar },
-            { line: comment.endLine, ch: comment.endChar }
-        );
-        editor.scrollIntoView(
-            {
-                from: { line: comment.startLine, ch: 0 },
-                to: { line: comment.endLine, ch: 0 },
-            },
-            true
-        );
+        if (isPageComment(comment)) {
+            editor.setSelection({ line: 0, ch: 0 }, { line: 0, ch: 0 });
+            editor.scrollIntoView(
+                {
+                    from: { line: 0, ch: 0 },
+                    to: { line: 0, ch: 0 },
+                },
+                true
+            );
+            editor.focus();
+            await this.activateViewAndHighlightComment(comment.id);
+            return;
+        }
+
+        const currentContent = editor.getValue();
+        const parsed = parseNoteComments(currentContent, comment.filePath);
+        const resolvedAnchor = resolveAnchorRange(parsed.mainContent, comment);
+
+        if (resolvedAnchor) {
+            editor.setSelection(
+                { line: resolvedAnchor.startLine, ch: resolvedAnchor.startChar },
+                { line: resolvedAnchor.startLine, ch: resolvedAnchor.startChar }
+            );
+            editor.scrollIntoView(
+                {
+                    from: { line: resolvedAnchor.startLine, ch: 0 },
+                    to: { line: resolvedAnchor.endLine, ch: 0 },
+                },
+                true
+            );
+        } else {
+            new Notice("Side note anchor text is missing; showing the stored location.");
+            editor.scrollIntoView(
+                {
+                    from: { line: comment.startLine, ch: 0 },
+                    to: { line: comment.startLine, ch: 0 },
+                },
+                true
+            );
+        }
         editor.focus();
         await this.activateViewAndHighlightComment(comment.id);
+    }
+
+    public clearRevealedCommentSelection(): void {
+        const revealedCommentState = this.revealedCommentState;
+        this.revealedCommentState = null;
+        this.refreshEditorDecorations();
+        this.refreshMarkdownPreviews();
+
+        if (!revealedCommentState) {
+            return;
+        }
+
+        const file = this.getMarkdownFileByPath(revealedCommentState.filePath);
+        if (!(file instanceof TFile)) {
+            return;
+        }
+
+        const markdownView = this.getMarkdownViewForFile(file);
+        if (!markdownView) {
+            return;
+        }
+
+        const editor = markdownView.editor;
+        const cursor = editor.getCursor("to");
+        editor.setSelection(cursor, cursor);
     }
 
     private async openCommentById(filePath: string, commentId: string) {
@@ -824,6 +946,23 @@ export default class SideNote2 extends Plugin {
         }
     }
 
+    public async startPageCommentDraft(file: TFile | null = this.getPinnedMarkdownFile()) {
+        if (!this.isCommentableFile(file)) {
+            new Notice(`Cannot add comments to ${ALL_COMMENTS_NOTE_PATH}.`);
+            return;
+        }
+
+        await this.startNewCommentDraft({
+            file,
+            selectedText: getPageCommentLabel(file.path),
+            startLine: 0,
+            startChar: 0,
+            endLine: 0,
+            endChar: 0,
+            anchorKind: "page",
+        });
+    }
+
     private async startNewCommentDraft(selection: DraftSelection) {
         if (!this.isCommentableFile(selection.file)) {
             new Notice(`Cannot add comments to ${ALL_COMMENTS_NOTE_PATH}.`);
@@ -842,6 +981,8 @@ export default class SideNote2 extends Plugin {
             selectedTextHash: await generateHash(selection.selectedText),
             comment: "",
             timestamp: Date.now(),
+            anchorKind: selection.anchorKind === "page" ? "page" : "selection",
+            orphaned: false,
             mode: "new",
         };
 
@@ -867,7 +1008,7 @@ export default class SideNote2 extends Plugin {
      */
     async activateView(skipViewUpdate = false) {
         const { workspace } = this.app;
-        const pinnedFile = this.getPinnedMarkdownFile();
+        const sidebarFile = this.getSidebarTargetFile();
 
         let leaf: WorkspaceLeaf | null = null;
         const leaves = workspace.getLeavesOfType("sidenote2-view");
@@ -882,7 +1023,7 @@ export default class SideNote2 extends Plugin {
                 leaf = rightLeaf;
                 await leaf.setViewState({
                     type: "sidenote2-view",
-                    state: { filePath: pinnedFile?.path ?? null },
+                    state: { filePath: sidebarFile?.path ?? null },
                     active: true,
                 });
             }
@@ -894,7 +1035,7 @@ export default class SideNote2 extends Plugin {
             // Update to show comments for the current active file
             // Skip if the view was just refreshed (e.g., when adding a new comment)
             if (!skipViewUpdate && leaf.view instanceof SideNote2View) {
-                await leaf.view.updateActiveFile(pinnedFile);
+                await leaf.view.updateActiveFile(sidebarFile);
             }
         }
     }
@@ -902,6 +1043,7 @@ export default class SideNote2 extends Plugin {
     private createAddFingerprint(comment: Comment): string {
         return [
             comment.filePath,
+            comment.anchorKind ?? "selection",
             comment.startLine,
             comment.startChar,
             comment.endLine,
@@ -1030,9 +1172,11 @@ export default class SideNote2 extends Plugin {
                 }
             }
 
+            const activeCommentId = this.getRevealedCommentId(context.sourcePath);
             const comments = this.commentManager
                 .getCommentsForFile(context.sourcePath)
                 .filter((comment) =>
+                    isAnchoredComment(comment) &&
                     !!comment.selectedText &&
                     comment.startLine >= sectionInfo.lineStart &&
                     comment.endLine <= sectionInfo.lineEnd &&
@@ -1116,6 +1260,9 @@ export default class SideNote2 extends Plugin {
                     span.classList.add('sidenote2-highlight', 'sidenote2-highlight-preview');
                     if (wrap.comment.resolved) {
                         span.classList.add('sidenote2-highlight-resolved');
+                    }
+                    if (wrap.comment.id === activeCommentId) {
+                        span.classList.add('sidenote2-highlight-active');
                     }
                     span.dataset.commentId = wrap.comment.id;
                     span.addEventListener('click', (event: MouseEvent) => {
@@ -1259,12 +1406,16 @@ export default class SideNote2 extends Plugin {
                     storedComments,
                     draftComment,
                     showResolved,
+                    plugin.getRevealedCommentId(filePath),
                 );
 
                 ranges.forEach((range) => {
                     const classes = ["sidenote2-highlight"];
                     if (range.resolved) {
                         classes.push("sidenote2-highlight-resolved");
+                    }
+                    if (range.active) {
+                        classes.push("sidenote2-highlight-active");
                     }
 
                     decorations.push(

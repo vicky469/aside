@@ -38,7 +38,9 @@
 
 .sidenote2-sidebar-toolbar {
     display: flex;
+    align-items: center;
     justify-content: flex-end;
+    gap: 8px;
     margin-bottom: 8px;
 }
 
@@ -110,6 +112,121 @@
     color: var(--interactive-accent);
 }
 
+.sidenote2-comment-section + .sidenote2-comment-section {
+    margin-top: 8px;
+}
+
+.sidenote2-comment-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-height: 24px;
+    padding: 0 4px 0 2px;
+    border-radius: var(--nav-item-radius, var(--radius-s, 4px));
+    margin-bottom: 3px;
+}
+
+.sidenote2-comment-section-header:hover,
+.sidenote2-comment-section-header:focus-within {
+    background: var(--nav-item-background-hover, var(--background-modifier-hover));
+}
+
+.sidenote2-comment-section-toggle {
+    all: unset;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 24px;
+    padding: 0;
+    border: none;
+    background: none;
+    border-radius: var(--radius-s, 4px);
+    color: var(--nav-item-color, var(--text-faint, var(--text-muted)));
+    font-size: var(--font-ui-small);
+    font-weight: 400;
+    text-align: left;
+    cursor: pointer;
+    background-color: transparent !important;
+    box-shadow: none !important;
+}
+
+.sidenote2-comment-section-toggle:hover,
+.sidenote2-comment-section-toggle:focus-visible {
+    color: var(--nav-item-color-hover, var(--text-normal));
+    outline: none;
+}
+
+.sidenote2-comment-section-toggle-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 12px;
+    height: 12px;
+    flex: 0 0 12px;
+}
+
+.sidenote2-comment-section-toggle-icon svg {
+    width: 12px;
+    height: 12px;
+}
+
+.sidenote2-comment-section-title {
+    flex: 1 1 auto;
+    white-space: nowrap;
+}
+
+.sidenote2-comment-section-add-button {
+    all: unset;
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 20px;
+    height: 20px;
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--nav-item-color, var(--text-faint, var(--text-muted)));
+    box-shadow: none;
+    outline: none;
+    appearance: none;
+    -webkit-appearance: none;
+    cursor: pointer;
+    transition: color 0.15s ease;
+    background-color: transparent !important;
+    box-shadow: none !important;
+}
+
+.sidenote2-comment-section-add-button svg {
+    width: 13px;
+    height: 13px;
+}
+
+.sidenote2-comment-section-add-button:hover,
+.sidenote2-comment-section-add-button:focus-visible {
+    color: var(--nav-item-color-hover, var(--text-normal));
+    outline: none;
+}
+
+.sidenote2-comment-section-body {
+    display: block;
+    padding-left: 18px;
+}
+
+.sidenote2-comment-section.is-collapsed .sidenote2-comment-section-body {
+    display: none;
+}
+
+.sidenote2-comment-section-body .sidenote2-comment-item:last-child {
+    margin-bottom: 0;
+}
+
 .sidenote2-comment-item {
     margin-bottom: 8px;
     padding: 8px 10px;
@@ -129,6 +246,11 @@
     background: var(--background-modifier-active-hover);
     border-color: var(--interactive-accent);
     box-shadow: 0 0 0 1px var(--interactive-accent-translucent);
+}
+
+.sidenote2-comment-item.orphaned {
+    border-style: dashed;
+    border-color: var(--color-orange, var(--text-warning, var(--text-accent)));
 }
 
 .sidenote2-comment-item.resolved {
@@ -174,6 +296,13 @@
     font-size: var(--font-ui-small);
     line-height: 1.45;
     word-break: break-word;
+    user-select: text;
+    cursor: text;
+}
+
+
+.sidenote2-comment-content:focus {
+    outline: none;
 }
 
 .sidenote2-comment-content > :first-child {
@@ -258,9 +387,9 @@
 }
 
 .sidenote2-comment-actions {
-    position: relative;
     display: flex;
     align-items: center;
+    gap: 2px;
     flex: 0 0 auto;
 }
 
@@ -268,122 +397,57 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 24px;
-    height: 24px;
+    width: 22px;
+    height: 22px;
     padding: 0;
     border: none;
-    border-radius: 7px;
-    background: transparent;
+    border-radius: 0;
+    background: none;
     color: var(--text-muted);
+    box-shadow: none;
+    outline: none;
+    appearance: none;
+    -webkit-appearance: none;
     cursor: pointer;
-    transition: background-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
+    transition: color 0.15s ease, opacity 0.15s ease;
+}
+
+.sidenote2-comment-actions button svg {
+    width: 13px;
+    height: 13px;
 }
 
 .sidenote2-comment-actions button:hover {
-    background: var(--background-modifier-hover);
     color: var(--text-normal);
-    transform: translateY(-1px);
 }
 
-.sidenote2-menu-button {
-    box-shadow: inset 0 0 0 1px transparent;
-}
-
-.sidenote2-menu-button svg {
-    width: 15px;
-    height: 15px;
-}
-
-.sidenote2-menu-button[aria-expanded="true"] {
-    background: var(--background-modifier-hover);
+.sidenote2-comment-actions button:focus-visible {
+    background: none;
+    box-shadow: none;
     color: var(--text-normal);
-    box-shadow: inset 0 0 0 1px var(--background-modifier-border);
 }
 
-.sidenote2-action-menu {
-    position: absolute;
-    top: calc(100% + 6px);
-    right: 0;
-    z-index: 100;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    min-width: 152px;
-    padding: 6px;
-    border: 1px solid var(--background-modifier-border);
-    border-radius: 12px;
-    background: var(--background-primary);
-    box-shadow: 0 14px 28px rgba(0, 0, 0, 0.18);
-    opacity: 0;
-    pointer-events: none;
-    transform: translateY(-4px);
-    transition: opacity 0.15s ease, transform 0.15s ease;
+.sidenote2-comment-action-resolve {
+    color: var(--text-muted);
 }
 
-.sidenote2-action-menu.visible {
-    opacity: 1;
-    pointer-events: auto;
-    transform: translateY(0);
-}
-
-.sidenote2-menu-option {
-    width: 100% !important;
-    min-width: 0 !important;
-    height: auto !important;
-    min-height: 32px;
-    padding: 7px 9px !important;
-    justify-content: flex-start !important;
-    gap: 8px;
-    border-radius: 8px !important;
-    color: var(--text-normal);
-    font-size: var(--font-ui-small) !important;
-    font-weight: 500;
-}
-
-.sidenote2-menu-option:hover {
-    background: var(--background-modifier-hover);
-}
-
-.sidenote2-menu-option-icon {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 14px;
-    height: 14px;
-    flex: 0 0 14px;
-}
-
-.sidenote2-menu-option-icon svg {
-    width: 14px;
-    height: 14px;
-}
-
-.sidenote2-menu-option-label {
-    flex: 1 1 auto;
-    text-align: left;
-}
-
-.sidenote2-menu-option-shortcut {
-    text-decoration: underline;
-    text-underline-offset: 0.14em;
-    text-decoration-thickness: 0.08em;
-}
-
-.sidenote2-menu-option-accent {
-    color: var(--interactive-accent);
-}
-
-.sidenote2-menu-option-accent:hover {
-    background: var(--background-modifier-hover);
+.sidenote2-comment-action-resolve:hover {
     color: var(--interactive-accent-hover, var(--interactive-accent));
 }
 
-.sidenote2-menu-option-danger {
-    color: var(--text-error, var(--text-accent));
+.sidenote2-comment-action-edit {
+    color: var(--text-muted);
 }
 
-.sidenote2-menu-option-danger:hover {
-    background: var(--background-modifier-error-hover, var(--background-modifier-error, var(--background-modifier-hover)));
+.sidenote2-comment-action-edit:hover {
+    color: var(--text-normal);
+}
+
+.sidenote2-comment-action-delete {
+    color: var(--text-muted);
+}
+
+.sidenote2-comment-action-delete:hover {
     color: var(--text-error, var(--text-accent));
 }
 
@@ -403,6 +467,13 @@
     margin: 4px 0;
 }
 
+.sidenote2-empty-state.sidenote2-section-empty-state {
+    align-items: flex-start;
+    height: auto;
+    padding: 2px 0 0;
+    text-align: left;
+}
+
 .sidenote2-highlight {
     background: hsla(var(--interactive-accent-hsl), var(--sidenote2-highlight-bg-alpha));
     box-decoration-break: clone;
@@ -416,9 +487,22 @@
     background: hsla(var(--interactive-accent-hsl), var(--sidenote2-highlight-hover-alpha));
 }
 
+.sidenote2-highlight-active {
+    background: hsla(var(--interactive-accent-hsl), var(--sidenote2-highlight-hover-alpha));
+    box-shadow:
+        inset 0 -2px 0 hsla(var(--interactive-accent-hsl), calc(var(--sidenote2-highlight-line-alpha) + 0.18)),
+        0 0 0 1px hsla(var(--interactive-accent-hsl), 0.18);
+}
+
 .sidenote2-highlight-resolved {
     background: hsla(var(--interactive-accent-hsl), calc(var(--sidenote2-highlight-bg-alpha) * 0.72));
     box-shadow: inset 0 -1.5px 0 hsla(var(--interactive-accent-hsl), calc(var(--sidenote2-highlight-line-alpha) * 0.8));
+}
+
+.sidenote2-highlight-resolved.sidenote2-highlight-active {
+    box-shadow:
+        inset 0 -2px 0 hsla(var(--interactive-accent-hsl), calc(var(--sidenote2-highlight-line-alpha) * 0.92)),
+        0 0 0 1px hsla(var(--interactive-accent-hsl), 0.14);
 }
 
 .markdown-preview-view .sidenote2-highlight,
@@ -459,10 +543,6 @@
     .sidenote2-comment-actions button {
         width: 28px;
         height: 28px;
-    }
-
-    .sidenote2-action-menu {
-        min-width: 164px;
     }
 }
 

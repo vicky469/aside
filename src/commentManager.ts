@@ -1,4 +1,7 @@
 import { resolveAnchorRange } from "./core/anchorResolver";
+import { getPageCommentLabel, isPageComment } from "./core/commentAnchors";
+
+export type CommentAnchorKind = "selection" | "page";
 
 export interface Comment {
     id: string;
@@ -11,6 +14,8 @@ export interface Comment {
     selectedTextHash: string;
     comment: string;
     timestamp: number;
+    anchorKind?: CommentAnchorKind;
+    orphaned?: boolean;
     resolved?: boolean;
 }
 
@@ -79,6 +84,10 @@ export class CommentManager {
         this.comments.forEach(comment => {
             if (comment.filePath === oldPath) {
                 comment.filePath = newPath;
+                if (isPageComment(comment)) {
+                    comment.selectedText = getPageCommentLabel(newPath);
+                    comment.orphaned = false;
+                }
             }
         });
     }
@@ -91,23 +100,29 @@ export class CommentManager {
      * @param filePath The path of the file that was changed
      */
     async updateCommentCoordinatesForFile(fileContent: string, filePath: string): Promise<void> {
-        for (let i = this.comments.length - 1; i >= 0; i--) {
-            const comment = this.comments[i];
+        for (const comment of this.comments) {
             if (comment.filePath !== filePath) {
+                continue;
+            }
+
+            if (isPageComment(comment)) {
+                comment.orphaned = false;
                 continue;
             }
 
             const newPosition = resolveAnchorRange(fileContent, comment);
 
-            // Update coordinates or drop the comment when the anchor no longer exists.
+            // Preserve comments even when the anchor temporarily disappears. This avoids
+            // destructive data loss during copy/paste and in-progress edits.
             if (newPosition) {
                 comment.startLine = newPosition.startLine;
                 comment.startChar = newPosition.startChar;
                 comment.endLine = newPosition.endLine;
                 comment.endChar = newPosition.endChar;
                 comment.selectedText = newPosition.text;
+                comment.orphaned = false;
             } else {
-                this.comments.splice(i, 1);
+                comment.orphaned = true;
             }
         }
     }

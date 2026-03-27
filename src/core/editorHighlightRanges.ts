@@ -1,4 +1,5 @@
 import type { Comment } from "../commentManager";
+import { isAnchoredComment } from "./commentAnchors";
 import { sortCommentsByPosition } from "./noteCommentStorage";
 
 export interface EditorHighlightRange {
@@ -6,6 +7,7 @@ export interface EditorHighlightRange {
     from: number;
     to: number;
     resolved: boolean;
+    active: boolean;
 }
 
 function lineChToOffset(text: string, line: number, ch: number): number | null {
@@ -40,7 +42,8 @@ function getVisibleCommentsForHighlighting(
         : commentsWithoutDraft.filter((comment) => !comment.resolved);
 
     return sortCommentsByPosition(
-        draftComment ? visibleComments.concat(draftComment) : visibleComments
+        (draftComment ? visibleComments.concat(draftComment) : visibleComments)
+            .filter((comment) => isAnchoredComment(comment))
     );
 }
 
@@ -50,8 +53,13 @@ export function buildEditorHighlightRanges(
     storedComments: Comment[],
     draftComment: Comment | null,
     showResolved: boolean,
+    activeCommentId: string | null,
 ): EditorHighlightRange[] {
-    const comments = getVisibleCommentsForHighlighting(storedComments, draftComment, showResolved);
+    const comments = getVisibleCommentsForHighlighting(
+        storedComments,
+        draftComment,
+        showResolved,
+    );
     const ranges: EditorHighlightRange[] = [];
 
     comments.forEach((comment) => {
@@ -103,6 +111,7 @@ export function buildEditorHighlightRanges(
                 from,
                 to,
                 resolved: comment.resolved === true,
+                active: comment.id === activeCommentId,
             });
         }
     });

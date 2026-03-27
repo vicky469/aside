@@ -42,12 +42,30 @@ test("CommentManager edits/deletes/resolves by id under timestamp collision", ()
     assert.equal(remaining[0].id, "id-2");
 });
 
-test("CommentManager removes a comment when its anchor text is gone", async () => {
+test("CommentManager preserves a comment when its anchor text is gone", async () => {
     const manager = new CommentManager([
         createComment("id-1", 1710000000000, "first"),
     ]);
 
     await manager.updateCommentCoordinatesForFile("goodbye", "note.md");
 
-    assert.equal(manager.getCommentsForFile("note.md").length, 0);
+    const remaining = manager.getCommentsForFile("note.md");
+    assert.equal(remaining.length, 1);
+    assert.equal(remaining[0].id, "id-1");
+    assert.equal(remaining[0].selectedText, "hello");
+    assert.equal(remaining[0].orphaned, true);
+});
+
+test("CommentManager clears orphaned when the anchor text returns", async () => {
+    const manager = new CommentManager([
+        {
+            ...createComment("id-1", 1710000000000, "first"),
+            orphaned: true,
+        },
+    ]);
+
+    await manager.updateCommentCoordinatesForFile("hello again", "note.md");
+
+    const remaining = manager.getCommentsForFile("note.md");
+    assert.equal(remaining[0].orphaned, false);
 });

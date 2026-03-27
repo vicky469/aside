@@ -16,9 +16,9 @@ test("decideEditDismissal exits edit mode when clicking another comment", () => 
     });
 });
 
-test("decideEditDismissal exits edit mode and clears active state on sidebar background click", () => {
+test("decideEditDismissal keeps edit mode on sidebar background click", () => {
     assert.deepEqual(decideEditDismissal(false, false), {
-        shouldCancelDraft: true,
-        shouldClearActiveState: true,
+        shouldCancelDraft: false,
+        shouldClearActiveState: false,
     });
 });

@@ -14,6 +14,13 @@ export function decideEditDismissal(
         };
     }
 
+    if (!clickedCommentItem) {
+        return {
+            shouldCancelDraft: false,
+            shouldClearActiveState: false,
+        };
+    }
+
     return {
         shouldCancelDraft: true,
         shouldClearActiveState: !clickedCommentItem,
