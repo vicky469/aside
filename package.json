@@ -13,7 +13,7 @@
 		"skill:install": "node bin/sidenote2.mjs install-skill",
 		"test": "rm -rf .test-dist && tsc -p tsconfig.test.json && find .test-dist/tests -type f -name '*.test.js' -exec node --test {} +",
 		"release:check": "npm run test && npm run build",
-		"version": "node version-bump.mjs && git add manifest.json versions.json README-beta-release.md README-qa.md"
+		"version": "node version-bump.mjs && git add manifest.json versions.json docs/README-beta-release.md docs/README-qa.md"
 	},
 	"keywords": [],
 	"author": "vicky",
