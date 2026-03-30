@@ -44,10 +44,15 @@ function syncBetaDocs(version) {
 	const readmePath = "README.md";
 	const readmeContent = readFileSync(readmePath, "utf8");
 	const nextReadmeContent = replaceRequired(
-		readmeContent,
-		/Current beta: <a href="https:\/\/github\.com\/vicky469\/SideNote2\/releases\/tag\/[^"]+">[^<]+<\/a>/,
-		`Current beta: <a href="https://github.com/vicky469/SideNote2/releases/tag/${version}">${version}</a>`,
-		`${readmePath} current beta link`,
+		replaceRequired(
+			readmeContent,
+			/https:\/\/github\.com\/vicky469\/SideNote2\/releases\/tag\/[^"]+/,
+			`https://github.com/vicky469/SideNote2/releases/tag/${version}`,
+			`${readmePath} beta badge link`,
+		),
+		/https:\/\/img\.shields\.io\/badge\/beta-[^?"]+\?style=flat-square/,
+		`https://img.shields.io/badge/beta-${version}-f97316?style=flat-square`,
+		`${readmePath} beta badge image`,
 	);
 	writeFileSync(readmePath, nextReadmeContent);
 }

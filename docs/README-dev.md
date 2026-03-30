@@ -1,50 +1,11 @@
 # SideNote2 Development
 
-Development notes for `SideNote2`. The main [README.md](./README.md) stays product-level; this file is for setup, internals, and testing.
-
-Release steps live in [README-release.md](./README-release.md). Beta rollout steps live in [README-beta-release.md](./README-beta-release.md). QA steps live in [README-qa.md](./README-qa.md).
+Development notes for `SideNote2`. The main [README.md](../README.md) stays product-level; this file is for setup, internals, and testing.
 
 ## Architecture
 
-- High-level flow:
+See [architecture.md](./architecture.md) for the visual module map, comment route map, and lifecycle state machine.
 
-```mermaid
-flowchart TD
-    A[User selects text in a markdown note] --> B[Add comment command or editor menu]
-    B --> C[SideNote2 draft in sidebar]
-    C --> D[src/main.ts]
-    D --> E[src/commentManager.ts]
-    D --> F[src/core/noteCommentStorage.ts]
-    F --> G[Same note: trailing HTML comment block]
-    D --> H[src/cache/ParsedNoteCache.ts]
-    D --> I[src/index/AggregateCommentIndex.ts]
-    D --> K[src/core/allCommentsNote.ts]
-    K --> L[SideNote2 index.md]
-    D --> M[CodeMirror and preview highlights]
-    N[src/debug.ts] --> D
-```
-
-- `src/main.ts`
-  Plugin lifecycle, command registration, sidebar drafting and editing flow, note syncing, aggregate note refresh, and editor or preview highlights.
-- `src/commentManager.ts`
-  In-memory comment list, anchor lookup, and coordinate updates after note edits.
-- `src/core/noteCommentStorage.ts`
-  Parses and serializes the trailing hidden `<!-- SideNote2 comments -->` block.
-- `src/cache/ParsedNoteCache.ts`
-  Small parsed-note cache used to avoid repeated full-note parsing.
-- `src/index/AggregateCommentIndex.ts`
-  Vault-wide aggregate comment index used to build `SideNote2 index.md`.
-- `src/core/allCommentsNote.ts`
-  Builds the vault-wide `SideNote2 index.md` jump index.
-- `src/debug.ts`
-  Opt-in debug logging and debug store globals.
-
-- Runtime model:
-  - The note itself is the only persisted source of truth for comment data.
-  - The sidebar is an in-memory view over the active note plus any current draft.
-  - `SideNote2 index.md` is generated from the note-backed comment index and is not the source of truth.
-  - Resolved comments stay in note JSON, can be shown in the sidebar, and can be highlighted when the resolved toggle is on.
-  - A small parsed-note cache and aggregate comment index reduce repeated full-note and full-vault work.
 
 ## Storage
 
@@ -72,33 +33,30 @@ Each note stores comments in a trailing hidden `<!-- SideNote2 comments -->` blo
 The stored payload includes coordinates and a text hash so anchors can be re-matched after edits. The block is hidden in Reading view, but still present in raw markdown for source-mode workflows and LLM ingestion.
 
 ## Dependencies
-### Current Model
 
-- The plugin bundles no third-party runtime dependencies.
+- Most of the plugin logic is implemented in this repo.
+- The production bundle includes no third-party runtime packages.
 - Obsidian, Electron, CodeMirror, Lezer, and Node built-ins stay external at bundle time.
-
-### Package-managed
-
-From `package.json`:
-
-| Group | Packages | Purpose |
-| --- | --- | --- |
-| Build | `typescript`, `esbuild`, `builtin-modules`, `tslib` | Type-check, bundle, externalize Node built-ins, and support TS helper imports |
-| Obsidian API | `obsidian` | Plugin API typings and build target |
-| Node types | `@types/node` | Node typings for tests and build scripts |
-| Linting | `@typescript-eslint/parser`, `@typescript-eslint/eslint-plugin` | TypeScript-aware ESLint support |
-
-### Runtime Externals
-
-Left unbundled in `esbuild.config.mjs`:
-
-| Group | Externals |
-| --- | --- |
-| Obsidian runtime | `obsidian`, `electron` |
-| CodeMirror | `@codemirror/autocomplete`, `@codemirror/collab`, `@codemirror/commands`, `@codemirror/language`, `@codemirror/lint`, `@codemirror/search`, `@codemirror/state`, `@codemirror/view` |
-| Lezer | `@lezer/common`, `@lezer/highlight`, `@lezer/lr` |
-| Node built-ins | Added through `builtin-modules` in the build config |
-
+  
+```text
++--------------------- Dependency Model ---------------------+
+| In-repo code (most plugin behavior)                        |
+|   src/main.ts                                              |
+|   src/commentManager.ts                                    |
+|   src/core/*  src/ui/*  src/index/*  src/cache/*           |
+|                                                            |
+| Build-time packages                                        |
+|   typescript  esbuild  builtin-modules  tslib              |
+|   @types/node  @typescript-eslint/*  obsidian              |
+|                                                            |
+| Host/runtime APIs kept external                            |
+|   obsidian  electron  @codemirror/*  @lezer/*              |
+|   node built-ins                                           |
+|                                                            |
+| Result                                                     |
+|   main.js is mostly our code, with host APIs left out      |
++------------------------------------------------------------+
+```
 
 ## Run
 
