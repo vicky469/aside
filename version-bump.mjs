@@ -40,6 +40,16 @@ function syncBetaDocs(version) {
 		`${betaReleasePath} patch example line`,
 	);
 	writeFileSync(betaReleasePath, nextBetaReleaseContent);
+
+	const readmePath = "README.md";
+	const readmeContent = readFileSync(readmePath, "utf8");
+	const nextReadmeContent = replaceRequired(
+		readmeContent,
+		/Current beta: <a href="https:\/\/github\.com\/vicky469\/SideNote2\/releases\/tag\/[^"]+">[^<]+<\/a>/,
+		`Current beta: <a href="https://github.com/vicky469/SideNote2/releases/tag/${version}">${version}</a>`,
+		`${readmePath} current beta link`,
+	);
+	writeFileSync(readmePath, nextReadmeContent);
 }
 
 const manifest = JSON.parse(readFileSync("manifest.json", "utf8"));

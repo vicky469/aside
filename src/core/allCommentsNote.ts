@@ -1,5 +1,5 @@
 import type { Comment } from "../commentManager";
-import { getCommentSelectionLabel, getCommentStatusLabel, isAnchoredComment } from "./commentAnchors";
+import { getCommentSelectionLabel, getCommentStatusLabel, isAnchoredComment, isPageComment } from "./commentAnchors";
 import { extractTagsFromText } from "./commentTags";
 import { sortCommentsByPosition } from "./noteCommentStorage";
 
@@ -89,14 +89,15 @@ function formatFileHeadingLabel(filePath: string): string {
     return escapeMarkdownText(filePath);
 }
 
-function formatCommentLinkLabel(comment: Comment, mentionedPageLabel?: string): string {
+function formatCommentLinkLabel(comment: Comment, mentionedPageLabel?: string, pageNoteOrdinal?: number): string {
     const selectedPreview = escapeMarkdownText(toInlinePreview(getCommentSelectionLabel(comment)));
     const normalizedMentionLabel = mentionedPageLabel
         ? escapeMarkdownText(toInlinePreview(mentionedPageLabel))
         : null;
+    const pageNoteFallbackLabel = pageNoteOrdinal ? String(pageNoteOrdinal) : selectedPreview;
     const prefixedPreview = isAnchoredComment(comment)
         ? (normalizedMentionLabel ? `${selectedPreview} · ${normalizedMentionLabel}` : selectedPreview)
-        : `${getCommentStatusLabel(comment)} · ${normalizedMentionLabel ?? selectedPreview}`;
+        : `${getCommentStatusLabel(comment)} · ${normalizedMentionLabel ?? (isPageComment(comment) ? pageNoteFallbackLabel : selectedPreview)}`;
     if (comment.resolved) {
         return `~~${prefixedPreview}~~`;
     }
@@ -212,6 +213,17 @@ export function buildAllCommentsNoteContent(
         lines.push(`**${formatFileHeadingLabel(filePath)}**`);
 
         const fileComments = sortCommentsByPosition(commentsByFile.get(filePath) ?? []);
+        const pageNoteOrdinals = new Map<string, number>();
+        let nextPageNoteOrdinal = 1;
+        for (const comment of fileComments) {
+            if (!isPageComment(comment)) {
+                continue;
+            }
+
+            pageNoteOrdinals.set(comment.id, nextPageNoteOrdinal);
+            nextPageNoteOrdinal += 1;
+        }
+
         for (const comment of fileComments) {
             const tagLine = formatCommentTags(comment);
             const mentionedPageLabels = dedupeMentionedPageLabels(options.getMentionedPageLabels?.(comment) ?? []);
@@ -220,8 +232,8 @@ export function buildAllCommentsNoteContent(
             for (const mentionedPageLabel of labels) {
                 lines.push(
                     tagLine
-                        ? `- [${formatCommentLinkLabel(comment, mentionedPageLabel ?? undefined)}](${buildCommentLocationUrl(vaultName, comment)})  ${tagLine}`
-                        : `- [${formatCommentLinkLabel(comment, mentionedPageLabel ?? undefined)}](${buildCommentLocationUrl(vaultName, comment)})`
+                        ? `- [${formatCommentLinkLabel(comment, mentionedPageLabel ?? undefined, pageNoteOrdinals.get(comment.id))}](${buildCommentLocationUrl(vaultName, comment)})  ${tagLine}`
+                        : `- [${formatCommentLinkLabel(comment, mentionedPageLabel ?? undefined, pageNoteOrdinals.get(comment.id))}](${buildCommentLocationUrl(vaultName, comment)})`
                 );
             }
         }

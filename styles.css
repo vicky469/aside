@@ -16,6 +16,21 @@
     --sidenote2-highlight-line-alpha: 0.34;
 }
 
+.sidenote2-index-note-view .markdown-preview-view,
+.sidenote2-index-note-view .markdown-source-view.mod-cm6 .markdown-rendered {
+    font-size: 0.92em;
+}
+
+.sidenote2-index-note-view .markdown-preview-view .el-p:has(> p > strong:only-child) > p,
+.sidenote2-index-note-view .markdown-source-view.mod-cm6 .markdown-rendered .el-p:has(> p > strong:only-child) > p {
+    margin-bottom: 0.12rem;
+}
+
+.sidenote2-index-note-view .markdown-preview-view .el-p:has(> p > strong:only-child) + .el-ul > ul,
+.sidenote2-index-note-view .markdown-source-view.mod-cm6 .markdown-rendered .el-p:has(> p > strong:only-child) + .el-ul > ul {
+    margin-top: 0;
+}
+
 .markdown-preview-view p:has(> img[alt="SideNote2 index header image"]),
 .markdown-source-view.mod-cm6 .markdown-rendered p:has(> img[alt="SideNote2 index header image"]) {
     margin-bottom: 0.2rem;

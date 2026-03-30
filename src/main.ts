@@ -1,4 +1,5 @@
 import { addIcon, FileView, WorkspaceLeaf, TFile, MarkdownView, Notice, Plugin, normalizePath } from "obsidian";
+import type { MarkdownViewModeType } from "obsidian";
 import type { CachedMetadata } from "obsidian";
 import { Decoration, DecorationSet, EditorView, ViewPlugin, ViewUpdate } from "@codemirror/view";
 import { Range, StateEffect } from "@codemirror/state";
@@ -87,6 +88,7 @@ export default class SideNote2 extends Plugin {
     private originalMetadataGetFileCache: ((file: TFile) => CachedMetadata | null) | null = null;
     private showResolvedComments = false;
     private revealedCommentState: { filePath: string; commentId: string } | null = null;
+    private static readonly INDEX_NOTE_VIEW_CLASS = "sidenote2-index-note-view";
 
     async onload() {
         initializeDebug();
@@ -118,6 +120,7 @@ export default class SideNote2 extends Plugin {
             await this.refreshCommentViews();
             this.refreshEditorDecorations();
             this.scheduleAggregateNoteRefresh();
+            this.syncIndexNoteViewClasses();
         });
 
         this.registerView("sidenote2-view", (leaf) => new SideNote2View(leaf, this));
@@ -198,9 +201,8 @@ export default class SideNote2 extends Plugin {
         // Listen for active leaf changes to update the comment view
         this.registerEvent(
             this.app.workspace.on('file-open', (file) => {
-                if (file instanceof TFile && this.isAllCommentsNotePath(file.path)) {
-                    void this.ensureIndexNotePreviewMode(this.app.workspace.activeLeaf);
-                }
+                void this.syncIndexNoteLeafMode(this.app.workspace.activeLeaf);
+                this.syncIndexNoteViewClasses();
 
                 const sidebarFile = isSidebarSupportedFile(file, this.getAllCommentsNotePath()) ? file : null;
                 if (isMarkdownCommentableFile(file, this.getAllCommentsNotePath())) {
@@ -226,9 +228,8 @@ export default class SideNote2 extends Plugin {
                 }
 
                 const file = this.getFileForLeaf(leaf);
-                if (file instanceof TFile && this.isAllCommentsNotePath(file.path)) {
-                    void this.ensureIndexNotePreviewMode(leaf);
-                }
+                void this.syncIndexNoteLeafMode(leaf);
+                this.syncIndexNoteViewClasses();
                 const sidebarFile = isSidebarSupportedFile(file, this.getAllCommentsNotePath()) ? file : null;
                 if (isMarkdownCommentableFile(file, this.getAllCommentsNotePath())) {
                     this.activeMarkdownFile = file;
@@ -655,15 +656,7 @@ export default class SideNote2 extends Plugin {
         return matchedView;
     }
 
-    private async ensureIndexNotePreviewMode(leaf: WorkspaceLeaf | null): Promise<void> {
-        if (!(leaf?.view instanceof MarkdownView) || !this.isAllCommentsNotePath(leaf.view.file?.path ?? "")) {
-            return;
-        }
-
-        if (leaf.view.getMode() === "preview") {
-            return;
-        }
-
+    private async setLeafMarkdownMode(leaf: WorkspaceLeaf, mode: MarkdownViewModeType): Promise<void> {
         const viewState = leaf.getViewState();
         if (viewState.type !== "markdown") {
             return;
@@ -673,9 +666,57 @@ export default class SideNote2 extends Plugin {
             ...viewState,
             state: {
                 ...(viewState.state ?? {}),
-                mode: "preview",
+                mode,
+                source: mode === "source",
+            },
+        });
+        this.syncIndexNoteViewClasses();
+    }
+
+    private async syncIndexNoteLeafMode(leaf: WorkspaceLeaf | null): Promise<void> {
+        if (!(leaf?.view instanceof MarkdownView)) {
+            return;
+        }
+
+        const isIndexLeaf = this.isAllCommentsNotePath(leaf.view.file?.path ?? "");
+        if (isIndexLeaf) {
+            if (leaf.view.getMode() !== "preview") {
+                await this.setLeafMarkdownMode(leaf, "preview");
+            }
+            return;
+        }
+
+        const viewState = leaf.getViewState();
+        if (viewState.type !== "markdown") {
+            return;
+        }
+
+        const isDefaultEditingMode = leaf.view.getMode() === "source" && viewState.state?.source !== true;
+        if (isDefaultEditingMode) {
+            return;
+        }
+
+        await leaf.setViewState({
+            ...viewState,
+            state: {
+                ...(viewState.state ?? {}),
+                mode: "source",
                 source: false,
             },
+        });
+        this.syncIndexNoteViewClasses();
+    }
+
+    private syncIndexNoteViewClasses(): void {
+        this.app.workspace.iterateAllLeaves((leaf) => {
+            if (!(leaf.view instanceof MarkdownView)) {
+                return;
+            }
+
+            leaf.view.containerEl.classList.toggle(
+                SideNote2.INDEX_NOTE_VIEW_CLASS,
+                this.isAllCommentsNotePath(leaf.view.file?.path ?? ""),
+            );
         });
     }
 
@@ -1286,19 +1327,28 @@ export default class SideNote2 extends Plugin {
         }
 
         const currentContent = await this.getCurrentNoteContent(existingFile);
-        if (currentContent === nextContent) {
-            return;
-        }
+        const contentChanged = currentContent !== nextContent;
 
         const openView = this.getMarkdownViewForFile(existingFile);
         if (openView) {
-            await this.ensureIndexNotePreviewMode(openView.leaf);
+            await this.syncIndexNoteLeafMode(openView.leaf);
             if (openView.getViewData() !== nextContent) {
                 openView.setViewData(nextContent, false);
+            }
+            if (contentChanged) {
+                await openView.save();
             }
             if (openView.getMode() === "preview") {
                 openView.previewMode.rerender(true);
             }
+        }
+
+        if (!contentChanged) {
+            return;
+        }
+
+        if (openView) {
+            return;
         }
 
         await this.app.vault.modify(existingFile, nextContent);

@@ -189,8 +189,50 @@ test("buildAllCommentsNoteContent labels page notes and orphaned notes", () => {
         }),
     ]);
 
-    assert.match(content, /\[page note · Note\]\(obsidian:\/\/side-note2-comment\?vault=dev&file=Folder%2FNote\.md&commentId=page-note\)/);
+    assert.match(content, /\[page note · 1\]\(obsidian:\/\/side-note2-comment\?vault=dev&file=Folder%2FNote\.md&commentId=page-note\)/);
     assert.match(content, /\[orphaned · missing text\]\(obsidian:\/\/side-note2-comment\?vault=dev&file=Folder%2FNote\.md&commentId=orphan-note\)/);
+});
+
+test("buildAllCommentsNoteContent numbers page notes per file when no mentioned page label is available", () => {
+    const content = buildAllCommentsNoteContent("dev", [
+        createComment({
+            id: "page-note-1",
+            filePath: "Folder/Note.md",
+            anchorKind: "page",
+            selectedText: "Note",
+            startLine: 0,
+            startChar: 0,
+            endLine: 0,
+            endChar: 0,
+            timestamp: 1,
+        }),
+        createComment({
+            id: "page-note-2",
+            filePath: "Folder/Note.md",
+            anchorKind: "page",
+            selectedText: "Note",
+            startLine: 0,
+            startChar: 0,
+            endLine: 0,
+            endChar: 0,
+            timestamp: 2,
+        }),
+        createComment({
+            id: "page-note-other-file",
+            filePath: "Folder/Other.md",
+            anchorKind: "page",
+            selectedText: "Other",
+            startLine: 0,
+            startChar: 0,
+            endLine: 0,
+            endChar: 0,
+            timestamp: 3,
+        }),
+    ]);
+
+    assert.match(content, /\*\*Folder\/Note\.md\*\*[\s\S]*\[page note · 1\]\(obsidian:\/\/side-note2-comment\?vault=dev&file=Folder%2FNote\.md&commentId=page-note-1\)/);
+    assert.match(content, /\*\*Folder\/Note\.md\*\*[\s\S]*\[page note · 2\]\(obsidian:\/\/side-note2-comment\?vault=dev&file=Folder%2FNote\.md&commentId=page-note-2\)/);
+    assert.match(content, /\*\*Folder\/Other\.md\*\*[\s\S]*\[page note · 1\]\(obsidian:\/\/side-note2-comment\?vault=dev&file=Folder%2FOther\.md&commentId=page-note-other-file\)/);
 });
 
 test("buildAllCommentsNoteContent expands mentioned pages and collapses duplicates per comment", () => {

@@ -24,6 +24,7 @@ interface MockLeaf {
     filePath?: string;
     active?: boolean;
     recent?: boolean;
+    mode?: "source" | "preview";
 }
 
 class MockPlugin {
@@ -118,6 +119,34 @@ class MockPlugin {
         const anyFileLeaf = leaves.find((leaf) => leaf.kind === "file");
         return anyFileLeaf?.id ?? "existing-or-new";
     }
+
+    shouldSkipAggregateViewRefreshOld(currentContent: string, nextContent: string): boolean {
+        return currentContent === nextContent;
+    }
+
+    shouldSkipAggregateViewRefreshFixed(currentContent: string, nextContent: string, hasOpenView: boolean): boolean {
+        return currentContent === nextContent && !hasOpenView;
+    }
+
+    syncIndexLeafModeOld(leaf: MockLeaf): MockLeaf {
+        if (leaf.kind === "file" && leaf.filePath === ALL_COMMENTS_NOTE_PATH) {
+            return { ...leaf, mode: "preview" };
+        }
+
+        return leaf;
+    }
+
+    syncIndexLeafModeFixed(leaf: MockLeaf): MockLeaf {
+        if (leaf.kind !== "file") {
+            return leaf;
+        }
+
+        if (leaf.filePath === ALL_COMMENTS_NOTE_PATH) {
+            return { ...leaf, mode: "preview" };
+        }
+
+        return { ...leaf, mode: "source" };
+    }
 }
 
 test("old sidebar target falls back to the last normal note for SideNote2 index", () => {
@@ -201,4 +230,46 @@ test("fixed reveal flow reuses an existing file leaf instead of forcing a new ta
     ], "Folder/Note.md");
 
     assert.equal(target, "main-1");
+});
+
+test("fixed aggregate refresh still updates an open index view when content is unchanged", () => {
+    const plugin = new MockPlugin();
+
+    assert.equal(plugin.shouldSkipAggregateViewRefreshOld("same", "same"), true);
+    assert.equal(plugin.shouldSkipAggregateViewRefreshFixed("same", "same", true), false);
+    assert.equal(plugin.shouldSkipAggregateViewRefreshFixed("same", "same", false), true);
+});
+
+test("fixed index preview mode returns non-index files to the default editing mode", () => {
+    const plugin = new MockPlugin();
+    const indexLeaf = plugin.syncIndexLeafModeFixed({
+        id: "main-1",
+        kind: "file",
+        filePath: ALL_COMMENTS_NOTE_PATH,
+        mode: "preview",
+    });
+    const noteLeaf = plugin.syncIndexLeafModeFixed({
+        ...indexLeaf,
+        filePath: "Folder/Note.md",
+    });
+
+    assert.equal(indexLeaf.mode, "preview");
+    assert.equal(noteLeaf.mode, "source");
+});
+
+test("old index preview mode leaks preview onto the next file in the same leaf", () => {
+    const plugin = new MockPlugin();
+    const indexLeaf = plugin.syncIndexLeafModeOld({
+        id: "main-1",
+        kind: "file",
+        filePath: ALL_COMMENTS_NOTE_PATH,
+        mode: "source",
+    });
+    const noteLeaf = plugin.syncIndexLeafModeOld({
+        ...indexLeaf,
+        filePath: "Folder/Note.md",
+    });
+
+    assert.equal(indexLeaf.mode, "preview");
+    assert.equal(noteLeaf.mode, "preview");
 });
