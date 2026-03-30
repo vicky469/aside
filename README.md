@@ -59,6 +59,7 @@ If multiple side comments in the same note use the same selected text, include a
 
 - `Debug mode`
   This is not implemented yet.
+- Others should be straightforward.
 
 ## Command
 

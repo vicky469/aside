@@ -198,6 +198,10 @@ export default class SideNote2 extends Plugin {
         // Listen for active leaf changes to update the comment view
         this.registerEvent(
             this.app.workspace.on('file-open', (file) => {
+                if (file instanceof TFile && this.isAllCommentsNotePath(file.path)) {
+                    void this.ensureIndexNotePreviewMode(this.app.workspace.activeLeaf);
+                }
+
                 const sidebarFile = isSidebarSupportedFile(file, this.getAllCommentsNotePath()) ? file : null;
                 if (isMarkdownCommentableFile(file, this.getAllCommentsNotePath())) {
                     this.activeMarkdownFile = file;
@@ -222,6 +226,9 @@ export default class SideNote2 extends Plugin {
                 }
 
                 const file = this.getFileForLeaf(leaf);
+                if (file instanceof TFile && this.isAllCommentsNotePath(file.path)) {
+                    void this.ensureIndexNotePreviewMode(leaf);
+                }
                 const sidebarFile = isSidebarSupportedFile(file, this.getAllCommentsNotePath()) ? file : null;
                 if (isMarkdownCommentableFile(file, this.getAllCommentsNotePath())) {
                     this.activeMarkdownFile = file;
@@ -646,6 +653,30 @@ export default class SideNote2 extends Plugin {
         });
 
         return matchedView;
+    }
+
+    private async ensureIndexNotePreviewMode(leaf: WorkspaceLeaf | null): Promise<void> {
+        if (!(leaf?.view instanceof MarkdownView) || !this.isAllCommentsNotePath(leaf.view.file?.path ?? "")) {
+            return;
+        }
+
+        if (leaf.view.getMode() === "preview") {
+            return;
+        }
+
+        const viewState = leaf.getViewState();
+        if (viewState.type !== "markdown") {
+            return;
+        }
+
+        await leaf.setViewState({
+            ...viewState,
+            state: {
+                ...(viewState.state ?? {}),
+                mode: "preview",
+                source: false,
+            },
+        });
     }
 
     private getMarkdownViewForEditorView(editorView: EditorView): MarkdownView | null {
@@ -1261,6 +1292,7 @@ export default class SideNote2 extends Plugin {
 
         const openView = this.getMarkdownViewForFile(existingFile);
         if (openView) {
+            await this.ensureIndexNotePreviewMode(openView.leaf);
             if (openView.getViewData() !== nextContent) {
                 openView.setViewData(nextContent, false);
             }
