@@ -16,6 +16,21 @@
     --sidenote2-highlight-line-alpha: 0.34;
 }
 
+.markdown-preview-view p:has(> img[alt="SideNote2 index header image"]),
+.markdown-source-view.mod-cm6 .markdown-rendered p:has(> img[alt="SideNote2 index header image"]) {
+    margin-bottom: 0.2rem;
+}
+
+.sidenote2-index-header-caption {
+    display: block;
+    width: 100%;
+    margin: 0 auto 0.75rem;
+    text-align: center !important;
+    color: var(--text-faint) !important;
+    font-size: var(--font-ui-smaller) !important;
+    line-height: 1.2 !important;
+}
+
 .sidenote2-confirm-modal h2 {
     margin: 0 0 0.25rem;
     text-align: center;

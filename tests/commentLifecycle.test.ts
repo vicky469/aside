@@ -1,6 +1,11 @@
 import * as assert from "node:assert/strict";
 import test from "node:test";
-import { buildAllCommentsNoteContent } from "../src/core/allCommentsNote";
+import {
+    ALL_COMMENTS_NOTE_IMAGE_ALT,
+    ALL_COMMENTS_NOTE_IMAGE_CAPTION,
+    ALL_COMMENTS_NOTE_IMAGE_URL,
+    buildAllCommentsNoteContent,
+} from "../src/core/allCommentsNote";
 import { parseNoteComments, serializeNoteComments } from "../src/core/noteCommentStorage";
 import type { Comment } from "../src/commentManager";
 import { CommentManager } from "../src/commentManager";
@@ -71,5 +76,8 @@ test("note-backed comment lifecycle stays aligned with aggregate output", () => 
 
     assert.equal(parsed.comments.length, 0);
     assert.equal(note, noteBody);
-    assert.equal(buildAllCommentsNoteContent("dev", parsed.comments), "");
+    assert.equal(
+        buildAllCommentsNoteContent("dev", parsed.comments),
+        `![${ALL_COMMENTS_NOTE_IMAGE_ALT}](${ALL_COMMENTS_NOTE_IMAGE_URL})\n<div class="sidenote2-index-header-caption">${ALL_COMMENTS_NOTE_IMAGE_CAPTION}</div>\n`,
+    );
 });

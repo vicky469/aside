@@ -1,6 +1,5 @@
 import { ItemView, MarkdownRenderer, TFile, WorkspaceLeaf, setIcon, type ViewStateResult } from "obsidian";
 import type { Comment } from "../../commentManager";
-import { isAllCommentsNotePath } from "../../core/allCommentsNote";
 import { isOrphanedComment, isPageComment } from "../../core/commentAnchors";
 import { extractTagsFromText } from "../../core/commentTags";
 import type { DraftComment } from "../../domain/drafts";
@@ -527,7 +526,7 @@ export default class SideNote2View extends ItemView {
     public async renderComments() {
         const renderVersion = ++this.renderVersion;
         const file = this.file;
-        const isAllCommentsView = !!file && isAllCommentsNotePath(file.path);
+        const isAllCommentsView = !!file && this.plugin.isAllCommentsNotePath(file.path);
 
         this.containerEl.empty();
         this.containerEl.addClass("sidenote2-view-container");

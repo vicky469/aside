@@ -6,7 +6,15 @@ import { Comment, CommentManager } from "./commentManager";
 import { getPageCommentLabel, isAnchoredComment, isPageComment } from "./core/commentAnchors";
 import { DraftComment, DraftSelection } from "./domain/drafts";
 import { parsePromptDeleteSetting } from "./core/appConfig";
-import { ALL_COMMENTS_NOTE_PATH, buildAllCommentsNoteContent, findCommentLocationTargetInMarkdownLine, isAllCommentsNotePath, LEGACY_ALL_COMMENTS_NOTE_PATH } from "./core/allCommentsNote";
+import {
+    buildAllCommentsNoteContent,
+    findCommentLocationTargetInMarkdownLine,
+    isAllCommentsNotePath,
+    LEGACY_ALL_COMMENTS_NOTE_PATH,
+    normalizeAllCommentsNoteImageCaption,
+    normalizeAllCommentsNoteImageUrl,
+    normalizeAllCommentsNotePath,
+} from "./core/allCommentsNote";
 import { buildAttachmentComments, parseAttachmentComments } from "./core/attachmentCommentStorage";
 import { pickExactTextMatch, resolveAnchorRange } from "./core/anchorResolver";
 import { isAttachmentCommentableFile, isAttachmentCommentablePath, isMarkdownCommentableFile, isSidebarSupportedFile, isSidebarSupportedPath } from "./core/commentableFiles";
@@ -90,10 +98,10 @@ export default class SideNote2 extends Plugin {
         setDebugEnabled(this.settings.enableDebugMode);
         this.installMetadataCacheAugmentation();
         const activeFile = this.app.workspace.getActiveFile();
-        if (isMarkdownCommentableFile(activeFile)) {
+        if (isMarkdownCommentableFile(activeFile, this.getAllCommentsNotePath())) {
             this.activeMarkdownFile = activeFile;
         }
-        if (activeFile instanceof TFile && isSidebarSupportedPath(activeFile.path)) {
+        if (activeFile instanceof TFile && isSidebarSupportedPath(activeFile.path, this.getAllCommentsNotePath())) {
             this.activeSidebarFile = activeFile;
         }
         await this.loadVisibleFiles();
@@ -190,8 +198,8 @@ export default class SideNote2 extends Plugin {
         // Listen for active leaf changes to update the comment view
         this.registerEvent(
             this.app.workspace.on('file-open', (file) => {
-                const sidebarFile = isSidebarSupportedFile(file) ? file : null;
-                if (isMarkdownCommentableFile(file)) {
+                const sidebarFile = isSidebarSupportedFile(file, this.getAllCommentsNotePath()) ? file : null;
+                if (isMarkdownCommentableFile(file, this.getAllCommentsNotePath())) {
                     this.activeMarkdownFile = file;
                 }
                 this.activeSidebarFile = sidebarFile;
@@ -214,8 +222,8 @@ export default class SideNote2 extends Plugin {
                 }
 
                 const file = this.getFileForLeaf(leaf);
-                const sidebarFile = isSidebarSupportedFile(file) ? file : null;
-                if (isMarkdownCommentableFile(file)) {
+                const sidebarFile = isSidebarSupportedFile(file, this.getAllCommentsNotePath()) ? file : null;
+                if (isMarkdownCommentableFile(file, this.getAllCommentsNotePath())) {
                     this.activeMarkdownFile = file;
                 }
                 this.activeSidebarFile = sidebarFile;
@@ -349,6 +357,11 @@ export default class SideNote2 extends Plugin {
             enableDebugMode: typeof loaded?.enableDebugMode === "boolean"
                 ? loaded.enableDebugMode
                 : DEFAULT_SETTINGS.enableDebugMode,
+            indexNotePath: normalizeAllCommentsNotePath(loaded?.indexNotePath),
+            indexHeaderImageUrl: normalizeAllCommentsNoteImageUrl(loaded?.indexHeaderImageUrl),
+            indexHeaderImageCaption: Object.prototype.hasOwnProperty.call(loaded ?? {}, "indexHeaderImageCaption")
+                ? normalizeAllCommentsNoteImageCaption(loaded?.indexHeaderImageCaption)
+                : DEFAULT_SETTINGS.indexHeaderImageCaption,
         };
 
         const persistedAttachmentComments = parseAttachmentComments(loaded?.attachmentComments);
@@ -381,6 +394,95 @@ export default class SideNote2 extends Plugin {
             ...this.settings,
             attachmentComments: buildAttachmentComments(this.commentManager.getAllComments()),
         });
+    }
+
+    public getAllCommentsNotePath(): string {
+        return normalizeAllCommentsNotePath(this.settings.indexNotePath);
+    }
+
+    public getIndexHeaderImageUrl(): string {
+        return normalizeAllCommentsNoteImageUrl(this.settings.indexHeaderImageUrl);
+    }
+
+    public getIndexHeaderImageCaption(): string {
+        return normalizeAllCommentsNoteImageCaption(this.settings.indexHeaderImageCaption);
+    }
+
+    public isAllCommentsNotePath(filePath: string): boolean {
+        return isAllCommentsNotePath(filePath, this.getAllCommentsNotePath());
+    }
+
+    public async setIndexNotePath(nextPathInput: string): Promise<void> {
+        const nextPath = normalizeAllCommentsNotePath(nextPathInput);
+        const previousPath = this.getAllCommentsNotePath();
+        if (nextPath === previousPath && this.settings.indexNotePath === nextPath) {
+            return;
+        }
+
+        const parentPath = nextPath.includes("/")
+            ? normalizePath(nextPath.split("/").slice(0, -1).join("/"))
+            : "";
+        if (parentPath) {
+            const parent = this.app.vault.getAbstractFileByPath(parentPath);
+            if (!parent) {
+                new Notice(`Folder does not exist: ${parentPath}`);
+                return;
+            }
+        }
+
+        const currentIndexFile = this.getMarkdownFileByPath(previousPath)
+            ?? this.getMarkdownFileByPath(LEGACY_ALL_COMMENTS_NOTE_PATH);
+        const conflictingFile = this.getFileByPath(nextPath);
+        if (conflictingFile && conflictingFile.path !== currentIndexFile?.path) {
+            new Notice(`${nextPath} already exists. Choose another index note path.`);
+            return;
+        }
+
+        this.settings.indexNotePath = nextPath;
+        await this.saveSettings();
+
+        if (currentIndexFile && currentIndexFile.path !== nextPath) {
+            await this.app.fileManager.renameFile(currentIndexFile, nextPath);
+        }
+
+        if (this.activeSidebarFile && isAllCommentsNotePath(this.activeSidebarFile.path, previousPath)) {
+            this.activeSidebarFile = this.getMarkdownFileByPath(nextPath);
+        }
+
+        if (this.draftHostFilePath && isAllCommentsNotePath(this.draftHostFilePath, previousPath)) {
+            this.draftHostFilePath = nextPath;
+        }
+
+        await this.refreshAggregateNoteNow();
+        await this.updateSidebarViews(this.getSidebarTargetFile());
+    }
+
+    public async setIndexHeaderImageUrl(nextUrlInput: string): Promise<void> {
+        const nextUrl = normalizeAllCommentsNoteImageUrl(nextUrlInput);
+        if (
+            nextUrl === this.getIndexHeaderImageUrl() &&
+            this.settings.indexHeaderImageUrl === nextUrl
+        ) {
+            return;
+        }
+
+        this.settings.indexHeaderImageUrl = nextUrl;
+        await this.saveSettings();
+        await this.refreshAggregateNoteNow();
+    }
+
+    public async setIndexHeaderImageCaption(nextCaptionInput: string): Promise<void> {
+        const nextCaption = normalizeAllCommentsNoteImageCaption(nextCaptionInput);
+        if (
+            nextCaption === this.getIndexHeaderImageCaption() &&
+            this.settings.indexHeaderImageCaption === nextCaption
+        ) {
+            return;
+        }
+
+        this.settings.indexHeaderImageCaption = nextCaption;
+        await this.saveSettings();
+        await this.refreshAggregateNoteNow();
     }
 
     public async shouldConfirmDelete(): Promise<boolean> {
@@ -444,7 +546,7 @@ export default class SideNote2 extends Plugin {
     private getOpenSidebarFiles(): TFile[] {
         const files = new Map<string, TFile>();
         this.app.workspace.iterateAllLeaves((leaf) => {
-            if (leaf.view instanceof FileView && isSidebarSupportedFile(leaf.view.file)) {
+            if (leaf.view instanceof FileView && isSidebarSupportedFile(leaf.view.file, this.getAllCommentsNotePath())) {
                 files.set(leaf.view.file.path, leaf.view.file);
             }
         });
@@ -453,7 +555,7 @@ export default class SideNote2 extends Plugin {
 
     public getPinnedMarkdownFile(): TFile | null {
         const activeFile = this.app.workspace.getActiveFile();
-        if (isMarkdownCommentableFile(activeFile)) {
+        if (isMarkdownCommentableFile(activeFile, this.getAllCommentsNotePath())) {
             return activeFile;
         }
 
@@ -475,7 +577,7 @@ export default class SideNote2 extends Plugin {
 
     public getSidebarTargetFile(): TFile | null {
         const activeFile = this.app.workspace.getActiveFile();
-        if (isSidebarSupportedFile(activeFile)) {
+        if (isSidebarSupportedFile(activeFile, this.getAllCommentsNotePath())) {
             return activeFile;
         }
 
@@ -611,7 +713,7 @@ export default class SideNote2 extends Plugin {
     }
 
     private isCommentableFile(file: TFile | null): file is TFile {
-        return isMarkdownCommentableFile(file) || isAttachmentCommentableFile(file);
+        return isMarkdownCommentableFile(file, this.getAllCommentsNotePath()) || isAttachmentCommentableFile(file);
     }
 
     private async getCurrentNoteContent(file: TFile): Promise<string> {
@@ -630,7 +732,7 @@ export default class SideNote2 extends Plugin {
         }
 
         const activeFile = this.app.workspace.getActiveFile();
-        if (isSidebarSupportedFile(activeFile)) {
+        if (isSidebarSupportedFile(activeFile, this.getAllCommentsNotePath())) {
             await this.syncSidebarFile(activeFile);
         }
     }
@@ -640,7 +742,7 @@ export default class SideNote2 extends Plugin {
             return;
         }
 
-        if (isAllCommentsNotePath(file.path)) {
+        if (this.isAllCommentsNotePath(file.path)) {
             await this.ensureIndexedCommentsLoaded();
             await this.refreshAggregateNoteNow();
             return;
@@ -858,7 +960,7 @@ export default class SideNote2 extends Plugin {
             this.aggregateIndexInitializationPromise = (async () => {
                 const markdownFiles = this.app.vault
                     .getMarkdownFiles()
-                    .filter((file) => !isAllCommentsNotePath(file.path))
+                    .filter((file) => !this.isAllCommentsNotePath(file.path))
                     .sort((left, right) => left.path.localeCompare(right.path));
 
                 for (const file of markdownFiles) {
@@ -896,7 +998,7 @@ export default class SideNote2 extends Plugin {
     }
 
     private async parseAndNormalizeFileComments(filePath: string, noteContent: string): Promise<ParsedNoteComments> {
-        if (isAllCommentsNotePath(filePath)) {
+        if (this.isAllCommentsNotePath(filePath)) {
             const parsed = this.getParsedNoteComments(filePath, noteContent);
             return {
                 mainContent: parsed.mainContent,
@@ -950,7 +1052,7 @@ export default class SideNote2 extends Plugin {
     }
 
     async loadCommentsForFile(file: TFile | null): Promise<Comment[]> {
-        if (!file || isAllCommentsNotePath(file.path) || !this.isCommentableFile(file)) {
+        if (!file || this.isAllCommentsNotePath(file.path) || !this.isCommentableFile(file)) {
             return [];
         }
 
@@ -1131,20 +1233,24 @@ export default class SideNote2 extends Plugin {
         await this.ensureAggregateCommentIndexInitialized();
         const comments = this.aggregateCommentIndex.getAllComments();
         const nextContent = buildAllCommentsNoteContent(this.app.vault.getName(), comments, {
+            allCommentsNotePath: this.getAllCommentsNotePath(),
+            headerImageUrl: this.getIndexHeaderImageUrl(),
+            headerImageCaption: this.getIndexHeaderImageCaption(),
             getMentionedPageLabels: (comment) => this.getCommentMentionedPageLabels(comment),
         });
-        let existingFile = this.getMarkdownFileByPath(ALL_COMMENTS_NOTE_PATH);
+        const allCommentsNotePath = this.getAllCommentsNotePath();
+        let existingFile = this.getMarkdownFileByPath(allCommentsNotePath);
 
         if (!existingFile) {
             const legacyFile = this.getMarkdownFileByPath(LEGACY_ALL_COMMENTS_NOTE_PATH);
             if (legacyFile) {
-                await this.app.fileManager.renameFile(legacyFile, ALL_COMMENTS_NOTE_PATH);
-                existingFile = this.getMarkdownFileByPath(ALL_COMMENTS_NOTE_PATH);
+                await this.app.fileManager.renameFile(legacyFile, allCommentsNotePath);
+                existingFile = this.getMarkdownFileByPath(allCommentsNotePath);
             }
         }
 
         if (!existingFile) {
-            await this.app.vault.create(ALL_COMMENTS_NOTE_PATH, nextContent);
+            await this.app.vault.create(allCommentsNotePath, nextContent);
             return;
         }
 
@@ -1416,7 +1522,7 @@ export default class SideNote2 extends Plugin {
 
     public async startPageCommentDraft(file: TFile | null = this.getPinnedCommentableFile()) {
         if (!this.isCommentableFile(file)) {
-            new Notice(`Cannot add comments to ${ALL_COMMENTS_NOTE_PATH}.`);
+            new Notice(`Cannot add comments to ${this.getAllCommentsNotePath()}.`);
             return;
         }
 
@@ -1433,10 +1539,10 @@ export default class SideNote2 extends Plugin {
 
     private async startNewCommentDraft(selection: DraftSelection) {
         if (!this.isCommentableFile(selection.file)) {
-            new Notice(`Cannot add comments to ${ALL_COMMENTS_NOTE_PATH}.`);
+            new Notice(`Cannot add comments to ${this.getAllCommentsNotePath()}.`);
             return;
         }
-        if (selection.anchorKind !== "page" && !isMarkdownCommentableFile(selection.file)) {
+        if (selection.anchorKind !== "page" && !isMarkdownCommentableFile(selection.file, this.getAllCommentsNotePath())) {
             new Notice("Text-anchored side notes are only supported in markdown files.");
             return;
         }
@@ -1458,7 +1564,7 @@ export default class SideNote2 extends Plugin {
             mode: "new",
         };
 
-        if (isMarkdownCommentableFile(selection.file)) {
+        if (isMarkdownCommentableFile(selection.file, this.getAllCommentsNotePath())) {
             this.activeMarkdownFile = selection.file;
         }
         this.activeSidebarFile = selection.file;
@@ -1540,8 +1646,8 @@ export default class SideNote2 extends Plugin {
     async addComment(newComment: Comment): Promise<boolean> {
         debugCount("addComment");
         debugLog("addComment", { filePath: newComment.filePath, id: newComment.id });
-        if (isAllCommentsNotePath(newComment.filePath)) {
-            new Notice(`Cannot add comments to ${ALL_COMMENTS_NOTE_PATH}.`);
+        if (this.isAllCommentsNotePath(newComment.filePath)) {
+            new Notice(`Cannot add comments to ${this.getAllCommentsNotePath()}.`);
             return false;
         }
 
@@ -1889,7 +1995,7 @@ export default class SideNote2 extends Plugin {
             private buildDecorations(): DecorationSet {
                 const markdownView = plugin.getMarkdownViewForEditorView(this.view);
                 const filePath = markdownView?.file?.path ?? null;
-                if (!filePath || isAllCommentsNotePath(filePath)) {
+                if (!filePath || plugin.isAllCommentsNotePath(filePath)) {
                     return Decoration.none;
                 }
 
@@ -1966,7 +2072,7 @@ export default class SideNote2 extends Plugin {
 
                 const markdownView = plugin.getMarkdownViewForEditorView(view);
                 const filePath = markdownView?.file?.path ?? null;
-                if (!filePath || !isAllCommentsNotePath(filePath)) {
+                if (!filePath || !plugin.isAllCommentsNotePath(filePath)) {
                     return false;
                 }
 
