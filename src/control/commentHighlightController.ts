@@ -8,6 +8,7 @@ import { isAnchoredComment } from "../core/anchors/commentAnchors";
 import { findCommentLocationTargetInMarkdownLine } from "../core/derived/allCommentsNote";
 import { buildEditorHighlightRanges } from "../core/derived/editorHighlightRanges";
 import { chooseCommentStateForOpenEditor } from "../core/rules/commentSyncPolicy";
+import { findClickedHighlightCommentId } from "./commentHighlightClickTarget";
 import { buildPreviewHighlightWraps } from "./commentHighlightPlanner";
 import {
     getManagedSectionRange,
@@ -152,76 +153,107 @@ export class CommentHighlightController {
     public createEditorHighlightPlugin() {
         const host = this.host;
 
-        return ViewPlugin.fromClass(class {
-            decorations: DecorationSet;
+        return [
+            ViewPlugin.fromClass(class {
+                decorations: DecorationSet;
 
-            constructor(readonly view: EditorView) {
-                this.decorations = this.buildDecorations();
-            }
-
-            update(update: ViewUpdate) {
-                if (
-                    update.docChanged ||
-                    update.viewportChanged ||
-                    update.transactions.some((tr) =>
-                        tr.effects.some((effect) => effect.is(forceHighlightRefreshEffect))
-                    )
-                ) {
+                constructor(readonly view: EditorView) {
                     this.decorations = this.buildDecorations();
                 }
-            }
 
-            private buildDecorations(): DecorationSet {
-                const markdownView = host.getMarkdownViewForEditorView(this.view);
-                const filePath = markdownView?.file?.path ?? null;
-                if (!filePath || host.isAllCommentsNotePath(filePath)) {
-                    return Decoration.none;
+                update(update: ViewUpdate) {
+                    if (
+                        update.docChanged ||
+                        update.viewportChanged ||
+                        update.transactions.some((tr) =>
+                            tr.effects.some((effect) => effect.is(forceHighlightRefreshEffect))
+                        )
+                    ) {
+                        this.decorations = this.buildDecorations();
+                    }
                 }
 
-                const doc = this.view.state.doc;
-                const currentNoteText = doc.toString();
-                const parsed = host.getParsedNoteComments(filePath, currentNoteText);
-                const searchableText = parsed.mainContent;
-                const decorations: Range<Decoration>[] = [];
-                const storedComments = chooseCommentStateForOpenEditor(
-                    host.getCommentsForFile(filePath),
-                    parsed.comments,
-                );
-                const draftComment = host.getDraftForFile(filePath);
-                const showResolved = host.shouldShowResolvedComments();
-                const ranges = buildEditorHighlightRanges(
-                    currentNoteText,
-                    searchableText,
-                    storedComments,
-                    draftComment,
-                    showResolved,
-                    host.getRevealedCommentId(filePath),
-                );
-
-                ranges.forEach((range) => {
-                    const classes = ["sidenote2-highlight"];
-                    if (range.resolved) {
-                        classes.push("sidenote2-highlight-resolved");
-                    }
-                    if (range.active) {
-                        classes.push("sidenote2-highlight-active");
+                private buildDecorations(): DecorationSet {
+                    const markdownView = host.getMarkdownViewForEditorView(this.view);
+                    const filePath = markdownView?.file?.path ?? null;
+                    if (!filePath || host.isAllCommentsNotePath(filePath)) {
+                        return Decoration.none;
                     }
 
-                    decorations.push(
-                        Decoration.mark({
-                            class: classes.join(" "),
-                            attributes: {
-                                "data-comment-id": range.commentId,
-                            },
-                        }).range(range.from, range.to),
+                    const doc = this.view.state.doc;
+                    const currentNoteText = doc.toString();
+                    const parsed = host.getParsedNoteComments(filePath, currentNoteText);
+                    const searchableText = parsed.mainContent;
+                    const decorations: Range<Decoration>[] = [];
+                    const storedComments = chooseCommentStateForOpenEditor(
+                        host.getCommentsForFile(filePath),
+                        parsed.comments,
                     );
-                });
+                    const draftComment = host.getDraftForFile(filePath);
+                    const showResolved = host.shouldShowResolvedComments();
+                    const ranges = buildEditorHighlightRanges(
+                        currentNoteText,
+                        searchableText,
+                        storedComments,
+                        draftComment,
+                        showResolved,
+                        host.getRevealedCommentId(filePath),
+                    );
 
-                return Decoration.set(decorations, true);
-            }
-        }, {
-            decorations: (value) => value.decorations,
-        });
+                    ranges.forEach((range) => {
+                        const classes = ["sidenote2-highlight"];
+                        if (range.resolved) {
+                            classes.push("sidenote2-highlight-resolved");
+                        }
+                        if (range.active) {
+                            classes.push("sidenote2-highlight-active");
+                        }
+
+                        decorations.push(
+                            Decoration.mark({
+                                class: classes.join(" "),
+                                attributes: {
+                                    "data-comment-id": range.commentId,
+                                },
+                            }).range(range.from, range.to),
+                        );
+                    });
+
+                    return Decoration.set(decorations, true);
+                }
+            }, {
+                decorations: (value) => value.decorations,
+            }),
+            EditorView.domEventHandlers({
+                click(event, view) {
+                    if (
+                        event.button !== 0
+                        || event.metaKey
+                        || event.ctrlKey
+                        || event.shiftKey
+                        || event.altKey
+                    ) {
+                        return false;
+                    }
+
+                    const markdownView = host.getMarkdownViewForEditorView(view);
+                    const filePath = markdownView?.file?.path ?? null;
+                    if (!filePath || host.isAllCommentsNotePath(filePath)) {
+                        return false;
+                    }
+
+                    const commentId = findClickedHighlightCommentId(event.target);
+                    if (!commentId) {
+                        return false;
+                    }
+
+                    event.preventDefault();
+                    event.stopPropagation();
+                    void host.activateViewAndHighlightComment(commentId);
+                    return true;
+                },
+            }),
+        ];
     }
 
     public createAllCommentsLivePreviewLinkPlugin() {

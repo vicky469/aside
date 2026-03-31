@@ -1,6 +1,7 @@
 import * as assert from "node:assert/strict";
 import test from "node:test";
 import type { Comment } from "../src/commentManager";
+import { findClickedHighlightCommentId } from "../src/control/commentHighlightClickTarget";
 import { buildPreviewHighlightWraps } from "../src/control/commentHighlightPlanner";
 
 function createComment(overrides: Partial<Comment> = {}): Comment {
@@ -57,4 +58,29 @@ test("buildPreviewHighlightWraps respects section line offsets for later lines",
     assert.equal(wraps[0].start, 18);
     assert.equal(wraps[0].end, 22);
     assert.equal(wraps[0].comment.id, "comment-2");
+});
+
+test("findClickedHighlightCommentId returns the clicked highlight comment id", () => {
+    const target = {
+        closest: (selector: string) => {
+            assert.equal(selector, ".sidenote2-highlight");
+            return {
+                getAttribute: (name: string) => {
+                    assert.equal(name, "data-comment-id");
+                    return "comment-7";
+                },
+            };
+        },
+    };
+
+    assert.equal(findClickedHighlightCommentId(target), "comment-7");
+});
+
+test("findClickedHighlightCommentId returns null when the target is not inside a highlight", () => {
+    const target = {
+        closest: () => null,
+    };
+
+    assert.equal(findClickedHighlightCommentId(target), null);
+    assert.equal(findClickedHighlightCommentId(null), null);
 });
