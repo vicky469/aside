@@ -1,6 +1,6 @@
 import * as assert from "node:assert/strict";
 import test from "node:test";
-import { continueMarkdownList } from "../src/ui/editor/commentEditorFormatting";
+import { continueMarkdownList, toggleMarkdownHighlight } from "../src/ui/editor/commentEditorFormatting";
 
 test("continueMarkdownList continues unordered list items on enter", () => {
     const edit = continueMarkdownList("- first item", 12, 12);
@@ -54,4 +54,44 @@ test("continueMarkdownList exits an empty alphabetic item", () => {
 
 test("continueMarkdownList ignores non-list lines", () => {
     assert.equal(continueMarkdownList("plain text", 10, 10), null);
+});
+
+test("toggleMarkdownHighlight wraps the current selection", () => {
+    const edit = toggleMarkdownHighlight("alpha beta", 6, 10);
+
+    assert.deepEqual(edit, {
+        value: "alpha ==beta==",
+        selectionStart: 8,
+        selectionEnd: 12,
+    });
+});
+
+test("toggleMarkdownHighlight removes surrounding markers when the selection is already highlighted", () => {
+    const edit = toggleMarkdownHighlight("alpha ==beta==", 8, 12);
+
+    assert.deepEqual(edit, {
+        value: "alpha beta",
+        selectionStart: 6,
+        selectionEnd: 10,
+    });
+});
+
+test("toggleMarkdownHighlight unwraps a fully selected highlighted span", () => {
+    const edit = toggleMarkdownHighlight("alpha ==beta==", 6, 14);
+
+    assert.deepEqual(edit, {
+        value: "alpha beta",
+        selectionStart: 6,
+        selectionEnd: 10,
+    });
+});
+
+test("toggleMarkdownHighlight inserts paired markers when there is no selection", () => {
+    const edit = toggleMarkdownHighlight("alpha", 5, 5);
+
+    assert.deepEqual(edit, {
+        value: "alpha====",
+        selectionStart: 7,
+        selectionEnd: 7,
+    });
 });

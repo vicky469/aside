@@ -19,6 +19,65 @@ function replaceRange(
     };
 }
 
+function toggleWrappedSelection(
+    value: string,
+    selectionStart: number,
+    selectionEnd: number,
+    marker: string,
+): TextEditResult {
+    const start = Math.min(selectionStart, selectionEnd);
+    const end = Math.max(selectionStart, selectionEnd);
+    const selectedText = value.slice(start, end);
+    const markerLength = marker.length;
+
+    if (
+        selectedText.length >= markerLength * 2
+        && selectedText.startsWith(marker)
+        && selectedText.endsWith(marker)
+    ) {
+        const unwrapped = selectedText.slice(markerLength, selectedText.length - markerLength);
+        return replaceRange(
+            value,
+            start,
+            end,
+            unwrapped,
+            start,
+            start + unwrapped.length,
+        );
+    }
+
+    const before = value.slice(Math.max(0, start - markerLength), start);
+    const after = value.slice(end, end + markerLength);
+    if (start !== end && before === marker && after === marker) {
+        return {
+            value: value.slice(0, start - markerLength) + selectedText + value.slice(end + markerLength),
+            selectionStart: start - markerLength,
+            selectionEnd: end - markerLength,
+        };
+    }
+
+    if (start === end) {
+        const insertion = `${marker}${marker}`;
+        return replaceRange(
+            value,
+            start,
+            end,
+            insertion,
+            start + markerLength,
+            start + markerLength,
+        );
+    }
+
+    return replaceRange(
+        value,
+        start,
+        end,
+        `${marker}${selectedText}${marker}`,
+        start + markerLength,
+        end + markerLength,
+    );
+}
+
 function incrementAlphabeticMarker(marker: string): string {
     const chars = marker.split("");
     let index = chars.length - 1;
@@ -120,4 +179,12 @@ export function continueMarkdownList(
         selectionStart + alphaInsertion.length,
         selectionStart + alphaInsertion.length,
     );
+}
+
+export function toggleMarkdownHighlight(
+    value: string,
+    selectionStart: number,
+    selectionEnd: number,
+): TextEditResult {
+    return toggleWrappedSelection(value, selectionStart, selectionEnd, "==");
 }

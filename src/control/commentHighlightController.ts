@@ -79,7 +79,6 @@ export interface CommentHighlightHost {
     getDraftForFile(filePath: string): DraftComment | null;
     getRevealedCommentId(filePath: string): string | null;
     activateViewAndHighlightComment(commentId: string): Promise<void>;
-    openCommentById(filePath: string, commentId: string): Promise<void>;
 }
 
 export class CommentHighlightController {
@@ -308,7 +307,7 @@ export class CommentHighlightController {
 
                 event.preventDefault();
                 event.stopPropagation();
-                void host.openCommentById(commentTarget.filePath, commentTarget.commentId);
+                void host.activateViewAndHighlightComment(commentTarget.commentId);
                 return true;
             },
         });

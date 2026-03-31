@@ -1,11 +1,11 @@
 {
 	"nodes":[
-		{"id":"guide","type":"text","text":"# Comment Route Map\nRead left to right.\nClick file cards to open code.","x":0,"y":-150,"width":700,"height":100,"color":"6"},
+		{"id":"guide","type":"text","text":"# Comment Route Map\nRead left to right.\nTop flow persists and derives; lower flow retargets and highlights.","x":0,"y":-150,"width":760,"height":100,"color":"6"},
 		{"id":"user","type":"text","text":"## User action\nSelect text\nCommand or editor menu","x":0,"y":170,"width":210,"height":100,"color":"6"},
 		{"id":"group-capture","type":"group","x":240,"y":100,"width":840,"height":210,"color":"5","label":"Capture + draft"},
 		{"id":"group-save","type":"group","x":1110,"y":100,"width":860,"height":340,"color":"3","label":"Mutation + persistence"},
-		{"id":"group-derived","type":"group","x":2000,"y":100,"width":860,"height":340,"color":"2","label":"Derived views"},
-		{"id":"group-visuals","type":"group","x":1110,"y":500,"width":1040,"height":220,"color":"4","label":"Retarget + highlights"},
+		{"id":"group-derived","type":"group","x":2000,"y":100,"width":860,"height":460,"color":"2","label":"Derived views + index surfaces"},
+		{"id":"group-visuals","type":"group","x":1110,"y":500,"width":1750,"height":220,"color":"4","label":"Retarget + highlights + index clicks"},
 		{"id":"entry","type":"file","file":"SideNote2/src/control/commentEntryController.ts","x":270,"y":180,"width":190,"height":90,"color":"5"},
 		{"id":"session","type":"file","file":"SideNote2/src/control/commentSessionController.ts","x":470,"y":180,"width":190,"height":90,"color":"5"},
 		{"id":"draft-store","type":"file","file":"SideNote2/src/domain/DraftSessionStore.ts","x":670,"y":180,"width":190,"height":90,"color":"5"},
@@ -19,11 +19,15 @@
 		{"id":"aggregate-index","type":"file","file":"SideNote2/src/index/AggregateCommentIndex.ts","x":2280,"y":170,"width":230,"height":90,"color":"2"},
 		{"id":"all-comments","type":"file","file":"SideNote2/src/core/derived/allCommentsNote.ts","x":2540,"y":170,"width":230,"height":90,"color":"2"},
 		{"id":"derived-metadata","type":"file","file":"SideNote2/src/core/derived/derivedCommentMetadata.ts","x":2030,"y":310,"width":280,"height":90,"color":"2"},
-		{"id":"index-note","type":"text","text":"## SideNote2 index.md\nDerived aggregate note","x":2340,"y":300,"width":260,"height":100,"color":"2"},
+		{"id":"thought-trail","type":"file","file":"SideNote2/src/core/derived/thoughtTrail.ts","x":2340,"y":310,"width":230,"height":90,"color":"2"},
+		{"id":"index-note","type":"text","text":"## SideNote2 index.md\nDerived aggregate note","x":2600,"y":300,"width":230,"height":100,"color":"2"},
+		{"id":"index-sidebar","type":"text","text":"## Index sidebar\nList or thought trail","x":2600,"y":430,"width":230,"height":90,"color":"2"},
 		{"id":"highlight","type":"file","file":"SideNote2/src/control/commentHighlightController.ts","x":1140,"y":580,"width":240,"height":90,"color":"4"},
 		{"id":"anchor","type":"file","file":"SideNote2/src/core/anchors/anchorResolver.ts","x":1410,"y":580,"width":250,"height":90,"color":"4"},
 		{"id":"ranges","type":"file","file":"SideNote2/src/core/derived/editorHighlightRanges.ts","x":1690,"y":580,"width":260,"height":90,"color":"4"},
-		{"id":"decorations","type":"text","text":"## Editor + preview\nHighlights","x":1980,"y":580,"width":150,"height":90,"color":"4"}
+		{"id":"decorations","type":"text","text":"## Editor + preview\nHighlights","x":1980,"y":580,"width":150,"height":90,"color":"4"},
+		{"id":"plugin-registration","type":"file","file":"SideNote2/src/control/pluginRegistrationController.ts","x":2220,"y":580,"width":280,"height":90,"color":"3"},
+		{"id":"index-click-note","type":"text","text":"## Index click\nHighlight sidebar first.\nSidebar card then navigates.","x":2530,"y":570,"width":290,"height":100,"color":"6"}
 	],
 	"edges":[
 		{"id":"edge-user-entry","fromNode":"user","fromSide":"right","toNode":"entry","toSide":"left"},
@@ -39,11 +43,15 @@
 		{"id":"edge-attachment-cache","fromNode":"attachment-storage","fromSide":"right","toNode":"parsed-cache","toSide":"left"},
 		{"id":"edge-cache-index","fromNode":"parsed-cache","fromSide":"right","toNode":"aggregate-index","toSide":"left"},
 		{"id":"edge-index-all-comments","fromNode":"aggregate-index","fromSide":"right","toNode":"all-comments","toSide":"left"},
+		{"id":"edge-index-thought-trail","fromNode":"aggregate-index","fromSide":"bottom","toNode":"thought-trail","toSide":"top"},
 		{"id":"edge-all-comments-index-note","fromNode":"all-comments","fromSide":"bottom","toNode":"index-note","toSide":"top"},
+		{"id":"edge-thought-trail-index-sidebar","fromNode":"thought-trail","fromSide":"right","toNode":"index-sidebar","toSide":"left"},
 		{"id":"edge-persistence-derived-metadata","fromNode":"persistence","fromSide":"right","toNode":"derived-metadata","toSide":"left"},
 		{"id":"edge-manager-highlight","fromNode":"manager","fromSide":"bottom","toNode":"highlight","toSide":"top"},
 		{"id":"edge-highlight-anchor","fromNode":"highlight","fromSide":"right","toNode":"anchor","toSide":"left"},
 		{"id":"edge-anchor-ranges","fromNode":"anchor","fromSide":"right","toNode":"ranges","toSide":"left"},
-		{"id":"edge-ranges-decorations","fromNode":"ranges","fromSide":"right","toNode":"decorations","toSide":"left"}
+		{"id":"edge-ranges-decorations","fromNode":"ranges","fromSide":"right","toNode":"decorations","toSide":"left"},
+		{"id":"edge-index-note-plugin-registration","fromNode":"index-note","fromSide":"bottom","toNode":"plugin-registration","toSide":"top"},
+		{"id":"edge-plugin-registration-highlight","fromNode":"plugin-registration","fromSide":"left","toNode":"highlight","toSide":"right"}
 	]
 }

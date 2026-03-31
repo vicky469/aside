@@ -3,8 +3,8 @@
   <img src="./logo-readme.svg" alt="SideNote2 logo" width="72">
 </p>
 <p align="center">
-  <a href="https://github.com/vicky469/SideNote2/releases/tag/1.0.19">
-    <img src="https://img.shields.io/badge/beta-1.0.19-f97316?style=flat-square" alt="Current beta">
+  <a href="https://github.com/vicky469/SideNote2/releases/tag/1.0.20">
+    <img src="https://img.shields.io/badge/beta-1.0.20-f97316?style=flat-square" alt="Current beta">
   </a>
   <a href="./docs/README-dev.md">
     <img src="https://img.shields.io/badge/docs-dev%20notes-0f766e?style=flat-square" alt="Dev docs">
@@ -67,8 +67,20 @@ python ~/.codex/skills/.system/skill-installer/scripts/install-skill-from-github
 2. Right-click `Add comment to selection`.
    You can use the ribbon button to open the sidebar, or assign your own hotkey in Obsidian.
 3. Write the comment in the sidebar.
-   Type `[[` to link a note, or type `#` to search existing tags or create a new one.
+   See `Writing in Side Notes` below for editor shortcuts and formatting behavior.
 4. Review it later from the sidebar or from `SideNote2 index.md`.
+
+## Writing in Side Notes
+
+| Action | How it works |
+| --- | --- |
+| Save draft | Press `Enter`. |
+| Insert a newline | Press `Shift+Enter`. |
+| Link a note | Type `[[` to open note suggestions and insert an Obsidian wikilink. |
+| Add a tag | Type `#` to open tag suggestions and insert a tag. |
+| Reopen link or tag suggestions | Press `Tab` while the cursor is inside an unfinished `[[...` or `#...` token. |
+| Toggle highlight | Uses your vault's Obsidian `Toggle highlight` hotkey (`editor:toggle-highlight`). If that command is unbound, it falls back to `Option+H` (`Alt+H`) and toggles `==highlight==` around the current selection. |
+| Cancel a draft or edit | Press `Esc`. |
 
 For power users:
 

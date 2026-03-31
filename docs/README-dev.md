@@ -2,6 +2,20 @@
 
 Development notes for `SideNote2`. The main [README.md](../README.md) stays product-level; this file is for setup, internals, and testing.
 
+## Docs Layout
+
+Use `docs/` for material we expect to keep current as the repo evolves.
+
+Examples:
+
+- `README-dev.md`
+- `architecture.md`
+- `architecture.canvas`
+- `comment-route-map.canvas`
+- `comment-lifecycle.canvas`
+
+Use `docs/thoughts/` for working notes, refactor logs, and naming or design thoughts that reflect the current thinking but are not treated as maintained reference docs.
+
 ## Architecture
 
 See [architecture.md](./architecture.md) for the visual module map, comment route map, and lifecycle state machine.

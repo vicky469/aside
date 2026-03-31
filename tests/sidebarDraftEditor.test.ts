@@ -3,9 +3,12 @@ import test from "node:test";
 import type { Comment } from "../src/commentManager";
 import type { DraftComment } from "../src/domain/drafts";
 import {
+    DEFAULT_HIGHLIGHT_HOTKEY,
     SidebarDraftEditorController,
+    eventMatchesHotkey,
     estimateDraftTextareaRows,
     getSidebarComments,
+    resolveHighlightHotkeysFromConfig,
 } from "../src/ui/views/sidebarDraftEditor";
 
 function createComment(overrides: Partial<Comment> = {}): Comment {
@@ -105,4 +108,48 @@ test("sidebar draft editor controller saves only on plain enter", () => {
         altKey: false,
         isComposing: true,
     } as KeyboardEvent), false);
+});
+
+test("resolveHighlightHotkeysFromConfig uses the configured editor highlight shortcut", () => {
+    assert.deepEqual(resolveHighlightHotkeysFromConfig([
+        {
+            modifiers: ["Mod", "Shift"],
+            key: "H",
+        },
+    ]), [
+        {
+            modifiers: ["Mod", "Shift"],
+            key: "H",
+        },
+    ]);
+});
+
+test("resolveHighlightHotkeysFromConfig falls back to Alt+H when the command is unbound", () => {
+    assert.deepEqual(resolveHighlightHotkeysFromConfig(null), [DEFAULT_HIGHLIGHT_HOTKEY]);
+    assert.deepEqual(resolveHighlightHotkeysFromConfig([]), [DEFAULT_HIGHLIGHT_HOTKEY]);
+});
+
+test("eventMatchesHotkey supports Mod bindings on macOS", () => {
+    assert.equal(eventMatchesHotkey({
+        key: "h",
+        altKey: false,
+        ctrlKey: false,
+        metaKey: true,
+        shiftKey: false,
+        isComposing: false,
+    } as KeyboardEvent, {
+        modifiers: ["Mod"],
+        key: "H",
+    }, true), true);
+});
+
+test("eventMatchesHotkey supports Alt fallback bindings", () => {
+    assert.equal(eventMatchesHotkey({
+        key: "H",
+        altKey: true,
+        ctrlKey: false,
+        metaKey: false,
+        shiftKey: false,
+        isComposing: false,
+    } as KeyboardEvent, DEFAULT_HIGHLIGHT_HOTKEY, true), true);
 });

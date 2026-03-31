@@ -89,6 +89,9 @@ export function renderDraftCommentCard(
     };
 
     textarea.addEventListener("click", stopPropagation);
+    textarea.addEventListener("focus", () => {
+        void draftEditorController.refreshFormattingHotkeys();
+    });
     textarea.addEventListener("input", (event) => {
         const target = event.target as HTMLTextAreaElement;
         host.updateDraftCommentText(comment.id, target.value);
@@ -118,6 +121,11 @@ export function renderDraftCommentCard(
             event.stopPropagation();
             event.stopImmediatePropagation();
         };
+
+        if (draftEditorController.toggleDraftHighlight(event, comment.id, textarea, comment.mode === "edit")) {
+            consumeShortcut();
+            return;
+        }
 
         if (draftEditorController.shouldSaveDraftFromEnter(event)) {
             consumeShortcut();
