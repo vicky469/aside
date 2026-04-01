@@ -17,6 +17,7 @@ import {
 import { renderDraftCommentCard } from "./sidebarDraftComment";
 import { SidebarInteractionController } from "./sidebarInteractionController";
 import { renderPersistedCommentCard } from "./sidebarPersistedComment";
+import { extractThoughtTrailClickTargets, parseThoughtTrailOpenFilePath, resolveThoughtTrailNodeId } from "./thoughtTrailNodeLinks";
 import type { CustomViewState } from "./viewState";
 
 function isDraftComment(comment: Comment | DraftComment): comment is DraftComment {
@@ -136,10 +137,12 @@ export default class SideNote2View extends ItemView {
     }
 
     public highlightComment(commentId: string) {
+        this.ensureListModeForIndexCommentFocus();
         this.interactionController.highlightComment(commentId);
     }
 
     public async highlightAndFocusDraft(commentId: string) {
+        this.ensureListModeForIndexCommentFocus();
         await this.interactionController.highlightAndFocusDraft(commentId);
     }
 
@@ -351,6 +354,12 @@ export default class SideNote2View extends ItemView {
         button.onclick = options.onClick;
     }
 
+    private ensureListModeForIndexCommentFocus(): void {
+        if (this.file && this.plugin.isAllCommentsNotePath(this.file.path) && this.indexSidebarMode !== "list") {
+            this.indexSidebarMode = "list";
+        }
+    }
+
     private renderCommentSection(
         container: HTMLElement,
         key: SidebarSectionKey,
@@ -477,12 +486,96 @@ export default class SideNote2View extends ItemView {
             return;
         }
 
+        thoughtTrailEl.createEl("p", {
+            cls: "sidenote2-thought-trail-caption",
+            text: "Click a file node to open it. Edge labels show the linking side note.",
+        });
+
         await MarkdownRenderer.renderMarkdown(
             thoughtTrailLines.join("\n"),
             thoughtTrailEl,
             file.path,
             this.plugin,
         );
+
+        this.bindThoughtTrailNodeLinks(thoughtTrailEl, thoughtTrailLines);
+    }
+
+    private bindThoughtTrailNodeLinks(container: HTMLElement, thoughtTrailLines: string[]): void {
+        const clickTargets = extractThoughtTrailClickTargets(thoughtTrailLines);
+        if (!clickTargets.size) {
+            return;
+        }
+
+        const mermaidEl = container.querySelector(".mermaid");
+        if (!mermaidEl) {
+            return;
+        }
+
+        mermaidEl.querySelectorAll(".node, [data-id]").forEach((element) => {
+            if (!(element instanceof Element)) {
+                return;
+            }
+
+            const nodeId = resolveThoughtTrailNodeId(
+                element.getAttribute("data-id"),
+                element.getAttribute("id"),
+            );
+            if (!nodeId || !clickTargets.has(nodeId)) {
+                return;
+            }
+
+            element.setAttribute("data-sidenote2-thought-trail-node-link", "true");
+        });
+
+        mermaidEl.addEventListener("click", (event: Event) => {
+            const target = event.target;
+            if (!(target instanceof Element)) {
+                return;
+            }
+
+            const nodeEl = target.closest(".node, [data-id]");
+            if (!(nodeEl instanceof Element)) {
+                return;
+            }
+
+            const nodeId = resolveThoughtTrailNodeId(
+                nodeEl.getAttribute("data-id"),
+                nodeEl.getAttribute("id"),
+            );
+            if (!nodeId) {
+                return;
+            }
+
+            const targetUrl = clickTargets.get(nodeId);
+            if (!targetUrl) {
+                return;
+            }
+
+            event.preventDefault();
+            event.stopPropagation();
+            void this.openThoughtTrailTarget(targetUrl);
+        });
+    }
+
+    private async openThoughtTrailTarget(targetUrl: string): Promise<void> {
+        const filePath = parseThoughtTrailOpenFilePath(targetUrl);
+        if (!filePath) {
+            return;
+        }
+
+        const targetFile = this.app.vault.getAbstractFileByPath(filePath);
+        if (!(targetFile instanceof TFile)) {
+            return;
+        }
+
+        const targetLeaf = this.plugin.getPreferredFileLeaf(filePath) ?? this.app.workspace.getLeaf(false);
+        if (!targetLeaf) {
+            return;
+        }
+
+        await targetLeaf.openFile(targetFile);
+        this.app.workspace.setActiveLeaf(targetLeaf, { focus: true });
     }
 
     getState(): CustomViewState {

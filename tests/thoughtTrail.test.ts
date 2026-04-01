@@ -21,7 +21,7 @@ function createComment(overrides: Partial<Comment> = {}): Comment {
     };
 }
 
-test("buildThoughtTrailLines renders nested thought trails from wiki links", () => {
+test("buildThoughtTrailLines renders a mermaid graph from wiki links", () => {
     const lines = buildThoughtTrailLines("dev", [
         createComment({
             id: "root-note",
@@ -40,10 +40,21 @@ test("buildThoughtTrailLines renders nested thought trails from wiki links", () 
     });
 
     assert.deepEqual(lines, [
-        "- **file1.md**",
-        "  - [setup · file3](obsidian://side-note2-comment?vault=dev&file=file1.md&commentId=root-note) -> **file3.md**",
-        "    - [internals · file4](obsidian://side-note2-comment?vault=dev&file=file3.md&commentId=deep-note) -> **file4.md**",
-        "  - [setup · file2](obsidian://side-note2-comment?vault=dev&file=file1.md&commentId=root-note) -> **file2.md**",
+        "%%{init: {\"themeVariables\": {\"fontSize\": \"7px\"}, \"flowchart\": {\"nodeSpacing\": 6, \"rankSpacing\": 10, \"diagramPadding\": 1, \"useMaxWidth\": true, \"htmlLabels\": false}} }%%",
+        "```mermaid",
+        "flowchart TD",
+        "    n0[\"file1\"]",
+        "    n1[\"file3\"]",
+        "    n2[\"file4\"]",
+        "    n3[\"file2\"]",
+        "    n0 -->|setup| n1",
+        "    n1 -->|internals| n2",
+        "    n0 -->|setup| n3",
+        "    click n0 href \"obsidian://open?vault=dev&file=file1.md\" \"Open file1\"",
+        "    click n1 href \"obsidian://open?vault=dev&file=file3.md\" \"Open file3\"",
+        "    click n2 href \"obsidian://open?vault=dev&file=file4.md\" \"Open file4\"",
+        "    click n3 href \"obsidian://open?vault=dev&file=file2.md\" \"Open file2\"",
+        "```",
     ]);
 });
 
@@ -79,8 +90,37 @@ test("buildThoughtTrailLines marks cycles and avoids duplicate roots", () => {
         resolveWikiLinkPath: (linkPath) => `${linkPath}.md`,
     });
 
-    assert.equal(lines[0], "- **file1.md**");
-    assert.equal(lines[1], "  - [alpha · file2](obsidian://side-note2-comment?vault=dev&file=file1.md&commentId=note-a) -> **file2.md**");
-    assert.equal(lines[2], "    - [beta · file1](obsidian://side-note2-comment?vault=dev&file=file2.md&commentId=note-b) -> **file1.md** (cycle)");
-    assert.equal(lines.includes("- **file2.md**"), false);
+    assert.equal(lines[0], "%%{init: {\"themeVariables\": {\"fontSize\": \"7px\"}, \"flowchart\": {\"nodeSpacing\": 6, \"rankSpacing\": 10, \"diagramPadding\": 1, \"useMaxWidth\": true, \"htmlLabels\": false}} }%%");
+    assert.equal(lines[1], "```mermaid");
+    assert.equal(lines[2], "flowchart TD");
+    assert.equal(lines.includes("    n0 -->|alpha| n1"), true);
+    assert.equal(lines.includes("    n1 -->|beta| n0"), true);
+    assert.equal(lines.includes("    n1[\"file2\"]"), true);
+    assert.equal(lines.filter((line) => line === "    n1[\"file2\"]").length, 1);
+});
+
+test("buildThoughtTrailLines uses pn ordinals for page notes", () => {
+    const lines = buildThoughtTrailLines("dev", [
+        createComment({
+            id: "page-note",
+            filePath: "file1.md",
+            selectedText: "",
+            anchorKind: "page",
+            comment: "Connects to [[target]].",
+        }),
+    ], {
+        resolveWikiLinkPath: (linkPath) => `${linkPath}.md`,
+    });
+
+    assert.deepEqual(lines, [
+        "%%{init: {\"themeVariables\": {\"fontSize\": \"7px\"}, \"flowchart\": {\"nodeSpacing\": 6, \"rankSpacing\": 10, \"diagramPadding\": 1, \"useMaxWidth\": true, \"htmlLabels\": false}} }%%",
+        "```mermaid",
+        "flowchart TD",
+        "    n0[\"file1\"]",
+        "    n1[\"target\"]",
+        "    n0 -->|pn1| n1",
+        "    click n0 href \"obsidian://open?vault=dev&file=file1.md\" \"Open file1\"",
+        "    click n1 href \"obsidian://open?vault=dev&file=target.md\" \"Open target\"",
+        "```",
+    ]);
 });

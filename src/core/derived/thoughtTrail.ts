@@ -6,6 +6,7 @@ import { extractWikiLinks } from "../text/commentMentions";
 const ALL_COMMENTS_NOTE_PATH = "SideNote2 index.md";
 const LEGACY_ALL_COMMENTS_NOTE_PATH = "SideNote2 comments.md";
 const MAX_PREVIEW_LENGTH = 80;
+const MAX_EDGE_LABEL_LENGTH = 24;
 const DEFAULT_CONNECTED_CHAIN_DEPTH = 2;
 
 export interface ThoughtTrailBuildOptions {
@@ -17,7 +18,7 @@ export interface ThoughtTrailBuildOptions {
 interface ThoughtTrailEdge {
     comment: Comment;
     targetFilePath: string;
-    targetLabel: string;
+    pageNoteOrdinal?: number;
 }
 
 function normalizeNotePath(filePath: string): string {
@@ -52,43 +53,52 @@ function normalizeConnectedChainDepth(value: number | null | undefined): number 
     return Math.max(1, Math.floor(value ?? DEFAULT_CONNECTED_CHAIN_DEPTH));
 }
 
-function toInlinePreview(value: string): string {
+function toInlinePreview(value: string, maxLength: number = MAX_PREVIEW_LENGTH): string {
     const normalized = value.replace(/\r\n/g, "\n").replace(/\s+/g, " ").trim();
     if (!normalized) {
         return "(blank selection)";
     }
 
-    if (normalized.length <= MAX_PREVIEW_LENGTH) {
+    if (normalized.length <= maxLength) {
         return normalized;
     }
 
-    return `${normalized.slice(0, MAX_PREVIEW_LENGTH - 3).trimEnd()}...`;
+    return `${normalized.slice(0, maxLength - 3).trimEnd()}...`;
 }
 
-function escapeMarkdownText(value: string): string {
+function buildNoteOpenUrl(vaultName: string, filePath: string): string {
+    return `obsidian://open?vault=${encodeURIComponent(vaultName)}&file=${encodeURIComponent(normalizeNotePath(filePath))}`;
+}
+
+function toMermaidText(value: string): string {
     return value
-        .replace(/\\/g, "\\\\")
-        .replace(/([`*_[\]()~<>])/g, "\\$1");
+        .replace(/\r\n/g, "\n")
+        .replace(/\s+/g, " ")
+        .trim()
+        .replace(/["`]/g, "'")
+        .replace(/[|{}[\]]/g, " ");
 }
 
-function formatFileHeadingLabel(filePath: string): string {
-    return escapeMarkdownText(filePath);
-}
-
-function formatCommentLinkLabel(comment: Comment, mentionedPageLabel?: string, pageNoteOrdinal?: number): string {
-    const selectedPreview = escapeMarkdownText(toInlinePreview(getCommentSelectionLabel(comment)));
-    const normalizedMentionLabel = mentionedPageLabel
-        ? escapeMarkdownText(toInlinePreview(mentionedPageLabel))
-        : null;
-    const pageNoteFallbackLabel = pageNoteOrdinal ? String(pageNoteOrdinal) : selectedPreview;
-    const prefixedPreview = isAnchoredComment(comment)
-        ? (normalizedMentionLabel ? `${selectedPreview} · ${normalizedMentionLabel}` : selectedPreview)
-        : `${getCommentStatusLabel(comment)} · ${normalizedMentionLabel ?? (isPageComment(comment) ? pageNoteFallbackLabel : selectedPreview)}`;
-    if (comment.resolved) {
-        return `~~${prefixedPreview}~~`;
+function formatEdgeLabel(comment: Comment, pageNoteOrdinal?: number): string {
+    let label: string;
+    if (isPageComment(comment)) {
+        label = pageNoteOrdinal ? `pn${pageNoteOrdinal}` : "pn";
+    } else {
+        const selectedPreview = toInlinePreview(getCommentSelectionLabel(comment), MAX_EDGE_LABEL_LENGTH);
+        label = isAnchoredComment(comment)
+            ? selectedPreview
+            : `${getCommentStatusLabel(comment)}: ${selectedPreview}`;
     }
 
-    return prefixedPreview;
+    if (comment.resolved) {
+        return `${label} (resolved)`;
+    }
+
+    return toMermaidText(label);
+}
+
+function formatNodeLabel(filePath: string): string {
+    return normalizeNotePath(filePath).replace(/\.md$/i, "");
 }
 
 function buildEdgesBySourceFile(
@@ -103,8 +113,18 @@ function buildEdgesBySourceFile(
     const edgesBySourceFile = new Map<string, ThoughtTrailEdge[]>();
     for (const filePath of Array.from(commentsByFile.keys()).sort((left, right) => left.localeCompare(right))) {
         const fileComments = sortCommentsByPosition(commentsByFile.get(filePath) ?? []);
-        const edges: ThoughtTrailEdge[] = [];
+        const pageNoteOrdinals = new Map<string, number>();
+        let nextPageNoteOrdinal = 1;
+        for (const comment of fileComments) {
+            if (!isPageComment(comment)) {
+                continue;
+            }
 
+            pageNoteOrdinals.set(comment.id, nextPageNoteOrdinal);
+            nextPageNoteOrdinal += 1;
+        }
+
+        const edges: ThoughtTrailEdge[] = [];
         for (const comment of fileComments) {
             const seenTargets = new Set<string>();
 
@@ -122,7 +142,7 @@ function buildEdgesBySourceFile(
                 edges.push({
                     comment,
                     targetFilePath: resolvedPath,
-                    targetLabel: toInlinePreview(match.displayText?.trim() || match.linkPath.trim()),
+                    pageNoteOrdinal: pageNoteOrdinals.get(comment.id),
                 });
             }
         }
@@ -146,6 +166,7 @@ function getOrderedRoots(edgesBySourceFile: Map<string, ThoughtTrailEdge[]>): st
 
     const orderedRoots: string[] = [];
     const coveredSources = new Set<string>();
+
     const markReachableSources = (rootFilePath: string): void => {
         const pending = [rootFilePath];
 
@@ -211,7 +232,31 @@ export function buildThoughtTrailLines(
     }
 
     const maxDepth = normalizeConnectedChainDepth(options.connectedChainDepth);
-    const lines: string[] = [];
+    const lines = [
+        "%%{init: {\"themeVariables\": {\"fontSize\": \"7px\"}, \"flowchart\": {\"nodeSpacing\": 6, \"rankSpacing\": 10, \"diagramPadding\": 1, \"useMaxWidth\": true, \"htmlLabels\": false}} }%%",
+        "```mermaid",
+        "flowchart TD",
+    ];
+    const nodeLines: string[] = [];
+    const edgeLines: string[] = [];
+    const clickLines: string[] = [];
+    const nodeIds = new Map<string, string>();
+
+    const ensureNode = (filePath: string): string => {
+        const existing = nodeIds.get(filePath);
+        if (existing) {
+            return existing;
+        }
+
+        const nodeId = `n${nodeIds.size}`;
+        nodeIds.set(filePath, nodeId);
+        const label = JSON.stringify(toMermaidText(formatNodeLabel(filePath)));
+        nodeLines.push(`    ${nodeId}[${label}]`);
+        clickLines.push(
+            `    click ${nodeId} href ${JSON.stringify(buildNoteOpenUrl(vaultName, filePath))} ${JSON.stringify(`Open ${formatNodeLabel(filePath)}`)}`,
+        );
+        return nodeId;
+    };
 
     const renderBranch = (
         sourceFilePath: string,
@@ -222,14 +267,13 @@ export function buildThoughtTrailLines(
             return;
         }
 
+        const sourceId = ensureNode(sourceFilePath);
         for (const edge of edgesBySourceFile.get(sourceFilePath) ?? []) {
-            const label = formatCommentLinkLabel(edge.comment, edge.targetLabel);
-            const isCycle = branchVisited.has(edge.targetFilePath);
-            lines.push(
-                `${"  ".repeat(depth)}- [${label}](obsidian://side-note2-comment?vault=${encodeURIComponent(vaultName)}&file=${encodeURIComponent(edge.comment.filePath)}&commentId=${encodeURIComponent(edge.comment.id)}) -> **${formatFileHeadingLabel(edge.targetFilePath)}**${isCycle ? " (cycle)" : ""}`,
-            );
+            const targetId = ensureNode(edge.targetFilePath);
+            const label = formatEdgeLabel(edge.comment, edge.pageNoteOrdinal);
+            edgeLines.push(`    ${sourceId} -->|${label}| ${targetId}`);
 
-            if (isCycle || depth >= maxDepth || !edgesBySourceFile.has(edge.targetFilePath)) {
+            if (branchVisited.has(edge.targetFilePath) || depth >= maxDepth || !edgesBySourceFile.has(edge.targetFilePath)) {
                 continue;
             }
 
@@ -240,14 +284,10 @@ export function buildThoughtTrailLines(
     };
 
     for (const rootFilePath of getOrderedRoots(edgesBySourceFile)) {
-        lines.push(`- **${formatFileHeadingLabel(rootFilePath)}**`);
+        ensureNode(rootFilePath);
         renderBranch(rootFilePath, 1, new Set([rootFilePath]));
-        lines.push("");
     }
 
-    if (lines[lines.length - 1] === "") {
-        lines.pop();
-    }
-
+    lines.push(...nodeLines, ...edgeLines, ...clickLines, "```");
     return lines;
 }

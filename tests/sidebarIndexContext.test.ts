@@ -35,6 +35,7 @@ interface MockLeaf {
     active?: boolean;
     recent?: boolean;
     mode?: "source" | "preview";
+    source?: boolean;
 }
 
 class MockPlugin {
@@ -136,11 +137,11 @@ class MockPlugin {
         const nextMode = resolveIndexLeafMode({
             isMarkdownLeaf: leaf.kind === "file",
             isIndexLeaf: leaf.filePath === ALL_COMMENTS_NOTE_PATH,
-            currentMode: leaf.mode ?? "source",
-            sourceFlag: leaf.mode === "preview",
+            currentViewMode: leaf.mode ?? "source",
+            isSourceMode: leaf.source,
         });
 
-        return nextMode ? { ...leaf, mode: nextMode } : leaf;
+        return nextMode ? { ...leaf, mode: nextMode.mode, source: nextMode.sourceMode } : leaf;
     }
 }
 
@@ -260,13 +261,14 @@ test("fixed aggregate refresh still updates an open index view when content is u
     assert.equal(shouldSkipAggregateViewRefresh("same", "same", false), true);
 });
 
-test("fixed index preview mode returns non-index files to the default editing mode", () => {
+test("fixed index preview mode returns non-index files to live preview", () => {
     const plugin = new MockPlugin();
     const indexLeaf = plugin.syncIndexLeafModeFixed({
         id: "main-1",
         kind: "file",
         filePath: ALL_COMMENTS_NOTE_PATH,
-        mode: "preview",
+        mode: "source",
+        source: true,
     });
     const noteLeaf = plugin.syncIndexLeafModeFixed({
         ...indexLeaf,
@@ -274,7 +276,23 @@ test("fixed index preview mode returns non-index files to the default editing mo
     });
 
     assert.equal(indexLeaf.mode, "preview");
+    assert.equal(indexLeaf.source, false);
     assert.equal(noteLeaf.mode, "source");
+    assert.equal(noteLeaf.source, false);
+});
+
+test("fixed index preview mode converts true source mode back to live preview", () => {
+    const plugin = new MockPlugin();
+    const noteLeaf = plugin.syncIndexLeafModeFixed({
+        id: "main-1",
+        kind: "file",
+        filePath: "Folder/Note.md",
+        mode: "source",
+        source: true,
+    });
+
+    assert.equal(noteLeaf.mode, "source");
+    assert.equal(noteLeaf.source, false);
 });
 
 test("old index preview mode leaks preview onto the next file in the same leaf", () => {

@@ -1,3 +1,5 @@
+import type { MarkdownViewModeType } from "obsidian";
+
 export interface WorkspaceFileTargets<T> {
     activeMarkdownFile: T | null;
     activeSidebarFile: T | null;
@@ -28,20 +30,35 @@ export function shouldIgnoreWorkspaceLeafChange(viewType: string | null): boolea
     return viewType === "sidenote2-view";
 }
 
+export interface ResolvedMarkdownViewState {
+    mode: MarkdownViewModeType;
+    // Obsidian uses mode: "source" for both live preview and source mode.
+    // This flag distinguishes raw source mode from live preview.
+    sourceMode: boolean;
+}
+
 export function resolveIndexLeafMode(options: {
     isMarkdownLeaf: boolean;
     isIndexLeaf: boolean;
-    currentMode: string;
-    sourceFlag?: boolean;
-}): "preview" | "source" | null {
+    currentViewMode: MarkdownViewModeType;
+    isSourceMode?: boolean;
+}): ResolvedMarkdownViewState | null {
     if (!options.isMarkdownLeaf) {
         return null;
     }
 
     if (options.isIndexLeaf) {
-        return options.currentMode === "preview" ? null : "preview";
+        return options.currentViewMode === "preview"
+            ? null
+            : { mode: "preview", sourceMode: false };
     }
 
-    const isDefaultEditingMode = options.currentMode === "source" && options.sourceFlag !== true;
-    return isDefaultEditingMode ? null : "source";
+    if (options.currentViewMode === "source" && options.isSourceMode === false) {
+        return null;
+    }
+
+    return {
+        mode: "source",
+        sourceMode: false,
+    };
 }

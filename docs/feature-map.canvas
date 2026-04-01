@@ -5,7 +5,7 @@
 		{"id":"group-guide","type":"group","x":0,"y":-170,"width":2240,"height":190,"color":"6","label":"How to use this"},
 		{"id":"group-settings","type":"group","x":1260,"y":1470,"width":980,"height":330,"color":"3","label":"8. Settings + index customization"},
 		{"id":"group-mutation","type":"group","x":0,"y":720,"width":980,"height":300,"color":"3","label":"3. Save + edit + resolve + delete"},
-		{"id":"group-index","type":"group","x":1260,"y":1100,"width":980,"height":300,"color":"2","label":"6. SideNote2 index + thought trail"},
+		{"id":"group-index","type":"group","x":1260,"y":1100,"width":980,"height":300,"color":"2","label":"6. SideNote2 index"},
 		{"id":"group-capture","type":"group","x":0,"y":350,"width":980,"height":290,"color":"5","label":"1. Capture comment + start draft"},
 		{"id":"group-draft-tools","type":"group","x":1260,"y":350,"width":980,"height":290,"color":"5","label":"2. Draft editing + formatting + suggestions"},
 		{"id":"group-navigation","type":"group","x":1260,"y":720,"width":980,"height":290,"color":"4","label":"4. Reveal + open + navigate"},
@@ -51,9 +51,8 @@
 		{"id":"derived-metadata","type":"file","file":"SideNote2/src/core/derived/derivedCommentMetadata.ts","x":520,"y":1864,"width":470,"height":72,"color":"2"},
 		{"id":"highlights-summary","type":"text","text":"Edit here:\nEditor decorations, reading-view highlights,\nanchor re-resolution, active/revealed styling.\n\nSee: `commentHighlightPlanner.ts`, `commentHighlightClickTarget.ts`, `commentAnchors.ts`\nTests: `commentHighlightController.test.ts`, `anchorResolver.test.ts`, `editorHighlightRanges.test.ts`","x":40,"y":1144,"width":330,"height":186,"color":"4"},
 		{"id":"highlights-anchor","type":"file","file":"SideNote2/src/core/anchors/anchorResolver.ts","x":410,"y":1232,"width":530,"height":72,"color":"4"},
-		{"id":"index-summary","type":"text","text":"Edit here:\nGenerated `SideNote2 index.md`,\npage-vs-anchored ordering,\nthought-trail derivation,\nindex sidebar modes and styling.\n\nSee: `AggregateCommentIndex.ts`, `commentSectionOrder.ts`, `styles.css`\nTests: `allCommentsNote.test.ts`, `thoughtTrail.test.ts`","x":1300,"y":1144,"width":340,"height":198,"color":"2"},
+		{"id":"index-summary","type":"text","text":"Edit here:\nGenerated `SideNote2 index.md`,\npage-vs-anchored ordering,\nindex sidebar grouping and styling.\n\nSee: `AggregateCommentIndex.ts`, `commentSectionOrder.ts`, `styles.css`\nTests: `allCommentsNote.test.ts`","x":1300,"y":1144,"width":340,"height":198,"color":"2"},
 		{"id":"index-all-comments","type":"file","file":"SideNote2/src/core/derived/allCommentsNote.ts","x":1670,"y":1142,"width":530,"height":72,"color":"2"},
-		{"id":"index-thought-trail","type":"file","file":"SideNote2/src/core/derived/thoughtTrail.ts","x":1670,"y":1232,"width":530,"height":72,"color":"2"},
 		{"id":"index-view","type":"file","file":"SideNote2/src/ui/views/SideNote2View.ts","x":1670,"y":1322,"width":530,"height":72,"color":"2"}
 	],
 	"edges":[

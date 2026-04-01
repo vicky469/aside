@@ -55,6 +55,32 @@
 .sidenote2-index-note-view .markdown-source-view.mod-cm6 .markdown-rendered a.external-link[href^="obsidian://side-note2-comment"] {
     background-image: none;
     padding-right: 0;
+    text-decoration: none;
+    color: var(--text-normal) !important;
+}
+
+.sidenote2-index-note-view .markdown-preview-view a.external-link[href^="obsidian://side-note2-comment"]:hover,
+.sidenote2-index-note-view .markdown-preview-view a.external-link[href^="obsidian://side-note2-comment"]:focus-visible,
+.sidenote2-index-note-view .markdown-source-view.mod-cm6 .markdown-rendered a.external-link[href^="obsidian://side-note2-comment"]:hover,
+.sidenote2-index-note-view .markdown-source-view.mod-cm6 .markdown-rendered a.external-link[href^="obsidian://side-note2-comment"]:focus-visible {
+    color: var(--text-normal) !important;
+}
+
+.sidenote2-index-heading-label {
+    color: var(--text-faint);
+    font-weight: 600;
+}
+
+.sidenote2-index-note-view .markdown-preview-view a.sidenote2-index-target-link[href^="obsidian://open"],
+.sidenote2-index-note-view .markdown-source-view.mod-cm6 .markdown-rendered a.sidenote2-index-target-link[href^="obsidian://open"] {
+    color: var(--text-faint);
+}
+
+.sidenote2-index-note-view .markdown-preview-view a.sidenote2-index-target-link[href^="obsidian://open"]:hover,
+.sidenote2-index-note-view .markdown-preview-view a.sidenote2-index-target-link[href^="obsidian://open"]:focus-visible,
+.sidenote2-index-note-view .markdown-source-view.mod-cm6 .markdown-rendered a.sidenote2-index-target-link[href^="obsidian://open"]:hover,
+.sidenote2-index-note-view .markdown-source-view.mod-cm6 .markdown-rendered a.sidenote2-index-target-link[href^="obsidian://open"]:focus-visible {
+    color: var(--text-muted);
 }
 
 .markdown-preview-view img[alt="SideNote2 index header image"],
@@ -190,6 +216,11 @@
     font-size: var(--font-ui-small);
 }
 
+.sidenote2-thought-trail-caption {
+    margin: 0 0 0.5rem;
+    color: var(--text-faint);
+}
+
 .sidenote2-thought-trail ul {
     margin: 0;
     padding-left: 1.1rem;
@@ -201,6 +232,27 @@
 
 .sidenote2-thought-trail p {
     margin: 0;
+}
+
+.sidenote2-thought-trail .mermaid {
+    overflow: hidden;
+}
+
+.sidenote2-thought-trail .mermaid svg {
+    display: block;
+    width: 76%;
+    max-width: 100%;
+    height: auto;
+    margin: 0 auto;
+}
+
+.sidenote2-thought-trail [data-sidenote2-thought-trail-node-link="true"] {
+    cursor: pointer;
+}
+
+.sidenote2-thought-trail a.external-link[href^="obsidian://side-note2-comment"] {
+    background-image: none;
+    padding-right: 0;
 }
 
 .sidenote2-comment-section + .sidenote2-comment-section {

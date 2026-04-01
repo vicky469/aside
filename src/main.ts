@@ -216,7 +216,7 @@ export default class SideNote2 extends Plugin {
         createSidebarView: (leaf) => new SideNote2View(leaf as WorkspaceLeaf, this),
         startDraftFromEditorSelection: (editor, file) =>
             this.commentEntryController.startDraftFromEditorSelection(editor as unknown as Editor, file),
-        activateViewAndHighlightComment: (commentId) => this.activateViewAndHighlightComment(commentId),
+        highlightCommentById: (filePath, commentId) => this.highlightCommentById(filePath, commentId),
         activateView: () => this.activateView(),
     });
     private readonly workspaceContextController = new WorkspaceContextController({
@@ -488,6 +488,10 @@ export default class SideNote2 extends Plugin {
 
     public clearRevealedCommentSelection(): void {
         this.commentSessionController.clearRevealedCommentSelection();
+    }
+
+    private async highlightCommentById(filePath: string, commentId: string) {
+        await this.commentNavigationController.highlightCommentById(filePath, commentId);
     }
 
     private async openCommentById(filePath: string, commentId: string) {

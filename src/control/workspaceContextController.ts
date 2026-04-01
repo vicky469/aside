@@ -56,17 +56,17 @@ export class WorkspaceContextController {
         }
 
         const viewState = leaf.getViewState();
-        const targetMode = resolveIndexLeafMode({
+        const targetViewState = resolveIndexLeafMode({
             isMarkdownLeaf: viewState.type === "markdown",
             isIndexLeaf: this.host.isAllCommentsNotePath(leaf.view.file?.path ?? ""),
-            currentMode: leaf.view.getMode(),
-            sourceFlag: typeof viewState.state?.source === "boolean" ? viewState.state.source : undefined,
+            currentViewMode: leaf.view.getMode(),
+            isSourceMode: typeof viewState.state?.source === "boolean" ? viewState.state.source : undefined,
         });
-        if (!targetMode) {
+        if (!targetViewState) {
             return;
         }
 
-        await this.setLeafMarkdownMode(leaf, targetMode);
+        await this.setLeafMarkdownMode(leaf, targetViewState);
     }
 
     public syncIndexNoteViewClasses(): void {
@@ -104,7 +104,10 @@ export class WorkspaceContextController {
             : null;
     }
 
-    private async setLeafMarkdownMode(leaf: WorkspaceLeaf, mode: MarkdownViewModeType): Promise<void> {
+    private async setLeafMarkdownMode(leaf: WorkspaceLeaf, targetMode: {
+        mode: MarkdownViewModeType;
+        sourceMode: boolean;
+    }): Promise<void> {
         const viewState = leaf.getViewState();
         if (viewState.type !== "markdown") {
             return;
@@ -114,8 +117,8 @@ export class WorkspaceContextController {
             ...viewState,
             state: {
                 ...(viewState.state ?? {}),
-                mode,
-                source: mode === "source",
+                mode: targetMode.mode,
+                source: targetMode.sourceMode,
             },
         });
         this.syncIndexNoteViewClasses();

@@ -5,6 +5,7 @@ import {
 } from "../anchors/commentSectionOrder";
 import { getCommentSelectionLabel, getCommentStatusLabel, isAnchoredComment, isPageComment } from "../anchors/commentAnchors";
 import { sortCommentsByPosition } from "../storage/noteCommentStorage";
+import { extractWikiLinks } from "../text/commentMentions";
 import { extractTagsFromText } from "../text/commentTags";
 
 export const ALL_COMMENTS_NOTE_PATH = "SideNote2 index.md";
@@ -91,8 +92,30 @@ function escapeMarkdownText(value: string): string {
         .replace(/([`*_[\]()~<>])/g, "\\$1");
 }
 
+function escapeHtmlText(value: string): string {
+    return value
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+}
+
+function buildNoteOpenUrl(vaultName: string, filePath: string): string {
+    return `obsidian://open?vault=${encodeURIComponent(vaultName)}&file=${encodeURIComponent(normalizeNotePath(filePath))}`;
+}
+
+function formatNoteOpenAnchor(vaultName: string, filePath: string, className: string, label?: string): string {
+    const normalizedLabel = label?.trim() || normalizeNotePath(filePath);
+    return `<a class="external-link ${className}" href="${escapeHtmlText(buildNoteOpenUrl(vaultName, filePath))}" target="_blank" rel="noopener nofollow">${escapeHtmlText(normalizedLabel)}</a>`;
+}
+
 function formatFileHeadingLabel(filePath: string): string {
-    return escapeMarkdownText(filePath);
+    return `<strong class="sidenote2-index-heading-label">${escapeHtmlText(filePath)}</strong>`;
+}
+
+function formatPageNoteLabel(pageNoteOrdinal?: number): string {
+    return pageNoteOrdinal ? `pn${pageNoteOrdinal}` : "pn";
 }
 
 function getCommentLinkLabelText(comment: Comment, mentionedPageLabel?: string, pageNoteOrdinal?: number): string {
@@ -100,9 +123,8 @@ function getCommentLinkLabelText(comment: Comment, mentionedPageLabel?: string, 
     const normalizedMentionLabel = mentionedPageLabel
         ? toInlinePreview(mentionedPageLabel)
         : null;
-    const pageNoteFallbackLabel = pageNoteOrdinal ? String(pageNoteOrdinal) : selectedPreview;
     if (isPageComment(comment)) {
-        return normalizedMentionLabel ?? `${getCommentStatusLabel(comment)} · ${pageNoteFallbackLabel}`;
+        return formatPageNoteLabel(pageNoteOrdinal);
     }
 
     return isAnchoredComment(comment)
@@ -198,6 +220,42 @@ function dedupeMentionedPageLabels(labels: string[]): string[] {
     return deduped;
 }
 
+type ResolvedMentionTarget = {
+    filePath: string;
+    label: string;
+};
+
+function buildResolvedMentionTargets(
+    comment: Comment,
+    options: AllCommentsNoteBuildOptions,
+): ResolvedMentionTarget[] {
+    const resolveWikiLinkPath = options.resolveWikiLinkPath;
+    if (!resolveWikiLinkPath) {
+        return [];
+    }
+
+    const targets: ResolvedMentionTarget[] = [];
+    const seen = new Set<string>();
+    for (const match of extractWikiLinks(comment.comment ?? "")) {
+        const resolvedPath = resolveWikiLinkPath(match.linkPath, comment.filePath);
+        if (!resolvedPath || resolvedPath === comment.filePath || isAllCommentsNotePath(resolvedPath, options.allCommentsNotePath)) {
+            continue;
+        }
+
+        if (seen.has(resolvedPath)) {
+            continue;
+        }
+
+        seen.add(resolvedPath);
+        targets.push({
+            filePath: resolvedPath,
+            label: toInlinePreview(match.displayText?.trim() || match.linkPath.trim()),
+        });
+    }
+
+    return targets;
+}
+
 export function buildAllCommentsNoteContent(
     vaultName: string,
     comments: Comment[],
@@ -230,7 +288,7 @@ export function buildAllCommentsNoteContent(
     const filePaths = Array.from(commentsByFile.keys()).sort((left, right) => left.localeCompare(right));
 
     for (const filePath of filePaths) {
-        lines.push(`**${formatFileHeadingLabel(filePath)}**`);
+        lines.push(formatFileHeadingLabel(filePath));
 
         const fileComments = sortCommentsByPosition(commentsByFile.get(filePath) ?? []);
         const pageNoteOrdinals = new Map<string, number>();
@@ -253,16 +311,25 @@ export function buildAllCommentsNoteContent(
 
             for (const comment of sectionComments) {
                 const tagLine = formatCommentTags(comment);
-                const mentionedPageLabels = dedupeMentionedPageLabels(options.getMentionedPageLabels?.(comment) ?? []);
-                const labels = mentionedPageLabels.length ? mentionedPageLabels : [null];
+                const resolvedMentionTargets = buildResolvedMentionTargets(comment, options);
+                const mentionedPageLabels = resolvedMentionTargets.length
+                    ? resolvedMentionTargets.map((target) => target.label)
+                    : dedupeMentionedPageLabels(options.getMentionedPageLabels?.(comment) ?? []);
+                const labels = isPageComment(comment)
+                    ? [null]
+                    : (mentionedPageLabels.length ? mentionedPageLabels : [null]);
                 const commentUrl = `${buildCommentLocationUrl(vaultName, comment)}&kind=${section.key}`;
                 const marker = formatCommentKindMarker(comment);
 
-                for (const mentionedPageLabel of labels) {
+                for (const [index, mentionedPageLabel] of labels.entries()) {
+                    const mentionedTarget = isPageComment(comment) ? null : resolvedMentionTargets[index];
+                    const targetSuffix = mentionedTarget
+                        ? ` -> ${formatNoteOpenAnchor(vaultName, mentionedTarget.filePath, "sidenote2-index-target-link", mentionedTarget.label)}`
+                        : "";
                     lines.push(
                         tagLine
-                            ? `${marker} [${formatCommentLinkLabel(comment, mentionedPageLabel ?? undefined, pageNoteOrdinals.get(comment.id))}](${commentUrl})  ${tagLine}`
-                            : `${marker} [${formatCommentLinkLabel(comment, mentionedPageLabel ?? undefined, pageNoteOrdinals.get(comment.id))}](${commentUrl})`
+                            ? `${marker} [${formatCommentLinkLabel(comment, mentionedPageLabel ?? undefined, pageNoteOrdinals.get(comment.id))}](${commentUrl})${targetSuffix}  ${tagLine}`
+                            : `${marker} [${formatCommentLinkLabel(comment, mentionedPageLabel ?? undefined, pageNoteOrdinals.get(comment.id))}](${commentUrl})${targetSuffix}`
                     );
                 }
             }

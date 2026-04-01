@@ -205,6 +205,29 @@ export class CommentNavigationController {
         await this.activateViewAndHighlightComment(comment.id);
     }
 
+    public async highlightCommentById(filePath: string, commentId: string): Promise<void> {
+        const knownComment = this.host.getKnownCommentById(commentId);
+        if (knownComment?.filePath === filePath) {
+            await this.activateViewAndHighlightComment(commentId);
+            return;
+        }
+
+        const file = this.host.getFileByPath(filePath);
+        if (!file) {
+            this.host.showNotice("Unable to find that file.");
+            return;
+        }
+
+        await this.host.loadCommentsForFile(file);
+        const comment = this.host.getLoadedCommentById(commentId);
+        if (!comment || comment.filePath !== file.path) {
+            this.host.showNotice("Unable to find that side comment.");
+            return;
+        }
+
+        await this.activateViewAndHighlightComment(comment.id);
+    }
+
     public async openCommentById(filePath: string, commentId: string): Promise<void> {
         const file = this.host.getFileByPath(filePath);
         if (!file) {
