@@ -178,7 +178,7 @@ function parseJsonSection(sectionContent: string, filePath: string): Comment[] |
 }
 
 function findTrailingManagedSection(normalized: string): SplitManagedSectionResult | null {
-    const matches = Array.from(normalized.matchAll(/^<!-- SideNote2 comments(?=$|[ \t]|\[|\{)/gm));
+    const matches = Array.from(normalized.matchAll(/<!-- SideNote2 comments(?=$|[\s\[{])/g));
     for (let i = matches.length - 1; i >= 0; i--) {
         const match = matches[i];
         if (typeof match.index !== "number") {
@@ -283,7 +283,7 @@ export function serializeNoteComments(noteContent: string, comments: Comment[]):
 
     const section = buildManagedSection(comments);
 
-    return normalizedMain.length ? `${normalizedMain}\n\n${section}\n` : `${section}\n`;
+    return normalizedMain.length ? `${normalizedMain}\n\n${section}\n` : `\n${section}\n`;
 }
 
 export function getManagedSectionEdit(noteContent: string, comments: Comment[]): ManagedSectionEdit {
@@ -301,7 +301,7 @@ export function getManagedSectionEdit(noteContent: string, comments: Comment[]):
     return {
         fromOffset: sectionFromOffset,
         toOffset: sectionToOffset,
-        replacement: sectionFromOffset > 0 ? `\n\n${section}\n` : `${section}\n`,
+        replacement: sectionFromOffset > 0 ? `\n\n${section}\n` : `\n${section}\n`,
     };
 }
 

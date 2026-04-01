@@ -20,6 +20,7 @@ import {
     serializeNoteComments,
     type ParsedNoteComments,
 } from "../core/storage/noteCommentStorage";
+import { remapSelectionOffsetAfterManagedSectionEdit } from "../core/text/editOffsets";
 import type { AggregateCommentIndex } from "../index/AggregateCommentIndex";
 import { shouldSkipAggregateViewRefresh } from "./commentPersistencePlanner";
 
@@ -298,10 +299,16 @@ export class CommentPersistenceController {
             const nextContent = serializeNoteComments(currentContent, comments);
             if (currentContent !== nextContent) {
                 const edit = getManagedSectionEdit(currentContent, comments);
+                const selectionFromOffset = openView.editor.posToOffset(openView.editor.getCursor("from"));
+                const selectionToOffset = openView.editor.posToOffset(openView.editor.getCursor("to"));
                 openView.editor.replaceRange(
                     edit.replacement,
                     openView.editor.offsetToPos(edit.fromOffset),
                     openView.editor.offsetToPos(edit.toOffset),
+                );
+                openView.editor.setSelection(
+                    openView.editor.offsetToPos(remapSelectionOffsetAfterManagedSectionEdit(selectionFromOffset, edit)),
+                    openView.editor.offsetToPos(remapSelectionOffsetAfterManagedSectionEdit(selectionToOffset, edit)),
                 );
             }
             await this.syncFileCommentsFromContent(file, nextContent);

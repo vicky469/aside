@@ -52,6 +52,19 @@ test("serializeNoteComments stores comments inside a managed appendix", () => {
     assert.equal(parsed.comments[1].comment, "Second comment");
 });
 
+test("serializeNoteComments keeps an empty note editable by leaving a blank line before the managed appendix", () => {
+    const serialized = serializeNoteComments("", [createComment({
+        anchorKind: "page",
+        selectedText: "Note",
+    })]);
+
+    assert.match(serialized, /^\n<!-- SideNote2 comments\n\[/);
+
+    const parsed = parseNoteComments(serialized, "note.md");
+    assert.equal(parsed.mainContent, "");
+    assert.equal(parsed.comments.length, 1);
+});
+
 test("serializeNoteComments stores multiline comment bodies as exact JSON strings", () => {
     const serialized = serializeNoteComments("Body", [
         createComment({
@@ -197,6 +210,17 @@ test("getManagedSectionEdit removes trailing managed block without touching note
     assert.equal(patched, "# Title\n\nAlpha beta gamma.\n");
 });
 
+test("getManagedSectionEdit keeps a blank leading line when adding comments to an empty note", () => {
+    const edit = getManagedSectionEdit("", [createComment({
+        anchorKind: "page",
+        selectedText: "Note",
+    })]);
+
+    assert.equal(edit.fromOffset, 0);
+    assert.equal(edit.toOffset, 0);
+    assert.match(edit.replacement, /^\n<!-- SideNote2 comments\n\[/);
+});
+
 test("getManagedSectionRange returns the trailing hidden block offsets", () => {
     const withComments = serializeNoteComments("# Title\n\nAlpha beta gamma.\n", [createComment()]);
     const range = getManagedSectionRange(withComments);
@@ -220,6 +244,48 @@ test("getManagedSectionLineRange covers the trailing managed block", () => {
 
 test("getManagedSectionRange returns null when no managed block exists", () => {
     assert.equal(getManagedSectionRange("# Title\n\nAlpha beta gamma.\n"), null);
+});
+
+test("parseNoteComments still recognizes a managed block after visible text is typed before it", () => {
+    const inlineManagedBlock = [
+        "a<!-- SideNote2 comments",
+        "[",
+        "  {",
+        '    "id": "comment-1",',
+        '    "startLine": 0,',
+        '    "startChar": 0,',
+        '    "endLine": 0,',
+        '    "endChar": 0,',
+        '    "selectedText": "Note",',
+        '    "selectedTextHash": "hash-1",',
+        '    "comment": "Page note",',
+        '    "timestamp": 1710000000000,',
+        '    "anchorKind": "page"',
+        "  }",
+        "]",
+        "-->",
+        "",
+    ].join("\n");
+
+    const parsed = parseNoteComments(inlineManagedBlock, "note.md");
+    assert.equal(parsed.mainContent, "a");
+    assert.equal(parsed.comments.length, 1);
+    assert.equal(parsed.comments[0].anchorKind, "page");
+    assert.equal(parsed.comments[0].comment, "Page note");
+});
+
+test("getManagedSectionRange still finds a managed block after visible text is typed before it", () => {
+    const inlineManagedBlock = [
+        "a<!-- SideNote2 comments",
+        "[]",
+        "-->",
+        "",
+    ].join("\n");
+
+    const range = getManagedSectionRange(inlineManagedBlock);
+    assert.ok(range);
+    assert.equal(inlineManagedBlock.slice(0, range.fromOffset), "a");
+    assert.equal(inlineManagedBlock.slice(range.fromOffset, range.toOffset).startsWith("<!-- SideNote2 comments"), true);
 });
 
 test("parseNoteComments ignores non-JSON comment sections", () => {
