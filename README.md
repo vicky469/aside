@@ -44,6 +44,7 @@ It is built for a minimal workflow: humans work in the sidebar, while agents can
 - Type `#` in a side note to search existing tags or add a new one.
 - Keeps resolved comments archived instead of removing them.
 - Generates `SideNote2 index.md` as a vault-wide comment index.
+- Lets the index sidebar switch between the comment list and a thought-trail graph built from side-note wiki links.
 - Supports Codex CLI workflows so agents can read and update side comments from the note-backed storage format.
 
 ## How to Get Started
@@ -54,12 +55,14 @@ It is built for a minimal workflow: humans work in the sidebar, while agents can
      <img src="./image.png" alt="Install SideNote2 with BRAT" width="420">
    </p>
 
-2. Install the SideNote2 skill in Codex CLI.
+2. Install the bundled SideNote2 skills in Codex CLI.
 
 ```bash
-python ~/.codex/skills/.system/skill-installer/scripts/install-skill-from-github.py --url \
-  https://github.com/vicky469/SideNote2/tree/main/skills/side-note2-note-comments
+python ~/.codex/skills/.system/skill-installer/scripts/install-skill-from-github.py --repo \
+  vicky469/SideNote2 --path skills/side-note2-note-comments skills/canvas-design
 ```
+
+`side-note2-note-comments` helps agents read and update SideNote2-backed notes. `canvas-design` is a bundled Obsidian canvas-layout skill for cleaner spacing, grouping, and board readability.
 
 ## Workflow
 
@@ -68,7 +71,7 @@ python ~/.codex/skills/.system/skill-installer/scripts/install-skill-from-github
    You can use the ribbon button to open the sidebar, or assign your own hotkey in Obsidian.
 3. Write the comment in the sidebar.
    See `Writing in Side Notes` below for editor shortcuts and formatting behavior.
-4. Review it later from the sidebar or from `SideNote2 index.md`.
+4. Review it later from the sidebar, from `SideNote2 index.md`, or from the sidebar thought trail.
 
 ## Writing in Side Notes
 

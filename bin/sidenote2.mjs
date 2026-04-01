@@ -6,8 +6,6 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const SKILL_NAME = "side-note2-note-comments";
-
 function getRepoRoot(metaUrl) {
     return path.resolve(path.dirname(fileURLToPath(metaUrl)), "..");
 }
@@ -20,7 +18,7 @@ function printMainUsage(stream = process.stderr) {
             "",
             "Commands:",
             "  comment:update  Update one stored SideNote2 comment body in a note",
-            "  install-skill   Copy the SideNote2 Codex skill into the Codex skills directory",
+            "  install-skill   Copy bundled SideNote2 Codex skill(s) into the Codex skills directory",
             "",
             "Run `sidenote2 <command> --help` for command-specific usage.",
         ].join("\n") + "\n",
@@ -44,9 +42,10 @@ function printSkillUsage(command, stream = process.stderr) {
     stream.write(
         [
             "Usage:",
-            `  sidenote2 ${command} [--dest <skills-root>]`,
+            `  sidenote2 ${command} [--name <skill-name>]... [--dest <skills-root>]`,
             "",
             "Defaults:",
+            "  installs all bundled skills when --name is omitted",
             "  --dest defaults to $CODEX_HOME/skills or ~/.codex/skills",
         ].join("\n") + "\n",
     );
@@ -102,11 +101,21 @@ function parseCommentUpdateArgs(argv) {
 function parseSkillArgs(argv) {
     const options = {
         destRoot: getDefaultSkillsRoot(),
+        skillNames: [],
     };
 
     for (let index = 0; index < argv.length; index += 1) {
         const arg = argv[index];
         switch (arg) {
+            case "--name": {
+                const skillName = argv[index + 1] ?? "";
+                if (!skillName) {
+                    throw new Error("Expected a skill name after --name.");
+                }
+                options.skillNames.push(skillName);
+                index += 1;
+                break;
+            }
             case "--dest":
                 options.destRoot = path.resolve(process.cwd(), argv[index + 1] ?? "");
                 index += 1;
@@ -179,6 +188,36 @@ async function loadCommentBody(options) {
     return readStdin();
 }
 
+async function getBundledSkills() {
+    const repoRoot = getRepoRoot(import.meta.url);
+    const skillsRoot = path.join(repoRoot, "skills");
+    const entries = await readdir(skillsRoot, { withFileTypes: true });
+    const skillNames = entries
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => entry.name)
+        .sort((left, right) => left.localeCompare(right));
+
+    if (skillNames.length === 0) {
+        throw new Error(`No bundled skills found in ${skillsRoot}`);
+    }
+
+    const skillDirectories = new Map();
+    for (const skillName of skillNames) {
+        const sourceDir = path.join(skillsRoot, skillName);
+        const skillFile = path.join(sourceDir, "SKILL.md");
+        if (!(await pathExists(skillFile))) {
+            continue;
+        }
+        skillDirectories.set(skillName, sourceDir);
+    }
+
+    if (skillDirectories.size === 0) {
+        throw new Error(`No bundled skills with SKILL.md found in ${skillsRoot}`);
+    }
+
+    return { repoRoot, skillDirectories };
+}
+
 async function loadStorageModule(repoRoot) {
     const entryPoint = path.resolve(repoRoot, "src/core/storage/noteCommentStorage.ts");
     const result = await esbuild.build({
@@ -232,16 +271,6 @@ async function runCommentUpdate(argv, streamOut, streamErr) {
     return 0;
 }
 
-async function getSkillDirectories() {
-    const repoRoot = getRepoRoot(import.meta.url);
-    const sourceDir = path.join(repoRoot, "skills", SKILL_NAME);
-    if (!(await pathExists(sourceDir))) {
-        throw new Error(`Skill source not found: ${sourceDir}`);
-    }
-
-    return { repoRoot, sourceDir };
-}
-
 async function runInstallSkill(argv, streamOut, streamErr) {
     let options;
     try {
@@ -257,14 +286,24 @@ async function runInstallSkill(argv, streamOut, streamErr) {
         return 0;
     }
 
-    const { sourceDir } = await getSkillDirectories();
+    const { skillDirectories } = await getBundledSkills();
+    const requestedSkillNames = options.skillNames.length > 0
+        ? [...new Set(options.skillNames)]
+        : [...skillDirectories.keys()];
 
     const destinationRoot = options.destRoot;
-    const destinationDir = path.join(destinationRoot, SKILL_NAME);
     await mkdir(destinationRoot, { recursive: true });
-    await rm(destinationDir, { recursive: true, force: true });
-    await copyDirectoryRecursive(sourceDir, destinationDir);
-    streamOut.write(`Installed skill ${SKILL_NAME} to ${destinationDir}\n`);
+    for (const skillName of requestedSkillNames) {
+        const sourceDir = skillDirectories.get(skillName);
+        if (!sourceDir) {
+            throw new Error(`Bundled skill not found: ${skillName}`);
+        }
+
+        const destinationDir = path.join(destinationRoot, skillName);
+        await rm(destinationDir, { recursive: true, force: true });
+        await copyDirectoryRecursive(sourceDir, destinationDir);
+        streamOut.write(`Installed skill ${skillName} to ${destinationDir}\n`);
+    }
     streamOut.write("Restart Codex to pick up new skills.\n");
     return 0;
 }

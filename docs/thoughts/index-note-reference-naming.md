@@ -13,6 +13,7 @@ The index note currently renders these reference shapes:
 - anchored-note references
 - orphaned-note references
 - resolved references
+- anchored target suffixes
 - tag suffixes
 
 The current source of truth is:
@@ -40,17 +41,18 @@ Important:
 
 ## File Heading Rule
 
-Each source file is rendered once as a bold heading:
+Each source file is rendered once as a bold text heading:
 
-```md
-**Folder/Note.md**
+```html
+<strong class="sidenote2-index-heading-label">Folder/Note.md</strong>
 ```
 
 Rule:
 
 - Use the stored `filePath`
-- Escape Markdown punctuation
+- HTML-escape the path text
 - Sort files lexicographically by path
+- Do not make the file heading itself clickable
 
 ## Common Label Normalization Rule
 
@@ -63,10 +65,10 @@ Before a text fragment is shown inside a label, it is normalized like this:
 
 After that, Markdown-sensitive characters are escaped.
 
-The blank fallback depends on the source text:
+The blank fallback currently matters only for non-page comments:
 
 - non-page comments fall back to `(blank selection)`
-- page comments fall back to the file basename without extension
+- page comments do not use selected-text fallback in the index; they always use `pn` ordinals
 
 ## Kind Marker Rule
 
@@ -79,52 +81,30 @@ This is visual only. The label text carries the actual naming.
 
 ## Page Note Naming
 
-Page notes use one of two label forms.
+Page notes currently use one label form.
 
-### Page Note Without Mentioned Page Label
+### Page Note Label
 
 Format:
 
 ```md
-[page note · N](...)
+[pnN](...)
 ```
 
 Example:
 
 ```md
-[page note · 1](...)
+[pn1](...)
 ```
 
 Rule:
 
-- `page note` comes from the page-note status label
+- `pn` is a fixed page-note prefix
 - `N` is the page-note ordinal within that file
 - ordinals are assigned from file-local comment position order
 - in the current renderer, page notes are always emitted before anchored notes for the same file
-
-### Page Note With Mentioned Page Label
-
-Format:
-
-```md
-[Mentioned Page](...)
-```
-
-Examples:
-
-```md
-[Another page](...)
-[Third page](...)
-```
-
-Rule:
-
-- if `getMentionedPageLabels(comment)` returns labels, each deduped label becomes its own rendered reference
-- when a mentioned page label exists, it fully replaces `page note · N`
-- duplicate mentioned labels for the same comment are collapsed
-- deduping keeps first-seen order
-
-This means page notes currently switch between a generic ordinal label and a pure mentioned-page label.
+- page-note rows stay a single entry even when the side note contains wiki links
+- page-note rows do not currently append resolved target links in the index note
 
 ## Anchored Note Naming
 
@@ -167,6 +147,29 @@ Rule:
 - keep the selection preview first
 - append the mentioned page label after ` · `
 
+## Anchored Target Suffix Rule
+
+When an anchored side note contains a resolved wiki link target, the rendered row appends a separate target suffix.
+
+Format:
+
+```html
+[Selected Preview · Mentioned Page](...) -> <a class="external-link sidenote2-index-target-link" ...>Mentioned Page</a>
+```
+
+Example:
+
+```html
+[hello · Roadmap](...) -> <a class="external-link sidenote2-index-target-link" ...>Roadmap</a>
+```
+
+Rule:
+
+- only anchored and orphaned-style rows currently use this suffix behavior
+- the suffix uses ` -> `
+- the target link opens the resolved note with `obsidian://open`
+- duplicate resolved targets for the same comment are collapsed before rendering
+
 ## Orphaned Note Naming
 
 Orphaned notes are rendered as anchored-kind entries, but their text uses the orphaned status label.
@@ -203,7 +206,7 @@ Example:
 
 ```md
 [~~alpha~~](...)
-[~~page note · 2~~](...)
+[~~pn2~~](...)
 ```
 
 ## Tag Suffix Rule
@@ -237,15 +240,21 @@ Current note:
 - `parseCommentLocationUrl()` only reads `file` and `commentId`
 - `kind` is currently extra metadata, not part of resolution
 
+Anchored target suffix links use a separate open-note URL:
+
+```txt
+obsidian://open?vault=<vault>&file=<resolvedFilePath>
+```
+
 ## Current Examples
 
 Examples of the current naming behavior:
 
-- file heading: `**Folder/Note.md**`
-- page note by ordinal: `[page note · 1](...)`
-- page note by mentioned page: `[Another page](...)`
+- file heading: `<strong class="sidenote2-index-heading-label">Folder/Note.md</strong>`
+- page note by ordinal: `[pn1](...)`
 - anchored note: `[hello](...)`
-- anchored note with related page: `[hello · Roadmap](...)`
+- anchored note with related page label: `[hello · Roadmap](...)`
+- anchored note with resolved target suffix: `[hello · Roadmap](...) -> <a ...>Roadmap</a>`
 - orphaned note: `[orphaned · missing text](...)`
 - resolved anchored note: `[~~alpha~~](...)`
 
@@ -253,26 +262,27 @@ Examples of the current naming behavior:
 
 If the goal is more clarity and simplicity, these are the main decision points:
 
-1. Should page notes always say `page note`, even when a mentioned page label exists?
+1. Should `pn` remain the visible page-note prefix, or should page-note labels become more descriptive?
 2. Should orphaned notes keep the `orphaned ·` prefix, or should orphaned state be visual only?
 3. Should anchored notes always include a stable prefix like `anchored ·`, or is plain selected text better?
-4. Should page-note ordinals remain visible, or should they be replaced by a simpler file-local naming rule?
+4. Should anchored rows keep both the inline mentioned-page label and the separate `-> target` suffix, or is that redundant?
 5. Is the extra `kind` query param useful enough to keep if it does not affect routing today?
 
 ## Recommended Simplification Target
 
 If we want the naming system to be easier to scan, the main inconsistency today is:
 
-- page notes sometimes look like `page note · 1`
-- page notes sometimes look like `Another page`
+- page notes look like `pn1`
 - anchored notes sometimes look like `hello`
+- anchored notes sometimes look like `hello · Roadmap`
+- anchored notes with resolved links also add `-> Roadmap`
 - orphaned notes look like `orphaned · missing text`
 - the list is ordered by kind, but that kind is not named with an explicit subheading
 
 That means the same list mixes:
 
-- status-first labels
+- compact ordinal labels
 - selection-first labels
-- destination-first labels
+- selection-plus-destination labels
 
 Any cleanup should probably choose one primary naming axis and use it consistently.

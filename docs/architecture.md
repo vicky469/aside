@@ -91,7 +91,7 @@ SideNote2 is easiest to understand if you keep one rule in mind:
 
 - The note-backed comment data is the source of truth.
 - The sidebar is a working view over that data plus any current draft.
-- The index surfaces are derived views: the note is built by `allCommentsNote.ts`, and the index sidebar renders the same sectioned list view over the aggregate comments.
+- The index surfaces are derived views: the note is built by `allCommentsNote.ts`, and the index sidebar can render either the sectioned comment list or the thought-trail graph over the aggregate comments.
 - Index clicks highlight the sidebar first. The sidebar card is what then redirects you back into the source note.
 
 That means most bugs reduce to one of three questions:

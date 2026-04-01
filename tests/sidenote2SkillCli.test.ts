@@ -1,6 +1,6 @@
 import * as assert from "node:assert/strict";
 import { execFile as execFileCallback } from "node:child_process";
-import { lstat, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { access, lstat, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import test from "node:test";
@@ -8,11 +8,12 @@ import { promisify } from "node:util";
 
 const execFile = promisify(execFileCallback);
 
-test("install-skill copies the canonical repo skill into the target Codex skills directory", async () => {
+test("install-skill copies all bundled repo skills into the target Codex skills directory by default", async () => {
     const tempDir = await mkdtemp(path.join(tmpdir(), "sidenote2-skill-install-"));
     const skillsRoot = path.join(tempDir, "skills");
     const cliPath = path.resolve(process.cwd(), "bin/sidenote2.mjs");
-    const sourceSkillDir = path.resolve(process.cwd(), "skills/side-note2-note-comments");
+    const sourceCommentSkillDir = path.resolve(process.cwd(), "skills/side-note2-note-comments");
+    const sourceCanvasSkillDir = path.resolve(process.cwd(), "skills/canvas-design");
 
     const { stdout } = await execFile("node", [
         cliPath,
@@ -24,15 +25,21 @@ test("install-skill copies the canonical repo skill into the target Codex skills
     });
 
     assert.match(stdout, /Installed skill side-note2-note-comments/);
+    assert.match(stdout, /Installed skill canvas-design/);
     assert.match(stdout, /Restart Codex to pick up new skills/);
 
-    const installedSkillDir = path.join(skillsRoot, "side-note2-note-comments");
-    const installedSkillPath = path.join(installedSkillDir, "SKILL.md");
-    const installedSkill = await readFile(installedSkillPath, "utf8");
-    const sourceSkill = await readFile(path.join(sourceSkillDir, "SKILL.md"), "utf8");
-    assert.equal(installedSkill, sourceSkill);
+    const installedCommentSkillDir = path.join(skillsRoot, "side-note2-note-comments");
+    const installedCommentSkill = await readFile(path.join(installedCommentSkillDir, "SKILL.md"), "utf8");
+    const sourceCommentSkill = await readFile(path.join(sourceCommentSkillDir, "SKILL.md"), "utf8");
+    assert.equal(installedCommentSkill, sourceCommentSkill);
 
-    const installedDirStat = await lstat(installedSkillDir);
+    const installedCanvasSkillDir = path.join(skillsRoot, "canvas-design");
+    const installedCanvasSkill = await readFile(path.join(installedCanvasSkillDir, "SKILL.md"), "utf8");
+    const sourceCanvasSkill = await readFile(path.join(sourceCanvasSkillDir, "SKILL.md"), "utf8");
+    assert.equal(installedCanvasSkill, sourceCanvasSkill);
+    await assert.rejects(access(path.join(installedCanvasSkillDir, "canvas-fonts")));
+
+    const installedDirStat = await lstat(installedCommentSkillDir);
     assert.equal(installedDirStat.isSymbolicLink(), false);
 });
 
@@ -49,6 +56,8 @@ test("install-skill replaces an existing installed skill directory", async () =>
     await execFile("node", [
         cliPath,
         "install-skill",
+        "--name",
+        "side-note2-note-comments",
         "--dest",
         skillsRoot,
     ], {
@@ -58,4 +67,29 @@ test("install-skill replaces an existing installed skill directory", async () =>
     const installedSkill = await readFile(path.join(installedSkillDir, "SKILL.md"), "utf8");
     const sourceSkill = await readFile(sourceSkillPath, "utf8");
     assert.equal(installedSkill, sourceSkill);
+});
+
+test("install-skill can install a named bundled skill", async () => {
+    const tempDir = await mkdtemp(path.join(tmpdir(), "sidenote2-skill-install-named-"));
+    const skillsRoot = path.join(tempDir, "skills");
+    const cliPath = path.resolve(process.cwd(), "bin/sidenote2.mjs");
+
+    const { stdout } = await execFile("node", [
+        cliPath,
+        "install-skill",
+        "--name",
+        "canvas-design",
+        "--dest",
+        skillsRoot,
+    ], {
+        cwd: process.cwd(),
+    });
+
+    assert.match(stdout, /Installed skill canvas-design/);
+
+    const installedCanvasSkill = await readFile(path.join(skillsRoot, "canvas-design", "SKILL.md"), "utf8");
+    const sourceCanvasSkill = await readFile(path.resolve(process.cwd(), "skills/canvas-design/SKILL.md"), "utf8");
+    assert.equal(installedCanvasSkill, sourceCanvasSkill);
+
+    await assert.rejects(access(path.join(skillsRoot, "side-note2-note-comments", "SKILL.md")));
 });
