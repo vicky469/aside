@@ -1,9 +1,8 @@
-import type { Hotkey } from "obsidian";
 import type { Comment } from "../../commentManager";
 import { compareCommentsForSidebarOrder } from "../../core/anchors/commentSectionOrder";
 import { extractTagsFromText } from "../../core/text/commentTags";
 import type { DraftComment } from "../../domain/drafts";
-import { toggleMarkdownHighlight, type TextEditResult } from "../editor/commentEditorFormatting";
+import { toggleMarkdownBold, toggleMarkdownHighlight, type TextEditResult } from "../editor/commentEditorFormatting";
 import { findOpenWikiLinkQuery, replaceOpenWikiLinkQuery } from "../editor/commentEditorLinks";
 import { findOpenTagQuery, replaceOpenTagQuery } from "../editor/commentEditorTags";
 
@@ -21,12 +20,6 @@ type TagSuggestCallbacks = {
     onCloseModal: () => void;
 };
 
-type KeyboardHotkeyEventLike = Pick<KeyboardEvent, "altKey" | "ctrlKey" | "isComposing" | "key" | "metaKey" | "shiftKey">;
-export const DEFAULT_HIGHLIGHT_HOTKEY: Hotkey = {
-    modifiers: ["Alt"],
-    key: "H",
-};
-
 export interface SidebarDraftEditorHost {
     getAllIndexedComments(): Comment[];
     updateDraftCommentText(commentId: string, commentText: string): void;
@@ -34,87 +27,6 @@ export interface SidebarDraftEditorHost {
     scheduleDraftFocus(commentId: string): void;
     openLinkSuggestModal(options: LinkSuggestCallbacks): void;
     openTagSuggestModal(options: TagSuggestCallbacks): void;
-}
-
-function isHotkeyModifierList(value: unknown): value is Hotkey["modifiers"] {
-    if (!Array.isArray(value)) {
-        return false;
-    }
-
-    return value.every((modifier) => (
-        modifier === "Mod"
-        || modifier === "Ctrl"
-        || modifier === "Meta"
-        || modifier === "Shift"
-        || modifier === "Alt"
-    ));
-}
-
-function isHotkey(value: unknown): value is Hotkey {
-    if (!value || typeof value !== "object") {
-        return false;
-    }
-
-    const hotkey = value as Partial<Hotkey>;
-    return isHotkeyModifierList(hotkey.modifiers)
-        && typeof hotkey.key === "string"
-        && hotkey.key.trim().length > 0;
-}
-
-export function resolveHighlightHotkeysFromConfig(rawValue: unknown): Hotkey[] {
-    if (!Array.isArray(rawValue)) {
-        return [DEFAULT_HIGHLIGHT_HOTKEY];
-    }
-
-    const hotkeys = rawValue
-        .filter(isHotkey)
-        .map((hotkey) => ({
-            modifiers: hotkey.modifiers.slice(),
-            key: hotkey.key,
-        }));
-
-    return hotkeys.length > 0 ? hotkeys : [DEFAULT_HIGHLIGHT_HOTKEY];
-}
-
-function normalizeHotkeyKey(key: string): string {
-    return key.length === 1 ? key.toUpperCase() : key;
-}
-
-function defaultIsMacOS(): boolean {
-    return typeof navigator !== "undefined"
-        && typeof navigator.platform === "string"
-        && navigator.platform.toLowerCase().includes("mac");
-}
-
-export function eventMatchesHotkey(
-    event: KeyboardHotkeyEventLike,
-    hotkey: Hotkey,
-    isMacOS: boolean = defaultIsMacOS(),
-): boolean {
-    if (event.isComposing) {
-        return false;
-    }
-
-    const expectsMod = hotkey.modifiers.includes("Mod");
-    const expectsCtrl = hotkey.modifiers.includes("Ctrl");
-    const expectsMeta = hotkey.modifiers.includes("Meta");
-    const expectedCtrl = expectsCtrl || (expectsMod && !isMacOS);
-    const expectedMeta = expectsMeta || (expectsMod && isMacOS);
-
-    if (event.ctrlKey !== expectedCtrl) {
-        return false;
-    }
-    if (event.metaKey !== expectedMeta) {
-        return false;
-    }
-    if (event.altKey !== hotkey.modifiers.includes("Alt")) {
-        return false;
-    }
-    if (event.shiftKey !== hotkey.modifiers.includes("Shift")) {
-        return false;
-    }
-
-    return normalizeHotkeyKey(event.key) === normalizeHotkeyKey(hotkey.key);
 }
 
 export function getSidebarComments(
@@ -161,46 +73,33 @@ export function estimateDraftTextareaRows(commentText: string, isEditMode: boole
 
 export class SidebarDraftEditorController {
     private activeInlineSuggest: "link" | "tag" | null = null;
-    private highlightHotkeys: Hotkey[] = [DEFAULT_HIGHLIGHT_HOTKEY];
 
-    constructor(
-        private readonly host: SidebarDraftEditorHost,
-        private readonly loadHighlightHotkeys: () => Promise<Hotkey[]> = async () => [DEFAULT_HIGHLIGHT_HOTKEY],
-    ) {}
+    constructor(private readonly host: SidebarDraftEditorHost) {}
 
-    public async refreshFormattingHotkeys(): Promise<void> {
-        try {
-            this.highlightHotkeys = await this.loadHighlightHotkeys();
-        } catch (error) {
-            console.warn("Failed to refresh SideNote2 draft editor formatting hotkeys", error);
-            this.highlightHotkeys = [DEFAULT_HIGHLIGHT_HOTKEY];
-        }
-    }
-
-    public shouldSaveDraftFromEnter(event: KeyboardEvent): boolean {
-        return event.key === "Enter"
-            && !event.shiftKey
-            && !event.altKey
-            && !event.isComposing;
-    }
-
-    public toggleDraftHighlight(
-        event: KeyboardEvent,
+    public applyDraftHighlight(
         commentId: string,
         textarea: HTMLTextAreaElement,
         isEditMode: boolean,
-    ): boolean {
-        if (!this.highlightHotkeys.some((hotkey) => eventMatchesHotkey(event, hotkey))) {
-            return false;
-        }
-
+    ): void {
         const edit = toggleMarkdownHighlight(
             textarea.value,
             textarea.selectionStart,
             textarea.selectionEnd,
         );
         this.applyDraftEditorEdit(commentId, textarea, edit, isEditMode);
-        return true;
+    }
+
+    public applyDraftBold(
+        commentId: string,
+        textarea: HTMLTextAreaElement,
+        isEditMode: boolean,
+    ): void {
+        const edit = toggleMarkdownBold(
+            textarea.value,
+            textarea.selectionStart,
+            textarea.selectionEnd,
+        );
+        this.applyDraftEditorEdit(commentId, textarea, edit, isEditMode);
     }
 
     public openDraftLinkSuggest(
@@ -329,6 +228,6 @@ export class SidebarDraftEditorController {
         textarea.value = edit.value;
         textarea.rows = estimateDraftTextareaRows(edit.value, isEditMode);
         textarea.setSelectionRange(edit.selectionStart, edit.selectionEnd);
-        this.host.updateDraftCommentText(commentId, edit.value);
+        textarea.dispatchEvent(new Event("input", { bubbles: true }));
     }
 }

@@ -47,6 +47,8 @@ function createHost(options: {
     sidebarTargetFilePath?: string | null;
     knownComments?: Comment[];
     loadedComments?: Comment[];
+    currentNoteContentByPath?: Record<string, string>;
+    getCurrentNoteContent?: (file: TFile) => Promise<string>;
     now?: number;
 } = {}) {
     const manager = new CommentManager(options.loadedComments ?? options.knownComments ?? []);
@@ -97,6 +99,9 @@ function createHost(options: {
         getKnownCommentById: (commentId) => knownCommentsById.get(commentId) ?? null,
         getLoadedCommentById: (commentId) => manager.getCommentById(commentId) ?? null,
         getFileByPath: (filePath) => filesByPath.get(filePath) ?? null,
+        getCurrentNoteContent: async (file) => options.getCurrentNoteContent
+            ? options.getCurrentNoteContent(file)
+            : options.currentNoteContentByPath?.[file.path] ?? "",
         isCommentableFile: (file): file is TFile => !!file && (file.extension === "md" || file.extension === "pdf"),
         loadCommentsForFile: async (file) => {
             loadedFiles.push(file.path);
@@ -163,6 +168,9 @@ test("comment mutation controller saves a new draft by trimming and persisting i
         draftComment: draft,
         knownComments: [draft],
         loadedComments: [],
+        currentNoteContentByPath: {
+            [draft.filePath]: "# Title\n\nAlpha beta gamma.\n",
+        },
     });
 
     await host.controller.saveDraft(draft.id);
@@ -177,6 +185,112 @@ test("comment mutation controller saves a new draft by trimming and persisting i
     assert.equal(host.getSavingDraftCommentId(), null);
     assert.equal(host.getRefreshCommentViewsCount() >= 2, true);
     assert.equal(host.getRefreshEditorDecorationsCount(), 1);
+    assert.deepEqual(host.notices, []);
+});
+
+test("comment mutation controller marks a new draft as saving before anchor resolution completes", async () => {
+    const draft = toDraft(createComment({
+        id: "draft-1",
+        comment: "  Ship it  ",
+        selectedText: "beta",
+        startLine: 2,
+        startChar: 6,
+        endLine: 2,
+        endChar: 10,
+    }));
+    let resolveCurrentNoteContent!: (value: string) => void;
+    const currentNoteContentPromise = new Promise<string>((resolve) => {
+        resolveCurrentNoteContent = resolve;
+    });
+    const host = createHost({
+        draftComment: draft,
+        knownComments: [draft],
+        loadedComments: [],
+        getCurrentNoteContent: async () => currentNoteContentPromise,
+    });
+
+    const savePromise = host.controller.saveDraft(draft.id);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    assert.equal(host.getDraftComment()?.comment, "Ship it");
+    assert.equal(host.getSavingDraftCommentId(), draft.id);
+    assert.equal(host.getRefreshCommentViewsCount(), 1);
+    assert.equal(host.getRefreshEditorDecorationsCount(), 0);
+
+    resolveCurrentNoteContent("# Title\n\nAlpha beta gamma.\n");
+    await savePromise;
+
+    assert.equal(host.manager.getAllComments().length, 1);
+    assert.equal(host.getDraftComment(), null);
+    assert.equal(host.getSavingDraftCommentId(), null);
+    assert.deepEqual(host.notices, []);
+});
+
+test("comment mutation controller keeps a new draft open when the selected text no longer exists", async () => {
+    const draft = toDraft(createComment({
+        id: "draft-1",
+        comment: "  Ship it  ",
+        selectedText: "beta",
+        startLine: 2,
+        startChar: 6,
+        endLine: 2,
+        endChar: 10,
+    }));
+    const host = createHost({
+        draftComment: draft,
+        knownComments: [draft],
+        loadedComments: [],
+        currentNoteContentByPath: {
+            [draft.filePath]: "# Title\n\nAlpha gamma delta.\n",
+        },
+    });
+
+    await host.controller.saveDraft(draft.id);
+
+    assert.equal(host.manager.getAllComments().length, 0);
+    assert.deepEqual(host.persistedFiles, []);
+    assert.equal(host.getDraftComment()?.id, draft.id);
+    assert.equal(host.getDraftComment()?.comment, "Ship it");
+    assert.equal(host.getSavingDraftCommentId(), null);
+    assert.equal(host.getRefreshCommentViewsCount(), 2);
+    assert.equal(host.getRefreshEditorDecorationsCount(), 1);
+    assert.deepEqual(host.notices, [
+        "Selected text changed before save. Review the draft and reselect the anchor text.",
+    ]);
+});
+
+test("comment mutation controller re-resolves a moved anchor before saving a new draft", async () => {
+    const draft = toDraft(createComment({
+        id: "draft-1",
+        comment: "  Ship it  ",
+        selectedText: "beta",
+        startLine: 2,
+        startChar: 6,
+        endLine: 2,
+        endChar: 10,
+    }));
+    const host = createHost({
+        draftComment: draft,
+        knownComments: [draft],
+        loadedComments: [],
+        currentNoteContentByPath: {
+            [draft.filePath]: "# Title\n\nAlpha gamma.\n\nbeta moved here.\n",
+        },
+    });
+
+    await host.controller.saveDraft(draft.id);
+
+    assert.equal(host.manager.getAllComments().length, 1);
+    assert.equal(host.manager.getAllComments()[0].startLine, 4);
+    assert.equal(host.manager.getAllComments()[0].startChar, 0);
+    assert.equal(host.manager.getAllComments()[0].endLine, 4);
+    assert.equal(host.manager.getAllComments()[0].endChar, 4);
+    assert.deepEqual(host.persistedFiles, [{
+        path: draft.filePath,
+        immediateAggregateRefresh: true,
+    }]);
+    assert.equal(host.getDraftComment(), null);
     assert.deepEqual(host.notices, []);
 });
 

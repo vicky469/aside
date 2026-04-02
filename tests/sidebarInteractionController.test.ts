@@ -139,3 +139,93 @@ test("sidebar interaction controller clears active state classes", () => {
     assert.equal(harness.controller.getActiveCommentId(), null);
     assert.deepEqual(harness.otherActiveEl.removeClassCalls, ["active"]);
 });
+
+test("sidebar interaction controller claims the sidebar leaf before focusing a draft textarea", () => {
+    const setActiveLeafCalls: Array<{ leaf: unknown; options: unknown }> = [];
+    const sidebarLeaf = { id: "sidebar-leaf" };
+    let activeLeaf: unknown = { id: "editor-leaf" };
+    const selectionCalls: Array<{ start: number; end: number }> = [];
+    const textarea = {
+        isConnected: true,
+        value: "Draft text",
+        focus(_options?: unknown) {
+            documentStub.activeElement = this as unknown as Element;
+        },
+        setSelectionRange(start: number, end: number) {
+            selectionCalls.push({ start, end });
+        },
+    } as unknown as HTMLTextAreaElement;
+    const rafCallbacks: Array<(time: number) => void> = [];
+    const windowStub = {
+        requestAnimationFrame(callback: (time: number) => void) {
+            rafCallbacks.push(callback);
+            return rafCallbacks.length;
+        },
+        cancelAnimationFrame() {},
+        getSelection: () => null,
+    };
+    const documentStub = {
+        activeElement: null as Element | null,
+    };
+    const originalWindow = globalThis.window;
+    const originalDocument = globalThis.document;
+
+    Object.assign(globalThis, {
+        window: windowStub,
+        document: documentStub,
+    });
+
+    try {
+        const controller = new SidebarInteractionController({
+            app: {
+                workspace: {
+                    get activeLeaf() {
+                        return activeLeaf;
+                    },
+                    setActiveLeaf: (leaf: unknown, options: unknown) => {
+                        setActiveLeafCalls.push({ leaf, options });
+                        activeLeaf = leaf;
+                    },
+                },
+            } as never,
+            leaf: sidebarLeaf as never,
+            containerEl: {
+                querySelector: (selector: string) =>
+                    selector === '[data-draft-id="draft-1"] textarea' ? textarea : null,
+                querySelectorAll: () => [],
+                contains: () => true,
+            } as never,
+            getCurrentFile: () => null,
+            getDraftForView: () => null,
+            renderComments: async () => {},
+            saveDraft: () => {},
+            cancelDraft: () => {},
+            clearRevealedCommentSelection: () => {},
+            revealComment: async () => {},
+            getPreferredFileLeaf: () => null,
+            openLinkText: async () => {},
+        });
+
+        controller.scheduleDraftFocus("draft-1", 0);
+        assert.equal(rafCallbacks.length, 1);
+
+        const callback = rafCallbacks.shift();
+        assert.ok(callback);
+        callback?.(0);
+
+        assert.deepEqual(setActiveLeafCalls, [{
+            leaf: sidebarLeaf,
+            options: { focus: false },
+        }]);
+        assert.equal(documentStub.activeElement, textarea);
+        assert.deepEqual(selectionCalls, [{
+            start: textarea.value.length,
+            end: textarea.value.length,
+        }]);
+    } finally {
+        Object.assign(globalThis, {
+            window: originalWindow,
+            document: originalDocument,
+        });
+    }
+});

@@ -1,5 +1,7 @@
 import type { TFile } from "obsidian";
 import type { Comment, CommentManager } from "../commentManager";
+import { resolveAnchorRange } from "../core/anchors/anchorResolver";
+import { parseNoteComments } from "../core/storage/noteCommentStorage";
 import type { DraftComment } from "../domain/drafts";
 import { debugCount, debugLog } from "../debug";
 
@@ -21,6 +23,7 @@ export interface CommentMutationHost {
     getKnownCommentById(commentId: string): Comment | null;
     getLoadedCommentById(commentId: string): Comment | null;
     getFileByPath(filePath: string): TFile | null;
+    getCurrentNoteContent(file: TFile): Promise<string>;
     isCommentableFile(file: TFile | null): file is TFile;
     loadCommentsForFile(file: TFile): Promise<unknown>;
     persistCommentsForFile(file: TFile, options?: PersistOptions): Promise<void>;
@@ -76,12 +79,33 @@ export class CommentMutationController {
         this.host.setSavingDraftCommentId(commentId);
         await this.host.refreshCommentViews();
 
+        let preparedDraft: DraftComment | null;
+        try {
+            preparedDraft = trimmedDraft.mode === "new"
+                ? await this.prepareNewDraftForSave(trimmedDraft)
+                : trimmedDraft;
+        } catch (error) {
+            this.host.setSavingDraftCommentId(null);
+            await this.host.refreshCommentViews();
+            this.host.refreshEditorDecorations();
+            throw error;
+        }
+
+        if (!preparedDraft) {
+            this.host.setSavingDraftCommentId(null);
+            await this.host.refreshCommentViews();
+            this.host.refreshEditorDecorations();
+            return;
+        }
+
+        this.host.setDraftCommentValue(preparedDraft);
+
         let saved = false;
         try {
-            if (trimmedDraft.mode === "new") {
-                saved = await this.addComment(this.toPersistedComment(trimmedDraft));
+            if (preparedDraft.mode === "new") {
+                saved = await this.addComment(this.toPersistedComment(preparedDraft));
             } else {
-                saved = await this.editComment(commentId, commentBody);
+                saved = await this.editComment(commentId, preparedDraft.comment);
             }
         } finally {
             if (saved && this.host.getDraftComment()?.id === commentId) {
@@ -191,6 +215,36 @@ export class CommentMutationController {
         }
 
         return { file, latestComment };
+    }
+
+    private async prepareNewDraftForSave(draftComment: DraftComment): Promise<DraftComment | null> {
+        if (draftComment.anchorKind === "page") {
+            return draftComment;
+        }
+
+        const file = this.host.getFileByPath(draftComment.filePath);
+        if (!this.host.isCommentableFile(file)) {
+            this.host.showNotice("Unable to find the note for this side note.");
+            return null;
+        }
+
+        const currentNoteContent = await this.host.getCurrentNoteContent(file);
+        const parsed = parseNoteComments(currentNoteContent, draftComment.filePath);
+        const resolvedAnchor = resolveAnchorRange(parsed.mainContent, draftComment);
+        if (!resolvedAnchor) {
+            this.host.showNotice("Selected text changed before save. Review the draft and reselect the anchor text.");
+            return null;
+        }
+
+        return {
+            ...draftComment,
+            startLine: resolvedAnchor.startLine,
+            startChar: resolvedAnchor.startChar,
+            endLine: resolvedAnchor.endLine,
+            endChar: resolvedAnchor.endChar,
+            selectedText: resolvedAnchor.text,
+            orphaned: false,
+        };
     }
 
     private toPersistedComment(draftComment: DraftComment): Comment {

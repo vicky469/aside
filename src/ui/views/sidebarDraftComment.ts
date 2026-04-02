@@ -1,5 +1,6 @@
 import { isOrphanedComment, isPageComment } from "../../core/anchors/commentAnchors";
 import type { DraftComment } from "../../domain/drafts";
+import { renderStyledDraftCommentHtml } from "../editor/commentEditorStyling";
 import { formatSidebarCommentMeta } from "./sidebarCommentSections";
 import type { SidebarDraftEditorController } from "./sidebarDraftEditor";
 import { estimateDraftTextareaRows } from "./sidebarDraftEditor";
@@ -61,12 +62,47 @@ export function renderDraftCommentCard(
     });
 
     const editorWrap = commentEl.createDiv("sidenote2-inline-editor");
-    const textarea = editorWrap.createEl("textarea", {
+    // Sidebar draft formatting is button-only for now. Keyboard shortcuts such as Cmd+B
+    // and Option+H are unreliable in this editor surface, so keep the explicit controls.
+    const formatRow = editorWrap.createDiv("sidenote2-inline-editor-toolbar");
+    const boldButton = formatRow.createEl("button", {
+        text: "B",
+        cls: "sidenote2-inline-format-button",
+    });
+    boldButton.setAttribute("type", "button");
+    boldButton.setAttribute("aria-label", "Bold");
+    boldButton.setAttribute("title", "Wrap selection with **bold**");
+    const highlightButton = formatRow.createEl("button", {
+        text: "H",
+        cls: "sidenote2-inline-format-button",
+    });
+    highlightButton.setAttribute("type", "button");
+    highlightButton.setAttribute("aria-label", "Highlight");
+    highlightButton.setAttribute("title", "Wrap selection with ==highlight==");
+    const editorShell = editorWrap.createDiv("sidenote2-inline-editor-shell");
+    const preview = editorShell.createDiv("sidenote2-inline-editor-preview");
+    const textarea = editorShell.createEl("textarea", {
         cls: "sidenote2-inline-textarea",
     });
     textarea.value = comment.comment;
-    textarea.setAttribute("placeholder", "Write a side note. Type [[ for links or # for tags.");
+    textarea.setAttribute("placeholder", "Write a side note. Use B or H for styling, or type @name.");
+    textarea.setAttribute("aria-label", "Side note draft");
     textarea.rows = estimateDraftTextareaRows(comment.comment, comment.mode === "edit");
+
+    const syncPreview = () => {
+        if (!textarea.value) {
+            preview.empty();
+            preview.addClass("is-empty");
+            preview.setText("Write a side note. Use B or H for styling, or type @name.");
+        } else {
+            preview.removeClass("is-empty");
+            preview.innerHTML = renderStyledDraftCommentHtml(textarea.value);
+        }
+
+        preview.scrollTop = textarea.scrollTop;
+        preview.scrollLeft = textarea.scrollLeft;
+    };
+    syncPreview();
 
     const actionRow = editorWrap.createDiv("sidenote2-inline-editor-actions");
     const cancelButton = actionRow.createEl("button", {
@@ -77,10 +113,12 @@ export function renderDraftCommentCard(
         text: presentation.saveLabel,
         cls: "mod-cta sidenote2-inline-save-button",
     });
-    saveButton.setAttribute("title", "Save (Enter; Shift+Enter for newline)");
+    saveButton.setAttribute("title", "Save");
 
     const saving = host.isSavingDraft(comment.id);
     textarea.disabled = saving;
+    boldButton.disabled = saving;
+    highlightButton.disabled = saving;
     cancelButton.disabled = saving;
     saveButton.disabled = saving;
 
@@ -89,13 +127,11 @@ export function renderDraftCommentCard(
     };
 
     textarea.addEventListener("click", stopPropagation);
-    textarea.addEventListener("focus", () => {
-        void draftEditorController.refreshFormattingHotkeys();
-    });
     textarea.addEventListener("input", (event) => {
         const target = event.target as HTMLTextAreaElement;
         host.updateDraftCommentText(comment.id, target.value);
         target.rows = estimateDraftTextareaRows(target.value, comment.mode === "edit");
+        syncPreview();
 
         if (!(event instanceof InputEvent) || event.inputType !== "insertText" || !event.data) {
             return;
@@ -122,17 +158,6 @@ export function renderDraftCommentCard(
             event.stopImmediatePropagation();
         };
 
-        if (draftEditorController.toggleDraftHighlight(event, comment.id, textarea, comment.mode === "edit")) {
-            consumeShortcut();
-            return;
-        }
-
-        if (draftEditorController.shouldSaveDraftFromEnter(event)) {
-            consumeShortcut();
-            host.saveDraft(comment.id);
-            return;
-        }
-
         event.stopPropagation();
 
         if (event.key === "Tab" && !event.shiftKey) {
@@ -149,7 +174,18 @@ export function renderDraftCommentCard(
             host.cancelDraft(comment.id);
         }
     }, { capture: true });
+    textarea.addEventListener("scroll", syncPreview);
 
+    boldButton.onclick = (event) => {
+        stopPropagation(event);
+        draftEditorController.applyDraftBold(comment.id, textarea, comment.mode === "edit");
+        textarea.focus();
+    };
+    highlightButton.onclick = (event) => {
+        stopPropagation(event);
+        draftEditorController.applyDraftHighlight(comment.id, textarea, comment.mode === "edit");
+        textarea.focus();
+    };
     cancelButton.onclick = (event) => {
         stopPropagation(event);
         host.cancelDraft(comment.id);

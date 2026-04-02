@@ -1,4 +1,4 @@
-import { ItemView, MarkdownRenderer, TFile, WorkspaceLeaf, normalizePath, setIcon, type Hotkey, type ViewStateResult } from "obsidian";
+import { ItemView, MarkdownRenderer, TFile, WorkspaceLeaf, setIcon, type ViewStateResult } from "obsidian";
 import type { Comment } from "../../commentManager";
 import { buildThoughtTrailLines } from "../../core/derived/thoughtTrail";
 import type { DraftComment } from "../../domain/drafts";
@@ -9,12 +9,7 @@ import SideNoteLinkSuggestModal from "../modals/SideNoteLinkSuggestModal";
 import SideNoteTagSuggestModal from "../modals/SideNoteTagSuggestModal";
 import { SIDE_NOTE2_ICON_ID } from "../sideNote2Icon";
 import { buildSidebarSections, type SidebarSectionKey } from "./sidebarCommentSections";
-import {
-    DEFAULT_HIGHLIGHT_HOTKEY,
-    SidebarDraftEditorController,
-    getSidebarComments,
-    resolveHighlightHotkeysFromConfig,
-} from "./sidebarDraftEditor";
+import { SidebarDraftEditorController, getSidebarComments } from "./sidebarDraftEditor";
 import { renderDraftCommentCard } from "./sidebarDraftComment";
 import {
     buildIndexFileFilterOptions,
@@ -52,23 +47,6 @@ function parseIndexFileFilterPaths(value: unknown): string[] | null {
     }
 
     return normalizeIndexFileFilterPaths(value);
-}
-
-async function loadConfiguredHighlightHotkeys(view: ItemView): Promise<Hotkey[]> {
-    const hotkeysPath = normalizePath(`${view.app.vault.configDir}/hotkeys.json`);
-
-    try {
-        if (!(await view.app.vault.adapter.exists(hotkeysPath))) {
-            return [DEFAULT_HIGHLIGHT_HOTKEY];
-        }
-
-        const rawConfig = await view.app.vault.adapter.read(hotkeysPath);
-        const parsed = JSON.parse(rawConfig) as Record<string, unknown>;
-        return resolveHighlightHotkeysFromConfig(parsed["editor:toggle-highlight"]);
-    } catch (error) {
-        console.warn("Failed to load configured highlight hotkeys for SideNote2 draft editor", error);
-        return [DEFAULT_HIGHLIGHT_HOTKEY];
-    }
 }
 
 export default class SideNote2View extends ItemView {
@@ -121,7 +99,7 @@ export default class SideNote2View extends ItemView {
             openTagSuggestModal: (options) => {
                 new SideNoteTagSuggestModal(this.app, options).open();
             },
-        }, () => loadConfiguredHighlightHotkeys(this));
+        });
     }
 
     getViewType() {
@@ -141,7 +119,6 @@ export default class SideNote2View extends ItemView {
         if (!this.file) {
             this.file = this.plugin.getSidebarTargetFile();
         }
-        await this.draftEditorController.refreshFormattingHotkeys();
         await this.renderComments();
         document.addEventListener("keydown", this.interactionController.documentKeydownHandler, true);
         document.addEventListener("copy", this.interactionController.documentCopyHandler, true);

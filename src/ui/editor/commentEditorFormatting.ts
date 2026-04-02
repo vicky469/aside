@@ -19,14 +19,39 @@ function replaceRange(
     };
 }
 
+function getMarkdownListContentStart(
+    value: string,
+    selectionStart: number,
+    selectionEnd: number,
+): number | null {
+    if (selectionStart === selectionEnd) {
+        return null;
+    }
+
+    const lineStart = value.lastIndexOf("\n", Math.max(selectionStart - 1, 0)) + 1;
+    const nextNewline = value.indexOf("\n", selectionStart);
+    const lineEnd = nextNewline === -1 ? value.length : nextNewline;
+    const lineText = value.slice(lineStart, lineEnd);
+    const match = lineText.match(/^(\s*)([-*+]\s|\d+\.\s|[a-zA-Z]+\.\s)/);
+    if (!match) {
+        return null;
+    }
+
+    const contentStart = lineStart + match[0].length;
+    return selectionStart < contentStart && selectionEnd > contentStart
+        ? contentStart
+        : null;
+}
+
 function toggleWrappedSelection(
     value: string,
     selectionStart: number,
     selectionEnd: number,
     marker: string,
 ): TextEditResult {
-    const start = Math.min(selectionStart, selectionEnd);
+    const rawStart = Math.min(selectionStart, selectionEnd);
     const end = Math.max(selectionStart, selectionEnd);
+    const start = getMarkdownListContentStart(value, rawStart, end) ?? rawStart;
     const selectedText = value.slice(start, end);
     const markerLength = marker.length;
 
@@ -187,4 +212,12 @@ export function toggleMarkdownHighlight(
     selectionEnd: number,
 ): TextEditResult {
     return toggleWrappedSelection(value, selectionStart, selectionEnd, "==");
+}
+
+export function toggleMarkdownBold(
+    value: string,
+    selectionStart: number,
+    selectionEnd: number,
+): TextEditResult {
+    return toggleWrappedSelection(value, selectionStart, selectionEnd, "**");
 }

@@ -3,12 +3,9 @@ import test from "node:test";
 import type { Comment } from "../src/commentManager";
 import type { DraftComment } from "../src/domain/drafts";
 import {
-    DEFAULT_HIGHLIGHT_HOTKEY,
     SidebarDraftEditorController,
-    eventMatchesHotkey,
     estimateDraftTextareaRows,
     getSidebarComments,
-    resolveHighlightHotkeysFromConfig,
 } from "../src/ui/views/sidebarDraftEditor";
 
 function createComment(overrides: Partial<Comment> = {}): Comment {
@@ -95,7 +92,8 @@ test("estimateDraftTextareaRows keeps draft editors within their intended bounds
     assert.equal(estimateDraftTextareaRows(longLine, true), 18);
 });
 
-test("sidebar draft editor controller saves only on plain enter", () => {
+test("sidebar draft editor controller applies bold formatting directly", () => {
+    const dispatchedEvents: string[] = [];
     const controller = new SidebarDraftEditorController({
         getAllIndexedComments: () => [],
         updateDraftCommentText: () => {},
@@ -104,73 +102,58 @@ test("sidebar draft editor controller saves only on plain enter", () => {
         openLinkSuggestModal: () => {},
         openTagSuggestModal: () => {},
     });
-
-    assert.equal(controller.shouldSaveDraftFromEnter({
-        key: "Enter",
-        shiftKey: false,
-        altKey: false,
-        isComposing: false,
-    } as KeyboardEvent), true);
-    assert.equal(controller.shouldSaveDraftFromEnter({
-        key: "Enter",
-        shiftKey: true,
-        altKey: false,
-        isComposing: false,
-    } as KeyboardEvent), false);
-    assert.equal(controller.shouldSaveDraftFromEnter({
-        key: "Enter",
-        shiftKey: false,
-        altKey: true,
-        isComposing: false,
-    } as KeyboardEvent), false);
-    assert.equal(controller.shouldSaveDraftFromEnter({
-        key: "Enter",
-        shiftKey: false,
-        altKey: false,
-        isComposing: true,
-    } as KeyboardEvent), false);
-});
-
-test("resolveHighlightHotkeysFromConfig uses the configured editor highlight shortcut", () => {
-    assert.deepEqual(resolveHighlightHotkeysFromConfig([
-        {
-            modifiers: ["Mod", "Shift"],
-            key: "H",
+    const textarea = {
+        value: "hello world",
+        selectionStart: 6,
+        selectionEnd: 11,
+        dispatchEvent: (event: Event) => {
+            dispatchedEvents.push(event.type);
+            return true;
         },
-    ]), [
-        {
-            modifiers: ["Mod", "Shift"],
-            key: "H",
+        setSelectionRange(start: number, end: number) {
+            textarea.selectionStart = start;
+            textarea.selectionEnd = end;
         },
-    ]);
+        rows: 4,
+    } as unknown as HTMLTextAreaElement;
+
+    controller.applyDraftBold("draft-1", textarea, false);
+
+    assert.equal(textarea.value, "hello **world**");
+    assert.equal(textarea.selectionStart, 8);
+    assert.equal(textarea.selectionEnd, 13);
+    assert.deepEqual(dispatchedEvents, ["input"]);
 });
 
-test("resolveHighlightHotkeysFromConfig falls back to Alt+H when the command is unbound", () => {
-    assert.deepEqual(resolveHighlightHotkeysFromConfig(null), [DEFAULT_HIGHLIGHT_HOTKEY]);
-    assert.deepEqual(resolveHighlightHotkeysFromConfig([]), [DEFAULT_HIGHLIGHT_HOTKEY]);
-});
+test("sidebar draft editor controller applies highlight formatting directly", () => {
+    const dispatchedEvents: string[] = [];
+    const controller = new SidebarDraftEditorController({
+        getAllIndexedComments: () => [],
+        updateDraftCommentText: () => {},
+        renderComments: async () => {},
+        scheduleDraftFocus: () => {},
+        openLinkSuggestModal: () => {},
+        openTagSuggestModal: () => {},
+    });
+    const textarea = {
+        value: "hello world",
+        selectionStart: 6,
+        selectionEnd: 11,
+        dispatchEvent: (event: Event) => {
+            dispatchedEvents.push(event.type);
+            return true;
+        },
+        setSelectionRange(start: number, end: number) {
+            textarea.selectionStart = start;
+            textarea.selectionEnd = end;
+        },
+        rows: 4,
+    } as unknown as HTMLTextAreaElement;
 
-test("eventMatchesHotkey supports Mod bindings on macOS", () => {
-    assert.equal(eventMatchesHotkey({
-        key: "h",
-        altKey: false,
-        ctrlKey: false,
-        metaKey: true,
-        shiftKey: false,
-        isComposing: false,
-    } as KeyboardEvent, {
-        modifiers: ["Mod"],
-        key: "H",
-    }, true), true);
-});
+    controller.applyDraftHighlight("draft-1", textarea, false);
 
-test("eventMatchesHotkey supports Alt fallback bindings", () => {
-    assert.equal(eventMatchesHotkey({
-        key: "H",
-        altKey: true,
-        ctrlKey: false,
-        metaKey: false,
-        shiftKey: false,
-        isComposing: false,
-    } as KeyboardEvent, DEFAULT_HIGHLIGHT_HOTKEY, true), true);
+    assert.equal(textarea.value, "hello ==world==");
+    assert.equal(textarea.selectionStart, 8);
+    assert.equal(textarea.selectionEnd, 13);
+    assert.deepEqual(dispatchedEvents, ["input"]);
 });

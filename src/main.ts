@@ -97,6 +97,7 @@ export default class SideNote2 extends Plugin {
         getKnownCommentById: (commentId) => this.getKnownCommentById(commentId),
         getLoadedCommentById: (commentId) => this.commentManager.getCommentById(commentId) ?? null,
         getFileByPath: (filePath) => this.workspaceViewController.getFileByPath(filePath),
+        getCurrentNoteContent: (file) => this.workspaceViewController.getCurrentNoteContent(file),
         isCommentableFile: (file): file is TFile => this.isCommentableFile(file),
         loadCommentsForFile: (file) => this.loadCommentsForFile(file),
         persistCommentsForFile: (file, options) => this.persistCommentsForFile(file, options),

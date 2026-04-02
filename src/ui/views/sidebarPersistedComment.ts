@@ -1,5 +1,7 @@
 import type { Comment } from "../../commentManager";
 import { isOrphanedComment, isPageComment } from "../../core/anchors/commentAnchors";
+import { normalizeCommentMarkdownForRender } from "../editor/commentMarkdownRendering";
+import { decorateRenderedCommentMentions } from "../editor/commentEditorStyling";
 import { shouldActivateSidebarComment } from "./commentPointerAction";
 import { formatSidebarCommentMeta } from "./sidebarCommentSections";
 
@@ -93,7 +95,12 @@ export async function renderPersistedCommentCard(
 
     const contentWrapper = commentEl.createDiv({ cls: "sidenote2-comment-content" });
     contentWrapper.tabIndex = -1;
-    await host.renderMarkdown(comment.comment || "", contentWrapper, comment.filePath);
+    await host.renderMarkdown(
+        normalizeCommentMarkdownForRender(comment.comment || ""),
+        contentWrapper,
+        comment.filePath,
+    );
+    decorateRenderedCommentMentions(contentWrapper);
 
     const focusContentWrapper = () => {
         host.claimSidebarInteractionOwnership(contentWrapper);

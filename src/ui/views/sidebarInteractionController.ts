@@ -17,6 +17,17 @@ function isModShortcut(event: KeyboardEvent, code: string, key?: string): boolea
     return !!key && event.key.toLowerCase() === key.toLowerCase();
 }
 
+function isDraftTextareaElement(element: Element | null): element is HTMLTextAreaElement {
+    return !!element
+        && typeof (element as HTMLTextAreaElement).value === "string"
+        && typeof (element as HTMLTextAreaElement).selectionStart === "number"
+        && typeof (element as HTMLTextAreaElement).selectionEnd === "number"
+        && typeof (element as HTMLElement).matches === "function"
+        && typeof (element as HTMLElement).closest === "function"
+        && typeof (element as HTMLTextAreaElement).setSelectionRange === "function"
+        && typeof (element as HTMLTextAreaElement).dispatchEvent === "function";
+}
+
 export interface SidebarInteractionHost {
     app: App;
     leaf: WorkspaceLeaf;
@@ -60,7 +71,7 @@ export class SidebarInteractionController {
         }
 
         const activeElement = document.activeElement;
-        if (!(activeElement instanceof HTMLTextAreaElement)) {
+        if (!isDraftTextareaElement(activeElement)) {
             return;
         }
 
@@ -69,14 +80,8 @@ export class SidebarInteractionController {
         }
 
         const draftEl = activeElement.closest("[data-draft-id]");
-        const draftId = draftEl?.getAttribute("data-draft-id");
-        if (!draftId) {
+        if (!draftEl?.getAttribute("data-draft-id")) {
             return;
-        }
-
-        if (event.key === "Enter" && !event.shiftKey && !event.altKey && !event.isComposing) {
-            consumeShortcut();
-            this.host.saveDraft(draftId);
         }
     };
 
@@ -254,7 +259,7 @@ export class SidebarInteractionController {
             ) as HTMLTextAreaElement | null;
 
             if (textarea) {
-                textarea.focus();
+                this.claimSidebarInteractionOwnership(textarea);
                 const end = textarea.value.length;
                 textarea.setSelectionRange(end, end);
                 this.pendingDraftFocusFrame = null;
