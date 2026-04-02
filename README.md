@@ -3,8 +3,8 @@
   <img src="./logo-readme.svg" alt="SideNote2 logo" width="72">
 </p>
 <p align="center">
-  <a href="https://github.com/vicky469/SideNote2/releases/tag/1.0.24">
-    <img src="https://img.shields.io/badge/beta-1.0.24-f97316?style=flat-square" alt="Current beta">
+  <a href="https://github.com/vicky469/SideNote2/releases/tag/1.0.25">
+    <img src="https://img.shields.io/badge/beta-1.0.25-f97316?style=flat-square" alt="Current beta">
   </a>
   <a href="./docs/README-dev.md">
     <img src="https://img.shields.io/badge/docs-dev%20notes-0f766e?style=flat-square" alt="Dev docs">
@@ -77,12 +77,12 @@ python ~/.codex/skills/.system/skill-installer/scripts/install-skill-from-github
 
 | Action | How it works |
 | --- | --- |
-| Save draft | Press `Enter`. |
-| Insert a newline | Press `Shift+Enter`. |
+| Save draft | Click `Save`. |
+| Insert a newline | Press `Enter`. |
 | Link a note | Type `[[` to open note suggestions and insert an Obsidian wikilink. |
 | Add a tag | Type `#` to open tag suggestions and insert a tag. |
 | Reopen link or tag suggestions | Press `Tab` while the cursor is inside an unfinished `[[...` or `#...` token. |
-| Toggle highlight | Uses your vault's Obsidian `Toggle highlight` hotkey (`editor:toggle-highlight`). If that command is unbound, it falls back to `Option+H` (`Alt+H`) and toggles `==highlight==` around the current selection. |
+| Bold or highlight text | Use the sidebar `B` and `H` buttons to wrap the current selection with `**bold**` or `==highlight==`. |
 | Cancel a draft or edit | Press `Esc`. |
 
 For power users:
