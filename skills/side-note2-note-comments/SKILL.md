@@ -52,6 +52,14 @@ If the user asks to edit the note body:
 1. Edit the markdown note directly.
 2. Preserve the trailing SideNote2 managed block unless the task explicitly changes comments.
 
+If the user asks to add a page-level tag in a SideNote2 note:
+
+1. Inspect the note's leading YAML frontmatter only if it starts at the top of the file.
+2. If that frontmatter already contains a `tags` field, add the tag there and avoid duplicates.
+3. Preserve the note's existing `tags` style when practical, such as a YAML list versus inline form.
+4. If the note does not have a leading frontmatter `tags` field, do not create one just for this request.
+5. In that fallback case, add the tag as a SideNote2 page note instead.
+
 If the user asks to edit a stored SideNote2 comment:
 
 1. Confirm the target note path.
