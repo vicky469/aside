@@ -47,7 +47,7 @@ It is built for a minimal workflow: humans work in the sidebar, while agents can
 - Type `#` in a side note to search existing tags or add a new one.
 - Keeps resolved comments archived instead of removing them.
 - Generates `SideNote2 index.md` as a vault-wide comment index.
-- Lets the index sidebar switch between the comment list and a thought-trail graph built from side-note wiki links.
+- Lets the index sidebar switch between the comment list and a thought-trail graph built from side-note wiki links. The graph follows those links across connected markdown files, so it can show multi-step trails instead of only direct one-hop links.
 - Supports Codex CLI workflows so agents can read and update side comments from the note-backed storage format.
 
 ## How to Get Started
