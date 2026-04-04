@@ -48,7 +48,7 @@ It is built for a minimal workflow: humans work in the sidebar, while agents can
 - Keeps resolved comments archived instead of removing them.
 - Generates `SideNote2 index.md` as a vault-wide comment index.
 - Lets the index sidebar switch between the comment list and a thought-trail graph built from side-note wiki links. The graph follows those links across connected markdown files, so it can show multi-step trails instead of only direct one-hop links.
-- Supports Codex CLI workflows so agents can read and update side comments from the note-backed storage format.
+- Supports agent workflows so Codex, Claude Code, and other assistants can read and update side comments from the note-backed storage format.
 
 ## How to Get Started
 
@@ -59,13 +59,15 @@ It is built for a minimal workflow: humans work in the sidebar, while agents can
    <p align="center">
      <img src="./image.png" alt="Install SideNote2 with BRAT" width="420">
    </p>
-3. Install the bundled SideNote2 skills in Codex CLI.
+3. Optional: use the bundled SideNote2 agent instructions.
+
+Example install for Codex CLI:
 ```bash
 python ~/.codex/skills/.system/skill-installer/scripts/install-skill-from-github.py --repo \
   vicky469/SideNote2 --path skills/side-note2-note-comments skills/canvas-design
 ```
 
-`side-note2-note-comments` helps agents read and update SideNote2-backed notes. `canvas-design` is a bundled Obsidian canvas-layout skill for cleaner spacing, grouping, and board readability.
+`side-note2-note-comments` helps agents read and update SideNote2-backed notes. `canvas-design` is a bundled Obsidian canvas-layout skill for cleaner spacing, grouping, and board readability. If you use Claude Code or another assistant, adapt the same instructions there.
 
 ## Workflow
 
@@ -92,7 +94,7 @@ For power users:
 
 Agents can read the side notes from markdown.
 
-In Codex CLI, you can ask:
+In Codex CLI, Claude Code, or another assistant, you can ask:
 
 ```text
 Show me the side comment for "selected text" in "/Users/path/to/note.md".
