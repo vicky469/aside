@@ -30,7 +30,7 @@
     <img src="https://img.shields.io/badge/Lezer-parser-f59e0b?style=flat-square" alt="Lezer">
   </a>
 </p>
-
+![[demo.mov]]
 For the fuller dependency and architecture notes, see [README-dev.md](./docs/README-dev.md).
 
 SideNote2 is an [Obsidian](https://obsidian.md) plugin for side comments that stay attached to the note.
