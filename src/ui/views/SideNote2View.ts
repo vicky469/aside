@@ -332,7 +332,6 @@ export default class SideNote2View extends ItemView {
                 label: "List",
                 active: this.indexSidebarMode === "list",
                 ariaLabel: "Show index list",
-                title: "Show index list",
                 onClick: () => {
                     if (this.indexSidebarMode === "list") {
                         return;
@@ -346,7 +345,6 @@ export default class SideNote2View extends ItemView {
                 label: "Thought Trail",
                 active: this.indexSidebarMode === "thought-trail",
                 ariaLabel: "Show thought trail",
-                title: "Show thought trail",
                 onClick: () => {
                     if (this.indexSidebarMode === "thought-trail") {
                         return;
@@ -361,9 +359,11 @@ export default class SideNote2View extends ItemView {
             this.renderToolbarChip(filterGroup, {
                 label: "Files",
                 active: options.filteredIndexFilePaths.length > 0,
-                ariaLabel: "Filter index by files",
-                title: options.indexFileFilterOptions.length
+                ariaLabel: options.indexFileFilterOptions.length
                     ? "Filter index by files"
+                    : "No files with side notes yet",
+                title: options.indexFileFilterOptions.length
+                    ? undefined
                     : "No files with side notes yet",
                 count: options.filteredIndexFilePaths.length
                     ? String(options.filteredIndexFilePaths.length)
@@ -385,7 +385,6 @@ export default class SideNote2View extends ItemView {
             label: "Resolved",
             active: showResolved,
             ariaLabel: showResolved ? "Hide resolved comments" : "Show resolved comments",
-            title: showResolved ? "Hide resolved comments" : "Show resolved comments",
             count: String(options.resolvedCount),
             showIndicator: true,
             onClick: () => {
@@ -400,7 +399,7 @@ export default class SideNote2View extends ItemView {
             label: string;
             active: boolean;
             ariaLabel: string;
-            title: string;
+            title?: string;
             onClick: () => void;
             count?: string;
             showIndicator?: boolean;
@@ -413,7 +412,9 @@ export default class SideNote2View extends ItemView {
         button.setAttribute("type", "button");
         button.setAttribute("aria-pressed", options.active ? "true" : "false");
         button.setAttribute("aria-label", options.ariaLabel);
-        button.setAttribute("title", options.title);
+        if (options.title) {
+            button.setAttribute("title", options.title);
+        }
         button.disabled = options.disabled ?? false;
 
         if (options.showIndicator) {
