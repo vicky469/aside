@@ -9,12 +9,11 @@ export interface PersistedCommentPresentation {
     classes: string[];
     metaText: string;
     redirectHint: {
-        title: string;
+        ariaLabel: string;
         icon: string;
     };
     resolveAction: {
         ariaLabel: string;
-        title: string;
         icon: string;
     };
 }
@@ -59,12 +58,11 @@ export function buildPersistedCommentPresentation(
         classes,
         metaText: formatSidebarCommentMeta(comment),
         redirectHint: {
-            title: "Open source note",
+            ariaLabel: "Open source note",
             icon: "arrow-up-right",
         },
         resolveAction: {
             ariaLabel: comment.resolved ? "Reopen side note" : "Resolve side note",
-            title: comment.resolved ? "Reopen side note" : "Resolve side note",
             icon: comment.resolved ? "rotate-ccw" : "check",
         },
     };
@@ -93,8 +91,7 @@ export async function renderPersistedCommentCard(
             cls: "sidenote2-comment-action-button sidenote2-comment-action-redirect",
         });
         redirectButton.setAttribute("type", "button");
-        redirectButton.setAttribute("aria-label", presentation.redirectHint.title);
-        redirectButton.setAttribute("title", presentation.redirectHint.title);
+        redirectButton.setAttribute("aria-label", presentation.redirectHint.ariaLabel);
         host.setIcon(redirectButton, presentation.redirectHint.icon);
         redirectButton.onclick = (event) => {
             event.stopPropagation();
@@ -161,7 +158,6 @@ export async function renderPersistedCommentCard(
     });
     resolveButton.setAttribute("type", "button");
     resolveButton.setAttribute("aria-label", presentation.resolveAction.ariaLabel);
-    resolveButton.setAttribute("title", presentation.resolveAction.title);
     host.setIcon(resolveButton, presentation.resolveAction.icon);
     resolveButton.onclick = (event) => {
         event.stopPropagation();
@@ -177,7 +173,6 @@ export async function renderPersistedCommentCard(
     });
     editButton.setAttribute("type", "button");
     editButton.setAttribute("aria-label", "Edit side note");
-    editButton.setAttribute("title", "Edit side note");
     host.setIcon(editButton, "pencil");
     editButton.onclick = (event) => {
         event.stopPropagation();
@@ -189,7 +184,6 @@ export async function renderPersistedCommentCard(
     });
     deleteButton.setAttribute("type", "button");
     deleteButton.setAttribute("aria-label", "Delete side note");
-    deleteButton.setAttribute("title", "Delete side note");
     host.setIcon(deleteButton, "trash-2");
     deleteButton.onclick = (event) => {
         event.stopPropagation();
