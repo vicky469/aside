@@ -226,6 +226,60 @@
     gap: 8px;
 }
 
+.sidenote2-segmented-control {
+    display: inline-flex;
+    align-items: center;
+    gap: 0;
+    padding: 2px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--background-secondary) 88%, transparent);
+}
+
+.sidenote2-segmented-control-button {
+    all: unset;
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 24px;
+    padding: 3px 10px;
+    border: none;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text-faint, var(--text-muted)) !important;
+    font-size: var(--font-ui-small);
+    font-family: inherit;
+    line-height: 1.2;
+    font-weight: 400;
+    user-select: none;
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+    outline: none;
+    text-decoration: none;
+    box-shadow: none !important;
+    transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.sidenote2-segmented-control-button:hover {
+    background: color-mix(in srgb, var(--background-modifier-hover) 68%, transparent);
+    color: var(--text-muted) !important;
+}
+
+.sidenote2-segmented-control-button:focus-visible {
+    box-shadow: none !important;
+    background: color-mix(in srgb, var(--background-modifier-hover) 68%, transparent);
+    color: var(--text-muted) !important;
+}
+
+.sidenote2-segmented-control-button.is-active {
+    background: var(--background-primary);
+    color: var(--text-normal) !important;
+    font-weight: 400;
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--background-modifier-border-hover) 65%, transparent) !important;
+}
+
 .sidenote2-filter-chip {
     display: inline-flex;
     align-items: center;

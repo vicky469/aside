@@ -365,33 +365,7 @@ export default class SideNote2View extends ItemView {
         const toolbarEl = container.createDiv("sidenote2-sidebar-toolbar");
         toolbarEl.classList.toggle("is-index-toolbar", options.isAllCommentsView);
         if (options.isAllCommentsView) {
-            const modeGroup = toolbarEl.createDiv("sidenote2-sidebar-toolbar-group");
-            this.renderToolbarChip(modeGroup, {
-                label: "List",
-                active: this.indexSidebarMode === "list",
-                ariaLabel: "Show index list",
-                onClick: () => {
-                    if (this.indexSidebarMode === "list") {
-                        return;
-                    }
-
-                    this.indexSidebarMode = "list";
-                    void this.renderComments();
-                },
-            });
-            this.renderToolbarChip(modeGroup, {
-                label: "Thought Trail",
-                active: this.indexSidebarMode === "thought-trail",
-                ariaLabel: "Show thought trail",
-                onClick: () => {
-                    if (this.indexSidebarMode === "thought-trail") {
-                        return;
-                    }
-
-                    this.indexSidebarMode = "thought-trail";
-                    void this.renderComments();
-                },
-            });
+            this.renderIndexModeControl(toolbarEl);
 
             const filterGroup = toolbarEl.createDiv("sidenote2-sidebar-toolbar-group");
             this.renderToolbarChip(filterGroup, {
@@ -481,6 +455,56 @@ export default class SideNote2View extends ItemView {
             });
         }
 
+        button.onclick = options.onClick;
+    }
+
+    private renderIndexModeControl(container: HTMLElement): void {
+        const modeGroup = container.createDiv("sidenote2-sidebar-toolbar-group");
+        const segmentedControl = modeGroup.createDiv("sidenote2-segmented-control");
+        this.renderSegmentedControlButton(segmentedControl, {
+            label: "List",
+            active: this.indexSidebarMode === "list",
+            ariaLabel: "Show index list",
+            onClick: () => {
+                if (this.indexSidebarMode === "list") {
+                    return;
+                }
+
+                this.indexSidebarMode = "list";
+                void this.renderComments();
+            },
+        });
+        this.renderSegmentedControlButton(segmentedControl, {
+            label: "Thought Trail",
+            active: this.indexSidebarMode === "thought-trail",
+            ariaLabel: "Show thought trail",
+            onClick: () => {
+                if (this.indexSidebarMode === "thought-trail") {
+                    return;
+                }
+
+                this.indexSidebarMode = "thought-trail";
+                void this.renderComments();
+            },
+        });
+    }
+
+    private renderSegmentedControlButton(
+        container: HTMLElement,
+        options: {
+            label: string;
+            active: boolean;
+            ariaLabel: string;
+            onClick: () => void;
+        },
+    ): void {
+        const button = container.createEl("button", {
+            cls: `sidenote2-segmented-control-button${options.active ? " is-active" : ""}`,
+            text: options.label,
+        });
+        button.setAttribute("type", "button");
+        button.setAttribute("aria-pressed", options.active ? "true" : "false");
+        button.setAttribute("aria-label", options.ariaLabel);
         button.onclick = options.onClick;
     }
 
