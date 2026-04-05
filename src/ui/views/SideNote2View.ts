@@ -1,4 +1,4 @@
-import { ItemView, MarkdownRenderer, TFile, WorkspaceLeaf, setIcon, type ViewStateResult } from "obsidian";
+import { ItemView, MarkdownRenderer, TFile, WorkspaceLeaf, loadMermaid, setIcon, type ViewStateResult } from "obsidian";
 import type { Comment } from "../../commentManager";
 import {
     buildIndexFileFilterGraph,
@@ -7,6 +7,8 @@ import {
 } from "../../core/derived/indexFileFilterGraph";
 import {
     buildThoughtTrailLines,
+    extractThoughtTrailMermaidSource,
+    getThoughtTrailMermaidRenderConfig,
 } from "../../core/derived/thoughtTrail";
 import type { DraftComment } from "../../domain/drafts";
 import type SideNote2 from "../../main";
@@ -28,7 +30,6 @@ import { filterCommentsByResolvedVisibility } from "../../core/rules/resolvedCom
 import { SidebarInteractionController } from "./sidebarInteractionController";
 import { renderPersistedCommentCard } from "./sidebarPersistedComment";
 import { extractThoughtTrailClickTargets, parseThoughtTrailOpenFilePath, resolveThoughtTrailNodeId } from "./thoughtTrailNodeLinks";
-import { getSidebarPersistedCommentPrimaryAction } from "./indexReverseHighlightMode";
 import {
     normalizeIndexFileFilterRootPath,
     resolveIndexFileFilterRootPathFromState,
@@ -613,10 +614,6 @@ export default class SideNote2View extends ItemView {
     private async renderPersistedComment(commentsContainer: HTMLDivElement, comment: Comment) {
         const currentFilePath = this.file?.path ?? null;
         const isIndexView = !!currentFilePath && this.plugin.isAllCommentsNotePath(currentFilePath);
-        const primaryAction = getSidebarPersistedCommentPrimaryAction(
-            currentFilePath,
-            (path) => this.plugin.isAllCommentsNotePath(path),
-        );
 
         await renderPersistedCommentCard(commentsContainer, comment, {
             activeCommentId: this.interactionController.getActiveCommentId(),
@@ -631,9 +628,9 @@ export default class SideNote2View extends ItemView {
             openSidebarInternalLink: (href, sourcePath, focusTarget) =>
                 this.interactionController.openSidebarInternalLink(href, sourcePath, focusTarget),
             activateComment: async (persistedComment) => {
-                if (primaryAction === "index-highlight" && currentFilePath) {
+                if (isIndexView && currentFilePath) {
                     this.interactionController.setActiveComment(persistedComment.id);
-                    await this.plugin.syncIndexCommentHighlightPair(persistedComment.id, currentFilePath);
+                    await this.plugin.revealIndexCommentFromSidebar(persistedComment.id, currentFilePath);
                     return;
                 }
 
@@ -709,14 +706,80 @@ export default class SideNote2View extends ItemView {
             text: "Click a file node to open it. Edge labels show the linking side note.",
         });
 
-        await MarkdownRenderer.renderMarkdown(
-            thoughtTrailLines.join("\n"),
-            thoughtTrailEl,
-            file.path,
-            this.plugin,
-        );
+        await this.renderThoughtTrailMermaid(thoughtTrailEl, thoughtTrailLines, file.path);
 
         this.bindThoughtTrailNodeLinks(thoughtTrailEl, thoughtTrailLines);
+    }
+
+    private async renderThoughtTrailMermaid(
+        container: HTMLElement,
+        thoughtTrailLines: string[],
+        sourcePath: string,
+    ): Promise<void> {
+        const fallbackToMarkdownRenderer = async (): Promise<void> => {
+            await MarkdownRenderer.renderMarkdown(
+                thoughtTrailLines.join("\n"),
+                container,
+                sourcePath,
+                this.plugin,
+            );
+
+            const fallbackMermaidEl = container.querySelector(".mermaid");
+            if (fallbackMermaidEl instanceof HTMLElement) {
+                fallbackMermaidEl.setAttribute("data-sidenote2-thought-trail-renderer", "markdown");
+            }
+        };
+
+        await loadMermaid().catch(() => undefined);
+        const mermaidRuntime = (globalThis as typeof globalThis & { mermaid?: any }).mermaid;
+        if (!mermaidRuntime?.render || !mermaidRuntime?.initialize) {
+            await fallbackToMarkdownRenderer();
+            return;
+        }
+
+        const previousConfig = this.cloneMermaidConfig(
+            mermaidRuntime.getConfig?.() ?? mermaidRuntime.mermaidAPI?.getConfig?.() ?? null,
+        );
+
+        try {
+            mermaidRuntime.initialize({
+                startOnLoad: false,
+                ...getThoughtTrailMermaidRenderConfig(),
+            });
+
+            const renderId = `sidenote2-thought-trail-${this.renderVersion}-${Date.now()}`;
+            const renderResult = await mermaidRuntime.render(
+                renderId,
+                extractThoughtTrailMermaidSource(thoughtTrailLines),
+            );
+            const svg = typeof renderResult === "string" ? renderResult : renderResult?.svg;
+            if (!svg) {
+                await fallbackToMarkdownRenderer();
+                return;
+            }
+
+            const mermaidEl = container.createDiv("mermaid");
+            mermaidEl.setAttribute("data-sidenote2-thought-trail-renderer", "direct");
+            mermaidEl.innerHTML = svg;
+            if (typeof renderResult?.bindFunctions === "function") {
+                renderResult.bindFunctions(mermaidEl);
+            }
+        } catch {
+            container.querySelectorAll(".mermaid").forEach((element) => element.remove());
+            await fallbackToMarkdownRenderer();
+        } finally {
+            if (previousConfig) {
+                mermaidRuntime.initialize(previousConfig);
+            }
+        }
+    }
+
+    private cloneMermaidConfig<T>(config: T): T {
+        if (config == null) {
+            return config;
+        }
+
+        return JSON.parse(JSON.stringify(config)) as T;
     }
 
     private bindThoughtTrailNodeLinks(container: HTMLElement, thoughtTrailLines: string[]): void {

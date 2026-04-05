@@ -65,6 +65,7 @@ function createHarness(options: {
     leaves?: Array<{ view: unknown }>;
     files?: TFile[];
     cachedReadValues?: Record<string, string>;
+    hasPendingAggregateRefresh?: boolean;
 } = {}) {
     const filesByPath = new Map((options.files ?? []).map((file) => [file.path, file]));
     const loadedFiles: string[] = [];
@@ -101,6 +102,7 @@ function createHarness(options: {
         ensureIndexedCommentsLoaded: async () => {
             ensureIndexedCommentsLoadedCount += 1;
         },
+        hasPendingAggregateRefresh: () => options.hasPendingAggregateRefresh ?? false,
         refreshAggregateNoteNow: async () => {
             refreshAggregateNoteCount += 1;
         },
@@ -194,7 +196,7 @@ test("workspace view controller syncs visible files, rerenders surfaces, and cle
     harness.controller.refreshMarkdownPreviews();
 
     assert.equal(harness.getEnsureIndexedCommentsLoadedCount(), 1);
-    assert.equal(harness.getRefreshAggregateNoteCount(), 1);
+    assert.equal(harness.getRefreshAggregateNoteCount(), 0);
     assert.deepEqual(harness.loadedFiles, ["docs/note.md"]);
     assert.deepEqual(sidebarRenderCalls, [1]);
     assert.deepEqual(previewRerenders, [true]);
@@ -202,4 +204,21 @@ test("workspace view controller syncs visible files, rerenders surfaces, and cle
     assert.equal(harness.controller.clearMarkdownSelection(noteFile.path), true);
     assert.deepEqual(selectionCalls, [{ from: noteCursor, to: noteCursor }]);
     assert.equal(harness.controller.clearMarkdownSelection(indexFile.path), false);
+});
+
+test("workspace view controller refreshes the index note immediately when an aggregate refresh is pending", async () => {
+    const indexFile = createFile("SideNote2 index.md");
+    const harness = createHarness({
+        activeLeaf: { view: { file: indexFile, getViewType: () => "markdown" } },
+        leaves: [
+            { view: { file: indexFile, getViewType: () => "markdown" } },
+        ],
+        files: [indexFile],
+        hasPendingAggregateRefresh: true,
+    });
+
+    await harness.controller.syncSidebarFile(indexFile);
+
+    assert.equal(harness.getEnsureIndexedCommentsLoadedCount(), 1);
+    assert.equal(harness.getRefreshAggregateNoteCount(), 1);
 });

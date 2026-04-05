@@ -156,6 +156,12 @@ export class CommentPersistenceController {
         await this.enqueueAggregateNoteRefresh();
     }
 
+    public hasPendingAggregateRefresh(): boolean {
+        return this.aggregateRefreshTimer !== null
+            || this.aggregateRefreshPromise !== null
+            || this.aggregateRefreshQueued;
+    }
+
     private clearPendingCommentPersistTimer(filePath: string): void {
         const timer = this.pendingCommentPersistTimers[filePath];
         if (timer === undefined) {

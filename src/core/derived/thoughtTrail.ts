@@ -7,19 +7,35 @@ const ALL_COMMENTS_NOTE_PATH = "SideNote2 index.md";
 const LEGACY_ALL_COMMENTS_NOTE_PATH = "SideNote2 comments.md";
 const MAX_PREVIEW_LENGTH = 80;
 const MAX_EDGE_LABEL_LENGTH = 24;
-const DEFAULT_CONNECTED_CHAIN_DEPTH = 2;
-const THOUGHT_TRAIL_MERMAID_INIT = "%%{init: {\"fontSize\": 12, \"fontFamily\": \"var(--font-interface-theme)\", \"flowchart\": {\"nodeSpacing\": 3, \"rankSpacing\": 5, \"padding\": 1, \"diagramPadding\": 0, \"useMaxWidth\": false, \"htmlLabels\": false}} }%%";
+const THOUGHT_TRAIL_MERMAID_RENDER_CONFIG = {
+    fontFamily: "var(--font-interface-theme)",
+    themeVariables: {
+        fontSize: "12px",
+    },
+    flowchart: {
+        nodeSpacing: 3,
+        rankSpacing: 5,
+        padding: 1,
+        diagramPadding: 0,
+        useMaxWidth: false,
+        htmlLabels: true,
+    },
+};
+const THOUGHT_TRAIL_MERMAID_INIT = `%%{init: ${JSON.stringify(THOUGHT_TRAIL_MERMAID_RENDER_CONFIG)}}%%`;
 
 export interface ThoughtTrailBuildOptions {
     allCommentsNotePath?: string;
     resolveWikiLinkPath?: (linkPath: string, sourceFilePath: string) => string | null;
-    connectedChainDepth?: number;
 }
 
 interface ThoughtTrailEdge {
     comment: Comment;
     targetFilePath: string;
     pageNoteOrdinal?: number;
+}
+
+function cloneJsonValue<T>(value: T): T {
+    return JSON.parse(JSON.stringify(value)) as T;
 }
 
 function normalizeNotePath(filePath: string): string {
@@ -44,14 +60,6 @@ function normalizeNotePath(filePath: string): string {
 
 function isAllCommentsNotePath(filePath: string, currentPath: string = ALL_COMMENTS_NOTE_PATH): boolean {
     return filePath === normalizeNotePath(currentPath) || filePath === LEGACY_ALL_COMMENTS_NOTE_PATH;
-}
-
-function normalizeConnectedChainDepth(value: number | null | undefined): number {
-    if (!Number.isFinite(value)) {
-        return DEFAULT_CONNECTED_CHAIN_DEPTH;
-    }
-
-    return Math.max(1, Math.floor(value ?? DEFAULT_CONNECTED_CHAIN_DEPTH));
 }
 
 function toInlinePreview(value: string, maxLength: number = MAX_PREVIEW_LENGTH): string {
@@ -100,6 +108,62 @@ function formatEdgeLabel(comment: Comment, pageNoteOrdinal?: number): string {
 
 function formatNodeLabel(filePath: string): string {
     return normalizeNotePath(filePath).replace(/\.md$/i, "");
+}
+
+function splitPathLabelSegments(filePath: string): string[] {
+    const normalized = formatNodeLabel(filePath);
+    return normalized.split("/").filter(Boolean);
+}
+
+function buildCompactNodeLabels(filePaths: Iterable<string>): Map<string, string> {
+    const uniqueFilePaths = Array.from(new Set(
+        Array.from(filePaths, (filePath) => normalizeNotePath(filePath)).filter(Boolean),
+    )).sort((left, right) => left.localeCompare(right));
+    const segmentsByFilePath = new Map(uniqueFilePaths.map((filePath) => [filePath, splitPathLabelSegments(filePath)]));
+    const depthsByFilePath = new Map(uniqueFilePaths.map((filePath) => [filePath, 1]));
+
+    while (true) {
+        const labelsByValue = new Map<string, string[]>();
+        for (const filePath of uniqueFilePaths) {
+            const segments = segmentsByFilePath.get(filePath) ?? [formatNodeLabel(filePath)];
+            const depth = depthsByFilePath.get(filePath) ?? 1;
+            const label = segments.slice(-depth).join("/");
+            const matchedFilePaths = labelsByValue.get(label);
+            if (matchedFilePaths) {
+                matchedFilePaths.push(filePath);
+            } else {
+                labelsByValue.set(label, [filePath]);
+            }
+        }
+
+        let updated = false;
+        for (const matchedFilePaths of labelsByValue.values()) {
+            if (matchedFilePaths.length <= 1) {
+                continue;
+            }
+
+            for (const filePath of matchedFilePaths) {
+                const segments = segmentsByFilePath.get(filePath) ?? [formatNodeLabel(filePath)];
+                const currentDepth = depthsByFilePath.get(filePath) ?? 1;
+                if (currentDepth >= segments.length) {
+                    continue;
+                }
+
+                depthsByFilePath.set(filePath, currentDepth + 1);
+                updated = true;
+            }
+        }
+
+        if (!updated) {
+            break;
+        }
+    }
+
+    return new Map(uniqueFilePaths.map((filePath) => {
+        const segments = segmentsByFilePath.get(filePath) ?? [formatNodeLabel(filePath)];
+        const depth = depthsByFilePath.get(filePath) ?? 1;
+        return [filePath, segments.slice(-depth).join("/")];
+    }));
 }
 
 function buildEdgesBySourceFile(
@@ -232,11 +296,15 @@ export function buildThoughtTrailLines(
         return [];
     }
 
-    const maxDepth = normalizeConnectedChainDepth(options.connectedChainDepth);
+    const nodeLabelByFilePath = buildCompactNodeLabels([
+        ...edgesBySourceFile.keys(),
+        ...Array.from(edgesBySourceFile.values()).flatMap((edges) => edges.map((edge) => edge.targetFilePath)),
+    ]);
     const nodeLines: string[] = [];
     const edgeLines: string[] = [];
     const clickLines: string[] = [];
     const nodeIds = new Map<string, string>();
+    const expandedSourceFilePaths = new Set<string>();
 
     const ensureNode = (filePath: string): string => {
         const existing = nodeIds.get(filePath);
@@ -246,42 +314,47 @@ export function buildThoughtTrailLines(
 
         const nodeId = `n${nodeIds.size}`;
         nodeIds.set(filePath, nodeId);
-        const label = JSON.stringify(toMermaidText(formatNodeLabel(filePath)));
+        const label = JSON.stringify(toMermaidText(nodeLabelByFilePath.get(filePath) ?? formatNodeLabel(filePath)));
         nodeLines.push(`    ${nodeId}[${label}]`);
         clickLines.push(
-            `    click ${nodeId} href ${JSON.stringify(buildNoteOpenUrl(vaultName, filePath))} ${JSON.stringify(`Open ${formatNodeLabel(filePath)}`)}`,
+            `    click ${nodeId} href ${JSON.stringify(buildNoteOpenUrl(vaultName, filePath))} ${JSON.stringify(`Open ${normalizeNotePath(filePath)}`)}`,
         );
         return nodeId;
     };
 
     const renderBranch = (
         sourceFilePath: string,
-        depth: number,
         branchVisited: Set<string>,
     ): void => {
-        if (depth > maxDepth) {
-            return;
-        }
-
         const sourceId = ensureNode(sourceFilePath);
         for (const edge of edgesBySourceFile.get(sourceFilePath) ?? []) {
             const targetId = ensureNode(edge.targetFilePath);
             const label = formatEdgeLabel(edge.comment, edge.pageNoteOrdinal);
             edgeLines.push(`    ${sourceId} -->|${label}| ${targetId}`);
 
-            if (branchVisited.has(edge.targetFilePath) || depth >= maxDepth || !edgesBySourceFile.has(edge.targetFilePath)) {
+            if (
+                branchVisited.has(edge.targetFilePath)
+                || expandedSourceFilePaths.has(edge.targetFilePath)
+                || !edgesBySourceFile.has(edge.targetFilePath)
+            ) {
                 continue;
             }
 
             branchVisited.add(edge.targetFilePath);
-            renderBranch(edge.targetFilePath, depth + 1, branchVisited);
+            renderBranch(edge.targetFilePath, branchVisited);
             branchVisited.delete(edge.targetFilePath);
         }
+
+        expandedSourceFilePaths.add(sourceFilePath);
     };
 
     for (const rootFilePath of getOrderedRoots(edgesBySourceFile)) {
         ensureNode(rootFilePath);
-        renderBranch(rootFilePath, 1, new Set([rootFilePath]));
+        if (expandedSourceFilePaths.has(rootFilePath)) {
+            continue;
+        }
+
+        renderBranch(rootFilePath, new Set([rootFilePath]));
     }
 
     const lines = [
@@ -291,4 +364,21 @@ export function buildThoughtTrailLines(
     ];
     lines.push(...nodeLines, ...edgeLines, ...clickLines, "```");
     return lines;
+}
+
+export function extractThoughtTrailMermaidSource(lines: string[]): string {
+    return lines
+        .filter((line, index) => {
+            if (index === 0 && line.startsWith("%%{init:")) {
+                return false;
+            }
+
+            const trimmed = line.trim();
+            return trimmed !== "```mermaid" && trimmed !== "```";
+        })
+        .join("\n");
+}
+
+export function getThoughtTrailMermaidRenderConfig() {
+    return cloneJsonValue(THOUGHT_TRAIL_MERMAID_RENDER_CONFIG);
 }

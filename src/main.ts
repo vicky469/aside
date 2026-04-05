@@ -43,12 +43,13 @@ function generateCommentId(): string {
 export default class SideNote2 extends Plugin {
     commentManager!: CommentManager;
     settings: SideNote2Settings = DEFAULT_SETTINGS;
-    private readonly workspaceViewController = new WorkspaceViewController({
+    private readonly workspaceViewController: WorkspaceViewController = new WorkspaceViewController({
         app: this.app,
         isSidebarSupportedFile: (file): file is TFile => isSidebarSupportedFile(file, this.getAllCommentsNotePath()),
         isAllCommentsNotePath: (filePath) => this.isAllCommentsNotePath(filePath),
         ensureIndexedCommentsLoaded: () => this.ensureIndexedCommentsLoaded(),
         refreshAggregateNoteNow: () => this.refreshAggregateNoteNow(),
+        hasPendingAggregateRefresh: () => this.commentPersistenceController.hasPendingAggregateRefresh(),
         loadCommentsForFile: (file) => this.loadCommentsForFile(file),
     });
     private readonly commentSessionController = new CommentSessionController({
@@ -127,7 +128,7 @@ export default class SideNote2 extends Plugin {
             new Notice(message);
         },
     });
-    private readonly commentPersistenceController = new CommentPersistenceController({
+    private readonly commentPersistenceController: CommentPersistenceController = new CommentPersistenceController({
         app: this.app,
         getAllCommentsNotePath: () => this.getAllCommentsNotePath(),
         getIndexHeaderImageUrl: () => this.getIndexHeaderImageUrl(),
@@ -388,6 +389,15 @@ export default class SideNote2 extends Plugin {
 
         const indexFile = this.workspaceViewController.getFileByPath(indexFilePath);
         await this.commentNavigationController.syncSidebarSelection(commentId, indexFile);
+    }
+
+    public async revealIndexCommentFromSidebar(commentId: string, indexFilePath: string) {
+        this.commentSessionController.setRevealedCommentState(
+            indexFilePath,
+            commentId,
+            { refreshMarkdownPreviews: false },
+        );
+        await this.commentHighlightController.revealIndexPreviewSelection(indexFilePath, commentId);
     }
 
     public async syncIndexCommentHighlightPair(commentId: string, indexFilePath: string) {

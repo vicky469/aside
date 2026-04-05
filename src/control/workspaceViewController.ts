@@ -35,6 +35,7 @@ export interface WorkspaceViewHost {
     isSidebarSupportedFile(file: TFile | null): file is TFile;
     isAllCommentsNotePath(filePath: string): boolean;
     ensureIndexedCommentsLoaded(): Promise<void>;
+    hasPendingAggregateRefresh(): boolean;
     refreshAggregateNoteNow(): Promise<void>;
     loadCommentsForFile(file: TFile | null): Promise<unknown>;
 }
@@ -173,7 +174,9 @@ export class WorkspaceViewController {
 
         if (this.host.isAllCommentsNotePath(file.path)) {
             await this.host.ensureIndexedCommentsLoaded();
-            await this.host.refreshAggregateNoteNow();
+            if (this.host.hasPendingAggregateRefresh()) {
+                await this.host.refreshAggregateNoteNow();
+            }
             return;
         }
 

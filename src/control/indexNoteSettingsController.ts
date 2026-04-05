@@ -1,6 +1,12 @@
 import type { Plugin, TFile } from "obsidian";
 import type { CommentManager } from "../commentManager";
-import { LEGACY_ALL_COMMENTS_NOTE_PATH, isAllCommentsNotePath, normalizeAllCommentsNoteImageCaption, normalizeAllCommentsNoteImageUrl, normalizeAllCommentsNotePath } from "../core/derived/allCommentsNote";
+import {
+    LEGACY_ALL_COMMENTS_NOTE_PATH,
+    isAllCommentsNotePath,
+    normalizeAllCommentsNoteImageCaption,
+    normalizeAllCommentsNoteImageUrl,
+    normalizeAllCommentsNotePath,
+} from "../core/derived/allCommentsNote";
 import { isAttachmentCommentableFile, isAttachmentCommentablePath } from "../core/rules/commentableFiles";
 import { buildAttachmentComments, parseAttachmentComments } from "../core/storage/attachmentCommentStorage";
 import type { SideNote2Settings } from "../ui/settings/SideNote2SettingTab";
@@ -175,4 +181,5 @@ export class IndexNoteSettingsController {
         await this.saveSettings();
         await this.host.refreshAggregateNoteNow();
     }
+
 }

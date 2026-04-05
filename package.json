@@ -10,6 +10,7 @@
 		"dev": "node esbuild.config.mjs",
 		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
 		"comment:update": "node bin/sidenote2.mjs comment:update",
+		"fixture:graph-1000": "node scripts/generate-large-graph-fixture.mjs",
 		"skill:install": "node bin/sidenote2.mjs install-skill",
 		"test": "rm -rf .test-dist && tsc -p tsconfig.test.json && find .test-dist/tests -type f -name '*.test.js' -exec node --test {} +",
 		"release:check": "npm run test && npm run build",

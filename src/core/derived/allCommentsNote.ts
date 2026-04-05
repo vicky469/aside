@@ -10,11 +10,22 @@ export const ALL_COMMENTS_NOTE_IMAGE_URL = "https://ichef.bbci.co.uk/images/ic/1
 export const ALL_COMMENTS_NOTE_IMAGE_CAPTION = "Relativity (Credit: 2015 The M.C. Escher Company - Baarn, The Netherlands)";
 export const ALL_COMMENTS_NOTE_IMAGE_ALT = "SideNote2 index header image";
 const MAX_PREVIEW_LENGTH = 80;
-const MAX_FILE_HEADING_LENGTH = 60;
 
 export interface CommentLocationTarget {
     filePath: string;
     commentId: string;
+}
+
+export interface IndexNoteCommentNavigationTarget {
+    commentId: string;
+    filePath: string;
+    fileLine: number | null;
+    commentLine: number;
+}
+
+export interface IndexNoteNavigationMap {
+    fileLineByFilePath: Map<string, number>;
+    targetsByCommentId: Map<string, IndexNoteCommentNavigationTarget>;
 }
 
 export interface AllCommentsNoteBuildOptions {
@@ -24,7 +35,6 @@ export interface AllCommentsNoteBuildOptions {
     getMentionedPageLabels?: (comment: Comment) => string[];
     hasSourceFile?: (filePath: string) => boolean;
     resolveWikiLinkPath?: (linkPath: string, sourceFilePath: string) => string | null;
-    connectedChainDepth?: number;
 }
 
 function normalizeNotePath(filePath: string): string {
@@ -98,13 +108,27 @@ function escapeHtmlText(value: string): string {
         .replace(/'/g, "&#39;");
 }
 
-function formatFileHeadingLabel(filePath: string): string {
-    const headingLabel = toInlinePreview(filePath, MAX_FILE_HEADING_LENGTH);
-    if (headingLabel === filePath) {
-        return `<strong class="sidenote2-index-heading-label">${escapeHtmlText(filePath)}</strong>`;
-    }
+function unescapeHtmlText(value: string): string {
+    return value
+        .replace(/&quot;/g, "\"")
+        .replace(/&#39;/g, "'")
+        .replace(/&gt;/g, ">")
+        .replace(/&lt;/g, "<")
+        .replace(/&amp;/g, "&");
+}
 
-    return `<strong class="sidenote2-index-heading-label" title="${escapeHtmlText(filePath)}">${escapeHtmlText(headingLabel)}</strong>`;
+function formatFileHeadingLabel(filePath: string): string {
+    const normalizedPath = normalizeNotePath(filePath);
+    const pathSegments = normalizedPath.split("/").filter(Boolean);
+    const fileName = pathSegments.pop() ?? normalizedPath;
+    return `<strong class="sidenote2-index-heading-label" title="${escapeHtmlText(filePath)}">${escapeHtmlText(fileName)}</strong>`;
+}
+
+function getFolderPath(filePath: string): string {
+    const normalizedPath = normalizeNotePath(filePath);
+    const pathSegments = normalizedPath.split("/").filter(Boolean);
+    pathSegments.pop();
+    return pathSegments.join("/");
 }
 
 function formatPageNoteLabel(pageNoteOrdinal?: number): string {
@@ -227,6 +251,126 @@ export function findCommentLocationLineNumber(noteContent: string, commentId: st
     return buildCommentLocationLineNumberMap(noteContent).get(commentId) ?? null;
 }
 
+function findFileHeadingPathInMarkdownLine(line: string): string | null {
+    const match = line.match(/<strong class="sidenote2-index-heading-label" title="([^"]+)">/);
+    if (!match?.[1]) {
+        return null;
+    }
+
+    return unescapeHtmlText(match[1]);
+}
+
+export function buildIndexNoteNavigationMap(noteContent: string): IndexNoteNavigationMap {
+    const fileLineByFilePath = new Map<string, number>();
+    const targetsByCommentId = new Map<string, IndexNoteCommentNavigationTarget>();
+    const lines = noteContent.split("\n");
+    let currentFilePath: string | null = null;
+
+    for (let index = 0; index < lines.length; index += 1) {
+        const line = lines[index] ?? "";
+        const fileHeadingPath = findFileHeadingPathInMarkdownLine(line);
+        if (fileHeadingPath) {
+            currentFilePath = fileHeadingPath;
+            fileLineByFilePath.set(fileHeadingPath, index);
+            continue;
+        }
+
+        const target = findCommentLocationTargetInMarkdownLine(line);
+        if (!target || targetsByCommentId.has(target.commentId)) {
+            continue;
+        }
+
+        const targetFilePath = currentFilePath ?? target.filePath;
+        targetsByCommentId.set(target.commentId, {
+            commentId: target.commentId,
+            filePath: targetFilePath,
+            fileLine: fileLineByFilePath.get(targetFilePath) ?? null,
+            commentLine: index,
+        });
+    }
+
+    return {
+        fileLineByFilePath,
+        targetsByCommentId,
+    };
+}
+
+function appendFileCommentLines(
+    lines: string[],
+    filePath: string,
+    fileComments: Comment[],
+    vaultName: string,
+): void {
+    const pageNoteOrdinals = new Map<string, number>();
+    let nextPageNoteOrdinal = 1;
+    for (const comment of fileComments) {
+        if (!isPageComment(comment)) {
+            continue;
+        }
+
+        pageNoteOrdinals.set(comment.id, nextPageNoteOrdinal);
+        nextPageNoteOrdinal += 1;
+    }
+
+    for (const comment of fileComments) {
+        const tagLine = formatCommentTags(comment);
+        const commentUrl = `${buildCommentLocationUrl(vaultName, comment)}&kind=${getCommentKindKey(comment)}`;
+        const blockId = buildIndexCommentBlockId(comment.id);
+        const marker = formatCommentKindMarker(comment);
+
+        lines.push(
+            tagLine
+                ? `${marker} [${formatCommentLinkLabel(comment, pageNoteOrdinals.get(comment.id))}](${commentUrl})  ${tagLine} ^${blockId}`
+                : `${marker} [${formatCommentLinkLabel(comment, pageNoteOrdinals.get(comment.id))}](${commentUrl}) ^${blockId}`
+        );
+        lines.push("");
+    }
+}
+
+function appendFileSections(
+    lines: string[],
+    filePaths: readonly string[],
+    commentsByFile: ReadonlyMap<string, Comment[]>,
+    vaultName: string,
+): void {
+    const filePathsByFolder = new Map<string, string[]>();
+    for (const filePath of filePaths) {
+        const folderPath = getFolderPath(filePath);
+        const existing = filePathsByFolder.get(folderPath);
+        if (existing) {
+            existing.push(filePath);
+        } else {
+            filePathsByFolder.set(folderPath, [filePath]);
+        }
+    }
+
+    const folderPaths = Array.from(filePathsByFolder.keys()).sort((left, right) => left.localeCompare(right));
+    for (const folderPath of folderPaths) {
+        if (folderPath) {
+            lines.push(`### ${escapeMarkdownText(folderPath)}`);
+            lines.push("");
+        }
+
+        const folderFilePaths = (filePathsByFolder.get(folderPath) ?? [])
+            .slice()
+            .sort((left, right) => left.localeCompare(right));
+        for (const filePath of folderFilePaths) {
+            lines.push(`  ${formatFileHeadingLabel(filePath)}`);
+            lines.push("");
+
+            const fileComments = (commentsByFile.get(filePath) ?? [])
+                .slice()
+                .sort(compareCommentsForSidebarOrder);
+            appendFileCommentLines(lines, filePath, fileComments, vaultName);
+            lines.push("");
+        }
+
+        if (folderPath) {
+            lines.push("");
+        }
+    }
+}
+
 export function buildAllCommentsNoteContent(
     vaultName: string,
     comments: Comment[],
@@ -260,41 +404,7 @@ export function buildAllCommentsNoteContent(
         }
     }
     const filePaths = Array.from(commentsByFile.keys()).sort((left, right) => left.localeCompare(right));
-
-    for (const filePath of filePaths) {
-        lines.push(formatFileHeadingLabel(filePath));
-        lines.push("");
-
-        const fileComments = (commentsByFile.get(filePath) ?? [])
-            .slice()
-            .sort(compareCommentsForSidebarOrder);
-        const pageNoteOrdinals = new Map<string, number>();
-        let nextPageNoteOrdinal = 1;
-        for (const comment of fileComments) {
-            if (!isPageComment(comment)) {
-                continue;
-            }
-
-            pageNoteOrdinals.set(comment.id, nextPageNoteOrdinal);
-            nextPageNoteOrdinal += 1;
-        }
-
-        for (const comment of fileComments) {
-            const tagLine = formatCommentTags(comment);
-            const commentUrl = `${buildCommentLocationUrl(vaultName, comment)}&kind=${getCommentKindKey(comment)}`;
-            const blockId = buildIndexCommentBlockId(comment.id);
-            const marker = formatCommentKindMarker(comment);
-
-            lines.push(
-                tagLine
-                    ? `${marker} [${formatCommentLinkLabel(comment, pageNoteOrdinals.get(comment.id))}](${commentUrl})  ${tagLine} ^${blockId}`
-                    : `${marker} [${formatCommentLinkLabel(comment, pageNoteOrdinals.get(comment.id))}](${commentUrl}) ^${blockId}`
-            );
-            lines.push("");
-        }
-
-        lines.push("");
-    }
+    appendFileSections(lines, filePaths, commentsByFile, vaultName);
 
     return `${lines.join("\n").trimEnd()}\n`;
 }

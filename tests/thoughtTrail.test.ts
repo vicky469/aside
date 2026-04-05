@@ -1,9 +1,13 @@
 import * as assert from "node:assert/strict";
 import test from "node:test";
-import { buildThoughtTrailLines } from "../src/core/derived/thoughtTrail";
+import {
+    buildThoughtTrailLines,
+    extractThoughtTrailMermaidSource,
+    getThoughtTrailMermaidRenderConfig,
+} from "../src/core/derived/thoughtTrail";
 import type { Comment } from "../src/commentManager";
 
-const THOUGHT_TRAIL_INIT = "%%{init: {\"fontSize\": 12, \"fontFamily\": \"var(--font-interface-theme)\", \"flowchart\": {\"nodeSpacing\": 3, \"rankSpacing\": 5, \"padding\": 1, \"diagramPadding\": 0, \"useMaxWidth\": false, \"htmlLabels\": false}} }%%";
+const THOUGHT_TRAIL_INIT = "%%{init: {\"fontFamily\":\"var(--font-interface-theme)\",\"themeVariables\":{\"fontSize\":\"12px\"},\"flowchart\":{\"nodeSpacing\":3,\"rankSpacing\":5,\"padding\":1,\"diagramPadding\":0,\"useMaxWidth\":false,\"htmlLabels\":true}}}%%";
 
 function createComment(overrides: Partial<Comment> = {}): Comment {
     return {
@@ -52,10 +56,10 @@ test("buildThoughtTrailLines renders a mermaid graph from wiki links", () => {
         "    n0 -->|setup| n1",
         "    n1 -->|internals| n2",
         "    n0 -->|setup| n3",
-        "    click n0 href \"obsidian://open?vault=dev&file=file1.md\" \"Open file1\"",
-        "    click n1 href \"obsidian://open?vault=dev&file=file3.md\" \"Open file3\"",
-        "    click n2 href \"obsidian://open?vault=dev&file=file4.md\" \"Open file4\"",
-        "    click n3 href \"obsidian://open?vault=dev&file=file2.md\" \"Open file2\"",
+        "    click n0 href \"obsidian://open?vault=dev&file=file1.md\" \"Open file1.md\"",
+        "    click n1 href \"obsidian://open?vault=dev&file=file3.md\" \"Open file3.md\"",
+        "    click n2 href \"obsidian://open?vault=dev&file=file4.md\" \"Open file4.md\"",
+        "    click n3 href \"obsidian://open?vault=dev&file=file2.md\" \"Open file2.md\"",
         "```",
     ]);
 });
@@ -121,8 +125,99 @@ test("buildThoughtTrailLines uses pn ordinals for page notes", () => {
         "    n0[\"file1\"]",
         "    n1[\"target\"]",
         "    n0 -->|pn1| n1",
-        "    click n0 href \"obsidian://open?vault=dev&file=file1.md\" \"Open file1\"",
-        "    click n1 href \"obsidian://open?vault=dev&file=target.md\" \"Open target\"",
+        "    click n0 href \"obsidian://open?vault=dev&file=file1.md\" \"Open file1.md\"",
+        "    click n1 href \"obsidian://open?vault=dev&file=target.md\" \"Open target.md\"",
         "```",
     ]);
+});
+
+test("buildThoughtTrailLines renders a full chain without a depth limit", () => {
+    const lines = buildThoughtTrailLines("dev", [
+        createComment({
+            id: "chain-1",
+            filePath: "file1.md",
+            selectedText: "one",
+            comment: "Go to [[file2]].",
+        }),
+        createComment({
+            id: "chain-2",
+            filePath: "file2.md",
+            selectedText: "two",
+            comment: "Go to [[file3]].",
+        }),
+        createComment({
+            id: "chain-3",
+            filePath: "file3.md",
+            selectedText: "three",
+            comment: "Go to [[file4]].",
+        }),
+        createComment({
+            id: "chain-4",
+            filePath: "file4.md",
+            selectedText: "four",
+            comment: "Go to [[file5]].",
+        }),
+    ], {
+        resolveWikiLinkPath: (linkPath) => `${linkPath}.md`,
+    });
+
+    assert.equal(lines.includes("    n4[\"file5\"]"), true);
+    assert.equal(lines.includes("    n3 -->|four| n4"), true);
+});
+
+test("buildThoughtTrailLines uses compact unique suffix labels instead of full file paths", () => {
+    const lines = buildThoughtTrailLines("dev", [
+        createComment({
+            id: "alpha-1",
+            filePath: "notes/alpha.md",
+            selectedText: "alpha",
+            comment: "Go to [[beta]].",
+        }),
+        createComment({
+            id: "alpha-2",
+            filePath: "archive/alpha.md",
+            selectedText: "archive alpha",
+            comment: "Go to [[gamma]].",
+        }),
+    ], {
+        resolveWikiLinkPath: (linkPath, sourceFilePath) => {
+            if (linkPath === "beta") {
+                return "notes/beta.md";
+            }
+            if (linkPath === "gamma") {
+                return "archive/gamma.md";
+            }
+            return sourceFilePath;
+        },
+    });
+
+    assert.equal(lines.includes("    n0[\"archive/alpha\"]"), true);
+    assert.equal(lines.includes("    n2[\"notes/alpha\"]"), true);
+    assert.equal(lines.includes("    click n2 href \"obsidian://open?vault=dev&file=notes%2Falpha.md\" \"Open notes/alpha.md\""), true);
+});
+
+test("extractThoughtTrailMermaidSource removes the init line and fences", () => {
+    const source = extractThoughtTrailMermaidSource([
+        THOUGHT_TRAIL_INIT,
+        "```mermaid",
+        "flowchart TD",
+        "    n0[\"file1\"]",
+        "```",
+    ]);
+
+    assert.equal(source, [
+        "flowchart TD",
+        "    n0[\"file1\"]",
+    ].join("\n"));
+});
+
+test("getThoughtTrailMermaidRenderConfig returns a cloned config", () => {
+    const firstConfig = getThoughtTrailMermaidRenderConfig();
+    const secondConfig = getThoughtTrailMermaidRenderConfig();
+
+    assert.notEqual(firstConfig, secondConfig);
+    assert.deepEqual(firstConfig, secondConfig);
+
+    firstConfig.flowchart.padding = 99;
+    assert.equal(secondConfig.flowchart.padding, 1);
 });

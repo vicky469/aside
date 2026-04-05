@@ -1,7 +1,10 @@
 import * as assert from "node:assert/strict";
 import test from "node:test";
 import type { Comment } from "../src/commentManager";
-import { buildPersistedCommentPresentation } from "../src/ui/views/sidebarPersistedComment";
+import {
+    buildPersistedCommentPresentation,
+    formatSidebarCommentSourceFileLabel,
+} from "../src/ui/views/sidebarPersistedComment";
 
 function createComment(overrides: Partial<Comment> = {}): Comment {
     return {
@@ -52,17 +55,26 @@ test("buildPersistedCommentPresentation chooses the right resolve action copy an
     const resolved = buildPersistedCommentPresentation(createComment({ resolved: true }), null);
 
     assert.deepEqual(unresolved.redirectHint, {
-        title: "Open source note",
+        ariaLabel: "Open source note",
         icon: "arrow-up-right",
     });
     assert.deepEqual(unresolved.resolveAction, {
         ariaLabel: "Resolve side note",
-        title: "Resolve side note",
         icon: "check",
     });
     assert.deepEqual(resolved.resolveAction, {
         ariaLabel: "Reopen side note",
-        title: "Reopen side note",
         icon: "rotate-ccw",
     });
+});
+
+test("formatSidebarCommentSourceFileLabel keeps the basename without md", () => {
+    assert.equal(
+        formatSidebarCommentSourceFileLabel("docs/thoughts/refactored.md"),
+        "refactored",
+    );
+    assert.equal(
+        formatSidebarCommentSourceFileLabel("Folder\\Nested\\Note.md"),
+        "Note",
+    );
 });

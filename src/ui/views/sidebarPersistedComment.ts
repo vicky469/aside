@@ -36,6 +36,12 @@ export interface SidebarPersistedCommentHost {
     setIcon(element: HTMLElement, icon: string): void;
 }
 
+export function formatSidebarCommentSourceFileLabel(filePath: string): string {
+    const normalizedPath = filePath.replace(/\\/g, "/");
+    const fileName = normalizedPath.split("/").pop() ?? normalizedPath;
+    return fileName.replace(/\.md$/i, "");
+}
+
 export function buildPersistedCommentPresentation(
     comment: Comment,
     activeCommentId: string | null,
@@ -79,9 +85,25 @@ export async function renderPersistedCommentCard(
     commentEl.setAttribute("data-start-line", String(comment.startLine));
 
     const headerEl = commentEl.createDiv("sidenote2-comment-header");
-    headerEl.createEl("small", {
+    const metaEl = headerEl.createEl("small", {
+        cls: "sidenote2-timestamp sidenote2-comment-meta",
+    });
+
+    if (host.showSourceRedirectAction) {
+        const sourceLabelEl = metaEl.createSpan({
+            cls: "sidenote2-comment-source-label",
+            text: formatSidebarCommentSourceFileLabel(comment.filePath),
+        });
+        sourceLabelEl.setAttribute("title", comment.filePath);
+
+        metaEl.createSpan({
+            cls: "sidenote2-comment-meta-separator",
+            text: "·",
+        });
+    }
+
+    metaEl.createSpan({
         text: presentation.metaText,
-        cls: "sidenote2-timestamp",
     });
 
     const actionsEl = headerEl.createDiv("sidenote2-comment-actions");

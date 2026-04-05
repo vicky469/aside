@@ -6,6 +6,8 @@ import type { Comment as SideNoteComment } from "../commentManager";
 import type { DraftComment } from "../domain/drafts";
 import { isAnchoredComment } from "../core/anchors/commentAnchors";
 import {
+    buildCommentLocationLineNumberMap,
+    buildIndexNoteNavigationMap,
     COMMENT_LOCATION_PROTOCOL,
     findCommentLocationTargetInMarkdownLine,
     parseCommentLocationUrl,
@@ -15,6 +17,10 @@ import { matchesResolvedCommentVisibility } from "../core/rules/resolvedCommentV
 import { chooseCommentStateForOpenEditor } from "../core/rules/commentSyncPolicy";
 import { findClickedHighlightCommentId } from "./commentHighlightClickTarget";
 import { buildPreviewHighlightWraps } from "./commentHighlightPlanner";
+import {
+    estimateIndexPreviewScrollTop,
+    type IndexPreviewRenderedLineSample,
+} from "./indexPreviewScrollPlanner";
 import {
     getManagedSectionRange,
     getManagedSectionStartLine,
@@ -114,6 +120,7 @@ export class CommentHighlightController {
     constructor(private readonly host: CommentHighlightHost) {}
 
     private readonly indexPreviewLinkSelector = "a.sidenote2-index-comment-link[data-sidenote2-comment-url]";
+    private readonly indexPreviewFileHeadingSelector = ".sidenote2-index-heading-label[title]";
 
     private getIndexPreviewContext(indexFilePath: string): {
         previewRoot: HTMLElement;
@@ -160,6 +167,96 @@ export class CommentHighlightController {
         });
 
         return targetRow;
+    }
+
+    private collectRenderedIndexRowSamples(
+        previewRoot: HTMLElement,
+        lineNumbersByCommentId: ReadonlyMap<string, number>,
+    ): IndexPreviewRenderedLineSample[] {
+        const previewTop = previewRoot.getBoundingClientRect().top;
+        const samples: IndexPreviewRenderedLineSample[] = [];
+
+        previewRoot.querySelectorAll(this.indexPreviewLinkSelector).forEach((link) => {
+            if (!(link instanceof HTMLAnchorElement)) {
+                return;
+            }
+
+            const target = parseCommentLocationUrl(link.dataset.sidenote2CommentUrl ?? "");
+            if (!target) {
+                return;
+            }
+
+            const line = lineNumbersByCommentId.get(target.commentId);
+            if (line === undefined) {
+                return;
+            }
+
+            const rowEl = link.closest("p, li");
+            if (!(rowEl instanceof HTMLElement)) {
+                return;
+            }
+
+            const rowTop = rowEl.getBoundingClientRect().top - previewTop + previewRoot.scrollTop;
+            samples.push({
+                line,
+                top: rowTop,
+            });
+        });
+
+        return samples;
+    }
+
+    private collectRenderedIndexFileSamples(
+        previewRoot: HTMLElement,
+        fileLineByFilePath: ReadonlyMap<string, number>,
+    ): IndexPreviewRenderedLineSample[] {
+        const previewTop = previewRoot.getBoundingClientRect().top;
+        const samples: IndexPreviewRenderedLineSample[] = [];
+
+        previewRoot.querySelectorAll(this.indexPreviewFileHeadingSelector).forEach((heading) => {
+            if (!(heading instanceof HTMLElement)) {
+                return;
+            }
+
+            const filePath = heading.getAttribute("title")?.trim();
+            if (!filePath) {
+                return;
+            }
+
+            const line = fileLineByFilePath.get(filePath);
+            if (line === undefined) {
+                return;
+            }
+
+            const rowEl = heading.closest("p, li") ?? heading;
+            const rowTop = rowEl.getBoundingClientRect().top - previewTop + previewRoot.scrollTop;
+            samples.push({
+                line,
+                top: rowTop,
+            });
+        });
+
+        return samples;
+    }
+
+    private centerRenderedIndexCommentRow(
+        previewRoot: HTMLElement,
+        rowEl: HTMLElement,
+    ): void {
+        const previewRect = previewRoot.getBoundingClientRect();
+        const rowRect = rowEl.getBoundingClientRect();
+        const delta = (rowRect.top - previewRect.top) - ((previewRect.height - rowRect.height) / 2);
+        previewRoot.scrollTop = previewRoot.scrollTop + delta;
+    }
+
+    private waitForPreviewFrame(): Promise<void> {
+        return new Promise((resolve) => {
+            requestAnimationFrame(() => resolve());
+        });
+    }
+
+    private setPreviewScrollTop(previewRoot: HTMLElement, top: number): void {
+        previewRoot.scrollTop = top;
     }
 
     private isPlainPrimaryClick(event: MouseEvent): boolean {
@@ -285,6 +382,75 @@ export class CommentHighlightController {
         this.syncIndexPreviewLinkStates(previewRoot, indexFilePath);
 
         return !!this.findRenderedIndexCommentRow(previewRoot, commentId);
+    }
+
+    public async revealIndexPreviewSelection(
+        indexFilePath: string,
+        commentId: string,
+    ): Promise<boolean> {
+        const context = this.getIndexPreviewContext(indexFilePath);
+        if (!context) {
+            return false;
+        }
+
+        const { previewRoot } = context;
+        this.prepareIndexPreviewLinks(previewRoot);
+        this.syncIndexPreviewLinkStates(previewRoot, indexFilePath);
+
+        const renderedRow = this.findRenderedIndexCommentRow(previewRoot, commentId);
+        if (renderedRow) {
+            this.centerRenderedIndexCommentRow(previewRoot, renderedRow);
+            return true;
+        }
+
+        const file = this.host.getMarkdownFileByPath(indexFilePath);
+        if (!file) {
+            return false;
+        }
+
+        const noteContent = await this.host.getCurrentNoteContent(file);
+        const navigationMap = buildIndexNoteNavigationMap(noteContent);
+        const lineNumbersByCommentId = buildCommentLocationLineNumberMap(noteContent);
+        const navigationTarget = navigationMap.targetsByCommentId.get(commentId);
+        if (!navigationTarget) {
+            return false;
+        }
+
+        const totalLineCount = noteContent.split("\n").length;
+        const targetLines = [
+            navigationTarget.fileLine ?? navigationTarget.commentLine,
+            navigationTarget.commentLine,
+            navigationTarget.commentLine,
+            navigationTarget.commentLine,
+        ];
+
+        for (const targetLine of targetLines) {
+            const samples = [
+                ...this.collectRenderedIndexFileSamples(previewRoot, navigationMap.fileLineByFilePath),
+                ...this.collectRenderedIndexRowSamples(previewRoot, lineNumbersByCommentId),
+            ];
+            const nextScrollTop = estimateIndexPreviewScrollTop(
+                targetLine,
+                totalLineCount,
+                samples,
+                previewRoot.scrollHeight,
+                previewRoot.clientHeight,
+            );
+
+            this.setPreviewScrollTop(previewRoot, nextScrollTop);
+            await this.waitForPreviewFrame();
+            await this.waitForPreviewFrame();
+
+            this.prepareIndexPreviewLinks(previewRoot);
+            this.syncIndexPreviewLinkStates(previewRoot, indexFilePath);
+            const nextRenderedRow = this.findRenderedIndexCommentRow(previewRoot, commentId);
+            if (nextRenderedRow) {
+                this.centerRenderedIndexCommentRow(previewRoot, nextRenderedRow);
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public registerMarkdownPreviewHighlights(plugin: Plugin) {
