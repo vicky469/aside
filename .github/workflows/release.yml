@@ -35,12 +35,11 @@ jobs:
       - name: Run release checks
         run: npm run release:check
 
-      - name: Create GitHub pre-release
+      - name: Create GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release create "$GITHUB_REF_NAME" \
             --title "$GITHUB_REF_NAME" \
             --latest \
-            --prerelease \
             main.js manifest.json styles.css
