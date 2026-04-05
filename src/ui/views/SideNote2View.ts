@@ -701,11 +701,6 @@ export default class SideNote2View extends ItemView {
             return;
         }
 
-        thoughtTrailEl.createEl("p", {
-            cls: "sidenote2-thought-trail-caption",
-            text: "Click a file node to open it. Edge labels show the linking side note.",
-        });
-
         await this.renderThoughtTrailMermaid(thoughtTrailEl, thoughtTrailLines, file.path);
 
         this.bindThoughtTrailNodeLinks(thoughtTrailEl, thoughtTrailLines);

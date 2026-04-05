@@ -482,11 +482,6 @@
     font-size: var(--font-ui-smaller);
 }
 
-.sidenote2-thought-trail-caption {
-    margin: 0 0 0.5rem;
-    color: var(--text-faint);
-}
-
 .sidenote2-thought-trail ul {
     margin: 0;
     padding-left: 1.1rem;
@@ -502,6 +497,7 @@
 
 .sidenote2-thought-trail .mermaid {
     overflow: auto;
+    margin-top: 0.5rem;
     padding-bottom: 2px;
 }
 

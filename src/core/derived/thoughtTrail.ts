@@ -15,7 +15,7 @@ const THOUGHT_TRAIL_MERMAID_RENDER_CONFIG = {
     flowchart: {
         nodeSpacing: 3,
         rankSpacing: 5,
-        padding: 1,
+        padding: 3,
         diagramPadding: 0,
         useMaxWidth: false,
         htmlLabels: true,

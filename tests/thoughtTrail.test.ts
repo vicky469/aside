@@ -7,7 +7,7 @@ import {
 } from "../src/core/derived/thoughtTrail";
 import type { Comment } from "../src/commentManager";
 
-const THOUGHT_TRAIL_INIT = "%%{init: {\"fontFamily\":\"var(--font-interface-theme)\",\"themeVariables\":{\"fontSize\":\"12px\"},\"flowchart\":{\"nodeSpacing\":3,\"rankSpacing\":5,\"padding\":1,\"diagramPadding\":0,\"useMaxWidth\":false,\"htmlLabels\":true}}}%%";
+const THOUGHT_TRAIL_INIT = "%%{init: {\"fontFamily\":\"var(--font-interface-theme)\",\"themeVariables\":{\"fontSize\":\"12px\"},\"flowchart\":{\"nodeSpacing\":3,\"rankSpacing\":5,\"padding\":3,\"diagramPadding\":0,\"useMaxWidth\":false,\"htmlLabels\":true}}}%%";
 
 function createComment(overrides: Partial<Comment> = {}): Comment {
     return {
@@ -219,5 +219,5 @@ test("getThoughtTrailMermaidRenderConfig returns a cloned config", () => {
     assert.deepEqual(firstConfig, secondConfig);
 
     firstConfig.flowchart.padding = 99;
-    assert.equal(secondConfig.flowchart.padding, 1);
+    assert.equal(secondConfig.flowchart.padding, 3);
 });
