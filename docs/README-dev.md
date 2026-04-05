@@ -28,22 +28,6 @@ See [feature-map.canvas](./feature-map.canvas) for the feature-first overview.
 Each note stores comments in a trailing hidden `<!-- SideNote2 comments -->` block:
 
 ````md
-<!-- SideNote2 comments
-[
-  {
-    "id": "comment-1",
-    "startLine": 2,
-    "startChar": 6,
-    "endLine": 2,
-    "endChar": 10,
-    "selectedText": "beta",
-    "selectedTextHash": "sha256...",
-    "comment": "Keep this compact.",
-    "timestamp": 1710000000000,
-    "resolved": false
-  }
-]
--->
 ````
 
 The stored payload includes coordinates and a text hash so anchors can be re-matched after edits. The block is hidden in Reading view, but still present in raw markdown for source-mode workflows and LLM ingestion.
@@ -83,6 +67,16 @@ npm run dev
 ```
 
 - Keep `npm run dev` running while testing.
+- `npm run dev` now does two things in development:
+  - watches and rebuilds `main.js`
+  - reloads the `side-note2` plugin through the Obsidian CLI after each successful rebuild
+- This matters because Obsidian runs `main.js`, not `src/*.ts`. A source edit is not live until the bundle is rebuilt and the plugin instance is reloaded.
+- If you want watch mode without automatic plugin reload, run:
+
+```bash
+SIDENOTE2_HOT_RELOAD=0 npm run dev
+```
+
 - `npm run build` creates a production bundle.
 - `npm test` runs the Node test suite.
 - `npm run skill:install` copies the packaged SideNote2 Codex skills into the default Codex skills directory. By default it installs every bundled skill under `skills/`; pass `-- --name <skill-name>` to install just one. This matches the end-user install flow.
@@ -115,7 +109,17 @@ Then open that vault in Obsidian and enable `SideNote2` under community plugins.
 
 ## Reload
 
-If Obsidian feels stale during development, reload the plugin from DevTools:
+`npm run dev` should normally handle plugin reloads automatically after a successful rebuild.
+
+If Obsidian still feels stale during development, reload the plugin manually.
+
+- Preferred CLI path:
+
+```bash
+obsidian plugin:reload id=side-note2
+```
+
+- DevTools fallback:
 
 - For Mac, use `Command + option + i` to inspect, then switch to the `Console` tab and run:
 
@@ -136,3 +140,19 @@ Inspect:
 window.__SIDENOTE2_DEBUG__;
 window.__SIDENOTE2_DEBUG_STORE__;
 ```
+
+<!-- SideNote2 comments
+[
+  {
+    "id": "comment-1",
+    "startLine": 83,
+    "startChar": 107,
+    "endLine": 83,
+    "endChar": 111,
+    "selectedText": "beta",
+    "selectedTextHash": "sha256...",
+    "comment": "Keep this compact.",
+    "timestamp": 1710000000000
+  }
+]
+-->

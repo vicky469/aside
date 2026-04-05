@@ -60,3 +60,10 @@ export function pickPreferredFileLeafCandidate<T>(
 
     return candidates.find((candidate) => candidate.eligible)?.value ?? null;
 }
+
+export function shouldRevealSidebarLeaf(
+    revealLeaf: boolean | undefined,
+    createdLeaf: boolean,
+): boolean {
+    return createdLeaf || revealLeaf !== false;
+}

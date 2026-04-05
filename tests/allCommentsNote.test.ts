@@ -6,7 +6,10 @@ import {
     ALL_COMMENTS_NOTE_IMAGE_CAPTION,
     ALL_COMMENTS_NOTE_IMAGE_URL,
     buildAllCommentsNoteContent,
+    buildCommentLocationLineNumberMap,
+    buildIndexCommentBlockId,
     buildCommentLocationUrl,
+    findCommentLocationLineNumber,
     findCommentLocationTargetInMarkdownLine,
     isAllCommentsNotePath,
     LEGACY_ALL_COMMENTS_NOTE_PATH,
@@ -66,6 +69,60 @@ test("findCommentLocationTargetInMarkdownLine finds the side note target in a ge
         },
     );
     assert.equal(findCommentLocationTargetInMarkdownLine("**Folder/Note.md**"), null);
+});
+
+test("findCommentLocationLineNumber returns the generated index line for a comment id", () => {
+    const content = buildAllCommentsNoteContent("dev", [
+        createComment({
+            id: "comment-1",
+            filePath: "Folder/Note.md",
+            selectedText: "alpha",
+            startLine: 1,
+        }),
+        createComment({
+            id: "comment-2",
+            filePath: "Folder/Other.md",
+            selectedText: "beta",
+            startLine: 2,
+        }),
+    ]);
+
+    const lineNumber = findCommentLocationLineNumber(content, "comment-2");
+    assert.equal(lineNumber === null, false);
+    assert.match(content.split("\n")[lineNumber ?? -1] ?? "", /commentId=comment-2/);
+    assert.equal(findCommentLocationLineNumber(content, "missing-comment"), null);
+});
+
+test("buildCommentLocationLineNumberMap indexes generated comment rows once per comment id", () => {
+    const content = buildAllCommentsNoteContent("dev", [
+        createComment({
+            id: "comment-1",
+            filePath: "Folder/Note.md",
+            selectedText: "alpha",
+            startLine: 1,
+        }),
+        createComment({
+            id: "comment-2",
+            filePath: "Folder/Other.md",
+            selectedText: "beta",
+            startLine: 2,
+        }),
+    ]);
+
+    const lineNumbersByCommentId = buildCommentLocationLineNumberMap(content);
+
+    assert.equal(lineNumbersByCommentId.get("comment-1") === undefined, false);
+    assert.equal(lineNumbersByCommentId.get("comment-2") === undefined, false);
+    assert.equal(lineNumbersByCommentId.get("missing-comment"), undefined);
+    assert.match(content.split("\n")[lineNumbersByCommentId.get("comment-1") ?? -1] ?? "", /commentId=comment-1/);
+    assert.match(content.split("\n")[lineNumbersByCommentId.get("comment-2") ?? -1] ?? "", /commentId=comment-2/);
+});
+
+test("buildIndexCommentBlockId normalizes comment ids into stable block ids", () => {
+    assert.equal(
+        buildIndexCommentBlockId("Comment 01/alpha"),
+        "sidenote2-index-comment-comment-01-alpha",
+    );
 });
 
 test("buildAllCommentsNoteContent groups comments by file and shows selected text and comment", () => {
@@ -207,7 +264,7 @@ test("buildAllCommentsNoteContent labels page notes and orphaned notes", () => {
     ]);
 
     assert.equal(content.match(/<strong class="sidenote2-index-heading-label">Folder\/Note\.md<\/strong>/g)?.length ?? 0, 1);
-    assert.match(content, /<strong class="sidenote2-index-heading-label">Folder\/Note\.md<\/strong>[\s\S]*<span class="sidenote2-index-kind-dot sidenote2-index-kind-page"><\/span> \[pn1\]\(obsidian:\/\/side-note2-comment\?vault=dev&file=Folder%2FNote\.md&commentId=page-note&kind=page\)\n<span class="sidenote2-index-kind-dot sidenote2-index-kind-anchored"><\/span> \[orphaned · missing text\]\(obsidian:\/\/side-note2-comment\?vault=dev&file=Folder%2FNote\.md&commentId=orphan-note&kind=anchored\)/);
+    assert.match(content, /<strong class="sidenote2-index-heading-label">Folder\/Note\.md<\/strong>[\s\S]*<span class="sidenote2-index-kind-dot sidenote2-index-kind-page"><\/span> \[pn1\]\(obsidian:\/\/side-note2-comment\?vault=dev&file=Folder%2FNote\.md&commentId=page-note&kind=page\) \^sidenote2-index-comment-page-note\n\n<span class="sidenote2-index-kind-dot sidenote2-index-kind-anchored"><\/span> \[orphaned · missing text\]\(obsidian:\/\/side-note2-comment\?vault=dev&file=Folder%2FNote\.md&commentId=orphan-note&kind=anchored\) \^sidenote2-index-comment-orphan-note/);
 });
 
 test("buildAllCommentsNoteContent numbers page notes per file when no mentioned page label is available", () => {
@@ -303,6 +360,62 @@ test("buildAllCommentsNoteContent keeps anchored index rows to the selected text
     assert.doesNotMatch(content, />Third page<\/a>/);
     assert.doesNotMatch(content, /sidenote2-index-target-link/);
     assert.doesNotMatch(content, / -> /);
+});
+
+test("buildAllCommentsNoteContent separates index comment rows into distinct markdown blocks", () => {
+    const content = buildAllCommentsNoteContent("dev", [
+        createComment({
+            id: "comment-1",
+            filePath: "Folder/Note.md",
+            selectedText: "alpha",
+            startLine: 1,
+        }),
+        createComment({
+            id: "comment-2",
+            filePath: "Folder/Note.md",
+            selectedText: "beta",
+            startLine: 2,
+        }),
+    ]);
+
+    assert.match(
+        content,
+        /<strong class="sidenote2-index-heading-label">Folder\/Note\.md<\/strong>\n\n<span class="sidenote2-index-kind-dot sidenote2-index-kind-anchored"><\/span> \[alpha\]\(obsidian:\/\/side-note2-comment\?vault=dev&file=Folder%2FNote\.md&commentId=comment-1&kind=anchored\) \^sidenote2-index-comment-comment-1\n\n<span class="sidenote2-index-kind-dot sidenote2-index-kind-anchored"><\/span> \[beta\]\(obsidian:\/\/side-note2-comment\?vault=dev&file=Folder%2FNote\.md&commentId=comment-2&kind=anchored\) \^sidenote2-index-comment-comment-2/,
+    );
+});
+
+test("buildAllCommentsNoteContent keeps page notes first within the same file without splitting sections", () => {
+    const content = buildAllCommentsNoteContent("dev", [
+        createComment({
+            id: "anchored-note",
+            filePath: "Folder/Note.md",
+            selectedText: "alpha",
+            anchorKind: "selection",
+            startLine: 2,
+        }),
+        createComment({
+            id: "page-note",
+            filePath: "Folder/Note.md",
+            selectedText: "Page",
+            anchorKind: "page",
+            startLine: 8,
+            startChar: 0,
+            endLine: 8,
+            endChar: 0,
+        }),
+        createComment({
+            id: "anchored-note-2",
+            filePath: "Folder/Note.md",
+            selectedText: "beta",
+            anchorKind: "selection",
+            startLine: 10,
+        }),
+    ]);
+
+    assert.match(
+        content,
+        /<strong class="sidenote2-index-heading-label">Folder\/Note\.md<\/strong>\n\n<span class="sidenote2-index-kind-dot sidenote2-index-kind-page"><\/span> \[pn1\]\(obsidian:\/\/side-note2-comment\?vault=dev&file=Folder%2FNote\.md&commentId=page-note&kind=page\) \^sidenote2-index-comment-page-note\n\n<span class="sidenote2-index-kind-dot sidenote2-index-kind-anchored"><\/span> \[alpha\]\(obsidian:\/\/side-note2-comment\?vault=dev&file=Folder%2FNote\.md&commentId=anchored-note&kind=anchored\) \^sidenote2-index-comment-anchored-note\n\n<span class="sidenote2-index-kind-dot sidenote2-index-kind-anchored"><\/span> \[beta\]\(obsidian:\/\/side-note2-comment\?vault=dev&file=Folder%2FNote\.md&commentId=anchored-note-2&kind=anchored\) \^sidenote2-index-comment-anchored-note-2/,
+    );
 });
 
 test("isAllCommentsNotePath matches the generated note path", () => {

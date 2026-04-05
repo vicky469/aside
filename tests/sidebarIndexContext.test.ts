@@ -4,6 +4,7 @@ import {
     pickPinnedCommentableFile,
     pickPreferredFileLeafCandidate,
     pickSidebarTargetFile,
+    shouldRevealSidebarLeaf,
 } from "../src/control/commentNavigationPlanner";
 import {
     resolveIndexLeafMode,
@@ -268,6 +269,12 @@ test("fixed reveal flow reuses an existing file leaf instead of forcing a new ta
     ], "Folder/Note.md");
 
     assert.equal(target, "main-1");
+});
+
+test("sidebar reveal helper skips revealing an existing sidebar leaf for index-origin sync", () => {
+    assert.equal(shouldRevealSidebarLeaf(false, false), false);
+    assert.equal(shouldRevealSidebarLeaf(undefined, false), true);
+    assert.equal(shouldRevealSidebarLeaf(false, true), true);
 });
 
 test("fixed aggregate refresh still updates an open index view when content is unchanged", () => {

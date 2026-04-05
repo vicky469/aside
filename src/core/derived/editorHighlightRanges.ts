@@ -1,5 +1,6 @@
 import type { Comment } from "../../commentManager";
 import { isAnchoredComment } from "../anchors/commentAnchors";
+import { filterCommentsByResolvedVisibility, matchesResolvedCommentVisibility } from "../rules/resolvedCommentVisibility";
 import { sortCommentsByPosition } from "../storage/noteCommentStorage";
 
 export interface EditorHighlightRange {
@@ -37,12 +38,13 @@ function getVisibleCommentsForHighlighting(
         ? storedComments.filter((comment) => comment.id !== draftComment.id)
         : storedComments.slice();
 
-    const visibleComments = showResolved
-        ? commentsWithoutDraft
-        : commentsWithoutDraft.filter((comment) => !comment.resolved);
+    const visibleComments = filterCommentsByResolvedVisibility(commentsWithoutDraft, showResolved);
+    const visibleDraft = draftComment && matchesResolvedCommentVisibility(draftComment, showResolved)
+        ? draftComment
+        : null;
 
     return sortCommentsByPosition(
-        (draftComment ? visibleComments.concat(draftComment) : visibleComments)
+        (visibleDraft ? visibleComments.concat(visibleDraft) : visibleComments)
             .filter((comment) => isAnchoredComment(comment))
     );
 }

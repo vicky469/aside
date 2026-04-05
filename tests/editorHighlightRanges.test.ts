@@ -74,6 +74,20 @@ test("buildEditorHighlightRanges includes resolved comments when showResolved is
     }]);
 });
 
+test("buildEditorHighlightRanges hides unresolved comments when showResolved is on", () => {
+    const docText = "alpha beta gamma";
+    const ranges = buildEditorHighlightRanges(
+        docText,
+        docText,
+        [createComment({ resolved: false })],
+        null,
+        true,
+        "comment-1",
+    );
+
+    assert.deepEqual(ranges, []);
+});
+
 test("buildEditorHighlightRanges supports multiline anchors", () => {
     const docText = "alpha\nbeta\ngamma";
     const ranges = buildEditorHighlightRanges(

@@ -8,7 +8,6 @@ import SideNoteFileFilterModal from "../modals/SideNoteFileFilterModal";
 import SideNoteLinkSuggestModal from "../modals/SideNoteLinkSuggestModal";
 import SideNoteTagSuggestModal from "../modals/SideNoteTagSuggestModal";
 import { SIDE_NOTE2_ICON_ID } from "../sideNote2Icon";
-import { buildSidebarSections, type SidebarSectionKey } from "./sidebarCommentSections";
 import { SidebarDraftEditorController, getSidebarComments } from "./sidebarDraftEditor";
 import { renderDraftCommentCard } from "./sidebarDraftComment";
 import {
@@ -18,6 +17,8 @@ import {
     normalizeIndexFileFilterPaths,
     type IndexFileFilterOption,
 } from "./indexFileFilter";
+import { INDEX_SIDEBAR_LIST_LIMIT, limitIndexSidebarListItems } from "./indexSidebarListLimit";
+import { filterCommentsByResolvedVisibility } from "../../core/rules/resolvedCommentVisibility";
 import { SidebarInteractionController } from "./sidebarInteractionController";
 import { renderPersistedCommentCard } from "./sidebarPersistedComment";
 import { extractThoughtTrailClickTargets, parseThoughtTrailOpenFilePath, resolveThoughtTrailNodeId } from "./thoughtTrailNodeLinks";
@@ -57,10 +58,6 @@ export default class SideNote2View extends ItemView {
     private readonly interactionController: SidebarInteractionController;
     private indexSidebarMode: IndexSidebarMode = "list";
     private filteredIndexFilePaths: string[] = [];
-    private readonly sectionExpandedState: Record<SidebarSectionKey, boolean> = {
-        page: true,
-        anchored: true,
-    };
 
     constructor(leaf: WorkspaceLeaf, plugin: SideNote2, file: TFile | null = null) {
         super(leaf);
@@ -221,6 +218,7 @@ export default class SideNote2View extends ItemView {
                 ? filterCommentsByFilePaths(persistedComments, filteredIndexFilePaths)
                 : persistedComments;
             const draftComment = this.plugin.getDraftForView(file.path);
+            const totalScopedCount = scopedPersistedComments.length;
             const resolvedCount = scopedPersistedComments.filter((comment) => comment.resolved).length;
             const hasResolvedComments = resolvedCount > 0;
             const showResolved = this.plugin.shouldShowResolvedComments();
@@ -230,6 +228,13 @@ export default class SideNote2View extends ItemView {
                 showResolved,
                 filteredIndexFilePaths,
             );
+            const limitedComments = isAllCommentsView && this.indexSidebarMode === "list"
+                ? limitIndexSidebarListItems(commentsForFile)
+                : {
+                    visibleItems: commentsForFile.slice(),
+                    hiddenCount: 0,
+                };
+            const renderedComments = limitedComments.visibleItems;
             const commentsContainer = this.containerEl.createDiv("sidenote2-comments-container");
 
             this.renderSidebarToolbar(commentsContainer, {
@@ -245,62 +250,67 @@ export default class SideNote2View extends ItemView {
             }
 
             if (isAllCommentsView && this.indexSidebarMode === "thought-trail") {
-                const trailComments = showResolved
-                    ? scopedPersistedComments
-                    : scopedPersistedComments.filter((comment) => !comment.resolved);
+                const trailComments = filterCommentsByResolvedVisibility(scopedPersistedComments, showResolved);
                 await this.renderThoughtTrail(commentsContainer, trailComments, file, {
                     hasFileFilter: filteredIndexFilePaths.length > 0,
                 });
                 return;
             }
 
-            const sections = buildSidebarSections(commentsForFile);
-            for (const section of sections) {
-                const sectionBody = this.renderCommentSection(
-                    commentsContainer,
-                    section.key,
-                    section.title,
-                    section.key === "page" && !isAllCommentsView
-                        ? {
-                            icon: "plus",
-                            ariaLabel: "Add page side note",
-                            title: "Add page side note",
-                            onClick: () => {
-                                void this.plugin.startPageCommentDraft(file);
-                            },
-                        }
-                        : undefined,
-                );
-                const renderPromises = section.comments.map(async (comment) => {
-                    if (isDraftComment(comment)) {
-                        this.renderDraftComment(sectionBody, comment);
-                        return;
+            const commentsBody = this.renderCommentsList(
+                commentsContainer,
+                !isAllCommentsView
+                    ? {
+                        icon: "plus",
+                        ariaLabel: "Add page side note",
+                        title: "Add page side note",
+                        onClick: () => {
+                            void this.plugin.startPageCommentDraft(file);
+                        },
                     }
+                    : undefined,
+            );
+            const renderPromises = renderedComments.map(async (comment) => {
+                if (isDraftComment(comment)) {
+                    this.renderDraftComment(commentsBody, comment);
+                    return;
+                }
 
-                    await this.renderPersistedComment(sectionBody, comment);
+                await this.renderPersistedComment(commentsBody, comment);
+            });
+            await Promise.all(renderPromises);
+
+            if (limitedComments.hiddenCount > 0) {
+                const limitNotice = commentsContainer.createDiv("sidenote2-list-limit-notice");
+                limitNotice.createEl("p", {
+                    text: `${INDEX_SIDEBAR_LIST_LIMIT} shown, ${limitedComments.hiddenCount} hidden.`,
                 });
-                await Promise.all(renderPromises);
+                limitNotice.createEl("p", {
+                    text: "Use Files to filter the index to see more.",
+                });
             }
 
-            if (commentsForFile.length === 0) {
-                const anchoredSectionBody = commentsContainer.querySelector(
-                    '[data-section-key="anchored"] .sidenote2-comment-section-body',
-                );
-                if (anchoredSectionBody instanceof HTMLDivElement) {
-                    if (isAllCommentsView) {
-                        const emptyStateEl = anchoredSectionBody.createDiv("sidenote2-empty-state sidenote2-section-empty-state");
-                        if (filteredIndexFilePaths.length) {
-                            emptyStateEl.createEl("p", { text: "No side notes match the selected file filter." });
-                            emptyStateEl.createEl("p", { text: "Add more files to the filter or clear it to widen the index view." });
-                        } else {
-                            emptyStateEl.createEl("p", { text: "No side notes in the index yet." });
-                            emptyStateEl.createEl("p", { text: "Add side notes in markdown files to populate SideNote2 index." });
-                        }
-                    } else if (hasResolvedComments && !showResolved) {
-                        const emptyStateEl = anchoredSectionBody.createDiv("sidenote2-empty-state sidenote2-section-empty-state");
-                        emptyStateEl.createEl("p", { text: "No active comments for this file." });
-                        emptyStateEl.createEl("p", { text: "Turn on Show resolved to review archived comments." });
+            if (renderedComments.length === 0) {
+                if (isAllCommentsView) {
+                    const emptyStateEl = commentsBody.createDiv("sidenote2-empty-state sidenote2-section-empty-state");
+                    if (showResolved && totalScopedCount > 0) {
+                        emptyStateEl.createEl("p", { text: "No resolved side notes match the current index view." });
+                        emptyStateEl.createEl("p", { text: "Turn off Resolved to return to active side notes." });
+                    } else if (filteredIndexFilePaths.length) {
+                        emptyStateEl.createEl("p", { text: "No side notes match the selected file filter." });
+                        emptyStateEl.createEl("p", { text: "Add more files to the filter or clear it to widen the index view." });
+                    } else {
+                        emptyStateEl.createEl("p", { text: "No side notes in the index yet." });
+                        emptyStateEl.createEl("p", { text: "Add side notes in markdown files to populate SideNote2 index." });
                     }
+                } else if (showResolved && totalScopedCount > 0) {
+                    const emptyStateEl = commentsBody.createDiv("sidenote2-empty-state sidenote2-section-empty-state");
+                    emptyStateEl.createEl("p", { text: "No resolved comments for this file." });
+                    emptyStateEl.createEl("p", { text: "Turn off Resolved to return to active comments." });
+                } else if (hasResolvedComments && !showResolved) {
+                    const emptyStateEl = commentsBody.createDiv("sidenote2-empty-state sidenote2-section-empty-state");
+                    emptyStateEl.createEl("p", { text: "No active comments for this file." });
+                    emptyStateEl.createEl("p", { text: "Turn on Resolved to review archived comments only." });
                 }
             }
         } else {
@@ -320,7 +330,8 @@ export default class SideNote2View extends ItemView {
             filteredIndexFilePaths: string[];
         },
     ) {
-        if (!options.isAllCommentsView && !options.hasResolvedComments) {
+        const showResolved = this.plugin.shouldShowResolvedComments();
+        if (!options.isAllCommentsView && !options.hasResolvedComments && !showResolved) {
             return;
         }
 
@@ -380,11 +391,10 @@ export default class SideNote2View extends ItemView {
         }
 
         const filterGroup = toolbarEl.createDiv("sidenote2-sidebar-toolbar-group");
-        const showResolved = this.plugin.shouldShowResolvedComments();
         this.renderToolbarChip(filterGroup, {
             label: "Resolved",
             active: showResolved,
-            ariaLabel: showResolved ? "Hide resolved comments" : "Show resolved comments",
+            ariaLabel: showResolved ? "Show active comments" : "Show resolved comments only",
             count: String(options.resolvedCount),
             showIndicator: true,
             onClick: () => {
@@ -519,10 +529,8 @@ export default class SideNote2View extends ItemView {
         }
     }
 
-    private renderCommentSection(
+    private renderCommentsList(
         container: HTMLElement,
-        key: SidebarSectionKey,
-        title: string,
         action?: {
             icon: string;
             ariaLabel: string;
@@ -530,41 +538,9 @@ export default class SideNote2View extends ItemView {
             onClick: () => void;
         },
     ): HTMLDivElement {
-        const sectionEl = container.createDiv("sidenote2-comment-section");
-        sectionEl.setAttribute("data-section-key", key);
-        const sectionHeader = sectionEl.createDiv("sidenote2-comment-section-header");
-
-        const toggleButton = sectionHeader.createEl("button", {
-            cls: "sidenote2-comment-section-toggle",
-        });
-        toggleButton.setAttribute("type", "button");
-
-        const toggleIconEl = toggleButton.createSpan("sidenote2-comment-section-toggle-icon");
-        toggleButton.createSpan({
-            text: title,
-            cls: "sidenote2-comment-section-title",
-        });
-
-        const sectionBody = sectionEl.createDiv("sidenote2-comment-section-body");
-        const syncExpandedState = () => {
-            const expanded = this.sectionExpandedState[key];
-            toggleButton.setAttribute("aria-expanded", expanded ? "true" : "false");
-            toggleButton.setAttribute(
-                "title",
-                `${expanded ? "Collapse" : "Expand"} ${title.toLowerCase()}`,
-            );
-            setIcon(toggleIconEl, expanded ? "chevron-down" : "chevron-right");
-            sectionEl.classList.toggle("is-collapsed", !expanded);
-        };
-
-        toggleButton.onclick = (event) => {
-            event.stopPropagation();
-            this.sectionExpandedState[key] = !this.sectionExpandedState[key];
-            syncExpandedState();
-        };
-
         if (action) {
-            const actionButton = sectionHeader.createEl("button", {
+            const actionsRow = container.createDiv("sidenote2-comments-list-actions");
+            const actionButton = actionsRow.createEl("button", {
                 cls: "sidenote2-comment-section-add-button",
             });
             actionButton.setAttribute("type", "button");
@@ -577,14 +553,17 @@ export default class SideNote2View extends ItemView {
             };
         }
 
-        syncExpandedState();
-        return sectionBody;
+        return container.createDiv("sidenote2-comments-list");
     }
 
     private async renderPersistedComment(commentsContainer: HTMLDivElement, comment: Comment) {
+        const currentFilePath = this.file?.path ?? null;
+        const isIndexView = !!currentFilePath && this.plugin.isAllCommentsNotePath(currentFilePath);
+
         await renderPersistedCommentCard(commentsContainer, comment, {
             activeCommentId: this.interactionController.getActiveCommentId(),
-            currentFilePath: this.file?.path ?? null,
+            currentFilePath,
+            showSourceRedirectAction: isIndexView,
             getEventTargetElement: (target) => this.interactionController.getEventTargetElement(target),
             isSelectionInsideSidebarContent: (selection) => this.interactionController.isSelectionInsideSidebarContent(selection),
             claimSidebarInteractionOwnership: (focusTarget) => this.interactionController.claimSidebarInteractionOwnership(focusTarget),
@@ -593,6 +572,9 @@ export default class SideNote2View extends ItemView {
             },
             openSidebarInternalLink: (href, sourcePath, focusTarget) =>
                 this.interactionController.openSidebarInternalLink(href, sourcePath, focusTarget),
+            // TODO: This is temporary. In index mode, restore reverse navigation here so
+            // clicking the card body scrolls/highlights the matching ref in index.md.
+            activateComment: (persistedComment) => this.interactionController.openCommentInEditor(persistedComment),
             openCommentInEditor: (persistedComment) => this.interactionController.openCommentInEditor(persistedComment),
             resolveComment: (commentId) => {
                 void this.plugin.resolveComment(commentId);

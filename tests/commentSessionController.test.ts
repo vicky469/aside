@@ -96,6 +96,20 @@ test("comment session controller tracks revealed comments and clears markdown se
     assert.deepEqual(harness.clearedMarkdownSelections, ["docs/architecture.md"]);
 });
 
+test("comment session controller can skip markdown preview rerender for a revealed comment update", () => {
+    const harness = createHarness();
+
+    assert.equal(
+        harness.controller.setRevealedCommentState("SideNote2 index.md", "comment-7", {
+            refreshMarkdownPreviews: false,
+        }),
+        true,
+    );
+    assert.equal(harness.controller.getRevealedCommentId("SideNote2 index.md"), "comment-7");
+    assert.equal(harness.getRefreshEditorDecorationsCount(), 1);
+    assert.equal(harness.getRefreshMarkdownPreviewsCount(), 0);
+});
+
 test("comment session controller still refreshes reveal state surfaces when no comment is active", () => {
     const harness = createHarness();
 

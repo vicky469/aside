@@ -115,7 +115,7 @@ export class SidebarInteractionController {
             ? target.closest(".sidenote2-comment-item")
             : null;
         const clickedSectionChrome = target instanceof HTMLElement
-            ? target.closest(".sidenote2-comment-section-header, .sidenote2-sidebar-toolbar")
+            ? target.closest(".sidenote2-comments-list-actions, .sidenote2-sidebar-toolbar, .sidenote2-active-file-filters")
             : null;
 
         const draft = this.host.getDraftForView(file.path);

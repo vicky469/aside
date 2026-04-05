@@ -9,6 +9,10 @@ export interface CommentSessionHost {
     clearMarkdownSelection(filePath: string): void;
 }
 
+export interface RevealedCommentStateUpdateOptions {
+    refreshMarkdownPreviews?: boolean;
+}
+
 export class CommentSessionController {
     private readonly draftSessionStore = new DraftSessionStore();
     private readonly revealedCommentSelectionStore = new RevealedCommentSelectionStore();
@@ -99,13 +103,19 @@ export class CommentSessionController {
         return this.revealedCommentSelectionStore.getRevealedCommentId(filePath);
     }
 
-    public setRevealedCommentState(filePath: string, commentId: string): boolean {
+    public setRevealedCommentState(
+        filePath: string,
+        commentId: string,
+        options: RevealedCommentStateUpdateOptions = {},
+    ): boolean {
         if (!this.revealedCommentSelectionStore.setRevealedCommentState(filePath, commentId)) {
             return false;
         }
 
         this.host.refreshEditorDecorations();
-        this.host.refreshMarkdownPreviews();
+        if (options.refreshMarkdownPreviews !== false) {
+            this.host.refreshMarkdownPreviews();
+        }
         return true;
     }
 

@@ -5,8 +5,13 @@ import type { MarkdownPostProcessorContext } from "obsidian";
 import type { Comment as SideNoteComment } from "../commentManager";
 import type { DraftComment } from "../domain/drafts";
 import { isAnchoredComment } from "../core/anchors/commentAnchors";
-import { findCommentLocationTargetInMarkdownLine } from "../core/derived/allCommentsNote";
+import {
+    COMMENT_LOCATION_PROTOCOL,
+    findCommentLocationTargetInMarkdownLine,
+    parseCommentLocationUrl,
+} from "../core/derived/allCommentsNote";
 import { buildEditorHighlightRanges } from "../core/derived/editorHighlightRanges";
+import { matchesResolvedCommentVisibility } from "../core/rules/resolvedCommentVisibility";
 import { chooseCommentStateForOpenEditor } from "../core/rules/commentSyncPolicy";
 import { findClickedHighlightCommentId } from "./commentHighlightClickTarget";
 import { buildPreviewHighlightWraps } from "./commentHighlightPlanner";
@@ -93,6 +98,7 @@ export interface CommentHighlightHost {
     app: Plugin["app"];
     getCommentsForFile(filePath: string): SideNoteComment[];
     getMarkdownViewForEditorView(editorView: EditorView): MarkdownView | null;
+    getMarkdownViewForFile(file: TFile): MarkdownView | null;
     getMarkdownFileByPath(path: string): TFile | null;
     getCurrentNoteContent(file: TFile): Promise<string>;
     getParsedNoteComments(filePath: string, noteContent: string): ParsedNoteComments;
@@ -101,20 +107,184 @@ export interface CommentHighlightHost {
     getDraftForFile(filePath: string): DraftComment | null;
     getRevealedCommentId(filePath: string): string | null;
     activateViewAndHighlightComment(commentId: string): Promise<void>;
+    activateIndexComment(commentId: string, indexFilePath: string): Promise<void>;
 }
 
 export class CommentHighlightController {
     constructor(private readonly host: CommentHighlightHost) {}
 
-    private stripIndexCommentLinkTooltips(element: HTMLElement): void {
-        element.querySelectorAll('a.external-link[href^="obsidian://side-note2-comment"]').forEach((link) => {
+    private readonly indexPreviewLinkSelector = "a.sidenote2-index-comment-link[data-sidenote2-comment-url]";
+
+    private getIndexPreviewContext(indexFilePath: string): {
+        previewRoot: HTMLElement;
+    } | null {
+        const file = this.host.getMarkdownFileByPath(indexFilePath);
+        if (!file) {
+            return null;
+        }
+
+        const markdownView = this.host.getMarkdownViewForFile(file);
+        if (!(markdownView?.contentEl instanceof HTMLElement)) {
+            return null;
+        }
+
+        const previewRoot = markdownView.contentEl.querySelector(".markdown-preview-view, .markdown-rendered");
+        if (!(previewRoot instanceof HTMLElement)) {
+            return null;
+        }
+
+        return {
+            previewRoot,
+        };
+    }
+
+    private findRenderedIndexCommentRow(
+        previewRoot: HTMLElement,
+        commentId: string,
+    ): HTMLElement | null {
+        let targetRow: HTMLElement | null = null;
+        previewRoot.querySelectorAll(this.indexPreviewLinkSelector).forEach((link) => {
             if (!(link instanceof HTMLAnchorElement)) {
                 return;
             }
 
+            const target = parseCommentLocationUrl(link.dataset.sidenote2CommentUrl ?? "");
+            if (!target || target.commentId !== commentId) {
+                return;
+            }
+
+            const rowEl = link.closest("p, li");
+            if (rowEl instanceof HTMLElement) {
+                targetRow = rowEl;
+            }
+        });
+
+        return targetRow;
+    }
+
+    private isPlainPrimaryClick(event: MouseEvent): boolean {
+        return event.button === 0
+            && !event.metaKey
+            && !event.ctrlKey
+            && !event.shiftKey
+            && !event.altKey;
+    }
+
+    private prepareIndexPreviewLinks(element: HTMLElement): void {
+        element.querySelectorAll(`a[href^="obsidian://${COMMENT_LOCATION_PROTOCOL}"], ${this.indexPreviewLinkSelector}`).forEach((link) => {
+            if (!(link instanceof HTMLAnchorElement)) {
+                return;
+            }
+
+            const nextUrl = link.dataset.sidenote2CommentUrl?.trim()
+                || link.getAttribute("href")?.trim()
+                || "";
+            if (!nextUrl.startsWith(`obsidian://${COMMENT_LOCATION_PROTOCOL}`)) {
+                return;
+            }
+
+            link.dataset.sidenote2CommentUrl = nextUrl;
+            link.classList.remove("external-link");
+            link.classList.add("sidenote2-index-comment-link");
+            link.removeAttribute("href");
+            link.removeAttribute("target");
+            link.removeAttribute("rel");
             link.removeAttribute("aria-label");
             link.removeAttribute("data-tooltip-position");
+            link.removeAttribute("tabindex");
         });
+    }
+
+    private syncIndexPreviewLinkStates(element: HTMLElement, sourcePath: string): void {
+        const activeCommentId = this.host.getRevealedCommentId(sourcePath);
+
+        element.querySelectorAll(this.indexPreviewLinkSelector).forEach((link) => {
+            if (!(link instanceof HTMLAnchorElement)) {
+                return;
+            }
+
+            const target = parseCommentLocationUrl(link.dataset.sidenote2CommentUrl ?? "");
+            const isActive = !!target && target.commentId === activeCommentId;
+            const rowEl = link.closest("p, li");
+
+            link.classList.remove("sidenote2-highlight", "sidenote2-highlight-preview", "sidenote2-highlight-active");
+
+            if (rowEl instanceof HTMLElement) {
+                rowEl.classList.toggle("sidenote2-index-active-row", isActive);
+            }
+        });
+    }
+
+    private bindIndexPreviewLinkClicks(element: HTMLElement, sourcePath: string): void {
+        element.querySelectorAll(this.indexPreviewLinkSelector).forEach((link) => {
+            if (!(link instanceof HTMLAnchorElement) || link.dataset.sidenote2IndexBound === "true") {
+                return;
+            }
+
+            link.dataset.sidenote2IndexBound = "true";
+            const activateLink = () => {
+                const target = parseCommentLocationUrl(link.dataset.sidenote2CommentUrl ?? "");
+                if (!target) {
+                    return;
+                }
+
+                void this.host.activateIndexComment(target.commentId, sourcePath);
+                const previewRoot = element.closest(".markdown-preview-view, .markdown-rendered");
+                if (previewRoot instanceof HTMLElement) {
+                    queueMicrotask(() => {
+                        this.syncIndexPreviewLinkStates(previewRoot, sourcePath);
+                    });
+                } else {
+                    queueMicrotask(() => {
+                        this.syncIndexPreviewLinkStates(element, sourcePath);
+                    });
+                }
+            };
+
+            link.addEventListener("mousedown", (event: MouseEvent) => {
+                if (!this.isPlainPrimaryClick(event)) {
+                    return;
+                }
+
+                event.preventDefault();
+                event.stopPropagation();
+            });
+            link.addEventListener("click", (event: MouseEvent) => {
+                if (!this.isPlainPrimaryClick(event)) {
+                    return;
+                }
+
+                event.preventDefault();
+                event.stopPropagation();
+                event.stopImmediatePropagation();
+                activateLink();
+            });
+            link.addEventListener("keydown", (event: KeyboardEvent) => {
+                if (event.key !== "Enter" && event.key !== " ") {
+                    return;
+                }
+
+                event.preventDefault();
+                event.stopPropagation();
+                activateLink();
+            });
+        });
+    }
+
+    public async syncIndexPreviewSelection(
+        indexFilePath: string,
+        commentId: string,
+    ): Promise<boolean> {
+        const context = this.getIndexPreviewContext(indexFilePath);
+        if (!context) {
+            return false;
+        }
+
+        const { previewRoot } = context;
+        this.prepareIndexPreviewLinks(previewRoot);
+        this.syncIndexPreviewLinkStates(previewRoot, indexFilePath);
+
+        return !!this.findRenderedIndexCommentRow(previewRoot, commentId);
     }
 
     public registerMarkdownPreviewHighlights(plugin: Plugin) {
@@ -348,7 +518,7 @@ export class CommentHighlightController {
 
                 event.preventDefault();
                 event.stopPropagation();
-                void host.activateViewAndHighlightComment(commentTarget.commentId);
+                void host.activateIndexComment(commentTarget.commentId, filePath);
                 return true;
             },
         });
@@ -376,7 +546,9 @@ export class CommentHighlightController {
         context: MarkdownPostProcessorContext,
     ): Promise<void> {
         if (this.host.isAllCommentsNotePath(context.sourcePath)) {
-            this.stripIndexCommentLinkTooltips(element);
+            this.prepareIndexPreviewLinks(element);
+            this.syncIndexPreviewLinkStates(element, context.sourcePath);
+            this.bindIndexPreviewLinkClicks(element, context.sourcePath);
             return;
         }
 
@@ -407,7 +579,7 @@ export class CommentHighlightController {
                 && !!comment.selectedText
                 && comment.startLine >= sectionInfo.lineStart
                 && comment.endLine <= sectionInfo.lineEnd
-                && (this.host.shouldShowResolvedComments() || !comment.resolved),
+                && matchesResolvedCommentVisibility(comment, this.host.shouldShowResolvedComments()),
             );
         if (!comments.length) {
             return;

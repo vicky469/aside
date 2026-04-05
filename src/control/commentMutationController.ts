@@ -14,6 +14,8 @@ export interface CommentMutationHost {
     getSidebarTargetFilePath(): string | null;
     getDraftComment(): DraftComment | null;
     getSavingDraftCommentId(): string | null;
+    shouldShowResolvedComments(): boolean;
+    setShowResolvedComments(showResolved: boolean): Promise<boolean>;
     setDraftComment(draftComment: DraftComment | null, hostFilePath?: string | null): Promise<void>;
     setDraftCommentValue(draftComment: DraftComment | null): void;
     clearDraftState(): void;
@@ -195,6 +197,9 @@ export class CommentMutationController {
 
         this.host.getCommentManager().unresolveComment(commentId);
         await this.host.persistCommentsForFile(latestTarget.file, { immediateAggregateRefresh: true });
+        if (this.host.shouldShowResolvedComments()) {
+            await this.host.setShowResolvedComments(false);
+        }
     }
 
     private async loadLatestCommentTarget(

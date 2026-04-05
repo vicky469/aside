@@ -30,6 +30,11 @@ export function compareCommentsForSidebarOrder<T extends SectionedCommentLike>(l
     if (left.filePath !== right.filePath) {
         return left.filePath.localeCompare(right.filePath);
     }
+    const leftSection = getCommentSectionKey(left);
+    const rightSection = getCommentSectionKey(right);
+    if (leftSection !== rightSection) {
+        return leftSection === "page" ? -1 : 1;
+    }
     if (left.startLine !== right.startLine) {
         return left.startLine - right.startLine;
     }

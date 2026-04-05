@@ -8,6 +8,10 @@ import { formatSidebarCommentMeta } from "./sidebarCommentSections";
 export interface PersistedCommentPresentation {
     classes: string[];
     metaText: string;
+    redirectHint: {
+        title: string;
+        icon: string;
+    };
     resolveAction: {
         ariaLabel: string;
         title: string;
@@ -18,11 +22,13 @@ export interface PersistedCommentPresentation {
 export interface SidebarPersistedCommentHost {
     activeCommentId: string | null;
     currentFilePath: string | null;
+    showSourceRedirectAction: boolean;
     getEventTargetElement(target: EventTarget | null): HTMLElement | null;
     isSelectionInsideSidebarContent(selection?: Selection | null): boolean;
     claimSidebarInteractionOwnership(focusTarget?: HTMLElement | null): void;
     renderMarkdown(markdown: string, container: HTMLElement, sourcePath: string): Promise<void>;
     openSidebarInternalLink(href: string, sourcePath: string, focusTarget: HTMLElement): Promise<void>;
+    activateComment(comment: Comment): Promise<void>;
     openCommentInEditor(comment: Comment): Promise<void>;
     resolveComment(commentId: string): void;
     unresolveComment(commentId: string): void;
@@ -52,6 +58,10 @@ export function buildPersistedCommentPresentation(
     return {
         classes,
         metaText: formatSidebarCommentMeta(comment),
+        redirectHint: {
+            title: "Open source note",
+            icon: "arrow-up-right",
+        },
         resolveAction: {
             ariaLabel: comment.resolved ? "Reopen side note" : "Resolve side note",
             title: comment.resolved ? "Reopen side note" : "Resolve side note",
@@ -78,6 +88,20 @@ export async function renderPersistedCommentCard(
 
     const actionsEl = headerEl.createDiv("sidenote2-comment-actions");
 
+    if (host.showSourceRedirectAction) {
+        const redirectButton = actionsEl.createEl("button", {
+            cls: "sidenote2-comment-action-button sidenote2-comment-action-redirect",
+        });
+        redirectButton.setAttribute("type", "button");
+        redirectButton.setAttribute("aria-label", presentation.redirectHint.title);
+        redirectButton.setAttribute("title", presentation.redirectHint.title);
+        host.setIcon(redirectButton, presentation.redirectHint.icon);
+        redirectButton.onclick = (event) => {
+            event.stopPropagation();
+            void host.openCommentInEditor(comment);
+        };
+    }
+
     commentEl.addEventListener("click", (event: MouseEvent) => {
         const target = host.getEventTargetElement(event.target);
         const selection = window.getSelection();
@@ -90,7 +114,7 @@ export async function renderPersistedCommentCard(
             return;
         }
 
-        void host.openCommentInEditor(comment);
+        void host.activateComment(comment);
     });
 
     const contentWrapper = commentEl.createDiv({ cls: "sidenote2-comment-content" });

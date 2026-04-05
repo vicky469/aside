@@ -1,10 +1,6 @@
 import type { Comment } from "../../commentManager";
-import {
-    COMMENT_SECTION_DEFINITIONS,
-    getCommentSectionKey,
-} from "../anchors/commentSectionOrder";
+import { compareCommentsForSidebarOrder } from "../anchors/commentSectionOrder";
 import { getCommentSelectionLabel, getCommentStatusLabel, isAnchoredComment, isPageComment } from "../anchors/commentAnchors";
-import { sortCommentsByPosition } from "../storage/noteCommentStorage";
 import { extractTagsFromText } from "../text/commentTags";
 
 export const ALL_COMMENTS_NOTE_PATH = "SideNote2 index.md";
@@ -149,12 +145,26 @@ function formatCommentTags(comment: Comment): string | null {
     return uniqueTags.join(" ");
 }
 
+function getCommentKindKey(comment: Comment): "page" | "anchored" {
+    return isPageComment(comment) ? "page" : "anchored";
+}
+
 export function isAllCommentsNotePath(filePath: string, currentPath: string = ALL_COMMENTS_NOTE_PATH): boolean {
     return filePath === normalizeAllCommentsNotePath(currentPath) || filePath === LEGACY_ALL_COMMENTS_NOTE_PATH;
 }
 
 export function buildCommentLocationUrl(vaultName: string, comment: Pick<Comment, "filePath" | "id">): string {
     return `obsidian://${COMMENT_LOCATION_PROTOCOL}?vault=${encodeURIComponent(vaultName)}&file=${encodeURIComponent(comment.filePath)}&commentId=${encodeURIComponent(comment.id)}`;
+}
+
+export function buildIndexCommentBlockId(commentId: string): string {
+    const normalizedId = commentId
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9_-]+/g, "-")
+        .replace(/^-+|-+$/g, "");
+
+    return `sidenote2-index-comment-${normalizedId || "unknown"}`;
 }
 
 export function parseCommentLocationUrl(url: string): CommentLocationTarget | null {
@@ -196,6 +206,26 @@ export function findCommentLocationTargetInMarkdownLine(line: string): CommentLo
     return null;
 }
 
+export function buildCommentLocationLineNumberMap(noteContent: string): Map<string, number> {
+    const lineNumbersByCommentId = new Map<string, number>();
+    const lines = noteContent.split("\n");
+
+    for (let index = 0; index < lines.length; index += 1) {
+        const target = findCommentLocationTargetInMarkdownLine(lines[index] ?? "");
+        if (!target || lineNumbersByCommentId.has(target.commentId)) {
+            continue;
+        }
+
+        lineNumbersByCommentId.set(target.commentId, index);
+    }
+
+    return lineNumbersByCommentId;
+}
+
+export function findCommentLocationLineNumber(noteContent: string, commentId: string): number | null {
+    return buildCommentLocationLineNumberMap(noteContent).get(commentId) ?? null;
+}
+
 export function buildAllCommentsNoteContent(
     vaultName: string,
     comments: Comment[],
@@ -229,8 +259,11 @@ export function buildAllCommentsNoteContent(
 
     for (const filePath of filePaths) {
         lines.push(formatFileHeadingLabel(filePath));
+        lines.push("");
 
-        const fileComments = sortCommentsByPosition(commentsByFile.get(filePath) ?? []);
+        const fileComments = (commentsByFile.get(filePath) ?? [])
+            .slice()
+            .sort(compareCommentsForSidebarOrder);
         const pageNoteOrdinals = new Map<string, number>();
         let nextPageNoteOrdinal = 1;
         for (const comment of fileComments) {
@@ -242,26 +275,18 @@ export function buildAllCommentsNoteContent(
             nextPageNoteOrdinal += 1;
         }
 
-        let renderedSectionCount = 0;
-        for (const section of COMMENT_SECTION_DEFINITIONS) {
-            const sectionComments = fileComments.filter((comment) => getCommentSectionKey(comment) === section.key);
-            if (!sectionComments.length) {
-                continue;
-            }
+        for (const comment of fileComments) {
+            const tagLine = formatCommentTags(comment);
+            const commentUrl = `${buildCommentLocationUrl(vaultName, comment)}&kind=${getCommentKindKey(comment)}`;
+            const blockId = buildIndexCommentBlockId(comment.id);
+            const marker = formatCommentKindMarker(comment);
 
-            for (const comment of sectionComments) {
-                const tagLine = formatCommentTags(comment);
-                const commentUrl = `${buildCommentLocationUrl(vaultName, comment)}&kind=${section.key}`;
-                const marker = formatCommentKindMarker(comment);
-
-                lines.push(
-                    tagLine
-                        ? `${marker} [${formatCommentLinkLabel(comment, pageNoteOrdinals.get(comment.id))}](${commentUrl})  ${tagLine}`
-                        : `${marker} [${formatCommentLinkLabel(comment, pageNoteOrdinals.get(comment.id))}](${commentUrl})`
-                );
-            }
-
-            renderedSectionCount += 1;
+            lines.push(
+                tagLine
+                    ? `${marker} [${formatCommentLinkLabel(comment, pageNoteOrdinals.get(comment.id))}](${commentUrl})  ${tagLine} ^${blockId}`
+                    : `${marker} [${formatCommentLinkLabel(comment, pageNoteOrdinals.get(comment.id))}](${commentUrl}) ^${blockId}`
+            );
+            lines.push("");
         }
 
         lines.push("");

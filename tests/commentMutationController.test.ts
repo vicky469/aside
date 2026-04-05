@@ -50,16 +50,19 @@ function createHost(options: {
     currentNoteContentByPath?: Record<string, string>;
     getCurrentNoteContent?: (file: TFile) => Promise<string>;
     now?: number;
+    showResolvedComments?: boolean;
 } = {}) {
     const manager = new CommentManager(options.loadedComments ?? options.knownComments ?? []);
     let draftComment = options.draftComment ?? null;
     let draftHostFilePath: string | null = draftComment?.filePath ?? null;
     let savingDraftCommentId: string | null = null;
+    let showResolvedComments = options.showResolvedComments ?? false;
     const notices: string[] = [];
     const loadedFiles: string[] = [];
     const persistedFiles: Array<{ path: string; immediateAggregateRefresh?: boolean }> = [];
     const highlightedCommentIds: string[] = [];
     const setDraftCalls: Array<{ draftComment: DraftComment | null; hostFilePath?: string | null }> = [];
+    const setShowResolvedCalls: boolean[] = [];
     let refreshCommentViewsCount = 0;
     let refreshEditorDecorationsCount = 0;
 
@@ -75,6 +78,16 @@ function createHost(options: {
         getSidebarTargetFilePath: () => options.sidebarTargetFilePath ?? null,
         getDraftComment: () => draftComment,
         getSavingDraftCommentId: () => savingDraftCommentId,
+        shouldShowResolvedComments: () => showResolvedComments,
+        setShowResolvedComments: async (nextShowResolved) => {
+            setShowResolvedCalls.push(nextShowResolved);
+            if (showResolvedComments === nextShowResolved) {
+                return false;
+            }
+
+            showResolvedComments = nextShowResolved;
+            return true;
+        },
         setDraftComment: async (nextDraftComment, hostFilePath) => {
             draftComment = nextDraftComment;
             draftHostFilePath = nextDraftComment ? (hostFilePath ?? nextDraftComment.filePath) : null;
@@ -129,10 +142,12 @@ function createHost(options: {
         loadedFiles,
         persistedFiles,
         highlightedCommentIds,
+        setShowResolvedCalls,
         setDraftCalls,
         getDraftComment: () => draftComment,
         getDraftHostFilePath: () => draftHostFilePath,
         getSavingDraftCommentId: () => savingDraftCommentId,
+        getShowResolvedComments: () => showResolvedComments,
         getRefreshCommentViewsCount: () => refreshCommentViewsCount,
         getRefreshEditorDecorationsCount: () => refreshEditorDecorationsCount,
     };
@@ -361,4 +376,23 @@ test("comment mutation controller resolves an existing comment and persists the 
         immediateAggregateRefresh: true,
     }]);
     assert.deepEqual(host.notices, []);
+});
+
+test("comment mutation controller exits resolved-only mode after reopening a comment", async () => {
+    const comment = createComment({ resolved: true });
+    const host = createHost({
+        knownComments: [comment],
+        loadedComments: [comment],
+        showResolvedComments: true,
+    });
+
+    await host.controller.unresolveComment(comment.id);
+
+    assert.equal(host.manager.getCommentById(comment.id)?.resolved, false);
+    assert.deepEqual(host.persistedFiles, [{
+        path: comment.filePath,
+        immediateAggregateRefresh: true,
+    }]);
+    assert.deepEqual(host.setShowResolvedCalls, [false]);
+    assert.equal(host.getShowResolvedComments(), false);
 });

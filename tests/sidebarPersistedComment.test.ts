@@ -51,6 +51,10 @@ test("buildPersistedCommentPresentation chooses the right resolve action copy an
     const unresolved = buildPersistedCommentPresentation(createComment({ resolved: false }), null);
     const resolved = buildPersistedCommentPresentation(createComment({ resolved: true }), null);
 
+    assert.deepEqual(unresolved.redirectHint, {
+        title: "Open source note",
+        icon: "arrow-up-right",
+    });
     assert.deepEqual(unresolved.resolveAction, {
         ariaLabel: "Resolve side note",
         title: "Resolve side note",

@@ -74,6 +74,7 @@ export default class SideNote2 extends Plugin {
         app: this.app,
         getCommentsForFile: (filePath) => this.commentManager.getCommentsForFile(filePath),
         getMarkdownViewForEditorView: (editorView) => this.workspaceViewController.getMarkdownViewForEditorView(editorView),
+        getMarkdownViewForFile: (file) => this.workspaceViewController.getMarkdownViewForFile(file),
         getMarkdownFileByPath: (path) => this.workspaceViewController.getMarkdownFileByPath(path),
         getCurrentNoteContent: (file) => this.workspaceViewController.getCurrentNoteContent(file),
         getParsedNoteComments: (filePath, noteContent) => this.getParsedNoteComments(filePath, noteContent),
@@ -82,12 +83,15 @@ export default class SideNote2 extends Plugin {
         getDraftForFile: (filePath) => this.commentSessionController.getDraftForFile(filePath),
         getRevealedCommentId: (filePath) => this.commentSessionController.getRevealedCommentId(filePath),
         activateViewAndHighlightComment: (commentId) => this.activateViewAndHighlightComment(commentId),
+        activateIndexComment: (commentId, indexFilePath) => this.activateIndexComment(commentId, indexFilePath),
     });
     private readonly commentMutationController = new CommentMutationController({
         getAllCommentsNotePath: () => this.getAllCommentsNotePath(),
         getSidebarTargetFilePath: () => this.getSidebarTargetFile()?.path ?? null,
         getDraftComment: () => this.commentSessionController.getDraftComment(),
         getSavingDraftCommentId: () => this.commentSessionController.getSavingDraftCommentId(),
+        shouldShowResolvedComments: () => this.commentSessionController.shouldShowResolvedComments(),
+        setShowResolvedComments: (showResolved) => this.commentSessionController.setShowResolvedComments(showResolved),
         setDraftComment: (draftComment, hostFilePath) => this.commentSessionController.setDraftComment(draftComment, hostFilePath),
         setDraftCommentValue: (draftComment) => this.commentSessionController.setDraftCommentValue(draftComment),
         clearDraftState: () => this.commentSessionController.clearDraftState(),
@@ -376,6 +380,18 @@ export default class SideNote2 extends Plugin {
      */
     async activateViewAndHighlightComment(commentId: string) {
         await this.commentNavigationController.activateViewAndHighlightComment(commentId);
+    }
+
+    async activateIndexComment(commentId: string, indexFilePath: string) {
+        this.commentSessionController.setRevealedCommentState(
+            indexFilePath,
+            commentId,
+            { refreshMarkdownPreviews: false },
+        );
+        await this.commentHighlightController.syncIndexPreviewSelection(indexFilePath, commentId);
+
+        const indexFile = this.workspaceViewController.getFileByPath(indexFilePath);
+        await this.commentNavigationController.syncSidebarSelection(commentId, indexFile);
     }
 
     public getPinnedMarkdownFile(): TFile | null {

@@ -38,6 +38,7 @@ test("getSidebarComments replaces the persisted version of the draft, hides reso
         createComment({ id: "comment-b", filePath: "docs/b.md", startLine: 8, timestamp: 300 }),
         createComment({ id: "draft-1", filePath: "docs/b.md", startLine: 12, timestamp: 400 }),
         createComment({ id: "comment-resolved", filePath: "docs/a.md", resolved: true, timestamp: 50 }),
+        createComment({ id: "comment-page", filePath: "docs/a.md", anchorKind: "page", startLine: 20, startChar: 0, endLine: 20, endChar: 0, timestamp: 150 }),
         createComment({ id: "comment-a", filePath: "docs/a.md", startLine: 3, timestamp: 200 }),
     ];
     const draft = createDraft({
@@ -56,6 +57,7 @@ test("getSidebarComments replaces the persisted version of the draft, hides reso
         timestamp: comment.timestamp,
         isDraft: "mode" in comment,
     })), [
+        { id: "comment-page", filePath: "docs/a.md", timestamp: 150, isDraft: false },
         { id: "comment-a", filePath: "docs/a.md", timestamp: 200, isDraft: false },
         { id: "comment-b", filePath: "docs/b.md", timestamp: 300, isDraft: false },
         { id: "draft-1", filePath: "docs/b.md", timestamp: 500, isDraft: true },
@@ -80,6 +82,18 @@ test("getSidebarComments applies file filters to both persisted comments and dra
     assert.deepEqual(
         getSidebarComments(persistedComments, draft, false, ["docs/c.md"]).map((comment) => comment.id),
         ["draft-1"],
+    );
+});
+
+test("getSidebarComments shows only resolved comments when the resolved toggle is on", () => {
+    const persistedComments = [
+        createComment({ id: "comment-unresolved", filePath: "docs/a.md", timestamp: 100, resolved: false }),
+        createComment({ id: "comment-resolved", filePath: "docs/a.md", timestamp: 200, resolved: true }),
+    ];
+
+    assert.deepEqual(
+        getSidebarComments(persistedComments, null, true).map((comment) => comment.id),
+        ["comment-resolved"],
     );
 });
 

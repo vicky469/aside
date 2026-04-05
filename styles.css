@@ -57,11 +57,23 @@
     margin-bottom: 0.2rem;
 }
 
-.sidenote2-index-note-view .markdown-preview-view a.external-link[href^="obsidian://side-note2-comment"],
-.sidenote2-index-note-view .markdown-source-view.mod-cm6 .markdown-rendered a.external-link[href^="obsidian://side-note2-comment"] {
+.sidenote2-index-note-view .markdown-preview-view .sidenote2-index-comment-link,
+.sidenote2-index-note-view .markdown-source-view.mod-cm6 .markdown-rendered .sidenote2-index-comment-link {
     background-image: none;
     padding-right: 0;
     text-decoration: none;
+    cursor: pointer;
+}
+
+.sidenote2-index-note-view .markdown-preview-view p.sidenote2-index-active-row,
+.sidenote2-index-note-view .markdown-preview-view li.sidenote2-index-active-row,
+.sidenote2-index-note-view .markdown-source-view.mod-cm6 .markdown-rendered p.sidenote2-index-active-row,
+.sidenote2-index-note-view .markdown-source-view.mod-cm6 .markdown-rendered li.sidenote2-index-active-row {
+    background: hsla(var(--interactive-accent-hsl), calc(var(--sidenote2-highlight-bg-alpha) + 0.06));
+    border-radius: 6px;
+    box-shadow: inset 3px 0 0 hsla(var(--interactive-accent-hsl), calc(var(--sidenote2-highlight-line-alpha) + 0.16));
+    margin-inline: -0.3rem;
+    padding-inline: 0.3rem;
 }
 
 .sidenote2-index-heading-label {
@@ -146,7 +158,7 @@
 }
 
 .sidenote2-comments-container {
-    padding: 8px 8px 12px;
+    padding: 8px 8px 56px;
 }
 
 .sidenote2-sidebar-toolbar {
@@ -361,71 +373,10 @@
     padding-right: 0;
 }
 
-.sidenote2-comment-section + .sidenote2-comment-section {
-    margin-top: 8px;
-}
-
-.sidenote2-comment-section-header {
+.sidenote2-comments-list-actions {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    min-height: 24px;
-    padding: 0 4px 0 2px;
-    border-radius: var(--nav-item-radius, var(--radius-s, 4px));
-    margin-bottom: 3px;
-}
-
-.sidenote2-comment-section-header:hover,
-.sidenote2-comment-section-header:focus-within {
-    background: var(--nav-item-background-hover, var(--background-modifier-hover));
-}
-
-.sidenote2-comment-section-toggle {
-    all: unset;
-    box-sizing: border-box;
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    flex: 1 1 auto;
-    min-width: 0;
-    min-height: 24px;
-    padding: 0;
-    border: none;
-    background: none;
-    border-radius: var(--radius-s, 4px);
-    color: var(--nav-item-color, var(--text-faint, var(--text-muted)));
-    font-size: var(--font-ui-small);
-    font-weight: 400;
-    text-align: left;
-    cursor: pointer;
-    background-color: transparent !important;
-    box-shadow: none !important;
-}
-
-.sidenote2-comment-section-toggle:hover,
-.sidenote2-comment-section-toggle:focus-visible {
-    color: var(--nav-item-color-hover, var(--text-normal));
-    outline: none;
-}
-
-.sidenote2-comment-section-toggle-icon {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 12px;
-    height: 12px;
-    flex: 0 0 12px;
-}
-
-.sidenote2-comment-section-toggle-icon svg {
-    width: 12px;
-    height: 12px;
-}
-
-.sidenote2-comment-section-title {
-    flex: 1 1 auto;
-    white-space: nowrap;
+    justify-content: flex-end;
+    margin-bottom: 6px;
 }
 
 .sidenote2-comment-section-add-button {
@@ -463,17 +414,23 @@
     outline: none;
 }
 
-.sidenote2-comment-section-body {
-    display: block;
-    padding-left: 18px;
-}
-
-.sidenote2-comment-section.is-collapsed .sidenote2-comment-section-body {
-    display: none;
-}
-
-.sidenote2-comment-section-body .sidenote2-comment-item:last-child {
+.sidenote2-comments-list .sidenote2-comment-item:last-child {
     margin-bottom: 0;
+}
+
+.sidenote2-list-limit-notice {
+    margin-top: 8px;
+    color: var(--text-faint, var(--text-muted));
+    font-size: var(--font-ui-small);
+    line-height: 1.35;
+}
+
+.sidenote2-list-limit-notice p {
+    margin: 0;
+}
+
+.sidenote2-list-limit-notice p + p {
+    margin-top: 2px;
 }
 
 .sidenote2-comment-item {
@@ -744,15 +701,18 @@
     justify-content: center;
     width: 22px;
     height: 22px;
+    width: 22px;
+    height: 22px;
     padding: 0;
     border: none;
-    border-radius: 0;
+    border-radius: 4px;
     background: none;
     color: var(--text-muted);
     box-shadow: none;
     outline: none;
     appearance: none;
     -webkit-appearance: none;
+    box-sizing: border-box;
     cursor: pointer;
     transition: color 0.15s ease, opacity 0.15s ease;
 }
@@ -778,6 +738,14 @@
 
 .sidenote2-comment-action-resolve:hover {
     color: var(--interactive-accent-hover, var(--interactive-accent));
+}
+
+.sidenote2-comment-action-redirect {
+    color: var(--link-external-color, var(--text-accent));
+}
+
+.sidenote2-comment-action-redirect:hover {
+    color: var(--link-external-color-hover, var(--text-accent-hover));
 }
 
 .sidenote2-comment-action-edit {

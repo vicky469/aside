@@ -1,5 +1,7 @@
 import esbuild from "esbuild";
+import { execFile } from "node:child_process";
 import process from "process";
+import { promisify } from "node:util";
 import builtins from "builtin-modules";
 
 const banner =
@@ -10,6 +12,41 @@ if you want to view the source, please visit the github repository of this plugi
 `;
 
 const prod = (process.argv[2] === "production");
+const pluginId = "side-note2";
+const hotReloadEnabled = !prod && process.env.SIDENOTE2_HOT_RELOAD !== "0";
+const execFileAsync = promisify(execFile);
+
+let hotReloadInFlight = false;
+let hotReloadQueued = false;
+
+async function reloadPlugin() {
+	if (!hotReloadEnabled) {
+		return;
+	}
+
+	if (hotReloadInFlight) {
+		hotReloadQueued = true;
+		return;
+	}
+
+	hotReloadInFlight = true;
+
+	do {
+		hotReloadQueued = false;
+		try {
+			await execFileAsync("obsidian", ["plugin:reload", `id=${pluginId}`]);
+			console.log(`[hot-reload] Reloaded ${pluginId}`);
+		} catch (error) {
+			const message =
+				error instanceof Error
+					? error.message
+					: String(error);
+			console.warn(`[hot-reload] Failed to reload ${pluginId}: ${message}`);
+		}
+	} while (hotReloadQueued);
+
+	hotReloadInFlight = false;
+}
 
 const context = await esbuild.context({
 	banner: {
@@ -42,6 +79,22 @@ const context = await esbuild.context({
 	treeShaking: true,
 	outfile: "main.js",
 	minify: prod,
+	plugins: prod
+		? []
+		: [
+			{
+				name: "obsidian-hot-reload",
+				setup(build) {
+					build.onEnd(async (result) => {
+						if (result.errors.length > 0) {
+							return;
+						}
+
+						await reloadPlugin();
+					});
+				},
+			},
+		],
 });
 
 if (prod) {

@@ -1,6 +1,7 @@
 import { FileView, MarkdownView, TFile, WorkspaceLeaf } from "obsidian";
 import type { Plugin } from "obsidian";
 import type { Comment } from "../commentManager";
+import type { RevealedCommentStateUpdateOptions } from "./commentSessionController";
 import type { DraftComment } from "../domain/drafts";
 import { isPageComment } from "../core/anchors/commentAnchors";
 import { resolveAnchorRange } from "../core/anchors/anchorResolver";
@@ -8,12 +9,15 @@ import { isAttachmentCommentableFile } from "../core/rules/commentableFiles";
 import { parseNoteComments } from "../core/storage/noteCommentStorage";
 import {
     pickPreferredFileLeafCandidate,
+    shouldRevealSidebarLeaf,
     type PreferredFileLeafCandidate,
 } from "./commentNavigationPlanner";
+import { resolveIndexLeafMode } from "./workspaceContextPlanner";
 
 interface SidebarViewLike {
     getViewType(): string;
     updateActiveFile(file: TFile | null): Promise<void>;
+    highlightComment(commentId: string): void;
     highlightAndFocusDraft(commentId: string): Promise<void>;
 }
 
@@ -22,6 +26,7 @@ function isSidebarViewLike(view: unknown): view is SidebarViewLike {
         && typeof (view as SidebarViewLike).getViewType === "function"
         && (view as SidebarViewLike).getViewType() === "sidenote2-view"
         && typeof (view as SidebarViewLike).updateActiveFile === "function"
+        && typeof (view as SidebarViewLike).highlightComment === "function"
         && typeof (view as SidebarViewLike).highlightAndFocusDraft === "function";
 }
 
@@ -30,7 +35,11 @@ export interface CommentNavigationHost {
     getSidebarTargetFile(): TFile | null;
     getDraftComment(): DraftComment | null;
     getKnownCommentById(commentId: string): Comment | null;
-    setRevealedCommentState(filePath: string, commentId: string): void;
+    setRevealedCommentState(
+        filePath: string,
+        commentId: string,
+        options?: RevealedCommentStateUpdateOptions,
+    ): void;
     getFileByPath(path: string): TFile | null;
     isCommentableFile(file: TFile | null): file is TFile;
     loadCommentsForFile(file: TFile): Promise<unknown>;
@@ -41,20 +50,44 @@ export interface CommentNavigationHost {
 export class CommentNavigationController {
     constructor(private readonly host: CommentNavigationHost) {}
 
-    public async updateSidebarViews(file: TFile | null): Promise<void> {
-        const leaves = this.host.app.workspace.getLeavesOfType("sidenote2-view");
-        for (const leaf of leaves) {
-            if (isSidebarViewLike(leaf.view)) {
-                await leaf.view.updateActiveFile(file);
-            }
+    private async ensureMarkdownLeafReadyForReveal(leaf: WorkspaceLeaf): Promise<MarkdownView | null> {
+        if (!(leaf.view instanceof MarkdownView)) {
+            return null;
         }
+
+        const viewState = leaf.getViewState();
+        const targetViewState = resolveIndexLeafMode({
+            isMarkdownLeaf: viewState.type === "markdown",
+            isIndexLeaf: false,
+            currentViewMode: leaf.view.getMode(),
+            isSourceMode: typeof viewState.state?.source === "boolean" ? viewState.state.source : undefined,
+        });
+
+        if (targetViewState && viewState.type === "markdown") {
+            await leaf.setViewState({
+                ...viewState,
+                state: {
+                    ...(viewState.state ?? {}),
+                    mode: targetViewState.mode,
+                    source: targetViewState.sourceMode,
+                },
+            });
+        }
+
+        return leaf.view instanceof MarkdownView ? leaf.view : null;
     }
 
-    public async activateView(skipViewUpdate = false): Promise<void> {
+    private async activateSidebarView(options: {
+        skipViewUpdate?: boolean;
+        revealLeaf?: boolean;
+    } = {}): Promise<void> {
         const { workspace } = this.host.app;
         const sidebarFile = this.host.getSidebarTargetFile();
+        const skipViewUpdate = options.skipViewUpdate === true;
+        const shouldRevealLeaf = options.revealLeaf !== false;
 
         let leaf: WorkspaceLeaf | null = null;
+        let createdLeaf = false;
         const leaves = workspace.getLeavesOfType("sidenote2-view");
 
         if (leaves.length > 0) {
@@ -63,6 +96,7 @@ export class CommentNavigationController {
             const rightLeaf = workspace.getRightLeaf(false);
             if (rightLeaf) {
                 leaf = rightLeaf;
+                createdLeaf = true;
                 await leaf.setViewState({
                     type: "sidenote2-view",
                     state: { filePath: sidebarFile?.path ?? null },
@@ -75,28 +109,83 @@ export class CommentNavigationController {
             return;
         }
 
-        workspace.revealLeaf(leaf);
+        if (shouldRevealSidebarLeaf(options.revealLeaf, createdLeaf)) {
+            workspace.revealLeaf(leaf);
+        }
+
         if (!skipViewUpdate && isSidebarViewLike(leaf.view)) {
             await leaf.view.updateActiveFile(sidebarFile);
         }
     }
 
-    public async activateViewAndHighlightComment(commentId: string): Promise<void> {
+    private getKnownOrDraftComment(commentId: string): Comment | DraftComment | null {
         const draftComment = this.host.getDraftComment();
-        const comment = draftComment?.id === commentId
-            ? draftComment
-            : this.host.getKnownCommentById(commentId);
-        if (comment) {
-            this.host.setRevealedCommentState(comment.filePath, comment.id);
+        if (draftComment?.id === commentId) {
+            return draftComment;
         }
 
-        const skipViewUpdate = draftComment !== null;
-        await this.activateView(skipViewUpdate);
+        return this.host.getKnownCommentById(commentId);
+    }
+
+    private async activateViewAndHighlightCommentForFile(
+        commentId: string,
+        revealedFilePath: string | null,
+        options: {
+            revealedCommentOptions?: RevealedCommentStateUpdateOptions;
+            revealSidebar?: boolean;
+        } = {},
+    ): Promise<void> {
+        const comment = this.getKnownOrDraftComment(commentId);
+        if (comment && revealedFilePath) {
+            this.host.setRevealedCommentState(
+                revealedFilePath,
+                comment.id,
+                options.revealedCommentOptions,
+            );
+        }
+
+        const skipViewUpdate = this.host.getDraftComment() !== null;
+        await this.activateSidebarView({
+            skipViewUpdate,
+            revealLeaf: options.revealSidebar,
+        });
 
         const leaves = this.host.app.workspace.getLeavesOfType("sidenote2-view");
         for (const leaf of leaves) {
             if (isSidebarViewLike(leaf.view)) {
                 await leaf.view.highlightAndFocusDraft(commentId);
+            }
+        }
+    }
+
+    public async updateSidebarViews(file: TFile | null): Promise<void> {
+        const leaves = this.host.app.workspace.getLeavesOfType("sidenote2-view");
+        for (const leaf of leaves) {
+            if (isSidebarViewLike(leaf.view)) {
+                await leaf.view.updateActiveFile(file);
+            }
+        }
+    }
+
+    public async activateView(skipViewUpdate = false): Promise<void> {
+        await this.activateSidebarView({ skipViewUpdate });
+    }
+
+    public async activateViewAndHighlightComment(commentId: string): Promise<void> {
+        const comment = this.getKnownOrDraftComment(commentId);
+        await this.activateViewAndHighlightCommentForFile(commentId, comment?.filePath ?? null);
+    }
+
+    public async syncSidebarSelection(
+        commentId: string,
+        file: TFile | null,
+    ): Promise<void> {
+        await this.updateSidebarViews(file);
+
+        const leaves = this.host.app.workspace.getLeavesOfType("sidenote2-view");
+        for (const leaf of leaves) {
+            if (isSidebarViewLike(leaf.view)) {
+                leaf.view.highlightComment(commentId);
             }
         }
     }
@@ -154,12 +243,13 @@ export class CommentNavigationController {
             await targetLeaf.openFile(file);
         }
 
-        if (!(targetLeaf.view instanceof MarkdownView)) {
+        const markdownView = await this.ensureMarkdownLeafReadyForReveal(targetLeaf);
+        if (!markdownView) {
             this.host.showNotice("Failed to jump to Markdown view.");
             return;
         }
 
-        const editor = targetLeaf.view.editor;
+        const editor = markdownView.editor;
         if (isPageComment(comment)) {
             editor.setSelection({ line: 0, ch: 0 }, { line: 0, ch: 0 });
             editor.scrollIntoView(
