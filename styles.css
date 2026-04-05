@@ -152,6 +152,51 @@
     height: 14px;
 }
 
+.sidenote2-file-filter-selection-summary {
+    margin: 8px 0 10px;
+    padding: 10px 12px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 12px;
+    background: var(--background-secondary);
+}
+
+.sidenote2-file-filter-selection-note {
+    margin: 0;
+    font-size: var(--font-ui-small);
+    color: var(--text-normal);
+    font-weight: 500;
+}
+
+.sidenote2-file-filter-selection-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    max-height: 168px;
+    margin-top: 10px;
+    padding: 2px;
+    overflow: auto;
+    align-content: flex-start;
+}
+
+.sidenote2-file-filter-selection-chip {
+    display: inline-flex;
+    align-items: center;
+    min-height: 22px;
+    padding: 3px 8px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 999px;
+    background: var(--background-primary);
+    color: var(--text-muted);
+    font-size: var(--font-ui-small);
+    line-height: 1.2;
+}
+
+.sidenote2-file-filter-selection-chip.is-root {
+    border-color: hsla(var(--interactive-accent-hsl), 0.38);
+    background: hsla(var(--interactive-accent-hsl), 0.12);
+    color: var(--text-normal);
+}
+
 .sidenote2-view-container {
     height: 100%;
     overflow-y: auto;
@@ -239,6 +284,29 @@
     white-space: nowrap;
 }
 
+.sidenote2-filter-chip-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-faint, var(--text-muted));
+    flex: 0 0 auto;
+}
+
+.sidenote2-filter-chip-icon svg {
+    width: 14px;
+    height: 14px;
+    stroke-width: 1.9;
+}
+
+.sidenote2-filter-chip:hover .sidenote2-filter-chip-icon,
+.sidenote2-filter-chip:focus-visible .sidenote2-filter-chip-icon {
+    color: var(--text-muted);
+}
+
+.sidenote2-filter-chip.is-active .sidenote2-filter-chip-icon {
+    color: var(--text-muted);
+}
+
 .sidenote2-filter-chip-count {
     min-width: 18px;
     padding: 2px 6px;
@@ -262,30 +330,26 @@
     margin: 0 0 8px;
 }
 
-.sidenote2-active-file-filter,
-.sidenote2-active-file-filter-clear {
+.sidenote2-active-file-filter {
     display: inline-flex;
     align-items: center;
     gap: 5px;
     min-height: 24px;
-    padding: 3px 8px;
+    position: relative;
+    padding: 3px 22px 3px 8px;
     border: 1px solid var(--background-modifier-border);
     border-radius: 999px;
     background: var(--background-primary);
     color: var(--text-muted);
     font-size: var(--font-ui-small);
     line-height: 1.2;
-    cursor: pointer;
     transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease;
 }
 
-.sidenote2-active-file-filter:hover,
-.sidenote2-active-file-filter-clear:hover,
-.sidenote2-active-file-filter:focus-visible,
-.sidenote2-active-file-filter-clear:focus-visible {
-    outline: none;
-    border-color: var(--background-modifier-border-hover, var(--interactive-accent-hover));
-    background: var(--background-modifier-hover);
+.sidenote2-active-file-filter.is-root {
+    border-color: hsla(var(--interactive-accent-hsl), 0.38);
+    background: hsla(var(--interactive-accent-hsl), 0.12);
+    color: var(--text-normal);
 }
 
 .sidenote2-active-file-filter-label {
@@ -305,23 +369,35 @@
     text-align: center;
 }
 
-.sidenote2-active-file-filter-remove {
+.sidenote2-active-file-filter-clear {
+    position: absolute;
+    top: 50%;
+    right: 4px;
+    transform: translateY(-50%);
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 10px;
-    height: 10px;
+    width: 16px;
+    height: 16px;
+    padding: 0;
     color: var(--text-faint, var(--text-muted));
+    opacity: 0.9;
 }
 
-.sidenote2-active-file-filter-remove svg {
+.sidenote2-active-file-filter-clear svg {
     width: 10px;
     height: 10px;
 }
 
-.sidenote2-active-file-filter-clear {
-    background: transparent;
-    color: var(--text-muted);
+.sidenote2-active-file-filter-clear:hover,
+.sidenote2-active-file-filter-clear:focus-visible {
+    color: var(--text-normal);
+    opacity: 1;
+}
+
+.sidenote2-active-file-filter-summary {
+    color: var(--text-faint, var(--text-muted));
+    font-size: var(--font-ui-small);
 }
 
 .sidenote2-file-filter-note {
@@ -331,7 +407,7 @@
 
 .sidenote2-thought-trail {
     padding: 2px 4px 4px;
-    font-size: var(--font-ui-small);
+    font-size: var(--font-ui-smaller);
 }
 
 .sidenote2-thought-trail-caption {
@@ -353,13 +429,14 @@
 }
 
 .sidenote2-thought-trail .mermaid {
-    overflow: hidden;
+    overflow: auto;
+    padding-bottom: 2px;
 }
 
 .sidenote2-thought-trail .mermaid svg {
     display: block;
-    width: 76%;
-    max-width: 100%;
+    width: auto !important;
+    max-width: none !important;
     height: auto;
     margin: 0 auto;
 }

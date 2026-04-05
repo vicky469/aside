@@ -1,6 +1,13 @@
 import { ItemView, MarkdownRenderer, TFile, WorkspaceLeaf, setIcon, type ViewStateResult } from "obsidian";
 import type { Comment } from "../../commentManager";
-import { buildThoughtTrailLines } from "../../core/derived/thoughtTrail";
+import {
+    buildIndexFileFilterGraph,
+    getIndexFileFilterConnectedComponent,
+    type IndexFileFilterGraph,
+} from "../../core/derived/indexFileFilterGraph";
+import {
+    buildThoughtTrailLines,
+} from "../../core/derived/thoughtTrail";
 import type { DraftComment } from "../../domain/drafts";
 import type SideNote2 from "../../main";
 import ConfirmDeleteModal from "../modals/ConfirmDeleteModal";
@@ -11,10 +18,9 @@ import { SIDE_NOTE2_ICON_ID } from "../sideNote2Icon";
 import { SidebarDraftEditorController, getSidebarComments } from "./sidebarDraftEditor";
 import { renderDraftCommentCard } from "./sidebarDraftComment";
 import {
-    buildIndexFileFilterOptions,
+    buildIndexFileFilterOptionsFromCounts,
     filterCommentsByFilePaths,
     getIndexFileFilterLabel,
-    normalizeIndexFileFilterPaths,
     type IndexFileFilterOption,
 } from "./indexFileFilter";
 import { INDEX_SIDEBAR_LIST_LIMIT, limitIndexSidebarListItems } from "./indexSidebarListLimit";
@@ -22,32 +28,21 @@ import { filterCommentsByResolvedVisibility } from "../../core/rules/resolvedCom
 import { SidebarInteractionController } from "./sidebarInteractionController";
 import { renderPersistedCommentCard } from "./sidebarPersistedComment";
 import { extractThoughtTrailClickTargets, parseThoughtTrailOpenFilePath, resolveThoughtTrailNodeId } from "./thoughtTrailNodeLinks";
-import type { CustomViewState, IndexSidebarMode } from "./viewState";
+import {
+    normalizeIndexFileFilterRootPath,
+    resolveIndexFileFilterRootPathFromState,
+    type CustomViewState,
+    type IndexSidebarMode,
+} from "./viewState";
 
 function isDraftComment(comment: Comment | DraftComment): comment is DraftComment {
     return "mode" in comment;
-}
-
-function arraysEqual(left: readonly string[], right: readonly string[]): boolean {
-    if (left.length !== right.length) {
-        return false;
-    }
-
-    return left.every((value, index) => value === right[index]);
 }
 
 function parseIndexSidebarMode(value: unknown): IndexSidebarMode | null {
     return value === "list" || value === "thought-trail"
         ? value
         : null;
-}
-
-function parseIndexFileFilterPaths(value: unknown): string[] | null {
-    if (!Array.isArray(value) || !value.every((entry) => typeof entry === "string")) {
-        return null;
-    }
-
-    return normalizeIndexFileFilterPaths(value);
 }
 
 export default class SideNote2View extends ItemView {
@@ -57,7 +52,8 @@ export default class SideNote2View extends ItemView {
     private readonly draftEditorController: SidebarDraftEditorController;
     private readonly interactionController: SidebarInteractionController;
     private indexSidebarMode: IndexSidebarMode = "list";
-    private filteredIndexFilePaths: string[] = [];
+    private selectedIndexFileFilterRootPath: string | null = null;
+    private indexFileFilterGraph: IndexFileFilterGraph | null = null;
 
     constructor(leaf: WorkspaceLeaf, plugin: SideNote2, file: TFile | null = null) {
         super(leaf);
@@ -131,12 +127,10 @@ export default class SideNote2View extends ItemView {
             shouldRender = true;
         }
 
-        if (Object.prototype.hasOwnProperty.call(state, "indexFileFilterPaths")) {
-            const nextFileFilterPaths = parseIndexFileFilterPaths(state.indexFileFilterPaths) ?? [];
-            if (!arraysEqual(this.filteredIndexFilePaths, nextFileFilterPaths)) {
-                this.filteredIndexFilePaths = nextFileFilterPaths;
-                shouldRender = true;
-            }
+        const nextRootPath = resolveIndexFileFilterRootPathFromState(state);
+        if (nextRootPath !== undefined && nextRootPath !== this.selectedIndexFileFilterRootPath) {
+            this.selectedIndexFileFilterRootPath = nextRootPath;
+            shouldRender = true;
         }
 
         if (state.filePath) {
@@ -187,6 +181,7 @@ export default class SideNote2View extends ItemView {
         this.containerEl.empty();
         this.containerEl.addClass("sidenote2-view-container");
         if (file) {
+            this.indexFileFilterGraph = null;
             if (isAllCommentsView) {
                 await this.plugin.ensureIndexedCommentsLoaded();
             } else {
@@ -201,27 +196,47 @@ export default class SideNote2View extends ItemView {
             const persistedComments = isAllCommentsView
                 ? this.plugin.getAllIndexedComments()
                 : this.plugin.commentManager.getCommentsForFile(file.path);
-            const indexFileFilterOptions = isAllCommentsView
-                ? buildIndexFileFilterOptions(persistedComments)
-                : [];
-            const availableIndexFilePaths = new Set(indexFileFilterOptions.map((option) => option.filePath));
-            const filteredIndexFilePaths = isAllCommentsView
-                ? normalizeIndexFileFilterPaths(
-                    this.filteredIndexFilePaths.filter((filePath) => availableIndexFilePaths.has(filePath)),
-                )
-                : [];
-            if (isAllCommentsView && !arraysEqual(this.filteredIndexFilePaths, filteredIndexFilePaths)) {
-                this.filteredIndexFilePaths = filteredIndexFilePaths;
+            const showResolved = this.plugin.shouldShowResolvedComments();
+            const visiblePersistedComments = filterCommentsByResolvedVisibility(persistedComments, showResolved);
+            const indexFileFilterGraph = isAllCommentsView
+                ? buildIndexFileFilterGraph(persistedComments, {
+                    allCommentsNotePath: this.plugin.getAllCommentsNotePath(),
+                    resolveWikiLinkPath: (linkPath, sourceFilePath) => {
+                        const linkedFile = this.app.metadataCache.getFirstLinkpathDest(linkPath, sourceFilePath);
+                        return linkedFile instanceof TFile ? linkedFile.path : null;
+                    },
+                    showResolved,
+                })
+                : null;
+            this.indexFileFilterGraph = indexFileFilterGraph;
+
+            let selectedIndexFileFilterRootPath = isAllCommentsView
+                ? this.selectedIndexFileFilterRootPath
+                : null;
+            if (
+                selectedIndexFileFilterRootPath
+                && (!indexFileFilterGraph || !indexFileFilterGraph.fileCommentCounts.has(selectedIndexFileFilterRootPath))
+            ) {
+                this.selectedIndexFileFilterRootPath = null;
+                selectedIndexFileFilterRootPath = null;
             }
 
-            const scopedPersistedComments = isAllCommentsView
+            const filteredIndexFilePaths = isAllCommentsView && indexFileFilterGraph
+                ? getIndexFileFilterConnectedComponent(indexFileFilterGraph, selectedIndexFileFilterRootPath)
+                : [];
+            const indexFileFilterOptions = isAllCommentsView && indexFileFilterGraph
+                ? buildIndexFileFilterOptionsFromCounts(indexFileFilterGraph.fileCommentCounts)
+                : [];
+            const scopedVisibleComments = isAllCommentsView
+                ? filterCommentsByFilePaths(visiblePersistedComments, filteredIndexFilePaths)
+                : visiblePersistedComments;
+            const resolvedScopedComments = isAllCommentsView
                 ? filterCommentsByFilePaths(persistedComments, filteredIndexFilePaths)
                 : persistedComments;
             const draftComment = this.plugin.getDraftForView(file.path);
-            const totalScopedCount = scopedPersistedComments.length;
-            const resolvedCount = scopedPersistedComments.filter((comment) => comment.resolved).length;
+            const totalScopedCount = scopedVisibleComments.length;
+            const resolvedCount = resolvedScopedComments.filter((comment) => comment.resolved).length;
             const hasResolvedComments = resolvedCount > 0;
-            const showResolved = this.plugin.shouldShowResolvedComments();
             const commentsForFile = getSidebarComments(
                 persistedComments,
                 draftComment,
@@ -242,15 +257,21 @@ export default class SideNote2View extends ItemView {
                 resolvedCount,
                 hasResolvedComments,
                 indexFileFilterOptions,
+                selectedIndexFileFilterRootPath,
                 filteredIndexFilePaths,
             });
 
-            if (isAllCommentsView && filteredIndexFilePaths.length) {
-                this.renderActiveFileFilters(commentsContainer, filteredIndexFilePaths, indexFileFilterOptions);
+            if (isAllCommentsView && selectedIndexFileFilterRootPath && filteredIndexFilePaths.length) {
+                this.renderActiveFileFilters(
+                    commentsContainer,
+                    selectedIndexFileFilterRootPath,
+                    filteredIndexFilePaths,
+                    indexFileFilterOptions,
+                );
             }
 
             if (isAllCommentsView && this.indexSidebarMode === "thought-trail") {
-                const trailComments = filterCommentsByResolvedVisibility(scopedPersistedComments, showResolved);
+                const trailComments = scopedVisibleComments;
                 await this.renderThoughtTrail(commentsContainer, trailComments, file, {
                     hasFileFilter: filteredIndexFilePaths.length > 0,
                 });
@@ -298,7 +319,7 @@ export default class SideNote2View extends ItemView {
                         emptyStateEl.createEl("p", { text: "Turn off Resolved to return to active side notes." });
                     } else if (filteredIndexFilePaths.length) {
                         emptyStateEl.createEl("p", { text: "No side notes match the selected file filter." });
-                        emptyStateEl.createEl("p", { text: "Add more files to the filter or clear it to widen the index view." });
+                        emptyStateEl.createEl("p", { text: "Use Files to choose a different root file." });
                     } else {
                         emptyStateEl.createEl("p", { text: "No side notes in the index yet." });
                         emptyStateEl.createEl("p", { text: "Add side notes in markdown files to populate SideNote2 index." });
@@ -327,6 +348,7 @@ export default class SideNote2View extends ItemView {
             resolvedCount: number;
             hasResolvedComments: boolean;
             indexFileFilterOptions: IndexFileFilterOption[];
+            selectedIndexFileFilterRootPath: string | null;
             filteredIndexFilePaths: string[];
         },
     ) {
@@ -369,14 +391,15 @@ export default class SideNote2View extends ItemView {
             const filterGroup = toolbarEl.createDiv("sidenote2-sidebar-toolbar-group");
             this.renderToolbarChip(filterGroup, {
                 label: "Files",
-                active: options.filteredIndexFilePaths.length > 0,
+                icon: "list-filter",
+                active: !!options.selectedIndexFileFilterRootPath,
                 ariaLabel: options.indexFileFilterOptions.length
                     ? "Filter index by files"
                     : "No files with side notes yet",
                 title: options.indexFileFilterOptions.length
                     ? undefined
                     : "No files with side notes yet",
-                count: options.filteredIndexFilePaths.length
+                count: options.selectedIndexFileFilterRootPath
                     ? String(options.filteredIndexFilePaths.length)
                     : undefined,
                 disabled: !options.indexFileFilterOptions.length,
@@ -414,6 +437,7 @@ export default class SideNote2View extends ItemView {
             count?: string;
             showIndicator?: boolean;
             disabled?: boolean;
+            icon?: string;
         },
     ): void {
         const button = container.createEl("button", {
@@ -433,6 +457,13 @@ export default class SideNote2View extends ItemView {
             });
         }
 
+        if (options.icon) {
+            const iconEl = button.createSpan({
+                cls: "sidenote2-filter-chip-icon",
+            });
+            setIcon(iconEl, options.icon);
+        }
+
         button.createSpan({
             text: options.label,
             cls: "sidenote2-filter-chip-label",
@@ -450,76 +481,70 @@ export default class SideNote2View extends ItemView {
 
     private renderActiveFileFilters(
         container: HTMLElement,
+        rootFilePath: string,
         filteredIndexFilePaths: string[],
         indexFileFilterOptions: IndexFileFilterOption[],
     ): void {
         const optionByPath = new Map(indexFileFilterOptions.map((option) => [option.filePath, option]));
         const filterBar = container.createDiv("sidenote2-active-file-filters");
+        const rootOption = optionByPath.get(rootFilePath);
+        const rootChip = filterBar.createDiv("sidenote2-active-file-filter");
+        rootChip.addClass("is-root");
 
-        for (const filePath of filteredIndexFilePaths) {
-            const option = optionByPath.get(filePath);
-            const button = filterBar.createEl("button", {
-                cls: "sidenote2-active-file-filter",
+        rootChip.createSpan({
+            text: getIndexFileFilterLabel(rootFilePath, filteredIndexFilePaths),
+            cls: "sidenote2-active-file-filter-label",
+        });
+
+        if (rootOption) {
+            rootChip.createSpan({
+                text: String(rootOption.commentCount),
+                cls: "sidenote2-active-file-filter-count",
             });
-            button.setAttribute("type", "button");
-            button.setAttribute("aria-label", `Remove ${filePath} from the file filter`);
-            button.setAttribute("title", `Remove ${filePath} from the file filter`);
-
-            button.createSpan({
-                text: getIndexFileFilterLabel(filePath, filteredIndexFilePaths),
-                cls: "sidenote2-active-file-filter-label",
-            });
-
-            if (option) {
-                button.createSpan({
-                    text: String(option.commentCount),
-                    cls: "sidenote2-active-file-filter-count",
-                });
-            }
-
-            const removeIcon = button.createSpan("sidenote2-active-file-filter-remove");
-            setIcon(removeIcon, "x");
-
-            button.onclick = () => {
-                void this.removeIndexFileFilterPath(filePath);
-            };
         }
 
-        const clearButton = filterBar.createEl("button", {
-            text: "Clear",
-            cls: "sidenote2-active-file-filter-clear",
+        const clearButton = rootChip.createEl("button", {
+            cls: "sidenote2-active-file-filter-clear clickable-icon",
         });
         clearButton.setAttribute("type", "button");
-        clearButton.setAttribute("aria-label", "Clear file filters");
-        clearButton.setAttribute("title", "Clear file filters");
-        clearButton.onclick = () => {
-            void this.setIndexFileFilterPaths([]);
+        clearButton.setAttribute("aria-label", `Clear file filter for ${rootFilePath}`);
+        clearButton.setAttribute("title", "Clear file filter");
+        setIcon(clearButton, "x");
+        clearButton.onclick = (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            void this.setIndexFileFilterRootPath(null);
         };
+
+        const linkedFileCount = Math.max(0, filteredIndexFilePaths.length - 1);
+        const summaryEl = filterBar.createDiv("sidenote2-active-file-filter-summary");
+        summaryEl.setText(
+            linkedFileCount > 0
+                ? `+${linkedFileCount} linked file${linkedFileCount === 1 ? "" : "s"}`
+                : "1 file",
+        );
     }
 
     private openIndexFileFilterModal(indexFileFilterOptions: IndexFileFilterOption[]): void {
         new SideNoteFileFilterModal(this.app, {
             availableOptions: indexFileFilterOptions,
-            selectedFilePaths: this.filteredIndexFilePaths,
-            onChangeSelection: async (filePaths) => {
-                await this.setIndexFileFilterPaths(filePaths);
+            selectedRootFilePath: this.selectedIndexFileFilterRootPath,
+            selectedFilePaths: this.indexFileFilterGraph
+                ? getIndexFileFilterConnectedComponent(this.indexFileFilterGraph, this.selectedIndexFileFilterRootPath)
+                : [],
+            onChooseRoot: async (rootFilePath) => {
+                await this.setIndexFileFilterRootPath(rootFilePath);
             },
         }).open();
     }
 
-    private async removeIndexFileFilterPath(filePath: string): Promise<void> {
-        await this.setIndexFileFilterPaths(
-            this.filteredIndexFilePaths.filter((path) => path !== filePath),
-        );
-    }
-
-    private async setIndexFileFilterPaths(filePaths: readonly string[]): Promise<void> {
-        const normalizedPaths = normalizeIndexFileFilterPaths(filePaths);
-        if (arraysEqual(this.filteredIndexFilePaths, normalizedPaths)) {
+    private async setIndexFileFilterRootPath(filePath: string | null): Promise<void> {
+        const normalizedRootPath = normalizeIndexFileFilterRootPath(filePath);
+        if (this.selectedIndexFileFilterRootPath === normalizedRootPath) {
             return;
         }
 
-        this.filteredIndexFilePaths = normalizedPaths;
+        this.selectedIndexFileFilterRootPath = normalizedRootPath;
         await this.renderComments();
     }
 
@@ -619,6 +644,12 @@ export default class SideNote2View extends ItemView {
         },
     ): Promise<void> {
         const thoughtTrailEl = commentsContainer.createDiv("sidenote2-thought-trail");
+        if (!options.hasFileFilter) {
+            const emptyStateEl = thoughtTrailEl.createDiv("sidenote2-empty-state sidenote2-section-empty-state");
+            emptyStateEl.createEl("p", { text: "Use Files to choose a file and see its connected thought trail." });
+            return;
+        }
+
         const thoughtTrailLines = buildThoughtTrailLines(this.app.vault.getName(), comments, {
             allCommentsNotePath: this.plugin.getAllCommentsNotePath(),
             resolveWikiLinkPath: (linkPath, sourceFilePath) => {
@@ -629,13 +660,8 @@ export default class SideNote2View extends ItemView {
 
         if (!thoughtTrailLines.length) {
             const emptyStateEl = thoughtTrailEl.createDiv("sidenote2-empty-state sidenote2-section-empty-state");
-            if (options.hasFileFilter) {
-                emptyStateEl.createEl("p", { text: "No thought trail matches the selected file filter." });
-                emptyStateEl.createEl("p", { text: "Add wiki links in those notes or widen the file filter." });
-            } else {
-                emptyStateEl.createEl("p", { text: "No thought trail yet." });
-                emptyStateEl.createEl("p", { text: "Add wiki links inside side notes to connect files into a trail." });
-            }
+            emptyStateEl.createEl("p", { text: "No thought trail matches the selected file filter." });
+            emptyStateEl.createEl("p", { text: "Add wiki links in those notes or choose a different file." });
             return;
         }
 
@@ -735,7 +761,7 @@ export default class SideNote2View extends ItemView {
         return {
             filePath: this.file ? this.file.path : null,
             indexSidebarMode: this.indexSidebarMode,
-            indexFileFilterPaths: this.filteredIndexFilePaths.slice(),
+            indexFileFilterRootPath: this.selectedIndexFileFilterRootPath,
         };
     }
 

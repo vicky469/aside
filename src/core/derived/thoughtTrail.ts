@@ -8,6 +8,7 @@ const LEGACY_ALL_COMMENTS_NOTE_PATH = "SideNote2 comments.md";
 const MAX_PREVIEW_LENGTH = 80;
 const MAX_EDGE_LABEL_LENGTH = 24;
 const DEFAULT_CONNECTED_CHAIN_DEPTH = 2;
+const THOUGHT_TRAIL_MERMAID_INIT = "%%{init: {\"fontSize\": 12, \"fontFamily\": \"var(--font-interface-theme)\", \"flowchart\": {\"nodeSpacing\": 3, \"rankSpacing\": 5, \"padding\": 1, \"diagramPadding\": 0, \"useMaxWidth\": false, \"htmlLabels\": false}} }%%";
 
 export interface ThoughtTrailBuildOptions {
     allCommentsNotePath?: string;
@@ -232,11 +233,6 @@ export function buildThoughtTrailLines(
     }
 
     const maxDepth = normalizeConnectedChainDepth(options.connectedChainDepth);
-    const lines = [
-        "%%{init: {\"themeVariables\": {\"fontSize\": \"7px\"}, \"flowchart\": {\"nodeSpacing\": 6, \"rankSpacing\": 10, \"diagramPadding\": 1, \"useMaxWidth\": true, \"htmlLabels\": false}} }%%",
-        "```mermaid",
-        "flowchart TD",
-    ];
     const nodeLines: string[] = [];
     const edgeLines: string[] = [];
     const clickLines: string[] = [];
@@ -288,6 +284,11 @@ export function buildThoughtTrailLines(
         renderBranch(rootFilePath, 1, new Set([rootFilePath]));
     }
 
+    const lines = [
+        THOUGHT_TRAIL_MERMAID_INIT,
+        "```mermaid",
+        "flowchart TD",
+    ];
     lines.push(...nodeLines, ...edgeLines, ...clickLines, "```");
     return lines;
 }

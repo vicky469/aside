@@ -3,6 +3,8 @@ import test from "node:test";
 import { buildThoughtTrailLines } from "../src/core/derived/thoughtTrail";
 import type { Comment } from "../src/commentManager";
 
+const THOUGHT_TRAIL_INIT = "%%{init: {\"fontSize\": 12, \"fontFamily\": \"var(--font-interface-theme)\", \"flowchart\": {\"nodeSpacing\": 3, \"rankSpacing\": 5, \"padding\": 1, \"diagramPadding\": 0, \"useMaxWidth\": false, \"htmlLabels\": false}} }%%";
+
 function createComment(overrides: Partial<Comment> = {}): Comment {
     return {
         id: overrides.id ?? "comment-1",
@@ -40,7 +42,7 @@ test("buildThoughtTrailLines renders a mermaid graph from wiki links", () => {
     });
 
     assert.deepEqual(lines, [
-        "%%{init: {\"themeVariables\": {\"fontSize\": \"7px\"}, \"flowchart\": {\"nodeSpacing\": 6, \"rankSpacing\": 10, \"diagramPadding\": 1, \"useMaxWidth\": true, \"htmlLabels\": false}} }%%",
+        THOUGHT_TRAIL_INIT,
         "```mermaid",
         "flowchart TD",
         "    n0[\"file1\"]",
@@ -90,7 +92,7 @@ test("buildThoughtTrailLines marks cycles and avoids duplicate roots", () => {
         resolveWikiLinkPath: (linkPath) => `${linkPath}.md`,
     });
 
-    assert.equal(lines[0], "%%{init: {\"themeVariables\": {\"fontSize\": \"7px\"}, \"flowchart\": {\"nodeSpacing\": 6, \"rankSpacing\": 10, \"diagramPadding\": 1, \"useMaxWidth\": true, \"htmlLabels\": false}} }%%");
+    assert.equal(lines[0], THOUGHT_TRAIL_INIT);
     assert.equal(lines[1], "```mermaid");
     assert.equal(lines[2], "flowchart TD");
     assert.equal(lines.includes("    n0 -->|alpha| n1"), true);
@@ -113,7 +115,7 @@ test("buildThoughtTrailLines uses pn ordinals for page notes", () => {
     });
 
     assert.deepEqual(lines, [
-        "%%{init: {\"themeVariables\": {\"fontSize\": \"7px\"}, \"flowchart\": {\"nodeSpacing\": 6, \"rankSpacing\": 10, \"diagramPadding\": 1, \"useMaxWidth\": true, \"htmlLabels\": false}} }%%",
+        THOUGHT_TRAIL_INIT,
         "```mermaid",
         "flowchart TD",
         "    n0[\"file1\"]",

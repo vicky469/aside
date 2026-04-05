@@ -3,13 +3,16 @@ import {
     getIndexFileFilterFileName,
     getIndexFileFilterSuggestions,
     normalizeIndexFileFilterPaths,
+    getIndexFileFilterLabel,
     type IndexFileFilterOption,
 } from "../views/indexFileFilter";
+import { normalizeIndexFileFilterRootPath } from "../views/viewState";
 
 interface SideNoteFileFilterModalOptions {
     availableOptions: IndexFileFilterOption[];
+    selectedRootFilePath: string | null;
     selectedFilePaths: string[];
-    onChangeSelection: (selectedFilePaths: string[]) => void | Promise<void>;
+    onChooseRoot: (selectedRootFilePath: string | null) => void | Promise<void>;
     onCloseModal?: () => void;
 }
 
@@ -19,50 +22,66 @@ function formatCommentCount(commentCount: number): string {
 
 export default class SideNoteFileFilterModal extends SuggestModal<IndexFileFilterOption> {
     private readonly availableOptions: IndexFileFilterOption[];
+    private readonly selectedRootFilePath: string | null;
     private selectedFilePaths: string[];
-    private readonly onChangeSelection: (selectedFilePaths: string[]) => void | Promise<void>;
+    private readonly onChooseRoot: (selectedRootFilePath: string | null) => void | Promise<void>;
     private readonly onCloseModal?: () => void;
+    private summaryEl: HTMLElement | null = null;
+    private applyingSelection = false;
 
     constructor(app: App, options: SideNoteFileFilterModalOptions) {
         super(app);
         this.availableOptions = options.availableOptions;
+        this.selectedRootFilePath = normalizeIndexFileFilterRootPath(options.selectedRootFilePath);
         this.selectedFilePaths = normalizeIndexFileFilterPaths(options.selectedFilePaths);
-        this.onChangeSelection = options.onChangeSelection;
+        this.onChooseRoot = options.onChooseRoot;
         this.onCloseModal = options.onCloseModal;
 
-        this.limit = Math.max(this.availableOptions.length, 40);
+        this.limit = 40;
         this.setPlaceholder("Search files");
         this.emptyStateText = this.availableOptions.length
-            ? "No matching files with side notes."
+            ? "Search to choose a file."
             : "No files with side notes yet.";
         this.setInstructions([
             { command: "↑↓", purpose: "move" },
-            { command: "Enter", purpose: "toggle" },
+            { command: "Enter", purpose: "select" },
             { command: "Esc", purpose: "close" },
         ]);
     }
 
     onOpen(): void {
         super.onOpen();
-        this.setTitle("Filter by files");
+        this.setTitle("Choose file");
+        this.renderSelectionSummary();
     }
 
     onClose(): void {
         super.onClose();
+        this.summaryEl = null;
         this.onCloseModal?.();
     }
 
     getSuggestions(query: string): IndexFileFilterOption[] {
+        if (!query.trim()) {
+            this.emptyStateText = this.availableOptions.length
+                ? "Search to choose a file."
+                : "No files with side notes yet.";
+            return [];
+        }
+
+        this.emptyStateText = this.availableOptions.length
+            ? "No matching files with side notes."
+            : "No files with side notes yet.";
         return getIndexFileFilterSuggestions(
             this.availableOptions,
             query,
-            this.selectedFilePaths,
+            this.selectedRootFilePath ? [this.selectedRootFilePath] : [],
             this.limit,
         );
     }
 
     renderSuggestion(option: IndexFileFilterOption, el: HTMLElement): void {
-        const isSelected = this.selectedFilePaths.includes(option.filePath);
+        const isSelected = option.filePath === this.selectedRootFilePath;
         el.addClass("sidenote2-file-filter-suggestion");
         if (isSelected) {
             el.addClass("is-selected");
@@ -84,30 +103,51 @@ export default class SideNoteFileFilterModal extends SuggestModal<IndexFileFilte
         }
     }
 
-    public selectSuggestion(value: IndexFileFilterOption, evt: MouseEvent | KeyboardEvent): void {
-        evt.preventDefault();
-        evt.stopPropagation();
-        void this.toggleFile(value.filePath);
+    async onChooseSuggestion(suggestion: IndexFileFilterOption): Promise<void> {
+        await this.chooseRoot(suggestion.filePath);
     }
 
-    async onChooseSuggestion(): Promise<void> {
-        await Promise.resolve();
+    private renderSelectionSummary(): void {
+        this.summaryEl?.remove();
+        this.summaryEl = this.contentEl.createDiv("sidenote2-file-filter-selection-summary");
+
+        const anchorEl = this.inputEl.parentElement ?? this.inputEl;
+        anchorEl.insertAdjacentElement("afterend", this.summaryEl);
+
+        if (!this.selectedRootFilePath || !this.selectedFilePaths.length) {
+            this.summaryEl.createEl("p", {
+                text: "No file selected. Search to choose a file.",
+                cls: "sidenote2-file-filter-selection-note",
+            });
+            return;
+        }
+
+        this.summaryEl.createEl("p", {
+            text: `${this.selectedFilePaths.length} file${this.selectedFilePaths.length === 1 ? "" : "s"} selected`,
+            cls: "sidenote2-file-filter-selection-note",
+        });
+
+        const chipsEl = this.summaryEl.createDiv("sidenote2-file-filter-selection-chips");
+        for (const filePath of this.selectedFilePaths) {
+            const chipEl = chipsEl.createSpan("sidenote2-file-filter-selection-chip");
+            if (filePath === this.selectedRootFilePath) {
+                chipEl.addClass("is-root");
+            }
+            chipEl.setText(getIndexFileFilterLabel(filePath, this.selectedFilePaths));
+        }
     }
 
-    private async toggleFile(filePath: string): Promise<void> {
-        const isSelected = this.selectedFilePaths.includes(filePath);
-        this.selectedFilePaths = isSelected
-            ? this.selectedFilePaths.filter((path) => path !== filePath)
-            : normalizeIndexFileFilterPaths([...this.selectedFilePaths, filePath]);
+    private async chooseRoot(filePath: string | null): Promise<void> {
+        if (this.applyingSelection) {
+            return;
+        }
 
-        await this.onChangeSelection(this.selectedFilePaths.slice());
-        this.refreshSuggestions();
-    }
-
-    private refreshSuggestions(): void {
-        this.inputEl.dispatchEvent(new Event("input"));
-        window.setTimeout(() => {
-            this.inputEl.focus();
-        }, 0);
+        this.applyingSelection = true;
+        try {
+            await this.onChooseRoot(filePath);
+            this.close();
+        } finally {
+            this.applyingSelection = false;
+        }
     }
 }

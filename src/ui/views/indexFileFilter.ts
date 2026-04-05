@@ -5,7 +5,7 @@ export interface IndexFileFilterOption {
     commentCount: number;
 }
 
-function getNormalizedFilterPath(filePath: string): string {
+export function getNormalizedFilterPath(filePath: string): string {
     return filePath.replace(/\\/g, "/").trim();
 }
 
@@ -56,6 +56,12 @@ export function buildIndexFileFilterOptions(comments: Comment[]): IndexFileFilte
         commentCounts.set(filePath, (commentCounts.get(filePath) ?? 0) + 1);
     }
 
+    return buildIndexFileFilterOptionsFromCounts(commentCounts);
+}
+
+export function buildIndexFileFilterOptionsFromCounts(
+    commentCounts: ReadonlyMap<string, number>,
+): IndexFileFilterOption[] {
     return Array.from(commentCounts.entries())
         .map(([filePath, commentCount]) => ({
             filePath,
