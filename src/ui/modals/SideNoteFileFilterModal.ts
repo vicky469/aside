@@ -109,19 +109,15 @@ export default class SideNoteFileFilterModal extends SuggestModal<IndexFileFilte
 
     private renderSelectionSummary(): void {
         this.summaryEl?.remove();
-        this.summaryEl = this.contentEl.createDiv("sidenote2-file-filter-selection-summary");
-
         const anchorEl = this.inputEl.parentElement ?? this.inputEl;
-        anchorEl.insertAdjacentElement("afterend", this.summaryEl);
 
         if (!this.selectedRootFilePath || !this.selectedFilePaths.length) {
-            this.summaryEl.createEl("p", {
-                text: "No file selected. Search to choose a file.",
-                cls: "sidenote2-file-filter-selection-note",
-            });
+            this.summaryEl = null;
             return;
         }
 
+        this.summaryEl = this.contentEl.createDiv("sidenote2-file-filter-selection-summary");
+        anchorEl.insertAdjacentElement("afterend", this.summaryEl);
         this.summaryEl.createEl("p", {
             text: `${this.selectedFilePaths.length} file${this.selectedFilePaths.length === 1 ? "" : "s"} selected`,
             cls: "sidenote2-file-filter-selection-note",

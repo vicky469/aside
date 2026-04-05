@@ -231,15 +231,22 @@
     align-items: center;
     gap: 7px;
     min-height: 28px;
+    margin: 0;
     padding: 4px 8px 4px 7px;
     border: 1px solid var(--background-modifier-border);
     border-radius: 999px;
     background: var(--background-primary);
     color: var(--text-muted);
     font-size: var(--font-ui-small);
+    font-family: inherit;
     line-height: 1.2;
     user-select: none;
     cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+    outline: none;
+    text-decoration: none;
+    box-shadow: none !important;
     transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 
@@ -252,7 +259,7 @@
 .sidenote2-filter-chip:focus-visible {
     outline: none;
     border-color: var(--interactive-accent);
-    box-shadow: 0 0 0 1px var(--interactive-accent-translucent);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--interactive-accent) 20%, transparent);
 }
 
 .sidenote2-filter-chip:disabled {
@@ -264,6 +271,7 @@
     border-color: hsla(var(--interactive-accent-hsl), 0.38);
     background: hsla(var(--interactive-accent-hsl), 0.12);
     color: var(--text-normal);
+    box-shadow: none !important;
 }
 
 .sidenote2-filter-chip-indicator {
