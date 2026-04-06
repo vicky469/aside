@@ -61,9 +61,13 @@ function createHarness(options: {
     let syncIndexNoteViewClassesCount = 0;
     let saveSettingsCount = 0;
     let modifyHandledPath: string | null = null;
+    let ensureSidebarViewCount = 0;
 
     const controller = new PluginLifecycleController({
         app: {} as never,
+        ensureSidebarView: async () => {
+            ensureSidebarViewCount += 1;
+        },
         getCommentManager: () => commentManager,
         getAggregateCommentIndex: () => aggregateCommentIndex,
         clearParsedNoteCache: (filePath) => {
@@ -136,6 +140,7 @@ function createHarness(options: {
         getRefreshAggregateNoteNowCount: () => refreshAggregateNoteNowCount,
         getScheduleAggregateNoteRefreshCount: () => scheduleAggregateNoteRefreshCount,
         getSyncIndexNoteViewClassesCount: () => syncIndexNoteViewClassesCount,
+        getEnsureSidebarViewCount: () => ensureSidebarViewCount,
         getSaveSettingsCount: () => saveSettingsCount,
         getModifyHandledPath: () => modifyHandledPath,
     };
@@ -146,6 +151,7 @@ test("plugin lifecycle controller handles layout ready by refreshing views and s
 
     await harness.controller.handleLayoutReady();
 
+    assert.equal(harness.getEnsureSidebarViewCount(), 1);
     assert.equal(harness.getRefreshCommentViewsCount(), 1);
     assert.equal(harness.getRefreshEditorDecorationsCount(), 1);
     assert.equal(harness.getScheduleAggregateNoteRefreshCount(), 1);

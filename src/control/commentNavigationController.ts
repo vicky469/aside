@@ -172,6 +172,13 @@ export class CommentNavigationController {
         await this.activateSidebarView({ skipViewUpdate });
     }
 
+    public async ensureSidebarView(skipViewUpdate = false): Promise<void> {
+        await this.activateSidebarView({
+            skipViewUpdate,
+            revealLeaf: false,
+        });
+    }
+
     public async activateViewAndHighlightComment(commentId: string): Promise<void> {
         const comment = this.getKnownOrDraftComment(commentId);
         await this.activateViewAndHighlightCommentForFile(commentId, comment?.filePath ?? null);

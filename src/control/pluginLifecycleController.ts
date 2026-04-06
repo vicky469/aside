@@ -4,6 +4,7 @@ import type { AggregateCommentIndex } from "../index/AggregateCommentIndex";
 
 export interface PluginLifecycleHost {
     app: Plugin["app"];
+    ensureSidebarView(): Promise<void>;
     getCommentManager(): CommentManager;
     getAggregateCommentIndex(): AggregateCommentIndex;
     clearParsedNoteCache(filePath: string): void;
@@ -30,6 +31,7 @@ export class PluginLifecycleController {
     constructor(private readonly host: PluginLifecycleHost) {}
 
     public async handleLayoutReady(): Promise<void> {
+        await this.host.ensureSidebarView();
         await this.host.refreshCommentViews();
         this.host.refreshEditorDecorations();
         this.host.scheduleAggregateNoteRefresh();

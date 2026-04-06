@@ -179,6 +179,7 @@ export default class SideNote2 extends Plugin {
     });
     private readonly pluginLifecycleController = new PluginLifecycleController({
         app: this.app,
+        ensureSidebarView: () => this.commentNavigationController.ensureSidebarView(),
         getCommentManager: () => this.commentManager,
         getAggregateCommentIndex: () => this.aggregateCommentIndex,
         clearParsedNoteCache: (filePath) => this.clearParsedNoteCache(filePath),
@@ -267,9 +268,13 @@ export default class SideNote2 extends Plugin {
 
         // Also highlight commented text inside rendered Markdown (Live Preview/Reading view)
         this.commentHighlightController.registerMarkdownPreviewHighlights(this);
-        this.app.workspace.onLayoutReady(async () => {
+        if (this.app.workspace.layoutReady) {
             await this.pluginLifecycleController.handleLayoutReady();
-        });
+        } else {
+            this.app.workspace.onLayoutReady(async () => {
+                await this.pluginLifecycleController.handleLayoutReady();
+            });
+        }
 
         this.pluginRegistrationController.register();
 
@@ -593,15 +598,7 @@ export default class SideNote2 extends Plugin {
         await this.commentNavigationController.activateView(skipViewUpdate);
     }
 
-    async openIndexNote() {
-        await this.refreshAggregateNoteNow();
-
-        const indexFilePath = this.getAllCommentsNotePath();
-        if (!this.workspaceViewController.getMarkdownFileByPath(indexFilePath)) {
-            new Notice(`Unable to open ${indexFilePath}.`);
-            return;
-        }
-
+    private getPreferredMarkdownLeafByPath(filePath: string): WorkspaceLeaf | null {
         const workspace = this.app.workspace;
         const activeLeaf = workspace.activeLeaf;
         const recentLeaf = workspace.getMostRecentLeaf(workspace.rootSplit);
@@ -621,13 +618,32 @@ export default class SideNote2 extends Plugin {
             });
         });
 
-        const existingLeaf = pickPreferredFileLeafCandidate(candidates, indexFilePath);
-        if (existingLeaf && existingLeaf.view instanceof MarkdownView && existingLeaf.view.file?.path === indexFilePath) {
-            workspace.setActiveLeaf(existingLeaf, { focus: true });
+        return pickPreferredFileLeafCandidate(candidates, filePath);
+    }
+
+    async openIndexNote() {
+        await this.refreshAggregateNoteNow();
+
+        const indexFilePath = this.getAllCommentsNotePath();
+        if (!this.workspaceViewController.getMarkdownFileByPath(indexFilePath)) {
+            new Notice(`Unable to open ${indexFilePath}.`);
             return;
         }
 
-        await this.app.workspace.openLinkText(indexFilePath, "", "tab");
+        const workspace = this.app.workspace;
+        let indexLeaf = this.getPreferredMarkdownLeafByPath(indexFilePath);
+        if (indexLeaf && indexLeaf.view instanceof MarkdownView && indexLeaf.view.file?.path === indexFilePath) {
+            workspace.setActiveLeaf(indexLeaf, { focus: true });
+        } else {
+            await workspace.openLinkText(indexFilePath, "", "tab");
+            indexLeaf = this.getPreferredMarkdownLeafByPath(indexFilePath);
+        }
+
+        await this.commentNavigationController.activateView(false);
+
+        if (indexLeaf && indexLeaf.view instanceof MarkdownView && indexLeaf.view.file?.path === indexFilePath) {
+            workspace.setActiveLeaf(indexLeaf, { focus: true });
+        }
     }
 
     async addComment(newComment: Comment): Promise<boolean> {
