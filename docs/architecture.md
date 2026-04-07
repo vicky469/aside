@@ -110,6 +110,7 @@ That means most bugs reduce to one of three questions:
     "endChar": 20,
     "selectedText": "Cross-Section ",
     "selectedTextHash": "964144fee0c5a203693674a98b75f471c7cf4e71ff06faa5999aff516b0aa326",
+    "resolved": true,
     "entries": [
       {
         "id": "8cc93bfb-ac20-4069-b430-57896f23393e",
