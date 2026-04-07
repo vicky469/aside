@@ -90,6 +90,67 @@ SIDENOTE2_HOT_RELOAD=0 npm run dev
 - `npm version patch|minor|major` updates `package.json`, `manifest.json`, `versions.json`, and the README beta badge together for a release bump.
 - The test suite covers the note-backed comment lifecycle, comment retargeting and pruning, JSON storage updates, aggregate note generation, and the parsed-note cache plus aggregate index behavior.
 
+## Linux Sandbox Troubleshooting
+
+On Ubuntu 24.04 and similar Linux hosts, Codex may fail to start sandboxed commands with a message like:
+
+```text
+Reason: command failed; retry without sandbox?
+```
+
+For this repo, that failure was not caused by SideNote2 vault permissions. The actual problem was host AppArmor policy blocking the Codex Linux sandbox from creating unprivileged user namespaces.
+
+Quick checks:
+
+```bash
+unshare -Ur true
+unshare -Urn true
+```
+
+If either command fails with `Operation not permitted`, check these host prerequisites:
+
+- `uidmap` is installed so `newuidmap` and `newgidmap` exist
+- AppArmor is not blocking unprivileged user namespaces for the Codex sandbox binary
+
+Install the namespace mapping helpers:
+
+```bash
+sudo apt update
+sudo apt install -y uidmap
+```
+
+Temporary diagnostic workaround:
+
+```bash
+sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+```
+
+Preferred long-term fix: add a targeted AppArmor profile for the current Codex sandbox binary and then restore:
+
+```bash
+sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=1
+```
+
+Profile shape used by Ubuntu 24.04:
+
+```text
+abi <abi/4.0>,
+include <tunables/global>
+
+profile codex-linux-san /absolute/path/to/codex flags=(unconfined) {
+  userns,
+  include if exists <local/codex-linux-san>
+}
+```
+
+On the DGX Spark setup used during development, the active Codex binary path was:
+
+```text
+/home/bun/.nvm/versions/node/v24.13.1/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-arm64/vendor/aarch64-unknown-linux-musl/codex/codex
+```
+
+After loading the profile, restart the Codex session and re-run the `unshare` checks above.
+
 ## Local Install
 
 On a fresh machine, identify the actual vault you want to run against before linking the plugin.
