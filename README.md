@@ -3,8 +3,8 @@
   <img src="./logo-readme.svg" alt="SideNote2 logo" width="72">
 </p>
 <p align="center">
-  <a href="https://github.com/vicky469/SideNote2/releases/tag/1.0.39">
-    <img src="https://img.shields.io/badge/beta-1.0.39-f97316?style=flat-square" alt="Current beta">
+  <a href="https://github.com/vicky469/SideNote2/releases/tag/2.0.0">
+    <img src="https://img.shields.io/badge/beta-2.0.0-f97316?style=flat-square" alt="Current beta">
   </a>
   <a href="./docs/README-dev.md">
     <img src="https://img.shields.io/badge/docs-dev%20notes-0f766e?style=flat-square" alt="Dev docs">
@@ -136,15 +136,13 @@ Setup, local vault install, debugging, and architecture notes live in [README-de
 
 ## Changelog
 
-### Breaking change: legacy flat note comments must be migrated
+### 2.0.0 - 2026-04-06
 
-SideNote2 now expects threaded note-backed comments with `entries` instead of the older flat top-level `comment` payload.
-
-If Codex CLI or Claude Code opens an older note, tell it:
-
-```text
-Use the side-note2-note-comments skill to migrate legacy flat notes.
-```
+- Breaking: SideNote2 now reads threaded note-backed comments with `entries[]`. Legacy flat `comment` payloads are not loaded by the current parser, so older notes must be migrated before those comments will appear in the sidebar, index, or agent workflows.
+- Migration path: run `npm run comment:migrate-legacy -- --root "/abs/path/to/vault" --dry-run`, then rerun without `--dry-run` once the results look correct. If Obsidian Sync is active, add `-- --settle-ms 2000`.
+- Added append-to-thread comment helpers for agents and repo automation via `npm run comment:append` and `scripts/append-note-comment-entry.mjs`.
+- Improved note comment rendering and index workflows, including safer CLI writes, better index sidebar behavior, and page-note previews in the generated index note.
+- Added `npm run review:bundle` for read-only isolated review snapshots.
 
 ## License
 
