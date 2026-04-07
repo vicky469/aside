@@ -9,10 +9,11 @@
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
 		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+		"comment:migrate-legacy": "node bin/sidenote2.mjs comment:migrate-legacy",
 		"comment:update": "node bin/sidenote2.mjs comment:update",
 		"fixture:graph-1000": "node scripts/generate-large-graph-fixture.mjs",
 		"skill:install": "node bin/sidenote2.mjs install-skill",
-		"test": "rm -rf .test-dist && tsc -p tsconfig.test.json && find .test-dist/tests -type f -name '*.test.js' -exec node --test {} +",
+		"test": "rm -rf .test-dist && tsc -p tsconfig.test.json && find .test-dist/tests -type f -name '*.test.js' -exec node --test {} + && find tests -type f -name '*.test.mjs' -exec node --test {} +",
 		"release:check": "npm run test && npm run build",
 		"version": "node version-bump.mjs && git add manifest.json versions.json README.md"
 	},

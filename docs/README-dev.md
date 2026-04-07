@@ -27,8 +27,8 @@ See [feature-map.canvas](./feature-map.canvas) for the feature-first overview.
 
 Each note stores comments in a trailing hidden `<!-- SideNote2 comments -->` block:
 
-````md
-````
+``` 
+```
 
 The stored payload includes coordinates and a text hash so anchors can be re-matched after edits. The block is hidden in Reading view, but still present in raw markdown for source-mode workflows and LLM ingestion.
 
@@ -70,6 +70,7 @@ npm run dev
 - `npm run dev` now does two things in development:
   - watches and rebuilds `main.js`
   - reloads the `side-note2` plugin through the Obsidian CLI after each successful rebuild
+- Open Obsidian on the target vault before starting `npm run dev`. Hot reload can only reload a plugin inside a running vault.
 - This matters because Obsidian runs `main.js`, not `src/*.ts`. A source edit is not live until the bundle is rebuilt and the plugin instance is reloaded.
 - If you want watch mode without automatic plugin reload, run:
 
@@ -80,17 +81,43 @@ SIDENOTE2_HOT_RELOAD=0 npm run dev
 - `npm run build` creates a production bundle.
 - `npm test` runs the Node test suite.
 - `npm run skill:install` copies the packaged SideNote2 Codex skills into the default Codex skills directory. By default it installs every bundled skill under `skills/`; pass `-- --name <skill-name>` to install just one. This matches the end-user install flow.
+- `npm run comment:migrate-legacy -- --file "/abs/path/note.md" --dry-run` verifies whether a note still uses the legacy flat `comment` payload and rewrites it to threaded storage when rerun without `--dry-run`.
+- `npm run comment:migrate-legacy -- --root "/abs/path/to/vault" --dry-run` scans a whole vault for legacy flat note comments and rewrites every matching note when rerun without `--dry-run`.
 - `npm run comment:update -- --file "/abs/path/note.md" --id "<comment-id>" --comment-file "/abs/path/comment.md"` updates one stored comment body using the same managed block format as the plugin.
+- `comment:migrate-legacy` and `comment:update` now write atomically and refuse to overwrite a note if it changed after the script first read it. If Obsidian Sync or another editor is active, pass `-- --settle-ms 2000` to require a short quiet window before each write, then rerun any skipped notes after Sync settles. Treat skipped-note runs as partial success and retry them instead of hand-editing the managed JSON.
 - `npm version patch|minor|major` updates `package.json`, `manifest.json`, `versions.json`, and the README beta badge together for a release bump.
 - The test suite covers the note-backed comment lifecycle, comment retargeting and pruning, JSON storage updates, aggregate note generation, and the parsed-note cache plus aggregate index behavior.
 
 The canonical repo skills live under `skills/`.
-When Codex is working in this repo, use the relevant repo-local skill directly. There is no separate sync or link step for development.
-Use `npm run skill:install` only when you want to test the user-style global Codex skill install flow on this machine.
+Use these repo-local skill entry points during development:
+
+- `skills/dev/obsidian-plugin-dev/SKILL.md`
+  Use for general Obsidian plugin repo, API, UI, build, and release work.
+- `skills/side-note2-note-comments/SKILL.md`
+  Use for reading or editing real SideNote2-backed notes in the vault.
+
+When Codex is working in this repo, use the relevant repo-local skill directly. There is no separate sync or link step for day-to-day development.
+If you want to test the global Codex install flow on this machine, run `npm run skill:install` or `npm run skill:install -- --name obsidian-plugin-dev`.
+
+Claude Code should use the same repo-local `SKILL.md` files as the canonical source.
+Do not keep a separate Claude-only copy of the same skill text unless the workflows genuinely diverge.
 
 For user or agent comment edits outside the UI, find the target `id` in the trailing `<!-- SideNote2 comments -->` block in source mode, then run the helper script instead of hand-editing escaped JSON.
+If that block still uses legacy top-level `comment` fields instead of `entries`, run `npm run comment:migrate-legacy -- --file "/abs/path/note.md" --dry-run` first, then rerun without `--dry-run` before updating any comment bodies.
+If the repo is nested inside a larger Obsidian vault, resolve the real vault root from Obsidian state first, then use `npm run comment:migrate-legacy -- --root "/abs/path/to/vault" --dry-run` for vault-wide discovery.
+If Sync is actively reconciling the vault, prefer `npm run comment:migrate-legacy -- --root "/abs/path/to/vault" --settle-ms 2000` and rerun any notes the script skips because they changed mid-run.
 
 ## Local Install
+
+On a fresh machine, identify the actual vault you want to run against before linking the plugin.
+The vault is often not the repo root.
+
+```bash
+obsidian vaults verbose
+obsidian vault info=path
+```
+
+If the repo lives inside a larger Obsidian vault, use that outer vault path for `VAULT`.
 
 Install the plugin into your vault with:
 
@@ -102,10 +129,29 @@ PLUGIN_DIR="$VAULT/.obsidian/plugins/$PLUGIN_ID"
 
 mkdir -p "$VAULT/.obsidian/plugins"
 if [ -L "$PLUGIN_DIR" ]; then rm "$PLUGIN_DIR"; fi
+if [ -e "$PLUGIN_DIR" ] && [ ! -L "$PLUGIN_DIR" ]; then mv "$PLUGIN_DIR" "$PLUGIN_DIR.backup.$(date +%Y%m%d-%H%M%S)"; fi
 ln -s "$REPO" "$PLUGIN_DIR"
 ```
 
 Then open that vault in Obsidian and enable `SideNote2` under community plugins.
+If you prefer the CLI:
+
+```bash
+obsidian plugin:enable id=side-note2 vault="<vault-name>"
+```
+
+The plugin installs as a symlink on purpose. `npm run dev` rebuilds `main.js` in the repo root, and Obsidian should load that same checkout rather than a copied plugin folder.
+
+## Open The View
+
+After enabling the plugin, click the SideNote2 ribbon icon labeled `Open SideNote2 index`.
+That opens the index note and ensures the right-sidebar SideNote2 view exists.
+
+If you want a console fallback in DevTools:
+
+```js
+await app.plugins.plugins["side-note2"].activateView(false);
+```
 
 ## Reload
 
@@ -116,7 +162,7 @@ If Obsidian still feels stale during development, reload the plugin manually.
 - Preferred CLI path:
 
 ```bash
-obsidian plugin:reload id=side-note2
+obsidian plugin:reload id=side-note2 vault="<vault-name>"
 ```
 
 - DevTools fallback:
@@ -140,19 +186,3 @@ Inspect:
 window.__SIDENOTE2_DEBUG__;
 window.__SIDENOTE2_DEBUG_STORE__;
 ```
-
-<!-- SideNote2 comments
-[
-  {
-    "id": "comment-1",
-    "startLine": 83,
-    "startChar": 107,
-    "endLine": 83,
-    "endChar": 111,
-    "selectedText": "beta",
-    "selectedTextHash": "sha256...",
-    "comment": "Keep this compact.",
-    "timestamp": 1710000000000
-  }
-]
--->

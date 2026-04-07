@@ -28,9 +28,15 @@ Use one of these two paths to locate the side comment that should be replaced:
 ## Finding Notes
 
 1. Prefer an explicit absolute path from the user.
-2. If the user gives only a note title or fragment, search the vault for matching `.md` files.
-3. Treat the markdown note itself as the source of truth.
-4. Do not rely on the Obsidian UI state alone when the note file can be read directly.
+2. Resolve the actual Obsidian vault root before searching broadly.
+   - Do not assume the plugin repo root is the vault root.
+   - If Obsidian CLI is available, check `obsidian vaults verbose` to map vault names to paths.
+   - Check `~/.config/obsidian/obsidian.json` for vault entries marked `"open": true` when you need the vault(s) currently open in Obsidian.
+   - Check `<vault>/.obsidian/workspace.json` for the current workspace state, active leaves, and recent files when you need the note the user is actively working in.
+   - If the repo is nested inside a larger vault, search the outer vault root for notes and keep the repo root only for helper scripts.
+3. If the user gives only a note title or fragment, search the resolved vault root for matching `.md` files.
+4. Treat the markdown note itself as the source of truth.
+5. Do not rely on the Obsidian UI state alone when the note file can be read directly.
 
 ## Reading Workflow
 
@@ -69,20 +75,44 @@ If the user asks to edit a stored SideNote2 comment:
    - Natural-language requests such as `Update the side comment for "selected text" in "/path/to/note.md" to: ...` should be interpreted as a `selectedText`-based replacement request.
    - If `id` is not provided, match by `selectedText` and surrounding note context.
    - If multiple stored comments in the same note share the same `selectedText`, ask for more context or use the `id`.
-5. Prefer the helper script from the repo root:
+5. If the stored payload uses legacy flat comments with top-level `comment` fields instead of `entries`, migrate the note before any edit.
+   - For one note:
 
 ```bash
-sidenote2 comment:update --file "/abs/path/to/note.md" --id "<comment-id>" --comment-file "/abs/path/to/comment.md"
+cd "/abs/path/to/SideNote2"
+node scripts/migrate-legacy-note-comments.mjs --file "/abs/path/to/note.md" --dry-run
+node scripts/migrate-legacy-note-comments.mjs --file "/abs/path/to/note.md"
+```
+
+   - For a whole vault after resolving the true vault root:
+
+```bash
+cd "/abs/path/to/SideNote2"
+node scripts/migrate-legacy-note-comments.mjs --root "/abs/path/to/vault" --dry-run
+node scripts/migrate-legacy-note-comments.mjs --root "/abs/path/to/vault"
+```
+
+   - If Obsidian Sync or another editor may still be touching the vault, add `--settle-ms 2000`.
+   - If the script reports skipped notes because they changed during the run, do not hand-merge the managed block. Wait for Sync to settle and rerun the same command. Treat that run as partial success, not completion.
+
+6. Prefer the helper script from the repo root:
+
+```bash
+cd "/abs/path/to/SideNote2"
+node scripts/update-note-comment.mjs --file "/abs/path/to/note.md" --id "<comment-id>" --comment-file "/abs/path/to/comment.md"
 ```
 
 Short replacements can use `--comment "New body"` instead of `--comment-file`.
+If Sync is active, add `--settle-ms 2000` here too so the script skips notes that changed after it read them instead of overwriting them.
 
-6. If the note is outside the writable workspace, request escalation before running the script.
-7. Verify the note still contains exactly one managed block and that only the target `comment` field changed.
+7. If the note is outside the writable workspace, request escalation before running the script.
+8. Verify the note still contains exactly one managed block and that only the target comment thread or entry body changed.
 
 ## Important Details
 
 - SideNote2 stores comments as strict JSON in the trailing hidden block.
+- Legacy notes may still use one flat object per comment with a top-level `comment` field. Migrate those notes with the helper script before editing them.
+- The helper scripts write atomically and skip notes that changed after the initial read. Treat a skipped note as a retry case, not as a signal to hand-edit the managed JSON.
 - Multiline comment bodies must stay JSON-escaped in source; do not paste raw block text into the JSON string by hand unless necessary.
 - The note itself is the source of truth. Sidebar state and aggregate views are derived from the note.
 - `SideNote2 index.md` is generated output, not canonical storage.
@@ -92,5 +122,7 @@ Short replacements can use `--comment "New body"` instead of `--comment-file`.
 If the helper script cannot be used:
 
 1. Edit the source-mode block directly.
-2. Preserve `id`, anchor coordinates, `selectedText`, `selectedTextHash`, `timestamp`, and `resolved`.
-3. Change only the `comment` value.
+2. Preserve `id`, anchor coordinates, `selectedText`, `selectedTextHash`, timestamps, and `resolved`.
+3. Change only the target body field:
+   - legacy flat payloads: `comment`
+   - threaded payloads: the target `entries[*].body`

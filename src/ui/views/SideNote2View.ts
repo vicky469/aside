@@ -1,5 +1,7 @@
 import { ItemView, MarkdownRenderer, TFile, WorkspaceLeaf, loadMermaid, setIcon, type ViewStateResult } from "obsidian";
-import type { Comment } from "../../commentManager";
+import type { Comment, CommentThread } from "../../commentManager";
+import { threadToComment } from "../../commentManager";
+import { compareCommentsForSidebarOrder } from "../../core/anchors/commentSectionOrder";
 import {
     buildIndexFileFilterGraph,
     type IndexFileFilterGraph,
@@ -16,7 +18,7 @@ import SideNoteFileFilterModal from "../modals/SideNoteFileFilterModal";
 import SideNoteLinkSuggestModal from "../modals/SideNoteLinkSuggestModal";
 import SideNoteTagSuggestModal from "../modals/SideNoteTagSuggestModal";
 import { SIDE_NOTE2_ICON_ID } from "../sideNote2Icon";
-import { SidebarDraftEditorController, getSidebarComments } from "./sidebarDraftEditor";
+import { SidebarDraftEditorController } from "./sidebarDraftEditor";
 import { renderDraftCommentCard } from "./sidebarDraftComment";
 import {
     buildIndexFileFilterOptionsFromCounts,
@@ -32,6 +34,11 @@ import { SidebarInteractionController } from "./sidebarInteractionController";
 import { renderPersistedCommentCard } from "./sidebarPersistedComment";
 import { extractThoughtTrailClickTargets, parseThoughtTrailOpenFilePath, resolveThoughtTrailNodeId } from "./thoughtTrailNodeLinks";
 import {
+    scopeIndexThreadsByFilePaths,
+    shouldShowResolvedIndexEmptyState,
+    shouldShowResolvedToolbarChip,
+} from "./indexSidebarState";
+import {
     normalizeIndexFileFilterRootPath,
     resolveIndexFileFilterRootPathFromState,
     type CustomViewState,
@@ -40,6 +47,22 @@ import {
 
 function isDraftComment(comment: Comment | DraftComment): comment is DraftComment {
     return "mode" in comment;
+}
+
+type SidebarRenderableItem =
+    | { kind: "thread"; thread: CommentThread }
+    | { kind: "draft"; draft: DraftComment };
+
+function matchesResolvedVisibility(resolved: boolean | undefined, showResolved: boolean): boolean {
+    return showResolved ? resolved === true : resolved !== true;
+}
+
+function sortRenderableItems(items: SidebarRenderableItem[]): SidebarRenderableItem[] {
+    return items.slice().sort((left, right) => {
+        const leftComment = left.kind === "thread" ? threadToComment(left.thread) : left.draft;
+        const rightComment = right.kind === "thread" ? threadToComment(right.thread) : right.draft;
+        return compareCommentsForSidebarOrder(leftComment, rightComment);
+    });
 }
 
 function parseIndexSidebarMode(value: unknown): IndexSidebarMode | null {
@@ -203,8 +226,13 @@ export default class SideNote2View extends ItemView {
             const persistedComments = isAllCommentsView
                 ? this.plugin.getAllIndexedComments()
                 : this.plugin.commentManager.getCommentsForFile(file.path);
+            const persistedThreads = isAllCommentsView
+                ? this.plugin.getAllIndexedThreads()
+                : this.plugin.getThreadsForFile(file.path);
             const showResolved = this.plugin.shouldShowResolvedComments();
             const visiblePersistedComments = filterCommentsByResolvedVisibility(persistedComments, showResolved);
+            const visiblePersistedThreads = persistedThreads.filter((thread) =>
+                matchesResolvedVisibility(thread.resolved, showResolved));
             const indexFileFilterGraph = isAllCommentsView
                 ? buildIndexFileFilterGraph(persistedComments, {
                     allCommentsNotePath: this.plugin.getAllCommentsNotePath(),
@@ -240,28 +268,42 @@ export default class SideNote2View extends ItemView {
             const scopedVisibleComments = isAllCommentsView
                 ? filterCommentsByFilePaths(visiblePersistedComments, filteredIndexFilePaths)
                 : visiblePersistedComments;
-            const resolvedScopedComments = isAllCommentsView
-                ? filterCommentsByFilePaths(persistedComments, filteredIndexFilePaths)
-                : persistedComments;
+            const {
+                scopedVisibleThreads,
+                scopedAllThreads,
+            } = isAllCommentsView
+                ? scopeIndexThreadsByFilePaths(visiblePersistedThreads, persistedThreads, filteredIndexFilePaths)
+                : {
+                    scopedVisibleThreads: visiblePersistedThreads,
+                    scopedAllThreads: persistedThreads,
+                };
             const draftComment = this.plugin.getDraftForView(file.path);
-            const totalScopedCount = scopedVisibleComments.length;
-            const resolvedCount = resolvedScopedComments.filter((comment) => comment.resolved).length;
+            const visibleDraftComment = draftComment
+                && matchesResolvedVisibility(draftComment.resolved, showResolved)
+                && (!filteredIndexFilePaths.length || filteredIndexFilePaths.includes(draftComment.filePath))
+                ? draftComment
+                : null;
+            const totalScopedCount = scopedAllThreads.length;
+            const resolvedCount = scopedAllThreads.filter((thread) => thread.resolved).length;
             const hasResolvedComments = resolvedCount > 0;
-            const commentsForFile = getSidebarComments(
-                persistedComments,
-                draftComment,
-                showResolved,
-                filteredIndexFilePaths,
+            const replacedThreadId = visibleDraftComment?.mode === "edit"
+                ? (visibleDraftComment.threadId ?? visibleDraftComment.id)
+                : null;
+            const renderableItems = sortRenderableItems(
+                scopedVisibleThreads
+                    .filter((thread) => thread.id !== replacedThreadId)
+                    .map((thread) => ({ kind: "thread", thread } as SidebarRenderableItem))
+                    .concat(visibleDraftComment ? [{ kind: "draft", draft: visibleDraftComment }] : []),
             );
             const limitedComments = isAllCommentsView
                 && this.indexSidebarMode === "list"
                 && shouldLimitIndexSidebarList(selectedIndexFileFilterRootPath)
-                ? limitIndexSidebarListItems(commentsForFile)
+                ? limitIndexSidebarListItems(renderableItems)
                 : {
-                    visibleItems: commentsForFile.slice(),
+                    visibleItems: renderableItems.slice(),
                     hiddenCount: 0,
                 };
-            const renderedComments = limitedComments.visibleItems;
+            const renderedItems = limitedComments.visibleItems;
             const commentsContainer = this.containerEl.createDiv("sidenote2-comments-container");
 
             this.renderSidebarToolbar(commentsContainer, {
@@ -296,20 +338,19 @@ export default class SideNote2View extends ItemView {
                     ? {
                         icon: "plus",
                         ariaLabel: "Add page side note",
-                        title: "Add page side note",
                         onClick: () => {
                             void this.plugin.startPageCommentDraft(file);
                         },
                     }
                     : undefined,
             );
-            const renderPromises = renderedComments.map(async (comment) => {
-                if (isDraftComment(comment)) {
-                    this.renderDraftComment(commentsBody, comment);
+            const renderPromises = renderedItems.map(async (item) => {
+                if (item.kind === "draft") {
+                    this.renderDraftComment(commentsBody, item.draft);
                     return;
                 }
 
-                await this.renderPersistedComment(commentsBody, comment);
+                await this.renderPersistedComment(commentsBody, item.thread);
             });
             await Promise.all(renderPromises);
 
@@ -323,10 +364,10 @@ export default class SideNote2View extends ItemView {
                 });
             }
 
-            if (renderedComments.length === 0) {
+            if (renderedItems.length === 0) {
                 if (isAllCommentsView) {
                     const emptyStateEl = commentsBody.createDiv("sidenote2-empty-state sidenote2-section-empty-state");
-                    if (showResolved && totalScopedCount > 0) {
+                    if (shouldShowResolvedIndexEmptyState(showResolved, totalScopedCount, renderedItems.length)) {
                         emptyStateEl.createEl("p", { text: "No resolved side notes match the current index view." });
                         emptyStateEl.createEl("p", { text: "Turn off Resolved to return to active side notes." });
                     } else if (filteredIndexFilePaths.length) {
@@ -395,7 +436,7 @@ export default class SideNote2View extends ItemView {
             });
         }
 
-        if (!options.hasResolvedComments) {
+        if (!shouldShowResolvedToolbarChip(options.hasResolvedComments, showResolved)) {
             return;
         }
 
@@ -544,7 +585,6 @@ export default class SideNote2View extends ItemView {
         });
         clearButton.setAttribute("type", "button");
         clearButton.setAttribute("aria-label", `Clear file filter for ${rootFilePath}`);
-        clearButton.setAttribute("title", "Clear file filter");
         setIcon(clearButton, "x");
         clearButton.onclick = (event) => {
             event.preventDefault();
@@ -596,18 +636,16 @@ export default class SideNote2View extends ItemView {
         action?: {
             icon: string;
             ariaLabel: string;
-            title: string;
             onClick: () => void;
         },
     ): HTMLDivElement {
         if (action) {
             const actionsRow = container.createDiv("sidenote2-comments-list-actions");
             const actionButton = actionsRow.createEl("button", {
-                cls: "sidenote2-comment-section-add-button",
+                cls: "clickable-icon sidenote2-comment-section-add-button",
             });
             actionButton.setAttribute("type", "button");
             actionButton.setAttribute("aria-label", action.ariaLabel);
-            actionButton.setAttribute("title", action.title);
             setIcon(actionButton, action.icon);
             actionButton.onclick = (event) => {
                 event.stopPropagation();
@@ -618,11 +656,11 @@ export default class SideNote2View extends ItemView {
         return container.createDiv("sidenote2-comments-list");
     }
 
-    private async renderPersistedComment(commentsContainer: HTMLDivElement, comment: Comment) {
+    private async renderPersistedComment(commentsContainer: HTMLDivElement, thread: CommentThread) {
         const currentFilePath = this.file?.path ?? null;
         const isIndexView = !!currentFilePath && this.plugin.isAllCommentsNotePath(currentFilePath);
 
-        await renderPersistedCommentCard(commentsContainer, comment, {
+        await renderPersistedCommentCard(commentsContainer, thread, {
             activeCommentId: this.interactionController.getActiveCommentId(),
             currentFilePath,
             showSourceRedirectAction: isIndexView,
@@ -652,6 +690,9 @@ export default class SideNote2View extends ItemView {
             },
             startEditDraft: (commentId, hostFilePath) => {
                 void this.plugin.startEditDraft(commentId, hostFilePath);
+            },
+            startAppendEntryDraft: (commentId, hostFilePath) => {
+                void this.plugin.startAppendEntryDraft(commentId, hostFilePath);
             },
             deleteCommentWithConfirm: (commentId) => {
                 void this.deleteCommentWithConfirm(commentId);

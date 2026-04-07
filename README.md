@@ -134,6 +134,18 @@ The JSON block is stored in plugin data.
 
 Setup, local vault install, debugging, and architecture notes live in [README-dev.md](./docs/README-dev.md).
 
+## Changelog
+
+### Breaking change: legacy flat note comments must be migrated
+
+SideNote2 now expects threaded note-backed comments with `entries` instead of the older flat top-level `comment` payload.
+
+If Codex CLI or Claude Code opens an older note, tell it:
+
+```text
+Use the side-note2-note-comments skill to migrate legacy flat notes.
+```
+
 ## License
 
 MIT

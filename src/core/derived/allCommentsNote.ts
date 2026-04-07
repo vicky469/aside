@@ -10,6 +10,7 @@ export const ALL_COMMENTS_NOTE_IMAGE_URL = "https://ichef.bbci.co.uk/images/ic/1
 export const ALL_COMMENTS_NOTE_IMAGE_CAPTION = "Relativity (Credit: 2015 The M.C. Escher Company - Baarn, The Netherlands)";
 export const ALL_COMMENTS_NOTE_IMAGE_ALT = "SideNote2 index header image";
 const MAX_PREVIEW_LENGTH = 80;
+const PAGE_NOTE_LABEL_WORD_LIMIT = 10;
 
 export interface CommentLocationTarget {
     filePath: string;
@@ -131,14 +132,24 @@ function getFolderPath(filePath: string): string {
     return pathSegments.join("/");
 }
 
-function formatPageNoteLabel(pageNoteOrdinal?: number): string {
-    return pageNoteOrdinal ? `pn${pageNoteOrdinal}` : "pn";
+function toWordPreview(value: string, maxWords: number): string {
+    const normalized = value.replace(/\r\n/g, "\n").replace(/\s+/g, " ").trim();
+    if (!normalized) {
+        return "";
+    }
+
+    const words = normalized.split(/\s+/);
+    if (words.length <= maxWords) {
+        return normalized;
+    }
+
+    return `${words.slice(0, maxWords).join(" ")}...`;
 }
 
-function getCommentLinkLabelText(comment: Comment, pageNoteOrdinal?: number): string {
+function getCommentLinkLabelText(comment: Comment): string {
     const selectedPreview = toInlinePreview(getCommentSelectionLabel(comment));
     if (isPageComment(comment)) {
-        return formatPageNoteLabel(pageNoteOrdinal);
+        return toWordPreview(comment.comment ?? "", PAGE_NOTE_LABEL_WORD_LIMIT) || selectedPreview;
     }
 
     return isAnchoredComment(comment)
@@ -146,8 +157,8 @@ function getCommentLinkLabelText(comment: Comment, pageNoteOrdinal?: number): st
         : `${getCommentStatusLabel(comment)} · ${selectedPreview}`;
 }
 
-function formatCommentLinkLabel(comment: Comment, pageNoteOrdinal?: number): string {
-    const escapedLabel = escapeMarkdownText(getCommentLinkLabelText(comment, pageNoteOrdinal));
+function formatCommentLinkLabel(comment: Comment): string {
+    const escapedLabel = escapeMarkdownText(getCommentLinkLabelText(comment));
     if (comment.resolved) {
         return `~~${escapedLabel}~~`;
     }
@@ -297,21 +308,9 @@ export function buildIndexNoteNavigationMap(noteContent: string): IndexNoteNavig
 
 function appendFileCommentLines(
     lines: string[],
-    filePath: string,
     fileComments: Comment[],
     vaultName: string,
 ): void {
-    const pageNoteOrdinals = new Map<string, number>();
-    let nextPageNoteOrdinal = 1;
-    for (const comment of fileComments) {
-        if (!isPageComment(comment)) {
-            continue;
-        }
-
-        pageNoteOrdinals.set(comment.id, nextPageNoteOrdinal);
-        nextPageNoteOrdinal += 1;
-    }
-
     for (const comment of fileComments) {
         const tagLine = formatCommentTags(comment);
         const commentUrl = `${buildCommentLocationUrl(vaultName, comment)}&kind=${getCommentKindKey(comment)}`;
@@ -320,8 +319,8 @@ function appendFileCommentLines(
 
         lines.push(
             tagLine
-                ? `${marker} [${formatCommentLinkLabel(comment, pageNoteOrdinals.get(comment.id))}](${commentUrl})  ${tagLine} ^${blockId}`
-                : `${marker} [${formatCommentLinkLabel(comment, pageNoteOrdinals.get(comment.id))}](${commentUrl}) ^${blockId}`
+                ? `${marker} [${formatCommentLinkLabel(comment)}](${commentUrl})  ${tagLine} ^${blockId}`
+                : `${marker} [${formatCommentLinkLabel(comment)}](${commentUrl}) ^${blockId}`
         );
         lines.push("");
     }
@@ -361,7 +360,7 @@ function appendFileSections(
             const fileComments = (commentsByFile.get(filePath) ?? [])
                 .slice()
                 .sort(compareCommentsForSidebarOrder);
-            appendFileCommentLines(lines, filePath, fileComments, vaultName);
+            appendFileCommentLines(lines, fileComments, vaultName);
             lines.push("");
         }
 
