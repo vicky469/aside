@@ -13,6 +13,10 @@ export interface PersistedCommentPresentation {
         ariaLabel: string;
         icon: string;
     };
+    shareAction: {
+        ariaLabel: string;
+        icon: string;
+    };
     resolveAction: {
         ariaLabel: string;
         icon: string;
@@ -30,6 +34,7 @@ export interface SidebarPersistedCommentHost {
     openSidebarInternalLink(href: string, sourcePath: string, focusTarget: HTMLElement): Promise<void>;
     activateComment(comment: Comment): Promise<void>;
     openCommentInEditor(comment: Comment): Promise<void>;
+    shareComment(comment: Comment): Promise<void>;
     resolveComment(commentId: string): void;
     unresolveComment(commentId: string): void;
     startEditDraft(commentId: string, hostFilePath: string | null): void;
@@ -74,6 +79,10 @@ export function buildPersistedCommentPresentation(
         redirectHint: {
             ariaLabel: "Open source note",
             icon: "arrow-up-right",
+        },
+        shareAction: {
+            ariaLabel: "Share side note",
+            icon: "share",
         },
         resolveAction: {
             ariaLabel: comment.resolved ? "Reopen side note" : "Resolve side note",
@@ -237,6 +246,17 @@ export async function renderPersistedCommentCard(
     };
 
     const footerEl = commentEl.createDiv("sidenote2-thread-footer");
+    const shareButton = footerEl.createEl("button", {
+        cls: "clickable-icon sidenote2-comment-action-button sidenote2-comment-action-share sidenote2-thread-share-button",
+    });
+    shareButton.setAttribute("type", "button");
+    shareButton.setAttribute("aria-label", presentation.shareAction.ariaLabel);
+    host.setIcon(shareButton, presentation.shareAction.icon);
+    shareButton.onclick = (event) => {
+        event.stopPropagation();
+        void host.shareComment(comment);
+    };
+
     const addEntryButton = footerEl.createEl("button", {
         cls: "clickable-icon sidenote2-comment-action-button sidenote2-comment-action-add-entry sidenote2-thread-add-entry-button",
     });

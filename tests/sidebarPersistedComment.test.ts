@@ -64,6 +64,10 @@ test("buildPersistedCommentPresentation chooses the right resolve action copy an
         ariaLabel: "Open source note",
         icon: "arrow-up-right",
     });
+    assert.deepEqual(unresolved.shareAction, {
+        ariaLabel: "Share side note",
+        icon: "share",
+    });
     assert.deepEqual(unresolved.resolveAction, {
         ariaLabel: "Resolve side note",
         icon: "check",

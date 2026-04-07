@@ -1,7 +1,8 @@
-import { ItemView, MarkdownRenderer, TFile, WorkspaceLeaf, loadMermaid, setIcon, type ViewStateResult } from "obsidian";
+import { ItemView, MarkdownRenderer, Notice, TFile, WorkspaceLeaf, loadMermaid, setIcon, type ViewStateResult } from "obsidian";
 import type { Comment, CommentThread } from "../../commentManager";
 import { threadToComment } from "../../commentManager";
 import { compareCommentsForSidebarOrder } from "../../core/anchors/commentSectionOrder";
+import { buildCommentLocationUrl } from "../../core/derived/allCommentsNote";
 import {
     buildIndexFileFilterGraph,
     type IndexFileFilterGraph,
@@ -18,6 +19,7 @@ import SideNoteFileFilterModal from "../modals/SideNoteFileFilterModal";
 import SideNoteLinkSuggestModal from "../modals/SideNoteLinkSuggestModal";
 import SideNoteTagSuggestModal from "../modals/SideNoteTagSuggestModal";
 import { SIDE_NOTE2_ICON_ID } from "../sideNote2Icon";
+import { copyTextToClipboard } from "../copyTextToClipboard";
 import { SidebarDraftEditorController } from "./sidebarDraftEditor";
 import { renderDraftCommentCard } from "./sidebarDraftComment";
 import {
@@ -682,6 +684,11 @@ export default class SideNote2View extends ItemView {
                 await this.interactionController.openCommentInEditor(persistedComment);
             },
             openCommentInEditor: (persistedComment) => this.interactionController.openCommentInEditor(persistedComment),
+            shareComment: async (persistedComment) => {
+                const commentUrl = buildCommentLocationUrl(this.app.vault.getName(), persistedComment);
+                const copied = await copyTextToClipboard(commentUrl);
+                new Notice(copied ? "Copied side note link." : "Failed to copy side note link.");
+            },
             resolveComment: (commentId) => {
                 void this.plugin.resolveComment(commentId);
             },
