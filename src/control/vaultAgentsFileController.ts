@@ -68,7 +68,7 @@ function buildVaultAgentsInstructions(context: VaultAgentsFileContext): string {
         "- Treat the trailing `<!-- SideNote2 comments -->` block as the canonical stored comment data.",
         "- Treat `SideNote2 index.md` as discovery output, not canonical storage.",
         "",
-        "If the `sidenote2` skill is available, use it for:",
+        "If the `sidenote2` skill is already installed in the current assistant, use it for:",
         "",
         "- `obsidian://side-note2-comment?...` URIs",
         "- `reply to this`",

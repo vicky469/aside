@@ -34,8 +34,6 @@
   <img src="./assets/demo-preview.gif" alt="SideNote2 demo preview" width="900">
 </p>
 
-For the fuller dependency and architecture notes, see [README-dev.md](./docs/README-dev.md).
-
 SideNote2 is an [Obsidian](https://obsidian.md) plugin for side comments that stay attached to the note.
 
 It is built for a minimal workflow: humans work in the sidebar, while agents can read the same comments directly from the markdown file. Inspired by [mofukuru/SideNote](https://github.com/mofukuru/SideNote).
@@ -59,25 +57,15 @@ It is built for a minimal workflow: humans work in the sidebar, while agents can
    <p align="center">
      <img src="./image.png" alt="Install SideNote2 with BRAT" width="420">
    </p>
-3. Agent support for SideNote2 workflows is automatic.
+3. If you want Codex to expose SideNote2 as a skill in `/skills`, ask Codex to install it directly from the GitHub skill URL:
 
-If an agent is working directly inside the Obsidian vault, SideNote2 manages a vault-root `AGENTS.md`.
-When the plugin is enabled, it creates the file when missing, or inserts and refreshes a SideNote2-managed block inside an existing `AGENTS.md` without overwriting unrelated user instructions.
+```text
+Use the skill-installer skill and install:
+https://github.com/vicky469/SideNote2/tree/main/skills/sidenote2
+```
 
-You can run it manually from the command palette if needed:
-
-- `SideNote2: Sync AGENTS.md in vault root`
-
-If you want to remove the SideNote2-managed agent support later, use:
-
-- `SideNote2: Remove SideNote2 agent support from vault`
-
-That vault `AGENTS.md` is the main routing layer for SideNote2 note workflows such as:
-
-- resolving `obsidian://side-note2-comment?...` links
-- replying to an existing side note thread
-- resolving a side note thread
-- updating a stored SideNote2 comment in a real markdown note
+4. Restart Codex, then run `/skills`.
+   You should see `sidenote2`.
 
 ## Workflow
 
@@ -102,7 +90,7 @@ That vault `AGENTS.md` is the main routing layer for SideNote2 note workflows su
 
 For power users:
 
-Agents can read the side notes from markdown.
+Agents can read, add, update, resolve the side notes from markdown.
 
 In Codex CLI, Claude Code, or another assistant, you can ask:
 
@@ -131,6 +119,18 @@ If multiple side comments in the same note use the same selected text, include a
 - `SideNote2: Add comment to selection`
 - `SideNote2: Sync AGENTS.md in vault root`
 - `SideNote2: Remove SideNote2 agent support from vault`
+
+## Uninstall
+
+Before uninstalling SideNote2, remove its managed agent-routing block from the vault.
+
+Press Command + P to open the command palette, then run:
+
+- `SideNote2: Remove SideNote2 agent support from vault`
+
+Then uninstall the plugin from Obsidian.
+
+This removes only SideNote2's managed `AGENTS.md` instructions. Stored side comments remain in the markdown notes until you edit or remove them separately.
 
 ## Storage
 

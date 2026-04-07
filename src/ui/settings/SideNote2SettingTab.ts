@@ -73,5 +73,35 @@ export default class SideNote2SettingTab extends PluginSettingTab {
                         setDebugEnabled(value);
                     })
             );
+
+        new Setting(containerEl)
+            .setName("Vault agent support")
+            .setDesc("SideNote2 auto-manages a SideNote2 block in the vault root AGENTS.md for agent routing. Use remove only right before uninstalling. If the plugin stays enabled, the block will be recreated the next time SideNote2 starts.")
+            .addButton((button) =>
+                button
+                    .setButtonText("Sync AGENTS.md")
+                    .onClick(async () => {
+                        button.setDisabled(true);
+                        try {
+                            await this.plugin.syncVaultAgentsFile();
+                        } finally {
+                            button.setDisabled(false);
+                        }
+                    })
+            )
+            .addButton((button) =>
+                button
+                    .setWarning()
+                    .setButtonText("Remove from vault")
+                    .setTooltip("Cleanup before uninstalling SideNote2.")
+                    .onClick(async () => {
+                        button.setDisabled(true);
+                        try {
+                            await this.plugin.removeVaultAgentSupport();
+                        } finally {
+                            button.setDisabled(false);
+                        }
+                    })
+            );
     }
 }

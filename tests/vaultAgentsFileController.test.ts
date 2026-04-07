@@ -19,6 +19,7 @@ test("buildVaultAgentsFileContent includes managed markers plus the active vault
     assert.match(content, /<!-- SideNote2 managed AGENTS start version="2\.0\.3" -->/);
     assert.match(content, /This Obsidian vault is `public`\./);
     assert.match(content, /Vault root path: `\/home\/bun\/Documents\/public`\./);
+    assert.match(content, /If the `sidenote2` skill is already installed in the current assistant, use it for:/);
     assert.match(content, /obsidian:\/\/side-note2-comment\?\.\.\./);
     assert.match(content, /append to the existing thread/);
     assert.match(content, /mark the targeted thread resolved/);

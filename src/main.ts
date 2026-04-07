@@ -415,6 +415,14 @@ export default class SideNote2 extends Plugin {
         await this.indexNoteSettingsController.setIndexHeaderImageCaption(nextCaptionInput);
     }
 
+    public async syncVaultAgentsFile(): Promise<void> {
+        await this.installVaultAgentsFile();
+    }
+
+    public async removeVaultAgentSupport(): Promise<void> {
+        await this.uninstallVaultAgentsFile();
+    }
+
     public async shouldConfirmDelete(): Promise<boolean> {
         const appConfigPath = normalizePath(`${this.app.vault.configDir}/app.json`);
 
