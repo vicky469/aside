@@ -3,6 +3,7 @@ import test from "node:test";
 import { commentToThread, type Comment } from "../src/commentManager";
 import {
     scopeIndexThreadsByFilePaths,
+    shouldShowIndexListToolbarChips,
     shouldShowResolvedIndexEmptyState,
     shouldShowResolvedToolbarChip,
 } from "../src/ui/views/indexSidebarState";
@@ -59,6 +60,12 @@ test("shouldShowResolvedToolbarChip keeps the resolved toggle visible while reso
     assert.equal(shouldShowResolvedToolbarChip(false, false), false);
     assert.equal(shouldShowResolvedToolbarChip(true, false), true);
     assert.equal(shouldShowResolvedToolbarChip(false, true), true);
+});
+
+test("shouldShowIndexListToolbarChips hides list-only chips when thought trail is active", () => {
+    assert.equal(shouldShowIndexListToolbarChips(true, "list"), true);
+    assert.equal(shouldShowIndexListToolbarChips(true, "thought-trail"), false);
+    assert.equal(shouldShowIndexListToolbarChips(false, "thought-trail"), true);
 });
 
 test("shouldShowResolvedIndexEmptyState points back to active notes when resolved mode hides all scoped items", () => {

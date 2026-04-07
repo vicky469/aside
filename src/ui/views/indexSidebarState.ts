@@ -1,5 +1,6 @@
 import type { CommentThread } from "../../commentManager";
 import { filterCommentsByFilePaths } from "./indexFileFilter";
+import type { IndexSidebarMode } from "./viewState";
 
 export function scopeIndexThreadsByFilePaths(
     visibleThreads: CommentThread[],
@@ -17,6 +18,13 @@ export function scopeIndexThreadsByFilePaths(
 
 export function shouldShowResolvedToolbarChip(hasResolvedComments: boolean, showResolved: boolean): boolean {
     return hasResolvedComments || showResolved;
+}
+
+export function shouldShowIndexListToolbarChips(
+    isAllCommentsView: boolean,
+    indexSidebarMode: IndexSidebarMode,
+): boolean {
+    return !isAllCommentsView || indexSidebarMode === "list";
 }
 
 export function shouldShowResolvedIndexEmptyState(

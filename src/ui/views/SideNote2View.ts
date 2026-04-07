@@ -37,6 +37,7 @@ import { renderPersistedCommentCard } from "./sidebarPersistedComment";
 import { extractThoughtTrailClickTargets, parseThoughtTrailOpenFilePath, resolveThoughtTrailNodeId } from "./thoughtTrailNodeLinks";
 import {
     scopeIndexThreadsByFilePaths,
+    shouldShowIndexListToolbarChips,
     shouldShowResolvedIndexEmptyState,
     shouldShowResolvedToolbarChip,
 } from "./indexSidebarState";
@@ -412,18 +413,24 @@ export default class SideNote2View extends ItemView {
     ) {
         const showResolved = this.plugin.shouldShowResolvedComments();
         const showChildComments = this.plugin.shouldShowChildComments();
+        const showListOnlyToolbarChips = shouldShowIndexListToolbarChips(options.isAllCommentsView, this.indexSidebarMode);
         if (!options.isAllCommentsView && !options.hasResolvedComments && !showResolved && !options.hasChildComments) {
             return;
         }
 
         const toolbarEl = container.createDiv("sidenote2-sidebar-toolbar");
         toolbarEl.classList.toggle("is-index-toolbar", options.isAllCommentsView);
-        let listFilterGroup: HTMLDivElement | null = null;
+        let indexChipGroup: HTMLDivElement | null = null;
+        let indexChipRow: HTMLDivElement | null = null;
         if (options.isAllCommentsView) {
-            this.renderIndexModeControl(toolbarEl);
+            const modeRow = toolbarEl.createDiv("sidenote2-sidebar-toolbar-row");
+            modeRow.addClass("is-index-primary-row");
+            this.renderIndexModeControl(modeRow);
 
-            listFilterGroup = toolbarEl.createDiv("sidenote2-sidebar-toolbar-group");
-            this.renderToolbarChip(listFilterGroup, {
+            indexChipRow = toolbarEl.createDiv("sidenote2-sidebar-toolbar-row");
+            indexChipRow.addClass("is-index-secondary-row");
+            indexChipGroup = indexChipRow.createDiv("sidenote2-sidebar-toolbar-group");
+            this.renderToolbarChip(indexChipGroup, {
                 label: "Files",
                 icon: "list-filter",
                 active: !!options.selectedIndexFileFilterRootPath,
@@ -443,8 +450,8 @@ export default class SideNote2View extends ItemView {
             });
         }
 
-        if (options.hasChildComments) {
-            const filterGroup = listFilterGroup ?? toolbarEl.createDiv("sidenote2-sidebar-toolbar-group");
+        if (showListOnlyToolbarChips && options.hasChildComments) {
+            const filterGroup = indexChipGroup ?? (indexChipRow ?? toolbarEl).createDiv("sidenote2-sidebar-toolbar-group");
             this.renderToolbarChip(filterGroup, {
                 label: showChildComments ? "Hide replies" : "Show replies",
                 active: showChildComments,
@@ -455,11 +462,11 @@ export default class SideNote2View extends ItemView {
             });
         }
 
-        if (!shouldShowResolvedToolbarChip(options.hasResolvedComments, showResolved)) {
+        if (!showListOnlyToolbarChips || !shouldShowResolvedToolbarChip(options.hasResolvedComments, showResolved)) {
             return;
         }
 
-        const filterGroup = toolbarEl.createDiv("sidenote2-sidebar-toolbar-group");
+        const filterGroup = indexChipGroup ?? (indexChipRow ?? toolbarEl).createDiv("sidenote2-sidebar-toolbar-group");
         this.renderToolbarChip(filterGroup, {
             label: "Resolved",
             active: showResolved,
@@ -527,8 +534,10 @@ export default class SideNote2View extends ItemView {
 
     private renderIndexModeControl(container: HTMLElement): void {
         const modeGroup = container.createDiv("sidenote2-sidebar-toolbar-group");
-        const segmentedControl = modeGroup.createDiv("sidenote2-segmented-control");
-        this.renderSegmentedControlButton(segmentedControl, {
+        const tabList = modeGroup.createDiv(`sidenote2-tablist is-${this.indexSidebarMode}`);
+        tabList.setAttribute("role", "tablist");
+        tabList.setAttribute("aria-label", "Index view mode");
+        this.renderTabButton(tabList, {
             label: "List",
             active: this.indexSidebarMode === "list",
             ariaLabel: "Show index list",
@@ -541,7 +550,7 @@ export default class SideNote2View extends ItemView {
                 void this.renderComments();
             },
         });
-        this.renderSegmentedControlButton(segmentedControl, {
+        this.renderTabButton(tabList, {
             label: "Thought Trail",
             active: this.indexSidebarMode === "thought-trail",
             ariaLabel: "Show thought trail",
@@ -556,7 +565,7 @@ export default class SideNote2View extends ItemView {
         });
     }
 
-    private renderSegmentedControlButton(
+    private renderTabButton(
         container: HTMLElement,
         options: {
             label: string;
@@ -566,12 +575,14 @@ export default class SideNote2View extends ItemView {
         },
     ): void {
         const button = container.createEl("button", {
-            cls: `sidenote2-segmented-control-button${options.active ? " is-active" : ""}`,
+            cls: `sidenote2-tab-button${options.active ? " is-active" : ""}`,
             text: options.label,
         });
         button.setAttribute("type", "button");
-        button.setAttribute("aria-pressed", options.active ? "true" : "false");
+        button.setAttribute("role", "tab");
+        button.setAttribute("aria-selected", options.active ? "true" : "false");
         button.setAttribute("aria-label", options.ariaLabel);
+        button.tabIndex = options.active ? 0 : -1;
         button.onclick = options.onClick;
     }
 
@@ -755,7 +766,7 @@ export default class SideNote2View extends ItemView {
         const thoughtTrailEl = commentsContainer.createDiv("sidenote2-thought-trail");
         if (!options.hasFileFilter) {
             const emptyStateEl = thoughtTrailEl.createDiv("sidenote2-empty-state sidenote2-section-empty-state");
-            emptyStateEl.createEl("p", { text: "Use Files to choose a file and see its connected thought trail." });
+            emptyStateEl.createEl("p", { text: "Use Files to choose a file and see its connected files." });
             return;
         }
 
