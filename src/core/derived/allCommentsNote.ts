@@ -1,6 +1,7 @@
 import type { Comment } from "../../commentManager";
 import { compareCommentsForSidebarOrder } from "../anchors/commentSectionOrder";
 import { getCommentSelectionLabel, getCommentStatusLabel, isAnchoredComment, isPageComment } from "../anchors/commentAnchors";
+import { filterCommentsByResolvedVisibility } from "../rules/resolvedCommentVisibility";
 import { extractTagsFromText } from "../text/commentTags";
 
 export const ALL_COMMENTS_NOTE_PATH = "SideNote2 index.md";
@@ -11,6 +12,8 @@ export const ALL_COMMENTS_NOTE_IMAGE_CAPTION = "Relativity (Credit: 2015 The M.C
 export const ALL_COMMENTS_NOTE_IMAGE_ALT = "SideNote2 index header image";
 const MAX_PREVIEW_LENGTH = 80;
 const PAGE_NOTE_LABEL_WORD_LIMIT = 10;
+const ACTIVE_COMMENTS_MODE_LABEL = "Showing: Active comments only";
+const RESOLVED_COMMENTS_MODE_LABEL = "Showing: Resolved comments only";
 
 export interface CommentLocationTarget {
     filePath: string;
@@ -33,6 +36,7 @@ export interface AllCommentsNoteBuildOptions {
     allCommentsNotePath?: string;
     headerImageUrl?: string;
     headerImageCaption?: string | null;
+    showResolved?: boolean;
     getMentionedPageLabels?: (comment: Comment) => string[];
     hasSourceFile?: (filePath: string) => boolean;
     resolveWikiLinkPath?: (linkPath: string, sourceFilePath: string) => string | null;
@@ -377,17 +381,26 @@ export function buildAllCommentsNoteContent(
 ): string {
     const headerImageUrl = normalizeAllCommentsNoteImageUrl(options.headerImageUrl);
     const headerImageCaption = normalizeAllCommentsNoteImageCaption(options.headerImageCaption);
+    const showResolved = options.showResolved ?? false;
     const lines: string[] = [
         `![${ALL_COMMENTS_NOTE_IMAGE_ALT}](${headerImageUrl})`,
     ];
     if (headerImageCaption) {
         lines.push(`<div class="sidenote2-index-header-caption">${headerImageCaption}</div>`);
     }
+    if (options.showResolved !== undefined) {
+        lines.push(
+            `<div class="sidenote2-index-visibility-label">${showResolved ? RESOLVED_COMMENTS_MODE_LABEL : ACTIVE_COMMENTS_MODE_LABEL}</div>`,
+        );
+    }
     lines.push("");
-    const visibleComments = comments.filter((comment) => (
-        !isAllCommentsNotePath(comment.filePath, options.allCommentsNotePath)
-        && (options.hasSourceFile?.(comment.filePath) ?? true)
-    ));
+    const visibleComments = filterCommentsByResolvedVisibility(
+        comments.filter((comment) => (
+            !isAllCommentsNotePath(comment.filePath, options.allCommentsNotePath)
+            && (options.hasSourceFile?.(comment.filePath) ?? true)
+        )),
+        showResolved,
+    );
 
     if (!visibleComments.length) {
         return `${lines.join("\n").trimEnd()}\n`;

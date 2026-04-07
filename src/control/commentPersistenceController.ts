@@ -42,6 +42,7 @@ export interface CommentPersistenceHost {
     getAllCommentsNotePath(): string;
     getIndexHeaderImageUrl(): string;
     getIndexHeaderImageCaption(): string;
+    shouldShowResolvedComments(): boolean;
     getMarkdownViewForFile(file: TFile): MarkdownView | null;
     getMarkdownFileByPath(filePath: string): TFile | null;
     getCurrentNoteContent(file: TFile): Promise<string>;
@@ -394,6 +395,7 @@ export class CommentPersistenceController {
             allCommentsNotePath: this.host.getAllCommentsNotePath(),
             headerImageUrl: this.host.getIndexHeaderImageUrl(),
             headerImageCaption: this.host.getIndexHeaderImageCaption(),
+            showResolved: this.host.shouldShowResolvedComments(),
             hasSourceFile: (filePath: string) => this.host.app.vault.getAbstractFileByPath(filePath) instanceof TFile,
             getMentionedPageLabels: (comment: Comment) => this.host.getCommentMentionedPageLabels(comment),
             resolveWikiLinkPath: (linkPath: string, sourceFilePath: string) => {

@@ -50,7 +50,9 @@ test("note-backed comment lifecycle stays aligned with aggregate output", () => 
     assert.equal(parsed.comments[0].comment, "Updated comment");
     assert.equal(parsed.comments[0].resolved, true);
 
-    const aggregateWhenResolved = buildAllCommentsNoteContent("dev", parsed.comments);
+    const aggregateWhenResolved = buildAllCommentsNoteContent("dev", parsed.comments, {
+        showResolved: true,
+    });
     assert.match(
         aggregateWhenResolved,
         /\[~~beta~~\]\(obsidian:\/\/side-note2-comment\?vault=dev&file=Folder%2FNote\.md&commentId=comment-1&kind=anchored\)/
@@ -63,7 +65,9 @@ test("note-backed comment lifecycle stays aligned with aggregate output", () => 
 
     assert.equal(parsed.comments[0].resolved, false);
 
-    const aggregateWhenReopened = buildAllCommentsNoteContent("dev", parsed.comments);
+    const aggregateWhenReopened = buildAllCommentsNoteContent("dev", parsed.comments, {
+        showResolved: false,
+    });
     assert.match(
         aggregateWhenReopened,
         /\[beta\]\(obsidian:\/\/side-note2-comment\?vault=dev&file=Folder%2FNote\.md&commentId=comment-1&kind=anchored\)/
