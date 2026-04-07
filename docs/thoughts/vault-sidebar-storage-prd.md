@@ -344,3 +344,27 @@ Adopt this storage design for phase 1:
 - no lazy-loading or collapse requirements yet
 
 That keeps the implementation simple while avoiding the main scale and correctness problems of storing threaded side notes inside the source Markdown file.
+
+<!-- SideNote2 comments
+[
+  {
+    "id": "4663134d-d808-4261-91bd-e13591588570",
+    "startLine": 0,
+    "startChar": 0,
+    "endLine": 0,
+    "endChar": 0,
+    "selectedText": "vault-sidebar-storage-prd",
+    "selectedTextHash": "30666c851fb87253d7ee6492447dc622fdb935df0180631a7c0e4e7b209229de",
+    "anchorKind": "page",
+    "entries": [
+      {
+        "id": "4663134d-d808-4261-91bd-e13591588570",
+        "body": "on the original source file, i am expecting this to show on source mode\n```\n\u003c!-- SideNote2 comments\n[\n  {\n    \"id\": \"lg-g01-isolated-c01-n01\",\n    \"startLine\": 0,\n    \"startChar\": 0,\n    \"endLine\": 0,\n    \"endChar\": 0,\n    \"selectedText\": \"g01-isolated-c01-n01\",\n    \"selectedTextHash\": \"3e9bf9289db750359c4bef054a7e95a79ba6c0b3\",\n    \"comment\": \"Synthetic graph fixture for isolated-size-1-component-01.\\nPattern: isolated.\\nConnected component size: 1.\\nNo outgoing wiki links from this note.\",\n    \"timestamp\": 1767226520000,\n    \"anchorKind\": \"page\"\n  }\n]\n--\u003e \n```\nexpect replace the detail to the path",
+        "timestamp": 1775506293171
+      }
+    ],
+    "createdAt": 1775506293171,
+    "updatedAt": 1775506293171
+  }
+]
+-->

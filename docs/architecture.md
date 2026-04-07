@@ -110,8 +110,15 @@ That means most bugs reduce to one of three questions:
     "endChar": 20,
     "selectedText": "Cross-Section ",
     "selectedTextHash": "964144fee0c5a203693674a98b75f471c7cf4e71ff06faa5999aff516b0aa326",
-    "comment": "Cross-section means: a cut-through view of something, as if you sliced it and looked inside.\n\nFor example, a codebase “cross-section” might show:\n\n  - UI layer\n  - application logic\n  - storage layer\n  - indexing/cache layer\n\n  So if you use cross-section visually for software, it suggests:\n\n  - internal composition\n  - layered architecture\n  - hidden structure made visible",
-    "timestamp": 1774912991539
+    "entries": [
+      {
+        "id": "8cc93bfb-ac20-4069-b430-57896f23393e",
+        "body": "Cross-section means: a cut-through view of something, as if you sliced it and looked inside.\n\nFor example, a codebase “cross-section” might show:\n\n  - UI layer\n  - application logic\n  - storage layer\n  - indexing/cache layer\n\n  So if you use cross-section visually for software, it suggests:\n\n  - internal composition\n  - layered architecture\n  - hidden structure made visible",
+        "timestamp": 1774912991539
+      }
+    ],
+    "createdAt": 1774912991539,
+    "updatedAt": 1774912991539
   }
 ]
 -->

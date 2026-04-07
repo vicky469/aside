@@ -979,8 +979,15 @@ At the end of the refactor pass:
     "endChar": 118,
     "selectedText": "volatile UI state toward stores",
     "selectedTextHash": "367078ae7e24067a59e3ed9363a2fdfd1919fcf1dd8ac6cbf63d9564edce0a4b",
-    "comment": "What does this mean:\n- Move temporary UI state into dedicated stores (state containers).\n- Centralize transient sidebar state in store objects.\n- Pull short-lived UI state out of views and into shared stores.\n\nWhy this helps:\n\n  - one source of truth for transient UI state\n  - less prop-drilling and fewer hidden couplings\n  - easier tests\n  - easier to restore/re-render UI consistently",
-    "timestamp": 1774932445390
+    "entries": [
+      {
+        "id": "37cd7eb3-8cf6-440e-b328-1b96e7161172",
+        "body": "What does this mean:\n- Move temporary UI state into dedicated stores (state containers).\n- Centralize transient sidebar state in store objects.\n- Pull short-lived UI state out of views and into shared stores.\n\nWhy this helps:\n\n  - one source of truth for transient UI state\n  - less prop-drilling and fewer hidden couplings\n  - easier tests\n  - easier to restore/re-render UI consistently",
+        "timestamp": 1774932445390
+      }
+    ],
+    "createdAt": 1774932445390,
+    "updatedAt": 1774932445390
   },
   {
     "id": "ecb8fd7d-68d8-445f-af20-74ef99670d30",
@@ -990,8 +997,15 @@ At the end of the refactor pass:
     "endChar": 56,
     "selectedText": "How much responsibility density is in this cluster?",
     "selectedTextHash": "403892403ab0da47f294db40968f6300b2f5f7fc289bdbbd32fa8208b618cd8e",
-    "comment": "This means: how many different reasons would cause this area to change?\n\nA high-density cluster is not just a big file. It is a file that mixes unrelated jobs. Early in this refactor, `main.ts` mixed framework bootstrapping, command handling, persistence scheduling, workspace tracking, reveal/navigation behavior, and UI/session coordination. `SideNote2View.ts` also mixed rendering, edit interactions, card behavior, and session glue.\n\nThat is why those areas moved up the queue. If one file changes for five unrelated reasons, it is harder to read, harder to test, and every edit carries more regression risk.",
-    "timestamp": 1774934181001
+    "entries": [
+      {
+        "id": "ecb8fd7d-68d8-445f-af20-74ef99670d30",
+        "body": "This means: how many different reasons would cause this area to change?\n\nA high-density cluster is not just a big file. It is a file that mixes unrelated jobs. Early in this refactor, `main.ts` mixed framework bootstrapping, command handling, persistence scheduling, workspace tracking, reveal/navigation behavior, and UI/session coordination. `SideNote2View.ts` also mixed rendering, edit interactions, card behavior, and session glue.\n\nThat is why those areas moved up the queue. If one file changes for five unrelated reasons, it is harder to read, harder to test, and every edit carries more regression risk.",
+        "timestamp": 1774934181001
+      }
+    ],
+    "createdAt": 1774934181001,
+    "updatedAt": 1774934181001
   },
   {
     "id": "5fc13ee8-2cea-4f30-b83a-11165ae8134c",
@@ -1001,8 +1015,15 @@ At the end of the refactor pass:
     "endChar": 46,
     "selectedText": "Is it on the read path or the write path?",
     "selectedTextHash": "1f6015a570aaab062da037dbd1ab3aec2192ca960ca226d89b28ba2c26731929",
-    "comment": "This was a risk filter. Read-only or derived flows were safer to extract first because they usually do not mutate the canonical note-backed comment data.\n\nExample from this refactor:\n- highlight(editor highlight decorations in source/live preview) and preview behavior moved out early into `commentHighlightController.ts`\n- aggregate and derived logic like `allCommentsNote.ts` and derived metadata were also safer than canonical note writes\n- canonical write flow stayed concentrated until `commentPersistenceController.ts` was ready\n\nSo this question really meant: if we make a mistake here, do we break rendering, or do we corrupt the stored source of truth?",
-    "timestamp": 1774934181002
+    "entries": [
+      {
+        "id": "5fc13ee8-2cea-4f30-b83a-11165ae8134c",
+        "body": "This was a risk filter. Read-only or derived flows were safer to extract first because they usually do not mutate the canonical note-backed comment data.\n\nExample from this refactor:\n- highlight(editor highlight decorations in source/live preview) and preview behavior moved out early into `commentHighlightController.ts`\n- aggregate and derived logic like `allCommentsNote.ts` and derived metadata were also safer than canonical note writes\n- canonical write flow stayed concentrated until `commentPersistenceController.ts` was ready\n\nSo this question really meant: if we make a mistake here, do we break rendering, or do we corrupt the stored source of truth?",
+        "timestamp": 1774934181002
+      }
+    ],
+    "createdAt": 1774934181002,
+    "updatedAt": 1774934181002
   },
   {
     "id": "a4c5a2db-b83f-4b0b-a261-b282d8fdf7b2",
@@ -1012,8 +1033,15 @@ At the end of the refactor pass:
     "endChar": 45,
     "selectedText": "Can it be given a narrow host interface?",
     "selectedTextHash": "1f8d4a66f224a1bc473908dd89eef4ec817b2c450f63d8ca513760ae9517031c",
-    "comment": "This means: can we extract the behavior without handing the new module the whole plugin object?\n\nA good candidate only needs a small host surface, usually a handful of callbacks. For example, the extracted controllers depend on limited capabilities such as “get active file”, “persist comments”, “refresh editor decorations”, or “open a comment by id” rather than direct access to every field on `main.ts`.\n\nThat mattered because a narrow host interface keeps dependencies explicit. If extraction only works by passing the whole plugin everywhere, the move is mostly cosmetic and the coupling is still there.",
-    "timestamp": 1774934181003
+    "entries": [
+      {
+        "id": "a4c5a2db-b83f-4b0b-a261-b282d8fdf7b2",
+        "body": "This means: can we extract the behavior without handing the new module the whole plugin object?\n\nA good candidate only needs a small host surface, usually a handful of callbacks. For example, the extracted controllers depend on limited capabilities such as “get active file”, “persist comments”, “refresh editor decorations”, or “open a comment by id” rather than direct access to every field on `main.ts`.\n\nThat mattered because a narrow host interface keeps dependencies explicit. If extraction only works by passing the whole plugin everywhere, the move is mostly cosmetic and the coupling is still there.",
+        "timestamp": 1774934181003
+      }
+    ],
+    "createdAt": 1774934181003,
+    "updatedAt": 1774934181003
   },
   {
     "id": "843d66f5-d316-48d7-b122-35caeb11b68e",
@@ -1023,8 +1051,15 @@ At the end of the refactor pass:
     "endChar": 69,
     "selectedText": "Does it own persistent state, transient state, or derived state?",
     "selectedTextHash": "07a83ae15156f8887e3300dca16021ea6830fa818867eb15e70012f75c06a7ee",
-    "comment": "This asks what kind of state the code is really responsible for, because those categories should not be blurred together.\n\nIn this repo:\n- persistent state is the canonical note-backed comment data in storage files like `noteCommentStorage.ts`\n- transient state is session/UI state such as the current draft or revealed comment, later moved into `DraftSessionStore.ts` and `RevealedCommentSelectionStore.ts`\n- derived state is recomputed output such as `SideNote2 index.md`, highlight ranges, and derived metadata\n\nThe refactor kept separating these because persistent, transient, and derived state fail in different ways and should have different owners.",
-    "timestamp": 1774934181004
+    "entries": [
+      {
+        "id": "843d66f5-d316-48d7-b122-35caeb11b68e",
+        "body": "This asks what kind of state the code is really responsible for, because those categories should not be blurred together.\n\nIn this repo:\n- persistent state is the canonical note-backed comment data in storage files like `noteCommentStorage.ts`\n- transient state is session/UI state such as the current draft or revealed comment, later moved into `DraftSessionStore.ts` and `RevealedCommentSelectionStore.ts`\n- derived state is recomputed output such as `SideNote2 index.md`, highlight ranges, and derived metadata\n\nThe refactor kept separating these because persistent, transient, and derived state fail in different ways and should have different owners.",
+        "timestamp": 1774934181004
+      }
+    ],
+    "createdAt": 1774934181004,
+    "updatedAt": 1774934181004
   },
   {
     "id": "6604d952-58c7-4d0f-a978-5aef52c49c4c",
@@ -1034,8 +1069,15 @@ At the end of the refactor pass:
     "endChar": 44,
     "selectedText": "Will this extraction unlock later ones?",
     "selectedTextHash": "d5f2deffb770cd558b5e9213e00446c50880b774a34eb55e3e171ca4e6f27ba7",
-    "comment": "This means a move might be worth doing even if it is not the worst mess yet, because it creates a landing zone for the next few steps.\n\nExamples from this refactor:\n- re-bucketing `src/core/*` unlocked later controller and helper extractions because there were already semantic destinations\n- extracting stores unlocked cleaner session and sidebar interaction code\n- thinning `main.ts` unlocked the later split of `SideNote2View.ts` because the UI finally had stable backend seams to lean on\n\nSo the question was not only “is this bad now?” but also “does this make the next two or three moves safer?”",
-    "timestamp": 1774934181005
+    "entries": [
+      {
+        "id": "6604d952-58c7-4d0f-a978-5aef52c49c4c",
+        "body": "This means a move might be worth doing even if it is not the worst mess yet, because it creates a landing zone for the next few steps.\n\nExamples from this refactor:\n- re-bucketing `src/core/*` unlocked later controller and helper extractions because there were already semantic destinations\n- extracting stores unlocked cleaner session and sidebar interaction code\n- thinning `main.ts` unlocked the later split of `SideNote2View.ts` because the UI finally had stable backend seams to lean on\n\nSo the question was not only “is this bad now?” but also “does this make the next two or three moves safer?”",
+        "timestamp": 1774934181005
+      }
+    ],
+    "createdAt": 1774934181005,
+    "updatedAt": 1774934181005
   },
   {
     "id": "56f8dcde-3f89-41da-a802-42d36d93aaf2",
@@ -1045,8 +1087,15 @@ At the end of the refactor pass:
     "endChar": 63,
     "selectedText": "Will the result be more testable, or just more fragmented?",
     "selectedTextHash": "b597605dbaea668f8865a9ccd5da2d51234d946ba3d3f383e673cd6f73532c11",
-    "comment": "This was the anti-refactor-for-appearance check. A split was only worth it if it created real test seams or clearer ownership.\n\nGood splits in this refactor:\n- planner/controller pairs, because pure decision logic became testable without Obsidian\n- stores, because transient state gained explicit owners and straightforward tests\n\nMoves that were deliberately not pushed further:\n- `main.ts` remained the composition root\n- `SideNote2View.ts` remained the sidebar shell\n- `commentManager.ts` remained central\n\nIf a split would only create wrapper files and extra indirection, it was postponed or rejected.",
-    "timestamp": 1774934181006
+    "entries": [
+      {
+        "id": "56f8dcde-3f89-41da-a802-42d36d93aaf2",
+        "body": "This was the anti-refactor-for-appearance check. A split was only worth it if it created real test seams or clearer ownership.\n\nGood splits in this refactor:\n- planner/controller pairs, because pure decision logic became testable without Obsidian\n- stores, because transient state gained explicit owners and straightforward tests\n\nMoves that were deliberately not pushed further:\n- `main.ts` remained the composition root\n- `SideNote2View.ts` remained the sidebar shell\n- `commentManager.ts` remained central\n\nIf a split would only create wrapper files and extra indirection, it was postponed or rejected.",
+        "timestamp": 1774934181006
+      }
+    ],
+    "createdAt": 1774934181006,
+    "updatedAt": 1774934181006
   },
   {
     "id": "7437f21c-0eb8-477c-9658-1b62b189e9e1",
@@ -1056,8 +1105,15 @@ At the end of the refactor pass:
     "endChar": 34,
     "selectedText": "1. Start with naming and packaging",
     "selectedTextHash": "ecd7cf9b50baa5c37c5c28550e4faf5e1334bb036b4e86af9a2a15cde0f64902",
-    "comment": "Example from this refactor:\n- `src/core/anchorResolver.ts` moved to `src/core/anchors/anchorResolver.ts`\n- `src/core/noteCommentStorage.ts` moved to `src/core/storage/noteCommentStorage.ts`\n- `src/core/allCommentsNote.ts` moved to `src/core/derived/allCommentsNote.ts`\n\nWhy this had to happen first:\n- later extractions from `main.ts` already had a semantic landing zone\n- highlight work could depend on `core/derived/editorHighlightRanges.ts` and `core/anchors/anchorResolver.ts` without inventing folder structure mid-refactor\n- it reduced accidental coupling before behavior changed, so anchors, storage, and derived views stopped reading like one subsystem",
-    "timestamp": 1774933651001
+    "entries": [
+      {
+        "id": "7437f21c-0eb8-477c-9658-1b62b189e9e1",
+        "body": "Example from this refactor:\n- `src/core/anchorResolver.ts` moved to `src/core/anchors/anchorResolver.ts`\n- `src/core/noteCommentStorage.ts` moved to `src/core/storage/noteCommentStorage.ts`\n- `src/core/allCommentsNote.ts` moved to `src/core/derived/allCommentsNote.ts`\n\nWhy this had to happen first:\n- later extractions from `main.ts` already had a semantic landing zone\n- highlight work could depend on `core/derived/editorHighlightRanges.ts` and `core/anchors/anchorResolver.ts` without inventing folder structure mid-refactor\n- it reduced accidental coupling before behavior changed, so anchors, storage, and derived views stopped reading like one subsystem",
+        "timestamp": 1774933651001
+      }
+    ],
+    "createdAt": 1774933651001,
+    "updatedAt": 1774933651001
   },
   {
     "id": "6c48ac14-4575-4a53-86d1-cdbef3860680",
@@ -1067,8 +1123,15 @@ At the end of the refactor pass:
     "endChar": 54,
     "selectedText": "2. Thin `main.ts` before touching the sidebar heavily",
     "selectedTextHash": "1a274bfd0178346c9a7850fe1a657e362369606a8b898c77a3b39a96d470ee9f",
-    "comment": "Example from this refactor:\n- entry flow became `commentEntryController.ts`\n- reveal/navigation became `commentNavigationController.ts`\n- persistence became `commentPersistenceController.ts`\n- workspace, lifecycle, and registration each got their own controller\n\nWhy this came before the sidebar split:\n- `main.ts` was the unstable center, so it had to become a composition root first\n- once those seams existed, `SideNote2View.ts` could call stable control-layer entry points instead of reaching into one giant plugin file\n- later UI pieces like `sidebarDraftEditor.ts` and `sidebarInteractionController.ts` were cleaner because the backend policy already lived elsewhere",
-    "timestamp": 1774933651002
+    "entries": [
+      {
+        "id": "6c48ac14-4575-4a53-86d1-cdbef3860680",
+        "body": "Example from this refactor:\n- entry flow became `commentEntryController.ts`\n- reveal/navigation became `commentNavigationController.ts`\n- persistence became `commentPersistenceController.ts`\n- workspace, lifecycle, and registration each got their own controller\n\nWhy this came before the sidebar split:\n- `main.ts` was the unstable center, so it had to become a composition root first\n- once those seams existed, `SideNote2View.ts` could call stable control-layer entry points instead of reaching into one giant plugin file\n- later UI pieces like `sidebarDraftEditor.ts` and `sidebarInteractionController.ts` were cleaner because the backend policy already lived elsewhere",
+        "timestamp": 1774933651002
+      }
+    ],
+    "createdAt": 1774933651002,
+    "updatedAt": 1774933651002
   },
   {
     "id": "0fe9360d-1133-4d16-9208-d3c352c3852d",
@@ -1078,8 +1141,15 @@ At the end of the refactor pass:
     "endChar": 57,
     "selectedText": "3. Separate “what should happen” from “talk to Obsidian”",
     "selectedTextHash": "9c35cea12c552841a6ff1b6c346d5eb300d6b5a7f70da5ed98c8d3e1637e9c6f",
-    "comment": "Concrete examples:\n- `commentNavigationPlanner.ts` decides leaf/reveal policy; `commentNavigationController.ts` opens files and focuses views\n- `workspaceContextPlanner.ts` decides target-file and mode policy; `workspaceContextController.ts` reacts to workspace events\n- `indexNoteSettingsPlanner.ts` validates rename/path changes; `indexNoteSettingsController.ts` performs vault operations\n\nWhy this ordering helped:\n- pure policy became testable in Node without booting Obsidian\n- side-effecting code stayed at the runtime edge\n- behavior could change with smaller tests and less risk than editing plugin integration code directly",
-    "timestamp": 1774933651003
+    "entries": [
+      {
+        "id": "0fe9360d-1133-4d16-9208-d3c352c3852d",
+        "body": "Concrete examples:\n- `commentNavigationPlanner.ts` decides leaf/reveal policy; `commentNavigationController.ts` opens files and focuses views\n- `workspaceContextPlanner.ts` decides target-file and mode policy; `workspaceContextController.ts` reacts to workspace events\n- `indexNoteSettingsPlanner.ts` validates rename/path changes; `indexNoteSettingsController.ts` performs vault operations\n\nWhy this ordering helped:\n- pure policy became testable in Node without booting Obsidian\n- side-effecting code stayed at the runtime edge\n- behavior could change with smaller tests and less risk than editing plugin integration code directly",
+        "timestamp": 1774933651003
+      }
+    ],
+    "createdAt": 1774933651003,
+    "updatedAt": 1774933651003
   },
   {
     "id": "2b1ae3ff-b5af-4556-80f9-9a39fa7be9fd",
@@ -1089,8 +1159,15 @@ At the end of the refactor pass:
     "endChar": 47,
     "selectedText": "4. Extract state stores before UI session glue",
     "selectedTextHash": "3a10a5c33d8a9ebd4c43f89cb66f38186dc55a1a18ab66f26b062254388c5faa",
-    "comment": "In SideNote2:\n\n  - the real saved work is the stored comment in the note\n  - the temporary “right now” stuff is:\n      - the current draft\n      - the currently revealed comment\n      - whether a draft is saving\n\n  The refactor says:\n\n  - don’t leave all that “right now” stuff inside one giant brain\n    (main.ts)\n  - give it small labeled boxes\n\n  So:\n\n  - one small box for draft state\n  - one small box for revealed comment state\n\n  Then later code can say:\n\n  - “ask the draft box what is being edited”\n  - “ask the reveal box what comment is active”\n\n  instead of:\n\n  - “go dig inside the giant main file and hope the right flag is\n    there”\n\n  So in very simple terms:\n\n  - store = a small labeled box for temporary app memory\n  - UI session glue = the code that reacts to those boxes and updates\n    the screen",
-    "timestamp": 1774933651004
+    "entries": [
+      {
+        "id": "2b1ae3ff-b5af-4556-80f9-9a39fa7be9fd",
+        "body": "In SideNote2:\n\n  - the real saved work is the stored comment in the note\n  - the temporary “right now” stuff is:\n      - the current draft\n      - the currently revealed comment\n      - whether a draft is saving\n\n  The refactor says:\n\n  - don’t leave all that “right now” stuff inside one giant brain\n    (main.ts)\n  - give it small labeled boxes\n\n  So:\n\n  - one small box for draft state\n  - one small box for revealed comment state\n\n  Then later code can say:\n\n  - “ask the draft box what is being edited”\n  - “ask the reveal box what comment is active”\n\n  instead of:\n\n  - “go dig inside the giant main file and hope the right flag is\n    there”\n\n  So in very simple terms:\n\n  - store = a small labeled box for temporary app memory\n  - UI session glue = the code that reacts to those boxes and updates\n    the screen",
+        "timestamp": 1774933651004
+      }
+    ],
+    "createdAt": 1774933651004,
+    "updatedAt": 1774933651004
   },
   {
     "id": "da6f3237-e1fe-48f2-9baf-0bf6166ebd5d",
@@ -1100,8 +1177,15 @@ At the end of the refactor pass:
     "endChar": 54,
     "selectedText": "5. Refactor the sidebar after the app shell was stable",
     "selectedTextHash": "fffd7bf0b800825117a6e570c9f285a8fc17d1d7b5cc6f99e050f4924fafe39f",
-    "comment": "Example from the actual sequence:\n- only after the control/state layer was in place did we extract `sidebarDraftEditor.ts`, `sidebarPersistedComment.ts`, `sidebarDraftComment.ts`, and `sidebarInteractionController.ts`\n\nWhy that order was safer:\n- the UI refactor could focus on rendering, edit interactions, focus behavior, and DOM events\n- persistence, navigation, workspace policy, and session ownership were already stabilized elsewhere\n- this avoided refactoring two unstable layers at once: sidebar DOM structure and plugin-shell behavior",
-    "timestamp": 1774933651005
+    "entries": [
+      {
+        "id": "da6f3237-e1fe-48f2-9baf-0bf6166ebd5d",
+        "body": "Example from the actual sequence:\n- only after the control/state layer was in place did we extract `sidebarDraftEditor.ts`, `sidebarPersistedComment.ts`, `sidebarDraftComment.ts`, and `sidebarInteractionController.ts`\n\nWhy that order was safer:\n- the UI refactor could focus on rendering, edit interactions, focus behavior, and DOM events\n- persistence, navigation, workspace policy, and session ownership were already stabilized elsewhere\n- this avoided refactoring two unstable layers at once: sidebar DOM structure and plugin-shell behavior",
+        "timestamp": 1774933651005
+      }
+    ],
+    "createdAt": 1774933651005,
+    "updatedAt": 1774933651005
   },
   {
     "id": "8da8a4f1-ee3e-4f5e-a48e-8c7f8ef763d9",
@@ -1111,8 +1195,15 @@ At the end of the refactor pass:
     "endChar": 44,
     "selectedText": "6. Stop when the remaining code is cohesive",
     "selectedTextHash": "6ffb9c0139bcd6f86d3211a6ae96e15ab96faf6286da00d4426e823dc8ffbb3b",
-    "comment": "What this meant in our codebase:\n- we intentionally kept `main.ts` as the composition root\n- we intentionally kept `SideNote2View.ts` as the sidebar shell\n- `commentManager.ts` also stayed central as the in-memory owner of comment CRUD and grouping\n\nWhy stopping there was correct:\n- the remaining files already had stable roles: controller, planner, store, shell, helper\n- more splitting would mostly add indirection rather than clarity\n- the goal was lower responsibility density, not maximum file count",
-    "timestamp": 1774933651006
+    "entries": [
+      {
+        "id": "8da8a4f1-ee3e-4f5e-a48e-8c7f8ef763d9",
+        "body": "What this meant in our codebase:\n- we intentionally kept `main.ts` as the composition root\n- we intentionally kept `SideNote2View.ts` as the sidebar shell\n- `commentManager.ts` also stayed central as the in-memory owner of comment CRUD and grouping\n\nWhy stopping there was correct:\n- the remaining files already had stable roles: controller, planner, store, shell, helper\n- more splitting would mostly add indirection rather than clarity\n- the goal was lower responsibility density, not maximum file count",
+        "timestamp": 1774933651006
+      }
+    ],
+    "createdAt": 1774933651006,
+    "updatedAt": 1774933651006
   }
 ]
 -->
