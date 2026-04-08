@@ -454,7 +454,8 @@ export default class SideNote2View extends ItemView {
             const filterGroup = indexChipGroup ?? (indexChipRow ?? toolbarEl).createDiv("sidenote2-sidebar-toolbar-group");
             this.renderToolbarChip(filterGroup, {
                 label: showChildComments ? "Hide replies" : "Show replies",
-                active: showChildComments,
+                active: false,
+                pressed: showChildComments,
                 ariaLabel: showChildComments ? "Hide child comments" : "Show child comments",
                 onClick: () => {
                     void this.plugin.toggleShowChildComments();
@@ -484,6 +485,7 @@ export default class SideNote2View extends ItemView {
         options: {
             label: string;
             active: boolean;
+            pressed?: boolean;
             ariaLabel: string;
             title?: string;
             onClick: () => void;
@@ -497,7 +499,7 @@ export default class SideNote2View extends ItemView {
             cls: `sidenote2-filter-chip${options.active ? " is-active" : ""}`,
         });
         button.setAttribute("type", "button");
-        button.setAttribute("aria-pressed", options.active ? "true" : "false");
+        button.setAttribute("aria-pressed", (options.pressed ?? options.active) ? "true" : "false");
         button.setAttribute("aria-label", options.ariaLabel);
         if (options.title) {
             button.setAttribute("title", options.title);
@@ -592,9 +594,7 @@ export default class SideNote2View extends ItemView {
         filteredIndexFilePaths: string[],
         indexFileFilterOptions: IndexFileFilterOption[],
     ): void {
-        const optionByPath = new Map(indexFileFilterOptions.map((option) => [option.filePath, option]));
         const filterBar = container.createDiv("sidenote2-active-file-filters");
-        const rootOption = optionByPath.get(rootFilePath);
         const rootChip = filterBar.createDiv("sidenote2-active-file-filter");
         rootChip.addClass("is-root");
 
@@ -602,13 +602,6 @@ export default class SideNote2View extends ItemView {
             text: getIndexFileFilterLabel(rootFilePath, filteredIndexFilePaths),
             cls: "sidenote2-active-file-filter-label",
         });
-
-        if (rootOption) {
-            rootChip.createSpan({
-                text: String(rootOption.commentCount),
-                cls: "sidenote2-active-file-filter-count",
-            });
-        }
 
         const clearButton = rootChip.createEl("button", {
             cls: "sidenote2-active-file-filter-clear clickable-icon",

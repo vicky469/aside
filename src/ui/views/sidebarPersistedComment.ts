@@ -340,7 +340,16 @@ export async function renderPersistedCommentCard(
         || entries.slice(1).some((entry) => entry.id === host.activeCommentId);
     const comment = threadEntryToComment(thread, entries[0]);
     const presentation = buildPersistedCommentPresentation(thread, host.activeCommentId);
-    const commentEl = commentsContainer.createDiv(presentation.classes.join(" "));
+    const threadEl = commentsContainer.createDiv("sidenote2-thread-stack");
+    threadEl.setAttribute("data-thread-id", thread.id);
+    if (entries.length > 1) {
+        threadEl.addClass("has-thread-entries");
+    }
+    if (showChildComments && entries.length > 1) {
+        threadEl.addClass("shows-thread-entries");
+    }
+
+    const commentEl = threadEl.createDiv(presentation.classes.join(" "));
     commentEl.setAttribute("data-comment-id", comment.id);
     commentEl.setAttribute("data-start-line", String(comment.startLine));
 
@@ -380,10 +389,11 @@ export async function renderPersistedCommentCard(
         return;
     }
 
+    const repliesEl = threadEl.createDiv("sidenote2-thread-replies");
     for (const entry of entries.slice(1)) {
         const entryComment = threadEntryToComment(thread, entry);
         const entryPresentation = buildPersistedThreadEntryPresentation(thread, entry, host.activeCommentId);
-        const entryEl = commentsContainer.createDiv(entryPresentation.classes.join(" "));
+        const entryEl = repliesEl.createDiv(entryPresentation.classes.join(" "));
         entryEl.setAttribute("data-comment-id", entryComment.id);
         entryEl.setAttribute("data-start-line", String(entryComment.startLine));
 
