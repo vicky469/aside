@@ -303,10 +303,6 @@ function renderThreadFooterActions(
 ): void {
     const footerEl = commentEl.createDiv("sidenote2-thread-footer");
     const footerActionsEl = footerEl.createDiv("sidenote2-thread-footer-actions");
-    if (host.showSourceRedirectAction) {
-        renderSourceRedirectButton(footerActionsEl, comment, "Open source note", "obsidian-external-link", host);
-    }
-
     const shareButton = footerActionsEl.createEl("button", {
         cls: "clickable-icon sidenote2-comment-action-button sidenote2-comment-action-share sidenote2-thread-share-button",
     });
@@ -382,6 +378,15 @@ export async function renderPersistedCommentCard(
 
     renderEditButton(actionsEl, comment.id, host, "Edit side note");
     renderDeleteButton(actionsEl, comment.id, host, "Delete side note thread");
+    if (host.showSourceRedirectAction) {
+        renderSourceRedirectButton(
+            actionsEl,
+            comment,
+            presentation.redirectHint.ariaLabel,
+            presentation.redirectHint.icon,
+            host,
+        );
+    }
     renderThreadFooterActions(commentEl, comment, host);
 
     if (!showChildComments) {
@@ -402,6 +407,9 @@ export async function renderPersistedCommentCard(
         const entryActionsEl = entryHeaderEl.createDiv("sidenote2-comment-actions");
         renderEditButton(entryActionsEl, entryComment.id, host, "Edit side note");
         renderDeleteButton(entryActionsEl, entryComment.id, host, "Delete side note entry");
+        if (host.showSourceRedirectAction) {
+            renderSourceRedirectButton(entryActionsEl, entryComment, "Open source note", "obsidian-external-link", host);
+        }
 
         const entryContentEl = entryEl.createDiv("sidenote2-comment-content");
         entryContentEl.tabIndex = -1;
