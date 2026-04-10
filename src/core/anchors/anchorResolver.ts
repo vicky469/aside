@@ -20,6 +20,14 @@ export interface ResolvedAnchorRange extends ExactTextMatch {
     text: string;
 }
 
+interface CollapsedWhitespaceText {
+    text: string;
+    spans: Array<{
+        startOffset: number;
+        endOffset: number;
+    }>;
+}
+
 function getLineStartOffsets(text: string): number[] {
     const starts = [0];
 
@@ -138,6 +146,84 @@ export function pickExactTextMatch(
     return bestMatch;
 }
 
+function collapseWhitespaceForAnchorMatch(text: string): CollapsedWhitespaceText {
+    const spans: CollapsedWhitespaceText["spans"] = [];
+    let collapsed = "";
+    let index = 0;
+
+    while (index < text.length) {
+        const startOffset = index;
+        if (/\s/.test(text.charAt(index))) {
+            index += 1;
+            while (index < text.length && /\s/.test(text.charAt(index))) {
+                index += 1;
+            }
+            collapsed += " ";
+            spans.push({ startOffset, endOffset: index });
+            continue;
+        }
+
+        collapsed += text.charAt(index);
+        index += 1;
+        spans.push({ startOffset, endOffset: index });
+    }
+
+    return {
+        text: collapsed,
+        spans,
+    };
+}
+
+function pickWhitespaceCollapsedTextMatch(
+    text: string,
+    target: string,
+    options: {
+        hintOffset?: number;
+        occurrenceIndex?: number;
+    } = {},
+): ExactTextMatch | null {
+    const collapsedText = collapseWhitespaceForAnchorMatch(text);
+    const collapsedTarget = collapseWhitespaceForAnchorMatch(target).text;
+    if (!collapsedTarget) {
+        return null;
+    }
+
+    const collapsedMatches = findExactTextMatches(collapsedText.text, collapsedTarget);
+    if (!collapsedMatches.length) {
+        return null;
+    }
+
+    const expandedMatches = collapsedMatches.map((match) => ({
+        startOffset: collapsedText.spans[match.startOffset]?.startOffset ?? 0,
+        endOffset: collapsedText.spans[match.endOffset - 1]?.endOffset ?? 0,
+        occurrenceIndex: match.occurrenceIndex,
+    }));
+
+    if (options.occurrenceIndex !== undefined) {
+        const byOccurrence = expandedMatches.find((match) => match.occurrenceIndex === options.occurrenceIndex);
+        if (byOccurrence) {
+            return byOccurrence;
+        }
+    }
+
+    if (options.hintOffset === undefined) {
+        return expandedMatches[0];
+    }
+
+    let bestMatch = expandedMatches[0];
+    let bestDistance = Math.abs(bestMatch.startOffset - options.hintOffset);
+
+    for (const match of expandedMatches.slice(1)) {
+        const distance = Math.abs(match.startOffset - options.hintOffset);
+        if (distance < bestDistance) {
+            bestMatch = match;
+            bestDistance = distance;
+        }
+    }
+
+    return bestMatch;
+}
+
 function toResolvedRange(text: string, match: ExactTextMatch): ResolvedAnchorRange {
     const start = offsetToLineCh(text, match.startOffset);
     const end = offsetToLineCh(text, match.endOffset);
@@ -175,5 +261,10 @@ export function resolveAnchorRange(text: string, anchor: TextAnchor): ResolvedAn
 
     const hintOffset = storedStart ?? 0;
     const bestMatch = pickExactTextMatch(text, target, { hintOffset });
-    return bestMatch ? toResolvedRange(text, bestMatch) : null;
+    if (bestMatch) {
+        return toResolvedRange(text, bestMatch);
+    }
+
+    const whitespaceCollapsedMatch = pickWhitespaceCollapsedTextMatch(text, target, { hintOffset });
+    return whitespaceCollapsedMatch ? toResolvedRange(text, whitespaceCollapsedMatch) : null;
 }
