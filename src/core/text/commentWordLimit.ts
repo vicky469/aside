@@ -1,4 +1,4 @@
-export const MAX_SIDENOTE_WORDS = 200;
+export const MAX_SIDENOTE_WORDS = 120;
 
 export function countCommentWords(text: string): number {
     const normalized = text.trim();

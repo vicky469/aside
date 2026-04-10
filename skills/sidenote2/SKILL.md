@@ -43,6 +43,11 @@ Use this skill when the user:
      mark the targeted thread resolved
 4. Prefer helper scripts over hand-editing JSON.
 5. Preserve all existing thread entries unless the user explicitly asked to replace one.
+6. Keep each SideNote2 comment body at or under 120 words.
+7. If the best response would exceed 120 words:
+   - prefer creating a linked wiki page for the detailed writeup and keep the side note itself high-level, like a short Wikipedia-style summary
+   - or split the continuation into child thread entries when the detail belongs inside the same discussion
+8. Do not cram oversized detail into one side note just to avoid splitting it.
 
 ## Preferred CLI Shapes
 
