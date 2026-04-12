@@ -67,3 +67,15 @@ export function shouldRevealSidebarLeaf(
 ): boolean {
     return createdLeaf || revealLeaf !== false;
 }
+
+export function resolveIndexSidebarScopeRootPath(
+    sidebarFilePath: string | null,
+    scopeRootFilePath: string | null,
+    isAllCommentsNotePath: (filePath: string) => boolean,
+): string | null {
+    if (!sidebarFilePath || !scopeRootFilePath || !isAllCommentsNotePath(sidebarFilePath)) {
+        return null;
+    }
+
+    return scopeRootFilePath;
+}

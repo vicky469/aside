@@ -127,6 +127,7 @@ export default class SideNote2 extends Plugin {
         getSidebarTargetFile: () => this.getSidebarTargetFile(),
         getDraftComment: () => this.commentSessionController.getDraftComment(),
         getKnownCommentById: (commentId) => this.getKnownCommentById(commentId),
+        isAllCommentsNotePath: (filePath) => this.isAllCommentsNotePath(filePath),
         setRevealedCommentState: (filePath, commentId) => this.commentSessionController.setRevealedCommentState(filePath, commentId),
         getFileByPath: (path) => this.workspaceViewController.getFileByPath(path),
         isCommentableFile: (file): file is TFile => this.isCommentableFile(file),

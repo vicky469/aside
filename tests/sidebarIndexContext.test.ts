@@ -4,6 +4,7 @@ import {
     pickPinnedCommentableFile,
     pickPreferredFileLeafCandidate,
     pickSidebarTargetFile,
+    resolveIndexSidebarScopeRootPath,
     shouldRevealSidebarLeaf,
 } from "../src/control/commentNavigationPlanner";
 import {
@@ -275,6 +276,28 @@ test("sidebar reveal helper skips revealing an existing sidebar leaf for index-o
     assert.equal(shouldRevealSidebarLeaf(false, false), false);
     assert.equal(shouldRevealSidebarLeaf(undefined, false), true);
     assert.equal(shouldRevealSidebarLeaf(false, true), true);
+});
+
+test("index sidebar scope root follows the target draft file when the sidebar is showing the index", () => {
+    assert.equal(
+        resolveIndexSidebarScopeRootPath(
+            ALL_COMMENTS_NOTE_PATH,
+            "Folder/Note.md",
+            (filePath) => filePath === ALL_COMMENTS_NOTE_PATH,
+        ),
+        "Folder/Note.md",
+    );
+});
+
+test("index sidebar scope root stays unchanged for non-index sidebar targets", () => {
+    assert.equal(
+        resolveIndexSidebarScopeRootPath(
+            "Folder/Note.md",
+            "Folder/Other.md",
+            (filePath) => filePath === ALL_COMMENTS_NOTE_PATH,
+        ),
+        null,
+    );
 });
 
 test("fixed aggregate refresh still updates an open index view when content is unchanged", () => {

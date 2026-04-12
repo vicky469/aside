@@ -131,6 +131,76 @@ test("sidebar interaction controller opens a comment by marking it active and re
     assert.deepEqual(harness.matchingCommentEl.addClassCalls, ["active"]);
 });
 
+test("sidebar interaction controller scrolls the rerendered draft card instead of a stale pre-render node", async () => {
+    const staleDraftEl = createCommentElement({ draftId: "draft-1" });
+    const freshDraftEl = createCommentElement({ draftId: "draft-1" });
+    let renderCalls = 0;
+    let renderCompleted = false;
+    const rafCallbacks: Array<(time: number) => void> = [];
+    const originalWindow = globalThis.window;
+    const originalDocument = globalThis.document;
+
+    Object.assign(globalThis, {
+        window: {
+            requestAnimationFrame(callback: (time: number) => void) {
+                rafCallbacks.push(callback);
+                return rafCallbacks.length;
+            },
+            cancelAnimationFrame() {},
+            getSelection: () => null,
+        },
+        document: {
+            activeElement: null,
+        },
+    });
+
+    try {
+        const controller = new SidebarInteractionController({
+            app: {
+                workspace: {
+                    activeLeaf: null,
+                    setActiveLeaf: () => {},
+                },
+            } as never,
+            leaf: {} as never,
+            containerEl: {
+                querySelector: (selector: string) => {
+                    if (!selector.includes("draft-1")) {
+                        return null;
+                    }
+
+                    return renderCompleted ? freshDraftEl : staleDraftEl;
+                },
+                querySelectorAll: () => [],
+                contains: () => true,
+            } as never,
+            getCurrentFile: () => null,
+            getDraftForView: () => null,
+            renderComments: async () => {
+                renderCalls += 1;
+                renderCompleted = true;
+            },
+            saveDraft: () => {},
+            cancelDraft: () => {},
+            clearRevealedCommentSelection: () => {},
+            revealComment: async () => {},
+            getPreferredFileLeaf: () => null,
+            openLinkText: async () => {},
+        });
+
+        await controller.highlightAndFocusDraft("draft-1");
+
+        assert.equal(renderCalls, 1);
+        assert.equal(staleDraftEl.scrollCalls, 0);
+        assert.equal(freshDraftEl.scrollCalls, 1);
+    } finally {
+        Object.assign(globalThis, {
+            window: originalWindow,
+            document: originalDocument,
+        });
+    }
+});
+
 test("sidebar interaction controller clears active state classes", () => {
     const harness = createHarness();
 

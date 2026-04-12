@@ -166,17 +166,19 @@ export class SidebarInteractionController {
 
         const draftEl = this.host.containerEl.querySelector(`[data-draft-id="${commentId}"]`);
         const persistedEl = this.host.containerEl.querySelector(`[data-comment-id="${commentId}"]`);
+        let commentEl: Element | null = null;
 
         if (draftEl || !persistedEl) {
             await this.host.renderComments();
+            commentEl = this.host.containerEl.querySelector(`[data-comment-id="${commentId}"], [data-draft-id="${commentId}"]`);
         } else {
             this.host.containerEl.querySelectorAll(".sidenote2-comment-item.active").forEach((el) => {
                 el.removeClass("active");
             });
             persistedEl.addClass("active");
+            commentEl = persistedEl;
         }
 
-        const commentEl = draftEl || this.host.containerEl.querySelector(`[data-comment-id="${commentId}"], [data-draft-id="${commentId}"]`);
         if (commentEl) {
             commentEl.scrollIntoView({ behavior: "smooth", block: "center" });
         }

@@ -9,6 +9,7 @@ import { isAttachmentCommentableFile } from "../core/rules/commentableFiles";
 import { parseNoteComments } from "../core/storage/noteCommentStorage";
 import {
     pickPreferredFileLeafCandidate,
+    resolveIndexSidebarScopeRootPath,
     shouldRevealSidebarLeaf,
     type PreferredFileLeafCandidate,
 } from "./commentNavigationPlanner";
@@ -36,6 +37,7 @@ export interface CommentNavigationHost {
     getSidebarTargetFile(): TFile | null;
     getDraftComment(): DraftComment | null;
     getKnownCommentById(commentId: string): Comment | null;
+    isAllCommentsNotePath(filePath: string): boolean;
     setRevealedCommentState(
         filePath: string,
         commentId: string,
@@ -50,6 +52,27 @@ export interface CommentNavigationHost {
 
 export class CommentNavigationController {
     constructor(private readonly host: CommentNavigationHost) {}
+
+    private async syncIndexSidebarScope(
+        leaf: WorkspaceLeaf,
+        sidebarFile: TFile | null,
+        scopeRootFilePath: string | null,
+    ): Promise<void> {
+        const nextScopeRootFilePath = resolveIndexSidebarScopeRootPath(
+            sidebarFile?.path ?? null,
+            scopeRootFilePath,
+            (filePath) => this.host.isAllCommentsNotePath(filePath),
+        );
+        if (
+            !nextScopeRootFilePath
+            || !isSidebarViewLike(leaf.view)
+            || !leaf.view.setIndexFileFilterRootPath
+        ) {
+            return;
+        }
+
+        await leaf.view.setIndexFileFilterRootPath(nextScopeRootFilePath);
+    }
 
     private async ensureMarkdownLeafReadyForReveal(leaf: WorkspaceLeaf): Promise<MarkdownView | null> {
         if (!(leaf.view instanceof MarkdownView)) {
@@ -146,6 +169,8 @@ export class CommentNavigationController {
         }
 
         const skipViewUpdate = this.host.getDraftComment() !== null;
+        const sidebarFile = this.host.getSidebarTargetFile();
+        const scopeRootFilePath = comment?.filePath ?? revealedFilePath;
         await this.activateSidebarView({
             skipViewUpdate,
             revealLeaf: options.revealSidebar,
@@ -154,6 +179,7 @@ export class CommentNavigationController {
         const leaves = this.host.app.workspace.getLeavesOfType("sidenote2-view");
         for (const leaf of leaves) {
             if (isSidebarViewLike(leaf.view)) {
+                await this.syncIndexSidebarScope(leaf, sidebarFile, scopeRootFilePath);
                 await leaf.view.highlightAndFocusDraft(commentId);
             }
         }
