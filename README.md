@@ -3,8 +3,8 @@
   <img src="./logo-readme.svg" alt="SideNote2 logo" width="72">
 </p>
 <p align="center">
-  <a href="https://github.com/vicky469/SideNote2/releases/tag/2.0.7">
-    <img src="https://img.shields.io/badge/beta-2.0.7-f97316?style=flat-square" alt="Current beta">
+  <a href="https://github.com/vicky469/SideNote2/releases/tag/2.0.9">
+    <img src="https://img.shields.io/badge/beta-2.0.9-f97316?style=flat-square" alt="Current beta">
   </a>
   <a href="./docs/README-dev.md">
     <img src="https://img.shields.io/badge/docs-dev%20notes-0f766e?style=flat-square" alt="Dev docs">
