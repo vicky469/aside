@@ -20,6 +20,26 @@ export function shouldShowResolvedToolbarChip(hasResolvedComments: boolean, show
     return hasResolvedComments || showResolved;
 }
 
+export function shouldShowNestedToolbarChip(options: {
+    hasNestedComments: boolean;
+    isAllCommentsView: boolean;
+    selectedIndexFileFilterRootPath: string | null;
+    filteredIndexFileCount: number;
+}): boolean {
+    if (!options.hasNestedComments) {
+        return false;
+    }
+
+    if (!options.isAllCommentsView) {
+        return true;
+    }
+
+    return !(
+        options.selectedIndexFileFilterRootPath
+        && options.filteredIndexFileCount <= 1
+    );
+}
+
 export function shouldShowIndexListToolbarChips(
     isAllCommentsView: boolean,
     indexSidebarMode: IndexSidebarMode,

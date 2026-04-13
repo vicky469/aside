@@ -4,6 +4,7 @@ import { commentToThread, type Comment } from "../src/commentManager";
 import {
     scopeIndexThreadsByFilePaths,
     shouldShowIndexListToolbarChips,
+    shouldShowNestedToolbarChip,
     shouldShowResolvedIndexEmptyState,
     shouldShowResolvedToolbarChip,
 } from "../src/ui/views/indexSidebarState";
@@ -66,6 +67,29 @@ test("shouldShowIndexListToolbarChips hides list-only chips when thought trail i
     assert.equal(shouldShowIndexListToolbarChips(true, "list"), true);
     assert.equal(shouldShowIndexListToolbarChips(true, "thought-trail"), false);
     assert.equal(shouldShowIndexListToolbarChips(false, "thought-trail"), true);
+});
+
+test("shouldShowNestedToolbarChip hides the nested toggle for a single-file filtered index scope", () => {
+    assert.equal(shouldShowNestedToolbarChip({
+        hasNestedComments: true,
+        isAllCommentsView: true,
+        selectedIndexFileFilterRootPath: "docs/a.md",
+        filteredIndexFileCount: 1,
+    }), false);
+
+    assert.equal(shouldShowNestedToolbarChip({
+        hasNestedComments: true,
+        isAllCommentsView: true,
+        selectedIndexFileFilterRootPath: "docs/a.md",
+        filteredIndexFileCount: 2,
+    }), true);
+
+    assert.equal(shouldShowNestedToolbarChip({
+        hasNestedComments: true,
+        isAllCommentsView: false,
+        selectedIndexFileFilterRootPath: null,
+        filteredIndexFileCount: 1,
+    }), true);
 });
 
 test("shouldShowResolvedIndexEmptyState points back to active notes when resolved mode hides all scoped items", () => {

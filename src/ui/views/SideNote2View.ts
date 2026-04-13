@@ -43,6 +43,7 @@ import { extractThoughtTrailClickTargets, parseThoughtTrailOpenFilePath, resolve
 import {
     scopeIndexThreadsByFilePaths,
     shouldShowIndexListToolbarChips,
+    shouldShowNestedToolbarChip,
     shouldShowResolvedIndexEmptyState,
     shouldShowResolvedToolbarChip,
 } from "./indexSidebarState";
@@ -455,7 +456,12 @@ export default class SideNote2View extends ItemView {
         const showListOnlyToolbarChips = shouldShowIndexListToolbarChips(options.isAllCommentsView, this.indexSidebarMode);
         const shouldShowResolvedChip = showListOnlyToolbarChips
             && shouldShowResolvedToolbarChip(options.hasResolvedComments, showResolved);
-        const shouldShowNestedChip = showListOnlyToolbarChips && options.hasNestedComments;
+        const shouldShowNestedChip = showListOnlyToolbarChips && shouldShowNestedToolbarChip({
+            hasNestedComments: options.hasNestedComments,
+            isAllCommentsView: options.isAllCommentsView,
+            selectedIndexFileFilterRootPath: options.selectedIndexFileFilterRootPath,
+            filteredIndexFileCount: options.filteredIndexFilePaths.length,
+        });
         const shouldRenderToolbar = options.isAllCommentsView
             || shouldShowResolvedChip
             || shouldShowNestedChip
@@ -482,9 +488,6 @@ export default class SideNote2View extends ItemView {
                 active: !!options.selectedIndexFileFilterRootPath,
                 ariaLabel: options.indexFileFilterOptions.length
                     ? "Filter index by files"
-                    : "No files with side notes yet",
-                title: options.indexFileFilterOptions.length
-                    ? undefined
                     : "No files with side notes yet",
                 count: options.selectedIndexFileFilterRootPath
                     ? String(options.filteredIndexFilePaths.length)
@@ -518,7 +521,6 @@ export default class SideNote2View extends ItemView {
             this.renderToolbarIconButton(filterGroup, {
                 icon: showNestedComments ? "chevrons-up" : "chevrons-down",
                 ariaLabel: showNestedComments ? "Hide nested comments" : "Show nested comments",
-                title: showNestedComments ? "Hide nested comments" : "Show nested comments",
                 active: showNestedComments,
                 onClick: () => {
                     void this.plugin.setShowNestedComments(!showNestedComments);
@@ -542,7 +544,6 @@ export default class SideNote2View extends ItemView {
             active: boolean;
             pressed?: boolean;
             ariaLabel: string;
-            title?: string;
             onClick: () => void;
             count?: string;
             showIndicator?: boolean;
@@ -556,9 +557,6 @@ export default class SideNote2View extends ItemView {
         button.setAttribute("type", "button");
         button.setAttribute("aria-pressed", (options.pressed ?? options.active) ? "true" : "false");
         button.setAttribute("aria-label", options.ariaLabel);
-        if (options.title) {
-            button.setAttribute("title", options.title);
-        }
         button.disabled = options.disabled ?? false;
 
         if (options.showIndicator) {
@@ -594,7 +592,6 @@ export default class SideNote2View extends ItemView {
         options: {
             icon: string;
             ariaLabel: string;
-            title?: string;
             active?: boolean;
             onClick: () => void;
         },
@@ -605,9 +602,6 @@ export default class SideNote2View extends ItemView {
         button.setAttribute("type", "button");
         button.setAttribute("aria-pressed", options.active ? "true" : "false");
         button.setAttribute("aria-label", options.ariaLabel);
-        if (options.title) {
-            button.setAttribute("title", options.title);
-        }
         setIcon(button, options.icon);
         button.onclick = options.onClick;
     }
@@ -723,6 +717,7 @@ export default class SideNote2View extends ItemView {
         }
 
         this.selectedIndexFileFilterRootPath = normalizedRootPath;
+        this.interactionController.clearActiveState();
         await this.renderComments();
     }
 
