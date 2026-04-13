@@ -3,6 +3,7 @@
 Related spec:
 
 - [../prd/private-source-public-release-split-spec.md](../prd/private-source-public-release-split-spec.md)
+- [todo-private-vs-public-repo-workflow.md](private-vs-public-repo-workflow.md)
 
 Context:
 - GitHub visibility is repository-wide. A public repo cannot hide `src/`, `tests/`, or any other tracked path inside that same repo.
