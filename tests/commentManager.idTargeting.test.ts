@@ -73,6 +73,57 @@ test("CommentManager targets child thread entries by id", () => {
     assert.equal(manager.getThreadById("entry-3")?.entries.length, 2);
 });
 
+test("CommentManager reorders root threads within the same file", () => {
+    const first = createComment("thread-1", 1710000000000, "first");
+    const second = createComment("thread-2", 1710000001000, "second");
+    const third = createComment("thread-3", 1710000002000, "third");
+    const manager = new CommentManager([first, second, third]);
+
+    assert.equal(manager.reorderThreadsForFile("note.md", "thread-3", "thread-1", "before"), true);
+    assert.deepEqual(
+        manager.getThreadsForFile("note.md").map((thread) => thread.id),
+        ["thread-3", "thread-1", "thread-2"],
+    );
+
+    assert.equal(manager.reorderThreadsForFile("note.md", "thread-3", "thread-2", "after"), true);
+    assert.deepEqual(
+        manager.getThreadsForFile("note.md").map((thread) => thread.id),
+        ["thread-1", "thread-2", "thread-3"],
+    );
+
+    assert.equal(manager.reorderThreadsForFile("note.md", "thread-3", "thread-3", "before"), false);
+});
+
+test("CommentManager reorders child entries only within their parent thread", () => {
+    const thread = commentToThread(createComment("thread-1", 1710000000000, "parent"));
+    thread.entries.push({
+        id: "entry-2",
+        body: "second",
+        timestamp: 1710000001000,
+    });
+    thread.entries.push({
+        id: "entry-3",
+        body: "third",
+        timestamp: 1710000002000,
+    });
+    thread.entries.push({
+        id: "entry-4",
+        body: "fourth",
+        timestamp: 1710000003000,
+    });
+
+    const manager = new CommentManager([thread]);
+
+    assert.equal(manager.reorderThreadEntries("thread-1", "entry-4", "entry-2", "before"), true);
+    assert.deepEqual(
+        manager.getThreadById("thread-1")?.entries.map((entry) => entry.id),
+        ["thread-1", "entry-4", "entry-2", "entry-3"],
+    );
+
+    assert.equal(manager.reorderThreadEntries("thread-1", "thread-1", "entry-2", "before"), false);
+    assert.equal(manager.reorderThreadEntries("thread-1", "entry-4", "thread-1", "before"), false);
+});
+
 test("CommentManager preserves a comment when its anchor text is gone", async () => {
     const manager = new CommentManager([
         createComment("id-1", 1710000000000, "first"),

@@ -1,10 +1,9 @@
 import * as assert from "node:assert/strict";
 import test from "node:test";
-import { commentToThread, type Comment } from "../src/commentManager";
+import type { Comment } from "../src/commentManager";
 import {
     getResolvedVisibilityForCommentSelection,
     shouldEnableResolvedVisibilityForComment,
-    shouldExpandChildCommentsForSelection,
 } from "../src/control/commentSelectionVisibility";
 
 function createComment(overrides: Partial<Comment> = {}): Comment {
@@ -59,19 +58,4 @@ test("getResolvedVisibilityForCommentSelection switches between active and resol
         null,
     );
     assert.equal(getResolvedVisibilityForCommentSelection(null, true), null);
-});
-
-test("shouldExpandChildCommentsForSelection expands a thread only when the targeted comment is a child entry", () => {
-    const rootComment = createComment({ id: "thread-1" });
-    const thread = commentToThread(rootComment);
-    thread.entries.push({
-        id: "reply-1",
-        body: "Reply body",
-        timestamp: 101,
-    });
-
-    assert.equal(shouldExpandChildCommentsForSelection(thread, "reply-1"), true);
-    assert.equal(shouldExpandChildCommentsForSelection(thread, "thread-1"), false);
-    assert.equal(shouldExpandChildCommentsForSelection(commentToThread(rootComment), "thread-1"), false);
-    assert.equal(shouldExpandChildCommentsForSelection(null, "reply-1"), false);
 });

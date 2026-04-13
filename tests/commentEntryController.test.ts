@@ -171,7 +171,7 @@ test("comment entry controller starts an append-entry draft using the resolved v
     assert.equal(started, true);
     assert.deepEqual(host.loadedFiles, [existingComment.filePath]);
     assert.deepEqual(host.markedFiles, [existingComment.filePath]);
-    assert.deepEqual(host.highlightedCommentIds, ["thread-1"]);
+    assert.deepEqual(host.highlightedCommentIds, ["comment-1"]);
     assert.equal(host.draftCalls.length, 1);
 
     const draft = host.draftCalls[0].draft;
@@ -208,7 +208,7 @@ test("comment entry controller can start an append-entry draft from a child entr
     assert.equal(started, true);
     assert.deepEqual(host.loadedFiles, [childComment.filePath]);
     assert.deepEqual(host.markedFiles, [childComment.filePath]);
-    assert.deepEqual(host.highlightedCommentIds, ["entry-2"]);
+    assert.deepEqual(host.highlightedCommentIds, ["comment-1"]);
     assert.equal(host.draftCalls.length, 1);
 
     const draft = host.draftCalls[0].draft;

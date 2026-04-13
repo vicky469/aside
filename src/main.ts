@@ -1,13 +1,13 @@
 import { addIcon, WorkspaceLeaf, TFile, Notice, Plugin, normalizePath, MarkdownView, FileSystemAdapter, type Editor } from "obsidian";
 import type { EditorView } from "@codemirror/view";
-import { Comment, CommentManager, CommentThread } from "./commentManager";
+import { Comment, CommentManager, CommentThread, type ReorderPlacement } from "./commentManager";
 import { CommentEntryController } from "./control/commentEntryController";
 import { CommentHighlightController } from "./control/commentHighlightController";
 import { CommentMutationController } from "./control/commentMutationController";
 import { CommentNavigationController } from "./control/commentNavigationController";
 import { pickPinnedCommentableFile, pickPreferredFileLeafCandidate, pickSidebarTargetFile, type PreferredFileLeafCandidate } from "./control/commentNavigationPlanner";
 import { CommentPersistenceController } from "./control/commentPersistenceController";
-import { getResolvedVisibilityForCommentSelection, shouldExpandChildCommentsForSelection } from "./control/commentSelectionVisibility";
+import { getResolvedVisibilityForCommentSelection } from "./control/commentSelectionVisibility";
 import { CommentSessionController } from "./control/commentSessionController";
 import { IndexNoteSettingsController } from "./control/indexNoteSettingsController";
 import { LegacyNoteCommentsMigrationController } from "./control/legacyNoteCommentsMigrationController";
@@ -446,14 +446,6 @@ export default class SideNote2 extends Plugin {
         return this.commentSessionController.getRevealedCommentId(filePath);
     }
 
-    public shouldShowChildComments(): boolean {
-        return this.commentSessionController.shouldShowChildComments();
-    }
-
-    public async toggleShowChildComments(): Promise<void> {
-        await this.commentSessionController.toggleShowChildComments();
-    }
-
     /**
      * Activate the SideNote2 view, highlight a specific comment, and focus the draft
      */
@@ -568,6 +560,14 @@ export default class SideNote2 extends Plugin {
         return true;
     }
 
+    public shouldShowNestedComments(): boolean {
+        return this.commentSessionController.shouldShowNestedComments();
+    }
+
+    public async setShowNestedComments(showNested: boolean): Promise<boolean> {
+        return this.commentSessionController.setShowNestedComments(showNested);
+    }
+
     private async persistCommentsForFile(
         file: TFile,
         options: { immediateAggregateRefresh?: boolean } = {},
@@ -651,6 +651,49 @@ export default class SideNote2 extends Plugin {
         return this.commentManager.getThreadsForFile(filePath);
     }
 
+    public async reorderThreadsForFile(
+        filePath: string,
+        movedThreadId: string,
+        targetThreadId: string,
+        placement: ReorderPlacement,
+    ): Promise<boolean> {
+        const file = this.workspaceViewController.getFileByPath(filePath);
+        if (!this.isCommentableFile(file)) {
+            return false;
+        }
+
+        await this.loadCommentsForFile(file);
+        const changed = this.commentManager.reorderThreadsForFile(file.path, movedThreadId, targetThreadId, placement);
+        if (!changed) {
+            return false;
+        }
+
+        await this.persistCommentsForFile(file, { immediateAggregateRefresh: true });
+        return true;
+    }
+
+    public async reorderThreadEntries(
+        filePath: string,
+        threadId: string,
+        movedEntryId: string,
+        targetEntryId: string,
+        placement: ReorderPlacement,
+    ): Promise<boolean> {
+        const file = this.workspaceViewController.getFileByPath(filePath);
+        if (!this.isCommentableFile(file)) {
+            return false;
+        }
+
+        await this.loadCommentsForFile(file);
+        const changed = this.commentManager.reorderThreadEntries(threadId, movedEntryId, targetEntryId, placement);
+        if (!changed) {
+            return false;
+        }
+
+        await this.persistCommentsForFile(file, { immediateAggregateRefresh: true });
+        return true;
+    }
+
     public isSavingDraft(commentId: string): boolean {
         return this.commentSessionController.isSavingDraft(commentId);
     }
@@ -703,34 +746,24 @@ export default class SideNote2 extends Plugin {
             ?? this.aggregateCommentIndex.getCommentById(commentId);
     }
 
-    private getKnownThreadById(threadId: string): CommentThread | null {
-        return this.commentManager.getThreadById(threadId)
-            ?? this.aggregateCommentIndex.getThreadById(threadId);
-    }
-
     private async loadKnownCommentSelectionTarget(
         commentId: string,
         filePath?: string | null,
-    ): Promise<{ comment: Comment | null; thread: CommentThread | null }> {
+    ): Promise<Comment | null> {
         let comment = this.getKnownCommentById(commentId);
-        let thread = this.getKnownThreadById(commentId);
-        if ((!comment || !thread) && filePath) {
+        if (!comment && filePath) {
             const file = this.workspaceViewController.getFileByPath(filePath);
             if (this.isCommentableFile(file)) {
                 await this.loadCommentsForFile(file);
                 comment = this.getKnownCommentById(commentId);
-                thread = this.getKnownThreadById(commentId);
             }
         }
 
-        return {
-            comment,
-            thread,
-        };
+        return comment;
     }
 
     private async ensureCommentSelectionVisible(commentId: string, filePath?: string | null): Promise<void> {
-        const { comment, thread } = await this.loadKnownCommentSelectionTarget(commentId, filePath);
+        const comment = await this.loadKnownCommentSelectionTarget(commentId, filePath);
 
         const nextShowResolved = getResolvedVisibilityForCommentSelection(
             comment,
@@ -739,12 +772,6 @@ export default class SideNote2 extends Plugin {
         if (nextShowResolved !== null) {
             await this.setShowResolvedComments(nextShowResolved);
         }
-
-        if (!shouldExpandChildCommentsForSelection(thread, commentId)) {
-            return;
-        }
-
-        await this.commentSessionController.setShowChildComments(true);
     }
 
     /**

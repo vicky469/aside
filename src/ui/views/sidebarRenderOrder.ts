@@ -33,6 +33,44 @@ export function getReplacedThreadIdForEditDraft(
     )?.id ?? draft.id;
 }
 
+export function getNestedThreadIdForAppendDraft(
+    threads: readonly CommentThread[],
+    draft: DraftComment | null,
+): string | null {
+    if (!draft || draft.mode !== "append" || !draft.threadId) {
+        return null;
+    }
+
+    return threads.find((thread) =>
+        thread.id === draft.threadId || thread.entries.some((entry) => entry.id === draft.threadId)
+    )?.id ?? null;
+}
+
+export function buildStoredOrderSidebarItems(
+    threads: readonly CommentThread[],
+    draft: DraftComment | null,
+    replacedThreadId: string | null,
+): SidebarRenderableItem[] {
+    const items: SidebarRenderableItem[] = [];
+    let insertedDraft = false;
+
+    for (const thread of threads) {
+        if (thread.id === replacedThreadId && draft) {
+            items.push({ kind: "draft", draft });
+            insertedDraft = true;
+            continue;
+        }
+
+        items.push({ kind: "thread", thread });
+    }
+
+    if (draft && !insertedDraft) {
+        items.push({ kind: "draft", draft });
+    }
+
+    return items;
+}
+
 export function sortSidebarRenderableItems(items: readonly SidebarRenderableItem[]): SidebarRenderableItem[] {
     return items.slice().sort((left, right) => {
         const leftComment = left.kind === "thread" ? getSidebarSortCommentForThread(left.thread) : left.draft;

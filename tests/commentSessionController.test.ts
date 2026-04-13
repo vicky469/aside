@@ -68,24 +68,18 @@ test("comment session controller refreshes comment visibility when resolved comm
     assert.equal(harness.getRefreshMarkdownPreviewsCount(), 1);
 });
 
-test("comment session controller toggles child comment visibility via comment-view refreshes only", async () => {
+test("comment session controller refreshes comment views when nested comments are toggled", async () => {
     const harness = createHarness();
 
-    assert.equal(harness.controller.shouldShowChildComments(), true);
-    assert.equal(await harness.controller.setShowChildComments(false), true);
-    assert.equal(harness.controller.shouldShowChildComments(), false);
+    assert.equal(harness.controller.shouldShowNestedComments(), true);
+    assert.equal(await harness.controller.setShowNestedComments(false), true);
+    assert.equal(harness.controller.shouldShowNestedComments(), false);
     assert.equal(harness.getRefreshCommentViewsCount(), 1);
     assert.equal(harness.getRefreshEditorDecorationsCount(), 0);
     assert.equal(harness.getRefreshMarkdownPreviewsCount(), 0);
 
-    assert.equal(await harness.controller.toggleShowChildComments(), true);
-    assert.equal(harness.controller.shouldShowChildComments(), true);
-    assert.equal(harness.getRefreshCommentViewsCount(), 2);
-    assert.equal(harness.getRefreshEditorDecorationsCount(), 0);
-    assert.equal(harness.getRefreshMarkdownPreviewsCount(), 0);
-
-    assert.equal(await harness.controller.setShowChildComments(true), false);
-    assert.equal(harness.getRefreshCommentViewsCount(), 2);
+    assert.equal(await harness.controller.setShowNestedComments(false), false);
+    assert.equal(harness.getRefreshCommentViewsCount(), 1);
 });
 
 test("comment session controller tracks revealed comments and clears markdown selections on reset", () => {

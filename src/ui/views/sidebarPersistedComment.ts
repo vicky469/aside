@@ -1,6 +1,7 @@
 import type { Comment, CommentThread, CommentThreadEntry } from "../../commentManager";
 import { getFirstThreadEntry, threadEntryToComment } from "../../commentManager";
 import { isOrphanedComment, isPageComment } from "../../core/anchors/commentAnchors";
+import type { DraftComment } from "../../domain/drafts";
 import { normalizeCommentMarkdownForRender } from "../editor/commentMarkdownRendering";
 import { decorateRenderedCommentMentions } from "../editor/commentEditorStyling";
 import { shouldActivateSidebarComment } from "./commentPointerAction";
@@ -35,7 +36,10 @@ export interface SidebarPersistedCommentHost {
     activeCommentId: string | null;
     currentFilePath: string | null;
     showSourceRedirectAction: boolean;
-    showChildComments: boolean;
+    showNestedComments: boolean;
+    enableManualReorder: boolean;
+    enableThreadReorder: boolean;
+    appendDraftComment: DraftComment | null;
     getEventTargetElement(target: EventTarget | null): HTMLElement | null;
     isSelectionInsideSidebarContent(selection?: Selection | null): boolean;
     claimSidebarInteractionOwnership(focusTarget?: HTMLElement | null): void;
@@ -50,6 +54,7 @@ export interface SidebarPersistedCommentHost {
     startAppendEntryDraft(commentId: string, hostFilePath: string | null): void;
     reanchorCommentThreadToCurrentSelection(commentId: string): void;
     deleteCommentWithConfirm(commentId: string): void;
+    renderAppendDraft(container: HTMLDivElement, comment: DraftComment): void;
     setIcon(element: HTMLElement, icon: string): void;
 }
 
@@ -170,6 +175,26 @@ function getRenderableThreadEntries(thread: CommentThread): CommentThreadEntry[]
     return [getFirstThreadEntry(thread)];
 }
 
+export function shouldRenderNestedThreadEntries(
+    thread: CommentThread,
+    options: {
+        activeCommentId: string | null;
+        showNestedComments: boolean;
+        hasAppendDraftComment: boolean;
+    },
+): boolean {
+    const childEntries = getRenderableThreadEntries(thread).slice(1);
+    if (childEntries.length === 0) {
+        return options.hasAppendDraftComment;
+    }
+
+    if (options.showNestedComments || options.hasAppendDraftComment) {
+        return true;
+    }
+
+    return childEntries.some((entry) => entry.id === options.activeCommentId);
+}
+
 function attachSidebarCommentCardInteractions(
     commentEl: HTMLDivElement,
     contentWrapper: HTMLDivElement,
@@ -223,7 +248,7 @@ function attachSidebarCommentCardInteractions(
 }
 
 function renderCommentMeta(
-    headerEl: HTMLDivElement,
+    headerEl: HTMLElement,
     comment: Comment,
     metaText: string,
     host: SidebarPersistedCommentHost,
@@ -244,6 +269,41 @@ function renderCommentMeta(
         cls: "sidenote2-comment-meta-value",
         text: metaText,
     });
+}
+
+function renderReorderHandle(
+    actionsEl: HTMLDivElement,
+    descriptor: {
+        kind: "thread";
+        threadId: string;
+    } | {
+        kind: "entry";
+        threadId: string;
+        entryId: string;
+    },
+    host: SidebarPersistedCommentHost,
+): void {
+    const handleEl = actionsEl.createDiv("sidenote2-comment-drag-handle");
+    handleEl.setAttribute("draggable", "true");
+    handleEl.setAttribute("aria-hidden", "true");
+    handleEl.setAttribute("data-sidenote2-drag-kind", descriptor.kind);
+    handleEl.setAttribute("data-sidenote2-thread-id", descriptor.threadId);
+    handleEl.setAttribute(
+        "title",
+        descriptor.kind === "thread"
+            ? "Drag to reorder side notes"
+            : "Drag to reorder child comments",
+    );
+    if (descriptor.kind === "entry") {
+        handleEl.setAttribute("data-sidenote2-entry-id", descriptor.entryId);
+    }
+
+    const stopPropagation = (event: Event) => {
+        event.stopPropagation();
+    };
+    handleEl.addEventListener("mousedown", stopPropagation);
+    handleEl.addEventListener("click", stopPropagation);
+    host.setIcon(handleEl, "grip-vertical");
 }
 
 function renderSourceRedirectButton(
@@ -308,6 +368,7 @@ function renderDeleteButton(
 function renderThreadFooterActions(
     commentEl: HTMLDivElement,
     comment: Comment,
+    showAddEntryAction: boolean,
     host: SidebarPersistedCommentHost,
 ): void {
     const footerEl = commentEl.createDiv("sidenote2-thread-footer");
@@ -322,6 +383,10 @@ function renderThreadFooterActions(
         event.stopPropagation();
         void host.shareComment(comment);
     };
+
+    if (!showAddEntryAction) {
+        return;
+    }
 
     const addEntryButton = footerActionsEl.createEl("button", {
         cls: "clickable-icon sidenote2-comment-action-button sidenote2-comment-action-add-entry sidenote2-thread-add-entry-button",
@@ -359,27 +424,34 @@ export async function renderPersistedCommentCard(
     host: SidebarPersistedCommentHost,
 ): Promise<void> {
     const entries = getRenderableThreadEntries(thread);
-    const showChildComments = host.showChildComments
-        || entries.slice(1).some((entry) => entry.id === host.activeCommentId);
     const comment = threadEntryToComment(thread, entries[0]);
     const presentation = buildPersistedCommentPresentation(thread, host.activeCommentId);
     const threadEl = commentsContainer.createDiv("sidenote2-thread-stack");
     threadEl.setAttribute("data-thread-id", thread.id);
-    if (entries.length > 1) {
-        threadEl.addClass("has-thread-entries");
-    }
-    if (showChildComments && entries.length > 1) {
-        threadEl.addClass("shows-thread-entries");
-    }
+    const shouldRenderStoredChildren = host.showNestedComments
+        || entries.slice(1).some((entry) => entry.id === host.activeCommentId);
+    const shouldRenderChildComments = shouldRenderNestedThreadEntries(thread, {
+        activeCommentId: host.activeCommentId,
+        showNestedComments: host.showNestedComments,
+        hasAppendDraftComment: !!host.appendDraftComment,
+    });
+    const canReorderChildEntries = host.enableManualReorder && entries.length > 2 && shouldRenderStoredChildren;
 
     const commentEl = threadEl.createDiv(presentation.classes.join(" "));
     commentEl.setAttribute("data-comment-id", comment.id);
     commentEl.setAttribute("data-start-line", String(comment.startLine));
 
     const headerEl = commentEl.createDiv("sidenote2-comment-header");
-    renderCommentMeta(headerEl, comment, presentation.metaText, host);
+    const headerMainEl = headerEl.createDiv("sidenote2-comment-header-main");
+    renderCommentMeta(headerMainEl, comment, presentation.metaText, host);
 
     const actionsEl = headerEl.createDiv("sidenote2-comment-actions");
+    if (host.enableThreadReorder) {
+        renderReorderHandle(actionsEl, {
+            kind: "thread",
+            threadId: thread.id,
+        }, host);
+    }
 
     const contentWrapper = commentEl.createDiv("sidenote2-comment-content");
     contentWrapper.tabIndex = -1;
@@ -417,35 +489,48 @@ export async function renderPersistedCommentCard(
     if (presentation.reanchorAction) {
         renderThreadReanchorAction(commentEl, thread.id, presentation.reanchorAction.label, host);
     }
-    renderThreadFooterActions(commentEl, comment, host);
+    renderThreadFooterActions(commentEl, comment, true, host);
 
-    if (!showChildComments) {
+    if (!shouldRenderChildComments) {
         await Promise.all(renderTasks);
         return;
     }
 
-    const repliesEl = threadEl.createDiv("sidenote2-thread-replies");
-    for (const entry of entries.slice(1)) {
-        const entryComment = threadEntryToComment(thread, entry);
-        const entryPresentation = buildPersistedThreadEntryPresentation(thread, entry, host.activeCommentId);
-        const entryEl = repliesEl.createDiv(entryPresentation.classes.join(" "));
-        entryEl.setAttribute("data-comment-id", entryComment.id);
-        entryEl.setAttribute("data-start-line", String(entryComment.startLine));
+    const childCommentsEl = threadEl.createDiv("sidenote2-thread-replies");
+    if (shouldRenderStoredChildren) {
+        for (const entry of entries.slice(1)) {
+            const entryComment = threadEntryToComment(thread, entry);
+            const entryPresentation = buildPersistedThreadEntryPresentation(thread, entry, host.activeCommentId);
+            const entryEl = childCommentsEl.createDiv(entryPresentation.classes.join(" "));
+            entryEl.setAttribute("data-comment-id", entryComment.id);
+            entryEl.setAttribute("data-start-line", String(entryComment.startLine));
 
-        const entryHeaderEl = entryEl.createDiv("sidenote2-comment-header");
-        renderCommentMeta(entryHeaderEl, entryComment, entryPresentation.metaText, host);
-        const entryActionsEl = entryHeaderEl.createDiv("sidenote2-comment-actions");
-        renderEditButton(entryActionsEl, entryComment.id, host, "Edit side note");
-        renderDeleteButton(entryActionsEl, entryComment.id, host, "Delete side note entry");
-        if (host.showSourceRedirectAction) {
-            renderSourceRedirectButton(entryActionsEl, entryComment, "Open source note", "obsidian-external-link", host);
+            const entryHeaderEl = entryEl.createDiv("sidenote2-comment-header");
+            renderCommentMeta(entryHeaderEl, entryComment, entryPresentation.metaText, host);
+            const entryActionsEl = entryHeaderEl.createDiv("sidenote2-comment-actions");
+            if (canReorderChildEntries) {
+                renderReorderHandle(entryActionsEl, {
+                    kind: "entry",
+                    threadId: thread.id,
+                    entryId: entryComment.id,
+                }, host);
+            }
+            renderEditButton(entryActionsEl, entryComment.id, host, "Edit side note");
+            renderDeleteButton(entryActionsEl, entryComment.id, host, "Delete side note entry");
+            if (host.showSourceRedirectAction) {
+                renderSourceRedirectButton(entryActionsEl, entryComment, "Open source note", "obsidian-external-link", host);
+            }
+
+            const entryContentEl = entryEl.createDiv("sidenote2-comment-content");
+            entryContentEl.tabIndex = -1;
+            attachSidebarCommentCardInteractions(entryEl, entryContentEl, entryComment, host);
+            renderTasks.push(renderThreadEntryContent(entryContentEl, thread, entry.body || "", host));
+            renderThreadFooterActions(entryEl, entryComment, false, host);
         }
+    }
 
-        const entryContentEl = entryEl.createDiv("sidenote2-comment-content");
-        entryContentEl.tabIndex = -1;
-        attachSidebarCommentCardInteractions(entryEl, entryContentEl, entryComment, host);
-        renderTasks.push(renderThreadEntryContent(entryContentEl, thread, entry.body || "", host));
-        renderThreadFooterActions(entryEl, entryComment, host);
+    if (host.appendDraftComment) {
+        host.renderAppendDraft(childCommentsEl, host.appendDraftComment);
     }
 
     await Promise.all(renderTasks);

@@ -1,4 +1,4 @@
-import type { Comment, CommentThread } from "../commentManager";
+import type { Comment } from "../commentManager";
 
 export function getResolvedVisibilityForCommentSelection(
     comment: Pick<Comment, "resolved"> | null,
@@ -19,13 +19,4 @@ export function shouldEnableResolvedVisibilityForComment(
     showResolvedComments: boolean,
 ): boolean {
     return getResolvedVisibilityForCommentSelection(comment, showResolvedComments) === true;
-}
-
-export function shouldExpandChildCommentsForSelection(
-    thread: Pick<CommentThread, "entries"> | null,
-    commentId: string,
-): boolean {
-    return !!thread
-        && thread.entries.length > 1
-        && thread.entries.slice(1).some((entry) => entry.id === commentId);
 }

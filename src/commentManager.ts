@@ -43,6 +43,18 @@ export interface Comment {
     entryCount?: number;
 }
 
+export type ReorderPlacement = "before" | "after";
+
+function compareThreadsByPosition(left: CommentThread, right: CommentThread): number {
+    if (left.startLine !== right.startLine) {
+        return left.startLine - right.startLine;
+    }
+    if (left.startChar !== right.startChar) {
+        return left.startChar - right.startChar;
+    }
+    return left.createdAt - right.createdAt;
+}
+
 function cloneThreadEntry(entry: CommentThreadEntry): CommentThreadEntry {
     return {
         id: entry.id,
@@ -157,6 +169,35 @@ function isThreadLike(value: Comment | CommentThread): value is CommentThread {
     return Array.isArray((value as CommentThread).entries);
 }
 
+function moveItemByIdRelative<T extends { id: string }>(
+    items: readonly T[],
+    movedId: string,
+    targetId: string,
+    placement: ReorderPlacement,
+): T[] | null {
+    if (movedId === targetId) {
+        return null;
+    }
+
+    const movedItem = items.find((item) => item.id === movedId);
+    if (!movedItem) {
+        return null;
+    }
+
+    const remainingItems = items.filter((item) => item.id !== movedId);
+    const targetIndex = remainingItems.findIndex((item) => item.id === targetId);
+    if (targetIndex === -1) {
+        return null;
+    }
+
+    const insertionIndex = placement === "before"
+        ? targetIndex
+        : targetIndex + 1;
+    const nextItems = remainingItems.slice();
+    nextItems.splice(insertionIndex, 0, movedItem);
+    return nextItems;
+}
+
 export class CommentManager {
     private threads: CommentThread[];
 
@@ -219,7 +260,17 @@ export class CommentManager {
     }
 
     addThread(newThread: CommentThread) {
-        this.threads.push(normalizeThread(newThread));
+        const normalizedThread = normalizeThread(newThread);
+        const insertionIndex = this.threads.findIndex((thread) =>
+            thread.filePath === normalizedThread.filePath
+            && compareThreadsByPosition(normalizedThread, thread) < 0);
+
+        if (insertionIndex === -1) {
+            this.threads.push(normalizedThread);
+            return;
+        }
+
+        this.threads.splice(insertionIndex, 0, normalizedThread);
     }
 
     appendEntry(threadId: string, entry: CommentThreadEntry) {
@@ -231,6 +282,65 @@ export class CommentManager {
 
         thread.entries.push(cloneThreadEntry(entry));
         thread.updatedAt = Math.max(thread.updatedAt, entry.timestamp);
+    }
+
+    reorderThreadsForFile(
+        filePath: string,
+        movedThreadId: string,
+        targetThreadId: string,
+        placement: ReorderPlacement,
+    ): boolean {
+        const fileThreads = this.threads.filter((thread) => thread.filePath === filePath);
+        const reorderedThreads = moveItemByIdRelative(fileThreads, movedThreadId, targetThreadId, placement);
+        if (!reorderedThreads) {
+            return false;
+        }
+
+        const reorderedThreadIds = new Set(reorderedThreads.map((thread) => thread.id));
+        const nextThreads: CommentThread[] = [];
+        let inserted = false;
+
+        for (const thread of this.threads) {
+            if (thread.filePath !== filePath) {
+                nextThreads.push(thread);
+                continue;
+            }
+
+            if (!inserted) {
+                nextThreads.push(...reorderedThreads);
+                inserted = true;
+            }
+
+            if (!reorderedThreadIds.has(thread.id)) {
+                nextThreads.push(thread);
+            }
+        }
+
+        this.threads = nextThreads;
+        return true;
+    }
+
+    reorderThreadEntries(
+        threadId: string,
+        movedEntryId: string,
+        targetEntryId: string,
+        placement: ReorderPlacement,
+    ): boolean {
+        const thread = this.threads.find((candidate) =>
+            candidate.id === threadId || candidate.entries.some((entry) => entry.id === threadId));
+        if (!thread || thread.entries.length < 3) {
+            return false;
+        }
+
+        const parentEntry = thread.entries[0];
+        const childEntries = thread.entries.slice(1);
+        const reorderedChildEntries = moveItemByIdRelative(childEntries, movedEntryId, targetEntryId, placement);
+        if (!reorderedChildEntries) {
+            return false;
+        }
+
+        thread.entries = [parentEntry, ...reorderedChildEntries];
+        return true;
     }
 
     editComment(id: string, newCommentText: string) {

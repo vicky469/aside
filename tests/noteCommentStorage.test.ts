@@ -12,8 +12,9 @@ import {
     resolveNoteCommentById,
     replaceNoteCommentBodyById,
     serializeNoteComments,
+    serializeNoteCommentThreads,
 } from "../src/core/storage/noteCommentStorage";
-import type { Comment } from "../src/commentManager";
+import type { Comment, CommentThread } from "../src/commentManager";
 
 function createComment(overrides: Partial<Comment> = {}): Comment {
     return {
@@ -148,6 +149,47 @@ test("serializeNoteComments preserves page-note and orphaned anchor metadata", (
     assert.equal(parsed.comments[0].anchorKind, "page");
     assert.equal(parsed.comments[0].orphaned, false);
     assert.equal(parsed.comments[1].orphaned, true);
+});
+
+test("serializeNoteCommentThreads preserves stored top-level thread order", () => {
+    const threads: CommentThread[] = [{
+        id: "thread-later",
+        filePath: "note.md",
+        startLine: 8,
+        startChar: 0,
+        endLine: 8,
+        endChar: 5,
+        selectedText: "later",
+        selectedTextHash: "hash-later",
+        entries: [{
+            id: "thread-later",
+            body: "Later thread",
+            timestamp: 1710000001000,
+        }],
+        createdAt: 1710000001000,
+        updatedAt: 1710000001000,
+    }, {
+        id: "thread-earlier",
+        filePath: "note.md",
+        startLine: 2,
+        startChar: 0,
+        endLine: 2,
+        endChar: 5,
+        selectedText: "earlier",
+        selectedTextHash: "hash-earlier",
+        entries: [{
+            id: "thread-earlier",
+            body: "Earlier thread",
+            timestamp: 1710000000000,
+        }],
+        createdAt: 1710000000000,
+        updatedAt: 1710000000000,
+    }];
+
+    const serialized = serializeNoteCommentThreads("Body\n", threads);
+    const parsed = parseNoteComments(serialized, "note.md");
+
+    assert.deepEqual(parsed.threads.map((thread) => thread.id), ["thread-later", "thread-earlier"]);
 });
 
 test("serializeNoteComments removes the managed appendix when there are no comments", () => {

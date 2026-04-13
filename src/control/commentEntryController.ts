@@ -80,7 +80,7 @@ export class CommentEntryController {
         };
         this.host.markDraftFileActive(commentFile);
         await this.host.setDraftComment(draft, hostFilePath ?? comment.filePath);
-        await this.host.activateViewAndHighlightComment(threadId);
+        await this.host.activateViewAndHighlightComment(draft.id);
         return true;
     }
 

@@ -4,6 +4,8 @@ import { commentToThread, type Comment } from "../src/commentManager";
 import type { DraftComment } from "../src/domain/drafts";
 import type { SidebarRenderableItem } from "../src/ui/views/sidebarRenderOrder";
 import {
+    buildStoredOrderSidebarItems,
+    getNestedThreadIdForAppendDraft,
     getReplacedThreadIdForEditDraft,
     getSidebarSortCommentForThread,
     sortSidebarRenderableItems,
@@ -99,4 +101,61 @@ test("getReplacedThreadIdForEditDraft replaces the parent thread when editing a 
     };
 
     assert.equal(getReplacedThreadIdForEditDraft([thread], draft), "thread-1");
+});
+
+test("getNestedThreadIdForAppendDraft resolves a child-targeted append draft to its parent thread", () => {
+    const thread = commentToThread(createComment({
+        id: "thread-1",
+        anchorKind: "selection",
+        timestamp: 100,
+    }));
+    thread.entries.push({
+        id: "reply-1",
+        body: "Child reply",
+        timestamp: 200,
+    });
+
+    const draft: DraftComment = {
+        ...createComment({
+            id: "draft-1",
+            anchorKind: "selection",
+            comment: "",
+            timestamp: 300,
+        }),
+        mode: "append",
+        threadId: "reply-1",
+    };
+
+    assert.equal(getNestedThreadIdForAppendDraft([thread], draft), "thread-1");
+    assert.equal(getNestedThreadIdForAppendDraft([thread], {
+        ...draft,
+        mode: "new",
+    }), null);
+});
+
+test("buildStoredOrderSidebarItems keeps file thread order and replaces the edited thread in place", () => {
+    const firstThread = commentToThread(createComment({
+        id: "thread-1",
+        timestamp: 100,
+    }));
+    const secondThread = commentToThread(createComment({
+        id: "thread-2",
+        timestamp: 200,
+    }));
+    const draft: DraftComment = {
+        ...createComment({
+            id: "draft-1",
+            comment: "Draft body",
+            timestamp: 250,
+        }),
+        mode: "edit",
+        threadId: "thread-2",
+    };
+
+    const items = buildStoredOrderSidebarItems([firstThread, secondThread], draft, "thread-2");
+
+    assert.deepEqual(items.map((item) => item.kind === "thread" ? item.thread.id : item.draft.id), [
+        "thread-1",
+        "draft-1",
+    ]);
 });

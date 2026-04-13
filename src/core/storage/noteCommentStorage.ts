@@ -191,7 +191,7 @@ function toStoredThread(thread: CommentThread): StoredNoteCommentThread {
 }
 
 function buildManagedSection(threads: CommentThread[]): string {
-    const storedThreads = sortThreadsByPosition(threads).map((thread) => toStoredThread(thread));
+    const storedThreads = cloneCommentThreads(threads).map((thread) => toStoredThread(thread));
     const json = JSON.stringify(storedThreads, null, 2)
         .replace(/</g, "\\u003c")
         .replace(/>/g, "\\u003e");
@@ -310,7 +310,7 @@ function parseJsonSection(sectionContent: string, filePath: string): CommentThre
         .map((item) => fromStoredThread(item, filePath))
         .filter((thread): thread is CommentThread => thread !== null);
 
-    return sortThreadsByPosition(threads);
+    return cloneCommentThreads(threads);
 }
 
 function findJsonManagedSection(noteContent: string): JsonManagedSectionResult | null {

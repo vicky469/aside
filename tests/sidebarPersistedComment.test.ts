@@ -5,6 +5,7 @@ import {
     buildPersistedCommentPresentation,
     buildPersistedThreadEntryPresentation,
     formatSidebarCommentSourceFileLabel,
+    shouldRenderNestedThreadEntries,
 } from "../src/ui/views/sidebarPersistedComment";
 import { formatSidebarCommentMeta } from "../src/ui/views/sidebarCommentSections";
 
@@ -150,6 +151,50 @@ test("buildPersistedThreadEntryPresentation gives child entries their own indent
             resolved: true,
         }),
     );
+});
+
+test("shouldRenderNestedThreadEntries hides stored child comments when nested comments are off", () => {
+    const thread = createThreadWithEntries({
+        entries: [
+            { id: "entry-1", body: "Parent", timestamp: 100 },
+            { id: "entry-2", body: "Child", timestamp: 200 },
+        ],
+        createdAt: 100,
+        updatedAt: 200,
+    });
+
+    assert.equal(shouldRenderNestedThreadEntries(thread, {
+        activeCommentId: null,
+        showNestedComments: false,
+        hasAppendDraftComment: false,
+    }), false);
+});
+
+test("shouldRenderNestedThreadEntries keeps a targeted child comment visible even when nested comments are off", () => {
+    const thread = createThreadWithEntries({
+        entries: [
+            { id: "entry-1", body: "Parent", timestamp: 100 },
+            { id: "entry-2", body: "Child", timestamp: 200 },
+        ],
+        createdAt: 100,
+        updatedAt: 200,
+    });
+
+    assert.equal(shouldRenderNestedThreadEntries(thread, {
+        activeCommentId: "entry-2",
+        showNestedComments: false,
+        hasAppendDraftComment: false,
+    }), true);
+});
+
+test("shouldRenderNestedThreadEntries keeps append drafts visible even when nested comments are off", () => {
+    const thread = createThreadWithEntries();
+
+    assert.equal(shouldRenderNestedThreadEntries(thread, {
+        activeCommentId: null,
+        showNestedComments: false,
+        hasAppendDraftComment: true,
+    }), true);
 });
 
 test("formatSidebarCommentSourceFileLabel keeps the basename without md, even for long paths", () => {
