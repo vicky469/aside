@@ -74,7 +74,7 @@ test("SideNote2LogService prunes expired daily files and appends deterministic j
         pluginDirPath: ".obsidian/plugins/side-note2",
         pluginDirRelativePath: ".obsidian/plugins/side-note2",
         vaultRootPath: "/Users/tester/Vault",
-        now: () => new Date(2026, 3, 13, 9, 30, 0),
+        now: () => new Date("2026-04-13T13:30:00.000Z"),
         sessionId: "session-1",
     });
 
@@ -117,7 +117,7 @@ test("SideNote2LogService swallows write failures so user flows do not throw", a
         pluginVersion: "2.0.10",
         pluginDirPath: ".obsidian/plugins/side-note2",
         pluginDirRelativePath: ".obsidian/plugins/side-note2",
-        now: () => new Date(2026, 3, 13, 9, 30, 0),
+        now: () => new Date("2026-04-13T13:30:00.000Z"),
         sessionId: "session-2",
     });
 
@@ -136,7 +136,7 @@ test("SideNote2LogService returns only the requested recent attachment window", 
     adapter.directories.add(".obsidian/plugins/side-note2");
     adapter.directories.add(".obsidian/plugins/side-note2/logs");
 
-    let now = new Date(2026, 3, 13, 9, 0, 0);
+    let now = new Date("2026-04-13T13:00:00.000Z");
     const service = new SideNote2LogService({
         adapter: adapter as unknown as DataAdapter,
         pluginVersion: "2.0.10",
@@ -149,12 +149,12 @@ test("SideNote2LogService returns only the requested recent attachment window", 
     await service.initialize();
     await service.log("info", "startup", "startup.load.begin");
 
-    now = new Date(2026, 3, 13, 9, 20, 0);
+    now = new Date("2026-04-13T13:20:00.000Z");
     await service.log("info", "index", "index.filter.changed", {
         source: "view-state",
     });
 
-    now = new Date(2026, 3, 13, 9, 31, 0);
+    now = new Date("2026-04-13T13:31:00.000Z");
     await service.log("warn", "persistence", "storage.note.parse.unsupported", {
         filePath: "Example.md",
     });
