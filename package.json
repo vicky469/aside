@@ -1,6 +1,6 @@
 {
 	"name": "side-note2",
-	"version": "2.0.11",
+	"version": "2.0.12",
 	"description": "Side comments for both humans and agents.",
 	"main": "main.js",
 	"bin": {
