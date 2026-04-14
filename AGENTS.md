@@ -56,10 +56,8 @@ If the user already supplied an `obsidian://side-note2-comment?...` URI, prefer 
 
 Do not overwrite an existing SideNote2 thread when the user clearly asked to reply.
 
-## Private/Public Repo Workflow
+## Repo Workflow
 
-- This checkout is the private source repo.
-- `origin` points to `SideNote2-source` and is where normal development commits should go.
-- `public` points to `SideNote2` and is release-only.
-- Do not push feature work directly to `public`.
-- When the user wants to update the public repo, run `npm run public-release:publish`.
+- This checkout should be treated as the canonical public source repo: `SideNote2`.
+- Normal plugin development and releases should happen here.
+- If SideNote2 later needs billing, auth, or entitlement services, keep that backend in a separate private repo.

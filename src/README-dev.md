@@ -95,9 +95,6 @@ SIDENOTE2_HOT_RELOAD=0 npm run dev
 
 - `npm test` runs the Node test suite.
 - `npm run build` creates the production bundle and fails if release artifacts leak source-map markers.
-- `npm run public-release:check` validates the explicit public release allowlist in a temporary export.
-- `npm run public-release:export` writes a release-only snapshot to `.public-release/`.
-- `npm run public-release:publish` exports the allowlisted public tree, commits it to the `public` remote snapshot, and pushes it.
 
 ## Release
 
@@ -109,8 +106,7 @@ git push origin main --follow-tags
 
 - `npm version patch|minor|major` updates `package.json`, `manifest.json`, `versions.json`, and the README release badge.
 - `npm run release:check` runs the tests and the production build.
-- `npm run release:check` also validates the explicit public release tree.
-- `npm run public-release:publish` updates the public `SideNote2` release repo from this private source repo.
+- `origin` should point to the canonical public source repo: `SideNote2`.
 - Before pushing a release tag, inspect the shipped files: `main.js`, `manifest.json`, and `styles.css`.
 - Releases should not ship `main.js.map`, `sourceMappingURL`, or `sourcesContent`.
 - GitHub releases upload only `main.js`, `manifest.json`, and `styles.css`.

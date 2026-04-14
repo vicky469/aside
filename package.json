@@ -13,12 +13,9 @@
 		"comment:resolve": "node bin/sidenote2.mjs comment:resolve",
 		"comment:update": "node bin/sidenote2.mjs comment:update",
 		"fixture:graph-1000": "node scripts/generate-large-graph-fixture.mjs",
-		"public-release:check": "node scripts/export-public-release.mjs --check",
-		"public-release:export": "node scripts/export-public-release.mjs --out-dir .public-release",
-		"public-release:publish": "npm run release:check && node scripts/publish-public-release.mjs --push",
 		"skill:install": "node bin/sidenote2.mjs install-skill",
 		"test": "rm -rf .test-dist && tsc -p tsconfig.test.json && find .test-dist/tests -type f -name '*.test.js' -exec node --test {} + && find tests -type f -name '*.test.mjs' -exec node --test {} +",
-		"release:check": "npm run test && npm run build && npm run public-release:check",
+		"release:check": "npm run test && npm run build",
 		"version": "node version-bump.mjs && git add manifest.json versions.json README.md"
 	},
 	"keywords": [],
