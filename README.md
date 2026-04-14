@@ -14,6 +14,9 @@
   <a href="https://obsidian.md">
     <img src="https://img.shields.io/badge/Obsidian-API-7c3aed?style=flat-square&logo=obsidian&logoColor=white" alt="Obsidian API">
   </a>
+  <a href="https://github.com/agentskills/agentskills">
+    <img src="https://img.shields.io/badge/Agents-ready-111827?style=flat-square" alt="Agents ready">
+  </a>
   <a href="https://www.typescriptlang.org/">
     <img src="https://img.shields.io/badge/TypeScript-language-3178c6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript">
   </a>
