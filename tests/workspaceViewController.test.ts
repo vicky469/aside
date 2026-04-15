@@ -75,6 +75,7 @@ function createHarness(options: {
     const workspace = {
         activeLeaf: options.activeLeaf ?? null,
         getActiveFile: () => options.activeFile ?? null,
+        getMostRecentLeaf: () => options.activeLeaf ?? null,
         getLeavesOfType: (viewType: string) =>
             (options.leaves ?? []).filter((leaf) =>
                 (leaf.view as { getViewType?: () => string } | null)?.getViewType?.() === viewType,

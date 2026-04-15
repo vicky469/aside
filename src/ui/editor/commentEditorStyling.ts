@@ -1,5 +1,70 @@
 const COMMENT_MENTION_PATTERN = /(^|[^\w])(@[A-Za-z0-9_/-]+(?:\.[A-Za-z0-9_/-]+)*)/g;
 
+function appendMentionNodes(
+    document: Document,
+    parent: Node,
+    value: string,
+    className: string,
+): void {
+    let lastIndex = 0;
+    COMMENT_MENTION_PATTERN.lastIndex = 0;
+
+    for (let match = COMMENT_MENTION_PATTERN.exec(value); match; match = COMMENT_MENTION_PATTERN.exec(value)) {
+        const [fullMatch, prefix, mention] = match;
+        if (match.index > lastIndex) {
+            parent.appendChild(document.createTextNode(value.slice(lastIndex, match.index)));
+        }
+        if (prefix.length > 0) {
+            parent.appendChild(document.createTextNode(prefix));
+        }
+
+        const mentionEl = document.createElement("span");
+        mentionEl.className = className;
+        mentionEl.textContent = mention;
+        parent.appendChild(mentionEl);
+        lastIndex = match.index + fullMatch.length;
+    }
+
+    if (lastIndex < value.length) {
+        parent.appendChild(document.createTextNode(value.slice(lastIndex)));
+    }
+}
+
+export function renderStyledDraftCommentFragment(document: Document, value: string): DocumentFragment {
+    const fragment = document.createDocumentFragment();
+    if (!value) {
+        return fragment;
+    }
+
+    let cursor = 0;
+    while (cursor < value.length) {
+        const boldStart = value.indexOf("**", cursor);
+        if (boldStart === -1) {
+            appendMentionNodes(document, fragment, value.slice(cursor), "sidenote2-editor-token-mention");
+            break;
+        }
+
+        const boldEnd = value.indexOf("**", boldStart + 2);
+        if (boldEnd === -1) {
+            appendMentionNodes(document, fragment, value.slice(cursor), "sidenote2-editor-token-mention");
+            break;
+        }
+
+        appendMentionNodes(document, fragment, value.slice(cursor, boldStart), "sidenote2-editor-token-mention");
+        fragment.append(document.createTextNode(value.slice(boldStart, boldStart + 2)));
+
+        const boldEl = document.createElement("span");
+        boldEl.className = "sidenote2-editor-token-bold";
+        appendMentionNodes(document, boldEl, value.slice(boldStart + 2, boldEnd), "sidenote2-editor-token-mention");
+        fragment.appendChild(boldEl);
+
+        fragment.append(document.createTextNode(value.slice(boldEnd, boldEnd + 2)));
+        cursor = boldEnd + 2;
+    }
+
+    return fragment;
+}
+
 function escapeHtml(value: string): string {
     return value
         .replace(/&/g, "&amp;")
@@ -69,7 +134,6 @@ function createMentionFragment(
     for (let match = COMMENT_MENTION_PATTERN.exec(value); match; match = COMMENT_MENTION_PATTERN.exec(value)) {
         const [fullMatch, prefix, mention] = match;
         const prefixStart = match.index;
-        const prefixEnd = prefixStart + prefix.length;
         const mentionEnd = match.index + fullMatch.length;
 
         if (prefixStart > lastIndex) {

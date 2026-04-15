@@ -19,7 +19,6 @@ import {
 import {
     getManagedSectionEditForThreads,
     getManagedSectionKind,
-    serializeNoteComments,
     serializeNoteCommentThreads,
     type ParsedNoteComments,
 } from "../core/storage/noteCommentStorage";

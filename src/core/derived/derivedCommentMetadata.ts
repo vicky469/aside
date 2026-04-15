@@ -31,8 +31,10 @@ export class DerivedCommentMetadataManager {
         }
 
         const metadataCache = this.getMutableMetadataCache();
-        this.originalMetadataGetCache = metadataCache.getCache.bind(this.app.metadataCache);
-        this.originalMetadataGetFileCache = metadataCache.getFileCache.bind(this.app.metadataCache);
+        const originalGetCache = metadataCache.getCache.bind(metadataCache) as MutableMetadataCache["getCache"];
+        const originalGetFileCache = metadataCache.getFileCache.bind(metadataCache) as MutableMetadataCache["getFileCache"];
+        this.originalMetadataGetCache = (path) => originalGetCache(path);
+        this.originalMetadataGetFileCache = (file) => originalGetFileCache(file);
 
         metadataCache.getCache = ((path: string) =>
             mergeDerivedLinksIntoCache(
@@ -178,8 +180,13 @@ export class DerivedCommentMetadataManager {
     }
 }
 
+function isObject(value: unknown): value is Record<string, unknown> {
+    return !!value && typeof value === "object";
+}
+
 function isTFileLike(value: unknown): value is TFile {
-    return !!value
-        && typeof (value as TFile).path === "string"
-        && typeof (value as TFile).extension === "string";
+    return isObject(value)
+        && typeof value.path === "string"
+        && typeof value.basename === "string"
+        && typeof value.extension === "string";
 }

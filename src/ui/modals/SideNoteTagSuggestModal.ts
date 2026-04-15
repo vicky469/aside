@@ -199,8 +199,8 @@ export default class SideNoteTagSuggestModal extends SuggestModal<SideNoteTagSug
         );
     }
 
-    async onChooseSuggestion(suggestion: SideNoteTagSuggestion): Promise<void> {
-        await this.onChooseTag(suggestion.tag);
+    onChooseSuggestion(suggestion: SideNoteTagSuggestion): void {
+        void this.onChooseTag(suggestion.tag);
     }
 
     private getCreateSuggestion(normalizedQuery: string): CreateTagSuggestion | null {

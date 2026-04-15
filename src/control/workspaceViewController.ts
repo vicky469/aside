@@ -1,5 +1,5 @@
 import type { EditorView } from "@codemirror/view";
-import type { Plugin, TFile, MarkdownView } from "obsidian";
+import type { MarkdownView, Plugin, TFile } from "obsidian";
 
 interface FileViewLike {
     file: TFile | null | undefined;
@@ -76,10 +76,14 @@ function isMarkdownViewLike(view: unknown): view is MarkdownViewLike {
 }
 
 function isSidebarViewLike(view: unknown): view is SidebarViewLike {
-    return isObject(view)
-        && typeof view.getViewType === "function"
-        && view.getViewType() === "sidenote2-view"
-        && typeof view.renderComments === "function";
+    if (!isObject(view)) {
+        return false;
+    }
+
+    const candidate = view as Partial<SidebarViewLike>;
+    return typeof candidate.getViewType === "function"
+        && candidate.getViewType() === "sidenote2-view"
+        && typeof candidate.renderComments === "function";
 }
 
 export class WorkspaceViewController {
@@ -96,9 +100,9 @@ export class WorkspaceViewController {
     }
 
     public getMarkdownViewForFile(file: TFile): MarkdownView | null {
-        const activeView = this.host.app.workspace.activeLeaf?.view;
-        if (isMarkdownViewLike(activeView) && activeView.file?.path === file.path) {
-            return activeView as MarkdownView;
+        const recentLeaf = this.host.app.workspace.getMostRecentLeaf?.() ?? null;
+        if (isMarkdownViewLike(recentLeaf?.view) && recentLeaf.view.file?.path === file.path) {
+            return recentLeaf.view as MarkdownView;
         }
 
         let matchedView: MarkdownView | null = null;

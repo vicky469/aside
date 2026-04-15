@@ -4,13 +4,7 @@ import { copyTextToClipboard, type ClipboardWriter, type CopyTextDocument, type 
 
 class FakeTextarea implements CopyTextTextarea {
     value = "";
-    style = {
-        position: "",
-        left: "",
-        top: "",
-        opacity: "",
-        pointerEvents: "",
-    };
+    public cssProps: Record<string, string> = {};
     public readonly attributes = new Map<string, string>();
     public focused = false;
     public selected = false;
@@ -19,6 +13,10 @@ class FakeTextarea implements CopyTextTextarea {
 
     setAttribute(name: string, value: string): void {
         this.attributes.set(name, value);
+    }
+
+    setCssProps(props: Record<string, string>): void {
+        this.cssProps = { ...props };
     }
 
     focus(): void {

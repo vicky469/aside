@@ -30,7 +30,7 @@ export type IndexNotePathChangePlan =
     };
 
 function hasOwn(target: object, key: string): boolean {
-    return Object.prototype.hasOwnProperty.call(target, key);
+    return Boolean(Object.prototype.hasOwnProperty.call(target, key));
 }
 
 export function resolveLoadedSettings(

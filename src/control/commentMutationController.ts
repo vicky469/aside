@@ -391,7 +391,9 @@ export class CommentMutationController {
     }
 
     private toPersistedComment(draftComment: DraftComment): Comment {
-        const { mode: _mode, threadId: _threadId, ...comment } = draftComment;
+        const { mode, threadId, ...comment } = draftComment;
+        void mode;
+        void threadId;
         return comment;
     }
 

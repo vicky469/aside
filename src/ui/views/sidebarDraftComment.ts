@@ -1,7 +1,7 @@
 import { isOrphanedComment, isPageComment } from "../../core/anchors/commentAnchors";
 import { MAX_SIDENOTE_WORDS, countCommentWords, exceedsCommentWordLimit } from "../../core/text/commentWordLimit";
 import type { DraftComment } from "../../domain/drafts";
-import { renderStyledDraftCommentHtml } from "../editor/commentEditorStyling";
+import { renderStyledDraftCommentFragment } from "../editor/commentEditorStyling";
 import { formatSidebarCommentMeta } from "./sidebarCommentSections";
 import type { SidebarDraftEditorController } from "./sidebarDraftEditor";
 import { estimateDraftTextareaRows } from "./sidebarDraftEditor";
@@ -104,8 +104,7 @@ export function renderDraftCommentCard(
             preview.setText(presentation.placeholder);
         } else {
             preview.removeClass("is-empty");
-            // Draft preview HTML is generated only from escaped user text plus fixed token spans.
-            preview.innerHTML = renderStyledDraftCommentHtml(textarea.value);
+            preview.replaceChildren(renderStyledDraftCommentFragment(preview.ownerDocument, textarea.value));
         }
 
         preview.scrollTop = textarea.scrollTop;

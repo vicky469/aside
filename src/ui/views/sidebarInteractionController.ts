@@ -28,6 +28,13 @@ function isDraftTextareaElement(element: Element | null): element is HTMLTextAre
         && typeof (element as HTMLTextAreaElement).dispatchEvent === "function";
 }
 
+function isFocusableTextareaElement(element: Element | null): element is HTMLTextAreaElement {
+    return !!element
+        && typeof (element as HTMLTextAreaElement).value === "string"
+        && typeof (element as HTMLTextAreaElement).focus === "function"
+        && typeof (element as HTMLTextAreaElement).setSelectionRange === "function";
+}
+
 export interface SidebarInteractionHost {
     app: App;
     leaf: WorkspaceLeaf;
@@ -217,9 +224,7 @@ export class SidebarInteractionController {
     }
 
     public claimSidebarInteractionOwnership(focusTarget?: HTMLElement | null): void {
-        if (this.host.app.workspace.activeLeaf !== this.host.leaf) {
-            this.host.app.workspace.setActiveLeaf(this.host.leaf, { focus: false });
-        }
+        this.host.app.workspace.setActiveLeaf(this.host.leaf, { focus: false });
 
         if (focusTarget?.isConnected && document.activeElement !== focusTarget) {
             focusTarget.focus({ preventScroll: true });
@@ -274,9 +279,9 @@ export class SidebarInteractionController {
         const tryFocus = (remainingAttempts: number) => {
             const textarea = this.host.containerEl.querySelector(
                 `[data-draft-id="${commentId}"] textarea`
-            ) as HTMLTextAreaElement | null;
+            );
 
-            if (textarea) {
+            if (isFocusableTextareaElement(textarea)) {
                 this.claimSidebarInteractionOwnership(textarea);
                 const end = textarea.value.length;
                 textarea.setSelectionRange(end, end);

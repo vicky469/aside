@@ -142,7 +142,7 @@ test("plugin registration controller registers the view, protocol handler, comma
     assert.deepEqual(harness.createdSidebarLeaves, [{ id: "leaf-1" }]);
     assert.deepEqual(harness.removedCommandIds, ["side-note2:activate-view"]);
     assert.deepEqual(harness.commands.map((command) => command.id), ["add-comment-to-selection"]);
-    assert.deepEqual(harness.ribbonActions.map((action) => action.title), ["Open SideNote2 index"]);
+    assert.deepEqual(harness.ribbonActions.map((action) => action.title), ["Open index"]);
 
     await harness.commands[0].editorCallback?.(
         { somethingSelected: () => true },

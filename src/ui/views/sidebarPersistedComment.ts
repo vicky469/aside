@@ -168,10 +168,10 @@ async function renderThreadEntryContent(
 ): Promise<void> {
     await host.renderMarkdown(
         normalizeCommentMarkdownForRender(entryBody),
-        container as HTMLElement,
+        container,
         thread.filePath,
     );
-    decorateRenderedCommentMentions(container as HTMLElement);
+    decorateRenderedCommentMentions(container);
 }
 
 function getRenderableThreadEntries(thread: CommentThread): CommentThreadEntry[] {

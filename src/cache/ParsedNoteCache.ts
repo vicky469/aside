@@ -1,4 +1,4 @@
-import type { Comment, CommentThread } from "../commentManager";
+import type { Comment } from "../commentManager";
 import { cloneCommentThreads } from "../commentManager";
 import type { ParsedNoteComments } from "../core/storage/noteCommentStorage";
 
@@ -38,11 +38,11 @@ export class ParsedNoteCache {
         });
 
         while (this.cache.size > this.maxEntries) {
-            const oldestKey = this.cache.keys().next().value;
-            if (!oldestKey) {
+            const oldestEntry = this.cache.keys().next();
+            if (oldestEntry.done) {
                 break;
             }
-            this.cache.delete(oldestKey);
+            this.cache.delete(oldestEntry.value);
         }
 
         return cloneParsed(parsed);

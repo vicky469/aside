@@ -103,8 +103,8 @@ export default class SideNoteFileFilterModal extends SuggestModal<IndexFileFilte
         }
     }
 
-    async onChooseSuggestion(suggestion: IndexFileFilterOption): Promise<void> {
-        await this.chooseRoot(suggestion.filePath);
+    onChooseSuggestion(suggestion: IndexFileFilterOption): void {
+        void this.chooseRoot(suggestion.filePath);
     }
 
     private renderSelectionSummary(): void {

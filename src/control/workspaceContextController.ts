@@ -35,7 +35,7 @@ export class WorkspaceContextController {
     }
 
     public handleFileOpen(file: TFile | null): void {
-        void this.syncIndexNoteLeafMode(this.host.app.workspace.activeLeaf);
+        void this.syncIndexNoteLeafMode(this.host.app.workspace.getActiveViewOfType(MarkdownView)?.leaf ?? null);
         this.syncIndexNoteViewClasses();
         this.applyWorkspaceFileTargets(file);
     }

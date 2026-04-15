@@ -109,7 +109,6 @@ export class CommentNavigationController {
         const { workspace } = this.host.app;
         const sidebarFile = this.host.getSidebarTargetFile();
         const skipViewUpdate = options.skipViewUpdate === true;
-        const shouldRevealLeaf = options.revealLeaf !== false;
 
         let leaf: WorkspaceLeaf | null = null;
         let createdLeaf = false;
@@ -135,7 +134,7 @@ export class CommentNavigationController {
         }
 
         if (shouldRevealSidebarLeaf(options.revealLeaf, createdLeaf)) {
-            workspace.revealLeaf(leaf);
+            await workspace.revealLeaf(leaf);
         }
 
         if (!skipViewUpdate && isSidebarViewLike(leaf.view)) {
@@ -236,7 +235,7 @@ export class CommentNavigationController {
 
     public getPreferredFileLeaf(filePath?: string): WorkspaceLeaf | null {
         const workspace = this.host.app.workspace;
-        const activeLeaf = workspace.activeLeaf;
+        const activeLeaf = workspace.getActiveViewOfType(FileView)?.leaf ?? null;
         const recentLeaf = workspace.getMostRecentLeaf(workspace.rootSplit);
         const candidates: PreferredFileLeafCandidate<WorkspaceLeaf>[] = [];
 

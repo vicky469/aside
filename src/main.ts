@@ -818,7 +818,7 @@ export default class SideNote2 extends Plugin {
 
     private getPreferredMarkdownLeafByPath(filePath: string): WorkspaceLeaf | null {
         const workspace = this.app.workspace;
-        const activeLeaf = workspace.activeLeaf;
+        const activeLeaf = workspace.getActiveViewOfType(MarkdownView)?.leaf ?? null;
         const recentLeaf = workspace.getMostRecentLeaf(workspace.rootSplit);
         const candidates: PreferredFileLeafCandidate<WorkspaceLeaf>[] = [];
 

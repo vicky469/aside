@@ -32,7 +32,7 @@ export default class SideNote2SettingTab extends PluginSettingTab {
 
         new Setting(containerEl)
             .setName("Index header image URL")
-            .setDesc("Remote image shown at the top of the generated SideNote2 index note.")
+            .setDesc("Remote image shown at the top of the generated index note.")
             .addText((text) =>
                 text
                     .setPlaceholder(DEFAULT_SETTINGS.indexHeaderImageUrl)

@@ -64,7 +64,7 @@ export default class SupportReportModal extends Modal {
 
         const intro = contentEl.createEl("p", {
             cls: "sidenote2-support-intro",
-            text: "Describe what happened. SideNote2 will attach the last 30 minutes of local logs automatically.",
+            text: "Describe what happened. The plugin will attach the last 30 minutes of local logs automatically.",
         });
         intro.setAttribute("role", "note");
 

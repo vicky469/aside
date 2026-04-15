@@ -53,7 +53,7 @@ function replacePathPrefix(
 function scrubAbsolutePathsInText(value: string, context: LogSanitizerContext): string {
     let nextValue = normalizePathForMatch(value);
     nextValue = replacePathPrefix(nextValue, context.vaultRootPath, "");
-    nextValue = replacePathPrefix(nextValue, context.pluginDirPath, context.pluginDirRelativePath ?? ".obsidian/plugins/side-note2");
+    nextValue = replacePathPrefix(nextValue, context.pluginDirPath, context.pluginDirRelativePath ?? "[config-dir]/plugins/side-note2");
     nextValue = nextValue
         .replace(/\/Users\/[^/\s]+(?:\/[^\s]*)?/g, "[absolute-path]")
         .replace(/\/home\/[^/\s]+(?:\/[^\s]*)?/g, "[absolute-path]")

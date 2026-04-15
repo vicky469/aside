@@ -100,7 +100,7 @@ export class PluginRegistrationController {
             });
         });
 
-        this.host.addRibbonIcon(this.host.iconId, "Open SideNote2 index", () => {
+        this.host.addRibbonIcon(this.host.iconId, "Open index", () => {
             void this.host.openIndexNote();
         });
     }

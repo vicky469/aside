@@ -27,7 +27,6 @@ export default class SupportLogInspectorModal extends Modal {
     private cachedPreviewSource: SupportLogPreviewSource | null = null;
     private cachedPreviewSourceContent: string | null = null;
     private cachedPreviewModels = new Map<string, SupportLogPreviewModel>();
-    private cachedRenderedTableHtml = new Map<string, string>();
     private inputEl: HTMLTextAreaElement | null = null;
     private actionsEl: HTMLDivElement | null = null;
     private resultsEl: HTMLDivElement | null = null;
@@ -142,8 +141,7 @@ export default class SupportLogInspectorModal extends Modal {
         this.setSectionVisible(this.emptyStateEl, false);
         this.setSectionVisible(this.tableWrapEl, true);
         if (this.tableBodyEl) {
-            // Row content is escaped in getRenderedTableHtml(); only level/kind classes come from enums.
-            this.tableBodyEl.innerHTML = this.getRenderedTableHtml(preview);
+            this.renderTableRows(preview, this.tableBodyEl);
         }
     }
 
@@ -151,22 +149,22 @@ export default class SupportLogInspectorModal extends Modal {
         const devPanelEl = contentEl.createDiv("sidenote2-support-log-dev-panel");
         const devPanelHeaderEl = devPanelEl.createDiv("sidenote2-support-log-dev-panel-header");
         devPanelHeaderEl.createEl("strong", {
-            text: "Inspector Input",
+            text: "Inspector input",
         });
         devPanelHeaderEl.createEl("span", {
-            text: "Paste or drop JSONL to inspect it locally.",
+            text: "Paste or drop log data to inspect it locally.",
         });
 
         const dropzoneEl = devPanelEl.createDiv("sidenote2-support-log-dev-dropzone");
         const inputEl = dropzoneEl.createEl("textarea", {
             cls: "sidenote2-support-log-dev-input",
             attr: {
-                placeholder: "Paste or drop JSONL here.",
+                placeholder: "Paste or drop log data here.",
                 spellcheck: "false",
                 wrap: "off",
-                "aria-label": "Log inspector JSONL input",
+                "aria-label": "Log inspector input",
             },
-        }) as HTMLTextAreaElement;
+        });
         this.inputEl = inputEl;
         inputEl.value = this.customInputValue;
         inputEl.addEventListener("input", () => {
@@ -285,7 +283,7 @@ export default class SupportLogInspectorModal extends Modal {
                 spellcheck: "false",
                 wrap: "off",
             },
-        }) as HTMLTextAreaElement;
+        });
 
         this.emptyStateEl = resultsEl.createDiv("sidenote2-support-empty-log-state");
 
@@ -339,7 +337,6 @@ export default class SupportLogInspectorModal extends Modal {
         this.cachedPreviewSource = buildSupportLogPreviewSource(content);
         this.cachedPreviewSourceContent = content;
         this.cachedPreviewModels.clear();
-        this.cachedRenderedTableHtml.clear();
     }
 
     private getPreviewModel(content: string): SupportLogPreviewModel {
@@ -378,43 +375,43 @@ export default class SupportLogInspectorModal extends Modal {
         this.setSectionVisible(this.emptyStateEl, true);
     }
 
-    private getRenderedTableHtml(preview: SupportLogPreviewModel): string {
-        const cacheKey = this.getPreviewFilterKey();
-        const cached = this.cachedRenderedTableHtml.get(cacheKey);
-        if (cached !== undefined) {
-            return cached;
+    private renderTableRows(preview: SupportLogPreviewModel, tableBodyEl: HTMLTableSectionElement): void {
+        const document = tableBodyEl.ownerDocument;
+        const fragment = document.createDocumentFragment();
+
+        for (const row of preview.rows) {
+            const rowEl = fragment.appendChild(document.createElement("tr"));
+            rowEl.className = `is-${row.level}`;
+
+            const appendCell = (className: string, text: string): void => {
+                const cellEl = rowEl.appendChild(document.createElement("td"));
+                const spanEl = cellEl.appendChild(document.createElement("span"));
+                spanEl.className = className;
+                spanEl.textContent = text;
+            };
+
+            appendCell("sidenote2-support-log-row-time", row.displayTime);
+            appendCell(`sidenote2-support-log-row-level is-${row.level}`, row.level.toUpperCase());
+            appendCell(`sidenote2-support-log-row-kind is-${row.kind}`, row.kind === "user" ? "USER" : "SYSTEM");
+            appendCell("sidenote2-support-log-row-area", row.area);
+            appendCell("sidenote2-support-log-row-event", row.event);
+
+            const detailsCellEl = rowEl.appendChild(document.createElement("td"));
+            detailsCellEl.className = "sidenote2-support-log-row-details";
+            if (row.payloadTokens.length === 0) {
+                const emptyEl = detailsCellEl.appendChild(document.createElement("span"));
+                emptyEl.className = "sidenote2-support-log-row-token is-empty";
+                emptyEl.textContent = "—";
+            } else {
+                for (const token of row.payloadTokens) {
+                    const tokenEl = detailsCellEl.appendChild(document.createElement("span"));
+                    tokenEl.className = "sidenote2-support-log-row-token";
+                    tokenEl.textContent = token;
+                }
+            }
         }
 
-        const html = preview.rows.map((row) => {
-            const detailsHtml = row.payloadTokens.length
-                ? row.payloadTokens
-                    .map((token) => `<span class="sidenote2-support-log-row-token">${this.escapeHtml(token)}</span>`)
-                    .join("")
-                : `<span class="sidenote2-support-log-row-token is-empty">—</span>`;
-
-            return [
-                `<tr class="is-${row.level}">`,
-                `<td><span class="sidenote2-support-log-row-time">${this.escapeHtml(row.displayTime)}</span></td>`,
-                `<td><span class="sidenote2-support-log-row-level is-${row.level}">${row.level.toUpperCase()}</span></td>`,
-                `<td><span class="sidenote2-support-log-row-kind is-${row.kind}">${row.kind === "user" ? "USER" : "SYSTEM"}</span></td>`,
-                `<td><span class="sidenote2-support-log-row-area">${this.escapeHtml(row.area)}</span></td>`,
-                `<td><span class="sidenote2-support-log-row-event">${this.escapeHtml(row.event)}</span></td>`,
-                `<td class="sidenote2-support-log-row-details">${detailsHtml}</td>`,
-                "</tr>",
-            ].join("");
-        }).join("");
-
-        this.cachedRenderedTableHtml.set(cacheKey, html);
-        return html;
-    }
-
-    private escapeHtml(value: string): string {
-        return value
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;")
-            .replace(/"/g, "&quot;")
-            .replace(/'/g, "&#39;");
+        tableBodyEl.replaceChildren(fragment);
     }
 
     private setSectionVisible(element: HTMLElement | null, visible: boolean): void {
@@ -489,7 +486,6 @@ export default class SupportLogInspectorModal extends Modal {
         this.cachedPreviewSource = null;
         this.cachedPreviewSourceContent = null;
         this.cachedPreviewModels.clear();
-        this.cachedRenderedTableHtml.clear();
         this.summaryCardEl = null;
         this.summaryHeadingEl = null;
         this.summaryRangeEl = null;

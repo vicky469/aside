@@ -8,14 +8,8 @@ export interface CopyTextContainer {
 
 export interface CopyTextTextarea {
     value: string;
-    style: {
-        position: string;
-        left: string;
-        top: string;
-        opacity: string;
-        pointerEvents: string;
-    };
     setAttribute(name: string, value: string): void;
+    setCssProps(props: Record<string, string>): void;
     focus(): void;
     select(): void;
     setSelectionRange(start: number, end: number): void;
@@ -77,11 +71,13 @@ export async function copyTextToClipboard(
     const textarea = doc.createElement("textarea");
     textarea.value = text;
     textarea.setAttribute("readonly", "true");
-    textarea.style.position = "fixed";
-    textarea.style.left = "-9999px";
-    textarea.style.top = "0";
-    textarea.style.opacity = "0";
-    textarea.style.pointerEvents = "none";
+    textarea.setCssProps({
+        left: "-9999px",
+        opacity: "0",
+        pointerEvents: "none",
+        position: "fixed",
+        top: "0",
+    });
 
     container.appendChild(textarea);
     textarea.focus();

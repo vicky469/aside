@@ -1,4 +1,13 @@
-import { ItemView, MarkdownRenderer, Notice, TFile, WorkspaceLeaf, loadMermaid, setIcon, type ViewStateResult } from "obsidian";
+import {
+    ItemView,
+    MarkdownRenderer,
+    Notice,
+    TFile,
+    WorkspaceLeaf,
+    loadMermaid,
+    setIcon,
+    type ViewStateResult,
+} from "obsidian";
 import type { Comment, CommentThread, ReorderPlacement } from "../../commentManager";
 import { buildCommentLocationUrl } from "../../core/derived/allCommentsNote";
 import {
@@ -40,6 +49,7 @@ import {
     type SidebarRenderableItem,
 } from "./sidebarRenderOrder";
 import { extractThoughtTrailClickTargets, parseThoughtTrailOpenFilePath, resolveThoughtTrailNodeId } from "./thoughtTrailNodeLinks";
+import { parseTrustedMermaidSvg } from "./thoughtTrailSvg";
 import {
     scopeIndexThreadsByFilePaths,
     shouldShowIndexListToolbarChips,
@@ -76,6 +86,30 @@ type SidebarReorderDragState =
         threadId: string;
         entryId: string;
     };
+
+type MermaidRenderResult = string | {
+    bindFunctions?: (element: HTMLElement) => void;
+    svg?: string;
+};
+
+type MermaidRuntimeLike = {
+    getConfig?: () => unknown;
+    initialize: (config: unknown) => void;
+    mermaidAPI?: {
+        getConfig?: () => unknown;
+    };
+    render: (id: string, source: string) => Promise<MermaidRenderResult>;
+};
+
+function isMermaidRuntimeLike(value: unknown): value is MermaidRuntimeLike {
+    if (!value || typeof value !== "object") {
+        return false;
+    }
+
+    const candidate = value as Partial<MermaidRuntimeLike>;
+    return typeof candidate.initialize === "function"
+        && typeof candidate.render === "function";
+}
 
 export default class SideNote2View extends ItemView {
     private file: TFile | null = null;
@@ -137,7 +171,7 @@ export default class SideNote2View extends ItemView {
     }
 
     getDisplayText() {
-        return "SideNote2";
+        return "Side notes";
     }
 
     getIcon() {
@@ -415,12 +449,12 @@ export default class SideNote2View extends ItemView {
 
             if (limitedComments.hiddenCount > 0) {
                 const limitNotice = commentsContainer.createDiv("sidenote2-list-limit-notice");
-                limitNotice.createEl("p", {
-                    text: `${INDEX_SIDEBAR_LIST_LIMIT} shown, ${limitedComments.hiddenCount} hidden.`,
-                });
-                limitNotice.createEl("p", {
-                    text: "Use Files to filter the index to see more.",
-                });
+                        limitNotice.createEl("p", {
+                            text: `${INDEX_SIDEBAR_LIST_LIMIT} shown, ${limitedComments.hiddenCount} hidden.`,
+                        });
+                        limitNotice.createEl("p", {
+                            text: "Use files to filter the index to see more.",
+                        });
             }
 
             if (renderedItems.length === 0) {
@@ -428,22 +462,22 @@ export default class SideNote2View extends ItemView {
                     const emptyStateEl = commentsBody.createDiv("sidenote2-empty-state sidenote2-section-empty-state");
                     if (shouldShowResolvedIndexEmptyState(showResolved, totalScopedCount, renderedItems.length)) {
                         emptyStateEl.createEl("p", { text: "No resolved side notes match the current index view." });
-                        emptyStateEl.createEl("p", { text: "Turn off Resolved to return to active side notes." });
+                        emptyStateEl.createEl("p", { text: "Turn off resolved to return to active side notes." });
                     } else if (filteredIndexFilePaths.length) {
                         emptyStateEl.createEl("p", { text: "No side notes match the selected file filter." });
-                        emptyStateEl.createEl("p", { text: "Use Files to choose a different root file." });
+                        emptyStateEl.createEl("p", { text: "Use files to choose a different root file." });
                     } else {
                         emptyStateEl.createEl("p", { text: "No side notes in the index yet." });
-                        emptyStateEl.createEl("p", { text: "Add side notes in markdown files to populate SideNote2 index." });
+                        emptyStateEl.createEl("p", { text: "Add side notes in your notes to populate the index." });
                     }
                 } else if (showResolved && totalScopedCount > 0) {
                     const emptyStateEl = commentsBody.createDiv("sidenote2-empty-state sidenote2-section-empty-state");
                     emptyStateEl.createEl("p", { text: "No resolved comments for this file." });
-                    emptyStateEl.createEl("p", { text: "Turn off Resolved to return to active comments." });
+                    emptyStateEl.createEl("p", { text: "Turn off resolved to return to active comments." });
                 } else if (hasResolvedComments && !showResolved) {
                     const emptyStateEl = commentsBody.createDiv("sidenote2-empty-state sidenote2-section-empty-state");
                     emptyStateEl.createEl("p", { text: "No active comments for this file." });
-                    emptyStateEl.createEl("p", { text: "Turn on Resolved to review archived comments only." });
+                    emptyStateEl.createEl("p", { text: "Turn on resolved to review archived comments only." });
                 }
             }
         } else {
@@ -782,7 +816,7 @@ export default class SideNote2View extends ItemView {
             cls: "clickable-icon sidenote2-support-button",
         });
         button.setAttribute("type", "button");
-        button.setAttribute("aria-label", "Open SideNote2 log inspector");
+        button.setAttribute("aria-label", "Open log inspector");
         setIcon(button, "life-buoy");
         button.onclick = () => {
             void this.plugin.openSupportLogInspectorModal({
@@ -818,7 +852,7 @@ export default class SideNote2View extends ItemView {
             isSelectionInsideSidebarContent: (selection) => this.interactionController.isSelectionInsideSidebarContent(selection),
             claimSidebarInteractionOwnership: (focusTarget) => this.interactionController.claimSidebarInteractionOwnership(focusTarget),
             renderMarkdown: async (markdown, container, sourcePath) => {
-                await MarkdownRenderer.renderMarkdown(markdown, container, sourcePath, this.plugin);
+                await MarkdownRenderer.render(this.app, markdown, container, sourcePath, this);
             },
             openSidebarInternalLink: (href, sourcePath, focusTarget) =>
                 this.interactionController.openSidebarInternalLink(href, sourcePath, focusTarget),
@@ -1100,7 +1134,7 @@ export default class SideNote2View extends ItemView {
         const thoughtTrailEl = commentsContainer.createDiv("sidenote2-thought-trail");
         if (!options.hasFileFilter) {
             const emptyStateEl = thoughtTrailEl.createDiv("sidenote2-empty-state sidenote2-section-empty-state");
-            emptyStateEl.createEl("p", { text: "Use Files to choose a file and see its connected files." });
+            emptyStateEl.createEl("p", { text: "Use files to choose a file and see its connected files." });
             return;
         }
 
@@ -1130,11 +1164,12 @@ export default class SideNote2View extends ItemView {
         sourcePath: string,
     ): Promise<void> {
         const fallbackToMarkdownRenderer = async (): Promise<void> => {
-            await MarkdownRenderer.renderMarkdown(
+            await MarkdownRenderer.render(
+                this.app,
                 thoughtTrailLines.join("\n"),
                 container,
                 sourcePath,
-                this.plugin,
+                this,
             );
 
             const fallbackMermaidEl = container.querySelector(".mermaid");
@@ -1144,8 +1179,8 @@ export default class SideNote2View extends ItemView {
         };
 
         await loadMermaid().catch(() => undefined);
-        const mermaidRuntime = (globalThis as typeof globalThis & { mermaid?: any }).mermaid;
-        if (!mermaidRuntime?.render || !mermaidRuntime?.initialize) {
+        const mermaidRuntime = (globalThis as typeof globalThis & { mermaid?: unknown }).mermaid;
+        if (!isMermaidRuntimeLike(mermaidRuntime)) {
             await fallbackToMarkdownRenderer();
             return;
         }
@@ -1173,11 +1208,19 @@ export default class SideNote2View extends ItemView {
 
             const mermaidEl = container.createDiv("mermaid");
             mermaidEl.setAttribute("data-sidenote2-thought-trail-renderer", "direct");
-            // Mermaid returns SVG markup here; the source graph is built from plugin-generated lines,
-            // sanitized labels, and encoded Obsidian URLs rather than raw user HTML.
-            mermaidEl.innerHTML = svg;
-            if (typeof renderResult?.bindFunctions === "function") {
-                renderResult.bindFunctions(mermaidEl);
+            const renderedSvg = parseTrustedMermaidSvg(svg);
+            if (!renderedSvg) {
+                mermaidEl.remove();
+                await fallbackToMarkdownRenderer();
+                return;
+            }
+
+            mermaidEl.replaceChildren(renderedSvg);
+            const bindFunctions = typeof renderResult === "object" && renderResult !== null
+                ? renderResult.bindFunctions
+                : undefined;
+            if (typeof bindFunctions === "function") {
+                bindFunctions(mermaidEl);
             }
         } catch {
             container.querySelectorAll(".mermaid").forEach((element) => element.remove());

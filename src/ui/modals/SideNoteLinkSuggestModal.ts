@@ -70,20 +70,22 @@ export default class SideNoteLinkSuggestModal extends SuggestModal<SideNoteLinkS
         noteEl.setText(suggestion.file.path);
     }
 
-    async onChooseSuggestion(suggestion: SideNoteLinkSuggestion): Promise<void> {
-        if (suggestion.type === "existing") {
-            await this.onChooseLink(`[[${suggestion.linkText}]]`);
-            return;
-        }
+    onChooseSuggestion(suggestion: SideNoteLinkSuggestion): void {
+        void (async () => {
+            if (suggestion.type === "existing") {
+                await this.onChooseLink(`[[${suggestion.linkText}]]`);
+                return;
+            }
 
-        try {
-            const file = await createSideNoteLinkNote(this.app, suggestion.notePath);
-            const linkText = this.app.metadataCache.fileToLinktext(file, this.sourcePath, true);
-            await this.onChooseLink(`[[${linkText}]]`);
-            new Notice(`Created ${file.basename}`);
-        } catch (error) {
-            console.error("Failed to create linked note", error);
-            new Notice("Failed to create note.");
-        }
+            try {
+                const file = await createSideNoteLinkNote(this.app, suggestion.notePath);
+                const linkText = this.app.metadataCache.fileToLinktext(file, this.sourcePath, true);
+                await this.onChooseLink(`[[${linkText}]]`);
+                new Notice(`Created ${file.basename}`);
+            } catch (error) {
+                console.error("Failed to create linked note", error);
+                new Notice("Failed to create note.");
+            }
+        })();
     }
 }

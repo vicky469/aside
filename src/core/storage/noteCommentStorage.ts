@@ -118,18 +118,6 @@ function splitManagedSection(noteContent: string): SplitManagedSectionResult {
     };
 }
 
-function sortThreadsByPosition(threads: CommentThread[]): CommentThread[] {
-    return cloneCommentThreads(threads).sort((left, right) => {
-        if (left.startLine !== right.startLine) {
-            return left.startLine - right.startLine;
-        }
-        if (left.startChar !== right.startChar) {
-            return left.startChar - right.startChar;
-        }
-        return left.createdAt - right.createdAt;
-    });
-}
-
 export function sortCommentsByPosition(comments: Comment[]): Comment[] {
     return comments
         .map((comment) => ({ ...comment }))
@@ -274,7 +262,7 @@ function parseManagedSectionJson(sectionContent: string): unknown[] | null {
     }
 
     try {
-        const parsed = JSON.parse(jsonText);
+        const parsed: unknown = JSON.parse(jsonText);
         return Array.isArray(parsed) ? parsed : null;
     } catch {
         return null;
@@ -353,7 +341,7 @@ function hasInlineCloseMarkerOnSameLine(normalized: string, sectionStart: number
 }
 
 function findLastManagedSection(normalized: string): FoundManagedSection | null {
-    const matches = Array.from(normalized.matchAll(/<!-- SideNote2 comments(?=$|[\s\[{])/g));
+    const matches = Array.from(normalized.matchAll(/<!-- SideNote2 comments(?=$|[\s[{])/g));
     const fencedCodeBlockRanges = buildFencedCodeBlockRanges(normalized);
     for (let index = matches.length - 1; index >= 0; index -= 1) {
         const match = matches[index];

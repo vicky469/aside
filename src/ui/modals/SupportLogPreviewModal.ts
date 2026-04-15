@@ -57,7 +57,7 @@ export default class SupportLogPreviewModal extends Modal {
                 wrap: "off",
                 "aria-label": `${this.options.fileName} preview`,
             },
-        }) as HTMLTextAreaElement;
+        });
         rawPreviewEl.value = rawPreview.content;
     }
 
