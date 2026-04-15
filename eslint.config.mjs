@@ -4,6 +4,7 @@ import obsidianmd from "eslint-plugin-obsidianmd";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
+	...obsidianmd.configs.recommended,
 	{
 		files: ["src/**/*.ts"],
 		languageOptions: {
@@ -12,11 +13,12 @@ export default tseslint.config(
 				...globals.node,
 			},
 			parserOptions: {
-				projectService: true,
+				project: "./tsconfig.json",
 				tsconfigRootDir: import.meta.dirname,
 			},
 		},
 		rules: {
+			"@typescript-eslint/require-await": "error",
 			"obsidianmd/ui/sentence-case": [
 				"error",
 				{
@@ -26,7 +28,6 @@ export default tseslint.config(
 			],
 		},
 	},
-	...obsidianmd.configs.recommended,
 	globalIgnores([
 		".test-dist",
 		".public-release",

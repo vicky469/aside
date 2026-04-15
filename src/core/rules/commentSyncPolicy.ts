@@ -9,7 +9,7 @@ interface ManagedCommentPersistDecisionOptions {
 
 interface LoadedCommentManager {
     replaceThreadsForFile(filePath: string, nextThreads: CommentThread[]): void;
-    updateCommentCoordinatesForFile(fileContent: string, filePath: string): Promise<void>;
+    updateCommentCoordinatesForFile(fileContent: string, filePath: string): void | Promise<void>;
     getThreadsForFile(filePath: string): CommentThread[];
 }
 

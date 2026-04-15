@@ -138,7 +138,7 @@ export default class SideNoteTagSuggestModal extends SuggestModal<SideNoteTagSug
     }
 
     onOpen(): void {
-        super.onOpen();
+        void super.onOpen();
         this.setTitle("Insert tag");
         this.inputEl.value = this.initialQuery;
         this.inputEl.dispatchEvent(new Event("input"));

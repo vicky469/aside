@@ -45,6 +45,36 @@ export interface Comment {
 
 export type ReorderPlacement = "before" | "after";
 
+const COORDINATE_SYNC_MIN_BATCH_SIZE = 5;
+const COORDINATE_SYNC_MAX_BATCH_MS = 8;
+
+type CoordinateUpdate = {
+    threadId: string;
+    orphaned: boolean;
+    nextPosition: ReturnType<typeof resolveAnchorRange>;
+};
+
+function getMonotonicNow(): number {
+    if (typeof performance !== "undefined" && typeof performance.now === "function") {
+        return performance.now();
+    }
+
+    return Date.now();
+}
+
+function yieldToMainThread(): Promise<void> {
+    return new Promise((resolve) => {
+        if (typeof globalThis.requestAnimationFrame === "function") {
+            globalThis.requestAnimationFrame(() => {
+                resolve();
+            });
+            return;
+        }
+
+        setTimeout(resolve, 0);
+    });
+}
+
 function compareThreadsByPosition(left: CommentThread, right: CommentThread): number {
     if (left.startLine !== right.startLine) {
         return left.startLine - right.startLine;
@@ -200,6 +230,7 @@ function moveItemByIdRelative<T extends { id: string }>(
 
 export class CommentManager {
     private threads: CommentThread[];
+    private coordinateSyncVersionByFile = new Map<string, number>();
 
     constructor(items: Array<Comment | CommentThread>) {
         this.threads = items.map((item) => normalizeThread(isThreadLike(item) ? item : commentToThread(item)));
@@ -439,8 +470,59 @@ export class CommentManager {
     }
 
     async updateCommentCoordinatesForFile(fileContent: string, filePath: string): Promise<void> {
-        for (const thread of this.threads) {
-            if (thread.filePath !== filePath) {
+        const runVersion = (this.coordinateSyncVersionByFile.get(filePath) ?? 0) + 1;
+        this.coordinateSyncVersionByFile.set(filePath, runVersion);
+
+        const candidateThreads = this.threads
+            .filter((thread) => thread.filePath === filePath)
+            .map((thread) => cloneCommentThread(thread));
+        const coordinateUpdates: CoordinateUpdate[] = [];
+        let batchStartedAt = getMonotonicNow();
+
+        for (let index = 0; index < candidateThreads.length; index += 1) {
+            const thread = candidateThreads[index];
+            if (isPageComment(thread)) {
+                coordinateUpdates.push({
+                    threadId: thread.id,
+                    orphaned: false,
+                    nextPosition: null,
+                });
+            } else {
+                const nextPosition = resolveAnchorRange(fileContent, thread);
+                coordinateUpdates.push({
+                    threadId: thread.id,
+                    orphaned: !nextPosition,
+                    nextPosition,
+                });
+            }
+
+            const processedCount = index + 1;
+            if (
+                processedCount < candidateThreads.length
+                && processedCount % COORDINATE_SYNC_MIN_BATCH_SIZE === 0
+                && getMonotonicNow() - batchStartedAt >= COORDINATE_SYNC_MAX_BATCH_MS
+            ) {
+                await yieldToMainThread();
+                if (this.coordinateSyncVersionByFile.get(filePath) !== runVersion) {
+                    return;
+                }
+                batchStartedAt = getMonotonicNow();
+            }
+        }
+
+        if (this.coordinateSyncVersionByFile.get(filePath) !== runVersion) {
+            return;
+        }
+
+        const currentThreadsById = new Map(
+            this.threads
+                .filter((thread) => thread.filePath === filePath)
+                .map((thread) => [thread.id, thread] as const),
+        );
+
+        for (const update of coordinateUpdates) {
+            const thread = currentThreadsById.get(update.threadId);
+            if (!thread) {
                 continue;
             }
 
@@ -449,17 +531,15 @@ export class CommentManager {
                 continue;
             }
 
-            const newPosition = resolveAnchorRange(fileContent, thread);
-
-            if (newPosition) {
-                thread.startLine = newPosition.startLine;
-                thread.startChar = newPosition.startChar;
-                thread.endLine = newPosition.endLine;
-                thread.endChar = newPosition.endChar;
-                thread.selectedText = newPosition.text;
+            if (update.nextPosition) {
+                thread.startLine = update.nextPosition.startLine;
+                thread.startChar = update.nextPosition.startChar;
+                thread.endLine = update.nextPosition.endLine;
+                thread.endChar = update.nextPosition.endChar;
+                thread.selectedText = update.nextPosition.text;
                 thread.orphaned = false;
             } else {
-                thread.orphaned = true;
+                thread.orphaned = update.orphaned;
             }
         }
     }

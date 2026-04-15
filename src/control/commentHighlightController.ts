@@ -413,10 +413,10 @@ export class CommentHighlightController {
         });
     }
 
-    public async syncIndexPreviewSelection(
+    public syncIndexPreviewSelection(
         indexFilePath: string,
         commentId: string,
-    ): Promise<boolean> {
+    ): boolean {
         const context = this.getIndexPreviewContext(indexFilePath);
         if (!context) {
             return false;

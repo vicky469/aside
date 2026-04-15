@@ -248,8 +248,8 @@ export default class SideNote2View extends ItemView {
         await this.interactionController.highlightAndFocusDraft(commentId);
     }
 
-    public async focusDraft(commentId: string) {
-        await this.interactionController.focusDraft(commentId);
+    public focusDraft(commentId: string): void {
+        this.interactionController.focusDraft(commentId);
     }
 
     public clearActiveState(): void {

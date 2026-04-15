@@ -23,7 +23,7 @@ interface SupportReportModalHost {
     showNotice(message: string): void;
 }
 
-async function arrayBufferToBase64(buffer: ArrayBuffer): Promise<string> {
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
     const bytes = new Uint8Array(buffer);
     let binary = "";
     const chunkSize = 0x8000;
@@ -286,7 +286,7 @@ export default class SupportReportModal extends Modal {
                 fileName: file.name,
                 mimeType: file.type,
                 sizeBytes: file.size,
-                contentBase64: await arrayBufferToBase64(await file.arrayBuffer()),
+                contentBase64: arrayBufferToBase64(await file.arrayBuffer()),
             })));
 
             const payload: SupportReportPayload = {

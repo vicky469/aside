@@ -202,7 +202,7 @@ export class SidebarInteractionController {
         this.scheduleDraftFocus(commentId);
     }
 
-    public async focusDraft(commentId: string): Promise<void> {
+    public focusDraft(commentId: string): void {
         const commentEl = this.host.containerEl.querySelector(`[data-draft-id="${commentId}"]`);
         if (commentEl) {
             commentEl.scrollIntoView({ behavior: "smooth", block: "center" });

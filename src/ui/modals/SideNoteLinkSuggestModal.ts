@@ -39,7 +39,7 @@ export default class SideNoteLinkSuggestModal extends SuggestModal<SideNoteLinkS
     }
 
     onOpen(): void {
-        super.onOpen();
+        void super.onOpen();
         this.setTitle("Insert note link");
         this.inputEl.value = this.initialQuery;
         this.inputEl.dispatchEvent(new Event("input"));

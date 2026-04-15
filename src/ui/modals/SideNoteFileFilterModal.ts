@@ -50,7 +50,7 @@ export default class SideNoteFileFilterModal extends SuggestModal<IndexFileFilte
     }
 
     onOpen(): void {
-        super.onOpen();
+        void super.onOpen();
         this.setTitle("Choose file");
         this.renderSelectionSummary();
     }

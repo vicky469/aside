@@ -523,7 +523,7 @@ export default class SideNote2 extends Plugin {
             commentId,
             { refreshMarkdownPreviews: false },
         );
-        await this.commentHighlightController.syncIndexPreviewSelection(indexFilePath, commentId);
+        this.commentHighlightController.syncIndexPreviewSelection(indexFilePath, commentId);
     }
 
     public getPinnedMarkdownFile(): TFile | null {
