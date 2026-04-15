@@ -1,6 +1,4 @@
 import { addIcon, WorkspaceLeaf, TFile, Notice, Plugin, normalizePath, MarkdownView, FileSystemAdapter, type Editor } from "obsidian";
-import type { EditorView } from "@codemirror/view";
-import { dirname } from "path";
 import { Comment, CommentManager, CommentThread, type ReorderPlacement } from "./commentManager";
 import { CommentEntryController } from "./control/commentEntryController";
 import { CommentHighlightController } from "./control/commentHighlightController";
@@ -43,6 +41,16 @@ async function generateHash(text: string): Promise<string> {
 
 function generateCommentId(): string {
     return crypto.randomUUID();
+}
+
+function getParentPath(filePath: string): string {
+    const normalized = filePath.replace(/\\/g, "/").replace(/\/+$/, "");
+    const slashIndex = normalized.lastIndexOf("/");
+    if (slashIndex <= 0) {
+        return normalized;
+    }
+
+    return normalized.slice(0, slashIndex);
 }
 
 // Main plugin class
@@ -972,7 +980,7 @@ export default class SideNote2 extends Plugin {
                 };
             };
             const fullPath = this.app.vault.adapter.getFullPath(relativePath);
-            const folderPath = dirname(fullPath);
+            const folderPath = getParentPath(fullPath);
             const openPath = electronModule.shell?.openPath;
             const showItemInFolder = electronModule.shell?.showItemInFolder;
             if (typeof openPath === "function") {

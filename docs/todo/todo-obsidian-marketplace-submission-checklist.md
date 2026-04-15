@@ -14,8 +14,8 @@ Checked against the official Obsidian docs and local repo guidance on 2026-04-14
 
 - [x] Root repo has `README.md`, `LICENSE`, and `manifest.json`.
 - [x] The plugin source is public on GitHub at `vicky469/SideNote2`.
-- [x] `manifest.json` uses a valid semver version: `2.0.12`.
-- [x] `versions.json` includes `2.0.12`.
+- [x] `manifest.json` uses a valid semver version.
+- [x] `versions.json` includes the current `manifest.json` version.
 - [x] `package-lock.json` is committed.
 - [x] `fundingUrl` only points to financial support.
 - [x] Plugin id is `side-note2`, which does not contain `obsidian`.
@@ -23,10 +23,11 @@ Checked against the official Obsidian docs and local repo guidance on 2026-04-14
 
 ## Compatibility And Runtime
 
-- [x] Decided desktop-only and set `manifest.json` `isDesktopOnly` to `true` because the shipped plugin uses Node `path`, `electron`, and `FileSystemAdapter` paths.
+- [x] Removed the desktop-only block. `manifest.json` now keeps `isDesktopOnly` `false`, and the remaining desktop-specific diagnostics path (`electron` log-location reveal) is runtime-gated so it does not block mobile loading.
 - [x] Updated `minAppVersion` to `1.12.7` to match the latest public Obsidian desktop release as of 2026-03-23.
 - [x] Command text does not include the plugin name or plugin id.
 - [x] No default hotkeys are registered in code.
+- [ ] Run a real Android or iOS smoke test before claiming mobile support in the submission PR.
 
 ## Documentation And User Disclosures
 
@@ -44,7 +45,7 @@ Checked against the official Obsidian docs and local repo guidance on 2026-04-14
 
 ## Release Artifact Security
 
-- [x] GitHub release `2.0.12` exists and ships `main.js`, `manifest.json`, and `styles.css`.
+- [x] The latest GitHub release ships `main.js`, `manifest.json`, and `styles.css`.
 - [x] The production build already blocks `main.js.map`, `sourceMappingURL`, and `sourcesContent`.
 - [x] Release policy already requires inspecting the shipped artifacts `main.js`, `manifest.json`, and `styles.css`.
 - [x] Before each public release, `npm run release:artifacts:check` now inspects the exact shipped artifacts and fails on missing assets, `main.js.map`, source-map markers, embedded sources, obvious secrets, or local absolute paths.
