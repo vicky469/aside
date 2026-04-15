@@ -4,10 +4,6 @@ title: "[Bug]: "
 labels:
   - bug
 body:
-  - type: markdown
-    attributes:
-      value: |
-        Do not paste private vault content into a public issue. If deeper diagnostics are needed, we can ask for follow-up details.
   - type: textarea
     id: problem_summary
     attributes:

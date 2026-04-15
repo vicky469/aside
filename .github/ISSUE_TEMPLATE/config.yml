@@ -1,5 +1,1 @@
 blank_issues_enabled: true
-contact_links:
-  - name: Report a security concern
-    url: https://github.com/vicky469/SideNote2#reporting-bugs-and-sensitive-security-concerns
-    about: Do not file suspected vulnerabilities publicly. Use the README instructions instead.
