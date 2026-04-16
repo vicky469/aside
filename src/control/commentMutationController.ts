@@ -1,6 +1,7 @@
 import type { TFile } from "obsidian";
 import type { Comment, CommentManager } from "../commentManager";
 import { lineChToOffset, offsetToLineCh } from "../core/anchors/anchorResolver";
+import { shortenBareUrlsInMarkdown } from "../core/text/commentUrls";
 import { MAX_SIDENOTE_WORDS, countCommentWords, exceedsCommentWordLimit } from "../core/text/commentWordLimit";
 import { resolveAnchorRange } from "../core/anchors/anchorResolver";
 import { getManagedSectionRange, getVisibleNoteContent } from "../core/storage/noteCommentStorage";
@@ -75,7 +76,7 @@ export class CommentMutationController {
             return;
         }
 
-        const commentBody = draft.comment.trim();
+        const commentBody = shortenBareUrlsInMarkdown(draft.comment).trim();
         if (!commentBody) {
             this.host.showNotice("Please enter a comment before saving.");
             return;

@@ -418,6 +418,26 @@ test("buildAllCommentsNoteContent uses page note comment previews and truncates 
     assert.match(content, /### Folder[\s\S]*  <strong class="sidenote2-index-heading-label" title="Folder\/Other\.md">Other\.md<\/strong>[\s\S]*\[Other file page note body\.\]\(obsidian:\/\/side-note2-comment\?vault=dev&file=Folder%2FOther\.md&commentId=page-note-other-file&kind=page\)/);
 });
 
+test("buildAllCommentsNoteContent shows markdown link labels in page note previews", () => {
+    const content = buildAllCommentsNoteContent("dev", [
+        createComment({
+            id: "page-note-1",
+            filePath: "Folder/Note.md",
+            anchorKind: "page",
+            selectedText: "Note",
+            comment: "Read [shipmonk.com/resources/.../dropshipping-with-a-fulfillment-company](https://www.shipmonk.com/resources/content-hub/dropshipping-with-a-fulfillment-company?utm_source=google&utm_medium=cpc&utm_campaign=summer) later.",
+            startLine: 0,
+            startChar: 0,
+            endLine: 0,
+            endChar: 0,
+            timestamp: 1,
+        }),
+    ]);
+
+    assert.match(content, /\[Read shipmonk\.com\/resources\/\.\.\.\/dropshipping-with-a-fulfillment-company later\.\]\(obsidian:\/\/side-note2-comment\?vault=dev&file=Folder%2FNote\.md&commentId=page-note-1&kind=page\)/);
+    assert.doesNotMatch(content, /\[Read \[shipmonk\.com/);
+});
+
 test("buildAllCommentsNoteContent keeps anchored index rows to the selected text only", () => {
     const content = buildAllCommentsNoteContent("dev", [
         createComment({

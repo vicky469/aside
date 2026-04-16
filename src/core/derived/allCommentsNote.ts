@@ -2,6 +2,7 @@ import type { Comment } from "../../commentManager";
 import { compareCommentsForSidebarOrder } from "../anchors/commentSectionOrder";
 import { getCommentSelectionLabel, getCommentStatusLabel, isAnchoredComment, isPageComment } from "../anchors/commentAnchors";
 import { filterCommentsByResolvedVisibility } from "../rules/resolvedCommentVisibility";
+import { stripMarkdownLinksForPreview } from "../text/commentUrls";
 import { extractTagsFromText } from "../text/commentTags";
 
 export const ALL_COMMENTS_NOTE_PATH = "SideNote2 index.md";
@@ -85,7 +86,7 @@ export function normalizeAllCommentsNoteImageCaption(caption: string | null | un
 }
 
 function toInlinePreview(value: string, maxLength: number = MAX_PREVIEW_LENGTH): string {
-    const normalized = value.replace(/\r\n/g, "\n").replace(/\s+/g, " ").trim();
+    const normalized = stripMarkdownLinksForPreview(value).replace(/\r\n/g, "\n").replace(/\s+/g, " ").trim();
     if (!normalized) {
         return "(blank selection)";
     }
@@ -136,7 +137,7 @@ function getFolderPath(filePath: string): string {
 }
 
 function toWordPreview(value: string, maxWords: number): string {
-    const normalized = value.replace(/\r\n/g, "\n").replace(/\s+/g, " ").trim();
+    const normalized = stripMarkdownLinksForPreview(value).replace(/\r\n/g, "\n").replace(/\s+/g, " ").trim();
     if (!normalized) {
         return "";
     }

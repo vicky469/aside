@@ -1,3 +1,5 @@
+import { shortenBareUrlsInMarkdown } from "../../core/text/commentUrls";
+
 const DASH_RULE_LINE = /^ {0,3}-(?:[ \t]*-){2,}[ \t]*$/;
 const FENCE_LINE = /^ {0,3}(`{3,}|~{3,})/;
 
@@ -40,7 +42,7 @@ export function normalizeCommentMarkdownForRender(markdown: string): string {
         return markdown;
     }
 
-    const lines = markdown.split("\n");
+    const lines = shortenBareUrlsInMarkdown(markdown).split("\n");
     const normalized: string[] = [];
     let activeFence: FenceState | null = null;
 

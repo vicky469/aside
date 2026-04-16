@@ -207,6 +207,28 @@ test("comment mutation controller saves a new draft by trimming and persisting i
     assert.deepEqual(host.notices, []);
 });
 
+test("comment mutation controller stores shortened markdown links when saving a draft", async () => {
+    const draft = toDraft(createComment({
+        id: "draft-1",
+        comment: "Check https://www.shipmonk.com/resources/content-hub/dropshipping-with-a-fulfillment-company?utm_source=google&utm_medium=cpc&utm_campaign=summer",
+    }));
+    const host = createHost({
+        draftComment: draft,
+        knownComments: [draft],
+        loadedComments: [],
+        currentNoteContentByPath: {
+            [draft.filePath]: "# Title\n\nAlpha beta gamma.\n",
+        },
+    });
+
+    await host.controller.saveDraft(draft.id);
+
+    assert.equal(
+        host.manager.getAllComments()[0]?.comment,
+        "Check [shipmonk.com/resources/.../dropshipping-with-a-fulfillment-company](https://www.shipmonk.com/resources/content-hub/dropshipping-with-a-fulfillment-company?utm_source=google&utm_medium=cpc&utm_campaign=summer)",
+    );
+});
+
 test("comment mutation controller marks a new draft as saving before anchor resolution completes", async () => {
     const draft = toDraft(createComment({
         id: "draft-1",
