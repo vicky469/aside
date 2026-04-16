@@ -87,29 +87,29 @@ Or store [`skills/sidenote2/SKILL.md`](./skills/sidenote2/SKILL.md)  in your hom
 
 ## Glossary
 
-**`thread`**
-One SideNote2 discussion attached to one target. A thread can have one first entry and later replies.
+- **`thread`**  
+  One SideNote2 discussion attached to one target. A thread can have one first entry and later replies.
 
-**`entry`**
-One message inside a thread. The first saved entry creates the thread. Later child entries are replies in the same thread.
+- **`entry`**  
+  One message inside a thread. The first saved entry creates the thread. Later child entries are replies in the same thread.
 
-**`page note`**
-A thread attached to the whole file, not to a text selection.
+- **`page note`**  
+  A thread attached to the whole file, not to a text selection.
 
-**`anchored note`**
-A thread attached to a specific text selection in a markdown note.
+- **`anchored note`**  
+  A thread attached to a specific text selection in a markdown note.
 
-**`orphaned note`**
-An anchored thread whose original text can no longer be matched in the file. The thread still exists; its anchor is just currently missing.
+- **`orphaned note`**  
+  An anchored thread whose original text can no longer be matched in the file. The thread still exists; its anchor is just currently missing.
 
-**`resolved note`**
-A thread that has been archived instead of deleted.
+- **`resolved note`**  
+  A thread that has been archived instead of deleted.
 
-**`SideNote2 index.md`**
-The generated vault-wide index note. It is derived output, not the source of truth.
+- **`SideNote2 index.md`**  
+  The generated vault-wide index note. It is derived output, not the source of truth.
 
-**`thought trail`**
-The graph view built from `[[wikilinks]]` inside side-note threads.
+- **`thought trail`**  
+  The graph view built from `[[wikilinks]]` inside side-note threads.
 
 ## Writing in Side Notes
 
