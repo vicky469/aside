@@ -1,5 +1,4 @@
-import { MarkdownView, TFile, type WorkspaceLeaf } from "obsidian";
-import type { Plugin } from "obsidian";
+import type { MarkdownView, Plugin, TFile, WorkspaceLeaf } from "obsidian";
 import type { Comment, CommentManager, CommentThread } from "../commentManager";
 import { threadToComment } from "../commentManager";
 import { getPageCommentLabel } from "../core/anchors/commentAnchors";
@@ -45,6 +44,7 @@ export interface CommentPersistenceHost {
     getMarkdownViewForFile(file: TFile): MarkdownView | null;
     getMarkdownFileByPath(filePath: string): TFile | null;
     getCurrentNoteContent(file: TFile): Promise<string>;
+    getStoredNoteContent(file: TFile): Promise<string>;
     getParsedNoteComments(filePath: string, noteContent: string): ParsedNoteComments;
     isAllCommentsNotePath(filePath: string): boolean;
     isCommentableFile(file: TFile | null): file is TFile;
@@ -56,10 +56,22 @@ export interface CommentPersistenceHost {
     syncDerivedCommentLinksForFile(file: TFile, noteContent: string, comments: Comment[]): void;
     refreshCommentViews(): Promise<void>;
     refreshEditorDecorations(): void;
+    refreshMarkdownPreviews(): void;
     getCommentMentionedPageLabels(comment: Comment): string[];
     syncIndexNoteLeafMode(leaf: WorkspaceLeaf | null): Promise<void>;
     saveSettings(): Promise<void>;
     log?(level: "info" | "warn" | "error", area: string, event: string, payload?: Record<string, unknown>): Promise<void>;
+}
+
+function isTFileLike(value: unknown): value is TFile {
+    if (!value || typeof value !== "object") {
+        return false;
+    }
+
+    const candidate = value as Partial<TFile>;
+    return typeof candidate.path === "string"
+        && typeof candidate.basename === "string"
+        && typeof candidate.extension === "string";
 }
 
 export class CommentPersistenceController {
@@ -79,6 +91,21 @@ export class CommentPersistenceController {
 
         try {
             const fileContent = await this.host.getCurrentNoteContent(file);
+            const storedContent = await this.host.getStoredNoteContent(file);
+            if (fileContent !== storedContent && this.host.getMarkdownViewForFile(file)) {
+                const currentParsed = await this.parseAndNormalizeFileComments(file.path, fileContent);
+                const storedParsed = await this.parseAndNormalizeFileComments(file.path, storedContent);
+                if (currentParsed.mainContent === storedParsed.mainContent) {
+                    await this.syncThreadsIntoVisibleNoteContent(file, currentParsed.mainContent, storedParsed.threads);
+                    this.clearPendingCommentPersistTimer(file.path);
+                    await this.afterCommentsChanged();
+                    void this.host.log?.("info", "persistence", "storage.note.external-managed-sync", {
+                        filePath: file.path,
+                        threadCount: storedParsed.threads.length,
+                    });
+                    return;
+                }
+            }
             const parsed = await this.syncFileCommentsFromContent(file, fileContent);
             const rewrittenContent = serializeNoteCommentThreads(parsed.mainContent, parsed.threads);
 
@@ -319,16 +346,24 @@ export class CommentPersistenceController {
 
     private async syncFileCommentsFromContent(file: TFile, noteContent: string): Promise<SyncedFileComments> {
         const parsed = await this.parseAndNormalizeFileComments(file.path, noteContent);
+        return this.syncThreadsIntoVisibleNoteContent(file, parsed.mainContent, parsed.threads);
+    }
+
+    private async syncThreadsIntoVisibleNoteContent(
+        file: TFile,
+        mainContent: string,
+        threads: CommentThread[],
+    ): Promise<SyncedFileComments> {
         const syncedComments = await syncLoadedCommentsForCurrentNote(
             file.path,
-            parsed.mainContent,
-            parsed.threads,
+            mainContent,
+            threads,
             this.host.getCommentManager(),
             this.host.getAggregateCommentIndex(),
         );
-        this.host.syncDerivedCommentLinksForFile(file, parsed.mainContent, syncedComments.comments);
+        this.host.syncDerivedCommentLinksForFile(file, mainContent, syncedComments.comments);
         return {
-            mainContent: parsed.mainContent,
+            mainContent,
             threads: syncedComments.threads,
             comments: syncedComments.comments,
         };
@@ -390,6 +425,7 @@ export class CommentPersistenceController {
     private async afterCommentsChanged(options: PersistOptions = {}): Promise<void> {
         await this.host.refreshCommentViews();
         this.host.refreshEditorDecorations();
+        this.host.refreshMarkdownPreviews();
         if (options.immediateAggregateRefresh) {
             await this.refreshAggregateNoteNow();
         } else {
@@ -427,11 +463,11 @@ export class CommentPersistenceController {
                 headerImageUrl: this.host.getIndexHeaderImageUrl(),
                 headerImageCaption: this.host.getIndexHeaderImageCaption(),
                 showResolved: this.host.shouldShowResolvedComments(),
-                hasSourceFile: (filePath: string) => this.host.app.vault.getAbstractFileByPath(filePath) instanceof TFile,
+                hasSourceFile: (filePath: string) => isTFileLike(this.host.app.vault.getAbstractFileByPath(filePath)),
                 getMentionedPageLabels: (comment: Comment) => this.host.getCommentMentionedPageLabels(comment),
                 resolveWikiLinkPath: (linkPath: string, sourceFilePath: string) => {
                     const linkedFile = this.host.app.metadataCache.getFirstLinkpathDest(linkPath, sourceFilePath);
-                    return linkedFile instanceof TFile ? linkedFile.path : null;
+                    return isTFileLike(linkedFile) ? linkedFile.path : null;
                 },
             };
             const nextContent = buildAllCommentsNoteContent(this.host.app.vault.getName(), comments, noteOptions);

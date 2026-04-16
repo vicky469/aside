@@ -143,6 +143,7 @@ test("workspace view controller resolves files, markdown views, and open note co
         leaves: [{ view: activeMarkdownView }, { view: secondaryMarkdownView }],
         files: [openFile, secondaryFile, closedFile, pdfFile],
         cachedReadValues: {
+            [openFile.path]: "open disk text",
             [closedFile.path]: "closed file text",
         },
     });
@@ -161,7 +162,9 @@ test("workspace view controller resolves files, markdown views, and open note co
     );
     assert.equal(harness.controller.isMarkdownEditorFocused(openFile), true);
     assert.equal(await harness.controller.getCurrentNoteContent(openFile), "open editor text");
+    assert.equal(await harness.controller.getStoredNoteContent(openFile), "open disk text");
     assert.equal(await harness.controller.getCurrentNoteContent(closedFile), "closed file text");
+    assert.equal(await harness.controller.getStoredNoteContent(closedFile), "closed file text");
 });
 
 test("workspace view controller syncs visible files, rerenders surfaces, and clears markdown selections", async () => {
