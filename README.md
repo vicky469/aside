@@ -31,9 +31,9 @@
   <img src="./assets/demo-preview.gif" alt="SideNote2 demo preview" width="900">
 </p>
 
-SideNote2 is an [Obsidian](https://obsidian.md) plugin for side comments that stay attached to the note.
+SideNote2 is an [Obsidian](https://obsidian.md) plugin for side comments that stay attached to the note. Inspired by [mofukuru/SideNote](https://github.com/mofukuru/SideNote).
 
-It is built for a minimal workflow: humans work in the sidebar, while agents can read the same comments directly from the markdown file. Inspired by [mofukuru/SideNote](https://github.com/mofukuru/SideNote).
+It is built for a minimal workflow: both humans and agents can work in the sidebar or the main markdown file. 
 
 For development, setup, testing, and release workflow, see [README-dev.md](./README-dev.md).
 
@@ -85,6 +85,17 @@ Or store [`skills/sidenote2/SKILL.md`](./skills/sidenote2/SKILL.md)  in your hom
    See `Writing in Side Notes` below for editor shortcuts and formatting behavior.
 4. Review it later from the sidebar, from `SideNote2 index.md`, or from the sidebar thought trail.
 
+## Glossary
+
+- `thread`: one SideNote2 discussion attached to one target. A thread can have one first entry and later replies.
+- `entry`: one message inside a thread. The first saved entry creates the thread. Later child entries are replies in the same thread.
+- `page note`: a thread attached to the whole file, not to a text selection.
+- `anchored note`: a thread attached to a specific text selection in a markdown note.
+- `orphaned note`: an anchored thread whose original text can no longer be matched in the file. The thread still exists; its anchor is just currently missing.
+- `resolved note`: a thread that has been archived instead of deleted.
+- `SideNote2 index.md`: the generated vault-wide index note. It is derived output, not the source of truth.
+- `thought trail`: the graph view built from `[[wikilinks]]` inside side-note threads.
+
 ## Writing in Side Notes
 
 | Action | How it works |
@@ -103,12 +114,26 @@ Or store [`skills/sidenote2/SKILL.md`](./skills/sidenote2/SKILL.md)  in your hom
    This copies an `obsidian://side-note2-comment?...` link.
 2. Paste that link into Codex, Claude Code, Kimi Code, or another assistant with the `sidenote2` instructions installed.
    For write actions, the agent should also have the `sidenote2` CLI available on the machine.
-3. Ask one of these:
+3. Use the glossary terms above so the agent knows whether you mean the whole thread or one message inside it.
+4. Ask one of these:
    - `reply to this`
+   - `reply to this thread`
+   - `add another entry under this anchored note`
+   - `add another entry under this page note`
    - `update this side note to: ...`
+   - `update this page note to: ...`
+   - `update this anchored note to: ...`
    - `resolve this side note`
+   - `resolve this thread`
 
 The `sidenote2` skill tells the agent to use the real markdown note as source of truth and to safely append, update, or resolve the stored comment/thread through the `sidenote2` CLI.
+
+If you want to be extra explicit, say what kind of thing you are pointing at:
+
+- `reply to this thread`
+- `update this anchored note to explain X more simply`
+- `update this page note to summarize the whole file`
+- `resolve this thread`
 
 ## Settings
 
