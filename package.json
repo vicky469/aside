@@ -10,6 +10,7 @@
 		"dev": "node esbuild.config.mjs",
 		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
 		"lint": "eslint src",
+		"comment:create": "node bin/sidenote2.mjs comment:create",
 		"comment:append": "node bin/sidenote2.mjs comment:append",
 		"comment:resolve": "node bin/sidenote2.mjs comment:resolve",
 		"comment:update": "node bin/sidenote2.mjs comment:update",

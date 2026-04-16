@@ -19,12 +19,28 @@ function printMainUsage(stream = process.stderr) {
             "  sidenote2 <command> [options]",
             "",
             "Commands:",
+            "  comment:create  Create one new SideNote2 comment thread in a note",
             "  comment:append  Append one entry to an existing SideNote2 comment thread in a note",
             "  comment:update  Update one stored SideNote2 comment body in a note",
             "  comment:resolve  Mark one SideNote2 comment thread as resolved in a note",
             "  install-skill   Copy bundled SideNote2 Codex skill(s) into the Codex skills directory",
             "",
             "Run `sidenote2 <command> --help` for command-specific usage.",
+        ].join("\n") + "\n",
+    );
+}
+
+function printCommentCreateUsage(stream = process.stderr) {
+    stream.write(
+        [
+            "Usage:",
+            "  sidenote2 comment:create --file <note.md> --page (--comment <text> | --comment-file <path> | --stdin) [--settle-ms <milliseconds>]",
+            "  sidenote2 comment:create --file <note.md> --selected-text <text> --start-line <number> --start-char <number> --end-line <number> --end-char <number> (--comment <text> | --comment-file <path> | --stdin) [--settle-ms <milliseconds>]",
+            "",
+            "Examples:",
+            "  sidenote2 comment:create --file ./note.md --page --comment-file ./comment.md",
+            "  sidenote2 comment:create --file ./note.md --selected-text \"Priority conflicts\" --start-line 335 --start-char 3 --end-line 335 --end-char 21 --comment-file ./comment.md",
+            "  printf 'New page note\\n' | sidenote2 comment:create --file ./note.md --page --stdin",
         ].join("\n") + "\n",
     );
 }
@@ -150,6 +166,113 @@ function parseCommentUpdateArgs(argv) {
     const hasUriTarget = Boolean(options.uri);
     if (contentSources !== 1 || (hasFileOrIdTarget ? 1 : 0) + (hasUriTarget ? 1 : 0) !== 1 || (hasFileOrIdTarget && !hasFileAndIdTarget)) {
         throw new Error("Expected exactly one target form: either --file with --id, or --uri, plus exactly one comment source.");
+    }
+
+    return options;
+}
+
+function parseCommentCreateArgs(argv) {
+    const options = {
+        file: "",
+        page: false,
+        selectedText: "",
+        startLine: null,
+        startChar: null,
+        endLine: null,
+        endChar: null,
+        comment: null,
+        commentFile: "",
+        stdin: false,
+        settleMs: 0,
+    };
+
+    for (let index = 0; index < argv.length; index += 1) {
+        const arg = argv[index];
+        switch (arg) {
+            case "--file":
+                options.file = argv[index + 1] ?? "";
+                index += 1;
+                break;
+            case "--page":
+                options.page = true;
+                break;
+            case "--selected-text":
+                options.selectedText = argv[index + 1] ?? "";
+                index += 1;
+                break;
+            case "--start-line":
+                options.startLine = parseNonNegativeIntegerOption(argv[index + 1] ?? "", "--start-line");
+                index += 1;
+                break;
+            case "--start-char":
+                options.startChar = parseNonNegativeIntegerOption(argv[index + 1] ?? "", "--start-char");
+                index += 1;
+                break;
+            case "--end-line":
+                options.endLine = parseNonNegativeIntegerOption(argv[index + 1] ?? "", "--end-line");
+                index += 1;
+                break;
+            case "--end-char":
+                options.endChar = parseNonNegativeIntegerOption(argv[index + 1] ?? "", "--end-char");
+                index += 1;
+                break;
+            case "--comment":
+                options.comment = argv[index + 1] ?? "";
+                index += 1;
+                break;
+            case "--comment-file":
+                options.commentFile = argv[index + 1] ?? "";
+                index += 1;
+                break;
+            case "--stdin":
+                options.stdin = true;
+                break;
+            case "--settle-ms":
+                options.settleMs = parseNonNegativeIntegerOption(argv[index + 1] ?? "", "--settle-ms");
+                index += 1;
+                break;
+            case "--help":
+            case "-h":
+                return null;
+            default:
+                throw new Error(`Unknown argument: ${arg}`);
+        }
+    }
+
+    const contentSources = [options.comment !== null, Boolean(options.commentFile), options.stdin].filter(Boolean).length;
+    if (!options.file || contentSources !== 1) {
+        throw new Error("Expected --file plus exactly one comment source.");
+    }
+
+    const hasSelectionTarget = options.selectedText.length > 0
+        || options.startLine !== null
+        || options.startChar !== null
+        || options.endLine !== null
+        || options.endChar !== null;
+
+    if (options.page && hasSelectionTarget) {
+        throw new Error("Expected either --page or a selection target, not both.");
+    }
+
+    if (!options.page) {
+        if (
+            !options.selectedText
+            || options.startLine === null
+            || options.startChar === null
+            || options.endLine === null
+            || options.endChar === null
+        ) {
+            throw new Error(
+                "Expected --page, or --selected-text with --start-line/--start-char/--end-line/--end-char.",
+            );
+        }
+
+        if (
+            options.endLine < options.startLine
+            || (options.endLine === options.startLine && options.endChar < options.startChar)
+        ) {
+            throw new Error("Expected the end position to be at or after the start position.");
+        }
     }
 
     return options;
@@ -377,6 +500,14 @@ async function loadCommentBody(options) {
     return readStdin();
 }
 
+function getPageCommentLabelForPath(filePath) {
+    return path.basename(filePath).replace(/\.[^.]+$/i, "") || filePath;
+}
+
+function hashCommentSelection(text) {
+    return createHash("sha256").update(text, "utf8").digest("hex");
+}
+
 const COMMENT_LOCATION_PROTOCOL = "side-note2-comment";
 
 function parseCommentProtocolUri(uri) {
@@ -597,6 +728,78 @@ async function runCommentUpdate(argv, streamOut, streamErr) {
     return 0;
 }
 
+async function runCommentCreate(argv, streamOut, streamErr) {
+    let options;
+    try {
+        options = parseCommentCreateArgs(argv);
+    } catch (error) {
+        streamErr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+        printCommentCreateUsage(streamErr);
+        return 1;
+    }
+
+    if (options === null) {
+        printCommentCreateUsage(streamOut);
+        return 0;
+    }
+
+    const repoRoot = getRepoRoot(import.meta.url);
+    const notePath = path.resolve(process.cwd(), options.file);
+    const nextCommentBody = await loadCommentBody(options);
+    const noteContent = await readFile(notePath, "utf8");
+    const storageModule = await loadStorageModule(repoRoot);
+    const managedSectionKind = storageModule.getManagedSectionKind(noteContent);
+    if (managedSectionKind === "unsupported") {
+        streamErr.write(
+            `Found a SideNote2 comments block in ${notePath}, but it is not a supported threaded entries[] payload.\n`,
+        );
+        return 1;
+    }
+
+    const parsed = storageModule.parseNoteComments(noteContent, notePath);
+    const timestamp = Date.now();
+    const threadId = randomUUID();
+    const selectedText = options.page
+        ? getPageCommentLabelForPath(notePath)
+        : options.selectedText;
+    const nextThread = {
+        id: threadId,
+        filePath: notePath,
+        startLine: options.page ? 0 : options.startLine,
+        startChar: options.page ? 0 : options.startChar,
+        endLine: options.page ? 0 : options.endLine,
+        endChar: options.page ? 0 : options.endChar,
+        selectedText,
+        selectedTextHash: hashCommentSelection(selectedText),
+        anchorKind: options.page ? "page" : "selection",
+        orphaned: false,
+        resolved: false,
+        entries: [{
+            id: threadId,
+            body: nextCommentBody,
+            timestamp,
+        }],
+        createdAt: timestamp,
+        updatedAt: timestamp,
+    };
+    const updated = storageModule.serializeNoteCommentThreads(noteContent, [...parsed.threads, nextThread]);
+
+    const writeResult = await writeObservedNoteSafely(notePath, createContentFingerprint(noteContent), updated, {
+        settleMs: options.settleMs,
+    });
+    if (writeResult.kind === "changed") {
+        streamErr.write(
+            `Skipped creating a comment in ${notePath} because ${writeResult.reason}. `
+            + "Rerun after Obsidian Sync or other local edits settle.\n",
+        );
+        return 1;
+    }
+
+    const anchorLabel = options.page ? "page note" : "anchored note";
+    streamOut.write(`Created ${anchorLabel} thread ${threadId} in ${notePath}\n`);
+    return 0;
+}
+
 async function runCommentAppend(argv, streamOut, streamErr) {
     let options;
     try {
@@ -773,6 +976,8 @@ export {
 export async function runCli(argv, io = { stdout: process.stdout, stderr: process.stderr }) {
     const [command, ...rest] = argv;
     switch (command) {
+        case "comment:create":
+            return runCommentCreate(rest, io.stdout, io.stderr);
         case "comment:append":
             return runCommentAppend(rest, io.stdout, io.stderr);
         case "comment:update":

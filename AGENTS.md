@@ -34,6 +34,7 @@ Switch to `skills/sidenote2/SKILL.md` when the user:
 
 For SideNote2 thread writes, prefer the helper scripts over hand-editing JSON:
 
+- `node scripts/create-note-comment-thread.mjs`
 - `node scripts/append-note-comment-entry.mjs`
 - `node scripts/resolve-note-comment.mjs`
 - `node scripts/update-note-comment.mjs`
@@ -44,6 +45,8 @@ If the user already supplied an `obsidian://side-note2-comment?...` URI, prefer 
 
 ## Intent Mapping
 
+- `create new thread`, `create a page note`, `create an anchored note`
+  Treat as create-thread.
 - `reply`, `continue`, `answer this`, `add another note under this`
   Treat as append-to-thread.
 - `update`, `rewrite`, `replace this comment`

@@ -141,7 +141,7 @@ Or store [`skills/sidenote2/SKILL.md`](./skills/sidenote2/SKILL.md)  in your hom
    - `resolve this side note`
    - `resolve this thread`
 
-The `sidenote2` skill tells the agent to use the real markdown note as source of truth and to safely append, update, or resolve the stored comment/thread through the `sidenote2` CLI.
+The `sidenote2` skill tells the agent to use the real markdown note as source of truth and to safely create, append, update, or resolve the stored comment/thread through the `sidenote2` CLI.
 
 If you want to be extra explicit, say what kind of thing you are pointing at:
 
