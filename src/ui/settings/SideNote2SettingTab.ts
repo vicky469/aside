@@ -34,7 +34,7 @@ export default class SideNote2SettingTab extends PluginSettingTab {
 
         new Setting(containerEl)
             .setName("Built-in agent")
-            .setDesc("Type @codex in a side note to use the built-in assistant for research, drafting, planning, automation, and more in the same thread.");
+            .setDesc("Type @codex in a side note to use the built-in assistant for the thread: ask questions, draft, organize, tag, automate, and more.");
 
         const codexStatusSetting = new Setting(containerEl)
             .setName("Codex status")
