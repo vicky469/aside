@@ -7,9 +7,12 @@ import { decorateRenderedCommentMentions } from "../editor/commentEditorStyling"
 import { shouldActivateSidebarComment } from "./commentPointerAction";
 import { formatSidebarCommentMeta } from "./sidebarCommentSections";
 
-export interface PersistedCommentPresentation {
+interface BasePersistedCommentPresentation {
     classes: string[];
     metaText: string;
+}
+
+export interface PersistedCommentPresentation extends BasePersistedCommentPresentation {
     reanchorAction: {
         label: string;
     } | null;
@@ -27,10 +30,7 @@ export interface PersistedCommentPresentation {
     };
 }
 
-export interface PersistedThreadEntryPresentation {
-    classes: string[];
-    metaText: string;
-}
+export interface PersistedThreadEntryPresentation extends BasePersistedCommentPresentation {}
 
 export interface SidebarPersistedCommentHost {
     activeCommentId: string | null;
@@ -91,12 +91,12 @@ function renderObsidianExternalLinkIcon(container: HTMLElement): void {
     container.replaceChildren(svgEl);
 }
 
-export function buildPersistedCommentPresentation(
-    thread: CommentThread,
+function buildBasePersistedCommentPresentation(
+    comment: Comment,
     activeCommentId: string | null,
-): PersistedCommentPresentation {
-    const comment = threadEntryToComment(thread, getFirstThreadEntry(thread));
-    const classes = ["sidenote2-comment-item", "sidenote2-thread-item"];
+    extraClasses: string[] = [],
+): BasePersistedCommentPresentation {
+    const classes = ["sidenote2-comment-item", "sidenote2-thread-item", ...extraClasses];
     if (isPageComment(comment)) {
         classes.push("page-note");
     }
@@ -113,6 +113,18 @@ export function buildPersistedCommentPresentation(
     return {
         classes,
         metaText: formatSidebarCommentMeta(comment),
+    };
+}
+
+export function buildPersistedCommentPresentation(
+    thread: CommentThread,
+    activeCommentId: string | null,
+): PersistedCommentPresentation {
+    const comment = threadEntryToComment(thread, getFirstThreadEntry(thread));
+    const basePresentation = buildBasePersistedCommentPresentation(comment, activeCommentId);
+
+    return {
+        ...basePresentation,
         reanchorAction: isOrphanedComment(comment) && !isPageComment(comment)
             ? {
                 label: "Re-anchor to current selection",
@@ -139,25 +151,9 @@ export function buildPersistedThreadEntryPresentation(
     activeCommentId: string | null,
 ): PersistedThreadEntryPresentation {
     const comment = threadEntryToComment(thread, entry);
-    const classes = ["sidenote2-comment-item", "sidenote2-thread-item", "sidenote2-thread-entry-item"];
-
-    if (isPageComment(comment)) {
-        classes.push("page-note");
-    }
-    if (isOrphanedComment(comment)) {
-        classes.push("orphaned");
-    }
-    if (comment.resolved) {
-        classes.push("resolved");
-    }
-    if (activeCommentId === comment.id) {
-        classes.push("active");
-    }
-
-    return {
-        classes,
-        metaText: formatSidebarCommentMeta(comment),
-    };
+    return buildBasePersistedCommentPresentation(comment, activeCommentId, [
+        "sidenote2-thread-entry-item",
+    ]);
 }
 
 async function renderThreadEntryContent(
@@ -372,39 +368,103 @@ function renderDeleteButton(
     };
 }
 
+function renderAddEntryButton(
+    actionsEl: HTMLDivElement,
+    commentId: string,
+    host: SidebarPersistedCommentHost,
+    options: {
+        ariaLabel: string;
+        extraClasses?: string[];
+        icon?: string;
+    },
+): void {
+    const addEntryButton = actionsEl.createEl("button", {
+        cls: [
+            "clickable-icon",
+            "sidenote2-comment-action-button",
+            "sidenote2-comment-action-add-entry",
+            ...(options.extraClasses ?? []),
+        ].join(" "),
+    });
+    addEntryButton.setAttribute("type", "button");
+    addEntryButton.setAttribute("aria-label", options.ariaLabel);
+    host.setIcon(addEntryButton, options.icon ?? "plus");
+    addEntryButton.onclick = (event) => {
+        event.stopPropagation();
+        host.startAppendEntryDraft(commentId, host.currentFilePath);
+    };
+}
+
+function renderPersistedEntryCard(
+    container: HTMLDivElement,
+    options: {
+        comment: Comment;
+        thread: CommentThread;
+        entryBody: string;
+        presentation: BasePersistedCommentPresentation;
+        host: SidebarPersistedCommentHost;
+    },
+): {
+    commentEl: HTMLDivElement;
+    actionsEl: HTMLDivElement;
+    renderTask: Promise<void>;
+} {
+    const commentEl = container.createDiv(options.presentation.classes.join(" "));
+    commentEl.setAttribute("data-comment-id", options.comment.id);
+    commentEl.setAttribute("data-start-line", String(options.comment.startLine));
+
+    const headerEl = commentEl.createDiv("sidenote2-comment-header");
+    const headerMainEl = headerEl.createDiv("sidenote2-comment-header-main");
+    renderCommentMeta(headerMainEl, options.comment, options.presentation.metaText, options.host);
+    const actionsEl = headerEl.createDiv("sidenote2-comment-actions");
+
+    const contentWrapper = commentEl.createDiv("sidenote2-comment-content");
+    contentWrapper.tabIndex = -1;
+    attachSidebarCommentCardInteractions(commentEl, contentWrapper, options.comment, options.host);
+
+    return {
+        commentEl,
+        actionsEl,
+        renderTask: renderThreadEntryContent(contentWrapper, options.thread, options.entryBody, options.host),
+    };
+}
+
 function renderThreadFooterActions(
     commentEl: HTMLDivElement,
     comment: Comment,
-    showAddEntryAction: boolean,
+    options: {
+        showShareAction: boolean;
+        showAddEntryAction: boolean;
+    },
     host: SidebarPersistedCommentHost,
 ): void {
-    const footerEl = commentEl.createDiv("sidenote2-thread-footer");
-    const footerActionsEl = footerEl.createDiv("sidenote2-thread-footer-actions");
-    const shareButton = footerActionsEl.createEl("button", {
-        cls: "clickable-icon sidenote2-comment-action-button sidenote2-comment-action-share sidenote2-thread-share-button",
-    });
-    shareButton.setAttribute("type", "button");
-    shareButton.setAttribute("aria-label", "Share side note");
-    host.setIcon(shareButton, "share");
-    shareButton.onclick = (event) => {
-        event.stopPropagation();
-        void host.shareComment(comment);
-    };
-
-    if (!showAddEntryAction) {
+    if (!(options.showShareAction || options.showAddEntryAction)) {
         return;
     }
 
-    const addEntryButton = footerActionsEl.createEl("button", {
-        cls: "clickable-icon sidenote2-comment-action-button sidenote2-comment-action-add-entry sidenote2-thread-add-entry-button",
+    const footerEl = commentEl.createDiv("sidenote2-thread-footer");
+    const footerActionsEl = footerEl.createDiv("sidenote2-thread-footer-actions");
+    if (options.showShareAction) {
+        const shareButton = footerActionsEl.createEl("button", {
+            cls: "clickable-icon sidenote2-comment-action-button sidenote2-comment-action-share sidenote2-thread-share-button",
+        });
+        shareButton.setAttribute("type", "button");
+        shareButton.setAttribute("aria-label", "Share side note");
+        host.setIcon(shareButton, "share");
+        shareButton.onclick = (event) => {
+            event.stopPropagation();
+            void host.shareComment(comment);
+        };
+    }
+
+    if (!options.showAddEntryAction) {
+        return;
+    }
+
+    renderAddEntryButton(footerActionsEl, comment.id, host, {
+        ariaLabel: "Add to thread",
+        extraClasses: ["sidenote2-thread-add-entry-button"],
     });
-    addEntryButton.setAttribute("type", "button");
-    addEntryButton.setAttribute("aria-label", "Add to thread");
-    host.setIcon(addEntryButton, "plus");
-    addEntryButton.onclick = (event) => {
-        event.stopPropagation();
-        host.startAppendEntryDraft(comment.id, host.currentFilePath);
-    };
 }
 
 function renderThreadReanchorAction(
@@ -443,29 +503,22 @@ export async function renderPersistedCommentCard(
         hasAppendDraftComment: !!host.appendDraftComment,
     });
     const canReorderChildEntries = host.enableManualReorder && entries.length > 2 && shouldRenderStoredChildren;
-
-    const commentEl = threadEl.createDiv(presentation.classes.join(" "));
-    commentEl.setAttribute("data-comment-id", comment.id);
-    commentEl.setAttribute("data-start-line", String(comment.startLine));
-
-    const headerEl = commentEl.createDiv("sidenote2-comment-header");
-    const headerMainEl = headerEl.createDiv("sidenote2-comment-header-main");
-    renderCommentMeta(headerMainEl, comment, presentation.metaText, host);
-
-    const actionsEl = headerEl.createDiv("sidenote2-comment-actions");
+    const renderedParent = renderPersistedEntryCard(threadEl, {
+        comment,
+        thread,
+        entryBody: entries[0]?.body || "",
+        presentation,
+        host,
+    });
+    const commentEl = renderedParent.commentEl;
+    const actionsEl = renderedParent.actionsEl;
+    const renderTasks: Array<Promise<void>> = [renderedParent.renderTask];
     if (host.enableThreadReorder) {
         renderReorderHandle(actionsEl, {
             kind: "thread",
             threadId: thread.id,
         }, host);
     }
-
-    const contentWrapper = commentEl.createDiv("sidenote2-comment-content");
-    contentWrapper.tabIndex = -1;
-    attachSidebarCommentCardInteractions(commentEl, contentWrapper, comment, host);
-    const renderTasks: Array<Promise<void>> = [
-        renderThreadEntryContent(contentWrapper, thread, entries[0]?.body || "", host),
-    ];
 
     const resolveButton = actionsEl.createEl("button", {
         cls: "clickable-icon sidenote2-comment-action-button sidenote2-comment-action-resolve",
@@ -496,7 +549,10 @@ export async function renderPersistedCommentCard(
     if (presentation.reanchorAction) {
         renderThreadReanchorAction(commentEl, thread.id, presentation.reanchorAction.label, host);
     }
-    renderThreadFooterActions(commentEl, comment, true, host);
+    renderThreadFooterActions(commentEl, comment, {
+        showShareAction: true,
+        showAddEntryAction: true,
+    }, host);
 
     if (!shouldRenderChildComments) {
         await Promise.all(renderTasks);
@@ -508,13 +564,15 @@ export async function renderPersistedCommentCard(
         for (const entry of entries.slice(1)) {
             const entryComment = threadEntryToComment(thread, entry);
             const entryPresentation = buildPersistedThreadEntryPresentation(thread, entry, host.activeCommentId);
-            const entryEl = childCommentsEl.createDiv(entryPresentation.classes.join(" "));
-            entryEl.setAttribute("data-comment-id", entryComment.id);
-            entryEl.setAttribute("data-start-line", String(entryComment.startLine));
-
-            const entryHeaderEl = entryEl.createDiv("sidenote2-comment-header");
-            renderCommentMeta(entryHeaderEl, entryComment, entryPresentation.metaText, host);
-            const entryActionsEl = entryHeaderEl.createDiv("sidenote2-comment-actions");
+            const renderedEntry = renderPersistedEntryCard(childCommentsEl, {
+                comment: entryComment,
+                thread,
+                entryBody: entry.body || "",
+                presentation: entryPresentation,
+                host,
+            });
+            const entryEl = renderedEntry.commentEl;
+            const entryActionsEl = renderedEntry.actionsEl;
             if (canReorderChildEntries) {
                 renderReorderHandle(entryActionsEl, {
                     kind: "entry",
@@ -527,12 +585,11 @@ export async function renderPersistedCommentCard(
             if (host.showSourceRedirectAction) {
                 renderSourceRedirectButton(entryActionsEl, entryComment, "Open source note", "obsidian-external-link", host);
             }
-
-            const entryContentEl = entryEl.createDiv("sidenote2-comment-content");
-            entryContentEl.tabIndex = -1;
-            attachSidebarCommentCardInteractions(entryEl, entryContentEl, entryComment, host);
-            renderTasks.push(renderThreadEntryContent(entryContentEl, thread, entry.body || "", host));
-            renderThreadFooterActions(entryEl, entryComment, false, host);
+            renderTasks.push(renderedEntry.renderTask);
+            renderThreadFooterActions(entryEl, entryComment, {
+                showShareAction: false,
+                showAddEntryAction: true,
+            }, host);
         }
     }
 
