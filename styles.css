@@ -862,6 +862,22 @@
     margin-top: 6px;
 }
 
+.sidenote2-agent-stream-item {
+    cursor: default;
+}
+
+.sidenote2-agent-stream-content {
+    white-space: pre-wrap;
+}
+
+.sidenote2-agent-stream-content:empty {
+    display: none;
+}
+
+.sidenote2-agent-stream-author {
+    color: var(--interactive-accent);
+}
+
 .sidenote2-comment-item.is-drag-source {
     opacity: 0.6;
 }
@@ -878,9 +894,121 @@
     display: flex;
     align-items: center;
     width: 100%;
-    justify-content: flex-end;
+    justify-content: space-between;
     gap: 8px;
     margin-top: 8px;
+}
+
+.sidenote2-thread-footer-meta {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.sidenote2-comment-author-indicator {
+    display: inline-flex;
+    align-items: center;
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 100%;
+    color: var(--text-faint, var(--text-muted));
+    font-size: var(--font-ui-smaller, 11px);
+    font-weight: 500;
+    line-height: 1.2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.sidenote2-comment-author-indicator.is-user {
+    color: var(--text-muted);
+}
+
+.sidenote2-comment-author-indicator.is-codex {
+    color: var(--interactive-accent);
+}
+
+.sidenote2-comment-author-indicator.is-claude {
+    color: var(--text-accent);
+}
+
+.sidenote2-agent-run-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 100%;
+    color: var(--text-faint, var(--text-muted));
+    font-size: var(--font-ui-smaller, 11px);
+    font-weight: 500;
+    line-height: 1.2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.sidenote2-agent-run-status-mark {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    font-size: 0.95em;
+    font-weight: 600;
+    line-height: 1;
+}
+
+.sidenote2-agent-run-status-mark.is-spinner {
+    width: 9px;
+    height: 9px;
+    border: 1.5px solid color-mix(in srgb, currentColor 24%, transparent);
+    border-top-color: currentColor;
+    border-right-color: currentColor;
+    border-radius: 999px;
+    box-sizing: border-box;
+    animation: sidenote2-agent-status-spin 0.9s linear infinite;
+}
+
+.sidenote2-agent-run-status.is-running {
+    color: color-mix(in srgb, var(--interactive-accent) 78%, var(--text-muted));
+}
+
+.sidenote2-agent-run-status.is-queued {
+    color: color-mix(in srgb, var(--text-accent) 74%, var(--text-muted));
+}
+
+.sidenote2-agent-run-status.is-failed {
+    color: var(--text-error);
+}
+
+.sidenote2-agent-run-status.is-succeeded {
+    color: color-mix(in srgb, var(--text-success) 76%, var(--text-muted));
+}
+
+.sidenote2-agent-run-status.is-cancelled {
+    color: var(--text-faint, var(--text-muted));
+}
+
+.sidenote2-agent-stream-item .sidenote2-agent-run-status {
+    gap: 0;
+}
+
+@keyframes sidenote2-agent-status-spin {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .sidenote2-agent-run-status-mark.is-spinner {
+        animation: none;
+    }
 }
 
 .sidenote2-thread-reanchor {
@@ -1047,6 +1175,8 @@
 
 .sidenote2-inline-editor-preview.is-empty {
     color: var(--text-faint, var(--text-muted));
+    font-size: var(--font-ui-smaller);
+    line-height: 1.35;
 }
 
 .sidenote2-inline-textarea {

@@ -4,14 +4,14 @@
 
 Draft implementation spec based on:
 
-- [agent-mentions-prd.md](agent-mentions-prd.md)
+- [agent-mentions-plan.md](agent-mentions-plan.md)
 - [architecture.md](../architecture.md)
 
 ## Objective
 
-Implement phase 1 agent delegation for explicit `@codex` and `@claude` mentions inside SideNote2-managed threads.
+Implement the current shipped phase of agent delegation for explicit `@codex` mentions inside SideNote2-managed threads, while keeping the internal target model extensible for additional agents later.
 
-This spec turns the PRD plus the answered sidebar questions into concrete implementation requirements for:
+This spec turns the plan plus the answered sidebar questions into concrete implementation requirements for:
 
 - directive parsing
 - post-persist dispatch
@@ -29,8 +29,12 @@ These decisions are closed for phase 1:
 - auto-dispatch happens only for newly saved user entries in `new` or `append` mode
 - editing an existing triggering entry never auto-dispatches
 - explicit retry creates a new run record
-- the runtime working directory is the active vault root
+- agent execution is owned by the desktop plugin/runtime, not by mobile clients
+- the current shipped build supports `@codex` only
+- unsupported explicit targets such as `@claude` must not dispatch and should surface a concise notice instead
+- the runtime working directory is the nearest git repo containing the note, with fallback to the note folder and then the vault root
 - raw agent reply text is the only note-body output
+- live streamed agent text is an in-memory sidebar surface only until completion
 - execution metadata stays in plugin data
 - the existing index sidebar `Agent` tab is the only dedicated phase-1 agent surface
 - no second active-runs panel is added
@@ -44,10 +48,11 @@ In scope:
 - a global FIFO queue with one active run at a time
 - runtime dispatch through an `AgentRuntimeAdapter`
 - raw reply append back into the same thread
+- live streamed reply rendering while a run is in progress
 - index sidebar `Agent` tab
 - status rendering for queued, running, succeeded, failed
 - explicit retry from agent-involved threads
-- desktop/runtime-precondition handling
+- desktop-hosted execution plus runtime-precondition handling
 
 Out of scope:
 
@@ -55,10 +60,13 @@ Out of scope:
 - multi-agent fan-out from one saved entry
 - per-note or frontmatter workspace mapping
 - multiple concurrent runtime executions
+- mobile-local agent runtime execution
 - structured note-body execution summaries
 - chain-of-thought or thinking-step storage
+- incremental note writes for partial streamed output
 - source-note agent tabs outside the index sidebar
 - direct note writes by the external runtime
+- an OpenClaw-style mobile node, relay, or off-device execution layer for SideNote2 phase 1
 
 ## Product Rules
 
@@ -99,20 +107,32 @@ One saved entry may create:
 
 If one saved entry contains conflicting explicit targets, SideNote2 must not auto-dispatch.
 
-### Rule 6: Runtime Working Directory Is The Active Vault Root
+### Rule 6: Runtime Working Directory Follows The Note's Local Repo Context
 
-Phase 1 uses the active vault root as the runtime working directory.
-Do not add:
+Phase 1 resolves the runtime working directory in this order:
 
-- workspace-root settings
-- per-note mapping
-- frontmatter mapping
-- folder-based mapping
+- nearest git repo root that contains the note
+- the note's own folder
+- the active vault root
+
+Do not add explicit workspace-root settings, frontmatter mapping, or folder mapping in phase 1.
 
 ### Rule 7: Raw Reply Text Only
 
 The appended agent reply entry stores only the reply text.
 Run status, timestamps, errors, and output linkage live in plugin data only.
+
+### Rule 7a: Streaming Is Transient Until Completion
+
+If the runtime exposes partial text, SideNote2 may render that text live in the sidebar while the run is `running`.
+
+That live text must:
+
+- stay in memory only
+- never become the canonical thread source of truth during generation
+- be replaced by one final persisted child entry only after the run succeeds
+
+If the run fails or is cancelled, SideNote2 must not persist the partial text as a normal thread entry in phase 1.
 
 ### Rule 8: The `Agent` Tab Reuses List Controls
 
@@ -168,38 +188,88 @@ It does not run for:
 
 ## Runtime Availability And Working Directory
 
+## Execution Topology
+
+Phase 1 follows the same broad control-plane idea OpenClaw uses for mobile:
+
+- one host-side runtime owns real agent execution
+- thinner clients are surfaces around that runtime, not independent runtimes
+
+In SideNote2 terms, the Obsidian desktop plugin process is the execution owner.
+It is responsible for:
+
+- parsing explicit directives after canonical save
+- creating run records
+- invoking the external agent runtime
+- appending the agent reply back into the canonical note
+
+Phase 1 does not introduce a separate SideNote2 mobile runtime, background relay, or node layer.
+
 ## Working Directory
 
-Use the vault root from the active Obsidian vault adapter:
+Resolve the working directory from the note path plus the desktop vault adapter:
 
-- `app.vault.adapter instanceof FileSystemAdapter`
-- `app.vault.adapter.getBasePath()`
+- if the note lives inside a git repo, use that repo root
+- otherwise use the note folder
+- if that cannot be resolved safely, fall back to the vault root
 
-This aligns with the existing runtime path access already used in `main.ts`.
+This keeps agent work scoped to the repo the note is actually about instead of forcing every run to start at the whole vault root.
 
 ## Unsupported Environments
 
-If the vault root cannot be resolved, SideNote2 must:
+If no filesystem-backed working directory can be resolved, SideNote2 must:
 
 - keep the saved user entry
 - create a failed run record
 - attach a concise environment error
 - avoid starting any external runtime process
 
-Phase 1 should treat this as unsupported runtime execution, which is expected on environments without a filesystem-backed vault.
+Phase 1 should treat this as unsupported runtime execution, which is expected on:
+
+- Obsidian mobile
+- any environment without a filesystem-backed vault
+- any client surface that can render synced notes but cannot safely host local runtime execution
+
+Agent-thread visibility is still allowed on those surfaces, but runtime dispatch is not.
 
 ## Runtime Selection
 
-Phase 1 hardcodes one runtime adapter family:
+Phase 1 uses direct local CLI adapters:
 
-- `openclaw-acp`
+- `@codex` -> `codex app-server` over local stdio JSON-RPC
+- `@claude` -> `claude -p`
 
-Explicit mention text selects the harness alias:
+The adapter should launch through a login-shell environment so PATH and exported user credentials match normal terminal execution. The existing `preferredAgentTarget` setting remains non-authoritative for explicit mentions and may be reused later for generic agent affordances.
 
-- `@codex` -> `codex`
-- `@claude` -> `claude`
+## Runtime Streaming
 
-The existing `preferredAgentTarget` setting remains non-authoritative for explicit mentions and may be reused later for generic agent affordances.
+When supported by the local runtime, the adapter should stream partial assistant text into SideNote2 during execution.
+
+Recommended phase-1 runtime behavior:
+
+- `@claude` should use `claude -p --verbose --output-format stream-json --include-partial-messages`
+- `@codex` should use `codex app-server --listen stdio://`
+- the Codex adapter should `initialize`, `thread/start`, and `turn/start` once per run and consume `item/agentMessage/delta` notifications for live text
+- the Codex adapter should treat `item/completed` and `turn/completed` as the canonical final-reply boundary before note persistence
+
+Streaming requirements:
+
+- parse stdout incrementally with `spawn`, not buffered `execFile`
+- ignore reasoning, tool, and command-output deltas for note text purposes
+- surface only assistant reply text deltas in the sidebar
+- do not rerender the full sidebar on every partial-text delta
+- route partial-text deltas into one per-thread transient UI controller that mutates a single DOM node in place
+- use plain-text rendering for live streamed text and reserve markdown rendering for the final persisted reply only
+
+Streaming UI rules:
+
+- the parent thread card owns run status rendering
+- the transient child streaming card must not repeat queued/running/succeeded/failed status
+- the transient child streaming card may show the agent identity only, plus the live text body
+- when the run completes, the transient child streaming card is removed and replaced by the normal persisted child entry on the next standard render
+- do not render a generic placeholder like `Working...` before real text exists
+- do not synthesize fake streaming from the final reply text
+- if a runtime does not provide partial assistant deltas, keep the transient child card hidden and persist only the final reply once the run completes
 
 ## Data Model
 
@@ -227,7 +297,7 @@ interface AgentRunRecord {
   triggerEntryId: string;
   filePath: string;
   requestedAgent: "codex" | "claude";
-  runtime: "openclaw-acp";
+  runtime: "direct-cli";
   status: AgentRunStatus;
   promptText: string;
   createdAt: number;
@@ -236,6 +306,21 @@ interface AgentRunRecord {
   retryOfRunId?: string;
   outputEntryId?: string;
   error?: string;
+}
+```
+
+Ephemeral streamed state should stay separate from persisted run records.
+
+Recommended in-memory shape:
+
+```ts
+interface AgentRunStreamState {
+  runId: string;
+  threadId: string;
+  requestedAgent: "codex" | "claude";
+  partialText: string;
+  startedAt: number;
+  updatedAt: number;
 }
 ```
 
@@ -273,8 +358,9 @@ Phase 1 queue rules:
 - one active run at a time
 - queued runs survive reload as persisted records
 - persisted `queued` or `running` runs from a previous session are normalized to `failed` on startup
+- streamed partial text does not need to survive reload
 
-This avoids pretending an external ACP session survived an Obsidian restart.
+This avoids pretending an external local CLI session survived an Obsidian restart.
 
 ## Post-Persist Trigger Point
 
@@ -399,6 +485,14 @@ Extend the sidebar card presentation so agent-relevant threads can show:
 At minimum, these statuses must be visible in the `Agent` tab.
 If reused in `List`, the status model must stay identical.
 
+While a run is `running`, the thread may also show a transient streamed child reply card underneath the thread so the user can watch text arrive without waiting for completion.
+
+Status placement rule:
+
+- parent thread footer shows run state
+- transient child stream card shows only the in-progress agent text surface
+- do not show the same run state in both places at once
+
 ## Agent Thread Actions
 
 Phase 1 thread-level actions in the `Agent` tab should include:
@@ -443,6 +537,7 @@ Owns:
 - post-persist directive handling
 - queue management
 - runtime invocation
+- ephemeral streamed text state for active runs
 - run-state transitions
 - retry creation
 - raw reply append orchestration
@@ -461,6 +556,8 @@ Owns:
 
 - rendering the `Agent` tab
 - wiring shared toolbar controls
+- owning one transient streamed-reply controller per visible active thread
+- binding stream updates to the correct transient streamed-reply controller
 - routing retry clicks to plugin/controller entry points
 
 ### `src/ui/views/sidebarPersistedComment.ts`
@@ -470,6 +567,15 @@ Owns:
 - displaying run status cues
 - rendering retry action affordances
 - keeping parent and child card layouts consistent
+- rendering the parent-owned status location without duplicating stream status in transient child UI
+
+### `src/ui/views/streamedAgentReplyController.ts`
+
+Owns:
+
+- one transient streamed-reply DOM surface per visible active thread
+- direct text updates for partial assistant output without full sidebar rerenders
+- removing its transient DOM when the run ends or the thread leaves the current view
 
 ## Logging
 
@@ -492,6 +598,7 @@ Payloads must continue following the existing logging hygiene rules:
 - no note body
 - no selected text
 - no absolute paths
+- no persisted partial streamed text
 
 ## Tests
 
@@ -512,4 +619,5 @@ Add or extend tests for:
 ## Implementation Notes
 
 - The current `preferredAgentTarget` setting already exists in code. This spec does not require it to drive explicit mention dispatch.
-- The current PRD `Open Questions` section can remain as historical context, but implementation should follow the closed decisions in this spec.
+- This desktop-owned execution model is intentional. Unlike OpenClaw, SideNote2 phase 1 does not add a second mobile/client transport layer around the runtime.
+- The current plan `Open Questions` section can remain as historical context, but implementation should follow the closed decisions in this spec.

@@ -95,6 +95,7 @@ test("comment persistence controller syncs external managed-block updates into a
         refreshCommentViews: async () => {
             refreshCommentViewsCount += 1;
         },
+        refreshAllCommentsSidebarViews: async () => {},
         refreshEditorDecorations: () => {
             refreshEditorDecorationsCount += 1;
         },

@@ -47,10 +47,13 @@ export interface IndexNoteSettingsHost {
 }
 
 export class IndexNoteSettingsController {
+    private persistedPluginData: PersistedPluginData = {};
+
     constructor(private readonly host: IndexNoteSettingsHost) {}
 
     public async loadSettings(): Promise<void> {
         const loaded = await this.host.loadData();
+        this.persistedPluginData = loaded ?? {};
         const resolved = resolveLoadedSettings(loaded, this.host.getSettings());
         this.host.setSettings(resolved.settings);
 
@@ -80,7 +83,8 @@ export class IndexNoteSettingsController {
     }
 
     public async saveSettings(): Promise<void> {
-        await this.host.saveData({
+        await this.writePersistedPluginData({
+            ...this.persistedPluginData,
             ...this.host.getSettings(),
             attachmentComments: buildAttachmentCommentThreads(this.host.getCommentManager().getAllThreads()),
         });
@@ -211,6 +215,19 @@ export class IndexNoteSettingsController {
             preferredAgentTarget: nextTarget,
         });
         await this.saveSettings();
+    }
+
+    public readPersistedPluginData(): PersistedPluginData {
+        return {
+            ...this.persistedPluginData,
+        };
+    }
+
+    public async writePersistedPluginData(data: PersistedPluginData): Promise<void> {
+        this.persistedPluginData = {
+            ...data,
+        };
+        await this.host.saveData(this.persistedPluginData);
     }
 
 }

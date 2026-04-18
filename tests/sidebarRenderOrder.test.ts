@@ -8,6 +8,7 @@ import {
     getNestedThreadIdForAppendDraft,
     getReplacedThreadIdForEditDraft,
     getSidebarSortCommentForThread,
+    shouldRenderTopLevelDraftComment,
     sortSidebarRenderableItems,
 } from "../src/ui/views/sidebarRenderOrder";
 
@@ -158,4 +159,46 @@ test("buildStoredOrderSidebarItems keeps file thread order and replaces the edit
         "thread-1",
         "draft-1",
     ]);
+});
+
+test("shouldRenderTopLevelDraftComment keeps normal note drafts visible even when the remembered index mode is agent", () => {
+    const draft: DraftComment = {
+        ...createComment({
+            id: "draft-1",
+            comment: "",
+            timestamp: 250,
+        }),
+        mode: "new",
+        threadId: "draft-1",
+    };
+
+    const visibleDraft = shouldRenderTopLevelDraftComment({
+        draft,
+        nestedAppendDraftThreadId: null,
+        isAgentIndexMode: false,
+        agentThreadIds: new Set<string>(),
+    });
+
+    assert.equal(visibleDraft?.id, "draft-1");
+});
+
+test("shouldRenderTopLevelDraftComment hides drafts that do not belong to the current agent index scope", () => {
+    const draft: DraftComment = {
+        ...createComment({
+            id: "draft-1",
+            comment: "",
+            timestamp: 250,
+        }),
+        mode: "new",
+        threadId: "draft-1",
+    };
+
+    const hiddenDraft = shouldRenderTopLevelDraftComment({
+        draft,
+        nestedAppendDraftThreadId: null,
+        isAgentIndexMode: true,
+        agentThreadIds: new Set<string>(["other-thread"]),
+    });
+
+    assert.equal(hiddenDraft, null);
 });

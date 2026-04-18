@@ -6,9 +6,11 @@ import { MAX_SIDENOTE_WORDS, countCommentWords, exceedsCommentWordLimit } from "
 import { resolveAnchorRange } from "../core/anchors/anchorResolver";
 import { getManagedSectionRange, getVisibleNoteContent } from "../core/storage/noteCommentStorage";
 import type { DraftComment, DraftSelection } from "../domain/drafts";
+import type { SavedUserEntryEvent } from "./commentAgentController";
 
 type PersistOptions = {
     immediateAggregateRefresh?: boolean;
+    skipCommentViewRefresh?: boolean;
 };
 
 export interface CommentMutationHost {
@@ -37,6 +39,7 @@ export interface CommentMutationHost {
     hashText(text: string): Promise<string>;
     showNotice(message: string): void;
     now(): number;
+    handleSavedUserEntry?(event: SavedUserEntryEvent): Promise<void>;
     log?(level: "info" | "warn" | "error", area: string, event: string, payload?: Record<string, unknown>): Promise<void>;
 }
 
@@ -63,6 +66,7 @@ export class CommentMutationController {
             {
                 ...latestTarget.latestComment,
                 mode: "edit",
+                threadId: this.host.getCommentManager().getThreadById(commentId)?.id ?? latestTarget.latestComment.id,
             },
             hostFilePath ?? latestTarget.latestComment.filePath,
         );
@@ -128,7 +132,7 @@ export class CommentMutationController {
             } else if (preparedDraft.mode === "append") {
                 saved = await this.appendEntry(preparedDraft);
             } else {
-                saved = await this.editComment(preparedDraft.threadId ?? commentId, preparedDraft.comment);
+                saved = await this.editComment(preparedDraft.id, preparedDraft.comment);
             }
             if (saved) {
                 void this.host.log?.("info", "draft", preparedDraft.mode === "edit" ? "draft.edit.success" : "draft.save.success", {
@@ -136,6 +140,20 @@ export class CommentMutationController {
                     draftMode: preparedDraft.mode,
                     filePath: preparedDraft.filePath,
                 });
+                try {
+                    await this.host.handleSavedUserEntry?.({
+                        threadId: preparedDraft.threadId ?? preparedDraft.id,
+                        entryId: preparedDraft.id,
+                        filePath: preparedDraft.filePath,
+                        body: preparedDraft.comment,
+                    });
+                } catch (agentError) {
+                    void this.host.log?.("error", "agents", "agents.dispatch.error", {
+                        commentId,
+                        filePath: preparedDraft.filePath,
+                        error: agentError,
+                    });
+                }
             }
         } catch (error) {
             void this.host.log?.("error", "draft", "draft.save.error", {
@@ -212,6 +230,32 @@ export class CommentMutationController {
             timestamp: draftComment.timestamp,
         });
         await this.host.persistCommentsForFile(latestTarget.file, { immediateAggregateRefresh: true });
+        return true;
+    }
+
+    public async appendThreadEntry(
+        threadId: string,
+        entry: {
+            id: string;
+            body: string;
+            timestamp: number;
+        },
+        options: PersistOptions = {},
+    ): Promise<boolean> {
+        const latestTarget = await this.loadLatestCommentTarget(threadId);
+        if (!latestTarget) {
+            return false;
+        }
+
+        this.host.getCommentManager().appendEntry(threadId, {
+            id: entry.id,
+            body: entry.body,
+            timestamp: entry.timestamp,
+        });
+        await this.host.persistCommentsForFile(latestTarget.file, {
+            immediateAggregateRefresh: true,
+            skipCommentViewRefresh: options.skipCommentViewRefresh,
+        });
         return true;
     }
 

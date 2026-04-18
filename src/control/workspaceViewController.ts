@@ -28,6 +28,7 @@ interface MarkdownViewLike extends FileViewLike {
 interface SidebarViewLike {
     getViewType(): string;
     renderComments(): Promise<void>;
+    file?: TFile | null | undefined;
 }
 
 export interface WorkspaceViewHost {
@@ -192,9 +193,19 @@ export class WorkspaceViewController {
     }
 
     public async refreshCommentViews(): Promise<void> {
+        await this.refreshSidebarViews(() => true);
+    }
+
+    public async refreshAllCommentsSidebarViews(): Promise<void> {
+        await this.refreshSidebarViews((view) =>
+            this.host.isAllCommentsNotePath(view.file?.path ?? ""),
+        );
+    }
+
+    private async refreshSidebarViews(predicate: (view: SidebarViewLike) => boolean): Promise<void> {
         const leaves = this.host.app.workspace.getLeavesOfType("sidenote2-view");
         for (const leaf of leaves) {
-            if (isSidebarViewLike(leaf.view)) {
+            if (isSidebarViewLike(leaf.view) && predicate(leaf.view)) {
                 await leaf.view.renderComments();
             }
         }

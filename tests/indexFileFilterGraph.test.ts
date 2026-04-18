@@ -198,6 +198,25 @@ test("buildIndexFileFilterGraph respects resolved-only visibility when building 
     assert.equal(resolvedGraph.fileCommentCounts.get("docs/a.md"), undefined);
 });
 
+test("buildIndexFileFilterGraph can include both active and resolved comments when requested", () => {
+    const graph = buildIndexFileFilterGraph([
+        createComment({
+            id: "a-active",
+            filePath: "docs/a.md",
+            resolved: false,
+        }),
+        createComment({
+            id: "r-resolved",
+            filePath: "docs/r.md",
+            resolved: true,
+        }),
+    ], {
+        showResolved: null,
+    });
+
+    assert.deepEqual(graph.availableFiles, ["docs/a.md", "docs/r.md"]);
+});
+
 test("getIndexFileFilterConnectedComponent returns empty for missing roots", () => {
     const graph = buildIndexFileFilterGraph([
         createComment({

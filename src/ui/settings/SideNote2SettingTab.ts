@@ -1,5 +1,9 @@
 import { App, PluginSettingTab, Setting } from "obsidian";
 import {
+    getAgentActorById,
+    getSupportedAgentActors,
+} from "../../core/agents/agentActorRegistry";
+import {
     normalizeAllCommentsNoteImageCaption,
     normalizeAllCommentsNoteImageUrl,
     normalizeAllCommentsNotePath,
@@ -7,7 +11,6 @@ import {
 import {
     DEFAULT_PREFERRED_AGENT_TARGET,
     normalizePreferredAgentTarget,
-    SIDE_NOTE2_AGENT_TARGET_OPTIONS,
     type SideNote2AgentTarget,
 } from "../../core/config/agentTargets";
 import type SideNote2 from "../../main";
@@ -26,13 +29,8 @@ export const DEFAULT_SETTINGS: SideNote2Settings = {
     preferredAgentTarget: DEFAULT_PREFERRED_AGENT_TARGET,
 };
 
-const PREFERRED_AGENT_DESCRIPTIONS: Record<SideNote2AgentTarget, string> = {
-    codex: "Type @codex in a comment to have Codex read it and answer questions or do the task.",
-    claude: "Type @claude in a comment to have Claude read it and answer questions or do the task.",
-};
-
 function getPreferredAgentDescription(target: SideNote2AgentTarget | string): string {
-    return PREFERRED_AGENT_DESCRIPTIONS[normalizePreferredAgentTarget(target)];
+    return getAgentActorById(normalizePreferredAgentTarget(target)).settingsDescription;
 }
 
 export default class SideNote2SettingTab extends PluginSettingTab {
@@ -47,24 +45,31 @@ export default class SideNote2SettingTab extends PluginSettingTab {
         const { containerEl } = this;
         containerEl.empty();
 
-        const preferredAgentSetting = new Setting(containerEl)
-            .setName("Preferred agent")
-            .setDesc(getPreferredAgentDescription(this.plugin.settings.preferredAgentTarget))
-            .addDropdown((dropdown) => {
-                Object.entries(SIDE_NOTE2_AGENT_TARGET_OPTIONS).forEach(([value, label]) => {
-                    dropdown.addOption(value, label);
-                });
-
-                dropdown
-                    .setValue(this.plugin.settings.preferredAgentTarget)
-                    .onChange(async (value) => {
-                        await this.plugin.setPreferredAgentTarget(value);
-                        dropdown.setValue(this.plugin.settings.preferredAgentTarget);
-                        preferredAgentSetting.setDesc(
-                            getPreferredAgentDescription(this.plugin.settings.preferredAgentTarget),
-                        );
+        const supportedAgents = getSupportedAgentActors();
+        if (supportedAgents.length > 1) {
+            const preferredAgentSetting = new Setting(containerEl)
+                .setName("Preferred agent")
+                .setDesc(getPreferredAgentDescription(this.plugin.settings.preferredAgentTarget))
+                .addDropdown((dropdown) => {
+                    supportedAgents.forEach((actor) => {
+                        dropdown.addOption(actor.id, actor.label);
                     });
-            });
+
+                    dropdown
+                        .setValue(this.plugin.settings.preferredAgentTarget)
+                        .onChange(async (value) => {
+                            await this.plugin.setPreferredAgentTarget(value);
+                            dropdown.setValue(this.plugin.settings.preferredAgentTarget);
+                            preferredAgentSetting.setDesc(
+                                getPreferredAgentDescription(this.plugin.settings.preferredAgentTarget),
+                            );
+                        });
+                });
+        } else {
+            new Setting(containerEl)
+                .setName("Agent runtime")
+                .setDesc(`Current build supports ${supportedAgents[0]?.label ?? "Codex"} only. Additional agents can be enabled later.`);
+        }
 
         new Setting(containerEl)
             .setName("Index header image URL")

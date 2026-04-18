@@ -1,10 +1,14 @@
 import * as assert from "node:assert/strict";
 import test from "node:test";
 import { commentToThread, type Comment, type CommentThread } from "../src/commentManager";
+import type { AgentRunRecord } from "../src/core/agents/agentRuns";
 import {
     buildPersistedCommentPresentation,
     buildPersistedThreadEntryPresentation,
     formatSidebarCommentSourceFileLabel,
+    getRenderableThreadEntries,
+    getAgentRunStatusPresentation,
+    resolveSidebarCommentAuthor,
     shouldRenderNestedThreadEntries,
 } from "../src/ui/views/sidebarPersistedComment";
 import { formatSidebarCommentMeta } from "../src/ui/views/sidebarCommentSections";
@@ -37,6 +41,25 @@ function createThreadWithEntries(overrides: Partial<CommentThread> = {}): Commen
         ...baseThread,
         ...overrides,
         entries: overrides.entries ?? baseThread.entries,
+    };
+}
+
+function createAgentRun(overrides: Partial<AgentRunRecord> = {}): AgentRunRecord {
+    return {
+        id: overrides.id ?? "run-1",
+        threadId: overrides.threadId ?? "comment-1",
+        triggerEntryId: overrides.triggerEntryId ?? "comment-1",
+        filePath: overrides.filePath ?? "docs/architecture.md",
+        requestedAgent: overrides.requestedAgent ?? "codex",
+        runtime: overrides.runtime ?? "direct-cli",
+        status: overrides.status ?? "succeeded",
+        promptText: overrides.promptText ?? "@codex do it",
+        createdAt: overrides.createdAt ?? 100,
+        startedAt: overrides.startedAt,
+        endedAt: overrides.endedAt ?? 200,
+        retryOfRunId: overrides.retryOfRunId,
+        outputEntryId: overrides.outputEntryId ?? "entry-2",
+        error: overrides.error,
     };
 }
 
@@ -167,6 +190,7 @@ test("shouldRenderNestedThreadEntries hides stored child comments when nested co
         activeCommentId: null,
         showNestedComments: false,
         hasAppendDraftComment: false,
+        hasAgentStream: false,
     }), false);
 });
 
@@ -184,6 +208,7 @@ test("shouldRenderNestedThreadEntries keeps a targeted child comment visible eve
         activeCommentId: "entry-2",
         showNestedComments: false,
         hasAppendDraftComment: false,
+        hasAgentStream: false,
     }), true);
 });
 
@@ -194,7 +219,44 @@ test("shouldRenderNestedThreadEntries keeps append drafts visible even when nest
         activeCommentId: null,
         showNestedComments: false,
         hasAppendDraftComment: true,
+        hasAgentStream: false,
     }), true);
+});
+
+test("shouldRenderNestedThreadEntries keeps streamed agent replies visible even when nested comments are off", () => {
+    const thread = createThreadWithEntries();
+
+    assert.equal(shouldRenderNestedThreadEntries(thread, {
+        activeCommentId: null,
+        showNestedComments: false,
+        hasAppendDraftComment: false,
+        hasAgentStream: true,
+    }), true);
+});
+
+test("getRenderableThreadEntries hides the persisted agent output entry while the live stream is retained", () => {
+    const thread = createThreadWithEntries({
+        entries: [
+            { id: "entry-1", body: "Parent", timestamp: 100 },
+            { id: "entry-2", body: "Agent reply", timestamp: 200 },
+        ],
+        createdAt: 100,
+        updatedAt: 200,
+    });
+
+    assert.deepEqual(
+        getRenderableThreadEntries(thread, {
+            runId: "run-1",
+            threadId: thread.id,
+            requestedAgent: "codex",
+            status: "succeeded",
+            partialText: "Agent reply",
+            startedAt: 100,
+            updatedAt: 200,
+            outputEntryId: "entry-2",
+        }),
+        [thread.entries[0]],
+    );
 });
 
 test("formatSidebarCommentSourceFileLabel keeps the basename without md, even for long paths", () => {
@@ -212,4 +274,47 @@ test("formatSidebarCommentSourceFileLabel keeps the basename without md, even fo
         ),
         "this-is-a-deliberately-extremely-long-file-name-to-check-how-the-sidebar-header-allocates-space-for-the-source-label",
     );
+});
+
+test("resolveSidebarCommentAuthor labels user-written entries as the current user", () => {
+    assert.deepEqual(resolveSidebarCommentAuthor("entry-1", [createAgentRun()], "You"), {
+        kind: "user",
+        label: "You",
+    });
+});
+
+test("resolveSidebarCommentAuthor labels agent-produced replies from their output run", () => {
+    assert.deepEqual(
+        resolveSidebarCommentAuthor(
+            "entry-2",
+            [createAgentRun({ requestedAgent: "claude", outputEntryId: "entry-2" })],
+            "You",
+        ),
+        {
+            kind: "claude",
+            label: "Claude",
+        },
+    );
+});
+
+test("getAgentRunStatusPresentation uses compact success and failure markers", () => {
+    assert.deepEqual(getAgentRunStatusPresentation("succeeded"), {
+        marker: "✓",
+        markerKind: "text",
+    });
+    assert.deepEqual(getAgentRunStatusPresentation("failed"), {
+        marker: "✕",
+        markerKind: "text",
+    });
+});
+
+test("getAgentRunStatusPresentation distinguishes queued from running", () => {
+    assert.deepEqual(getAgentRunStatusPresentation("queued"), {
+        marker: "…",
+        markerKind: "text",
+    });
+    assert.deepEqual(getAgentRunStatusPresentation("running"), {
+        marker: null,
+        markerKind: "spinner",
+    });
 });

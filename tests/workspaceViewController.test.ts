@@ -50,8 +50,9 @@ function createMarkdownView(
     };
 }
 
-function createSidebarView(renderCalls: number[]) {
+function createSidebarView(renderCalls: number[], file: TFile | null = null) {
     return {
+        file,
         getViewType: () => "sidenote2-view",
         renderComments: async () => {
             renderCalls.push(renderCalls.length + 1);
@@ -172,6 +173,7 @@ test("workspace view controller syncs visible files, rerenders surfaces, and cle
     const noteFile = createFile("docs/note.md");
     const previewRerenders: boolean[] = [];
     const sidebarRenderCalls: number[] = [];
+    const indexSidebarRenderCalls: number[] = [];
     const selectionCalls: Array<{ from: unknown; to: unknown }> = [];
     const noteCursor = { line: 2, ch: 8 };
     const noteMarkdownView = createMarkdownView(noteFile, {
@@ -188,7 +190,8 @@ test("workspace view controller syncs visible files, rerenders surfaces, and cle
         leaves: [
             { view: { file: indexFile, getViewType: () => "markdown" } },
             { view: { file: noteFile, getViewType: () => "markdown" } },
-            { view: createSidebarView(sidebarRenderCalls) },
+            { view: createSidebarView(sidebarRenderCalls, noteFile) },
+            { view: createSidebarView(indexSidebarRenderCalls, indexFile) },
             { view: previewMarkdownView },
             { view: noteMarkdownView },
         ],
@@ -197,12 +200,14 @@ test("workspace view controller syncs visible files, rerenders surfaces, and cle
 
     await harness.controller.loadVisibleFiles();
     await harness.controller.refreshCommentViews();
+    await harness.controller.refreshAllCommentsSidebarViews();
     harness.controller.refreshMarkdownPreviews();
 
     assert.equal(harness.getEnsureIndexedCommentsLoadedCount(), 1);
     assert.equal(harness.getRefreshAggregateNoteCount(), 0);
     assert.deepEqual(harness.loadedFiles, ["docs/note.md"]);
     assert.deepEqual(sidebarRenderCalls, [1]);
+    assert.deepEqual(indexSidebarRenderCalls, [1, 2]);
     assert.deepEqual(previewRerenders, [true]);
 
     assert.equal(harness.controller.clearMarkdownSelection(noteFile.path), true);

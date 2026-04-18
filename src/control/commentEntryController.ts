@@ -10,6 +10,7 @@ export interface CommentEntryHost {
     isCommentableFile(file: TFile | null): file is TFile;
     loadCommentsForFile(file: TFile): Promise<unknown>;
     getKnownCommentById(commentId: string): Comment | null;
+    getKnownThreadIdByCommentId(commentId: string): string | null;
     markDraftFileActive(file: TFile): void;
     setDraftComment(draftComment: DraftComment | null, hostFilePath?: string | null): Promise<void>;
     activateViewAndHighlightComment(commentId: string): Promise<void>;
@@ -63,6 +64,7 @@ export class CommentEntryController {
         hostFilePath: string | null = null,
     ): Promise<boolean> {
         const comment = this.host.getKnownCommentById(threadId);
+        const normalizedThreadId = this.host.getKnownThreadIdByCommentId(threadId) ?? threadId;
         const commentFile = comment ? this.host.getFileByPath(comment.filePath) : null;
 
         if (!(comment && commentFile && this.host.isCommentableFile(commentFile))) {
@@ -77,13 +79,13 @@ export class CommentEntryController {
             comment: "",
             timestamp: Date.now(),
             mode: "append",
-            threadId,
+            threadId: normalizedThreadId,
         };
         this.host.markDraftFileActive(commentFile);
         await this.host.setDraftComment(draft, hostFilePath ?? comment.filePath);
         void this.host.log?.("info", "draft", "draft.append.created", {
             filePath: comment.filePath,
-            threadId,
+            threadId: normalizedThreadId,
             commentId: draft.id,
         });
         await this.host.activateViewAndHighlightComment(draft.id);

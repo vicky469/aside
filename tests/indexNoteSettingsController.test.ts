@@ -160,7 +160,7 @@ test("loaded settings resolution normalizes persisted values and marks legacy co
         indexNotePath: "notes/index.md",
         indexHeaderImageUrl: "https://example.com/header.webp",
         indexHeaderImageCaption: "Custom caption",
-        preferredAgentTarget: "claude",
+        preferredAgentTarget: "codex",
     });
     assert.equal(resolved.shouldRewriteLegacySettings, true);
 });
@@ -271,7 +271,7 @@ test("index note settings controller loads attachment comments and rewrites lega
         indexNotePath: "docs/index.md",
         indexHeaderImageUrl: "https://example.com/header.webp",
         indexHeaderImageCaption: "Header",
-        preferredAgentTarget: "claude",
+        preferredAgentTarget: "codex",
     });
     assert.deepEqual(
         harness.commentManager.getCommentsForFile("docs/file.pdf").map((comment) => comment.id),
@@ -328,7 +328,7 @@ test("index note settings controller saves preferred agent changes without refre
 
     await harness.controller.setPreferredAgentTarget("claude");
 
-    assert.equal(harness.getSettings().preferredAgentTarget, "claude");
+    assert.equal(harness.getSettings().preferredAgentTarget, "codex");
     assert.equal(harness.getRefreshAggregateNoteCount(), 0);
-    assert.equal(harness.savedPayloads.length, 1);
+    assert.equal(harness.savedPayloads.length, 0);
 });

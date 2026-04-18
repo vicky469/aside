@@ -1,8 +1,8 @@
-# Agent Mentions PRD
+# Agent Mentions Plan
 
 ## Status
 
-Draft PRD
+Draft plan
 
 Implementation spec:
 
@@ -12,7 +12,12 @@ Implementation spec:
 
 SideNote2 should support semantic agent mentions inside side notes.
 
-When a user writes an explicit agent target such as `@codex` or `@claude` in a side note, SideNote2 should treat that as an instruction to hand the thread to an external coding assistant runtime.
+Current implementation scope:
+
+- support `@codex` in the shipped build
+- keep the target abstraction open so additional agents can be added later without rewriting the feature shape
+
+When a user writes an explicit agent target such as `@codex` in a side note, SideNote2 should treat that as an instruction to hand the thread to an external coding assistant runtime.
 
 The important architecture decision is:
 
@@ -410,8 +415,8 @@ Add a small SideNote2 agent subsystem:
 `AgentRuntimeAdapter`
 
 - provide one abstraction over runtime backends
-- preferred first backend: OpenClaw ACP
-- possible later backends: direct Codex CLI, direct Claude CLI
+- preferred phase-1 backend: direct local Codex and Claude CLI execution
+- possible later backend: OpenClaw ACP
 
 `CommentAgentController`
 
@@ -433,22 +438,22 @@ Add a small SideNote2 agent subsystem:
 
 Primary backend:
 
-- OpenClaw ACP
+- direct local CLI execution
 
 Reason:
 
-- it already models Codex and Claude Code as external ACP runtimes
-- it already has task semantics
-- it already supports harness aliases such as `codex` and `claude`
+- it removes the extra dependency on an ACP bridge for the first shipping version
+- it keeps SideNote2 aligned with the Codex and Claude CLIs users already run locally
+- it still leaves room for a later ACP adapter if the runtime model expands
 
 ### Runtime selection
 
 Phase 1 should use plugin settings for:
 
 - a preferred-agent dropdown with `Codex` and `Claude`
-- runtime/backend config for `@codex`
-- runtime/backend config for `@claude`
-- working directory or workspace root
+- later runtime/backend config for `@codex`
+- later runtime/backend config for `@claude`
+- automatic working-directory resolution based on the note context
 
 The preferred-agent dropdown should be the first settings surface in the plugin.
 
@@ -459,7 +464,7 @@ It provides a simple explicit picker for future agent actions and fallback routi
 
 ### Permission boundary
 
-Because ACP sessions are non-interactive and have permission-policy constraints, SideNote2 should avoid delegating the final note write to the harness.
+Because external runtimes should not write directly into SideNote2-managed note storage, SideNote2 should avoid delegating the final note write to the harness.
 
 Instead:
 
@@ -501,12 +506,12 @@ It should not become a second source of truth.
 
 ## Safest Delivery Order
 
-1. Add a PRD-backed semantic model for `@codex` and `@claude`.
+1. Add a plan-backed semantic model for `@codex` and `@claude`.
 2. Add durable run storage in plugin data.
 3. Add post-persist dispatch hook after successful SideNote2 note writes.
 4. Add derived agent-thread selection logic for a dedicated `Agent` tab.
 5. Add a no-op or stub runtime adapter for local development.
-6. Add the first real adapter for OpenClaw ACP.
+6. Add the first real direct CLI adapter for Codex and Claude.
 7. Append successful runtime output back into the same thread.
 8. Add retry and failure UX.
 
@@ -585,9 +590,9 @@ A user can stay inside SideNote2, write a thread entry with `@codex` or `@claude
 [
   {
     "id": "d9c3d365-9be4-4891-969e-2c6ad215fe66",
-    "startLine": 565,
+    "startLine": 570,
     "startChar": 2,
-    "endLine": 565,
+    "endLine": 570,
     "endChar": 100,
     "selectedText": " Should `@codex` or `@claude` dispatch on every save, or only on new entries and explicit retries?",
     "selectedTextHash": "1f41339bb903512ae2b2d03d006c6b9079381f7a7efb20bbd39eb9f85c2d2377",
@@ -608,9 +613,9 @@ A user can stay inside SideNote2, write a thread entry with `@codex` or `@claude
   },
   {
     "id": "f24863be-8490-4822-b89e-d30b63a55357",
-    "startLine": 567,
+    "startLine": 572,
     "startChar": 2,
-    "endLine": 567,
+    "endLine": 572,
     "endChar": 78,
     "selectedText": " Should an edited triggering entry re-run the same task or create a new run?",
     "selectedTextHash": "0096aa5cf2fbbae1c682b07217e1d08408ca562eccbc7dd29a16c4e95dbbd53c",
@@ -631,9 +636,9 @@ A user can stay inside SideNote2, write a thread entry with `@codex` or `@claude
   },
   {
     "id": "5863f159-b17b-4280-83f5-91a5e56152b2",
-    "startLine": 569,
+    "startLine": 574,
     "startChar": 2,
-    "endLine": 569,
+    "endLine": 574,
     "endChar": 47,
     "selectedText": " What is the right working-directory mapping:",
     "selectedTextHash": "b463f2abee98edeabfed1e634556eab32106f3ed7ddd4d8c30a418a175b18ce6",
@@ -659,9 +664,9 @@ A user can stay inside SideNote2, write a thread entry with `@codex` or `@claude
   },
   {
     "id": "4b23505a-a616-4e0a-b6ab-e506c4a29641",
-    "startLine": 575,
+    "startLine": 580,
     "startChar": 1,
-    "endLine": 575,
+    "endLine": 580,
     "endChar": 99,
     "selectedText": "4. Should SideNote2 append raw agent text only, or store a small structured execution summary too?",
     "selectedTextHash": "a3772077d736909ce5fe7e22c4dcc9c32a4cdcbbb778b1ed0d46d9fc204bc910",
@@ -682,9 +687,9 @@ A user can stay inside SideNote2, write a thread entry with `@codex` or `@claude
   },
   {
     "id": "d56f262f-44c4-4870-a636-d99a04ef1f34",
-    "startLine": 577,
+    "startLine": 582,
     "startChar": 0,
-    "endLine": 577,
+    "endLine": 582,
     "endChar": 105,
     "selectedText": "5. Do we want a dedicated sidebar section for active agent runs in phase 1, or only inline thread status?",
     "selectedTextHash": "1786e422f91001b45d9e125d9e5dd8309ba801e7e65ce41fbc982f694f1bf8f8",

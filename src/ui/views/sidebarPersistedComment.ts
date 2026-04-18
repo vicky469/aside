@@ -1,6 +1,9 @@
 import type { Comment, CommentThread, CommentThreadEntry } from "../../commentManager";
 import { getFirstThreadEntry, threadEntryToComment } from "../../commentManager";
 import { isOrphanedComment, isPageComment } from "../../core/anchors/commentAnchors";
+import { getAgentActorLabel } from "../../core/agents/agentActorRegistry";
+import { getAgentRunByOutputEntryId, type AgentRunRecord, type AgentRunStreamState } from "../../core/agents/agentRuns";
+import type { SideNote2AgentTarget } from "../../core/config/agentTargets";
 import type { DraftComment } from "../../domain/drafts";
 import { normalizeCommentMarkdownForRender } from "../editor/commentMarkdownRendering";
 import { decorateRenderedCommentMentions } from "../editor/commentEditorStyling";
@@ -32,14 +35,24 @@ export interface PersistedCommentPresentation extends BasePersistedCommentPresen
 
 export interface PersistedThreadEntryPresentation extends BasePersistedCommentPresentation {}
 
+export interface SidebarCommentAuthorPresentation {
+    kind: "user" | SideNote2AgentTarget;
+    label: string;
+}
+
 export interface SidebarPersistedCommentHost {
     activeCommentId: string | null;
     currentFilePath: string | null;
+    currentUserLabel: string;
     showSourceRedirectAction: boolean;
     showNestedComments: boolean;
     enableManualReorder: boolean;
     enableThreadReorder: boolean;
     appendDraftComment: DraftComment | null;
+    agentRun: AgentRunRecord | null;
+    agentStream: AgentRunStreamState | null;
+    threadAgentRuns: AgentRunRecord[];
+    showAgentRetryAction: boolean;
     getEventTargetElement(target: EventTarget | null): HTMLElement | null;
     isSelectionInsideSidebarContent(selection?: Selection | null): boolean;
     claimSidebarInteractionOwnership(focusTarget?: HTMLElement | null): void;
@@ -52,10 +65,77 @@ export interface SidebarPersistedCommentHost {
     unresolveComment(commentId: string): void;
     startEditDraft(commentId: string, hostFilePath: string | null): void;
     startAppendEntryDraft(commentId: string, hostFilePath: string | null): void;
+    retryAgentRun(threadId: string): void;
     reanchorCommentThreadToCurrentSelection(commentId: string): void;
     deleteCommentWithConfirm(commentId: string): void;
     renderAppendDraft(container: HTMLDivElement, comment: DraftComment): void;
     setIcon(element: HTMLElement, icon: string): void;
+}
+
+export interface AgentRunStatusPresentation {
+    marker: string | null;
+    markerKind: "text" | "spinner";
+}
+
+export function getAgentRunStatusPresentation(status: AgentRunRecord["status"]): AgentRunStatusPresentation {
+    switch (status) {
+        case "queued":
+            return { marker: "…", markerKind: "text" };
+        case "running":
+            return { marker: null, markerKind: "spinner" };
+        case "failed":
+            return { marker: "✕", markerKind: "text" };
+        case "succeeded":
+            return { marker: "✓", markerKind: "text" };
+        case "cancelled":
+            return { marker: "–", markerKind: "text" };
+        default:
+            return { marker: "?", markerKind: "text" };
+    }
+}
+
+function getAgentLabel(target: AgentRunRecord["requestedAgent"]): string {
+    return getAgentActorLabel(target);
+}
+
+function buildSidebarCommentAuthorPresentation(
+    currentUserLabel: string,
+    run: AgentRunRecord | null,
+): SidebarCommentAuthorPresentation {
+    if (!run) {
+        return {
+            kind: "user",
+            label: currentUserLabel,
+        };
+    }
+
+    return {
+        kind: run.requestedAgent,
+        label: getAgentLabel(run.requestedAgent),
+    };
+}
+
+function renderAgentRunStatus(
+    metaEl: HTMLElement,
+    run: AgentRunRecord,
+): void {
+    const presentation = getAgentRunStatusPresentation(run.status);
+    const statusEl = metaEl.createSpan({
+        cls: `sidenote2-agent-run-status is-${run.status}`,
+    });
+    const markEl = statusEl.createSpan({
+        cls: `sidenote2-agent-run-status-mark is-${presentation.markerKind}`,
+    });
+    if (presentation.marker) {
+        markEl.setText(presentation.marker);
+    } else {
+        markEl.setAttribute("aria-hidden", "true");
+    }
+    const agentLabel = getAgentLabel(run.requestedAgent);
+    statusEl.setAttribute("aria-label", `${agentLabel} ${run.status}`);
+    if (run.error) {
+        statusEl.setAttribute("title", run.error);
+    }
 }
 
 export function formatSidebarCommentSourceFileLabel(filePath: string): string {
@@ -145,6 +225,17 @@ export function buildPersistedCommentPresentation(
     };
 }
 
+export function resolveSidebarCommentAuthor(
+    commentId: string,
+    threadAgentRuns: readonly AgentRunRecord[],
+    currentUserLabel: string,
+): SidebarCommentAuthorPresentation {
+    return buildSidebarCommentAuthorPresentation(
+        currentUserLabel,
+        getAgentRunByOutputEntryId(threadAgentRuns, commentId),
+    );
+}
+
 export function buildPersistedThreadEntryPresentation(
     thread: CommentThread,
     entry: CommentThreadEntry,
@@ -170,12 +261,19 @@ async function renderThreadEntryContent(
     decorateRenderedCommentMentions(container);
 }
 
-function getRenderableThreadEntries(thread: CommentThread): CommentThreadEntry[] {
-    if (thread.entries.length > 0) {
-        return thread.entries;
+export function getRenderableThreadEntries(
+    thread: CommentThread,
+    agentStream: AgentRunStreamState | null = null,
+): CommentThreadEntry[] {
+    const entries = thread.entries.length > 0
+        ? thread.entries
+        : [getFirstThreadEntry(thread)];
+
+    if (!agentStream?.outputEntryId) {
+        return entries;
     }
 
-    return [getFirstThreadEntry(thread)];
+    return entries.filter((entry) => entry.id !== agentStream.outputEntryId);
 }
 
 export function shouldRenderNestedThreadEntries(
@@ -184,14 +282,15 @@ export function shouldRenderNestedThreadEntries(
         activeCommentId: string | null;
         showNestedComments: boolean;
         hasAppendDraftComment: boolean;
+        hasAgentStream: boolean;
     },
 ): boolean {
     const childEntries = getRenderableThreadEntries(thread).slice(1);
     if (childEntries.length === 0) {
-        return options.hasAppendDraftComment;
+        return options.hasAppendDraftComment || options.hasAgentStream;
     }
 
-    if (options.showNestedComments || options.hasAppendDraftComment) {
+    if (options.showNestedComments || options.hasAppendDraftComment || options.hasAgentStream) {
         return true;
     }
 
@@ -247,6 +346,16 @@ function attachSidebarCommentCardInteractions(
                 void host.openSidebarInternalLink(href, comment.filePath, contentWrapper);
             }
         }
+    });
+}
+
+function renderCommentAuthorIndicator(
+    metaEl: HTMLElement,
+    author: SidebarCommentAuthorPresentation,
+): void {
+    metaEl.createSpan({
+        cls: `sidenote2-comment-author-indicator is-${author.kind}`,
+        text: author.label,
     });
 }
 
@@ -403,6 +512,7 @@ function renderPersistedEntryCard(
         entryBody: string;
         presentation: BasePersistedCommentPresentation;
         host: SidebarPersistedCommentHost;
+        interactive?: boolean;
     },
 ): {
     commentEl: HTMLDivElement;
@@ -420,7 +530,9 @@ function renderPersistedEntryCard(
 
     const contentWrapper = commentEl.createDiv("sidenote2-comment-content");
     contentWrapper.tabIndex = -1;
-    attachSidebarCommentCardInteractions(commentEl, contentWrapper, options.comment, options.host);
+    if (options.interactive !== false) {
+        attachSidebarCommentCardInteractions(commentEl, contentWrapper, options.comment, options.host);
+    }
 
     return {
         commentEl,
@@ -432,17 +544,27 @@ function renderPersistedEntryCard(
 function renderThreadFooterActions(
     commentEl: HTMLDivElement,
     comment: Comment,
+    threadId: string,
+    author: SidebarCommentAuthorPresentation,
+    agentRun: AgentRunRecord | null,
     options: {
         showShareAction: boolean;
         showAddEntryAction: boolean;
+        showRetryAction?: boolean;
     },
     host: SidebarPersistedCommentHost,
 ): void {
-    if (!(options.showShareAction || options.showAddEntryAction)) {
+    const footerEl = commentEl.createDiv("sidenote2-thread-footer");
+    const footerMetaEl = footerEl.createDiv("sidenote2-thread-footer-meta");
+    renderCommentAuthorIndicator(footerMetaEl, author);
+    if (agentRun) {
+        renderAgentRunStatus(footerMetaEl, agentRun);
+    }
+
+    if (!(options.showShareAction || options.showAddEntryAction || options.showRetryAction)) {
         return;
     }
 
-    const footerEl = commentEl.createDiv("sidenote2-thread-footer");
     const footerActionsEl = footerEl.createDiv("sidenote2-thread-footer-actions");
     if (options.showShareAction) {
         const shareButton = footerActionsEl.createEl("button", {
@@ -457,14 +579,27 @@ function renderThreadFooterActions(
         };
     }
 
-    if (!options.showAddEntryAction) {
+    if (options.showAddEntryAction) {
+        renderAddEntryButton(footerActionsEl, comment.id, host, {
+            ariaLabel: "Add to thread",
+            extraClasses: ["sidenote2-thread-add-entry-button"],
+        });
+    }
+
+    if (!options.showRetryAction) {
         return;
     }
 
-    renderAddEntryButton(footerActionsEl, comment.id, host, {
-        ariaLabel: "Add to thread",
-        extraClasses: ["sidenote2-thread-add-entry-button"],
+    const retryButton = footerActionsEl.createEl("button", {
+        cls: "clickable-icon sidenote2-comment-action-button sidenote2-comment-action-retry",
     });
+    retryButton.setAttribute("type", "button");
+    retryButton.setAttribute("aria-label", "Retry latest agent run");
+    host.setIcon(retryButton, "refresh-cw");
+    retryButton.onclick = (event) => {
+        event.stopPropagation();
+        host.retryAgentRun(threadId);
+    };
 }
 
 function renderThreadReanchorAction(
@@ -490,7 +625,7 @@ export async function renderPersistedCommentCard(
     thread: CommentThread,
     host: SidebarPersistedCommentHost,
 ): Promise<void> {
-    const entries = getRenderableThreadEntries(thread);
+    const entries = getRenderableThreadEntries(thread, host.agentStream);
     const comment = threadEntryToComment(thread, entries[0]);
     const presentation = buildPersistedCommentPresentation(thread, host.activeCommentId);
     const threadEl = commentsContainer.createDiv("sidenote2-thread-stack");
@@ -501,6 +636,7 @@ export async function renderPersistedCommentCard(
         activeCommentId: host.activeCommentId,
         showNestedComments: host.showNestedComments,
         hasAppendDraftComment: !!host.appendDraftComment,
+        hasAgentStream: !!host.agentStream,
     });
     const canReorderChildEntries = host.enableManualReorder && entries.length > 2 && shouldRenderStoredChildren;
     const renderedParent = renderPersistedEntryCard(threadEl, {
@@ -510,6 +646,7 @@ export async function renderPersistedCommentCard(
         presentation,
         host,
     });
+    const parentAuthor = resolveSidebarCommentAuthor(comment.id, host.threadAgentRuns, host.currentUserLabel);
     const commentEl = renderedParent.commentEl;
     const actionsEl = renderedParent.actionsEl;
     const renderTasks: Array<Promise<void>> = [renderedParent.renderTask];
@@ -549,9 +686,10 @@ export async function renderPersistedCommentCard(
     if (presentation.reanchorAction) {
         renderThreadReanchorAction(commentEl, thread.id, presentation.reanchorAction.label, host);
     }
-    renderThreadFooterActions(commentEl, comment, {
+    renderThreadFooterActions(commentEl, comment, thread.id, parentAuthor, null, {
         showShareAction: true,
         showAddEntryAction: true,
+        showRetryAction: host.showAgentRetryAction && !!host.agentRun,
     }, host);
 
     if (!shouldRenderChildComments) {
@@ -586,10 +724,21 @@ export async function renderPersistedCommentCard(
                 renderSourceRedirectButton(entryActionsEl, entryComment, "Open source note", "obsidian-external-link", host);
             }
             renderTasks.push(renderedEntry.renderTask);
-            renderThreadFooterActions(entryEl, entryComment, {
+            const entryAuthor = resolveSidebarCommentAuthor(entryComment.id, host.threadAgentRuns, host.currentUserLabel);
+            const entryAgentRun = getAgentRunByOutputEntryId(host.threadAgentRuns, entryComment.id);
+            renderThreadFooterActions(
+                entryEl,
+                entryComment,
+                thread.id,
+                entryAuthor,
+                entryAgentRun,
+                {
                 showShareAction: false,
                 showAddEntryAction: true,
-            }, host);
+                showRetryAction: false,
+                },
+                host,
+            );
         }
     }
 

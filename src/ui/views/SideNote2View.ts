@@ -11,6 +11,10 @@ import {
 import type { Comment, CommentThread, ReorderPlacement } from "../../commentManager";
 import { buildCommentLocationUrl } from "../../core/derived/allCommentsNote";
 import {
+    getAgentRunsForCommentThread,
+    type AgentRunRecord,
+} from "../../core/agents/agentRuns";
+import {
     buildIndexFileFilterGraph,
     type IndexFileFilterGraph,
 } from "../../core/derived/indexFileFilterGraph";
@@ -21,6 +25,7 @@ import {
 } from "../../core/derived/thoughtTrail";
 import type { DraftComment } from "../../domain/drafts";
 import type SideNote2 from "../../main";
+import type { AgentStreamUpdate } from "../../control/commentAgentController";
 import ConfirmDeleteModal from "../modals/ConfirmDeleteModal";
 import SideNoteFileFilterModal from "../modals/SideNoteFileFilterModal";
 import SideNoteLinkSuggestModal from "../modals/SideNoteLinkSuggestModal";
@@ -38,11 +43,17 @@ import {
 } from "./indexFileFilter";
 import { INDEX_SIDEBAR_LIST_LIMIT, limitIndexSidebarListItems } from "./indexSidebarListLimit";
 import { SidebarInteractionController } from "./sidebarInteractionController";
+import {
+    buildAgentSidebarThreads,
+    countAgentSidebarThreadsByOutcome,
+    filterAgentSidebarThreadsByOutcome,
+} from "./agentSidebarPlanner";
 import { renderPersistedCommentCard } from "./sidebarPersistedComment";
 import {
     buildStoredOrderSidebarItems,
     getNestedThreadIdForAppendDraft,
     getReplacedThreadIdForEditDraft,
+    shouldRenderTopLevelDraftComment,
     sortSidebarRenderableItems,
     type SidebarRenderableItem,
 } from "./sidebarRenderOrder";
@@ -55,10 +66,13 @@ import {
     shouldShowResolvedIndexEmptyState,
     shouldShowResolvedToolbarChip,
 } from "./indexSidebarState";
+import { StreamedAgentReplyController } from "./streamedAgentReplyController";
 import {
     normalizeIndexFileFilterRootPath,
+    resolveIndexAgentOutcomeFilterFromState,
     resolveIndexFileFilterRootPathFromState,
     type CustomViewState,
+    type IndexAgentOutcomeFilter,
     type IndexSidebarMode,
 } from "./viewState";
 
@@ -67,7 +81,7 @@ function matchesResolvedVisibility(resolved: boolean | undefined, showResolved: 
 }
 
 function parseIndexSidebarMode(value: unknown): IndexSidebarMode | null {
-    return value === "list" || value === "thought-trail"
+    return value === "list" || value === "thought-trail" || value === "agent"
         ? value
         : null;
 }
@@ -116,12 +130,15 @@ export default class SideNote2View extends ItemView {
     private readonly draftEditorController: SidebarDraftEditorController;
     private readonly interactionController: SidebarInteractionController;
     private indexSidebarMode: IndexSidebarMode = "list";
+    private indexAgentOutcomeFilter: IndexAgentOutcomeFilter = "all";
     private selectedIndexFileFilterRootPath: string | null = null;
     private indexFileFilterGraph: IndexFileFilterGraph | null = null;
     private reorderDragState: SidebarReorderDragState | null = null;
     private reorderDragSourceEl: HTMLElement | null = null;
     private reorderDropIndicatorEl: HTMLElement | null = null;
     private reorderDropIndicatorPlacement: ReorderPlacement | null = null;
+    private readonly streamedReplyControllers = new Map<string, StreamedAgentReplyController>();
+    private unsubscribeFromAgentStreamUpdates: (() => void) | null = null;
 
     constructor(leaf: WorkspaceLeaf, plugin: SideNote2, file: TFile | null = null) {
         super(leaf);
@@ -181,11 +198,25 @@ export default class SideNote2View extends ItemView {
         if (!this.file) {
             this.file = this.plugin.getSidebarTargetFile();
         }
+        this.unsubscribeFromAgentStreamUpdates = this.plugin.subscribeToAgentStreamUpdates((update) => {
+            this.handleAgentStreamUpdate(update);
+        });
         await this.renderComments();
         document.addEventListener("keydown", this.interactionController.documentKeydownHandler, true);
         document.addEventListener("copy", this.interactionController.documentCopyHandler, true);
         document.addEventListener("selectionchange", this.interactionController.documentSelectionChangeHandler);
         this.containerEl.addEventListener("click", this.interactionController.sidebarClickHandler);
+    }
+
+    async onClose() {
+        this.unsubscribeFromAgentStreamUpdates?.();
+        this.unsubscribeFromAgentStreamUpdates = null;
+        this.resetStreamedReplyControllers();
+        document.removeEventListener("keydown", this.interactionController.documentKeydownHandler, true);
+        document.removeEventListener("copy", this.interactionController.documentCopyHandler, true);
+        document.removeEventListener("selectionchange", this.interactionController.documentSelectionChangeHandler);
+        this.containerEl.removeEventListener("click", this.interactionController.sidebarClickHandler);
+        await Promise.resolve();
     }
 
     async setState(state: CustomViewState, result: ViewStateResult): Promise<void> {
@@ -195,6 +226,16 @@ export default class SideNote2View extends ItemView {
             this.indexSidebarMode = nextMode;
             void this.plugin.logEvent("info", "index", "index.mode.changed", {
                 mode: nextMode,
+                source: "view-state",
+            });
+            shouldRender = true;
+        }
+
+        const nextAgentOutcomeFilter = resolveIndexAgentOutcomeFilterFromState(state);
+        if (nextAgentOutcomeFilter !== undefined && nextAgentOutcomeFilter !== this.indexAgentOutcomeFilter) {
+            this.indexAgentOutcomeFilter = nextAgentOutcomeFilter;
+            void this.plugin.logEvent("info", "index", "index.agent-filter.changed", {
+                outcome: nextAgentOutcomeFilter,
                 source: "view-state",
             });
             shouldRender = true;
@@ -259,6 +300,7 @@ export default class SideNote2View extends ItemView {
         const file = this.file;
         const isAllCommentsView = !!file && this.plugin.isAllCommentsNotePath(file.path);
         this.clearReorderDragState();
+        this.resetStreamedReplyControllers();
 
         this.containerEl.empty();
         this.containerEl.addClass("sidenote2-view-container");
@@ -279,16 +321,24 @@ export default class SideNote2View extends ItemView {
                 ? this.plugin.getAllIndexedThreads()
                 : this.plugin.getThreadsForFile(file.path);
             const showResolved = this.plugin.shouldShowResolvedComments();
+            const allAgentRuns = this.plugin.getAgentRuns();
+            const isAgentIndexMode = isAllCommentsView && this.indexSidebarMode === "agent";
             const visiblePersistedThreads = persistedThreads.filter((thread) =>
-                matchesResolvedVisibility(thread.resolved, showResolved));
+                isAgentIndexMode || matchesResolvedVisibility(thread.resolved, showResolved));
+            const allAgentSidebarThreads = isAllCommentsView
+                ? buildAgentSidebarThreads(persistedThreads, allAgentRuns)
+                : [];
+            const indexedFileFilterThreads = isAgentIndexMode
+                ? allAgentSidebarThreads.map(({ thread }) => thread)
+                : persistedThreads;
             const indexFileFilterGraph = isAllCommentsView
-                ? buildIndexFileFilterGraph(persistedThreads, {
+                ? buildIndexFileFilterGraph(indexedFileFilterThreads, {
                     allCommentsNotePath: this.plugin.getAllCommentsNotePath(),
                     resolveWikiLinkPath: (linkPath, sourceFilePath) => {
                         const linkedFile = this.app.metadataCache.getFirstLinkpathDest(linkPath, sourceFilePath);
                         return linkedFile instanceof TFile ? linkedFile.path : null;
                     },
-                    showResolved,
+                    showResolved: isAgentIndexMode ? null : showResolved,
                 })
                 : null;
             this.indexFileFilterGraph = indexFileFilterGraph;
@@ -317,19 +367,27 @@ export default class SideNote2View extends ItemView {
                 scopedVisibleThreads,
                 scopedAllThreads,
             } = isAllCommentsView
-                ? scopeIndexThreadsByFilePaths(visiblePersistedThreads, persistedThreads, filteredIndexFilePaths)
+                ? isAgentIndexMode
+                    ? scopeIndexThreadsByFilePaths(
+                        allAgentSidebarThreads.map(({ thread }) => thread),
+                        allAgentSidebarThreads.map(({ thread }) => thread),
+                        filteredIndexFilePaths,
+                    )
+                    : scopeIndexThreadsByFilePaths(visiblePersistedThreads, persistedThreads, filteredIndexFilePaths)
                 : {
                     scopedVisibleThreads: visiblePersistedThreads,
                     scopedAllThreads: persistedThreads,
                 };
             const draftComment = this.plugin.getDraftForView(file.path);
             const visibleDraftComment = draftComment
-                && matchesResolvedVisibility(draftComment.resolved, showResolved)
+                && (isAgentIndexMode || matchesResolvedVisibility(draftComment.resolved, showResolved))
                 && (!filteredIndexFilePaths.length || filteredIndexFilePaths.includes(draftComment.filePath))
                 ? draftComment
                 : null;
             const totalScopedCount = scopedAllThreads.length;
-            const resolvedCount = scopedAllThreads.filter((thread) => thread.resolved).length;
+            const resolvedCount = isAgentIndexMode
+                ? 0
+                : scopedAllThreads.filter((thread) => thread.resolved).length;
             const hasResolvedComments = resolvedCount > 0;
             const hasNestedComments = scopedAllThreads.some((thread) => thread.entries.length > 1)
                 || visibleDraftComment?.mode === "append";
@@ -337,21 +395,36 @@ export default class SideNote2View extends ItemView {
                 scopedVisibleThreads,
                 visibleDraftComment,
             );
+            const agentSidebarThreads = isAllCommentsView
+                ? allAgentSidebarThreads.filter(({ thread }) =>
+                    !filteredIndexFilePaths.length || filteredIndexFilePaths.includes(thread.filePath))
+                : [];
+            const filteredAgentSidebarThreads = isAgentIndexMode
+                ? filterAgentSidebarThreadsByOutcome(agentSidebarThreads, this.indexAgentOutcomeFilter)
+                : [];
+            const agentThreadIds = new Set(agentSidebarThreads.map(({ thread }) => thread.id));
             const nestedAppendDraftThreadId = getNestedThreadIdForAppendDraft(
                 scopedVisibleThreads,
                 visibleDraftComment,
             );
-            const topLevelDraftComment = visibleDraftComment
-                && (visibleDraftComment.mode !== "append" || !nestedAppendDraftThreadId)
-                ? visibleDraftComment
-                : null;
+            const topLevelDraftComment = shouldRenderTopLevelDraftComment({
+                draft: visibleDraftComment,
+                nestedAppendDraftThreadId,
+                isAgentIndexMode,
+                agentThreadIds,
+            });
             const renderableItems = isAllCommentsView
-                ? sortSidebarRenderableItems(
-                    scopedVisibleThreads
-                        .filter((thread) => thread.id !== replacedThreadId)
-                        .map((thread) => ({ kind: "thread", thread } as SidebarRenderableItem))
-                        .concat(topLevelDraftComment ? [{ kind: "draft", draft: topLevelDraftComment }] : []),
-                )
+                ? this.indexSidebarMode === "agent"
+                    ? filteredAgentSidebarThreads
+                        .filter(({ thread }) => thread.id !== replacedThreadId)
+                        .map(({ thread }) => ({ kind: "thread", thread } as SidebarRenderableItem))
+                        .concat(topLevelDraftComment ? [{ kind: "draft", draft: topLevelDraftComment }] : [])
+                    : sortSidebarRenderableItems(
+                        scopedVisibleThreads
+                            .filter((thread) => thread.id !== replacedThreadId)
+                            .map((thread) => ({ kind: "thread", thread } as SidebarRenderableItem))
+                            .concat(topLevelDraftComment ? [{ kind: "draft", draft: topLevelDraftComment }] : []),
+                    )
                 : buildStoredOrderSidebarItems(
                     scopedVisibleThreads,
                     topLevelDraftComment,
@@ -376,6 +449,11 @@ export default class SideNote2View extends ItemView {
                 resolvedCount,
                 hasResolvedComments,
                 hasNestedComments,
+                isAgentMode: isAgentIndexMode,
+                agentOutcomeCounts: {
+                    succeeded: countAgentSidebarThreadsByOutcome(agentSidebarThreads, "succeeded"),
+                    failed: countAgentSidebarThreadsByOutcome(agentSidebarThreads, "failed"),
+                },
                 addPageCommentAction: !isAllCommentsView
                     ? {
                         icon: "plus",
@@ -427,16 +505,22 @@ export default class SideNote2View extends ItemView {
                     return;
                 }
 
+                const threadAgentRuns = getAgentRunsForCommentThread(allAgentRuns, item.thread);
                 await this.renderPersistedComment(
                     commentsBody,
                     item.thread,
                     canReorderVisibleThreads,
+                    threadAgentRuns[0] ?? null,
+                    this.plugin.getActiveAgentStreamForThread(item.thread.id),
+                    threadAgentRuns,
+                    isAllCommentsView && this.indexSidebarMode === "agent",
                     nestedAppendDraftThreadId === item.thread.id && visibleDraftComment?.mode === "append"
                         ? visibleDraftComment
                         : null,
                 );
             });
             await Promise.all(renderPromises);
+            this.syncVisibleStreamedReplyControllers();
 
             if (limitedComments.hiddenCount > 0) {
                 const limitNotice = commentsContainer.createDiv("sidenote2-list-limit-notice");
@@ -451,12 +535,22 @@ export default class SideNote2View extends ItemView {
             if (renderedItems.length === 0) {
                 if (isAllCommentsView) {
                     const emptyStateEl = commentsBody.createDiv("sidenote2-empty-state sidenote2-section-empty-state");
-                    if (shouldShowResolvedIndexEmptyState(showResolved, totalScopedCount, renderedItems.length)) {
-                        emptyStateEl.createEl("p", { text: "No resolved side notes match the current index view." });
+                    if (isAgentIndexMode && this.indexAgentOutcomeFilter !== "all" && totalScopedCount > 0) {
+                        emptyStateEl.createEl("p", {
+                            text: this.indexAgentOutcomeFilter === "succeeded"
+                                ? "No successful agent threads match the current index view."
+                                : "No failed agent threads match the current index view.",
+                        });
+                        emptyStateEl.createEl("p", { text: "Turn off the current agent filter to return to all agent threads." });
+                    } else if (!isAgentIndexMode && shouldShowResolvedIndexEmptyState(showResolved, totalScopedCount, renderedItems.length)) {
+                        emptyStateEl.createEl("p", { text: this.indexSidebarMode === "agent" ? "No resolved agent threads match the current index view." : "No resolved side notes match the current index view." });
                         emptyStateEl.createEl("p", { text: "Turn off resolved to return to active side notes." });
                     } else if (filteredIndexFilePaths.length) {
-                        emptyStateEl.createEl("p", { text: "No side notes match the selected file filter." });
+                        emptyStateEl.createEl("p", { text: this.indexSidebarMode === "agent" ? "No agent threads match the selected file filter." : "No side notes match the selected file filter." });
                         emptyStateEl.createEl("p", { text: "Use files to choose a different root file." });
+                    } else if (this.indexSidebarMode === "agent") {
+                        emptyStateEl.createEl("p", { text: "No agent threads in the index yet." });
+                        emptyStateEl.createEl("p", { text: "Save a side note with @codex to create one." });
                     } else {
                         emptyStateEl.createEl("p", { text: "No side notes in the index yet." });
                         emptyStateEl.createEl("p", { text: "Add side notes in your notes to populate the index." });
@@ -472,6 +566,7 @@ export default class SideNote2View extends ItemView {
                 }
             }
         } else {
+            this.resetStreamedReplyControllers();
             const emptyStateEl = this.containerEl.createDiv("sidenote2-empty-state");
             emptyStateEl.createEl("p", { text: "No file selected." });
             emptyStateEl.createEl("p", { text: "Open a file to see its comments." });
@@ -488,6 +583,93 @@ export default class SideNote2View extends ItemView {
         }
     }
 
+    private handleAgentStreamUpdate(update: AgentStreamUpdate): void {
+        if (!update.stream) {
+            this.removeStreamedReplyController(update.threadId);
+            return;
+        }
+
+        const threadEl = this.containerEl.querySelector(`.sidenote2-thread-stack[data-thread-id="${update.threadId}"]`);
+        if (!(threadEl instanceof HTMLDivElement)) {
+            return;
+        }
+        if (this.shouldHideStreamedReplyController(threadEl, update.stream)) {
+            this.removeStreamedReplyController(update.threadId);
+            return;
+        }
+
+        this.getOrCreateStreamedReplyController(update.threadId).sync(this.containerEl, update.stream);
+    }
+
+    private syncVisibleStreamedReplyControllers(): void {
+        const visibleThreadIds = new Set<string>();
+        const threadEls = Array.from(this.containerEl.querySelectorAll(".sidenote2-thread-stack[data-thread-id]"));
+        for (const threadEl of threadEls) {
+            if (!(threadEl instanceof HTMLDivElement)) {
+                continue;
+            }
+            const threadId = threadEl.getAttribute("data-thread-id");
+            if (!threadId) {
+                continue;
+            }
+
+            visibleThreadIds.add(threadId);
+            const stream = this.plugin.getActiveAgentStreamForThread(threadId);
+            if (!stream) {
+                this.removeStreamedReplyController(threadId);
+                continue;
+            }
+            if (this.shouldHideStreamedReplyController(threadEl, stream)) {
+                this.removeStreamedReplyController(threadId);
+                continue;
+            }
+
+            this.getOrCreateStreamedReplyController(threadId).sync(this.containerEl, stream);
+        }
+
+        for (const [threadId] of this.streamedReplyControllers) {
+            if (!visibleThreadIds.has(threadId)) {
+                this.removeStreamedReplyController(threadId);
+            }
+        }
+    }
+
+    private getOrCreateStreamedReplyController(threadId: string): StreamedAgentReplyController {
+        let controller = this.streamedReplyControllers.get(threadId);
+        if (!controller) {
+            controller = new StreamedAgentReplyController(threadId);
+            this.streamedReplyControllers.set(threadId, controller);
+        }
+
+        return controller;
+    }
+
+    private removeStreamedReplyController(threadId: string): void {
+        const controller = this.streamedReplyControllers.get(threadId);
+        if (!controller) {
+            return;
+        }
+
+        controller.clear();
+        this.streamedReplyControllers.delete(threadId);
+    }
+
+    private resetStreamedReplyControllers(): void {
+        for (const controller of this.streamedReplyControllers.values()) {
+            controller.clear();
+        }
+        this.streamedReplyControllers.clear();
+    }
+
+    private shouldHideStreamedReplyController(threadEl: HTMLDivElement, stream: ReturnType<SideNote2["getActiveAgentStreamForThread"]>): boolean {
+        if (!stream?.outputEntryId) {
+            return false;
+        }
+
+        const persistedReplyEl = threadEl.querySelector(`.sidenote2-thread-entry-item[data-comment-id="${stream.outputEntryId}"]`);
+        return persistedReplyEl instanceof HTMLDivElement;
+    }
+
     private renderSidebarToolbar(
         container: HTMLElement,
         options: {
@@ -495,6 +677,11 @@ export default class SideNote2View extends ItemView {
             resolvedCount: number;
             hasResolvedComments: boolean;
             hasNestedComments: boolean;
+            isAgentMode: boolean;
+            agentOutcomeCounts: {
+                succeeded: number;
+                failed: number;
+            };
             addPageCommentAction: {
                 icon: string;
                 ariaLabel: string;
@@ -509,7 +696,9 @@ export default class SideNote2View extends ItemView {
         const showNestedComments = this.plugin.shouldShowNestedComments();
         const showListOnlyToolbarChips = shouldShowIndexListToolbarChips(options.isAllCommentsView, this.indexSidebarMode);
         const shouldShowResolvedChip = showListOnlyToolbarChips
+            && !options.isAgentMode
             && shouldShowResolvedToolbarChip(options.hasResolvedComments, showResolved);
+        const shouldShowAgentOutcomeChips = showListOnlyToolbarChips && options.isAgentMode;
         const shouldShowNestedChip = showListOnlyToolbarChips && shouldShowNestedToolbarChip({
             hasNestedComments: options.hasNestedComments,
             isAllCommentsView: options.isAllCommentsView,
@@ -518,6 +707,7 @@ export default class SideNote2View extends ItemView {
         });
         const shouldRenderToolbar = options.isAllCommentsView
             || shouldShowResolvedChip
+            || shouldShowAgentOutcomeChips
             || shouldShowNestedChip
             || !!options.addPageCommentAction;
         if (!shouldRenderToolbar) {
@@ -558,7 +748,42 @@ export default class SideNote2View extends ItemView {
         }
 
         const filterGroup = indexChipGroup ?? (indexChipRow ?? toolbarEl).createDiv("sidenote2-sidebar-toolbar-group");
-        if (shouldShowResolvedChip) {
+        if (shouldShowAgentOutcomeChips) {
+            this.renderToolbarChip(filterGroup, {
+                label: "✓",
+                active: this.indexAgentOutcomeFilter === "succeeded",
+                ariaLabel: this.indexAgentOutcomeFilter === "succeeded"
+                    ? "Show all agent threads"
+                    : "Show successful agent threads",
+                count: String(options.agentOutcomeCounts.succeeded),
+                disabled: options.agentOutcomeCounts.succeeded === 0 && this.indexAgentOutcomeFilter !== "succeeded",
+                onClick: () => {
+                    this.indexAgentOutcomeFilter = this.indexAgentOutcomeFilter === "succeeded" ? "all" : "succeeded";
+                    void this.plugin.logEvent("info", "index", "index.agent-filter.changed", {
+                        outcome: this.indexAgentOutcomeFilter,
+                        source: "toolbar",
+                    });
+                    void this.renderComments();
+                },
+            });
+            this.renderToolbarChip(filterGroup, {
+                label: "✕",
+                active: this.indexAgentOutcomeFilter === "failed",
+                ariaLabel: this.indexAgentOutcomeFilter === "failed"
+                    ? "Show all agent threads"
+                    : "Show failed agent threads",
+                count: String(options.agentOutcomeCounts.failed),
+                disabled: options.agentOutcomeCounts.failed === 0 && this.indexAgentOutcomeFilter !== "failed",
+                onClick: () => {
+                    this.indexAgentOutcomeFilter = this.indexAgentOutcomeFilter === "failed" ? "all" : "failed";
+                    void this.plugin.logEvent("info", "index", "index.agent-filter.changed", {
+                        outcome: this.indexAgentOutcomeFilter,
+                        source: "toolbar",
+                    });
+                    void this.renderComments();
+                },
+            });
+        } else if (shouldShowResolvedChip) {
             this.renderToolbarChip(filterGroup, {
                 label: "Resolved",
                 active: showResolved,
@@ -699,6 +924,23 @@ export default class SideNote2View extends ItemView {
                 void this.renderComments();
             },
         });
+        this.renderTabButton(tabList, {
+            label: "Agent",
+            active: this.indexSidebarMode === "agent",
+            ariaLabel: "Show agent threads",
+            onClick: () => {
+                if (this.indexSidebarMode === "agent") {
+                    return;
+                }
+
+                this.indexSidebarMode = "agent";
+                void this.plugin.logEvent("info", "index", "index.mode.changed", {
+                    mode: "agent",
+                    source: "toolbar",
+                });
+                void this.renderComments();
+            },
+        });
     }
 
     private renderTabButton(
@@ -826,6 +1068,10 @@ export default class SideNote2View extends ItemView {
         commentsContainer: HTMLDivElement,
         thread: CommentThread,
         enableThreadReorder: boolean,
+        agentRun: ReturnType<SideNote2["getLatestAgentRunForThread"]>,
+        agentStream: ReturnType<SideNote2["getActiveAgentStreamForThread"]>,
+        threadAgentRuns: AgentRunRecord[],
+        showAgentRetryAction: boolean,
         appendDraftComment: DraftComment | null = null,
     ) {
         const currentFilePath = this.file?.path ?? null;
@@ -834,11 +1080,16 @@ export default class SideNote2View extends ItemView {
         await renderPersistedCommentCard(commentsContainer, thread, {
             activeCommentId: this.interactionController.getActiveCommentId(),
             currentFilePath,
+            currentUserLabel: "You",
             showSourceRedirectAction: isIndexView,
             showNestedComments: this.plugin.shouldShowNestedComments(),
             enableManualReorder: !isIndexView,
             enableThreadReorder,
             appendDraftComment,
+            agentRun,
+            agentStream,
+            threadAgentRuns,
+            showAgentRetryAction,
             getEventTargetElement: (target) => this.interactionController.getEventTargetElement(target),
             isSelectionInsideSidebarContent: (selection) => this.interactionController.isSelectionInsideSidebarContent(selection),
             claimSidebarInteractionOwnership: (focusTarget) => this.interactionController.claimSidebarInteractionOwnership(focusTarget),
@@ -873,6 +1124,9 @@ export default class SideNote2View extends ItemView {
             },
             startAppendEntryDraft: (commentId, hostFilePath) => {
                 void this.plugin.startAppendEntryDraft(commentId, hostFilePath);
+            },
+            retryAgentRun: (threadId) => {
+                void this.plugin.retryAgentRun(threadId);
             },
             reanchorCommentThreadToCurrentSelection: (commentId) => {
                 void this.plugin.reanchorCommentThreadToCurrentSelection(commentId);
@@ -1312,6 +1566,7 @@ export default class SideNote2View extends ItemView {
         return {
             filePath: this.file ? this.file.path : null,
             indexSidebarMode: this.indexSidebarMode,
+            indexAgentOutcomeFilter: this.indexAgentOutcomeFilter,
             indexFileFilterRootPath: this.selectedIndexFileFilterRootPath,
         };
     }

@@ -27,6 +27,7 @@ import { shouldSkipAggregateViewRefresh } from "./commentPersistencePlanner";
 
 type PersistOptions = {
     immediateAggregateRefresh?: boolean;
+    skipCommentViewRefresh?: boolean;
 };
 
 type SyncedFileComments = {
@@ -55,6 +56,7 @@ export interface CommentPersistenceHost {
     hashText(text: string): Promise<string>;
     syncDerivedCommentLinksForFile(file: TFile, noteContent: string, comments: Array<Comment | CommentThread>): void;
     refreshCommentViews(): Promise<void>;
+    refreshAllCommentsSidebarViews(): Promise<void>;
     refreshEditorDecorations(): void;
     refreshMarkdownPreviews(): void;
     getCommentMentionedPageLabels(comment: Comment): string[];
@@ -76,6 +78,7 @@ function isTFileLike(value: unknown): value is TFile {
 
 export class CommentPersistenceController {
     private readonly pendingCommentPersistTimers: Record<string, number> = {};
+    private readonly commentViewRefreshSuppressions = new Map<string, number>();
     private aggregateRefreshTimer: number | null = null;
     private aggregateRefreshPromise: Promise<void> | null = null;
     private aggregateRefreshQueued = false;
@@ -98,7 +101,7 @@ export class CommentPersistenceController {
                 if (currentParsed.mainContent === storedParsed.mainContent) {
                     await this.syncThreadsIntoVisibleNoteContent(file, currentParsed.mainContent, storedParsed.threads);
                     this.clearPendingCommentPersistTimer(file.path);
-                    await this.afterCommentsChanged();
+                    await this.afterCommentsChanged(file.path);
                     void this.host.log?.("info", "persistence", "storage.note.external-managed-sync", {
                         filePath: file.path,
                         threadCount: storedParsed.threads.length,
@@ -118,7 +121,7 @@ export class CommentPersistenceController {
                     filePath: file.path,
                 });
                 this.scheduleDeferredCommentPersist(file);
-                await this.afterCommentsChanged();
+                await this.afterCommentsChanged(file.path);
                 return;
             }
 
@@ -128,7 +131,7 @@ export class CommentPersistenceController {
             }
 
             this.clearPendingCommentPersistTimer(file.path);
-            await this.afterCommentsChanged();
+            await this.afterCommentsChanged(file.path);
         } catch (error) {
             console.error("Error syncing note-backed comments:", error);
             void this.host.log?.("error", "persistence", "storage.note.write.error", {
@@ -162,13 +165,16 @@ export class CommentPersistenceController {
     }
 
     public async persistCommentsForFile(file: TFile, options: PersistOptions = {}): Promise<void> {
+        if (options.skipCommentViewRefresh) {
+            this.scheduleCommentViewRefreshSuppression(file.path, 2);
+        }
         if (isAttachmentCommentableFile(file)) {
             this.host.getAggregateCommentIndex().updateFile(
                 file.path,
                 this.host.getCommentManager().getThreadsForFile(file.path),
             );
             await this.host.saveSettings();
-            await this.afterCommentsChanged(options);
+            await this.afterCommentsChanged(file.path, options);
             return;
         }
 
@@ -402,7 +408,7 @@ export class CommentPersistenceController {
                 );
             }
             await this.syncFileCommentsFromContent(file, nextContent);
-            await this.afterCommentsChanged(options);
+            await this.afterCommentsChanged(file.path, options);
             void this.host.log?.("info", "persistence", "storage.note.write.success", {
                 filePath: file.path,
                 threadCount: threads.length,
@@ -414,7 +420,7 @@ export class CommentPersistenceController {
             serializeNoteCommentThreads(currentContent, threads),
         );
         await this.syncFileCommentsFromContent(file, nextContent);
-        await this.afterCommentsChanged(options);
+        await this.afterCommentsChanged(file.path, options);
         void this.host.log?.("info", "persistence", "storage.note.write.success", {
             filePath: file.path,
             threadCount: threads.length,
@@ -422,8 +428,12 @@ export class CommentPersistenceController {
         return nextContent;
     }
 
-    private async afterCommentsChanged(options: PersistOptions = {}): Promise<void> {
-        await this.host.refreshCommentViews();
+    private async afterCommentsChanged(filePath: string | null = null, options: PersistOptions = {}): Promise<void> {
+        if (filePath && this.host.isAllCommentsNotePath(filePath)) {
+            await this.host.refreshAllCommentsSidebarViews();
+        } else if (!filePath || !this.consumeCommentViewRefreshSuppression(filePath)) {
+            await this.host.refreshCommentViews();
+        }
         this.host.refreshEditorDecorations();
         this.host.refreshMarkdownPreviews();
         if (options.immediateAggregateRefresh) {
@@ -431,6 +441,25 @@ export class CommentPersistenceController {
         } else {
             this.scheduleAggregateNoteRefresh();
         }
+    }
+
+    private scheduleCommentViewRefreshSuppression(filePath: string, count: number): void {
+        const existingCount = this.commentViewRefreshSuppressions.get(filePath) ?? 0;
+        this.commentViewRefreshSuppressions.set(filePath, Math.max(existingCount, count));
+    }
+
+    private consumeCommentViewRefreshSuppression(filePath: string): boolean {
+        const count = this.commentViewRefreshSuppressions.get(filePath) ?? 0;
+        if (count <= 0) {
+            return false;
+        }
+
+        if (count === 1) {
+            this.commentViewRefreshSuppressions.delete(filePath);
+        } else {
+            this.commentViewRefreshSuppressions.set(filePath, count - 1);
+        }
+        return true;
     }
 
     private async enqueueAggregateNoteRefresh(): Promise<void> {

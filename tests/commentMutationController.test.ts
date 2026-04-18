@@ -6,6 +6,7 @@ import {
     CommentMutationController,
     type CommentMutationHost,
 } from "../src/control/commentMutationController";
+import type { SavedUserEntryEvent } from "../src/control/commentAgentController";
 import type { DraftComment, DraftSelection } from "../src/domain/drafts";
 
 function createFile(path: string): TFile {
@@ -52,6 +53,7 @@ function createHost(options: {
     currentSelectionByPath?: Record<string, DraftSelection | null>;
     now?: number;
     showResolvedComments?: boolean;
+    handleSavedUserEntry?: (event: SavedUserEntryEvent) => Promise<void> | void;
 } = {}) {
     const manager = new CommentManager(options.loadedComments ?? options.knownComments ?? []);
     let draftComment = options.draftComment ?? null;
@@ -64,6 +66,7 @@ function createHost(options: {
     const highlightedCommentIds: string[] = [];
     const setDraftCalls: Array<{ draftComment: DraftComment | null; hostFilePath?: string | null }> = [];
     const setShowResolvedCalls: boolean[] = [];
+    const savedUserEntryEvents: SavedUserEntryEvent[] = [];
     let refreshCommentViewsCount = 0;
     let refreshEditorDecorationsCount = 0;
 
@@ -110,7 +113,7 @@ function createHost(options: {
         refreshEditorDecorations: () => {
             refreshEditorDecorationsCount += 1;
         },
-        getKnownCommentById: (commentId) => knownCommentsById.get(commentId) ?? null,
+        getKnownCommentById: (commentId) => manager.getCommentById(commentId) ?? knownCommentsById.get(commentId) ?? null,
         getLoadedCommentById: (commentId) => manager.getCommentById(commentId) ?? null,
         getFileByPath: (filePath) => filesByPath.get(filePath) ?? null,
         getCurrentNoteContent: async (file) => options.getCurrentNoteContent
@@ -136,6 +139,10 @@ function createHost(options: {
             notices.push(message);
         },
         now: () => options.now ?? 1_000,
+        handleSavedUserEntry: async (event) => {
+            savedUserEntryEvents.push(event);
+            await options.handleSavedUserEntry?.(event);
+        },
     };
 
     return {
@@ -147,6 +154,7 @@ function createHost(options: {
         highlightedCommentIds,
         setShowResolvedCalls,
         setDraftCalls,
+        savedUserEntryEvents,
         getDraftComment: () => draftComment,
         getDraftHostFilePath: () => draftHostFilePath,
         getSavingDraftCommentId: () => savingDraftCommentId,
@@ -175,6 +183,7 @@ test("comment mutation controller starts an edit draft from the latest loaded co
         ...comment,
         entryCount: 1,
         mode: "edit",
+        threadId: comment.id,
     });
 });
 
@@ -205,6 +214,105 @@ test("comment mutation controller saves a new draft by trimming and persisting i
     assert.equal(host.getRefreshCommentViewsCount() >= 2, true);
     assert.equal(host.getRefreshEditorDecorationsCount(), 1);
     assert.deepEqual(host.notices, []);
+});
+
+test("comment mutation controller dispatches saved new entries to the agent hook after persistence", async () => {
+    const draft = toDraft(createComment({
+        id: "draft-agent-1",
+        comment: "@codex fix the parser",
+    }));
+    const host = createHost({
+        draftComment: draft,
+        knownComments: [draft],
+        currentNoteContentByPath: {
+            [draft.filePath]: "# Title\n\nAlpha beta gamma.\n",
+        },
+    });
+
+    await host.controller.saveDraft(draft.id);
+
+    assert.deepEqual(host.savedUserEntryEvents, [{
+        threadId: draft.id,
+        entryId: draft.id,
+        filePath: draft.filePath,
+        body: "@codex fix the parser",
+    }]);
+});
+
+test("comment mutation controller dispatches saved append entries to the agent hook after persistence", async () => {
+    const existing = createComment({ id: "thread-1", comment: "Original" });
+    const draft = {
+        ...toDraft(existing, {
+            id: "entry-2",
+            comment: "@codex explain this",
+            mode: "append",
+        }),
+        threadId: existing.id,
+    } satisfies DraftComment;
+    const host = createHost({
+        draftComment: draft,
+        knownComments: [existing],
+        loadedComments: [existing],
+    });
+
+    await host.controller.saveDraft(draft.id);
+
+    assert.deepEqual(host.savedUserEntryEvents, [{
+        threadId: existing.id,
+        entryId: draft.id,
+        filePath: draft.filePath,
+        body: "@codex explain this",
+    }]);
+});
+
+test("comment mutation controller dispatches edited entries to the agent hook", async () => {
+    const existing = createComment({ id: "thread-1", comment: "@codex original" });
+    const draft = toDraft(existing, {
+        comment: "@codex edited",
+        mode: "edit",
+        threadId: existing.id,
+    });
+    const host = createHost({
+        draftComment: draft,
+        knownComments: [existing],
+        loadedComments: [existing],
+    });
+
+    await host.controller.saveDraft(draft.id);
+
+    assert.deepEqual(host.savedUserEntryEvents, [{
+        threadId: existing.id,
+        entryId: existing.id,
+        filePath: existing.filePath,
+        body: "@codex edited",
+    }]);
+});
+
+test("comment mutation controller keeps child edit drafts attached to their parent thread", async () => {
+    const parent = createComment({ id: "thread-1", comment: "@codex parent" });
+    const host = createHost({
+        knownComments: [parent],
+        loadedComments: [parent],
+    });
+    host.manager.appendEntry(parent.id, {
+        id: "entry-2",
+        body: "@codex child before",
+        timestamp: 200,
+    });
+
+    const started = await host.controller.startEditDraft("entry-2");
+    assert.equal(started, true);
+    assert.equal(host.getDraftComment()?.threadId, parent.id);
+
+    host.getDraftComment()!.comment = "@codex child after";
+    await host.controller.saveDraft("entry-2");
+
+    assert.deepEqual(host.savedUserEntryEvents, [{
+        threadId: parent.id,
+        entryId: "entry-2",
+        filePath: parent.filePath,
+        body: "@codex child after",
+    }]);
 });
 
 test("comment mutation controller stores shortened markdown links when saving a draft", async () => {

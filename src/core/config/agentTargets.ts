@@ -1,17 +1,23 @@
-export type SideNote2AgentTarget = "codex" | "claude";
+import {
+    DEFAULT_SIDE_NOTE2_AGENT_ACTOR_ID,
+    normalizeAnyAgentTarget,
+    normalizeSupportedAgentTarget,
+    SIDE_NOTE2_AGENT_LABELS,
+    SUPPORTED_SIDE_NOTE2_AGENT_LABELS,
+} from "../agents/agentActorRegistry";
 
-export const DEFAULT_PREFERRED_AGENT_TARGET: SideNote2AgentTarget = "codex";
+export type { SideNote2AgentTarget } from "../agents/agentActorDefinition";
 
-export const SIDE_NOTE2_AGENT_TARGET_OPTIONS: Record<SideNote2AgentTarget, string> = {
-    codex: "Codex",
-    claude: "Claude",
-};
+export const DEFAULT_PREFERRED_AGENT_TARGET = DEFAULT_SIDE_NOTE2_AGENT_ACTOR_ID;
 
-export function normalizePreferredAgentTarget(value: unknown): SideNote2AgentTarget {
-    if (typeof value !== "string") {
-        return DEFAULT_PREFERRED_AGENT_TARGET;
-    }
+export const SIDE_NOTE2_AGENT_TARGET_OPTIONS = SIDE_NOTE2_AGENT_LABELS;
 
-    const normalized = value.trim().toLowerCase();
-    return normalized === "claude" ? "claude" : DEFAULT_PREFERRED_AGENT_TARGET;
+export const SUPPORTED_SIDE_NOTE2_AGENT_TARGET_OPTIONS = SUPPORTED_SIDE_NOTE2_AGENT_LABELS;
+
+export function normalizeAgentTarget(value: unknown) {
+    return normalizeAnyAgentTarget(value);
+}
+
+export function normalizePreferredAgentTarget(value: unknown) {
+    return normalizeSupportedAgentTarget(value);
 }

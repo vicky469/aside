@@ -7,7 +7,7 @@ const LEGACY_ALL_COMMENTS_NOTE_PATH = "SideNote2 comments.md";
 
 export interface IndexFileFilterGraphBuildOptions {
     allCommentsNotePath?: string;
-    showResolved?: boolean;
+    showResolved?: boolean | null;
     resolveWikiLinkPath?: (linkPath: string, sourceFilePath: string) => string | null;
 }
 
@@ -129,10 +129,10 @@ export function buildIndexFileFilterGraph(
     comments: Array<Comment | CommentThread>,
     options: IndexFileFilterGraphBuildOptions = {},
 ): IndexFileFilterGraph {
-    const visibleComments = filterCommentsByResolvedVisibility(
-        comments.filter((comment) => !isAllCommentsNotePath(comment.filePath, options.allCommentsNotePath)),
-        options.showResolved ?? false,
-    );
+    const scopedComments = comments.filter((comment) => !isAllCommentsNotePath(comment.filePath, options.allCommentsNotePath));
+    const visibleComments = options.showResolved === null
+        ? scopedComments
+        : filterCommentsByResolvedVisibility(scopedComments, options.showResolved ?? false);
     const fileCommentCounts = new Map<string, number>();
 
     for (const comment of visibleComments) {

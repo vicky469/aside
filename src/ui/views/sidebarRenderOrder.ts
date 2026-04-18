@@ -46,6 +46,34 @@ export function getNestedThreadIdForAppendDraft(
     )?.id ?? null;
 }
 
+export function shouldRenderTopLevelDraftComment(options: {
+    draft: DraftComment | null;
+    nestedAppendDraftThreadId: string | null;
+    isAgentIndexMode: boolean;
+    agentThreadIds: ReadonlySet<string>;
+}): DraftComment | null {
+    const {
+        draft,
+        nestedAppendDraftThreadId,
+        isAgentIndexMode,
+        agentThreadIds,
+    } = options;
+
+    if (!draft) {
+        return null;
+    }
+
+    if (draft.mode === "append" && nestedAppendDraftThreadId) {
+        return null;
+    }
+
+    if (isAgentIndexMode && !agentThreadIds.has(draft.threadId ?? draft.id)) {
+        return null;
+    }
+
+    return draft;
+}
+
 export function buildStoredOrderSidebarItems(
     threads: readonly CommentThread[],
     draft: DraftComment | null,

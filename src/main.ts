@@ -1,6 +1,11 @@
 import { addIcon, WorkspaceLeaf, TFile, Notice, Plugin, normalizePath, MarkdownView, FileSystemAdapter, type Editor } from "obsidian";
 import { Comment, CommentManager, CommentThread, type ReorderPlacement } from "./commentManager";
 import { CommentEntryController } from "./control/commentEntryController";
+import {
+    CommentAgentController,
+    type AgentStreamUpdate,
+    type SavedUserEntryEvent,
+} from "./control/commentAgentController";
 import { CommentHighlightController } from "./control/commentHighlightController";
 import { CommentMutationController } from "./control/commentMutationController";
 import { CommentNavigationController } from "./control/commentNavigationController";
@@ -13,6 +18,9 @@ import { PluginLifecycleController } from "./control/pluginLifecycleController";
 import { PluginRegistrationController } from "./control/pluginRegistrationController";
 import { WorkspaceContextController } from "./control/workspaceContextController";
 import { WorkspaceViewController } from "./control/workspaceViewController";
+import { AgentRunStore } from "./control/agentRunStore";
+import { disposeAgentRuntimeProcesses, runAgentRuntime } from "./control/agentRuntimeAdapter";
+import type { AgentRunRecord, AgentRunStreamState } from "./core/agents/agentRuns";
 import { DraftComment, DraftSelection } from "./domain/drafts";
 import { parsePromptDeleteSetting } from "./core/config/appConfig";
 import type { SideNote2AgentTarget } from "./core/config/agentTargets";
@@ -85,6 +93,7 @@ export default class SideNote2 extends Plugin {
         isCommentableFile: (file): file is TFile => this.isCommentableFile(file),
         loadCommentsForFile: (file) => this.loadCommentsForFile(file),
         getKnownCommentById: (commentId) => this.getKnownCommentById(commentId),
+        getKnownThreadIdByCommentId: (commentId) => this.getKnownThreadById(commentId)?.id ?? null,
         markDraftFileActive: (file) => this.markDraftFileActive(file),
         setDraftComment: (draftComment, hostFilePath) => this.commentSessionController.setDraftComment(draftComment, hostFilePath),
         activateViewAndHighlightComment: (commentId) => this.activateViewAndHighlightComment(commentId),
@@ -112,7 +121,7 @@ export default class SideNote2 extends Plugin {
             this.activateIndexComment(commentId, indexFilePath, sourceFilePath),
         log: (level, area, event, payload) => this.logEvent(level, area, event, payload),
     });
-    private readonly commentMutationController = new CommentMutationController({
+    private readonly commentMutationController: CommentMutationController = new CommentMutationController({
         getAllCommentsNotePath: () => this.getAllCommentsNotePath(),
         getSidebarTargetFilePath: () => this.getSidebarTargetFile()?.path ?? null,
         getDraftComment: () => this.commentSessionController.getDraftComment(),
@@ -140,6 +149,7 @@ export default class SideNote2 extends Plugin {
             this.showNotice(message, "draft", "draft.notice");
         },
         now: () => Date.now(),
+        handleSavedUserEntry: (event: SavedUserEntryEvent): Promise<void> => this.commentAgentController.handleSavedUserEntry(event),
         log: (level, area, event, payload) => this.logEvent(level, area, event, payload),
     });
     private readonly derivedCommentMetadataManager = new DerivedCommentMetadataManager(this.app);
@@ -180,6 +190,7 @@ export default class SideNote2 extends Plugin {
         syncDerivedCommentLinksForFile: (file, noteContent, comments) =>
             this.derivedCommentMetadataManager.syncDerivedCommentLinksForFile(file, noteContent, comments),
         refreshCommentViews: () => this.workspaceViewController.refreshCommentViews(),
+        refreshAllCommentsSidebarViews: () => this.workspaceViewController.refreshAllCommentsSidebarViews(),
         refreshEditorDecorations: () => this.refreshEditorDecorations(),
         refreshMarkdownPreviews: () => this.workspaceViewController.refreshMarkdownPreviews(),
         getCommentMentionedPageLabels: (comment) => this.getCommentMentionedPageLabels(comment),
@@ -211,6 +222,36 @@ export default class SideNote2 extends Plugin {
             this.showNotice(message, "index", "index.notice");
         },
     });
+    private readonly agentRunStore = new AgentRunStore({
+        readPersistedPluginData: () => this.indexNoteSettingsController.readPersistedPluginData(),
+        writePersistedPluginData: (data) => this.indexNoteSettingsController.writePersistedPluginData(data),
+    });
+    private readonly commentAgentController: CommentAgentController = new CommentAgentController({
+        createCommentId: () => generateCommentId(),
+        now: () => Date.now(),
+        refreshCommentViews: () => this.workspaceViewController.refreshCommentViews(),
+        getRuntimeWorkingDirectory: (filePath: string) => this.getRuntimeWorkingDirectory(filePath),
+        getCommentManager: () => this.commentManager,
+        getFileByPath: (filePath) => this.workspaceViewController.getFileByPath(filePath),
+        isCommentableFile: (file): file is TFile => this.isCommentableFile(file),
+        loadCommentsForFile: (file) => this.loadCommentsForFile(file),
+        appendThreadEntry: (
+            threadId: string,
+            entry: {
+                id: string;
+                body: string;
+                timestamp: number;
+            },
+            options?: {
+                skipCommentViewRefresh?: boolean;
+            },
+        ): Promise<boolean> => this.commentMutationController.appendThreadEntry(threadId, entry, options),
+        runAgentRuntime: (invocation) => runAgentRuntime(invocation),
+        showNotice: (message) => {
+            this.showNotice(message, "agents", "agents.notice");
+        },
+        log: (level, area, event, payload) => this.logEvent(level, area, event, payload),
+    }, this.agentRunStore);
     private readonly pluginLifecycleController = new PluginLifecycleController({
         app: this.app,
         ensureSidebarView: () => this.commentNavigationController.ensureSidebarView(),
@@ -319,6 +360,8 @@ export default class SideNote2 extends Plugin {
 
         this.commentManager = new CommentManager([]);
         await this.loadSettings();
+        this.commentAgentController.initialize();
+        await this.commentAgentController.reconcilePendingRunsFromPreviousSession();
         await this.logEvent("info", "startup", "startup.settings.loaded", {
             indexNotePath: this.getAllCommentsNotePath(),
         });
@@ -390,6 +433,8 @@ export default class SideNote2 extends Plugin {
 
     onunload() {
         void this.logEvent("info", "startup", "startup.unload");
+        disposeAgentRuntimeProcesses();
+        this.commentAgentController.dispose();
         this.pluginLifecycleController.clearPendingEditorRefreshes();
         this.derivedCommentMetadataManager.restoreMetadataCacheAugmentation();
         this.derivedCommentMetadataManager.clearAllDerivedCommentLinks();
@@ -402,6 +447,10 @@ export default class SideNote2 extends Plugin {
 
     async saveSettings() {
         await this.indexNoteSettingsController.saveSettings();
+    }
+
+    public readPersistedPluginData() {
+        return this.indexNoteSettingsController.readPersistedPluginData();
     }
 
     public getAllCommentsNotePath(): string {
@@ -418,6 +467,22 @@ export default class SideNote2 extends Plugin {
 
     public getPreferredAgentTarget(): SideNote2AgentTarget {
         return this.indexNoteSettingsController.getPreferredAgentTarget();
+    }
+
+    public getAgentRuns(): AgentRunRecord[] {
+        return this.commentAgentController.getAgentRuns();
+    }
+
+    public getLatestAgentRunForThread(threadId: string): AgentRunRecord | null {
+        return this.commentAgentController.getLatestAgentRunForThread(threadId);
+    }
+
+    public getActiveAgentStreamForThread(threadId: string): AgentRunStreamState | null {
+        return this.commentAgentController.getActiveAgentStreamForThread(threadId);
+    }
+
+    public subscribeToAgentStreamUpdates(listener: (update: AgentStreamUpdate) => void): () => void {
+        return this.commentAgentController.subscribeToStreamUpdates(listener);
     }
 
     public isAllCommentsNotePath(filePath: string): boolean {
@@ -438,6 +503,10 @@ export default class SideNote2 extends Plugin {
 
     public async setPreferredAgentTarget(nextTargetInput: SideNote2AgentTarget | string): Promise<void> {
         await this.indexNoteSettingsController.setPreferredAgentTarget(nextTargetInput);
+    }
+
+    public async retryAgentRun(threadId: string): Promise<boolean> {
+        return this.commentAgentController.retryLatestRun(threadId);
     }
 
     public async shouldConfirmDelete(): Promise<boolean> {
@@ -471,6 +540,61 @@ export default class SideNote2 extends Plugin {
 
     public isLocalRuntime(): boolean {
         return this.runtime === "local";
+    }
+
+    public getVaultRootPath(): string | null {
+        return this.app.vault.adapter instanceof FileSystemAdapter
+            ? this.app.vault.adapter.getBasePath()
+            : null;
+    }
+
+    public getRuntimeWorkingDirectory(filePath: string): string | null {
+        if (!(this.app.vault.adapter instanceof FileSystemAdapter)) {
+            return null;
+        }
+
+        const vaultRootPath = this.app.vault.adapter.getBasePath();
+        const electronRequire = typeof window !== "undefined"
+            ? (window as Window & {
+                require?: (moduleName: string) => unknown;
+            }).require
+            : undefined;
+        if (typeof electronRequire !== "function") {
+            return vaultRootPath;
+        }
+
+        try {
+            const nodePath = electronRequire("node:path") as {
+                dirname(value: string): string;
+                join(...parts: string[]): string;
+            };
+            const nodeFs = electronRequire("node:fs") as {
+                existsSync(path: string): boolean;
+            };
+            const noteFullPath = this.app.vault.adapter.getFullPath(filePath);
+            let currentDirectory = nodePath.dirname(noteFullPath);
+            while (currentDirectory.startsWith(vaultRootPath)) {
+                if (nodeFs.existsSync(nodePath.join(currentDirectory, ".git"))) {
+                    return currentDirectory;
+                }
+
+                if (currentDirectory === vaultRootPath) {
+                    break;
+                }
+
+                const parentDirectory = nodePath.dirname(currentDirectory);
+                if (parentDirectory === currentDirectory) {
+                    break;
+                }
+                currentDirectory = parentDirectory;
+            }
+
+            return nodePath.dirname(noteFullPath).startsWith(vaultRootPath)
+                ? nodePath.dirname(noteFullPath)
+                : vaultRootPath;
+        } catch {
+            return vaultRootPath;
+        }
     }
 
     private showNotice(
@@ -792,6 +916,11 @@ export default class SideNote2 extends Plugin {
     private getKnownCommentById(commentId: string): Comment | null {
         return this.commentManager.getCommentById(commentId)
             ?? this.aggregateCommentIndex.getCommentById(commentId);
+    }
+
+    private getKnownThreadById(commentId: string): CommentThread | null {
+        return this.commentManager.getThreadById(commentId)
+            ?? this.aggregateCommentIndex.getThreadById(commentId);
     }
 
     private async loadKnownCommentSelectionTarget(

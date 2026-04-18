@@ -35,7 +35,7 @@ function isCommentableFilePath(path: string): boolean {
     return path.endsWith(".md") || path.endsWith(".pdf");
 }
 
-function createHost(options: { knownComments?: Comment[] } = {}) {
+function createHost(options: { knownComments?: Comment[]; threadIdsByCommentId?: Record<string, string> } = {}) {
     const draftCalls: Array<{ draft: DraftComment | null; hostFilePath?: string | null }> = [];
     const loadedFiles: string[] = [];
     const markedFiles: string[] = [];
@@ -51,6 +51,7 @@ function createHost(options: { knownComments?: Comment[] } = {}) {
             loadedFiles.push(file.path);
         },
         getKnownCommentById: (commentId) => knownComments.get(commentId) ?? null,
+        getKnownThreadIdByCommentId: (commentId) => options.threadIdsByCommentId?.[commentId] ?? null,
         markDraftFileActive: (file) => {
             markedFiles.push(file.path);
         },
@@ -202,7 +203,12 @@ test("comment entry controller can start an append-entry draft from a child entr
         orphaned: false,
         resolved: false,
     };
-    const host = createHost({ knownComments: [childComment] });
+    const host = createHost({
+        knownComments: [childComment],
+        threadIdsByCommentId: {
+            "entry-2": "thread-1",
+        },
+    });
 
     const started = await host.controller.startAppendEntryDraft("entry-2", "docs/host.md");
 
@@ -215,7 +221,7 @@ test("comment entry controller can start an append-entry draft from a child entr
     const draft = host.draftCalls[0].draft;
     assert.ok(draft);
     assert.equal(draft.id, "comment-1");
-    assert.equal(draft.threadId, "entry-2");
+    assert.equal(draft.threadId, "thread-1");
     assert.equal(draft.mode, "append");
     assert.equal(draft.filePath, childComment.filePath);
     assert.equal(draft.comment, "");
