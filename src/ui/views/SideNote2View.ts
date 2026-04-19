@@ -1613,20 +1613,9 @@ export default class SideNote2View extends ItemView {
     }
 
     private async deleteCommentWithConfirm(commentId: string) {
-        console.log("[SideNote2] sidebar.delete.begin", {
-            commentId,
-            showDeletedBefore: this.plugin.shouldShowDeletedComments(),
-            filePath: this.file?.path ?? null,
-        });
         if (this.plugin.shouldShowDeletedComments()) {
             await this.plugin.setShowDeletedComments(false);
-            console.log("[SideNote2] sidebar.delete.hideDeletedToggle", {
-                commentId,
-            });
         }
         await this.plugin.deleteComment(commentId);
-        console.log("[SideNote2] sidebar.delete.end", {
-            commentId,
-        });
     }
 }

@@ -472,16 +472,9 @@ function renderDeleteButton(
     deleteButton.setAttribute("aria-label", ariaLabel);
     host.setIcon(deleteButton, "trash-2");
     deleteButton.onclick = async (event) => {
-        console.log("[SideNote2] sidebar.delete.click", {
-            commentId,
-            ariaLabel,
-        });
         event.preventDefault();
         event.stopPropagation();
         await host.deleteCommentWithConfirm(commentId);
-        console.log("[SideNote2] sidebar.delete.click.completed", {
-            commentId,
-        });
     };
 }
 

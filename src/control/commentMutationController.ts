@@ -266,23 +266,13 @@ export class CommentMutationController {
 
     public async deleteComment(commentId: string): Promise<void> {
         void this.host.log?.("info", "draft", "thread.delete", { commentId });
-        console.log("[SideNote2] mutation.delete.begin", { commentId });
         const latestTarget = await this.loadLatestCommentTarget(commentId);
         if (!latestTarget) {
-            console.log("[SideNote2] mutation.delete.missing-target", { commentId });
             return;
         }
 
         this.host.getCommentManager().deleteComment(commentId, this.host.now());
-        console.log("[SideNote2] mutation.delete.after-manager", {
-            commentId,
-            filePath: latestTarget.file.path,
-        });
         await this.host.persistCommentsForFile(latestTarget.file, { immediateAggregateRefresh: true });
-        console.log("[SideNote2] mutation.delete.after-persist", {
-            commentId,
-            filePath: latestTarget.file.path,
-        });
     }
 
     public async restoreComment(commentId: string): Promise<void> {

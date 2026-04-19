@@ -27,10 +27,10 @@ export class StreamedAgentReplyController {
         labelClassName: string;
         labelText: string;
         statusClassName: string;
-        statusInnerHTML: string;
+        statusNodes: Node[];
         statusAriaLabel: string | null;
         statusTitle: string | null;
-        contentInnerHTML: string;
+        contentNodes: Node[];
     } | null = null;
 
     constructor(private readonly threadId: string) {}
@@ -244,10 +244,10 @@ export class StreamedAgentReplyController {
             labelClassName: this.labelEl?.className ?? "",
             labelText: this.labelEl?.textContent ?? "",
             statusClassName: this.statusEl?.className ?? "",
-            statusInnerHTML: this.statusEl?.innerHTML ?? "",
+            statusNodes: Array.from(this.statusEl?.childNodes ?? []).map((node) => node.cloneNode(true)),
             statusAriaLabel: this.statusEl?.getAttribute("aria-label") ?? null,
             statusTitle: this.statusEl?.getAttribute("title") ?? null,
-            contentInnerHTML: this.contentEl?.innerHTML ?? "",
+            contentNodes: Array.from(this.contentEl?.childNodes ?? []).map((node) => node.cloneNode(true)),
         };
     }
 
@@ -265,7 +265,7 @@ export class StreamedAgentReplyController {
         }
         if (this.statusEl) {
             this.statusEl.className = this.borrowedSnapshot.statusClassName;
-            this.statusEl.innerHTML = this.borrowedSnapshot.statusInnerHTML;
+            this.statusEl.replaceChildren(...this.borrowedSnapshot.statusNodes.map((node) => node.cloneNode(true)));
             if (this.borrowedSnapshot.statusAriaLabel) {
                 this.statusEl.setAttribute("aria-label", this.borrowedSnapshot.statusAriaLabel);
             } else {
@@ -278,7 +278,7 @@ export class StreamedAgentReplyController {
             }
         }
         if (this.contentEl) {
-            this.contentEl.innerHTML = this.borrowedSnapshot.contentInnerHTML;
+            this.contentEl.replaceChildren(...this.borrowedSnapshot.contentNodes.map((node) => node.cloneNode(true)));
         }
     }
 }

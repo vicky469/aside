@@ -417,17 +417,10 @@ export class CommentManager {
     }
 
     deleteComment(id: string, deletedAt: number = Date.now()) {
-        console.log("[SideNote2] manager.delete.begin", {
-            id,
-            deletedAt,
-        });
         this.purgeExpiredDeletedComments(deletedAt);
         const indexToDelete = this.threads.findIndex((thread) =>
             thread.id === id || thread.entries.some((entry) => entry.id === id));
         if (indexToDelete === -1) {
-            console.log("[SideNote2] manager.delete.not-found", {
-                id,
-            });
             return;
         }
 
@@ -435,30 +428,16 @@ export class CommentManager {
         if (thread.id === id) {
             thread.deletedAt = deletedAt;
             thread.updatedAt = Math.max(thread.updatedAt, deletedAt);
-            console.log("[SideNote2] manager.delete.thread-marked", {
-                id,
-                threadId: thread.id,
-                entryCount: thread.entries.length,
-            });
             return;
         }
 
         const entry = thread.entries.find((candidate) => candidate.id === id);
         if (!entry) {
-            console.log("[SideNote2] manager.delete.entry-missing", {
-                id,
-                threadId: thread.id,
-            });
             return;
         }
 
         entry.deletedAt = deletedAt;
         thread.updatedAt = Math.max(thread.updatedAt, deletedAt);
-        console.log("[SideNote2] manager.delete.entry-marked", {
-            id,
-            threadId: thread.id,
-            remainingEntries: thread.entries.length,
-        });
     }
 
     restoreComment(id: string, restoredAt: number = Date.now()) {

@@ -1,6 +1,5 @@
 import type { Comment, CommentThread } from "../commentManager";
 import {
-    cloneCommentThreads,
     commentToThread,
     threadToComment,
     cloneCommentThread,
