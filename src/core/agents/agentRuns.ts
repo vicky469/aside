@@ -9,6 +9,8 @@ export interface AgentRunStreamState {
     threadId: string;
     requestedAgent: SideNote2AgentTarget;
     status: AgentRunStatus;
+    statusText?: string;
+    statusHintText?: string;
     partialText: string;
     startedAt: number;
     updatedAt: number;

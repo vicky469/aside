@@ -2,7 +2,19 @@
 
 ## Status
 
-Draft plan
+Phase 1 in progress
+
+Implemented in current branch:
+
+- staged in-thread runtime status copy for active `@codex` runs
+- visible `Cancel` action on active run cards
+- delete -> cancel behavior so active runs stop immediately when their thread is deleted
+
+Still pending from this plan:
+
+- smarter default context packing
+- built-in SideNote2 runtime knowledge primer
+- cold-start reduction work
 
 Related docs:
 

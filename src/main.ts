@@ -243,6 +243,7 @@ export default class SideNote2 extends Plugin {
         getCommentManager: () => this.commentManager,
         getFileByPath: (filePath) => this.workspaceViewController.getFileByPath(filePath),
         isCommentableFile: (file): file is TFile => this.isCommentableFile(file),
+        getCurrentNoteContent: (file) => this.workspaceViewController.getCurrentNoteContent(file),
         loadCommentsForFile: (file) => this.loadCommentsForFile(file),
         appendThreadEntry: (
             threadId: string,
@@ -257,6 +258,8 @@ export default class SideNote2 extends Plugin {
         ): Promise<boolean> => this.commentMutationController.appendThreadEntry(threadId, entry, options),
         editComment: (commentId: string, newCommentText: string, options?: { skipCommentViewRefresh?: boolean }): Promise<boolean> =>
             this.commentMutationController.editComment(commentId, newCommentText, options),
+        deleteComment: (commentId: string, options?: { skipCommentViewRefresh?: boolean }): Promise<void> =>
+            this.commentMutationController.deleteComment(commentId, options),
         runAgentRuntime: (invocation) => runAgentRuntime(invocation),
         showNotice: (message) => {
             this.showNotice(message, "agents", "agents.notice");
@@ -522,6 +525,10 @@ export default class SideNote2 extends Plugin {
 
     public async retryAgentRun(runId: string): Promise<boolean> {
         return this.commentAgentController.retryRun(runId);
+    }
+
+    public async cancelAgentRun(runId: string): Promise<boolean> {
+        return this.commentAgentController.cancelRun(runId);
     }
 
     public async shouldConfirmDelete(): Promise<boolean> {
@@ -1041,6 +1048,7 @@ export default class SideNote2 extends Plugin {
     }
 
     async deleteComment(commentId: string) {
+        await this.commentAgentController.cancelRunsForComment(commentId);
         await this.commentMutationController.deleteComment(commentId);
     }
 

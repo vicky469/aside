@@ -3,8 +3,8 @@
   <img src="./assets/logo-readme.svg" alt="SideNote2 logo" width="72">
 </p>
 <p align="center">
-  <a href="https://github.com/vicky469/SideNote2/releases/tag/2.0.28">
-    <img src="https://img.shields.io/badge/beta-2.0.28-f97316?style=flat-square" alt="Current beta">
+  <a href="https://github.com/vicky469/SideNote2/releases/tag/2.0.29">
+    <img src="https://img.shields.io/badge/beta-2.0.29-f97316?style=flat-square" alt="Current beta">
   </a>
   <a href="https://buymeacoffee.com/vickyli">
     <img src="https://img.shields.io/badge/Buy%20me%20a%20coffee-support-FFDD00?style=flat-square&logo=buymeacoffee&logoColor=000000" alt="Buy Me a Coffee">

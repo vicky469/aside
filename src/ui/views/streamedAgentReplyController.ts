@@ -14,26 +14,38 @@ function createElement<K extends keyof HTMLElementTagNameMap>(
     return element;
 }
 
+type StreamedAgentReplyControllerOptions = {
+    onCancelRun?: (runId: string) => void;
+};
+
 export class StreamedAgentReplyController {
     private cardEl: HTMLDivElement | null = null;
     private metaValueEl: HTMLSpanElement | null = null;
     private contentEl: HTMLDivElement | null = null;
     private labelEl: HTMLSpanElement | null = null;
     private statusEl: HTMLSpanElement | null = null;
+    private actionsEl: HTMLDivElement | null = null;
     private runId: string | null = null;
     private ownsCard = false;
     private borrowedSnapshot: {
         metaText: string;
         labelClassName: string;
         labelText: string;
+        labelHidden: boolean;
+        labelDisplay: string;
         statusClassName: string;
         statusNodes: Node[];
         statusAriaLabel: string | null;
         statusTitle: string | null;
         contentNodes: Node[];
+        actionsClassName: string;
+        actionsNodes: Node[];
     } | null = null;
 
-    constructor(private readonly threadId: string) {}
+    constructor(
+        private readonly threadId: string,
+        private readonly options: StreamedAgentReplyControllerOptions = {},
+    ) {}
 
     public sync(containerEl: HTMLElement, stream: AgentRunStreamState): void {
         const threadEl = this.findThreadElement(containerEl);
@@ -48,24 +60,33 @@ export class StreamedAgentReplyController {
         const labelEl = this.labelEl;
         const statusEl = this.statusEl;
         const contentEl = this.contentEl;
+        const actionsEl = this.actionsEl;
         if (
             !(metaValueEl instanceof HTMLSpanElement)
             || !(labelEl instanceof HTMLSpanElement)
             || !(statusEl instanceof HTMLSpanElement)
             || !(contentEl instanceof HTMLDivElement)
+            || !(actionsEl instanceof HTMLDivElement)
         ) {
             return;
         }
+
         const metaText = formatSidebarCommentMeta({ timestamp: stream.startedAt });
         if (metaValueEl.textContent !== metaText) {
             metaValueEl.textContent = metaText;
         }
+
         const label = getAgentActorLabel(stream.requestedAgent);
         labelEl.className = `sidenote2-comment-author-indicator sidenote2-agent-stream-author is-${stream.requestedAgent}`;
         if (labelEl.textContent !== label) {
             labelEl.textContent = label;
         }
+        const hideAgentLabel = stream.status === "queued" || stream.status === "running";
+        labelEl.hidden = hideAgentLabel;
+        labelEl.style.display = hideAgentLabel ? "none" : "";
+
         this.syncStatus(statusEl, label, stream);
+        this.syncActions(actionsEl, stream);
 
         if (contentEl.textContent !== stream.partialText) {
             contentEl.textContent = stream.partialText;
@@ -86,15 +107,17 @@ export class StreamedAgentReplyController {
             this.cardEl?.remove();
         } else {
             this.restoreBorrowedCard();
-            this.cardEl?.classList.remove("sidenote2-agent-stream-active", "is-empty");
+            this.cardEl?.classList.remove("sidenote2-agent-stream-active", "sidenote2-agent-stream-item", "is-empty");
             this.cardEl?.removeAttribute("data-agent-run-id");
             this.cardEl?.removeAttribute("data-agent-output-entry-id");
         }
+
         this.cardEl = null;
         this.metaValueEl = null;
         this.contentEl = null;
         this.labelEl = null;
         this.statusEl = null;
+        this.actionsEl = null;
         this.runId = null;
         this.ownsCard = false;
         this.borrowedSnapshot = null;
@@ -102,6 +125,9 @@ export class StreamedAgentReplyController {
 
     private syncStatus(statusEl: HTMLSpanElement, label: string, stream: AgentRunStreamState): void {
         const presentation = getAgentRunStatusPresentation(stream.status);
+        const statusText = stream.statusText?.trim() || null;
+        const statusHintText = stream.statusHintText?.trim() || null;
+        const shouldShowStatusText = stream.status !== "running" && stream.status !== "queued";
         statusEl.className = `sidenote2-agent-run-status is-${stream.status}`;
         statusEl.replaceChildren();
 
@@ -112,13 +138,48 @@ export class StreamedAgentReplyController {
             markEl.setAttribute("aria-hidden", "true");
         }
         statusEl.appendChild(markEl);
-        statusEl.setAttribute("aria-label", `${label} ${stream.status}`);
+
+        if (shouldShowStatusText && statusText) {
+            const textEl = createElement("span", "sidenote2-agent-run-status-text");
+            textEl.textContent = statusText;
+            statusEl.appendChild(textEl);
+        }
+
+        if (statusHintText) {
+            const hintEl = createElement("span", "sidenote2-agent-run-status-hint");
+            hintEl.textContent = statusHintText;
+            statusEl.appendChild(hintEl);
+        }
+
+        const accessibleStatus = [statusHintText, statusText ?? stream.status].filter(Boolean).join(". ");
+        statusEl.setAttribute("aria-label", `${label} ${accessibleStatus}`);
         if (stream.error) {
             statusEl.setAttribute("title", stream.error);
             return;
         }
 
         statusEl.removeAttribute("title");
+    }
+
+    private syncActions(actionsEl: HTMLDivElement, stream: AgentRunStreamState): void {
+        actionsEl.replaceChildren();
+        if (
+            !this.options.onCancelRun
+            || (stream.status !== "queued" && stream.status !== "running")
+        ) {
+            return;
+        }
+
+        const cancelButton = actionsEl.createEl("button", {
+            cls: "sidenote2-agent-stream-cancel-button",
+            text: "Cancel",
+        });
+        cancelButton.setAttribute("type", "button");
+        cancelButton.onclick = (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            this.options.onCancelRun?.(stream.runId);
+        };
     }
 
     private findThreadElement(containerEl: HTMLElement): HTMLDivElement | null {
@@ -148,8 +209,6 @@ export class StreamedAgentReplyController {
                 || this.cardEl.closest(`.sidenote2-thread-stack[data-thread-id="${this.threadId}"]`) === threadEl
             );
         if (isCardConnected) {
-            // Verify this card still matches the stream's target. If the stream now targets a
-            // different outputEntryId (e.g. regenerating a different entry), we must re-attach.
             const cardCommentId = this.cardEl!.getAttribute("data-comment-id");
             const cardRunId = this.cardEl!.getAttribute("data-agent-run-id");
             const targetMatches = outputEntryId
@@ -158,7 +217,7 @@ export class StreamedAgentReplyController {
             if (targetMatches) {
                 return this.cardEl!;
             }
-            // Card doesn't match — fall through to find/create the correct one.
+
             this.clear();
         }
 
@@ -171,12 +230,14 @@ export class StreamedAgentReplyController {
                 const labelEl = persisted.querySelector(".sidenote2-comment-author-indicator");
                 const statusEl = persisted.querySelector(".sidenote2-agent-run-status");
                 const contentEl = persisted.querySelector(".sidenote2-comment-content");
+                const actionsEl = persisted.querySelector(".sidenote2-comment-actions");
                 this.metaValueEl = metaValueEl instanceof HTMLSpanElement ? metaValueEl : null;
                 this.labelEl = labelEl instanceof HTMLSpanElement ? labelEl : null;
                 this.statusEl = statusEl instanceof HTMLSpanElement ? statusEl : null;
                 this.contentEl = contentEl instanceof HTMLDivElement ? contentEl : null;
+                this.actionsEl = actionsEl instanceof HTMLDivElement ? actionsEl : null;
                 this.captureBorrowedCardSnapshot();
-                persisted.classList.add("sidenote2-agent-stream-active");
+                persisted.classList.add("sidenote2-agent-stream-active", "sidenote2-agent-stream-item");
                 return persisted;
             }
         }
@@ -190,10 +251,12 @@ export class StreamedAgentReplyController {
                 const labelEl = existing.querySelector(".sidenote2-agent-stream-author");
                 const statusEl = existing.querySelector(".sidenote2-agent-run-status");
                 const contentEl = existing.querySelector(".sidenote2-agent-stream-content");
+                const actionsEl = existing.querySelector(".sidenote2-comment-actions");
                 this.metaValueEl = metaValueEl instanceof HTMLSpanElement ? metaValueEl : null;
                 this.labelEl = labelEl instanceof HTMLSpanElement ? labelEl : null;
                 this.statusEl = statusEl instanceof HTMLSpanElement ? statusEl : null;
                 this.contentEl = contentEl instanceof HTMLDivElement ? contentEl : null;
+                this.actionsEl = actionsEl instanceof HTMLDivElement ? actionsEl : null;
                 return existing;
             }
         }
@@ -206,7 +269,8 @@ export class StreamedAgentReplyController {
         metaEl.appendChild(metaValueEl);
         headerMainEl.appendChild(metaEl);
         headerEl.appendChild(headerMainEl);
-        headerEl.appendChild(createElement("div", "sidenote2-comment-actions sidenote2-agent-stream-actions"));
+        const actionsEl = createElement("div", "sidenote2-comment-actions sidenote2-agent-stream-actions");
+        headerEl.appendChild(actionsEl);
         const contentEl = createElement("div", "sidenote2-comment-content sidenote2-agent-stream-content");
         const footerEl = createElement("div", "sidenote2-thread-footer");
         const footerMetaEl = createElement("div", "sidenote2-thread-footer-meta");
@@ -230,6 +294,7 @@ export class StreamedAgentReplyController {
         this.labelEl = labelEl;
         this.statusEl = statusEl;
         this.contentEl = contentEl;
+        this.actionsEl = actionsEl;
         return cardEl;
     }
 
@@ -243,11 +308,15 @@ export class StreamedAgentReplyController {
             metaText: this.metaValueEl?.textContent ?? "",
             labelClassName: this.labelEl?.className ?? "",
             labelText: this.labelEl?.textContent ?? "",
+            labelHidden: this.labelEl?.hidden ?? false,
+            labelDisplay: this.labelEl?.style.display ?? "",
             statusClassName: this.statusEl?.className ?? "",
             statusNodes: Array.from(this.statusEl?.childNodes ?? []).map((node) => node.cloneNode(true)),
             statusAriaLabel: this.statusEl?.getAttribute("aria-label") ?? null,
             statusTitle: this.statusEl?.getAttribute("title") ?? null,
             contentNodes: Array.from(this.contentEl?.childNodes ?? []).map((node) => node.cloneNode(true)),
+            actionsClassName: this.actionsEl?.className ?? "",
+            actionsNodes: Array.from(this.actionsEl?.childNodes ?? []).map((node) => node.cloneNode(true)),
         };
     }
 
@@ -262,6 +331,8 @@ export class StreamedAgentReplyController {
         if (this.labelEl) {
             this.labelEl.className = this.borrowedSnapshot.labelClassName;
             this.labelEl.textContent = this.borrowedSnapshot.labelText;
+            this.labelEl.hidden = this.borrowedSnapshot.labelHidden;
+            this.labelEl.style.display = this.borrowedSnapshot.labelDisplay;
         }
         if (this.statusEl) {
             this.statusEl.className = this.borrowedSnapshot.statusClassName;
@@ -279,6 +350,10 @@ export class StreamedAgentReplyController {
         }
         if (this.contentEl) {
             this.contentEl.replaceChildren(...this.borrowedSnapshot.contentNodes.map((node) => node.cloneNode(true)));
+        }
+        if (this.actionsEl) {
+            this.actionsEl.className = this.borrowedSnapshot.actionsClassName;
+            this.actionsEl.replaceChildren(...this.borrowedSnapshot.actionsNodes.map((node) => node.cloneNode(true)));
         }
     }
 }

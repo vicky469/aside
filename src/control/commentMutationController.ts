@@ -264,7 +264,7 @@ export class CommentMutationController {
         return true;
     }
 
-    public async deleteComment(commentId: string): Promise<void> {
+    public async deleteComment(commentId: string, options: PersistOptions = {}): Promise<void> {
         void this.host.log?.("info", "draft", "thread.delete", { commentId });
         const latestTarget = await this.loadLatestCommentTarget(commentId);
         if (!latestTarget) {
@@ -272,7 +272,10 @@ export class CommentMutationController {
         }
 
         this.host.getCommentManager().deleteComment(commentId, this.host.now());
-        await this.host.persistCommentsForFile(latestTarget.file, { immediateAggregateRefresh: true });
+        await this.host.persistCommentsForFile(latestTarget.file, {
+            immediateAggregateRefresh: true,
+            skipCommentViewRefresh: options.skipCommentViewRefresh,
+        });
     }
 
     public async restoreComment(commentId: string): Promise<void> {

@@ -43,8 +43,13 @@ async function waitForAgentQueueToDrain(controller: CommentAgentController): Pro
     }
 }
 
+function squashConsecutiveValues<T>(values: T[]): T[] {
+    return values.filter((value, index) => index === 0 || values[index - 1] !== value);
+}
+
 function createHarness(options: {
     runtimeWorkingDirectory?: string | null;
+    currentNoteContent?: string;
     runtimeReplyText?: string;
     runtimeError?: Error;
     runtimeStreamTexts?: string[];
@@ -55,6 +60,8 @@ function createHarness(options: {
         prompt: string;
         cwd: string;
         onPartialText?: (partialText: string) => void;
+        onProgressText?: (progressText: string) => void;
+        abortSignal?: AbortSignal;
     }) => Promise<{ runtime: "direct-cli"; replyText: string }>;
 } = {}) {
     let persistedData: PersistedPluginData = {};
@@ -87,6 +94,7 @@ function createHarness(options: {
         getCommentManager: () => commentManager,
         getFileByPath: () => file,
         isCommentableFile: (candidate): candidate is TFile => !!candidate,
+        getCurrentNoteContent: async () => options.currentNoteContent ?? "",
         loadCommentsForFile: async () => undefined,
         appendThreadEntry: async (threadId, entry) => {
             appendedEntries.push({ threadId, body: entry.body });
@@ -97,6 +105,9 @@ function createHarness(options: {
             editedEntries.push({ commentId, body: newCommentText });
             commentManager.editComment(commentId, newCommentText);
             return true;
+        },
+        deleteComment: async (commentId) => {
+            commentManager.deleteComment(commentId, now);
         },
         runAgentRuntime: async (invocation) => {
             runtimeCalls.push(invocation);
@@ -291,6 +302,46 @@ test("comment agent controller uses the resolved working directory for runtime e
     assert.equal(harness.runtimeCalls[0]?.cwd, "/vault/SideNote2");
 });
 
+test("comment agent controller packs note path, section context, and transcript into the runtime prompt", async () => {
+    const harness = createHarness({
+        currentNoteContent: [
+            "# Project",
+            "",
+            "Overview",
+            "",
+            "## Focus",
+            "",
+            "Alpha detail",
+            "Beta detail",
+            "",
+            "## Later",
+            "",
+            "Gamma detail",
+        ].join("\n"),
+        initialComments: [createComment({
+            anchorKind: "page",
+            startLine: 4,
+            comment: "@codex summarize the focus section",
+        })],
+    });
+
+    await harness.controller.handleSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "@codex summarize the focus section",
+    });
+    await waitForAgentQueueToDrain(harness.controller);
+
+    const prompt = harness.runtimeCalls[0]?.prompt ?? "";
+    assert.match(prompt, /Current note path: Folder\/Note\.md/);
+    assert.match(prompt, /Context scope: section/);
+    assert.match(prompt, /Local section:\n<<<\n## Focus\n\nAlpha detail\nBeta detail\n>>>/);
+    assert.match(prompt, /Thread transcript:\n- You \(current\): @codex summarize the focus section/);
+    assert.match(prompt, /Current request:\n<<<\n@codex summarize the focus section\n>>>/);
+    assert.doesNotMatch(prompt, /Gamma detail/);
+});
+
 test("comment agent controller keeps the final stream card in place when a run succeeds", async () => {
     let releaseRuntime: () => void = () => {
         throw new Error("Expected runtime release callback to be set.");
@@ -322,7 +373,7 @@ test("comment agent controller keeps the final stream card in place when a run s
 
     await new Promise((resolve) => setTimeout(resolve, 120));
     assert.equal(harness.controller.getActiveAgentStreamForThread("thread-1")?.partialText, "Hello");
-    assert.deepEqual(streamUpdates.slice(0, 2), ["", "Hello"]);
+    assert.deepEqual(squashConsecutiveValues(streamUpdates).slice(0, 2), ["", "Hello"]);
     assert.equal(harness.controller.getActiveAgentStreamForThread("thread-1")?.partialText, "Hello");
     assert.equal(harness.getRefreshCount(), 2);
 
@@ -332,8 +383,173 @@ test("comment agent controller keeps the final stream card in place when a run s
 
     const finalStream = harness.controller.getActiveAgentStreamForThread("thread-1");
     assert.equal(finalStream, null);
-    assert.deepEqual(streamUpdates, ["", "Hello", "Hello there", "Hello there", null]);
+    assert.deepEqual(squashConsecutiveValues(streamUpdates), ["", "Hello", "Hello there", null]);
     assert.equal(harness.getRefreshCount(), 3);
+});
+
+test("comment agent controller keeps running streams free of stage labels", async () => {
+    let releaseRuntime: () => void = () => {
+        throw new Error("Expected runtime release callback to be set.");
+    };
+    const statusUpdates: Array<string | null> = [];
+    const harness = createHarness({
+        customRunAgentRuntime: async (invocation) => {
+            await new Promise<void>((resolve) => {
+                releaseRuntime = () => resolve();
+            });
+            invocation.onPartialText?.("Draft reply");
+            return {
+                runtime: "direct-cli",
+                replyText: "Draft reply",
+            };
+        },
+    });
+    const unsubscribe = harness.controller.subscribeToStreamUpdates((update) => {
+        statusUpdates.push(update.stream?.statusText ?? null);
+    });
+
+    await harness.controller.handleSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "@codex stage this",
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    assert.deepEqual(squashConsecutiveValues(statusUpdates), [null]);
+
+    releaseRuntime();
+    await waitForAgentQueueToDrain(harness.controller);
+    unsubscribe();
+
+    assert.equal(harness.controller.getLatestAgentRunForThread("thread-1")?.status, "succeeded");
+});
+
+test("comment agent controller shows real progress text while the runtime is still working", async () => {
+    let releaseRuntime: () => void = () => {
+        throw new Error("Expected runtime release callback to be set.");
+    };
+    const hintUpdates: Array<string | null> = [];
+    const harness = createHarness({
+        customRunAgentRuntime: async (invocation) => {
+            invocation.onProgressText?.("Reviewing the surrounding section");
+            await new Promise<void>((resolve) => {
+                releaseRuntime = () => resolve();
+            });
+            invocation.onPartialText?.("Draft reply");
+            return {
+                runtime: "direct-cli",
+                replyText: "Draft reply",
+            };
+        },
+    });
+    const unsubscribe = harness.controller.subscribeToStreamUpdates((update) => {
+        hintUpdates.push(update.stream?.statusHintText ?? null);
+    });
+
+    await harness.controller.handleSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "@codex show progress",
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    assert.equal(
+        harness.controller.getActiveAgentStreamForThread("thread-1")?.statusHintText,
+        "Reviewing the surrounding section",
+    );
+    assert.ok(hintUpdates.includes("Reviewing the surrounding section"));
+
+    releaseRuntime();
+    await waitForAgentQueueToDrain(harness.controller);
+    unsubscribe();
+});
+
+test("comment agent controller cancels a running run without reviving the stream", async () => {
+    let waitForAbort: Promise<void> | null = null;
+    const harness = createHarness({
+        customRunAgentRuntime: async (invocation) => {
+            invocation.onPartialText?.("Partial answer");
+            waitForAbort = new Promise<void>((resolve) => {
+                invocation.abortSignal?.addEventListener("abort", () => resolve(), { once: true });
+            });
+            await waitForAbort;
+            throw new Error("Runtime cancelled");
+        },
+    });
+
+    await harness.controller.handleSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "@codex cancel this",
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    assert.equal(harness.controller.getActiveAgentStreamForThread("thread-1")?.partialText, "Partial answer");
+
+    const cancelled = await harness.controller.cancelRun("generated-1");
+    await new Promise((resolve) => setTimeout(resolve, 40));
+
+    assert.equal(cancelled, true);
+    assert.equal(waitForAbort !== null, true);
+    assert.equal(harness.controller.getActiveAgentStreamForThread("thread-1")?.status, "cancelled");
+    assert.equal(harness.controller.getActiveAgentStreamForThread("thread-1")?.statusText, "Cancelled");
+    assert.equal(harness.controller.getLatestAgentRunForThread("thread-1")?.status, "cancelled");
+    assert.equal(harness.commentManager.getCommentById("generated-2")?.comment, "Partial answer");
+});
+
+test("comment agent controller keeps the cancelled reply card when no text has streamed yet", async () => {
+    const harness = createHarness({
+        customRunAgentRuntime: async (invocation) => {
+            await new Promise<void>((resolve) => {
+                invocation.abortSignal?.addEventListener("abort", () => resolve(), { once: true });
+            });
+            throw new Error("Runtime cancelled");
+        },
+    });
+
+    await harness.controller.handleSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "@codex cancel before reply",
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    const cancelled = await harness.controller.cancelRun("generated-1");
+    await new Promise((resolve) => setTimeout(resolve, 40));
+
+    assert.equal(cancelled, true);
+    assert.equal(harness.controller.getActiveAgentStreamForThread("thread-1")?.status, "cancelled");
+    assert.equal(harness.commentManager.getCommentById("generated-2")?.comment, "");
+    assert.equal(harness.controller.getLatestAgentRunForThread("thread-1")?.status, "cancelled");
+});
+
+test("comment agent controller marks thread runs cancelled before delete flow continues", async () => {
+    const harness = createHarness({
+        customRunAgentRuntime: async (invocation) => {
+            await new Promise<void>((resolve) => {
+                invocation.abortSignal?.addEventListener("abort", () => resolve(), { once: true });
+            });
+            throw new Error("Runtime cancelled");
+        },
+    });
+
+    await harness.controller.handleSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "@codex remove this",
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    await harness.controller.cancelRunsForComment("thread-1");
+    await new Promise((resolve) => setTimeout(resolve, 40));
+
+    assert.equal(harness.controller.getActiveAgentStreamForThread("thread-1")?.status, "cancelled");
+    assert.equal(harness.controller.getLatestAgentRunForThread("thread-1")?.status, "cancelled");
 });
 
 test("comment agent controller refreshes views only after the stream targets the persisted reply entry", async () => {
@@ -384,7 +600,10 @@ test("comment agent controller does not synthesize transient stream text when th
     await waitForAgentQueueToDrain(harness.controller);
     unsubscribe();
 
-    assert.deepEqual(streamUpdates, ["", Array.from({ length: 12 }, (_value, index) => `Line ${index + 1}`).join("\n"), null]);
+    assert.deepEqual(
+        squashConsecutiveValues(streamUpdates),
+        ["", Array.from({ length: 12 }, (_value, index) => `Line ${index + 1}`).join("\n"), null],
+    );
     assert.equal(harness.appendedEntries[0]?.body, "");
     assert.equal(harness.editedEntries[0]?.body, Array.from({ length: 12 }, (_value, index) => `Line ${index + 1}`).join("\n"));
     assert.equal(harness.getRefreshCount(), 3);

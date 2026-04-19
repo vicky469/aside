@@ -66,6 +66,8 @@ export interface AgentRuntimeInvocation {
     prompt: string;
     cwd: string;
     onPartialText?: (partialText: string) => void;
+    onProgressText?: (progressText: string) => void;
+    abortSignal?: AbortSignal;
 }
 
 export interface AgentRuntimeResult {
@@ -77,6 +79,18 @@ export type CodexRuntimeDiagnostics = {
     status: "checking" | "available" | "missing" | "unsupported" | "unavailable";
     message: string;
 };
+
+export class AgentRuntimeCancelledError extends Error {
+    constructor(message: string = "Agent execution cancelled.") {
+        super(message);
+        this.name = "AgentRuntimeCancelledError";
+    }
+}
+
+export function isAgentRuntimeCancelledError(error: unknown): error is AgentRuntimeCancelledError {
+    return error instanceof AgentRuntimeCancelledError
+        || (error instanceof Error && error.name === "AgentRuntimeCancelledError");
+}
 
 type JsonRpcRequestMessage = {
     id: string;
@@ -388,6 +402,100 @@ export function extractCodexTextDeltaFromJsonEvent(event: unknown): string | nul
         ?? joinTextContentItems(getNestedValue(event, ["contentItems"]));
 }
 
+function normalizeProgressText(value: string): string | null {
+    const normalized = value.replace(/\s+/gu, " ").trim();
+    if (!normalized) {
+        return null;
+    }
+
+    if (normalized.length <= 140) {
+        return normalized;
+    }
+
+    return `${normalized.slice(0, 137).trimEnd()}...`;
+}
+
+function extractPlanProgressText(params: unknown): string | null {
+    const explanation = firstStringAtPaths(params, [["explanation"]]);
+    if (explanation) {
+        return normalizeProgressText(explanation);
+    }
+
+    const plan = getNestedValue(params, ["plan"]);
+    if (!Array.isArray(plan)) {
+        return null;
+    }
+
+    for (const step of plan) {
+        if (isRecord(step) && step.status === "inProgress" && typeof step.step === "string") {
+            return normalizeProgressText(step.step);
+        }
+    }
+
+    for (const step of plan) {
+        if (isRecord(step) && typeof step.step === "string") {
+            return normalizeProgressText(step.step);
+        }
+    }
+
+    return null;
+}
+
+export function extractCodexProgressTextFromJsonEvent(event: unknown): string | null {
+    const eventKey = firstStringAtPaths(event, [
+        ["method"],
+        ["msg"],
+        ["event_type"],
+        ["type"],
+    ]);
+    if (!eventKey) {
+        return null;
+    }
+
+    switch (eventKey) {
+        case "item/reasoning/summaryTextDelta":
+            return normalizeProgressText(firstStringAtPaths(event, [
+                ["params", "delta"],
+                ["delta"],
+            ]) ?? "");
+        case "turn/plan/updated":
+            return extractPlanProgressText(getNestedValue(event, ["params"]));
+        default:
+            return null;
+    }
+}
+
+function extractCodexProgressTextFromThreadItem(item: unknown): string | null {
+    if (!isRecord(item) || typeof item.type !== "string") {
+        return null;
+    }
+
+    switch (item.type) {
+        case "commandExecution": {
+            const command = typeof item.command === "string" ? item.command : "";
+            return normalizeProgressText(command ? `Running ${command}` : "Running command");
+        }
+        case "fileChange": {
+            const changeCount = Array.isArray(item.changes) ? item.changes.length : 0;
+            return changeCount > 1 ? `Updating ${changeCount} files` : "Updating file";
+        }
+        case "mcpToolCall": {
+            const tool = typeof item.tool === "string" ? item.tool : "tool";
+            return normalizeProgressText(`Calling ${tool}`);
+        }
+        case "dynamicToolCall": {
+            const tool = typeof item.tool === "string" ? item.tool : "tool";
+            return normalizeProgressText(`Using ${tool}`);
+        }
+        case "webSearch": {
+            const query = typeof item.query === "string" ? item.query : "";
+            return normalizeProgressText(query ? `Searching ${query}` : "Searching");
+        }
+        default:
+            return null;
+    }
+}
+
 export async function resolveAgentExecutionEnv(
     modules: NodeModules,
     baseEnv: ExecEnv = getBaseProcessEnv(),
@@ -623,6 +731,10 @@ async function runCodexDirect(
     modules: NodeModules,
     invocation: AgentRuntimeInvocation,
 ): Promise<AgentRuntimeResult> {
+    if (invocation.abortSignal?.aborted) {
+        throw new AgentRuntimeCancelledError();
+    }
+
     const childProcess = await spawnInteractiveAgentRuntimeProcess(
         modules,
         "codex",
@@ -642,6 +754,8 @@ async function runCodexDirect(
         let activeAgentMessageItemId: string | null = null;
         let streamedText = "";
         let finalText: string | null = null;
+        const reasoningSummaryBuffers = new Map<string, string>();
+        let abortHandler: (() => void) | null = null;
         const pendingResponses = new Map<string, {
             resolve: (value: unknown) => void;
             reject: (error: Error) => void;
@@ -649,6 +763,10 @@ async function runCodexDirect(
 
         const cleanup = () => {
             activeAgentRuntimeProcesses.delete(childProcess);
+            if (invocation.abortSignal && abortHandler) {
+                invocation.abortSignal.removeEventListener("abort", abortHandler);
+                abortHandler = null;
+            }
         };
 
         const finalizeError = (error: unknown) => {
@@ -768,7 +886,12 @@ async function runCodexDirect(
                         return;
                     }
 
-                    handleItemMessage(isRecord(params) ? params.item : undefined);
+                    const item = isRecord(params) ? params.item : undefined;
+                    handleItemMessage(item);
+                    const progressText = extractCodexProgressTextFromThreadItem(item);
+                    if (progressText) {
+                        invocation.onProgressText?.(progressText);
+                    }
                     return;
                 }
                 case "item/agentMessage/delta": {
@@ -779,6 +902,41 @@ async function runCodexDirect(
 
                     streamedText += delta;
                     invocation.onPartialText?.(sanitizeAgentReplyText(streamedText));
+                    return;
+                }
+                case "item/reasoning/summaryTextDelta": {
+                    if (!matchesCodexThreadTurnContext(activeThreadId, activeTurnId, params)) {
+                        return;
+                    }
+
+                    const delta = extractCodexProgressTextFromJsonEvent(message);
+                    if (!delta) {
+                        return;
+                    }
+
+                    const itemId = firstStringAtPaths(params, [["itemId"]]) ?? "reasoning";
+                    const summaryIndexValue = getNestedValue(params, ["summaryIndex"]);
+                    const summaryIndex = typeof summaryIndexValue === "string" || typeof summaryIndexValue === "number"
+                        ? String(summaryIndexValue)
+                        : "0";
+                    const bufferKey = `${itemId}:${summaryIndex}`;
+                    const nextText = `${reasoningSummaryBuffers.get(bufferKey) ?? ""}${delta}`;
+                    reasoningSummaryBuffers.set(bufferKey, nextText);
+                    const progressText = normalizeProgressText(nextText);
+                    if (progressText) {
+                        invocation.onProgressText?.(progressText);
+                    }
+                    return;
+                }
+                case "turn/plan/updated": {
+                    if (!matchesCodexThreadTurnContext(activeThreadId, activeTurnId, params)) {
+                        return;
+                    }
+
+                    const progressText = extractCodexProgressTextFromJsonEvent(message);
+                    if (progressText) {
+                        invocation.onProgressText?.(progressText);
+                    }
                     return;
                 }
                 case "item/completed": {
@@ -885,6 +1043,17 @@ async function runCodexDirect(
             ));
         });
 
+        if (invocation.abortSignal) {
+            abortHandler = () => {
+                finalizeError(new AgentRuntimeCancelledError());
+            };
+            invocation.abortSignal.addEventListener("abort", abortHandler, { once: true });
+            if (invocation.abortSignal.aborted) {
+                abortHandler();
+                return;
+            }
+        }
+
         void (async () => {
             try {
                 await sendRequest("initialize", {
@@ -903,14 +1072,12 @@ async function runCodexDirect(
                             "item/fileChange/outputDelta",
                             "item/plan/delta",
                             "item/reasoning/summaryPartAdded",
-                            "item/reasoning/summaryTextDelta",
                             "item/reasoning/textDelta",
                             "mcpServer/startupStatus/updated",
                             "thread/started",
                             "thread/status/changed",
                             "thread/tokenUsage/updated",
                             "turn/diff/updated",
-                            "turn/plan/updated",
                         ],
                     },
                 });

@@ -1,6 +1,7 @@
 import * as assert from "node:assert/strict";
 import test from "node:test";
 import {
+    extractCodexProgressTextFromJsonEvent,
     extractCodexTextDeltaFromJsonEvent,
     getCodexRuntimeDiagnostics,
     resetResolvedAgentExecutionEnvForTests,
@@ -183,6 +184,31 @@ test("extractCodexTextDeltaFromJsonEvent reads assistant deltas from exec json e
             },
         }),
         null,
+    );
+});
+
+test("extractCodexProgressTextFromJsonEvent reads reasoning summaries and plan updates", () => {
+    assert.equal(
+        extractCodexProgressTextFromJsonEvent({
+            method: "item/reasoning/summaryTextDelta",
+            params: {
+                delta: "Reviewing nearby headings",
+            },
+        }),
+        "Reviewing nearby headings",
+    );
+    assert.equal(
+        extractCodexProgressTextFromJsonEvent({
+            method: "turn/plan/updated",
+            params: {
+                explanation: null,
+                plan: [
+                    { step: "Inspect the current section", status: "completed" },
+                    { step: "Draft the reply", status: "inProgress" },
+                ],
+            },
+        }),
+        "Draft the reply",
     );
 });
 

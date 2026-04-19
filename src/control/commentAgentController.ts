@@ -2,6 +2,7 @@ import type { TFile } from "obsidian";
 import type { CommentManager } from "../commentManager";
 import {
     cloneAgentRunStreamState,
+    getAgentRunsForCommentThread,
     getLatestAgentRunForThread,
     getQueuedAgentRuns,
     type AgentRunRecord,
@@ -15,6 +16,8 @@ import {
 import type { SideNote2AgentTarget } from "../core/config/agentTargets";
 import { parseAgentDirectives } from "../core/text/agentDirectives";
 import { AgentRunStore } from "./agentRunStore";
+import { isAgentRuntimeCancelledError } from "./agentRuntimeAdapter";
+import { buildAgentPromptContext } from "./agentPromptContextPlanner";
 
 export interface SavedUserEntryEvent {
     threadId: string;
@@ -41,6 +44,7 @@ export interface CommentAgentHost {
     getCommentManager(): CommentManager;
     getFileByPath(filePath: string): TFile | null;
     isCommentableFile(file: TFile | null): file is TFile;
+    getCurrentNoteContent(file: TFile): Promise<string>;
     loadCommentsForFile(file: TFile): Promise<unknown>;
     appendThreadEntry(
         threadId: string,
@@ -54,11 +58,14 @@ export interface CommentAgentHost {
         },
     ): Promise<boolean>;
     editComment(commentId: string, newCommentText: string, options?: { skipCommentViewRefresh?: boolean }): Promise<boolean>;
+    deleteComment(commentId: string, options?: { skipCommentViewRefresh?: boolean }): Promise<void>;
     runAgentRuntime(invocation: {
         target: SideNote2AgentTarget;
         prompt: string;
         cwd: string;
         onPartialText?: (partialText: string) => void;
+        onProgressText?: (progressText: string) => void;
+        abortSignal?: AbortSignal;
     }): Promise<AgentRuntimeResponse>;
     showNotice(message: string): void;
     log?(level: "info" | "warn" | "error", area: string, event: string, payload?: Record<string, unknown>): Promise<void>;
@@ -70,6 +77,15 @@ const AGENT_RETRY_NOTICE = `Retry requires a single explicit ${PRIMARY_SUPPORTED
 const AGENT_PENDING_SESSION_NOTICE = "The previous SideNote2 agent run did not finish. Retry the thread to run it again.";
 const AGENT_DESKTOP_RUNTIME_NOTICE = "Agent execution requires desktop Obsidian with a filesystem-backed vault.";
 const AGENT_REGENERATE_REPLACE_FAILED_NOTICE = "Unable to replace the previous agent reply.";
+const AGENT_CANCELLED_NOTICE = "Cancelled.";
+const AGENT_STATUS_CANCELLED = "Cancelled";
+
+interface ActiveRunExecution {
+    runId: string;
+    threadId: string;
+    abortController: AbortController;
+    cancelRequested: boolean;
+}
 
 function summarizeError(error: unknown): string {
     if (error instanceof Error && error.message.trim()) {
@@ -87,6 +103,7 @@ export class CommentAgentController {
     private readonly runStreams = new Map<string, AgentRunStreamState>();
     private readonly runStreamPruneTimers = new Map<string, ReturnType<typeof setTimeout>>();
     private readonly streamListeners = new Set<AgentStreamListener>();
+    private readonly activeRunExecutions = new Map<string, ActiveRunExecution>();
 
     constructor(
         private readonly host: CommentAgentHost,
@@ -135,6 +152,11 @@ export class CommentAgentController {
             clearTimeout(timer);
         }
         this.runStreamPruneTimers.clear();
+        for (const execution of this.activeRunExecutions.values()) {
+            execution.cancelRequested = true;
+            execution.abortController.abort();
+        }
+        this.activeRunExecutions.clear();
         this.runStreams.clear();
     }
 
@@ -211,6 +233,73 @@ export class CommentAgentController {
         return true;
     }
 
+    public async cancelRun(runId: string): Promise<boolean> {
+        const run = this.store.getRunById(runId);
+        if (!run || (run.status !== "queued" && run.status !== "running")) {
+            return false;
+        }
+
+        const execution = this.activeRunExecutions.get(runId);
+        if (execution) {
+            execution.cancelRequested = true;
+            execution.abortController.abort();
+        }
+
+        const existingStream = this.runStreams.get(runId);
+        const partialText = existingStream?.partialText.trim().length
+            ? existingStream.partialText
+            : "";
+        if (run.outputEntryId) {
+            if (partialText) {
+                await this.host.editComment(run.outputEntryId, partialText, { skipCommentViewRefresh: true });
+            }
+        }
+
+        const cancelledRun = await this.store.updateRun(runId, (currentRun) => ({
+            ...currentRun,
+            status: "cancelled",
+            endedAt: this.host.now(),
+            error: AGENT_CANCELLED_NOTICE,
+        }));
+        if (cancelledRun) {
+            this.setRunStream(this.buildRunStreamState(cancelledRun, {
+                status: "cancelled",
+                statusText: AGENT_STATUS_CANCELLED,
+                partialText,
+                startedAt: cancelledRun.startedAt ?? run.createdAt,
+                updatedAt: cancelledRun.endedAt ?? this.host.now(),
+                outputEntryId: cancelledRun.outputEntryId,
+                error: AGENT_CANCELLED_NOTICE,
+            }));
+        } else {
+            this.clearRunStream(runId, run.threadId);
+        }
+        await this.refreshStatusViews();
+        if (cancelledRun) {
+            void this.host.log?.("info", "agents", "agents.run.cancelled", {
+                runId,
+                threadId: cancelledRun.threadId,
+                requestedAgent: cancelledRun.requestedAgent,
+                runtime: cancelledRun.runtime,
+            });
+        }
+        return true;
+    }
+
+    public async cancelRunsForComment(commentId: string): Promise<void> {
+        const thread = this.host.getCommentManager().getThreadById(commentId);
+        const runs = thread
+            ? getAgentRunsForCommentThread(this.store.getRuns(), thread)
+            : this.store.getRuns().filter((run) =>
+                run.triggerEntryId === commentId
+                || run.outputEntryId === commentId,
+            );
+        const activeRuns = runs.filter((run) => run.status === "queued" || run.status === "running");
+        for (const run of activeRuns) {
+            await this.cancelRun(run.id);
+        }
+    }
+
     private async processQueue(): Promise<void> {
         if (this.processingQueue) {
             return;
@@ -243,6 +332,11 @@ export class CommentAgentController {
             : null;
         const replaceOutputEntryId = previousRun?.outputEntryId ?? undefined;
         const outputEntryId = replaceOutputEntryId ?? this.host.createCommentId();
+        const runtimePrompt = await this.buildRuntimePrompt(queuedRun);
+        const latestQueuedRun = this.store.getRunById(runId);
+        if (!latestQueuedRun || latestQueuedRun.status !== "queued") {
+            return;
+        }
         if (!replaceOutputEntryId) {
             const appended = await this.host.appendThreadEntry(queuedRun.threadId, {
                 id: outputEntryId,
@@ -274,6 +368,13 @@ export class CommentAgentController {
         if (!runningRun) {
             return;
         }
+        const execution: ActiveRunExecution = {
+            runId,
+            threadId: runningRun.threadId,
+            abortController: new AbortController(),
+            cancelRequested: false,
+        };
+        this.activeRunExecutions.set(runId, execution);
         await this.refreshStatusViews();
         this.setRunStream(this.buildRunStreamState(runningRun, {
             status: "running",
@@ -292,6 +393,7 @@ export class CommentAgentController {
 
         const workingDirectory = this.host.getRuntimeWorkingDirectory(runningRun.filePath);
         if (!workingDirectory) {
+            this.activeRunExecutions.delete(runId);
             await this.failRun(runId, runningRun, AGENT_DESKTOP_RUNTIME_NOTICE);
             return;
         }
@@ -299,26 +401,68 @@ export class CommentAgentController {
         try {
             const runtimeResponse = await this.host.runAgentRuntime({
                 target: runningRun.requestedAgent,
-                prompt: runningRun.promptText,
+                prompt: runtimePrompt,
                 cwd: workingDirectory,
-                onPartialText: (partialText) => this.updateRunStream(
-                    runId,
-                    this.buildRunStreamState(runningRun, {
-                        status: "running",
-                        partialText,
-                        startedAt,
-                        updatedAt: this.host.now(),
-                        outputEntryId,
-                    }),
-                ),
+                abortSignal: execution.abortController.signal,
+                onProgressText: (progressText) => {
+                    if (this.isRunCancellationRequested(runId)) {
+                        return;
+                    }
+
+                    const normalizedProgressText = progressText.trim();
+                    if (!normalizedProgressText) {
+                        return;
+                    }
+
+                    this.updateRunStream(
+                        runId,
+                        this.buildRunStreamState(runningRun, {
+                            status: "running",
+                            statusHintText: normalizedProgressText,
+                            partialText: this.runStreams.get(runId)?.partialText ?? "",
+                            startedAt,
+                            updatedAt: this.host.now(),
+                            outputEntryId,
+                        }),
+                    );
+                },
+                onPartialText: (partialText) => {
+                    if (this.isRunCancellationRequested(runId)) {
+                        return;
+                    }
+
+                    this.updateRunStream(
+                        runId,
+                        this.buildRunStreamState(runningRun, {
+                            status: "running",
+                            partialText,
+                            startedAt,
+                            updatedAt: this.host.now(),
+                            outputEntryId,
+                        }),
+                    );
+                },
             });
+            if (this.isRunCancellationRequested(runId)) {
+                return;
+            }
             const replyText = runtimeResponse.replyText.trim();
             if (!replyText) {
                 throw new Error("The agent returned an empty response.");
             }
 
             const timestamp = this.host.now();
+            this.updateRunStream(runId, this.buildRunStreamState(runningRun, {
+                status: "running",
+                partialText: replyText,
+                startedAt,
+                updatedAt: timestamp,
+                outputEntryId,
+            }));
             const replaced = await this.host.editComment(outputEntryId, replyText, { skipCommentViewRefresh: true });
+            if (this.isRunCancellationRequested(runId)) {
+                return;
+            }
             if (!replaced) {
                 if (replaceOutputEntryId) {
                     throw new Error(AGENT_REGENERATE_REPLACE_FAILED_NOTICE);
@@ -358,7 +502,12 @@ export class CommentAgentController {
                 outputEntryId,
             });
         } catch (error) {
+            if (this.isRunCancellationRequested(runId) || isAgentRuntimeCancelledError(error)) {
+                return;
+            }
             await this.failRun(runId, runningRun, summarizeError(error));
+        } finally {
+            this.activeRunExecutions.delete(runId);
         }
     }
 
@@ -395,6 +544,49 @@ export class CommentAgentController {
             runtime: run.runtime,
             error: message,
         });
+    }
+
+    private isRunCancellationRequested(runId: string): boolean {
+        return this.activeRunExecutions.get(runId)?.cancelRequested ?? false;
+    }
+
+    private async buildRuntimePrompt(
+        run: Pick<AgentRunRecord, "id" | "threadId" | "triggerEntryId" | "filePath" | "promptText">,
+    ): Promise<string> {
+        const thread = this.host.getCommentManager().getThreadById(run.threadId);
+        if (!thread) {
+            return run.promptText;
+        }
+
+        const file = this.host.getFileByPath(run.filePath);
+        let noteContent: string | null = null;
+        if (file && /\.md$/i.test(file.path)) {
+            try {
+                noteContent = await this.host.getCurrentNoteContent(file);
+            } catch (error) {
+                void this.host.log?.("warn", "agents", "agents.context.note-read.warn", {
+                    runId: run.id,
+                    filePath: run.filePath,
+                    error,
+                });
+            }
+        }
+
+        const context = buildAgentPromptContext({
+            filePath: run.filePath,
+            noteContent,
+            thread,
+            triggerEntryId: run.triggerEntryId,
+            fallbackPromptText: run.promptText,
+            threadAgentRuns: getAgentRunsForCommentThread(this.store.getRuns(), thread),
+        });
+        void this.host.log?.("info", "agents", "agents.context.built", {
+            runId: run.id,
+            threadId: run.threadId,
+            scope: context.scope,
+            hasNoteContext: !!noteContent,
+        });
+        return context.promptText;
     }
 
     private resolveDispatchTarget(
@@ -466,6 +658,8 @@ export class CommentAgentController {
         run: Pick<AgentRunRecord, "id" | "threadId" | "requestedAgent">,
         options: {
             status: AgentRunRecord["status"];
+            statusText?: string;
+            statusHintText?: string;
             partialText: string;
             startedAt: number;
             updatedAt: number;
@@ -478,6 +672,8 @@ export class CommentAgentController {
             threadId: run.threadId,
             requestedAgent: run.requestedAgent,
             status: options.status,
+            statusText: options.statusText,
+            statusHintText: options.statusHintText,
             partialText: options.partialText,
             startedAt: options.startedAt,
             updatedAt: options.updatedAt,
@@ -514,12 +710,16 @@ export class CommentAgentController {
             previous
             && previous.partialText === nextStream.partialText
             && previous.status === nextStream.status
+            && previous.statusText === nextStream.statusText
+            && previous.statusHintText === nextStream.statusHintText
             && previous.error === nextStream.error
             && previous.outputEntryId === nextStream.outputEntryId
         ) {
             this.runStreams.set(runId, {
                 ...previous,
                 updatedAt: nextStream.updatedAt,
+                statusText: nextStream.statusText,
+                statusHintText: nextStream.statusHintText,
             });
             return;
         }

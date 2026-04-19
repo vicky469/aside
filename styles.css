@@ -993,6 +993,19 @@
     animation: sidenote2-agent-status-spin 0.9s linear infinite;
 }
 
+.sidenote2-agent-run-status-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.sidenote2-agent-run-status-hint {
+    color: var(--text-faint, var(--text-muted));
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .sidenote2-agent-run-status.is-running {
     color: color-mix(in srgb, var(--interactive-accent) 78%, var(--text-muted));
 }
@@ -1014,7 +1027,30 @@
 }
 
 .sidenote2-agent-stream-item .sidenote2-agent-run-status {
-    gap: 0;
+    gap: 4px;
+}
+
+.sidenote2-agent-stream-cancel-button {
+    width: auto;
+    height: 18px;
+    min-height: 18px;
+    padding: 0 5px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 5px;
+    background: var(--background-secondary-alt, var(--background-primary));
+    color: var(--text-muted);
+    font-size: 10px;
+    font-weight: 500;
+    line-height: 1;
+    white-space: nowrap;
+    box-shadow: none;
+}
+
+.sidenote2-agent-stream-cancel-button:hover,
+.sidenote2-agent-stream-cancel-button:focus-visible {
+    border-color: var(--background-modifier-border-hover, var(--background-modifier-border));
+    background: var(--background-modifier-hover);
+    color: var(--text-normal);
 }
 
 @keyframes sidenote2-agent-status-spin {
@@ -1232,6 +1268,11 @@
 .sidenote2-inline-textarea::placeholder {
     color: var(--text-faint, var(--text-muted));
     -webkit-text-fill-color: var(--text-faint, var(--text-muted));
+}
+
+.sidenote2-inline-editor-shell:not(:focus-within) .sidenote2-inline-textarea::placeholder {
+    color: transparent;
+    -webkit-text-fill-color: transparent;
 }
 
 .sidenote2-inline-textarea:focus {
@@ -1852,5 +1893,12 @@
     .sidenote2-comment-actions button {
         width: 28px;
         height: 28px;
+    }
+
+    .sidenote2-agent-stream-cancel-button {
+        width: auto;
+        height: 18px;
+        min-height: 18px;
+        padding: 0 5px;
     }
 }

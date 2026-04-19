@@ -43,6 +43,10 @@ import {
 import { INDEX_SIDEBAR_LIST_LIMIT, limitIndexSidebarListItems } from "./indexSidebarListLimit";
 import { SidebarInteractionController } from "./sidebarInteractionController";
 import {
+    buildPageSidebarDraftRenderSignature,
+    buildPageSidebarThreadRenderSignature,
+} from "./sidebarPageRenderSignature";
+import {
     buildAgentSidebarThreads,
     countAgentSidebarThreadsByOutcome,
     filterAgentSidebarThreadsByOutcome,
@@ -122,6 +126,21 @@ type SidebarReorderDragState =
         entryId: string;
     };
 
+type NoteSidebarShell = {
+    filePath: string;
+    commentsContainerEl: HTMLDivElement;
+    toolbarSlotEl: HTMLDivElement;
+    commentsBodyEl: HTMLDivElement;
+    supportSlotEl: HTMLDivElement;
+};
+
+type NoteSidebarRenderDescriptor = {
+    key: string;
+    signature: string;
+    threadId: string | null;
+    render: () => Promise<HTMLElement>;
+};
+
 type MermaidRenderResult = string | {
     bindFunctions?: (element: HTMLElement) => void;
     svg?: string;
@@ -160,6 +179,7 @@ export default class SideNote2View extends ItemView {
     private reorderDragSourceEl: HTMLElement | null = null;
     private reorderDropIndicatorEl: HTMLElement | null = null;
     private reorderDropIndicatorPlacement: ReorderPlacement | null = null;
+    private noteSidebarShell: NoteSidebarShell | null = null;
     private readonly streamedReplyControllers = new Map<string, StreamedAgentReplyController>();
     private unsubscribeFromAgentStreamUpdates: (() => void) | null = null;
 
@@ -234,6 +254,7 @@ export default class SideNote2View extends ItemView {
     async onClose() {
         this.unsubscribeFromAgentStreamUpdates?.();
         this.unsubscribeFromAgentStreamUpdates = null;
+        this.noteSidebarShell = null;
         this.resetStreamedReplyControllers();
         document.removeEventListener("keydown", this.interactionController.documentKeydownHandler, true);
         document.removeEventListener("copy", this.interactionController.documentCopyHandler, true);
@@ -323,8 +344,19 @@ export default class SideNote2View extends ItemView {
         const file = this.file;
         const isAllCommentsView = !!file && this.plugin.isAllCommentsNotePath(file.path);
         this.clearReorderDragState();
-        this.resetStreamedReplyControllers();
+        if (file && !isAllCommentsView) {
+            this.indexFileFilterGraph = null;
+            await this.plugin.loadCommentsForFile(file);
+            if (renderVersion !== this.renderVersion || this.file?.path !== file.path) {
+                return;
+            }
 
+            await this.renderPageSidebar(file);
+            return;
+        }
+
+        this.noteSidebarShell = null;
+        this.resetStreamedReplyControllers();
         this.containerEl.empty();
         this.containerEl.addClass("sidenote2-view-container");
         if (file) {
@@ -628,6 +660,298 @@ export default class SideNote2View extends ItemView {
         }
     }
 
+    private async renderPageSidebar(file: TFile): Promise<void> {
+        const shell = this.ensureNoteSidebarShell(file.path);
+        const showDeleted = this.plugin.shouldShowDeletedComments();
+        const persistedThreads = this.plugin.getThreadsForFile(file.path, { includeDeleted: showDeleted });
+        const pageThreadsWithDeleted = this.plugin.getThreadsForFile(file.path, { includeDeleted: true });
+        const deletedCommentCount = countDeletedComments(pageThreadsWithDeleted);
+        const showResolved = this.plugin.shouldShowResolvedComments();
+        const allAgentRuns = this.plugin.getAgentRuns();
+        const visiblePersistedThreads = persistedThreads.filter((thread) =>
+            matchesPageSidebarVisibility(thread, {
+                showResolved,
+                showDeleted,
+            }));
+        const draftComment = this.plugin.getDraftForView(file.path);
+        const visibleDraftComment = draftComment
+            && matchesResolvedVisibility(draftComment.resolved, showResolved)
+            ? draftComment
+            : null;
+        const totalScopedCount = persistedThreads.length;
+        const resolvedCount = persistedThreads.filter((thread) => thread.resolved).length;
+        const hasResolvedComments = resolvedCount > 0;
+        const hasNestedComments = persistedThreads.some((thread) => thread.entries.length > 1)
+            || visibleDraftComment?.mode === "append";
+        const replacedThreadId = getReplacedThreadIdForEditDraft(
+            visiblePersistedThreads,
+            visibleDraftComment,
+        );
+        const nestedAppendDraftThreadId = getNestedThreadIdForAppendDraft(
+            visiblePersistedThreads,
+            visibleDraftComment,
+        );
+        const topLevelDraftComment = shouldRenderTopLevelDraftComment({
+            draft: visibleDraftComment,
+            nestedAppendDraftThreadId,
+            isAgentIndexMode: false,
+            agentThreadIds: new Set<string>(),
+        });
+        const renderableItems = buildStoredOrderSidebarItems(
+            visiblePersistedThreads,
+            topLevelDraftComment,
+            replacedThreadId,
+        );
+
+        shell.toolbarSlotEl.empty();
+        this.renderSidebarToolbar(shell.toolbarSlotEl, {
+            isAllCommentsView: false,
+            resolvedCount,
+            hasResolvedComments,
+            hasDeletedComments: pageThreadsWithDeleted.some((thread) => hasDeletedComments(thread)),
+            deletedCommentCount,
+            showDeletedComments: showDeleted,
+            hasNestedComments,
+            isAgentMode: false,
+            agentOutcomeCounts: {
+                succeeded: 0,
+                failed: 0,
+            },
+            addPageCommentAction: {
+                icon: "plus",
+                ariaLabel: "Add page side note",
+                onClick: () => {
+                    void this.plugin.startPageCommentDraft(file);
+                },
+            },
+            indexFileFilterOptions: [],
+            selectedIndexFileFilterRootPath: null,
+            filteredIndexFilePaths: [],
+        });
+
+        const canReorderVisibleThreads = renderableItems.filter((item) => item.kind === "thread").length > 1;
+        const renderDescriptors = this.buildNoteSidebarRenderDescriptors(renderableItems, {
+            allAgentRuns,
+            canReorderVisibleThreads,
+            nestedAppendDraftThreadId,
+            visibleDraftComment,
+        });
+        await this.reconcileNoteSidebarItems(shell.commentsBodyEl, renderDescriptors);
+        this.renderPageSidebarEmptyState(shell.commentsBodyEl, {
+            renderedItemCount: renderableItems.length,
+            showResolved,
+            totalScopedCount,
+            hasResolvedComments,
+        });
+        this.syncVisibleStreamedReplyControllers();
+
+        shell.supportSlotEl.empty();
+        if (this.plugin.isLocalRuntime()) {
+            this.renderSupportButtonIn(shell.supportSlotEl, {
+                filePath: file.path,
+                isAllCommentsView: false,
+                threadCount: this.plugin.getThreadsForFile(file.path).length,
+            });
+        }
+    }
+
+    private ensureNoteSidebarShell(filePath: string): NoteSidebarShell {
+        if (
+            this.noteSidebarShell?.filePath === filePath
+            && this.noteSidebarShell.commentsContainerEl.isConnected
+            && this.noteSidebarShell.supportSlotEl.isConnected
+        ) {
+            this.containerEl.addClass("sidenote2-view-container");
+            return this.noteSidebarShell;
+        }
+
+        this.noteSidebarShell = null;
+        this.resetStreamedReplyControllers();
+        this.containerEl.empty();
+        this.containerEl.addClass("sidenote2-view-container");
+
+        const commentsContainerEl = this.containerEl.createDiv("sidenote2-comments-container");
+        const toolbarSlotEl = commentsContainerEl.createDiv("sidenote2-note-sidebar-toolbar-slot");
+        const commentsBodyEl = this.renderCommentsList(commentsContainerEl);
+        this.setupCommentReorderInteractions(commentsBodyEl, {
+            enabled: true,
+            filePath,
+        });
+        const supportSlotEl = this.containerEl.createDiv("sidenote2-support-button-slot");
+
+        this.noteSidebarShell = {
+            filePath,
+            commentsContainerEl,
+            toolbarSlotEl,
+            commentsBodyEl,
+            supportSlotEl,
+        };
+        return this.noteSidebarShell;
+    }
+
+    private buildNoteSidebarRenderDescriptors(
+        renderableItems: SidebarRenderableItem[],
+        options: {
+            allAgentRuns: AgentRunRecord[];
+            canReorderVisibleThreads: boolean;
+            nestedAppendDraftThreadId: string | null;
+            visibleDraftComment: DraftComment | null;
+        },
+    ): NoteSidebarRenderDescriptor[] {
+        return renderableItems.map((item) => {
+            if (item.kind === "draft") {
+                return {
+                    key: `draft:${item.draft.id}`,
+                    signature: buildPageSidebarDraftRenderSignature(
+                        item.draft,
+                        this.interactionController.getActiveCommentId(),
+                    ),
+                    threadId: null,
+                    render: () => {
+                        const stagingEl = document.createElement("div");
+                        this.renderDraftComment(stagingEl, item.draft);
+                        const nextNode = stagingEl.firstElementChild;
+                        if (!(nextNode instanceof HTMLElement)) {
+                            throw new Error("Failed to render sidebar draft card.");
+                        }
+                        return Promise.resolve(nextNode);
+                    },
+                };
+            }
+
+            const appendDraftComment = options.nestedAppendDraftThreadId === item.thread.id && options.visibleDraftComment?.mode === "append"
+                ? options.visibleDraftComment
+                : null;
+            const threadAgentRuns = getAgentRunsForCommentThread(options.allAgentRuns, item.thread);
+            return {
+                key: `thread:${item.thread.id}`,
+                signature: buildPageSidebarThreadRenderSignature({
+                    thread: item.thread,
+                    activeCommentId: this.interactionController.getActiveCommentId(),
+                    showNestedComments: this.plugin.shouldShowNestedComments(),
+                    enableThreadReorder: options.canReorderVisibleThreads,
+                    appendDraftComment,
+                    threadAgentRuns,
+                }),
+                threadId: item.thread.id,
+                render: async () => {
+                    const stagingEl = document.createElement("div");
+                    await this.renderPersistedComment(
+                        stagingEl,
+                        item.thread,
+                        options.canReorderVisibleThreads,
+                        threadAgentRuns[0] ?? null,
+                        this.plugin.getActiveAgentStreamForThread(item.thread.id),
+                        threadAgentRuns,
+                        appendDraftComment,
+                    );
+                    const nextNode = stagingEl.firstElementChild;
+                    if (!(nextNode instanceof HTMLElement)) {
+                        throw new Error("Failed to render sidebar thread card.");
+                    }
+                    return nextNode;
+                },
+            };
+        });
+    }
+
+    private async reconcileNoteSidebarItems(
+        commentsBody: HTMLDivElement,
+        descriptors: readonly NoteSidebarRenderDescriptor[],
+    ): Promise<void> {
+        const existingByKey = new Map<string, HTMLElement>();
+        for (const child of Array.from(commentsBody.children)) {
+            if (!(child instanceof HTMLElement)) {
+                continue;
+            }
+
+            const key = child.dataset.sidenote2RenderKey;
+            if (key) {
+                existingByKey.set(key, child);
+                continue;
+            }
+
+            if (child.classList.contains("sidenote2-empty-state")) {
+                child.remove();
+            }
+        }
+
+        const desiredNodes: HTMLElement[] = [];
+        for (const descriptor of descriptors) {
+            const existing = existingByKey.get(descriptor.key) ?? null;
+            existingByKey.delete(descriptor.key);
+            if (existing && existing.dataset.sidenote2RenderSignature === descriptor.signature) {
+                desiredNodes.push(existing);
+                continue;
+            }
+
+            if (descriptor.threadId) {
+                this.removeStreamedReplyController(descriptor.threadId);
+            }
+
+            const nextNode = await descriptor.render();
+            nextNode.dataset.sidenote2RenderKey = descriptor.key;
+            nextNode.dataset.sidenote2RenderSignature = descriptor.signature;
+            desiredNodes.push(nextNode);
+        }
+
+        for (const [key, element] of existingByKey) {
+            if (key.startsWith("thread:")) {
+                this.removeStreamedReplyController(key.slice("thread:".length));
+            }
+            element.remove();
+        }
+
+        desiredNodes.forEach((node, index) => {
+            const currentNode = commentsBody.children.item(index);
+            if (currentNode === node) {
+                return;
+            }
+
+            commentsBody.insertBefore(node, currentNode ?? null);
+        });
+
+        const desiredNodeSet = new Set(desiredNodes);
+        for (const child of Array.from(commentsBody.children)) {
+            if (child instanceof HTMLElement && !desiredNodeSet.has(child)) {
+                child.remove();
+            }
+        }
+    }
+
+    private renderPageSidebarEmptyState(
+        commentsBody: HTMLDivElement,
+        options: {
+            renderedItemCount: number;
+            showResolved: boolean;
+            totalScopedCount: number;
+            hasResolvedComments: boolean;
+        },
+    ): void {
+        for (const child of Array.from(commentsBody.children)) {
+            if (child instanceof HTMLDivElement && child.classList.contains("sidenote2-empty-state")) {
+                child.remove();
+            }
+        }
+
+        if (options.renderedItemCount !== 0) {
+            return;
+        }
+
+        if (options.showResolved && options.totalScopedCount > 0) {
+            const emptyStateEl = commentsBody.createDiv("sidenote2-empty-state sidenote2-section-empty-state");
+            emptyStateEl.createEl("p", { text: "No resolved comments for this file." });
+            emptyStateEl.createEl("p", { text: "Turn off resolved to return to active comments." });
+            return;
+        }
+
+        if (!options.showResolved && options.hasResolvedComments) {
+            const emptyStateEl = commentsBody.createDiv("sidenote2-empty-state sidenote2-section-empty-state");
+            emptyStateEl.createEl("p", { text: "No active comments for this file." });
+            emptyStateEl.createEl("p", { text: "Turn on resolved to review archived comments only." });
+        }
+    }
+
     private handleAgentStreamUpdate(update: AgentStreamUpdate): void {
         if (!update.stream) {
             this.removeStreamedReplyController(update.threadId);
@@ -673,7 +997,11 @@ export default class SideNote2View extends ItemView {
     private getOrCreateStreamedReplyController(threadId: string): StreamedAgentReplyController {
         let controller = this.streamedReplyControllers.get(threadId);
         if (!controller) {
-            controller = new StreamedAgentReplyController(threadId);
+            controller = new StreamedAgentReplyController(threadId, {
+                onCancelRun: (runId) => {
+                    void this.plugin.cancelAgentRun(runId);
+                },
+            });
             this.streamedReplyControllers.set(threadId, controller);
         }
 
@@ -1097,7 +1425,19 @@ export default class SideNote2View extends ItemView {
         threadCount: number;
     }): void {
         const slot = this.containerEl.createDiv("sidenote2-support-button-slot");
-        const button = slot.createEl("button", {
+        this.renderSupportButtonIn(slot, options);
+    }
+
+    private renderSupportButtonIn(
+        container: HTMLElement,
+        options: {
+            filePath: string | null;
+            isAllCommentsView: boolean;
+            threadCount: number;
+        },
+    ): void {
+        container.empty();
+        const button = container.createEl("button", {
             cls: "clickable-icon sidenote2-support-button",
         });
         button.setAttribute("type", "button");
