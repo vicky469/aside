@@ -29,7 +29,7 @@ import type { AgentRunRecord, AgentRunStreamState } from "./core/agents/agentRun
 import { DraftComment, DraftSelection } from "./domain/drafts";
 import { parsePromptDeleteSetting } from "./core/config/appConfig";
 import { DerivedCommentMetadataManager } from "./core/derived/derivedCommentMetadata";
-import { isAttachmentCommentableFile, isAttachmentCommentablePath, isMarkdownCommentableFile, isSidebarSupportedFile } from "./core/rules/commentableFiles";
+import { isMarkdownCommentableFile, isSidebarSupportedFile } from "./core/rules/commentableFiles";
 import { extractWikiLinkPaths } from "./core/text/commentMentions";
 import { AggregateCommentIndex } from "./index/AggregateCommentIndex";
 import { ParsedNoteCache } from "./cache/ParsedNoteCache";
@@ -170,7 +170,6 @@ export default class SideNote2 extends Plugin {
         isAllCommentsNotePath: (filePath) => this.isAllCommentsNotePath(filePath),
         setRevealedCommentState: (filePath, commentId) => this.commentSessionController.setRevealedCommentState(filePath, commentId),
         getFileByPath: (path) => this.workspaceViewController.getFileByPath(path),
-        isCommentableFile: (file): file is TFile => this.isCommentableFile(file),
         loadCommentsForFile: (file) => this.loadCommentsForFile(file),
         getLoadedCommentById: (commentId) => this.commentManager.getCommentById(commentId),
         showNotice: (message) => {
@@ -204,7 +203,6 @@ export default class SideNote2 extends Plugin {
         refreshMarkdownPreviews: () => this.workspaceViewController.refreshMarkdownPreviews(),
         getCommentMentionedPageLabels: (comment) => this.getCommentMentionedPageLabels(comment),
         syncIndexNoteLeafMode: (leaf) => this.syncIndexNoteLeafMode(leaf),
-        saveSettings: () => this.saveSettings(),
         log: (level, area, event, payload) => this.logEvent(level, area, event, payload),
     });
     private readonly indexNoteSettingsController = new IndexNoteSettingsController({
@@ -213,7 +211,6 @@ export default class SideNote2 extends Plugin {
         setSettings: (settings) => {
             this.settings = settings;
         },
-        getCommentManager: () => this.commentManager,
         getFileByPath: (filePath) => this.workspaceViewController.getFileByPath(filePath),
         getMarkdownFileByPath: (filePath) => this.workspaceViewController.getMarkdownFileByPath(filePath),
         getActiveSidebarFile: () => this.activeSidebarFile,
@@ -274,9 +271,6 @@ export default class SideNote2 extends Plugin {
         clearParsedNoteCache: (filePath) => this.clearParsedNoteCache(filePath),
         clearDerivedCommentLinksForFile: (filePath) => this.derivedCommentMetadataManager.clearDerivedCommentLinksForFile(filePath),
         isCommentableFile: (file): file is TFile => this.isCommentableFile(file),
-        isAttachmentCommentableFile: (file): file is TFile => isAttachmentCommentableFile(file),
-        isAttachmentCommentablePath: (filePath) => isAttachmentCommentablePath(filePath),
-        saveSettings: () => this.saveSettings(),
         loadCommentsForFile: (file) => this.loadCommentsForFile(file),
         refreshCommentViews: () => this.workspaceViewController.refreshCommentViews(),
         refreshEditorDecorations: () => this.refreshEditorDecorations(),
@@ -712,6 +706,10 @@ export default class SideNote2 extends Plugin {
         );
     }
 
+    public isSidebarSupportedFile(file: TFile | null): file is TFile {
+        return isSidebarSupportedFile(file, this.getAllCommentsNotePath());
+    }
+
     public getPreferredFileLeaf(filePath?: string): WorkspaceLeaf | null {
         return this.commentNavigationController.getPreferredFileLeaf(filePath);
     }
@@ -725,7 +723,7 @@ export default class SideNote2 extends Plugin {
     }
 
     private isCommentableFile(file: TFile | null): file is TFile {
-        return isMarkdownCommentableFile(file, this.getAllCommentsNotePath()) || isAttachmentCommentableFile(file);
+        return isMarkdownCommentableFile(file, this.getAllCommentsNotePath());
     }
 
     private getParsedNoteComments(filePath: string, noteContent: string): ParsedNoteComments {

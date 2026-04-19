@@ -1,5 +1,4 @@
 import type { Plugin, TFile } from "obsidian";
-import type { CommentManager } from "../commentManager";
 import {
     LEGACY_ALL_COMMENTS_NOTE_PATH,
     isAllCommentsNotePath,
@@ -7,11 +6,6 @@ import {
     normalizeAllCommentsNoteImageUrl,
     normalizeAllCommentsNotePath,
 } from "../core/derived/allCommentsNote";
-import { isAttachmentCommentableFile, isAttachmentCommentablePath } from "../core/rules/commentableFiles";
-import {
-    buildAttachmentCommentThreads,
-    parseAttachmentCommentThreads,
-} from "../core/storage/attachmentCommentStorage";
 import {
     type SideNote2Settings,
 } from "../ui/settings/SideNote2SettingTab";
@@ -27,7 +21,6 @@ export interface IndexNoteSettingsHost {
     app: Plugin["app"];
     getSettings(): SideNote2Settings;
     setSettings(settings: SideNote2Settings): void;
-    getCommentManager(): CommentManager;
     getFileByPath(filePath: string): TFile | null;
     getMarkdownFileByPath(filePath: string): TFile | null;
     getActiveSidebarFile(): TFile | null;
@@ -53,26 +46,6 @@ export class IndexNoteSettingsController {
         const resolved = resolveLoadedSettings(loaded, this.host.getSettings());
         this.host.setSettings(resolved.settings);
 
-        const persistedAttachmentThreads = parseAttachmentCommentThreads(loaded?.attachmentComments);
-        const existingAttachmentCommentPaths = new Set(
-            this.host.getCommentManager()
-                .getAllThreads({ includeDeleted: true })
-                .filter((thread) => isAttachmentCommentablePath(thread.filePath))
-                .map((thread) => thread.filePath),
-        );
-        for (const filePath of existingAttachmentCommentPaths) {
-            this.host.getCommentManager().replaceThreadsForFile(filePath, []);
-        }
-        for (const thread of persistedAttachmentThreads) {
-            const file = this.host.getFileByPath(thread.filePath);
-            if (!isAttachmentCommentableFile(file)) {
-                continue;
-            }
-
-            const nextThreads = this.host.getCommentManager().getThreadsForFile(thread.filePath, { includeDeleted: true }).concat(thread);
-            this.host.getCommentManager().replaceThreadsForFile(thread.filePath, nextThreads);
-        }
-
         if (resolved.shouldRewriteLegacySettings) {
             await this.saveSettings();
         }
@@ -82,7 +55,6 @@ export class IndexNoteSettingsController {
         await this.writePersistedPluginData({
             ...this.persistedPluginData,
             ...this.host.getSettings(),
-            attachmentComments: buildAttachmentCommentThreads(this.host.getCommentManager().getAllThreads({ includeDeleted: true })),
         });
     }
 

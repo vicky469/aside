@@ -12,7 +12,7 @@
 		{"id":"group-navigation","type":"group","x":1260,"y":720,"width":980,"height":330,"color":"4","label":"4. Reveal + open + navigate"},
 		{"id":"group-highlights","type":"group","x":0,"y":1100,"width":980,"height":330,"color":"4","label":"5. Highlights + anchors"},
 		{"id":"group-workspace","type":"group","x":0,"y":1470,"width":980,"height":340,"color":"3","label":"7. Sidebar targeting + workspace behavior"},
-		{"id":"mutation-summary","type":"text","text":"Edit here:\nLifecycle mutations, dedupe,\npersistence timing, managed block\nserialization, attachment storage.\n\nSee: `attachmentCommentStorage.ts`,\n`commentSyncPolicy.ts`, `commentManager.ts`\nTests: `commentLifecycle.test.ts`,\n`noteCommentStorage.test.ts`, `commentMutationController.test.ts`","x":40,"y":764,"width":360,"height":236,"color":"3"},
+		{"id":"mutation-summary","type":"text","text":"Edit here:\nLifecycle mutations, dedupe,\npersistence timing, and managed block\nserialization for markdown notes.\n\nSee: `noteCommentStorage.ts`,\n`commentSyncPolicy.ts`, `commentManager.ts`\nTests: `commentLifecycle.test.ts`,\n`noteCommentStorage.test.ts`, `commentMutationController.test.ts`","x":40,"y":764,"width":360,"height":236,"color":"3"},
 		{"id":"mutation-controller","type":"file","file":"SideNote2/src/control/commentMutationController.ts","x":440,"y":762,"width":500,"height":72,"color":"3"},
 		{"id":"mutation-persistence","type":"file","file":"SideNote2/src/control/commentPersistenceController.ts","x":440,"y":852,"width":500,"height":72,"color":"3"},
 		{"id":"mutation-storage","type":"file","file":"SideNote2/src/core/storage/noteCommentStorage.ts","x":440,"y":942,"width":500,"height":72,"color":"3"},

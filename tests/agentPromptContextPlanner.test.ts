@@ -129,10 +129,10 @@ test("buildAgentPromptContext uses section scope for page threads and strips hid
 
 test("buildAgentPromptContext falls back cleanly when note content is unavailable", () => {
     const context = buildAgentPromptContext({
-        filePath: "Folder/Attachment.pdf",
+        filePath: "Folder/Note.md",
         noteContent: null,
         thread: createThread({
-            filePath: "Folder/Attachment.pdf",
+            filePath: "Folder/Note.md",
             anchorKind: "selection",
             selectedText: "Page 4 chart",
             comment: "@codex explain this chart",
@@ -142,7 +142,7 @@ test("buildAgentPromptContext falls back cleanly when note content is unavailabl
     });
 
     assert.equal(context.scope, "anchor");
-    assert.match(context.promptText, /Current note path: Folder\/Attachment\.pdf/);
+    assert.match(context.promptText, /Current note path: Folder\/Note\.md/);
     assert.match(context.promptText, /Anchored text:\n<<<\nPage 4 chart\n>>>/);
     assert.doesNotMatch(context.promptText, /Nearby headings:/);
 });

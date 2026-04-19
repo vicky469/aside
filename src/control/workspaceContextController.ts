@@ -2,6 +2,7 @@ import { FileView, MarkdownView, TFile, WorkspaceLeaf } from "obsidian";
 import type { Plugin } from "obsidian";
 import type { MarkdownViewModeType } from "obsidian";
 import {
+    resolveWorkspaceTargetInput,
     resolveIndexLeafMode,
     resolveWorkspaceFileTargets,
     shouldIgnoreWorkspaceLeafChange,
@@ -37,7 +38,10 @@ export class WorkspaceContextController {
     public handleFileOpen(file: TFile | null): void {
         void this.syncIndexNoteLeafMode(this.host.app.workspace.getActiveViewOfType(MarkdownView)?.leaf ?? null);
         this.syncIndexNoteViewClasses();
-        this.applyWorkspaceFileTargets(file);
+        this.applyWorkspaceFileTargets(resolveWorkspaceTargetInput(
+            file,
+            this.host.app.workspace.getActiveFile(),
+        ));
     }
 
     public handleActiveLeafChange(leaf: WorkspaceLeaf | null): void {
@@ -46,7 +50,10 @@ export class WorkspaceContextController {
             return;
         }
 
-        const file = this.getFileForLeaf(leaf);
+        const file = resolveWorkspaceTargetInput(
+            this.getFileForLeaf(leaf),
+            this.host.app.workspace.getActiveFile(),
+        );
         void this.syncIndexNoteLeafMode(leaf);
         this.syncIndexNoteViewClasses();
         this.applyWorkspaceFileTargets(file);

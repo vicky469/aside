@@ -65,7 +65,7 @@ This is a separate canvas so you can zoom the flow without crowding the main arc
 Read this when debugging a specific comment. The route map shows flow; this one shows allowed status changes.
 
 - `draft` is UI-only and not yet persisted.
-- `saved` means persisted in markdown or attachment storage.
+- `saved` means persisted in markdown note storage.
 - `resolved` is still stored, but normally hidden in the sidebar.
 - `orphaned` means the stored comment still exists, but its anchor could not currently be matched back to the file text.
 
@@ -90,7 +90,7 @@ Use this shortcut table:
 | Symptom | First files to inspect |
 | --- | --- |
 | Draft does not save or disappears | `src/ui/views/SideNote2View.ts`, `src/ui/views/sidebarDraftEditor.ts`, `src/domain/drafts.ts` |
-| Comment saved but not persisted to note | `src/core/storage/noteCommentStorage.ts`, `src/core/storage/attachmentCommentStorage.ts`, `src/core/rules/commentSyncPolicy.ts` |
+| Comment saved but not persisted to note | `src/core/storage/noteCommentStorage.ts`, `src/core/rules/commentSyncPolicy.ts` |
 | Comment exists but highlight is wrong | `src/core/anchors/anchorResolver.ts`, `src/core/derived/editorHighlightRanges.ts`, `src/commentManager.ts` |
 | Sidebar or index sidebar shows wrong grouping or visibility | `src/ui/views/sidebarCommentSections.ts`, `src/ui/views/SideNote2View.ts`, `src/commentManager.ts` |
 | Sidebar card click, link, or action buttons behave incorrectly | `src/ui/views/sidebarPersistedComment.ts`, `src/ui/views/SideNote2View.ts`, `src/ui/views/commentPointerAction.ts` |
@@ -121,9 +121,9 @@ That means most bugs reduce to one of three questions:
 [
   {
     "id": "8cc93bfb-ac20-4069-b430-57896f23393e",
-    "startLine": 24,
+    "startLine": 28,
     "startChar": 6,
-    "endLine": 24,
+    "endLine": 28,
     "endChar": 20,
     "selectedText": "Cross-Section ",
     "selectedTextHash": "964144fee0c5a203693674a98b75f471c7cf4e71ff06faa5999aff516b0aa326",

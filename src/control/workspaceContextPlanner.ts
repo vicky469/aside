@@ -6,6 +6,13 @@ export interface WorkspaceFileTargets<T> {
     sidebarFile: T | null;
 }
 
+export function resolveWorkspaceTargetInput<T>(
+    eventFile: T | null,
+    workspaceActiveFile: T | null,
+): T | null {
+    return workspaceActiveFile ?? eventFile;
+}
+
 export function resolveWorkspaceFileTargets<T>(
     file: T | null,
     activeMarkdownFile: T | null,

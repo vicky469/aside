@@ -1,9 +1,7 @@
 import * as assert from "node:assert/strict";
 import test from "node:test";
 import type { TFile } from "obsidian";
-import { CommentManager, type Comment } from "../src/commentManager";
 import { IndexNoteSettingsController } from "../src/control/indexNoteSettingsController";
-import { buildAttachmentComments } from "../src/core/storage/attachmentCommentStorage";
 import {
     resolveIndexNotePathChange,
     resolveLoadedSettings,
@@ -20,24 +18,6 @@ function createFile(path: string): TFile {
     } as TFile;
 }
 
-function createComment(overrides: Partial<Comment> = {}): Comment {
-    return {
-        id: overrides.id ?? "comment-1",
-        filePath: overrides.filePath ?? "docs/file.pdf",
-        startLine: overrides.startLine ?? 0,
-        startChar: overrides.startChar ?? 0,
-        endLine: overrides.endLine ?? 0,
-        endChar: overrides.endChar ?? 0,
-        selectedText: overrides.selectedText ?? "Page 1",
-        selectedTextHash: overrides.selectedTextHash ?? "hash:page-1",
-        comment: overrides.comment ?? "PDF note",
-        timestamp: overrides.timestamp ?? 10,
-        anchorKind: overrides.anchorKind ?? "page",
-        orphaned: overrides.orphaned ?? false,
-        resolved: overrides.resolved ?? false,
-    };
-}
-
 function createSettings(overrides: Partial<SideNote2Settings> = {}): SideNote2Settings {
     return {
         indexNotePath: overrides.indexNotePath ?? "SideNote2 index.md",
@@ -52,12 +32,10 @@ function createControllerHarness(options: {
     activeSidebarFilePath?: string | null;
     draftHostFilePath?: string | null;
     loadedData?: PersistedPluginData | null;
-    initialComments?: Comment[];
 } = {}) {
     let settings = options.settings ?? createSettings();
     let activeSidebarFile = options.activeSidebarFilePath ? createFile(options.activeSidebarFilePath) : null;
     let draftHostFilePath = options.draftHostFilePath ?? null;
-    const commentManager = new CommentManager(options.initialComments ?? []);
     const savedPayloads: PersistedPluginData[] = [];
     const notices: string[] = [];
     const refreshedTargets: Array<string | null> = [];
@@ -101,7 +79,6 @@ function createControllerHarness(options: {
         setSettings: (nextSettings: SideNote2Settings) => {
             settings = nextSettings;
         },
-        getCommentManager: () => commentManager,
         getFileByPath: (filePath: string) => filesByPath.get(filePath) ?? null,
         getMarkdownFileByPath: (filePath: string) => {
             const file = filesByPath.get(filePath) ?? null;
@@ -136,7 +113,6 @@ function createControllerHarness(options: {
         getSettings: () => settings,
         getActiveSidebarFile: () => activeSidebarFile,
         getDraftHostFilePath: () => draftHostFilePath,
-        commentManager,
         savedPayloads,
         notices,
         refreshedTargets,
@@ -245,9 +221,8 @@ test("normalized setting change helper ignores no-op writes after normalization"
     }), true);
 });
 
-test("index note settings controller loads attachment comments and rewrites legacy confirmDelete settings", async () => {
+test("index note settings controller rewrites legacy settings", async () => {
     const harness = createControllerHarness({
-        files: ["docs/file.pdf"],
         loadedData: {
             enableDebugMode: true,
             indexNotePath: " docs/index ",
@@ -255,12 +230,7 @@ test("index note settings controller loads attachment comments and rewrites lega
             indexHeaderImageCaption: " Header ",
             preferredAgentTarget: " claude ",
             confirmDelete: true,
-            attachmentComments: buildAttachmentComments([
-                createComment({ filePath: "docs/file.pdf", id: "pdf-comment" }),
-                createComment({ filePath: "docs/missing.pdf", id: "missing-comment" }),
-            ]),
         },
-        initialComments: [createComment({ filePath: "docs/existing.pdf", id: "stale-comment" })],
     });
 
     await harness.controller.loadSettings();
@@ -270,11 +240,6 @@ test("index note settings controller loads attachment comments and rewrites lega
         indexHeaderImageUrl: "https://example.com/header.webp",
         indexHeaderImageCaption: "Header",
     });
-    assert.deepEqual(
-        harness.commentManager.getCommentsForFile("docs/file.pdf").map((comment) => comment.id),
-        ["pdf-comment"],
-    );
-    assert.deepEqual(harness.commentManager.getCommentsForFile("docs/existing.pdf"), []);
     assert.equal(harness.savedPayloads.length, 1);
     assert.equal("preferredAgentTarget" in harness.savedPayloads[0], false);
     assert.equal("confirmDelete" in harness.savedPayloads[0], false);

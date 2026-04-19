@@ -43,8 +43,7 @@ export class CommentEntryController {
     }
 
     public async startPageCommentDraft(file: TFile | null): Promise<boolean> {
-        if (!this.host.isCommentableFile(file)) {
-            this.host.showNotice(`Cannot add comments to ${this.host.getAllCommentsNotePath()}.`);
+        if (!isMarkdownCommentableFile(file, this.host.getAllCommentsNotePath())) {
             return false;
         }
 
@@ -93,15 +92,10 @@ export class CommentEntryController {
     }
 
     private async startNewCommentDraft(selection: DraftSelection): Promise<boolean> {
-        if (!this.host.isCommentableFile(selection.file)) {
-            this.host.showNotice(`Cannot add comments to ${this.host.getAllCommentsNotePath()}.`);
-            return false;
-        }
-        if (
-            selection.anchorKind !== "page"
-            && !isMarkdownCommentableFile(selection.file, this.host.getAllCommentsNotePath())
-        ) {
-            this.host.showNotice("Text-anchored side notes are only supported in markdown files.");
+        if (!isMarkdownCommentableFile(selection.file, this.host.getAllCommentsNotePath())) {
+            if (selection.anchorKind !== "page") {
+                this.host.showNotice("Text-anchored side notes are only supported in markdown files.");
+            }
             return false;
         }
 

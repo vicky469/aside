@@ -5,7 +5,6 @@ import type { RevealedCommentStateUpdateOptions } from "./commentSessionControll
 import type { DraftComment } from "../domain/drafts";
 import { isPageComment } from "../core/anchors/commentAnchors";
 import { resolveAnchorRange } from "../core/anchors/anchorResolver";
-import { isAttachmentCommentableFile } from "../core/rules/commentableFiles";
 import { parseNoteComments } from "../core/storage/noteCommentStorage";
 import {
     pickPreferredFileLeafCandidate,
@@ -44,7 +43,6 @@ export interface CommentNavigationHost {
         options?: RevealedCommentStateUpdateOptions,
     ): void;
     getFileByPath(path: string): TFile | null;
-    isCommentableFile(file: TFile | null): file is TFile;
     loadCommentsForFile(file: TFile): Promise<unknown>;
     getLoadedCommentById(commentId: string): Comment | undefined;
     showNotice(message: string): void;
@@ -280,11 +278,6 @@ export class CommentNavigationController {
         }
 
         this.host.app.workspace.setActiveLeaf(targetLeaf, { focus: true });
-
-        if (isAttachmentCommentableFile(file)) {
-            await this.activateViewAndHighlightComment(comment.id);
-            return;
-        }
 
         if (!(targetLeaf.view instanceof MarkdownView)) {
             await targetLeaf.openFile(file);

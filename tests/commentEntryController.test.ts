@@ -32,7 +32,7 @@ function isCommentableFilePath(path: string): boolean {
         return false;
     }
 
-    return path.endsWith(".md") || path.endsWith(".pdf");
+    return path.endsWith(".md");
 }
 
 function createHost(options: { knownComments?: Comment[]; threadIdsByCommentId?: Record<string, string> } = {}) {
@@ -130,9 +130,21 @@ test("comment entry controller rejects text-anchored drafts for non-markdown fil
     assert.deepEqual(host.notices, ["Text-anchored side notes are only supported in markdown files."]);
 });
 
-test("comment entry controller starts page drafts for commentable files", async () => {
+test("comment entry controller rejects page drafts for non-markdown files", async () => {
     const host = createHost();
     const file = createFile("docs/diagram.pdf");
+
+    const started = await host.controller.startPageCommentDraft(file);
+
+    assert.equal(started, false);
+    assert.deepEqual(host.loadedFiles, []);
+    assert.equal(host.draftCalls.length, 0);
+    assert.deepEqual(host.notices, []);
+});
+
+test("comment entry controller starts page drafts for markdown files", async () => {
+    const host = createHost();
+    const file = createFile("docs/architecture.md");
 
     const started = await host.controller.startPageCommentDraft(file);
 

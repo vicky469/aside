@@ -3,8 +3,8 @@
   <img src="./assets/logo-readme.svg" alt="SideNote2 logo" width="72">
 </p>
 <p align="center">
-  <a href="https://github.com/vicky469/SideNote2/releases/tag/2.0.29">
-    <img src="https://img.shields.io/badge/beta-2.0.29-f97316?style=flat-square" alt="Current beta">
+  <a href="https://github.com/vicky469/SideNote2/releases/tag/2.0.30">
+    <img src="https://img.shields.io/badge/beta-2.0.30-f97316?style=flat-square" alt="Current beta">
   </a>
   <a href="https://buymeacoffee.com/vickyli">
     <img src="https://img.shields.io/badge/Buy%20me%20a%20coffee-support-FFDD00?style=flat-square&logo=buymeacoffee&logoColor=000000" alt="Buy Me a Coffee">
@@ -41,7 +41,7 @@
 </table>
 SideNote2 is an [Obsidian](https://obsidian.md) plugin for side comments that stay attached to the note. Inspired by [mofukuru/SideNote](https://github.com/mofukuru/SideNote).
 
-It is built for a minimal workflow: both humans and agents can work in the sidebar or the main markdown file. 
+It is built for a minimal workflow: both humans and agents can work in the sidebar or the main markdown file.
 
 For development, setup, testing, and release workflow, see [README-dev.md](./README-dev.md).
 
@@ -70,7 +70,7 @@ For development, setup, testing, and release workflow, see [README-dev.md](./REA
 
 ## Workflow
 
-1. Open a note.
+1. Open a markdown file.
 2. Add a side note.
    You can select text and right-click `Add comment to selection`, or use the sidebar for a page note.
 3. Write your comment in the sidebar.
@@ -129,11 +129,7 @@ For development, setup, testing, and release workflow, see [README-dev.md](./REA
 
 ## Storage
 
-For MD files:
-Each note stores its comments in a trailing hidden `<!-- SideNote2 comments -->` JSON block inside the same markdown file.
-
-For PDF files:
-The JSON block is stored in plugin data.
+Each markdown note stores its comments in a trailing hidden `<!-- SideNote2 comments -->` JSON block inside the same file.
 
 `SideNote2 index.md` is just a generated index, not separate storage.
 

@@ -10,9 +10,6 @@ export interface PluginLifecycleHost {
     clearParsedNoteCache(filePath: string): void;
     clearDerivedCommentLinksForFile(filePath: string): void;
     isCommentableFile(file: TFile | null): file is TFile;
-    isAttachmentCommentableFile(file: TFile | null): file is TFile;
-    isAttachmentCommentablePath(filePath: string): boolean;
-    saveSettings(): Promise<void>;
     loadCommentsForFile(file: TFile | null): Promise<unknown>;
     refreshCommentViews(): Promise<void>;
     refreshEditorDecorations(): void;
@@ -51,9 +48,6 @@ export class PluginLifecycleController {
         this.host.clearParsedNoteCache(file.path);
         this.host.getAggregateCommentIndex().renameFile(oldPath, file.path);
         this.host.clearDerivedCommentLinksForFile(oldPath);
-        if (this.host.isAttachmentCommentablePath(oldPath) || this.host.isAttachmentCommentableFile(file)) {
-            void this.host.saveSettings();
-        }
         void this.host.loadCommentsForFile(file);
         void this.host.refreshCommentViews();
         this.host.refreshEditorDecorations();
@@ -69,9 +63,6 @@ export class PluginLifecycleController {
         this.host.clearParsedNoteCache(file.path);
         this.host.getAggregateCommentIndex().deleteFile(file.path);
         this.host.clearDerivedCommentLinksForFile(file.path);
-        if (this.host.isAttachmentCommentableFile(file)) {
-            void this.host.saveSettings();
-        }
         void this.host.refreshCommentViews();
         this.host.refreshEditorDecorations();
         void this.host.refreshAggregateNoteNow();

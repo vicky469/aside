@@ -120,7 +120,7 @@ function createHost(options: {
             ? options.getCurrentNoteContent(file)
             : options.currentNoteContentByPath?.[file.path] ?? "",
         getCurrentSelectionForFile: (file) => options.currentSelectionByPath?.[file.path] ?? null,
-        isCommentableFile: (file): file is TFile => !!file && (file.extension === "md" || file.extension === "pdf"),
+        isCommentableFile: (file): file is TFile => !!file && file.extension === "md",
         loadCommentsForFile: async (file) => {
             loadedFiles.push(file.path);
         },

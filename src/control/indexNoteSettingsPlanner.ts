@@ -10,7 +10,6 @@ import {
 
 export type PersistedPluginData = Partial<SideNote2Settings> & {
     preferredAgentTarget?: unknown;
-    attachmentComments?: unknown;
     agentRuns?: unknown;
     confirmDelete?: unknown;
     enableDebugMode?: unknown;

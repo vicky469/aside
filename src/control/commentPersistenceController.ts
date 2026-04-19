@@ -8,10 +8,6 @@ import {
     LEGACY_ALL_COMMENTS_NOTE_PATH,
 } from "../core/derived/allCommentsNote";
 import {
-    isAttachmentCommentableFile,
-    isAttachmentCommentablePath,
-} from "../core/rules/commentableFiles";
-import {
     shouldDeferManagedCommentPersist,
     syncLoadedCommentsForCurrentNote,
 } from "../core/rules/commentSyncPolicy";
@@ -62,7 +58,6 @@ export interface CommentPersistenceHost {
     refreshMarkdownPreviews(): void;
     getCommentMentionedPageLabels(comment: Comment): string[];
     syncIndexNoteLeafMode(leaf: WorkspaceLeaf | null): Promise<void>;
-    saveSettings(): Promise<void>;
     log?(level: "info" | "warn" | "error", area: string, event: string, payload?: Record<string, unknown>): Promise<void>;
 }
 
@@ -147,12 +142,6 @@ export class CommentPersistenceController {
             return [];
         }
 
-        if (isAttachmentCommentableFile(file)) {
-            const comments = this.host.getCommentManager().getCommentsForFile(file.path);
-            this.host.getAggregateCommentIndex().updateFile(file.path, this.host.getCommentManager().getThreadsForFile(file.path));
-            return comments;
-        }
-
         const noteContent = await this.host.getCurrentNoteContent(file);
         const parsed = await this.syncFileCommentsFromContent(file, noteContent);
         return parsed.comments;
@@ -168,15 +157,6 @@ export class CommentPersistenceController {
     public async persistCommentsForFile(file: TFile, options: PersistOptions = {}): Promise<void> {
         if (options.skipCommentViewRefresh) {
             this.scheduleCommentViewRefreshSuppression(file.path, 2);
-        }
-        if (isAttachmentCommentableFile(file)) {
-            this.host.getAggregateCommentIndex().updateFile(
-                file.path,
-                this.host.getCommentManager().getThreadsForFile(file.path),
-            );
-            await this.host.saveSettings();
-            await this.afterCommentsChanged(file.path, options);
-            return;
         }
 
         await this.writeCommentsForFile(file, options);
@@ -257,23 +237,6 @@ export class CommentPersistenceController {
                     const noteContent = await this.host.getCurrentNoteContent(file);
                     const parsed = await this.parseAndNormalizeFileComments(file.path, noteContent);
                     this.host.getAggregateCommentIndex().updateFile(file.path, parsed.threads);
-                }
-
-                const attachmentThreadsByFile = new Map<string, CommentThread[]>();
-                for (const thread of this.host.getCommentManager().getAllThreads()) {
-                    if (!isAttachmentCommentablePath(thread.filePath)) {
-                        continue;
-                    }
-
-                    const existingThreads = attachmentThreadsByFile.get(thread.filePath) ?? [];
-                    existingThreads.push(thread);
-                    attachmentThreadsByFile.set(thread.filePath, existingThreads);
-                }
-
-                for (const [filePath, threads] of Array.from(attachmentThreadsByFile.entries()).sort(([left], [right]) =>
-                    left.localeCompare(right),
-                )) {
-                    this.host.getAggregateCommentIndex().updateFile(filePath, threads);
                 }
 
                 this.aggregateIndexInitialized = true;

@@ -14,7 +14,7 @@
 		{"id":"manager","type":"file","file":"SideNote2/src/commentManager.ts","x":1390,"y":170,"width":220,"height":90,"color":"3"},
 		{"id":"persistence","type":"file","file":"SideNote2/src/control/commentPersistenceController.ts","x":1640,"y":170,"width":220,"height":90,"color":"3"},
 		{"id":"note-storage","type":"file","file":"SideNote2/src/core/storage/noteCommentStorage.ts","x":1180,"y":310,"width":280,"height":90,"color":"3"},
-		{"id":"attachment-storage","type":"file","file":"SideNote2/src/core/storage/attachmentCommentStorage.ts","x":1500,"y":310,"width":320,"height":90,"color":"3"},
+		{"id":"attachment-storage","type":"text","text":"## Markdown notes\nHidden managed block\nis the stored source","x":1500,"y":300,"width":320,"height":110,"color":"3"},
 		{"id":"parsed-cache","type":"file","file":"SideNote2/src/cache/ParsedNoteCache.ts","x":2030,"y":170,"width":220,"height":90,"color":"2"},
 		{"id":"aggregate-index","type":"file","file":"SideNote2/src/index/AggregateCommentIndex.ts","x":2280,"y":170,"width":230,"height":90,"color":"2"},
 		{"id":"all-comments","type":"file","file":"SideNote2/src/core/derived/allCommentsNote.ts","x":2540,"y":170,"width":230,"height":90,"color":"2"},

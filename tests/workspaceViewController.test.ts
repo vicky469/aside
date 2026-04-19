@@ -99,7 +99,7 @@ function createHarness(options: {
     const controller = new WorkspaceViewController({
         app,
         isSidebarSupportedFile: (file): file is TFile =>
-            !!file && (file.extension === "md" || file.extension === "pdf"),
+            !!file && file.extension === "md",
         isAllCommentsNotePath: (filePath) => filePath === "SideNote2 index.md",
         ensureIndexedCommentsLoaded: async () => {
             ensureIndexedCommentsLoadedCount += 1;

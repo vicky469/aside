@@ -59,7 +59,6 @@ function createHarness(options: {
     let scheduleAggregateNoteRefreshCount = 0;
     let refreshAggregateNoteNowCount = 0;
     let syncIndexNoteViewClassesCount = 0;
-    let saveSettingsCount = 0;
     let modifyHandledPath: string | null = null;
     let ensureSidebarViewCount = 0;
 
@@ -76,12 +75,7 @@ function createHarness(options: {
         clearDerivedCommentLinksForFile: (filePath) => {
             clearedDerivedPaths.push(filePath);
         },
-        isCommentableFile: (file): file is TFile => !!file && (file.extension === "md" || file.extension === "pdf"),
-        isAttachmentCommentableFile: (file): file is TFile => !!file && file.extension === "pdf",
-        isAttachmentCommentablePath: (filePath) => filePath.endsWith(".pdf"),
-        saveSettings: async () => {
-            saveSettingsCount += 1;
-        },
+        isCommentableFile: (file): file is TFile => !!file && file.extension === "md",
         loadCommentsForFile: async (file) => {
             if (file) {
                 loadedFiles.push(file.path);
@@ -141,7 +135,6 @@ function createHarness(options: {
         getScheduleAggregateNoteRefreshCount: () => scheduleAggregateNoteRefreshCount,
         getSyncIndexNoteViewClassesCount: () => syncIndexNoteViewClassesCount,
         getEnsureSidebarViewCount: () => ensureSidebarViewCount,
-        getSaveSettingsCount: () => saveSettingsCount,
         getModifyHandledPath: () => modifyHandledPath,
     };
 }
@@ -159,10 +152,10 @@ test("plugin lifecycle controller handles layout ready by refreshing views and s
 });
 
 test("plugin lifecycle controller keeps renamed comment files and indexes aligned", async () => {
-    const originalFile = createFile("docs/file.pdf");
-    const renamedFile = createFile("docs/renamed.pdf");
+    const originalFile = createFile("docs/file.md");
+    const renamedFile = createFile("docs/renamed.md");
     const harness = createHarness({
-        initialComments: [createComment({ filePath: originalFile.path, anchorKind: "page" })],
+        initialComments: [createComment({ filePath: originalFile.path })],
     });
 
     harness.controller.handleFileRename(renamedFile, originalFile.path);
@@ -176,13 +169,12 @@ test("plugin lifecycle controller keeps renamed comment files and indexes aligne
     assert.equal(harness.getRefreshCommentViewsCount(), 1);
     assert.equal(harness.getRefreshEditorDecorationsCount(), 1);
     assert.equal(harness.getScheduleAggregateNoteRefreshCount(), 1);
-    assert.equal(harness.getSaveSettingsCount(), 1);
 });
 
 test("plugin lifecycle controller clears deleted comment files only when commentable", async () => {
-    const deletedFile = createFile("docs/file.pdf");
+    const deletedFile = createFile("docs/file.md");
     const harness = createHarness({
-        initialComments: [createComment({ filePath: deletedFile.path, anchorKind: "page" })],
+        initialComments: [createComment({ filePath: deletedFile.path })],
     });
 
     harness.controller.handleFileDelete(createFile("docs/ignored.png"));
@@ -196,7 +188,6 @@ test("plugin lifecycle controller clears deleted comment files only when comment
     );
     assert.deepEqual(harness.clearedParsedPaths, [deletedFile.path]);
     assert.deepEqual(harness.clearedDerivedPaths, [deletedFile.path]);
-    assert.equal(harness.getSaveSettingsCount(), 1);
     assert.equal(harness.getRefreshCommentViewsCount(), 1);
     assert.equal(harness.getRefreshEditorDecorationsCount(), 1);
     assert.equal(harness.getRefreshAggregateNoteNowCount(), 1);

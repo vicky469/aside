@@ -84,6 +84,7 @@ import {
     type IndexAgentOutcomeFilter,
     type IndexSidebarMode,
 } from "./viewState";
+import { normalizeSidebarViewFile } from "./sidebarViewFileState";
 
 function matchesResolvedVisibility(resolved: boolean | undefined, showResolved: boolean): boolean {
     return showResolved ? resolved === true : resolved !== true;
@@ -297,8 +298,14 @@ export default class SideNote2View extends ItemView {
 
         if (state.filePath) {
             const file = this.app.vault.getAbstractFileByPath(state.filePath);
-            if (file instanceof TFile) {
-                this.file = file;
+            const normalizedFile = file instanceof TFile
+                ? normalizeSidebarViewFile(file, (candidate): candidate is TFile => this.plugin.isSidebarSupportedFile(candidate))
+                : null;
+            if (normalizedFile) {
+                this.file = normalizedFile;
+                shouldRender = true;
+            } else if (this.file !== null) {
+                this.file = null;
                 shouldRender = true;
             }
         } else if (state.filePath === null && this.file) {
@@ -313,7 +320,7 @@ export default class SideNote2View extends ItemView {
     }
 
     public async updateActiveFile(file: TFile | null) {
-        this.file = file;
+        this.file = normalizeSidebarViewFile(file, (candidate): candidate is TFile => this.plugin.isSidebarSupportedFile(candidate));
         await this.renderComments();
     }
 
@@ -341,7 +348,14 @@ export default class SideNote2View extends ItemView {
 
     public async renderComments() {
         const renderVersion = ++this.renderVersion;
-        const file = this.file;
+        const normalizedFile = normalizeSidebarViewFile(
+            this.file,
+            (candidate): candidate is TFile => this.plugin.isSidebarSupportedFile(candidate),
+        );
+        if (normalizedFile !== this.file) {
+            this.file = normalizedFile;
+        }
+        const file = normalizedFile;
         const isAllCommentsView = !!file && this.plugin.isAllCommentsNotePath(file.path);
         this.clearReorderDragState();
         if (file && !isAllCommentsView) {

@@ -8,6 +8,7 @@ import {
     shouldRevealSidebarLeaf,
 } from "../src/control/commentNavigationPlanner";
 import {
+    resolveWorkspaceTargetInput,
     resolveIndexLeafMode,
     resolveWorkspaceFileTargets,
 } from "../src/control/workspaceContextPlanner";
@@ -170,15 +171,25 @@ test("fixed sidebar target uses SideNote2 index when it is the active note", () 
     assert.deepEqual(target, { path: ALL_COMMENTS_NOTE_PATH, extension: "md" });
 });
 
+test("fixed sidebar target clears when the active file is unsupported", () => {
+    const plugin = new MockPlugin();
+    const target = plugin.getSidebarTargetFileFixed({
+        path: "docs/file.pdf",
+        extension: "pdf",
+    });
+
+    assert.equal(target, null);
+});
+
 test("pinned commentable file falls back from an unsupported active file to the sidebar target", () => {
     const target = pickPinnedCommentableFile(
         { path: "image.png", extension: "png" },
-        { path: "doc.pdf", extension: "pdf" },
+        { path: "doc.md", extension: "md" },
         { path: "last-note.md", extension: "md" },
-        (file): file is MockFile => !!file && (file.extension === "md" || file.extension === "pdf"),
+        (file): file is MockFile => !!file && file.extension === "md",
     );
 
-    assert.deepEqual(target, { path: "doc.pdf", extension: "pdf" });
+    assert.deepEqual(target, { path: "doc.md", extension: "md" });
 });
 
 test("fixed file-open keeps the last normal note while still targeting SideNote2 index", () => {
@@ -218,6 +229,15 @@ test("workspace file targets preserve the current sidebar file when leaf changes
     assert.deepEqual(target.activeMarkdownFile, { path: "last-note.md", extension: "md" });
     assert.deepEqual(target.activeSidebarFile, { path: ALL_COMMENTS_NOTE_PATH, extension: "md" });
     assert.deepEqual(target.sidebarFile, { path: ALL_COMMENTS_NOTE_PATH, extension: "md" });
+});
+
+test("workspace target input prefers the real active file when the event file is missing", () => {
+    const resolved = resolveWorkspaceTargetInput(
+        null,
+        { path: "docs/file.pdf", extension: "pdf" },
+    );
+
+    assert.deepEqual(resolved, { path: "docs/file.pdf", extension: "pdf" });
 });
 
 test("draft can stay tied to the source file while rendering in SideNote2 index", () => {

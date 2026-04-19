@@ -104,7 +104,6 @@ test("comment persistence controller syncs external managed-block updates into a
         },
         getCommentMentionedPageLabels: () => [],
         syncIndexNoteLeafMode: async () => {},
-        saveSettings: async () => {},
         log: async () => {},
     });
 
