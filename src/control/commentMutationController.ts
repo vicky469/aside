@@ -13,6 +13,10 @@ type PersistOptions = {
     skipCommentViewRefresh?: boolean;
 };
 
+type AppendThreadEntryOptions = PersistOptions & {
+    insertAfterCommentId?: string;
+};
+
 export interface CommentMutationHost {
     getAllCommentsNotePath(): string;
     getSidebarTargetFilePath(): string | null;
@@ -253,7 +257,7 @@ export class CommentMutationController {
             body: string;
             timestamp: number;
         },
-        options: PersistOptions = {},
+        options: AppendThreadEntryOptions = {},
     ): Promise<boolean> {
         const latestTarget = await this.loadLatestCommentTarget(threadId);
         if (!latestTarget) {
@@ -265,6 +269,14 @@ export class CommentMutationController {
             body: entry.body,
             timestamp: entry.timestamp,
         });
+        if (options.insertAfterCommentId && options.insertAfterCommentId !== threadId) {
+            this.host.getCommentManager().reorderThreadEntries(
+                threadId,
+                entry.id,
+                options.insertAfterCommentId,
+                "after",
+            );
+        }
         await this.host.persistCommentsForFile(latestTarget.file, {
             immediateAggregateRefresh: true,
             skipCommentViewRefresh: options.skipCommentViewRefresh,

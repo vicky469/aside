@@ -8,7 +8,10 @@ import type { DraftComment } from "../../domain/drafts";
 import { normalizeCommentMarkdownForRender } from "../editor/commentMarkdownRendering";
 import { decorateRenderedCommentMentions } from "../editor/commentEditorStyling";
 import { SIDE_NOTE2_REGENERATE_ICON_ID } from "../sideNote2Icon";
-import { shouldActivateSidebarComment } from "./commentPointerAction";
+import {
+    shouldActivateSidebarComment,
+    shouldStartSidebarCommentEditOnDoubleClick,
+} from "./commentPointerAction";
 import {
     formatSidebarCommentMeta,
     formatSidebarCommentSelectedTextPreview,
@@ -339,6 +342,22 @@ function attachSidebarCommentCardInteractions(
     comment: Comment,
     host: SidebarPersistedCommentHost,
 ): void {
+    const startEditDraftOnDoubleClick = (event: MouseEvent): boolean => {
+        const target = host.getEventTargetElement(event.target);
+        if (!shouldStartSidebarCommentEditOnDoubleClick({
+            clickedInteractiveElement: !!target?.closest("button, a"),
+            commentDeleted: !!comment.deletedAt,
+        })) {
+            return false;
+        }
+
+        host.claimSidebarInteractionOwnership(contentWrapper);
+        event.preventDefault();
+        event.stopPropagation();
+        host.startEditDraft(comment.id, host.currentFilePath);
+        return true;
+    };
+
     commentEl.addEventListener("click", (event: MouseEvent) => {
         const target = host.getEventTargetElement(event.target);
         const selection = window.getSelection();
@@ -353,6 +372,7 @@ function attachSidebarCommentCardInteractions(
 
         void host.activateComment(comment);
     });
+    commentEl.addEventListener("dblclick", startEditDraftOnDoubleClick);
 
     const focusContentWrapper = () => {
         host.claimSidebarInteractionOwnership(contentWrapper);
@@ -364,7 +384,14 @@ function attachSidebarCommentCardInteractions(
 
     contentWrapper.addEventListener("mousedown", stopContentPointerPropagation);
     contentWrapper.addEventListener("mouseup", stopContentPointerPropagation);
-    contentWrapper.addEventListener("dblclick", stopContentPointerPropagation);
+    contentWrapper.addEventListener("dblclick", (event: MouseEvent) => {
+        focusContentWrapper();
+        if (startEditDraftOnDoubleClick(event)) {
+            return;
+        }
+
+        event.stopPropagation();
+    });
     contentWrapper.addEventListener("click", (event: MouseEvent) => {
         const target = host.getEventTargetElement(event.target);
         const link = target?.closest("a") as HTMLAnchorElement | null;

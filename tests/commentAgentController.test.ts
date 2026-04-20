@@ -67,7 +67,7 @@ function createHarness(options: {
     let persistedData: PersistedPluginData = {};
     const commentManager = new CommentManager(options.initialComments ?? [createComment()]);
     const file = createFile((options.initialComments?.[0] ?? createComment()).filePath);
-    const appendedEntries: Array<{ threadId: string; body: string }> = [];
+    const appendedEntries: Array<{ threadId: string; body: string; insertAfterCommentId?: string }> = [];
     const editedEntries: Array<{ commentId: string; body: string }> = [];
     const notices: string[] = [];
     const runtimeCalls: Array<{ target: "codex" | "claude"; prompt: string; cwd: string }> = [];
@@ -96,9 +96,23 @@ function createHarness(options: {
         isCommentableFile: (candidate): candidate is TFile => !!candidate,
         getCurrentNoteContent: async () => options.currentNoteContent ?? "",
         loadCommentsForFile: async () => undefined,
-        appendThreadEntry: async (threadId, entry) => {
-            appendedEntries.push({ threadId, body: entry.body });
+        appendThreadEntry: async (threadId, entry, appendOptions) => {
+            appendedEntries.push({
+                threadId,
+                body: entry.body,
+                ...(appendOptions?.insertAfterCommentId
+                    ? { insertAfterCommentId: appendOptions.insertAfterCommentId }
+                    : {}),
+            });
             commentManager.appendEntry(threadId, entry);
+            if (appendOptions?.insertAfterCommentId && appendOptions.insertAfterCommentId !== threadId) {
+                commentManager.reorderThreadEntries(
+                    threadId,
+                    entry.id,
+                    appendOptions.insertAfterCommentId,
+                    "after",
+                );
+            }
             return true;
         },
         editComment: async (commentId, newCommentText) => {
@@ -166,6 +180,7 @@ test("comment agent controller marks runs failed when runtime execution is unava
     assert.deepEqual(harness.appendedEntries, [{
         threadId: "thread-1",
         body: "",
+        insertAfterCommentId: "thread-1",
     }]);
     assert.equal(harness.editedEntries[0]?.commentId, "generated-2");
     assert.match(harness.editedEntries[0]?.body ?? "", /desktop Obsidian/i);
@@ -192,6 +207,7 @@ test("comment agent controller appends a reply and marks the run succeeded", asy
     assert.deepEqual(harness.appendedEntries, [{
         threadId: "thread-1",
         body: "",
+        insertAfterCommentId: "thread-1",
     }]);
     assert.deepEqual(harness.editedEntries, [{
         commentId: "generated-2",
@@ -199,6 +215,42 @@ test("comment agent controller appends a reply and marks the run succeeded", asy
     }]);
     assert.equal(harness.runtimeCalls[0]?.target, "codex");
     assert.equal(harness.runtimeCalls[0]?.cwd, "/vault");
+});
+
+test("comment agent controller inserts child-triggered replies after the triggering child entry", async () => {
+    const harness = createHarness({
+        runtimeReplyText: "Placed reply.",
+    });
+    harness.commentManager.editComment("thread-1", "Parent");
+    harness.commentManager.appendEntry("thread-1", {
+        id: "entry-2",
+        body: "@codex answer here",
+        timestamp: 20,
+    });
+    harness.commentManager.appendEntry("thread-1", {
+        id: "entry-3",
+        body: "Later child",
+        timestamp: 30,
+    });
+
+    await harness.controller.handleSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "entry-2",
+        filePath: "Folder/Note.md",
+        body: "@codex answer here",
+    });
+    await waitForAgentQueueToDrain(harness.controller);
+
+    assert.deepEqual(harness.appendedEntries, [{
+        threadId: "thread-1",
+        body: "",
+        insertAfterCommentId: "entry-2",
+    }]);
+    assert.deepEqual(
+        harness.commentManager.getThreadById("thread-1")?.entries.map((entry) => entry.id),
+        ["thread-1", "entry-2", "generated-2", "entry-3"],
+    );
+    assert.equal(harness.commentManager.getCommentById("generated-2")?.comment, "Placed reply.");
 });
 
 test("comment agent controller regenerates a specific reply run using the current saved directive text", async () => {
@@ -231,6 +283,7 @@ test("comment agent controller regenerates a specific reply run using the curren
     assert.deepEqual(harness.appendedEntries, [{
         threadId: "thread-1",
         body: "",
+        insertAfterCommentId: "thread-1",
     }]);
     assert.deepEqual(harness.editedEntries, [{
         commentId: "generated-2",
@@ -282,6 +335,7 @@ test("comment agent controller keeps failed runs retryable through the same outp
     assert.deepEqual(harness.appendedEntries, [{
         threadId: "thread-1",
         body: "",
+        insertAfterCommentId: "thread-1",
     }]);
     assert.equal(harness.commentManager.getCommentById("generated-2")?.comment, "Recovered reply");
 });

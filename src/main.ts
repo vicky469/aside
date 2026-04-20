@@ -250,6 +250,7 @@ export default class SideNote2 extends Plugin {
                 timestamp: number;
             },
             options?: {
+                insertAfterCommentId?: string;
                 skipCommentViewRefresh?: boolean;
             },
         ): Promise<boolean> => this.commentMutationController.appendThreadEntry(threadId, entry, options),

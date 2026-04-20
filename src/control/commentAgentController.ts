@@ -54,6 +54,7 @@ export interface CommentAgentHost {
             timestamp: number;
         },
         options?: {
+            insertAfterCommentId?: string;
             skipCommentViewRefresh?: boolean;
         },
     ): Promise<boolean>;
@@ -343,6 +344,7 @@ export class CommentAgentController {
                 body: "",
                 timestamp: startedAt,
             }, {
+                insertAfterCommentId: queuedRun.triggerEntryId,
                 skipCommentViewRefresh: true,
             });
             if (!appended) {
