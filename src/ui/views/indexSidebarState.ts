@@ -51,7 +51,7 @@ export function shouldShowIndexListToolbarChips(
     isAllCommentsView: boolean,
     indexSidebarMode: IndexSidebarMode,
 ): boolean {
-    return !isAllCommentsView || indexSidebarMode === "list" || indexSidebarMode === "agent";
+    return !isAllCommentsView || indexSidebarMode === "list";
 }
 
 export function shouldShowResolvedIndexEmptyState(

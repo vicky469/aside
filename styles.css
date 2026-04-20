@@ -235,6 +235,13 @@
     gap: 6px;
 }
 
+.sidenote2-sidebar-toolbar.is-note-toolbar {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+}
+
 .sidenote2-sidebar-toolbar-row {
     display: flex;
     align-items: center;
@@ -250,7 +257,15 @@
     width: 100%;
 }
 
+.sidenote2-sidebar-toolbar-row.is-note-primary-row .sidenote2-sidebar-toolbar-group {
+    width: 100%;
+}
+
 .sidenote2-sidebar-toolbar-row.is-index-secondary-row {
+    justify-content: flex-start;
+}
+
+.sidenote2-sidebar-toolbar-row.is-note-secondary-row {
     justify-content: flex-start;
 }
 
@@ -263,10 +278,18 @@
     --sidenote2-toolbar-control-font-size: var(--font-ui-smaller);
 }
 
+.sidenote2-sidebar-toolbar-group.is-filter-group {
+    margin-right: auto;
+}
+
+.sidenote2-sidebar-toolbar-group.is-action-group {
+    justify-content: flex-end;
+}
+
 .sidenote2-tablist {
     display: grid;
     align-items: center;
-    grid-template-columns: 0.9fr 1.35fr 1fr;
+    grid-template-columns: 0.9fr 1.35fr;
     width: 100%;
     gap: 3px;
     padding: 3px;
@@ -652,18 +675,19 @@
 }
 
 .sidenote2-comment-item {
+    --sidenote2-comment-background: var(--background-secondary);
     position: relative;
     margin-bottom: 8px;
     padding: 8px 10px;
     border: 1px solid var(--background-modifier-border);
     border-radius: 10px;
-    background: var(--background-secondary);
+    background: var(--sidenote2-comment-background);
     cursor: pointer;
     transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
 }
 
 .sidenote2-comment-item.active {
-    background: var(--background-modifier-active-hover);
+    background: var(--sidenote2-comment-background);
     border-color: var(--background-modifier-border-hover, var(--background-modifier-border));
     box-shadow: none;
 }
@@ -674,8 +698,8 @@
 }
 
 .sidenote2-comment-item.resolved {
+    --sidenote2-comment-background: var(--background-primary-alt, var(--background-secondary));
     opacity: 0.7;
-    background: var(--background-primary-alt, var(--background-secondary));
 }
 
 .sidenote2-comment-item.resolved .sidenote2-timestamp,
@@ -686,8 +710,8 @@
 }
 
 .sidenote2-comment-item.deleted {
+    --sidenote2-comment-background: var(--background-primary-alt, var(--background-secondary));
     opacity: 0.76;
-    background: var(--background-primary-alt, var(--background-secondary));
     border-style: dashed;
 }
 
@@ -713,7 +737,7 @@
 .sidenote2-comment-draft {
     cursor: default;
     border-color: var(--interactive-accent);
-    background: var(--background-primary-alt, var(--background-secondary));
+    --sidenote2-comment-background: var(--background-primary-alt, var(--background-secondary));
 }
 
 .sidenote2-comment-draft:hover {
@@ -724,7 +748,7 @@
 .sidenote2-comment-draft.is-append {
     margin-left: var(--sidenote2-thread-indent);
     border-color: var(--background-modifier-border);
-    background: var(--background-secondary);
+    --sidenote2-comment-background: var(--background-secondary);
 }
 
 .sidenote2-thread-replies > .sidenote2-comment-draft.is-append {
@@ -737,7 +761,7 @@
 }
 
 .sidenote2-comment-draft.is-append.active {
-    background: var(--background-modifier-active-hover);
+    background: var(--sidenote2-comment-background);
     border-color: var(--interactive-accent);
     box-shadow: 0 0 0 1px var(--interactive-accent-translucent);
 }
@@ -773,6 +797,19 @@
     min-width: 0;
     max-width: 100%;
     white-space: nowrap;
+}
+
+.sidenote2-comment-bookmark-indicator {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    color: var(--interactive-accent);
+}
+
+.sidenote2-comment-bookmark-indicator .svg-icon {
+    width: 12px;
+    height: 12px;
 }
 
 .sidenote2-comment-source-label {
@@ -1210,6 +1247,9 @@
 }
 
 .sidenote2-inline-format-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     min-width: 28px;
     min-height: 28px;
     padding: 0 8px;
@@ -1222,10 +1262,25 @@
     box-shadow: none;
 }
 
+.sidenote2-inline-format-button.is-icon-only {
+    padding: 0;
+}
+
+.sidenote2-inline-format-button .svg-icon {
+    width: 15px;
+    height: 15px;
+}
+
 .sidenote2-inline-format-button:hover,
 .sidenote2-inline-format-button:focus-visible {
     border-color: var(--background-modifier-border-hover, var(--interactive-accent-hover));
     background: var(--background-modifier-hover);
+}
+
+.sidenote2-inline-format-button.is-active {
+    border-color: color-mix(in srgb, var(--interactive-accent) 44%, var(--background-modifier-border) 56%);
+    background: color-mix(in srgb, var(--interactive-accent) 16%, var(--background-primary) 84%);
+    color: var(--text-normal);
 }
 
 .sidenote2-inline-format-button:disabled {

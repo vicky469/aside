@@ -7,7 +7,7 @@ import {
     type SavedUserEntryEvent,
 } from "./control/commentAgentController";
 import { CommentHighlightController } from "./control/commentHighlightController";
-import { CommentMutationController } from "./control/commentMutationController";
+import { CommentMutationController, type SaveDraftOptions } from "./control/commentMutationController";
 import { CommentNavigationController } from "./control/commentNavigationController";
 import { pickPinnedCommentableFile, pickPreferredFileLeafCandidate, pickSidebarTargetFile, type PreferredFileLeafCandidate } from "./control/commentNavigationPlanner";
 import { CommentPersistenceController } from "./control/commentPersistenceController";
@@ -911,6 +911,10 @@ export default class SideNote2 extends Plugin {
         this.commentSessionController.updateDraftCommentText(commentId, commentText);
     }
 
+    public updateDraftCommentBookmarkState(commentId: string, isBookmark: boolean) {
+        this.commentSessionController.updateDraftCommentBookmarkState(commentId, isBookmark);
+    }
+
     public async cancelDraft(commentId?: string) {
         await this.commentSessionController.cancelDraft(commentId);
     }
@@ -923,8 +927,8 @@ export default class SideNote2 extends Plugin {
         await this.commentMutationController.startEditDraft(commentId, hostFilePath);
     }
 
-    public async saveDraft(commentId: string) {
-        await this.commentMutationController.saveDraft(commentId);
+    public async saveDraft(commentId: string, options?: SaveDraftOptions) {
+        await this.commentMutationController.saveDraft(commentId, options);
     }
 
     public async startPageCommentDraft(file: TFile | null = this.getPinnedCommentableFile()) {

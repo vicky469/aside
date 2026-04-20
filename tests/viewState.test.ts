@@ -1,10 +1,17 @@
 import * as assert from "node:assert/strict";
 import test from "node:test";
 import {
+    normalizeSidebarPrimaryMode,
     normalizeIndexFileFilterRootPath,
-    resolveIndexAgentOutcomeFilterFromState,
     resolveIndexFileFilterRootPathFromState,
 } from "../src/ui/views/viewState";
+
+test("normalizeSidebarPrimaryMode accepts the supported sidebar modes only", () => {
+    assert.equal(normalizeSidebarPrimaryMode("list"), "list");
+    assert.equal(normalizeSidebarPrimaryMode("thought-trail"), "thought-trail");
+    assert.equal(normalizeSidebarPrimaryMode("agent"), null);
+    assert.equal(normalizeSidebarPrimaryMode(undefined), null);
+});
 
 test("normalizeIndexFileFilterRootPath normalizes one file path", () => {
     assert.equal(
@@ -42,25 +49,6 @@ test("resolveIndexFileFilterRootPathFromState migrates the first legacy file pat
 test("resolveIndexFileFilterRootPathFromState returns undefined when no filter state is present", () => {
     assert.equal(
         resolveIndexFileFilterRootPathFromState({}),
-        undefined,
-    );
-});
-
-test("resolveIndexAgentOutcomeFilterFromState normalizes valid and invalid agent filter state", () => {
-    assert.equal(
-        resolveIndexAgentOutcomeFilterFromState({
-            indexAgentOutcomeFilter: "succeeded",
-        }),
-        "succeeded",
-    );
-    assert.equal(
-        resolveIndexAgentOutcomeFilterFromState({
-            indexAgentOutcomeFilter: "unexpected" as never,
-        }),
-        "all",
-    );
-    assert.equal(
-        resolveIndexAgentOutcomeFilterFromState({}),
         undefined,
     );
 });

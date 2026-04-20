@@ -43,6 +43,16 @@ test("draft session store updates text only for the active draft id", () => {
     assert.equal(store.getDraftComment()?.comment, "After");
 });
 
+test("draft session store updates bookmark state only for the active draft id", () => {
+    const store = new DraftSessionStore();
+    const draft = createDraft();
+    store.setDraftComment(draft, draft.filePath);
+
+    assert.equal(store.updateDraftCommentBookmarkState("other-id", true), false);
+    assert.equal(store.updateDraftCommentBookmarkState(draft.id, true), true);
+    assert.equal(store.getDraftComment()?.isBookmark, true);
+});
+
 test("draft session store tracks saving state and can clear a matching draft", () => {
     const store = new DraftSessionStore();
     const draft = createDraft();

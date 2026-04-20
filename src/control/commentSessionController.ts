@@ -51,6 +51,10 @@ export class CommentSessionController {
         return this.draftSessionStore.updateDraftCommentText(commentId, commentText);
     }
 
+    public updateDraftCommentBookmarkState(commentId: string, isBookmark: boolean): boolean {
+        return this.draftSessionStore.updateDraftCommentBookmarkState(commentId, isBookmark);
+    }
+
     public async setDraftComment(
         draftComment: DraftComment | null,
         hostFilePath: string | null = draftComment?.filePath ?? null,

@@ -21,6 +21,7 @@ type SerializableDraftComment = {
     comment: string;
     timestamp: number;
     anchorKind: DraftComment["anchorKind"] | null;
+    isBookmark: boolean;
     orphaned: boolean;
     resolved: boolean;
     deletedAt: number | null;
@@ -56,6 +57,7 @@ function serializeDraftComment(draft: DraftComment | null): SerializableDraftCom
         comment: draft.comment,
         timestamp: draft.timestamp,
         anchorKind: draft.anchorKind ?? null,
+        isBookmark: draft.isBookmark === true,
         orphaned: draft.orphaned === true,
         resolved: draft.resolved === true,
         deletedAt: draft.deletedAt ?? null,
@@ -119,6 +121,7 @@ export function buildPageSidebarThreadRenderSignature(options: {
             selectedText: thread.selectedText,
             selectedTextHash: thread.selectedTextHash,
             anchorKind: thread.anchorKind ?? null,
+            isBookmark: thread.isBookmark === true,
             orphaned: thread.orphaned === true,
             resolved: thread.resolved === true,
             deletedAt: thread.deletedAt ?? null,

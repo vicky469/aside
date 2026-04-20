@@ -30,6 +30,7 @@ function createComment(overrides: Partial<Comment> = {}): Comment {
         comment: overrides.comment ?? "Original comment",
         timestamp: overrides.timestamp ?? 123,
         anchorKind: overrides.anchorKind ?? "selection",
+        isBookmark: overrides.isBookmark ?? false,
         orphaned: overrides.orphaned ?? false,
         resolved: overrides.resolved ?? false,
     };
@@ -216,6 +217,31 @@ test("comment mutation controller saves a new draft by trimming and persisting i
     assert.deepEqual(host.notices, []);
 });
 
+test("comment mutation controller can skip the pre-save rerender for quick draft saves", async () => {
+    const draft = toDraft(createComment({
+        id: "draft-1",
+        comment: "  Ship it  ",
+    }));
+    const host = createHost({
+        draftComment: draft,
+        knownComments: [draft],
+        loadedComments: [],
+        currentNoteContentByPath: {
+            [draft.filePath]: "# Title\n\nAlpha beta gamma.\n",
+        },
+    });
+
+    await host.controller.saveDraft(draft.id, { skipPreSaveRefresh: true });
+
+    assert.equal(host.manager.getAllComments().length, 1);
+    assert.equal(host.manager.getAllComments()[0].comment, "Ship it");
+    assert.equal(host.getDraftComment(), null);
+    assert.equal(host.getSavingDraftCommentId(), null);
+    assert.equal(host.getRefreshCommentViewsCount(), 1);
+    assert.equal(host.getRefreshEditorDecorationsCount(), 1);
+    assert.deepEqual(host.notices, []);
+});
+
 test("comment mutation controller dispatches saved new entries to the agent hook after persistence", async () => {
     const draft = toDraft(createComment({
         id: "draft-agent-1",
@@ -350,6 +376,34 @@ test("comment mutation controller does not dispatch edited entries to the agent 
     assert.deepEqual(host.savedUserEntryEvents, []);
     assert.equal(host.getRefreshCommentViewsCount(), 1);
     assert.equal(host.getRefreshEditorDecorationsCount(), 1);
+});
+
+test("comment mutation controller can convert an edited note thread to bookmark state without rewriting the body", async () => {
+    const existing = createComment({
+        id: "thread-1",
+        comment: "Existing idea",
+        isBookmark: false,
+    });
+    const draft = {
+        ...toDraft(existing, {
+            comment: "Existing idea",
+            mode: "edit",
+            threadId: existing.id,
+            isBookmark: true,
+        }),
+        isBookmark: true,
+    } satisfies DraftComment;
+    const host = createHost({
+        draftComment: draft,
+        knownComments: [existing],
+        loadedComments: [existing],
+    });
+
+    await host.controller.saveDraft(draft.id);
+
+    assert.equal(host.manager.getCommentById(existing.id)?.comment, "Existing idea");
+    assert.equal(host.manager.getThreadById(existing.id)?.isBookmark, true);
+    assert.deepEqual(host.savedUserEntryEvents, []);
 });
 
 test("comment mutation controller keeps child edit drafts attached to their parent thread", async () => {

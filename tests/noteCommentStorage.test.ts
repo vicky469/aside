@@ -151,6 +151,28 @@ test("serializeNoteComments preserves page-note and orphaned anchor metadata", (
     assert.equal(parsed.comments[1].orphaned, true);
 });
 
+test("serializeNoteComments roundtrips bookmark state and omits false by default", () => {
+    const bookmarkSerialized = serializeNoteComments("Body", [
+        createComment({
+            id: "comment-bookmark",
+            isBookmark: true,
+        }),
+    ]);
+
+    assert.match(bookmarkSerialized, /"isBookmark": true/);
+
+    const parsedBookmark = parseNoteComments(bookmarkSerialized, "note.md");
+    assert.equal(parsedBookmark.comments[0].isBookmark, true);
+    assert.equal(parsedBookmark.threads[0].isBookmark, true);
+
+    const noteSerialized = serializeNoteComments("Body", [createComment()]);
+    assert.doesNotMatch(noteSerialized, /"isBookmark":/);
+
+    const parsedNote = parseNoteComments(noteSerialized, "note.md");
+    assert.equal(parsedNote.comments[0].isBookmark, false);
+    assert.equal(parsedNote.threads[0].isBookmark, false);
+});
+
 test("serializeNoteCommentThreads preserves stored top-level thread order", () => {
     const threads: CommentThread[] = [{
         id: "thread-later",

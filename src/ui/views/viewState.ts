@@ -1,14 +1,21 @@
 import { getNormalizedFilterPath, normalizeIndexFileFilterPaths } from "./indexFileFilter";
 
-export type IndexSidebarMode = "list" | "thought-trail" | "agent";
-export type IndexAgentOutcomeFilter = "all" | "succeeded" | "failed";
+export type SidebarPrimaryMode = "list" | "thought-trail";
+export type IndexSidebarMode = SidebarPrimaryMode;
+export type NoteSidebarMode = SidebarPrimaryMode;
 
 export interface CustomViewState extends Record<string, unknown> {
     filePath: string | null;
     indexSidebarMode?: IndexSidebarMode;
-    indexAgentOutcomeFilter?: IndexAgentOutcomeFilter;
+    noteSidebarMode?: NoteSidebarMode;
     indexFileFilterRootPath?: string | null;
     indexFileFilterPaths?: string[];
+}
+
+export function normalizeSidebarPrimaryMode(value: unknown): SidebarPrimaryMode | null {
+    return value === "list" || value === "thought-trail"
+        ? value
+        : null;
 }
 
 export function normalizeIndexFileFilterRootPath(filePath: string | null | undefined): string | null {
@@ -42,16 +49,4 @@ export function resolveIndexFileFilterRootPathFromState(state: Pick<CustomViewSt
     }
 
     return undefined;
-}
-
-export function resolveIndexAgentOutcomeFilterFromState(
-    state: Pick<CustomViewState, "indexAgentOutcomeFilter">,
-): IndexAgentOutcomeFilter | undefined {
-    if (!Object.prototype.hasOwnProperty.call(state, "indexAgentOutcomeFilter")) {
-        return undefined;
-    }
-
-    return state.indexAgentOutcomeFilter === "succeeded" || state.indexAgentOutcomeFilter === "failed"
-        ? state.indexAgentOutcomeFilter
-        : "all";
 }

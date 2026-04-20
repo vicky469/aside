@@ -29,6 +29,7 @@ function createComment(overrides: Partial<Comment> = {}): Comment {
         comment: overrides.comment ?? "Comment body",
         timestamp: overrides.timestamp ?? 100,
         anchorKind: overrides.anchorKind ?? "selection",
+        isBookmark: overrides.isBookmark ?? false,
         orphaned: overrides.orphaned ?? false,
         resolved: overrides.resolved ?? false,
     };
@@ -95,6 +96,18 @@ test("buildPersistedCommentPresentation includes orphaned class for orphaned sel
     assert.deepEqual(presentation.reanchorAction, {
         label: "Re-anchor to current selection",
     });
+});
+
+test("buildPersistedCommentPresentation includes bookmark class for bookmark threads", () => {
+    const presentation = buildPersistedCommentPresentation(createThread({
+        isBookmark: true,
+    }), null);
+
+    assert.deepEqual(presentation.classes, [
+        "sidenote2-comment-item",
+        "sidenote2-thread-item",
+        "bookmark",
+    ]);
 });
 
 test("buildPersistedCommentPresentation omits re-anchor action for page notes", () => {
@@ -370,7 +383,7 @@ test("formatSidebarCommentSourceFileLabel keeps the basename without md, even fo
     );
 });
 
-test("formatSidebarCommentIndexLeadLabel uses page name for page notes and selected text for anchored notes", () => {
+test("formatSidebarCommentIndexLeadLabel uses the source page name for both page and anchored notes", () => {
     assert.equal(
         formatSidebarCommentIndexLeadLabel(createComment({
             anchorKind: "page",
@@ -385,7 +398,7 @@ test("formatSidebarCommentIndexLeadLabel uses page name for page notes and selec
             selectedText: "First line\nsecond line",
             filePath: "docs/architecture.md",
         })),
-        "First line second line",
+        "architecture",
     );
 });
 

@@ -161,12 +161,7 @@ export function formatSidebarCommentSourceFileLabel(filePath: string): string {
 }
 
 export function formatSidebarCommentIndexLeadLabel(comment: Pick<Comment, "anchorKind" | "selectedText" | "filePath">): string {
-    if (isPageComment(comment)) {
-        return formatSidebarCommentSourceFileLabel(comment.filePath);
-    }
-
-    return formatSidebarCommentSelectedTextPreview(comment)
-        ?? formatSidebarCommentSourceFileLabel(comment.filePath);
+    return formatSidebarCommentSourceFileLabel(comment.filePath);
 }
 
 function renderObsidianExternalLinkIcon(container: HTMLElement): void {
@@ -204,6 +199,9 @@ function buildBasePersistedCommentPresentation(
     const classes = ["sidenote2-comment-item", "sidenote2-thread-item", ...extraClasses];
     if (isPageComment(comment)) {
         classes.push("page-note");
+    }
+    if (comment.isBookmark === true) {
+        classes.push("bookmark");
     }
     if (isOrphanedComment(comment)) {
         classes.push("orphaned");
@@ -447,11 +445,26 @@ export function shouldRenderSidebarCommentAuthor(author: SidebarCommentAuthorPre
     return author.kind !== "user";
 }
 
+function renderBookmarkStateIndicator(
+    metaEl: HTMLElement,
+    host: SidebarPersistedCommentHost,
+): void {
+    const indicatorEl = metaEl.createSpan({
+        cls: "sidenote2-comment-bookmark-indicator",
+    });
+    indicatorEl.setAttribute("aria-label", "Bookmarked");
+    indicatorEl.setAttribute("title", "Bookmarked");
+    host.setIcon(indicatorEl, "bookmark");
+}
+
 function renderCommentMeta(
     headerEl: HTMLElement,
     comment: Comment,
     meta: Pick<BasePersistedCommentPresentation, "metaText" | "metaPreviewText">,
     host: SidebarPersistedCommentHost,
+    options: {
+        showBookmarkState?: boolean;
+    } = {},
 ): void {
     const metaEl = headerEl.createEl("small", {
         cls: "sidenote2-timestamp sidenote2-comment-meta",
@@ -465,10 +478,11 @@ function renderCommentMeta(
         });
         sourceLabelEl.setAttribute(
             "title",
-            isPageComment(comment)
-                ? comment.filePath
-                : `${leadLabel}\n${comment.filePath}`,
+            comment.filePath,
         );
+        if (options.showBookmarkState) {
+            renderBookmarkStateIndicator(metaEl, host);
+        }
         metaEl.createSpan({
             cls: "sidenote2-comment-meta-value",
             text: meta.metaText,
@@ -477,10 +491,17 @@ function renderCommentMeta(
     }
 
     if (meta.metaPreviewText) {
+        if (options.showBookmarkState) {
+            renderBookmarkStateIndicator(metaEl, host);
+        }
         metaEl.createSpan({
             cls: "sidenote2-comment-meta-preview",
             text: meta.metaPreviewText,
         });
+    }
+
+    if (!meta.metaPreviewText && options.showBookmarkState) {
+        renderBookmarkStateIndicator(metaEl, host);
     }
 
     metaEl.createSpan({
@@ -671,7 +692,9 @@ function renderPersistedEntryCard(
 
     const headerEl = commentEl.createDiv("sidenote2-comment-header");
     const headerMainEl = headerEl.createDiv("sidenote2-comment-header-main");
-    renderCommentMeta(headerMainEl, options.comment, options.presentation, options.host);
+    renderCommentMeta(headerMainEl, options.comment, options.presentation, options.host, {
+        showBookmarkState: options.comment.isBookmark === true && options.comment.id === options.thread.id,
+    });
     const actionsEl = headerEl.createDiv("sidenote2-comment-actions");
 
     const contentWrapper = commentEl.createDiv("sidenote2-comment-content");

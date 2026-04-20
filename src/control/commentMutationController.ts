@@ -17,6 +17,10 @@ type AppendThreadEntryOptions = PersistOptions & {
     insertAfterCommentId?: string;
 };
 
+export type SaveDraftOptions = {
+    skipPreSaveRefresh?: boolean;
+};
+
 export interface CommentMutationHost {
     getAllCommentsNotePath(): string;
     getSidebarTargetFilePath(): string | null;
@@ -78,7 +82,7 @@ export class CommentMutationController {
         return true;
     }
 
-    public async saveDraft(commentId: string): Promise<void> {
+    public async saveDraft(commentId: string, options: SaveDraftOptions = {}): Promise<void> {
         const draft = this.host.getDraftComment();
         if (!draft || draft.id !== commentId || this.host.getSavingDraftCommentId() === commentId) {
             return;
@@ -106,7 +110,7 @@ export class CommentMutationController {
         });
         this.host.setDraftCommentValue(trimmedDraft);
         this.host.setSavingDraftCommentId(commentId);
-        if (trimmedDraft.mode !== "edit") {
+        if (trimmedDraft.mode !== "edit" && !options.skipPreSaveRefresh) {
             await this.host.refreshCommentViews();
         }
 
@@ -138,7 +142,9 @@ export class CommentMutationController {
             } else if (preparedDraft.mode === "append") {
                 saved = await this.appendEntry(preparedDraft);
             } else {
-                saved = await this.editComment(preparedDraft.id, preparedDraft.comment);
+                saved = await this.editComment(preparedDraft.id, preparedDraft.comment, {
+                    isBookmark: preparedDraft.isBookmark === true,
+                });
             }
             if (saved) {
                 void this.host.log?.("info", "draft", preparedDraft.mode === "edit" ? "draft.edit.success" : "draft.save.success", {
@@ -210,13 +216,20 @@ export class CommentMutationController {
         return true;
     }
 
-    public async editComment(commentId: string, newCommentText: string, options: { skipCommentViewRefresh?: boolean } = {}): Promise<boolean> {
+    public async editComment(
+        commentId: string,
+        newCommentText: string,
+        options: { skipCommentViewRefresh?: boolean; isBookmark?: Comment["isBookmark"] } = {},
+    ): Promise<boolean> {
         const latestTarget = await this.loadLatestCommentTarget(commentId);
         if (!latestTarget) {
             return false;
         }
 
         this.host.getCommentManager().editComment(commentId, newCommentText);
+        if (options.isBookmark !== undefined) {
+            this.host.getCommentManager().setCommentBookmarkState(commentId, options.isBookmark);
+        }
         await this.host.persistCommentsForFile(latestTarget.file, {
             immediateAggregateRefresh: true,
             skipCommentViewRefresh: options.skipCommentViewRefresh,
