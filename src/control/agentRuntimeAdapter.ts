@@ -196,6 +196,8 @@ function buildSideNotePrompt(promptText: string): string {
         "Keep the side-note reply compact and easy to scan.",
         "Use plain paragraphs or one simple list; avoid headings, long multi-section layouts, and excess blank lines.",
         "Keep the reply at or under 250 words.",
+        "If you include a diagram in a side note, render it as a compact ASCII diagram that fits comfortably in the sidebar.",
+        "Do not use Mermaid or other large diagram syntax in side-note replies.",
         "If the best useful answer would exceed 250 words, create or update a short linked wiki note with the full detail and return a concise side note that points to it.",
         "Do not mention skills, prompts, searches, files, tools, AGENTS instructions, or your process.",
         "Do not narrate what you are doing.",
