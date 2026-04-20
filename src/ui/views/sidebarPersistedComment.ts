@@ -9,6 +9,8 @@ import { normalizeCommentMarkdownForRender } from "../editor/commentMarkdownRend
 import { decorateRenderedCommentMentions } from "../editor/commentEditorStyling";
 import { SIDE_NOTE2_REGENERATE_ICON_ID } from "../sideNote2Icon";
 import {
+    isSidebarCommentOpenBlockingTarget,
+    shouldRefocusSidebarCommentContent,
     shouldActivateSidebarComment,
     shouldOpenSidebarCommentOnDoubleClick,
 } from "./commentPointerAction";
@@ -352,7 +354,7 @@ function attachSidebarCommentCardInteractions(
     const openCommentOnDoubleClick = (event: MouseEvent): boolean => {
         const target = host.getEventTargetElement(event.target);
         if (!shouldOpenSidebarCommentOnDoubleClick({
-            clickedInteractiveElement: !!target?.closest("button, a"),
+            clickedInteractiveElement: isSidebarCommentOpenBlockingTarget(target),
         })) {
             return false;
         }
@@ -367,7 +369,7 @@ function attachSidebarCommentCardInteractions(
         const target = host.getEventTargetElement(event.target);
         const selection = window.getSelection();
         if (!shouldActivateSidebarComment({
-            clickedInteractiveElement: !!target?.closest("button, a"),
+            clickedInteractiveElement: isSidebarCommentOpenBlockingTarget(target),
             clickedInsideCommentContent: !!target?.closest(".sidenote2-comment-content"),
             selection,
             selectionInsideSidebarCommentContent: host.isSelectionInsideSidebarContent(selection),
@@ -379,27 +381,42 @@ function attachSidebarCommentCardInteractions(
     });
     commentEl.addEventListener("dblclick", openCommentOnDoubleClick);
 
-    const focusContentWrapper = () => {
-        host.claimSidebarInteractionOwnership(contentWrapper);
+    const claimContentOwnership = (target: HTMLElement | null) => {
+        host.claimSidebarInteractionOwnership(
+            shouldRefocusSidebarCommentContent(target) ? contentWrapper : null,
+        );
     };
     const stopContentPointerPropagation = (event: MouseEvent) => {
-        focusContentWrapper();
+        const target = host.getEventTargetElement(event.target);
+        claimContentOwnership(target);
         event.stopPropagation();
     };
 
     contentWrapper.addEventListener("mousedown", stopContentPointerPropagation);
     contentWrapper.addEventListener("mouseup", stopContentPointerPropagation);
     contentWrapper.addEventListener("dblclick", (event: MouseEvent) => {
-        focusContentWrapper();
-        event.stopPropagation();
+        const target = host.getEventTargetElement(event.target);
+        claimContentOwnership(target);
+        if (!openCommentOnDoubleClick(event)) {
+            event.stopPropagation();
+        }
     });
     contentWrapper.addEventListener("click", (event: MouseEvent) => {
         const target = host.getEventTargetElement(event.target);
         const link = target?.closest("a") as HTMLAnchorElement | null;
+        const selection = window.getSelection();
 
-        focusContentWrapper();
+        claimContentOwnership(target);
         event.stopPropagation();
         if (!link) {
+            if (shouldActivateSidebarComment({
+                clickedInteractiveElement: isSidebarCommentOpenBlockingTarget(target),
+                clickedInsideCommentContent: false,
+                selection,
+                selectionInsideSidebarCommentContent: host.isSelectionInsideSidebarContent(selection),
+            })) {
+                void host.activateComment(comment);
+            }
             return;
         }
 

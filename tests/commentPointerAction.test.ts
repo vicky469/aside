@@ -1,9 +1,21 @@
 import * as assert from "node:assert/strict";
 import test from "node:test";
 import {
+    isSidebarCommentOpenBlockingTarget,
+    shouldRefocusSidebarCommentContent,
     shouldActivateSidebarComment,
     shouldOpenSidebarCommentOnDoubleClick,
 } from "../src/ui/views/commentPointerAction";
+
+function createClosestTarget(
+    matcher: (selector: string) => boolean,
+): Element {
+    return {
+        closest(selector: string) {
+            return matcher(selector) ? this as Element : null;
+        },
+    } as unknown as Element;
+}
 
 test("shouldActivateSidebarComment allows plain clicks with no selection", () => {
     assert.equal(shouldActivateSidebarComment({
@@ -84,4 +96,28 @@ test("shouldOpenSidebarCommentOnDoubleClick blocks interactive targets", () => {
     assert.equal(shouldOpenSidebarCommentOnDoubleClick({
         clickedInteractiveElement: true,
     }), false);
+});
+
+test("isSidebarCommentOpenBlockingTarget treats links as card-open blockers", () => {
+    const target = createClosestTarget((selector) => selector.includes("a"));
+
+    assert.equal(isSidebarCommentOpenBlockingTarget(target), true);
+});
+
+test("isSidebarCommentOpenBlockingTarget treats inline editors as card-open blockers", () => {
+    const target = createClosestTarget((selector) => selector.includes(".sidenote2-inline-editor"));
+
+    assert.equal(isSidebarCommentOpenBlockingTarget(target), true);
+});
+
+test("shouldRefocusSidebarCommentContent keeps wrapper focus for plain rendered content", () => {
+    const target = createClosestTarget(() => false);
+
+    assert.equal(shouldRefocusSidebarCommentContent(target), true);
+});
+
+test("shouldRefocusSidebarCommentContent does not steal focus from draft textareas", () => {
+    const target = createClosestTarget((selector) => selector.includes("textarea"));
+
+    assert.equal(shouldRefocusSidebarCommentContent(target), false);
 });

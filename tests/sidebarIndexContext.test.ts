@@ -1,6 +1,7 @@
 import * as assert from "node:assert/strict";
 import test from "node:test";
 import {
+    buildCommentRevealScrollTarget,
     pickPinnedCommentableFile,
     pickPreferredFileLeafCandidate,
     pickSidebarTargetFile,
@@ -290,6 +291,44 @@ test("fixed reveal flow reuses an existing file leaf instead of forcing a new ta
     ], "Folder/Note.md");
 
     assert.equal(target, "main-1");
+});
+
+test("anchored reveal scroll target keeps the stored character range when no re-resolved anchor is available", () => {
+    assert.deepEqual(
+        buildCommentRevealScrollTarget({
+            startLine: 378,
+            startChar: 1026,
+            endLine: 378,
+            endChar: 1043,
+        }),
+        {
+            from: { line: 378, ch: 1026 },
+            to: { line: 378, ch: 1043 },
+        },
+    );
+});
+
+test("anchored reveal scroll target prefers the resolved anchor range when it changes", () => {
+    assert.deepEqual(
+        buildCommentRevealScrollTarget(
+            {
+                startLine: 378,
+                startChar: 1026,
+                endLine: 378,
+                endChar: 1043,
+            },
+            {
+                startLine: 379,
+                startChar: 14,
+                endLine: 379,
+                endChar: 31,
+            },
+        ),
+        {
+            from: { line: 379, ch: 14 },
+            to: { line: 379, ch: 31 },
+        },
+    );
 });
 
 test("sidebar reveal helper skips revealing an existing sidebar leaf for index-origin sync", () => {

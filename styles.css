@@ -1176,34 +1176,20 @@
     height: 14px;
 }
 
-@media (hover: hover) {
-    .sidenote2-comment-item:not(.sidenote2-agent-stream-item) .sidenote2-comment-actions,
-    .sidenote2-comment-item:not(.sidenote2-agent-stream-item) .sidenote2-thread-footer-actions,
-    .sidenote2-comment-item:not(.sidenote2-agent-stream-item) .sidenote2-thread-reanchor-button {
-        opacity: 0;
-        visibility: hidden;
-        pointer-events: none;
-    }
+.sidenote2-comment-item:not(.sidenote2-agent-stream-item) .sidenote2-comment-actions,
+.sidenote2-comment-item:not(.sidenote2-agent-stream-item) .sidenote2-thread-footer-actions,
+.sidenote2-comment-item:not(.sidenote2-agent-stream-item) .sidenote2-thread-reanchor-button {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+}
 
-    .sidenote2-comment-item:not(.sidenote2-agent-stream-item):hover .sidenote2-comment-actions,
-    .sidenote2-comment-item:not(.sidenote2-agent-stream-item):focus-within .sidenote2-comment-actions,
-    .sidenote2-comment-item:not(.sidenote2-agent-stream-item).active .sidenote2-comment-actions {
-        opacity: 1;
-        visibility: visible;
-        pointer-events: auto;
-    }
-
-    .sidenote2-comment-item:not(.sidenote2-agent-stream-item):hover .sidenote2-thread-footer-actions,
-    .sidenote2-comment-item:not(.sidenote2-agent-stream-item):focus-within .sidenote2-thread-footer-actions,
-    .sidenote2-comment-item:not(.sidenote2-agent-stream-item).active .sidenote2-thread-footer-actions,
-    .sidenote2-comment-item:not(.sidenote2-agent-stream-item):hover .sidenote2-thread-reanchor-button,
-    .sidenote2-comment-item:not(.sidenote2-agent-stream-item):focus-within .sidenote2-thread-reanchor-button,
-    .sidenote2-comment-item:not(.sidenote2-agent-stream-item).active .sidenote2-thread-reanchor-button,
-    .sidenote2-comment-item:not(.sidenote2-agent-stream-item):hover .sidenote2-thread-nested-toggle-button,
-    .sidenote2-comment-item:not(.sidenote2-agent-stream-item):focus-within .sidenote2-thread-nested-toggle-button,
-    .sidenote2-comment-item:not(.sidenote2-agent-stream-item).active .sidenote2-thread-nested-toggle-button {
-        opacity: 1;
-    }
+.sidenote2-comment-item:not(.sidenote2-agent-stream-item).active .sidenote2-comment-actions,
+.sidenote2-comment-item:not(.sidenote2-agent-stream-item).active .sidenote2-thread-footer-actions,
+.sidenote2-comment-item:not(.sidenote2-agent-stream-item).active .sidenote2-thread-reanchor-button {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
 }
 
 .sidenote2-inline-editor {

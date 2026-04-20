@@ -6,6 +6,24 @@ export interface PreferredFileLeafCandidate<T> {
     recent: boolean;
 }
 
+export interface CommentRevealAnchorRange {
+    startLine: number;
+    startChar: number;
+    endLine: number;
+    endChar: number;
+}
+
+export interface CommentRevealScrollTarget {
+    from: {
+        line: number;
+        ch: number;
+    };
+    to: {
+        line: number;
+        ch: number;
+    };
+}
+
 export function pickPinnedCommentableFile<T>(
     activeFile: T | null,
     activeSidebarFile: T | null,
@@ -82,4 +100,21 @@ export function resolveIndexSidebarScopeRootPath(
     }
 
     return scopeRootFilePath;
+}
+
+export function buildCommentRevealScrollTarget(
+    comment: CommentRevealAnchorRange,
+    resolvedAnchor: CommentRevealAnchorRange | null = null,
+): CommentRevealScrollTarget {
+    const anchor = resolvedAnchor ?? comment;
+    return {
+        from: {
+            line: anchor.startLine,
+            ch: anchor.startChar,
+        },
+        to: {
+            line: anchor.endLine,
+            ch: anchor.endChar,
+        },
+    };
 }

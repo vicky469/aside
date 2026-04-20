@@ -215,7 +215,10 @@ function renderDraftEditor(
         event.stopPropagation();
     };
 
+    textarea.addEventListener("mousedown", stopPropagation);
+    textarea.addEventListener("mouseup", stopPropagation);
     textarea.addEventListener("click", stopPropagation);
+    textarea.addEventListener("dblclick", stopPropagation);
     textarea.addEventListener("input", (event) => {
         const target = event.target as HTMLTextAreaElement;
         host.updateDraftCommentText(comment.id, target.value);

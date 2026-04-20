@@ -7,6 +7,7 @@ import { isPageComment } from "../core/anchors/commentAnchors";
 import { resolveAnchorRange } from "../core/anchors/anchorResolver";
 import { parseNoteComments } from "../core/storage/noteCommentStorage";
 import {
+    buildCommentRevealScrollTarget,
     pickPreferredFileLeafCandidate,
     resolveIndexSidebarScopeRootPath,
     shouldRevealSidebarLeaf,
@@ -318,13 +319,7 @@ export class CommentNavigationController {
                 { line: resolvedAnchor.startLine, ch: resolvedAnchor.startChar },
                 { line: resolvedAnchor.startLine, ch: resolvedAnchor.startChar },
             );
-            editor.scrollIntoView(
-                {
-                    from: { line: resolvedAnchor.startLine, ch: 0 },
-                    to: { line: resolvedAnchor.endLine, ch: 0 },
-                },
-                true,
-            );
+            editor.scrollIntoView(buildCommentRevealScrollTarget(comment, resolvedAnchor), true);
             void this.host.log?.("info", "navigation", "navigation.reveal.resolved", {
                 commentId: comment.id,
                 filePath: comment.filePath,
@@ -336,13 +331,7 @@ export class CommentNavigationController {
                 commentId: comment.id,
                 filePath: comment.filePath,
             });
-            editor.scrollIntoView(
-                {
-                    from: { line: comment.startLine, ch: 0 },
-                    to: { line: comment.startLine, ch: 0 },
-                },
-                true,
-            );
+            editor.scrollIntoView(buildCommentRevealScrollTarget(comment), true);
         }
 
         editor.focus();
