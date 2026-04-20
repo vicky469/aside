@@ -82,7 +82,7 @@ test("comment session controller refreshes comment views when nested comments ar
     assert.equal(harness.getRefreshCommentViewsCount(), 1);
 });
 
-test("comment session controller can hide nested comments for a single thread and reset them with show all", async () => {
+test("comment session controller can override nested comment visibility per thread and reset with show all", async () => {
     const harness = createHarness();
 
     assert.equal(harness.controller.shouldShowNestedCommentsForThread("thread-1"), true);
@@ -96,11 +96,18 @@ test("comment session controller can hide nested comments for a single thread an
 
     assert.equal(await harness.controller.setShowNestedComments(false), true);
     assert.equal(harness.controller.shouldShowNestedCommentsForThread("thread-1"), false);
+    assert.equal(harness.controller.shouldShowNestedCommentsForThread("thread-2"), false);
     assert.equal(harness.getRefreshCommentViewsCount(), 2);
+
+    assert.equal(await harness.controller.setShowNestedCommentsForThread("thread-1", true), true);
+    assert.equal(harness.controller.shouldShowNestedCommentsForThread("thread-1"), true);
+    assert.equal(harness.controller.shouldShowNestedCommentsForThread("thread-2"), false);
+    assert.equal(harness.getRefreshCommentViewsCount(), 3);
 
     assert.equal(await harness.controller.setShowNestedComments(true), true);
     assert.equal(harness.controller.shouldShowNestedCommentsForThread("thread-1"), true);
-    assert.equal(harness.getRefreshCommentViewsCount(), 3);
+    assert.equal(harness.controller.shouldShowNestedCommentsForThread("thread-2"), true);
+    assert.equal(harness.getRefreshCommentViewsCount(), 4);
 });
 
 test("comment session controller tracks revealed comments and clears markdown selections on reset", () => {

@@ -846,14 +846,12 @@ export default class SideNote2View extends ItemView {
                 : null;
             const threadAgentRuns = getAgentRunsForCommentThread(options.allAgentRuns, item.thread);
             const showNestedComments = this.plugin.shouldShowNestedCommentsForThread(item.thread.id);
-            const canToggleThreadNestedComments = this.plugin.shouldShowNestedComments();
             return {
                 key: `thread:${item.thread.id}`,
                 signature: buildPageSidebarThreadRenderSignature({
                     thread: item.thread,
                     activeCommentId: this.interactionController.getActiveCommentId(),
                     showNestedComments,
-                    canToggleThreadNestedComments,
                     enablePageThreadReorder: options.enablePageThreadReorder,
                     editDraftComment,
                     appendDraftComment,
@@ -1528,7 +1526,6 @@ export default class SideNote2View extends ItemView {
             enablePageThreadReorder,
             enableSoftDeleteActions: !isIndexView,
             showNestedComments: this.plugin.shouldShowNestedCommentsForThread(thread.id),
-            canToggleThreadNestedComments: this.plugin.shouldShowNestedComments(),
             editDraftComment,
             appendDraftComment,
             agentRun,

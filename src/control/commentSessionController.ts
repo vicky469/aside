@@ -16,7 +16,7 @@ export interface RevealedCommentStateUpdateOptions {
 export class CommentSessionController {
     private readonly draftSessionStore = new DraftSessionStore();
     private readonly revealedCommentSelectionStore = new RevealedCommentSelectionStore();
-    private readonly hiddenNestedCommentThreadIds = new Set<string>();
+    private readonly nestedCommentThreadOverrideIds = new Set<string>();
     private showResolvedComments = false;
     private showDeletedComments = false;
     private showNestedComments = true;
@@ -107,7 +107,11 @@ export class CommentSessionController {
     }
 
     public shouldShowNestedCommentsForThread(threadId: string): boolean {
-        return this.showNestedComments && !this.hiddenNestedCommentThreadIds.has(threadId);
+        if (this.showNestedComments) {
+            return !this.nestedCommentThreadOverrideIds.has(threadId);
+        }
+
+        return this.nestedCommentThreadOverrideIds.has(threadId);
     }
 
     public shouldShowDeletedComments(): boolean {
@@ -130,21 +134,21 @@ export class CommentSessionController {
         }
 
         this.showNestedComments = showNested;
-        this.hiddenNestedCommentThreadIds.clear();
+        this.nestedCommentThreadOverrideIds.clear();
         await this.host.refreshCommentViews();
         return true;
     }
 
     public async setShowNestedCommentsForThread(threadId: string, showNested: boolean): Promise<boolean> {
-        const isVisible = !this.hiddenNestedCommentThreadIds.has(threadId);
+        const isVisible = this.shouldShowNestedCommentsForThread(threadId);
         if (isVisible === showNested) {
             return false;
         }
 
-        if (showNested) {
-            this.hiddenNestedCommentThreadIds.delete(threadId);
+        if (showNested === this.showNestedComments) {
+            this.nestedCommentThreadOverrideIds.delete(threadId);
         } else {
-            this.hiddenNestedCommentThreadIds.add(threadId);
+            this.nestedCommentThreadOverrideIds.add(threadId);
         }
         await this.host.refreshCommentViews();
         return true;

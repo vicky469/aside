@@ -77,7 +77,6 @@ test("buildPageSidebarThreadRenderSignature ignores unrelated active comment ids
         thread,
         activeCommentId: null,
         showNestedComments: false,
-        canToggleThreadNestedComments: false,
         enablePageThreadReorder: true,
         editDraftComment: null,
         appendDraftComment: null,
@@ -87,7 +86,6 @@ test("buildPageSidebarThreadRenderSignature ignores unrelated active comment ids
         thread,
         activeCommentId: "other-thread",
         showNestedComments: false,
-        canToggleThreadNestedComments: false,
         enablePageThreadReorder: true,
         editDraftComment: null,
         appendDraftComment: null,
@@ -97,7 +95,6 @@ test("buildPageSidebarThreadRenderSignature ignores unrelated active comment ids
         thread,
         activeCommentId: "entry-2",
         showNestedComments: false,
-        canToggleThreadNestedComments: false,
         enablePageThreadReorder: true,
         editDraftComment: null,
         appendDraftComment: null,
@@ -114,7 +111,6 @@ test("buildPageSidebarThreadRenderSignature changes when nested draft or run sta
         thread,
         activeCommentId: null,
         showNestedComments: false,
-        canToggleThreadNestedComments: false,
         enablePageThreadReorder: true,
         editDraftComment: null,
         appendDraftComment: null,
@@ -124,7 +120,6 @@ test("buildPageSidebarThreadRenderSignature changes when nested draft or run sta
         thread,
         activeCommentId: null,
         showNestedComments: false,
-        canToggleThreadNestedComments: false,
         enablePageThreadReorder: true,
         editDraftComment: createDraft({ mode: "edit", id: "entry-2", threadId: "thread-1" }),
         appendDraftComment: null,
@@ -134,7 +129,6 @@ test("buildPageSidebarThreadRenderSignature changes when nested draft or run sta
         thread,
         activeCommentId: null,
         showNestedComments: false,
-        canToggleThreadNestedComments: false,
         enablePageThreadReorder: true,
         editDraftComment: null,
         appendDraftComment: createDraft(),
@@ -144,7 +138,6 @@ test("buildPageSidebarThreadRenderSignature changes when nested draft or run sta
         thread,
         activeCommentId: null,
         showNestedComments: false,
-        canToggleThreadNestedComments: false,
         enablePageThreadReorder: true,
         editDraftComment: null,
         appendDraftComment: null,
@@ -156,30 +149,28 @@ test("buildPageSidebarThreadRenderSignature changes when nested draft or run sta
     assert.notEqual(base, withFailedRun);
 });
 
-test("buildPageSidebarThreadRenderSignature changes when thread-level nested toggle availability changes", () => {
+test("buildPageSidebarThreadRenderSignature changes when nested comments are shown or hidden", () => {
     const thread = createThread();
-    const hiddenWithoutToggle = buildPageSidebarThreadRenderSignature({
+    const hidden = buildPageSidebarThreadRenderSignature({
         thread,
         activeCommentId: null,
         showNestedComments: false,
-        canToggleThreadNestedComments: false,
         enablePageThreadReorder: true,
         editDraftComment: null,
         appendDraftComment: null,
         threadAgentRuns: [],
     });
-    const hiddenWithToggle = buildPageSidebarThreadRenderSignature({
+    const visible = buildPageSidebarThreadRenderSignature({
         thread,
         activeCommentId: null,
-        showNestedComments: false,
-        canToggleThreadNestedComments: true,
+        showNestedComments: true,
         enablePageThreadReorder: true,
         editDraftComment: null,
         appendDraftComment: null,
         threadAgentRuns: [],
     });
 
-    assert.notEqual(hiddenWithoutToggle, hiddenWithToggle);
+    assert.notEqual(hidden, visible);
 });
 
 test("buildPageSidebarDraftRenderSignature changes only for the matching active draft", () => {

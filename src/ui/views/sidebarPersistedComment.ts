@@ -59,7 +59,6 @@ export interface SidebarPersistedCommentHost {
     enablePageThreadReorder: boolean;
     enableSoftDeleteActions: boolean;
     showNestedComments: boolean;
-    canToggleThreadNestedComments: boolean;
     editDraftComment: DraftComment | null;
     appendDraftComment: DraftComment | null;
     agentRun: AgentRunRecord | null;
@@ -908,7 +907,7 @@ export async function renderPersistedCommentCard(
             showRetryAction: false,
         }, host);
     }
-    if (hasStoredChildEntries && host.canToggleThreadNestedComments) {
+    if (hasStoredChildEntries) {
         renderThreadNestedToggleButton(commentEl, thread.id, host.showNestedComments, host);
     }
 

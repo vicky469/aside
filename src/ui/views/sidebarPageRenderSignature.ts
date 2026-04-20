@@ -102,7 +102,6 @@ export function buildPageSidebarThreadRenderSignature(options: {
     thread: CommentThread;
     activeCommentId: string | null;
     showNestedComments: boolean;
-    canToggleThreadNestedComments: boolean;
     enablePageThreadReorder: boolean;
     editDraftComment: DraftComment | null;
     appendDraftComment: DraftComment | null;
@@ -129,7 +128,6 @@ export function buildPageSidebarThreadRenderSignature(options: {
         },
         isActive: isActiveCommentInThread(thread, options.activeCommentId),
         showNestedComments: options.showNestedComments,
-        canToggleThreadNestedComments: options.canToggleThreadNestedComments,
         enablePageThreadReorder: options.enablePageThreadReorder,
         editDraftComment: serializeDraftComment(options.editDraftComment),
         appendDraftComment: serializeDraftComment(options.appendDraftComment),
