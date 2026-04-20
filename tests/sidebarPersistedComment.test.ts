@@ -7,6 +7,7 @@ import {
     buildPersistedThreadEntryPresentation,
     formatSidebarCommentIndexLeadLabel,
     formatSidebarCommentSourceFileLabel,
+    getAppendDraftInsertAfterEntryId,
     getRenderableThreadEntries,
     getAgentRunStatusPresentation,
     resolveSidebarCommentAuthor,
@@ -245,6 +246,63 @@ test("shouldRenderNestedThreadEntries keeps streamed agent replies visible even 
         hasAppendDraftComment: false,
         hasAgentStream: true,
     }), true);
+});
+
+test("getAppendDraftInsertAfterEntryId returns the clicked child entry id for child-targeted appends", () => {
+    const thread = createThreadWithEntries({
+        id: "thread-1",
+        entries: [
+            { id: "thread-1", body: "Parent", timestamp: 100 },
+            { id: "entry-2", body: "Child", timestamp: 200 },
+            { id: "entry-3", body: "Later child", timestamp: 300 },
+        ],
+        createdAt: 100,
+        updatedAt: 300,
+    });
+
+    assert.equal(getAppendDraftInsertAfterEntryId(thread, {
+        ...createComment({
+            id: "draft-1",
+            comment: "",
+            timestamp: 400,
+        }),
+        mode: "append",
+        threadId: "thread-1",
+        appendAfterCommentId: "entry-2",
+    }), "entry-2");
+});
+
+test("getAppendDraftInsertAfterEntryId falls back to end-of-thread for parent-targeted or unknown append targets", () => {
+    const thread = createThreadWithEntries({
+        id: "thread-1",
+        entries: [
+            { id: "thread-1", body: "Parent", timestamp: 100 },
+            { id: "entry-2", body: "Child", timestamp: 200 },
+        ],
+        createdAt: 100,
+        updatedAt: 200,
+    });
+
+    assert.equal(getAppendDraftInsertAfterEntryId(thread, {
+        ...createComment({
+            id: "draft-1",
+            comment: "",
+            timestamp: 300,
+        }),
+        mode: "append",
+        threadId: "thread-1",
+        appendAfterCommentId: "thread-1",
+    }), null);
+    assert.equal(getAppendDraftInsertAfterEntryId(thread, {
+        ...createComment({
+            id: "draft-2",
+            comment: "",
+            timestamp: 300,
+        }),
+        mode: "append",
+        threadId: "thread-1",
+        appendAfterCommentId: "missing-entry",
+    }), null);
 });
 
 test("getRenderableThreadEntries keeps the persisted agent output entry visible while the live stream is retained", () => {

@@ -315,6 +315,24 @@ export function shouldRenderNestedThreadEntries(
     return childEntries.some((entry) => entry.id === options.activeCommentId);
 }
 
+export function getAppendDraftInsertAfterEntryId(
+    thread: CommentThread,
+    draft: DraftComment | null,
+): string | null {
+    if (!draft || draft.mode !== "append") {
+        return null;
+    }
+
+    const targetId = draft.appendAfterCommentId ?? draft.threadId ?? null;
+    if (!targetId || targetId === thread.id) {
+        return null;
+    }
+
+    return thread.entries.slice(1).some((entry) => entry.id === targetId)
+        ? targetId
+        : null;
+}
+
 function attachSidebarCommentCardInteractions(
     commentEl: HTMLDivElement,
     contentWrapper: HTMLDivElement,
@@ -704,6 +722,7 @@ export async function renderPersistedCommentCard(
         hasAgentStream: !!host.agentStream,
         hasDeletedEntriesVisible: hasVisibleDeletedEntries(thread),
     });
+    const appendDraftAfterEntryId = getAppendDraftInsertAfterEntryId(thread, host.appendDraftComment);
     const renderedParent = renderPersistedEntryCard(threadEl, {
         comment,
         thread,
@@ -766,6 +785,7 @@ export async function renderPersistedCommentCard(
     }
 
     const childCommentsEl = threadEl.createDiv("sidenote2-thread-replies");
+    let renderedAppendDraft = false;
     if (shouldRenderStoredChildren) {
         for (const entry of entries.slice(1)) {
             const entryComment = threadEntryToComment(thread, entry);
@@ -808,10 +828,15 @@ export async function renderPersistedCommentCard(
                 },
                 host,
             );
+
+            if (host.appendDraftComment && appendDraftAfterEntryId === entry.id) {
+                host.renderAppendDraft(childCommentsEl, host.appendDraftComment);
+                renderedAppendDraft = true;
+            }
         }
     }
 
-    if (host.appendDraftComment) {
+    if (host.appendDraftComment && !renderedAppendDraft) {
         host.renderAppendDraft(childCommentsEl, host.appendDraftComment);
     }
 

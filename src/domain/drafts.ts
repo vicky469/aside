@@ -5,6 +5,7 @@ import type { Comment } from "../commentManager";
 export interface DraftComment extends Comment {
     mode: "new" | "edit" | "append";
     threadId?: string;
+    appendAfterCommentId?: string;
 }
 
 export interface DraftSelection {

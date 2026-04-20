@@ -265,6 +265,41 @@ test("comment mutation controller dispatches saved append entries to the agent h
     }]);
 });
 
+test("comment mutation controller inserts child-targeted append drafts after the clicked child entry", async () => {
+    const existing = createComment({ id: "thread-1", comment: "Original" });
+    const draft = {
+        ...toDraft(existing, {
+            comment: "Inserted after child",
+            mode: "append",
+        }),
+        id: "entry-4",
+        threadId: existing.id,
+        appendAfterCommentId: "entry-2",
+    } satisfies DraftComment;
+    const host = createHost({
+        draftComment: draft,
+        knownComments: [existing],
+        loadedComments: [existing],
+    });
+    host.manager.appendEntry(existing.id, {
+        id: "entry-2",
+        body: "First child",
+        timestamp: 200,
+    });
+    host.manager.appendEntry(existing.id, {
+        id: "entry-3",
+        body: "Second child",
+        timestamp: 300,
+    });
+
+    await host.controller.saveDraft(draft.id);
+
+    assert.deepEqual(
+        host.manager.getThreadById(existing.id)?.entries.map((entry) => entry.id),
+        ["thread-1", "entry-2", "entry-4", "entry-3"],
+    );
+});
+
 test("comment mutation controller does not dispatch edited entries to the agent hook", async () => {
     const existing = createComment({ id: "thread-1", comment: "@codex original" });
     const draft = toDraft(existing, {

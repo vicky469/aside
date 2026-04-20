@@ -234,6 +234,14 @@ export class CommentMutationController {
             body: draftComment.comment,
             timestamp: draftComment.timestamp,
         });
+        if (draftComment.appendAfterCommentId && draftComment.appendAfterCommentId !== threadId) {
+            this.host.getCommentManager().reorderThreadEntries(
+                threadId,
+                draftComment.id,
+                draftComment.appendAfterCommentId,
+                "after",
+            );
+        }
         await this.host.persistCommentsForFile(latestTarget.file, { immediateAggregateRefresh: true });
         return true;
     }
@@ -472,9 +480,10 @@ export class CommentMutationController {
     }
 
     private toPersistedComment(draftComment: DraftComment): Comment {
-        const { mode, threadId, ...comment } = draftComment;
+        const { mode, threadId, appendAfterCommentId, ...comment } = draftComment;
         void mode;
         void threadId;
+        void appendAfterCommentId;
         return comment;
     }
 

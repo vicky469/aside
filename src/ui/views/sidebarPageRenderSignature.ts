@@ -26,6 +26,7 @@ type SerializableDraftComment = {
     deletedAt: number | null;
     mode: DraftComment["mode"];
     threadId: string | null;
+    appendAfterCommentId: string | null;
 };
 
 type SerializableAgentRun = {
@@ -60,6 +61,7 @@ function serializeDraftComment(draft: DraftComment | null): SerializableDraftCom
         deletedAt: draft.deletedAt ?? null,
         mode: draft.mode,
         threadId: draft.threadId ?? null,
+        appendAfterCommentId: draft.appendAfterCommentId ?? null,
     };
 }
 

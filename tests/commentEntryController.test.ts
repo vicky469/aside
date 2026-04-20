@@ -192,6 +192,7 @@ test("comment entry controller starts an append-entry draft using the resolved v
     assert.ok(draft);
     assert.equal(draft.id, "comment-1");
     assert.equal(draft.threadId, "thread-1");
+    assert.equal(draft.appendAfterCommentId, "thread-1");
     assert.equal(draft.mode, "append");
     assert.equal(draft.filePath, existingComment.filePath);
     assert.equal(draft.comment, "");
@@ -234,6 +235,7 @@ test("comment entry controller can start an append-entry draft from a child entr
     assert.ok(draft);
     assert.equal(draft.id, "comment-1");
     assert.equal(draft.threadId, "thread-1");
+    assert.equal(draft.appendAfterCommentId, "entry-2");
     assert.equal(draft.mode, "append");
     assert.equal(draft.filePath, childComment.filePath);
     assert.equal(draft.comment, "");

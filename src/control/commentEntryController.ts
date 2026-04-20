@@ -59,11 +59,11 @@ export class CommentEntryController {
     }
 
     public async startAppendEntryDraft(
-        threadId: string,
+        commentId: string,
         hostFilePath: string | null = null,
     ): Promise<boolean> {
-        const comment = this.host.getKnownCommentById(threadId);
-        const normalizedThreadId = this.host.getKnownThreadIdByCommentId(threadId) ?? threadId;
+        const comment = this.host.getKnownCommentById(commentId);
+        const normalizedThreadId = this.host.getKnownThreadIdByCommentId(commentId) ?? commentId;
         const commentFile = comment ? this.host.getFileByPath(comment.filePath) : null;
 
         if (!(comment && commentFile && this.host.isCommentableFile(commentFile))) {
@@ -79,12 +79,14 @@ export class CommentEntryController {
             timestamp: Date.now(),
             mode: "append",
             threadId: normalizedThreadId,
+            appendAfterCommentId: commentId,
         };
         this.host.markDraftFileActive(commentFile);
         await this.host.setDraftComment(draft, hostFilePath ?? comment.filePath);
         void this.host.log?.("info", "draft", "draft.append.created", {
             filePath: comment.filePath,
             threadId: normalizedThreadId,
+            appendAfterCommentId: commentId,
             commentId: draft.id,
         });
         await this.host.activateViewAndHighlightComment(draft.id);
