@@ -114,18 +114,10 @@ function parseIndexSidebarMode(value: unknown): IndexSidebarMode | null {
         : null;
 }
 
-type SidebarReorderDragState =
-    | {
-        kind: "thread";
-        filePath: string;
-        threadId: string;
-    }
-    | {
-        kind: "entry";
-        filePath: string;
-        threadId: string;
-        entryId: string;
-    };
+type SidebarReorderDragState = {
+    filePath: string;
+    threadId: string;
+};
 
 type NoteSidebarShell = {
     filePath: string;
@@ -549,7 +541,7 @@ export default class SideNote2View extends ItemView {
                 addPageCommentAction: !isAllCommentsView
                     ? {
                         icon: "plus",
-                        ariaLabel: "Add page side note",
+                        ariaLabel: "Add page note",
                         onClick: () => {
                             void this.plugin.startPageCommentDraft(file);
                         },
@@ -585,12 +577,6 @@ export default class SideNote2View extends ItemView {
             }
 
             const commentsBody = this.renderCommentsList(commentsContainer);
-            this.setupCommentReorderInteractions(commentsBody, {
-                enabled: !isAllCommentsView,
-                filePath: file.path,
-            });
-            const canReorderVisibleThreads = !isAllCommentsView
-                && renderedItems.filter((item) => item.kind === "thread").length > 1;
             const renderPromises = renderedItems.map(async (item) => {
                 if (item.kind === "draft") {
                     this.renderDraftComment(commentsBody, item.draft);
@@ -601,7 +587,7 @@ export default class SideNote2View extends ItemView {
                 await this.renderPersistedComment(
                     commentsBody,
                     item.thread,
-                    canReorderVisibleThreads,
+                    false,
                     threadAgentRuns[0] ?? null,
                     this.plugin.getActiveAgentStreamForThread(item.thread.id),
                     threadAgentRuns,
@@ -733,7 +719,7 @@ export default class SideNote2View extends ItemView {
             },
             addPageCommentAction: {
                 icon: "plus",
-                ariaLabel: "Add page side note",
+                ariaLabel: "Add page note",
                 onClick: () => {
                     void this.plugin.startPageCommentDraft(file);
                 },
@@ -743,10 +729,14 @@ export default class SideNote2View extends ItemView {
             filteredIndexFilePaths: [],
         });
 
-        const canReorderVisibleThreads = renderableItems.filter((item) => item.kind === "thread").length > 1;
+        const visiblePageThreadCount = renderableItems.filter((item) =>
+            item.kind === "thread"
+            && item.thread.anchorKind === "page"
+            && !item.thread.deletedAt
+        ).length;
         const renderDescriptors = this.buildNoteSidebarRenderDescriptors(renderableItems, {
             allAgentRuns,
-            canReorderVisibleThreads,
+            enablePageThreadReorder: visiblePageThreadCount > 1,
             nestedAppendDraftThreadId,
             visibleDraftComment,
         });
@@ -787,10 +777,7 @@ export default class SideNote2View extends ItemView {
         const commentsContainerEl = this.containerEl.createDiv("sidenote2-comments-container");
         const toolbarSlotEl = commentsContainerEl.createDiv("sidenote2-note-sidebar-toolbar-slot");
         const commentsBodyEl = this.renderCommentsList(commentsContainerEl);
-        this.setupCommentReorderInteractions(commentsBodyEl, {
-            enabled: true,
-            filePath,
-        });
+        this.setupPageThreadReorderInteractions(commentsBodyEl, filePath);
         const supportSlotEl = this.containerEl.createDiv("sidenote2-support-button-slot");
 
         this.noteSidebarShell = {
@@ -807,7 +794,7 @@ export default class SideNote2View extends ItemView {
         renderableItems: SidebarRenderableItem[],
         options: {
             allAgentRuns: AgentRunRecord[];
-            canReorderVisibleThreads: boolean;
+            enablePageThreadReorder: boolean;
             nestedAppendDraftThreadId: string | null;
             visibleDraftComment: DraftComment | null;
         },
@@ -843,7 +830,7 @@ export default class SideNote2View extends ItemView {
                     thread: item.thread,
                     activeCommentId: this.interactionController.getActiveCommentId(),
                     showNestedComments: this.plugin.shouldShowNestedComments(),
-                    enableThreadReorder: options.canReorderVisibleThreads,
+                    enablePageThreadReorder: options.enablePageThreadReorder,
                     appendDraftComment,
                     threadAgentRuns,
                 }),
@@ -853,7 +840,7 @@ export default class SideNote2View extends ItemView {
                     await this.renderPersistedComment(
                         stagingEl,
                         item.thread,
-                        options.canReorderVisibleThreads,
+                        options.enablePageThreadReorder,
                         threadAgentRuns[0] ?? null,
                         this.plugin.getActiveAgentStreamForThread(item.thread.id),
                         threadAgentRuns,
@@ -963,7 +950,12 @@ export default class SideNote2View extends ItemView {
             const emptyStateEl = commentsBody.createDiv("sidenote2-empty-state sidenote2-section-empty-state");
             emptyStateEl.createEl("p", { text: "No active comments for this file." });
             emptyStateEl.createEl("p", { text: "Turn on resolved to review archived comments only." });
+            return;
         }
+
+        const emptyStateEl = commentsBody.createDiv("sidenote2-empty-state");
+        emptyStateEl.createEl("p", { text: "No comments for this file yet." });
+        emptyStateEl.createEl("p", { text: "Use the add button to create a page side note." });
     }
 
     private handleAgentStreamUpdate(update: AgentStreamUpdate): void {
@@ -1177,7 +1169,7 @@ export default class SideNote2View extends ItemView {
         if (!options.isAllCommentsView) {
             this.renderToolbarIconButton(filterGroup, {
                 icon: "trash-2",
-                ariaLabel: showDeletedComments ? "Hide deleted comments" : "Show deleted comments",
+                ariaLabel: showDeletedComments ? "Hide deleted notes" : "Show deleted notes",
                 active: showDeletedComments,
                 disabled: !options.hasDeletedComments && !showDeletedComments,
                 onClick: () => {
@@ -1473,7 +1465,7 @@ export default class SideNote2View extends ItemView {
     private async renderPersistedComment(
         commentsContainer: HTMLDivElement,
         thread: CommentThread,
-        enableThreadReorder: boolean,
+        enablePageThreadReorder: boolean,
         agentRun: ReturnType<SideNote2["getLatestAgentRunForThread"]>,
         agentStream: ReturnType<SideNote2["getActiveAgentStreamForThread"]>,
         threadAgentRuns: AgentRunRecord[],
@@ -1487,10 +1479,10 @@ export default class SideNote2View extends ItemView {
             currentFilePath,
             currentUserLabel: "You",
             showSourceRedirectAction: isIndexView,
+            showDeletedComments: this.plugin.shouldShowDeletedComments(),
+            enablePageThreadReorder,
             enableSoftDeleteActions: !isIndexView,
             showNestedComments: this.plugin.shouldShowNestedComments(),
-            enableManualReorder: !isIndexView,
-            enableThreadReorder,
             appendDraftComment,
             agentRun,
             agentStream,
@@ -1552,19 +1544,9 @@ export default class SideNote2View extends ItemView {
         });
     }
 
-    private setupCommentReorderInteractions(
-        commentsBody: HTMLDivElement,
-        options: {
-            enabled: boolean;
-            filePath: string;
-        },
-    ): void {
-        if (!options.enabled) {
-            return;
-        }
-
+    private setupPageThreadReorderInteractions(commentsBody: HTMLDivElement, filePath: string): void {
         commentsBody.addEventListener("dragstart", (event: DragEvent) => {
-            const dragState = this.getReorderDragStateFromEventTarget(event.target, options.filePath);
+            const dragState = this.getPageThreadDragStateFromEventTarget(event.target, filePath);
             if (!dragState) {
                 return;
             }
@@ -1575,12 +1557,12 @@ export default class SideNote2View extends ItemView {
             this.reorderDragSourceEl?.addClass("is-drag-source");
             if (event.dataTransfer) {
                 event.dataTransfer.effectAllowed = "move";
-                event.dataTransfer.setData("text/plain", dragState.kind === "thread" ? dragState.threadId : dragState.entryId);
+                event.dataTransfer.setData("text/plain", dragState.threadId);
             }
         });
 
         commentsBody.addEventListener("dragover", (event: DragEvent) => {
-            const dropTarget = this.resolveReorderDropTarget(event);
+            const dropTarget = this.resolvePageThreadDropTarget(event);
             if (!dropTarget) {
                 this.clearReorderDropIndicator();
                 return;
@@ -1595,7 +1577,7 @@ export default class SideNote2View extends ItemView {
 
         commentsBody.addEventListener("drop", (event: DragEvent) => {
             const dragState = this.reorderDragState;
-            const dropTarget = this.resolveReorderDropTarget(event);
+            const dropTarget = this.resolvePageThreadDropTarget(event);
             this.clearReorderDropIndicator();
             if (!dragState || !dropTarget) {
                 return;
@@ -1603,20 +1585,9 @@ export default class SideNote2View extends ItemView {
 
             event.preventDefault();
             this.clearReorderDragState();
-            if (dragState.kind === "thread") {
-                void this.plugin.reorderThreadsForFile(
-                    dragState.filePath,
-                    dragState.threadId,
-                    dropTarget.targetId,
-                    dropTarget.placement,
-                );
-                return;
-            }
-
-            void this.plugin.reorderThreadEntries(
+            void this.plugin.reorderThreadsForFile(
                 dragState.filePath,
                 dragState.threadId,
-                dragState.entryId,
                 dropTarget.targetId,
                 dropTarget.placement,
             );
@@ -1633,7 +1604,7 @@ export default class SideNote2View extends ItemView {
             : null;
     }
 
-    private getReorderDragStateFromEventTarget(
+    private getPageThreadDragStateFromEventTarget(
         target: EventTarget | null,
         filePath: string,
     ): SidebarReorderDragState | null {
@@ -1641,35 +1612,23 @@ export default class SideNote2View extends ItemView {
             return null;
         }
 
-        const handleEl = target.closest("[data-sidenote2-drag-kind]");
+        const handleEl = target.closest("[data-sidenote2-drag-kind='thread']");
         if (!(handleEl instanceof HTMLElement)) {
             return null;
         }
 
-        const dragKind = handleEl.getAttribute("data-sidenote2-drag-kind");
         const threadId = handleEl.getAttribute("data-sidenote2-thread-id");
-        if (dragKind === "thread" && threadId) {
-            return {
-                kind: "thread",
-                filePath,
-                threadId,
-            };
+        if (!threadId) {
+            return null;
         }
 
-        const entryId = handleEl.getAttribute("data-sidenote2-entry-id");
-        if (dragKind === "entry" && threadId && entryId) {
-            return {
-                kind: "entry",
-                filePath,
-                threadId,
-                entryId,
-            };
-        }
-
-        return null;
+        return {
+            filePath,
+            threadId,
+        };
     }
 
-    private resolveReorderDropTarget(event: DragEvent): {
+    private resolvePageThreadDropTarget(event: DragEvent): {
         element: HTMLElement;
         targetId: string;
         placement: ReorderPlacement;
@@ -1679,57 +1638,30 @@ export default class SideNote2View extends ItemView {
             return null;
         }
 
-        if (dragState.kind === "thread") {
-            const threadStackEl = event.target.closest(".sidenote2-thread-stack");
-            if (!(threadStackEl instanceof HTMLElement)) {
-                return null;
-            }
-
-            const targetThreadId = threadStackEl.getAttribute("data-thread-id");
-            const targetCommentEl = threadStackEl.firstElementChild;
-            if (!targetThreadId || targetThreadId === dragState.threadId) {
-                return null;
-            }
-            if (!(targetCommentEl instanceof HTMLElement)) {
-                return null;
-            }
-
-            return {
-                element: targetCommentEl,
-                targetId: targetThreadId,
-                placement: this.resolveReorderPlacement(threadStackEl, event.clientY),
-            };
-        }
-
-        const targetEntryEl = event.target.closest(".sidenote2-thread-entry-item");
-        if (!(targetEntryEl instanceof HTMLElement)) {
+        const threadStackEl = event.target.closest(".sidenote2-thread-stack[data-sidenote2-page-thread='true']");
+        if (!(threadStackEl instanceof HTMLElement)) {
             return null;
         }
 
-        const targetEntryId = targetEntryEl.getAttribute("data-comment-id");
-        const threadStackEl = targetEntryEl.closest(".sidenote2-thread-stack");
-        const targetThreadId = threadStackEl?.getAttribute("data-thread-id");
-        if (
-            !targetEntryId
-            || !targetThreadId
-            || targetThreadId !== dragState.threadId
-            || targetEntryId === dragState.entryId
-        ) {
+        const targetThreadId = threadStackEl.getAttribute("data-thread-id");
+        const targetCommentEl = threadStackEl.firstElementChild;
+        if (!targetThreadId || targetThreadId === dragState.threadId) {
+            return null;
+        }
+        if (!(targetCommentEl instanceof HTMLElement)) {
             return null;
         }
 
         return {
-            element: targetEntryEl,
-            targetId: targetEntryId,
-            placement: this.resolveReorderPlacement(targetEntryEl, event.clientY),
+            element: targetCommentEl,
+            targetId: targetThreadId,
+            placement: this.resolveReorderPlacement(threadStackEl, event.clientY),
         };
     }
 
     private resolveReorderPlacement(element: HTMLElement, clientY: number): ReorderPlacement {
         const rect = element.getBoundingClientRect();
-        return clientY < rect.top + rect.height / 2
-            ? "before"
-            : "after";
+        return clientY < rect.top + rect.height / 2 ? "before" : "after";
     }
 
     private setReorderDropIndicator(element: HTMLElement, placement: ReorderPlacement): void {

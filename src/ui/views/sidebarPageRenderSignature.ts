@@ -100,7 +100,7 @@ export function buildPageSidebarThreadRenderSignature(options: {
     thread: CommentThread;
     activeCommentId: string | null;
     showNestedComments: boolean;
-    enableThreadReorder: boolean;
+    enablePageThreadReorder: boolean;
     appendDraftComment: DraftComment | null;
     threadAgentRuns: readonly AgentRunRecord[];
 }): string {
@@ -125,7 +125,7 @@ export function buildPageSidebarThreadRenderSignature(options: {
         },
         isActive: isActiveCommentInThread(thread, options.activeCommentId),
         showNestedComments: options.showNestedComments,
-        enableThreadReorder: options.enableThreadReorder,
+        enablePageThreadReorder: options.enablePageThreadReorder,
         appendDraftComment: serializeDraftComment(options.appendDraftComment),
         threadAgentRuns: options.threadAgentRuns.map((run) => serializeAgentRun(run)),
     });

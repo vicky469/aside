@@ -77,7 +77,7 @@ test("buildPageSidebarThreadRenderSignature ignores unrelated active comment ids
         thread,
         activeCommentId: null,
         showNestedComments: false,
-        enableThreadReorder: true,
+        enablePageThreadReorder: true,
         appendDraftComment: null,
         threadAgentRuns: [],
     });
@@ -85,7 +85,7 @@ test("buildPageSidebarThreadRenderSignature ignores unrelated active comment ids
         thread,
         activeCommentId: "other-thread",
         showNestedComments: false,
-        enableThreadReorder: true,
+        enablePageThreadReorder: true,
         appendDraftComment: null,
         threadAgentRuns: [],
     });
@@ -93,7 +93,7 @@ test("buildPageSidebarThreadRenderSignature ignores unrelated active comment ids
         thread,
         activeCommentId: "entry-2",
         showNestedComments: false,
-        enableThreadReorder: true,
+        enablePageThreadReorder: true,
         appendDraftComment: null,
         threadAgentRuns: [],
     });
@@ -108,7 +108,7 @@ test("buildPageSidebarThreadRenderSignature changes when nested draft or run sta
         thread,
         activeCommentId: null,
         showNestedComments: false,
-        enableThreadReorder: true,
+        enablePageThreadReorder: true,
         appendDraftComment: null,
         threadAgentRuns: [],
     });
@@ -116,7 +116,7 @@ test("buildPageSidebarThreadRenderSignature changes when nested draft or run sta
         thread,
         activeCommentId: null,
         showNestedComments: false,
-        enableThreadReorder: true,
+        enablePageThreadReorder: true,
         appendDraftComment: createDraft(),
         threadAgentRuns: [],
     });
@@ -124,7 +124,7 @@ test("buildPageSidebarThreadRenderSignature changes when nested draft or run sta
         thread,
         activeCommentId: null,
         showNestedComments: false,
-        enableThreadReorder: true,
+        enablePageThreadReorder: true,
         appendDraftComment: null,
         threadAgentRuns: [createAgentRun({ status: "failed", error: "Boom" })],
     });

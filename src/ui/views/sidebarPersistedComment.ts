@@ -50,10 +50,10 @@ export interface SidebarPersistedCommentHost {
     currentFilePath: string | null;
     currentUserLabel: string;
     showSourceRedirectAction: boolean;
+    showDeletedComments: boolean;
+    enablePageThreadReorder: boolean;
     enableSoftDeleteActions: boolean;
     showNestedComments: boolean;
-    enableManualReorder: boolean;
-    enableThreadReorder: boolean;
     appendDraftComment: DraftComment | null;
     agentRun: AgentRunRecord | null;
     agentStream: AgentRunStreamState | null;
@@ -427,41 +427,6 @@ function renderCommentMeta(
     });
 }
 
-function renderReorderHandle(
-    actionsEl: HTMLDivElement,
-    descriptor: {
-        kind: "thread";
-        threadId: string;
-    } | {
-        kind: "entry";
-        threadId: string;
-        entryId: string;
-    },
-    host: SidebarPersistedCommentHost,
-): void {
-    const handleEl = actionsEl.createDiv("sidenote2-comment-drag-handle");
-    handleEl.setAttribute("draggable", "true");
-    handleEl.setAttribute("aria-hidden", "true");
-    handleEl.setAttribute("data-sidenote2-drag-kind", descriptor.kind);
-    handleEl.setAttribute("data-sidenote2-thread-id", descriptor.threadId);
-    handleEl.setAttribute(
-        "title",
-        descriptor.kind === "thread"
-            ? "Drag to reorder side notes"
-            : "Drag to reorder child comments",
-    );
-    if (descriptor.kind === "entry") {
-        handleEl.setAttribute("data-sidenote2-entry-id", descriptor.entryId);
-    }
-
-    const stopPropagation = (event: Event) => {
-        event.stopPropagation();
-    };
-    handleEl.addEventListener("mousedown", stopPropagation);
-    handleEl.addEventListener("click", stopPropagation);
-    host.setIcon(handleEl, "grip-vertical");
-}
-
 function renderSourceRedirectButton(
     actionsEl: HTMLDivElement,
     comment: Comment,
@@ -566,6 +531,26 @@ function renderAddEntryButton(
         event.stopPropagation();
         host.startAppendEntryDraft(commentId, host.currentFilePath);
     };
+}
+
+function renderReorderHandle(
+    actionsEl: HTMLDivElement,
+    threadId: string,
+    host: SidebarPersistedCommentHost,
+): void {
+    const handleEl = actionsEl.createDiv("sidenote2-comment-drag-handle");
+    handleEl.setAttribute("draggable", "true");
+    handleEl.setAttribute("aria-hidden", "true");
+    handleEl.setAttribute("data-sidenote2-drag-kind", "thread");
+    handleEl.setAttribute("data-sidenote2-thread-id", threadId);
+    handleEl.setAttribute("title", "Drag to reorder page notes");
+
+    const stopPropagation = (event: Event) => {
+        event.stopPropagation();
+    };
+    handleEl.addEventListener("mousedown", stopPropagation);
+    handleEl.addEventListener("click", stopPropagation);
+    host.setIcon(handleEl, "grip-vertical");
 }
 
 function renderPersistedEntryCard(
@@ -700,6 +685,15 @@ export async function renderPersistedCommentCard(
     const presentation = buildPersistedCommentPresentation(thread, host.activeCommentId);
     const threadEl = commentsContainer.createDiv("sidenote2-thread-stack");
     threadEl.setAttribute("data-thread-id", thread.id);
+    const isDraggablePageThread = host.enablePageThreadReorder
+        && isPageComment(comment)
+        && !host.showSourceRedirectAction
+        && !host.showDeletedComments
+        && !comment.deletedAt
+        && !thread.deletedAt;
+    if (isDraggablePageThread) {
+        threadEl.setAttribute("data-sidenote2-page-thread", "true");
+    }
     const shouldRenderStoredChildren = host.showNestedComments
         || entries.slice(1).some((entry) => entry.id === host.activeCommentId)
         || hasVisibleDeletedEntries(thread);
@@ -710,7 +704,6 @@ export async function renderPersistedCommentCard(
         hasAgentStream: !!host.agentStream,
         hasDeletedEntriesVisible: hasVisibleDeletedEntries(thread),
     });
-    const canReorderChildEntries = host.enableManualReorder && entries.length > 2 && shouldRenderStoredChildren;
     const renderedParent = renderPersistedEntryCard(threadEl, {
         comment,
         thread,
@@ -722,11 +715,8 @@ export async function renderPersistedCommentCard(
     const commentEl = renderedParent.commentEl;
     const actionsEl = renderedParent.actionsEl;
     const renderTasks: Array<Promise<void>> = [renderedParent.renderTask];
-    if (host.enableThreadReorder) {
-        renderReorderHandle(actionsEl, {
-            kind: "thread",
-            threadId: thread.id,
-        }, host);
+    if (isDraggablePageThread) {
+        renderReorderHandle(actionsEl, thread.id, host);
     }
 
     if (comment.deletedAt && host.enableSoftDeleteActions) {
@@ -789,13 +779,6 @@ export async function renderPersistedCommentCard(
             });
             const entryEl = renderedEntry.commentEl;
             const entryActionsEl = renderedEntry.actionsEl;
-            if (canReorderChildEntries) {
-                renderReorderHandle(entryActionsEl, {
-                    kind: "entry",
-                    threadId: thread.id,
-                    entryId: entryComment.id,
-                }, host);
-            }
             if (thread.deletedAt) {
                 // Parent restore controls the whole soft-deleted thread.
             } else if (entryComment.deletedAt && host.enableSoftDeleteActions) {
