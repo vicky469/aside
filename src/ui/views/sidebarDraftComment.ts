@@ -17,9 +17,11 @@ export interface SidebarDraftCommentHost {
     activeCommentId: string | null;
     isSavingDraft(commentId: string): boolean;
     updateDraftCommentText(commentId: string, commentText: string): void;
-    saveDraft(commentId: string): void;
+    saveDraft(commentId: string): Promise<void> | void;
     cancelDraft(commentId: string): void;
 }
+
+type DraftEditorLayout = "card" | "inline-edit";
 
 export function buildDraftCommentPresentation(
     comment: DraftComment,
@@ -70,24 +72,68 @@ export function renderDraftCommentCard(
         cls: "sidenote2-timestamp",
     });
 
-    const editorWrap = commentEl.createDiv("sidenote2-inline-editor");
+    renderDraftEditor(commentEl, comment, presentation, host, draftEditorController, "card");
+}
+
+export function renderInlineEditDraftContent(
+    container: HTMLElement,
+    comment: DraftComment,
+    host: SidebarDraftCommentHost,
+    draftEditorController: SidebarDraftEditorController,
+): void {
+    const presentation = buildDraftCommentPresentation(comment, host.activeCommentId);
+    renderDraftEditor(container, comment, presentation, host, draftEditorController, "inline-edit");
+}
+
+function createDraftFormatButton(
+    container: HTMLElement,
+    options: {
+        label: string;
+        ariaLabel: string;
+        title: string;
+    },
+): HTMLButtonElement {
+    const button = container.createEl("button", {
+        text: options.label,
+        cls: "sidenote2-inline-format-button",
+    });
+    button.setAttribute("type", "button");
+    button.setAttribute("aria-label", options.ariaLabel);
+    button.setAttribute("title", options.title);
+    return button;
+}
+
+function renderDraftEditor(
+    container: HTMLElement,
+    comment: DraftComment,
+    presentation: DraftCommentPresentation,
+    host: SidebarDraftCommentHost,
+    draftEditorController: SidebarDraftEditorController,
+    layout: DraftEditorLayout,
+): void {
+    const editorWrap = container.createDiv([
+        "sidenote2-inline-editor",
+        layout === "inline-edit" ? "is-inline-edit" : "is-card-edit",
+    ].join(" "));
     // Sidebar draft formatting is button-only for now. Keyboard shortcuts such as Cmd+B
     // and Option+H are unreliable in this editor surface, so keep the explicit controls.
-    const formatRow = editorWrap.createDiv("sidenote2-inline-editor-toolbar");
-    const boldButton = formatRow.createEl("button", {
-        text: "B",
-        cls: "sidenote2-inline-format-button",
-    });
-    boldButton.setAttribute("type", "button");
-    boldButton.setAttribute("aria-label", "Bold");
-    boldButton.setAttribute("title", "Wrap selection with **bold**");
-    const highlightButton = formatRow.createEl("button", {
-        text: "H",
-        cls: "sidenote2-inline-format-button",
-    });
-    highlightButton.setAttribute("type", "button");
-    highlightButton.setAttribute("aria-label", "Highlight");
-    highlightButton.setAttribute("title", "Wrap selection with ==highlight==");
+    const toolbarRow = layout === "card"
+        ? editorWrap.createDiv("sidenote2-inline-editor-toolbar")
+        : null;
+    const boldButton = toolbarRow
+        ? createDraftFormatButton(toolbarRow, {
+            label: "B",
+            ariaLabel: "Bold",
+            title: "Wrap selection with **bold**",
+        })
+        : null;
+    const highlightButton = toolbarRow
+        ? createDraftFormatButton(toolbarRow, {
+            label: "H",
+            ariaLabel: "Highlight",
+            title: "Wrap selection with ==highlight==",
+        })
+        : null;
     const editorShell = editorWrap.createDiv("sidenote2-inline-editor-shell");
     const preview = editorShell.createDiv("sidenote2-inline-editor-preview");
     const textarea = editorShell.createEl("textarea", {
@@ -113,7 +159,24 @@ export function renderDraftCommentCard(
     syncPreview();
 
     const actionRow = editorWrap.createDiv("sidenote2-inline-editor-actions");
+    if (layout === "inline-edit") {
+        actionRow.addClass("is-inline-edit");
+    }
     const wordCountEl = actionRow.createDiv("sidenote2-inline-word-count");
+    const inlineEditBoldButton = layout === "inline-edit"
+        ? createDraftFormatButton(actionRow, {
+            label: "B",
+            ariaLabel: "Bold",
+            title: "Wrap selection with **bold**",
+        })
+        : null;
+    const inlineEditHighlightButton = layout === "inline-edit"
+        ? createDraftFormatButton(actionRow, {
+            label: "H",
+            ariaLabel: "Highlight",
+            title: "Wrap selection with ==highlight==",
+        })
+        : null;
     const cancelButton = actionRow.createEl("button", {
         text: "Cancel",
         cls: "sidenote2-inline-cancel-button",
@@ -132,8 +195,18 @@ export function renderDraftCommentCard(
     };
 
     textarea.disabled = saving;
-    boldButton.disabled = saving;
-    highlightButton.disabled = saving;
+    if (boldButton) {
+        boldButton.disabled = saving;
+    }
+    if (highlightButton) {
+        highlightButton.disabled = saving;
+    }
+    if (inlineEditBoldButton) {
+        inlineEditBoldButton.disabled = saving;
+    }
+    if (inlineEditHighlightButton) {
+        inlineEditHighlightButton.disabled = saving;
+    }
     cancelButton.disabled = saving;
     saveButton.disabled = saving;
     syncWordCount();
@@ -193,22 +266,26 @@ export function renderDraftCommentCard(
     }, { capture: true });
     textarea.addEventListener("scroll", syncPreview);
 
-    boldButton.onclick = (event) => {
+    const applyBold = (event: Event) => {
         stopPropagation(event);
         draftEditorController.applyDraftBold(comment.id, textarea, comment.mode === "edit");
         textarea.focus();
     };
-    highlightButton.onclick = (event) => {
+    const applyHighlight = (event: Event) => {
         stopPropagation(event);
         draftEditorController.applyDraftHighlight(comment.id, textarea, comment.mode === "edit");
         textarea.focus();
     };
+    boldButton?.addEventListener("click", applyBold);
+    highlightButton?.addEventListener("click", applyHighlight);
+    inlineEditBoldButton?.addEventListener("click", applyBold);
+    inlineEditHighlightButton?.addEventListener("click", applyHighlight);
     cancelButton.onclick = (event) => {
         stopPropagation(event);
         host.cancelDraft(comment.id);
     };
     saveButton.onclick = (event) => {
         stopPropagation(event);
-        host.saveDraft(comment.id);
+        void host.saveDraft(comment.id);
     };
 }

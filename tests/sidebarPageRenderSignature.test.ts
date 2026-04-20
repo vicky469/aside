@@ -77,7 +77,9 @@ test("buildPageSidebarThreadRenderSignature ignores unrelated active comment ids
         thread,
         activeCommentId: null,
         showNestedComments: false,
+        canToggleThreadNestedComments: false,
         enablePageThreadReorder: true,
+        editDraftComment: null,
         appendDraftComment: null,
         threadAgentRuns: [],
     });
@@ -85,7 +87,9 @@ test("buildPageSidebarThreadRenderSignature ignores unrelated active comment ids
         thread,
         activeCommentId: "other-thread",
         showNestedComments: false,
+        canToggleThreadNestedComments: false,
         enablePageThreadReorder: true,
+        editDraftComment: null,
         appendDraftComment: null,
         threadAgentRuns: [],
     });
@@ -93,7 +97,9 @@ test("buildPageSidebarThreadRenderSignature ignores unrelated active comment ids
         thread,
         activeCommentId: "entry-2",
         showNestedComments: false,
+        canToggleThreadNestedComments: false,
         enablePageThreadReorder: true,
+        editDraftComment: null,
         appendDraftComment: null,
         threadAgentRuns: [],
     });
@@ -108,7 +114,19 @@ test("buildPageSidebarThreadRenderSignature changes when nested draft or run sta
         thread,
         activeCommentId: null,
         showNestedComments: false,
+        canToggleThreadNestedComments: false,
         enablePageThreadReorder: true,
+        editDraftComment: null,
+        appendDraftComment: null,
+        threadAgentRuns: [],
+    });
+    const withEditDraft = buildPageSidebarThreadRenderSignature({
+        thread,
+        activeCommentId: null,
+        showNestedComments: false,
+        canToggleThreadNestedComments: false,
+        enablePageThreadReorder: true,
+        editDraftComment: createDraft({ mode: "edit", id: "entry-2", threadId: "thread-1" }),
         appendDraftComment: null,
         threadAgentRuns: [],
     });
@@ -116,7 +134,9 @@ test("buildPageSidebarThreadRenderSignature changes when nested draft or run sta
         thread,
         activeCommentId: null,
         showNestedComments: false,
+        canToggleThreadNestedComments: false,
         enablePageThreadReorder: true,
+        editDraftComment: null,
         appendDraftComment: createDraft(),
         threadAgentRuns: [],
     });
@@ -124,13 +144,42 @@ test("buildPageSidebarThreadRenderSignature changes when nested draft or run sta
         thread,
         activeCommentId: null,
         showNestedComments: false,
+        canToggleThreadNestedComments: false,
         enablePageThreadReorder: true,
+        editDraftComment: null,
         appendDraftComment: null,
         threadAgentRuns: [createAgentRun({ status: "failed", error: "Boom" })],
     });
 
+    assert.notEqual(base, withEditDraft);
     assert.notEqual(base, withAppendDraft);
     assert.notEqual(base, withFailedRun);
+});
+
+test("buildPageSidebarThreadRenderSignature changes when thread-level nested toggle availability changes", () => {
+    const thread = createThread();
+    const hiddenWithoutToggle = buildPageSidebarThreadRenderSignature({
+        thread,
+        activeCommentId: null,
+        showNestedComments: false,
+        canToggleThreadNestedComments: false,
+        enablePageThreadReorder: true,
+        editDraftComment: null,
+        appendDraftComment: null,
+        threadAgentRuns: [],
+    });
+    const hiddenWithToggle = buildPageSidebarThreadRenderSignature({
+        thread,
+        activeCommentId: null,
+        showNestedComments: false,
+        canToggleThreadNestedComments: true,
+        enablePageThreadReorder: true,
+        editDraftComment: null,
+        appendDraftComment: null,
+        threadAgentRuns: [],
+    });
+
+    assert.notEqual(hiddenWithoutToggle, hiddenWithToggle);
 });
 
 test("buildPageSidebarDraftRenderSignature changes only for the matching active draft", () => {

@@ -1,6 +1,7 @@
 import * as assert from "node:assert/strict";
 import test from "node:test";
 import type { Comment } from "../src/commentManager";
+import type { DraftComment } from "../src/domain/drafts";
 import { SidebarInteractionController } from "../src/ui/views/sidebarInteractionController";
 
 function createComment(overrides: Partial<Comment> = {}): Comment {
@@ -19,6 +20,65 @@ function createComment(overrides: Partial<Comment> = {}): Comment {
         orphaned: overrides.orphaned ?? false,
         resolved: overrides.resolved ?? false,
     };
+}
+
+function createDraft(overrides: Partial<DraftComment> = {}): DraftComment {
+    return {
+        ...createComment(overrides),
+        mode: overrides.mode ?? "edit",
+        threadId: overrides.threadId,
+        appendAfterCommentId: overrides.appendAfterCommentId,
+    };
+}
+
+class FakeNode {}
+
+class FakeSidebarElement extends FakeNode {
+    public parentElement: FakeSidebarElement | null = null;
+    public addClassCalls: string[] = [];
+    public removeClassCalls: string[] = [];
+    public scrollCalls = 0;
+
+    constructor(
+        private readonly options: {
+            isCommentItem?: boolean;
+            isSectionChrome?: boolean;
+        } = {},
+    ) {
+        super();
+    }
+
+    public closest(selector: string): FakeSidebarElement | null {
+        if (selector === ".sidenote2-comment-item") {
+            return this.options.isCommentItem ? this : null;
+        }
+
+        if (selector === ".sidenote2-comments-list-actions, .sidenote2-sidebar-toolbar, .sidenote2-active-file-filters") {
+            return this.options.isSectionChrome ? this : null;
+        }
+
+        return null;
+    }
+
+    public contains(target: unknown): boolean {
+        return target === this;
+    }
+
+    public getAttribute(_name: string): string | null {
+        return null;
+    }
+
+    public addClass(name: string): void {
+        this.addClassCalls.push(name);
+    }
+
+    public removeClass(name: string): void {
+        this.removeClassCalls.push(name);
+    }
+
+    public scrollIntoView(_options: unknown): void {
+        this.scrollCalls += 1;
+    }
 }
 
 type FakeCommentElement = {
@@ -296,6 +356,126 @@ test("sidebar interaction controller claims the sidebar leaf before focusing a d
         Object.assign(globalThis, {
             window: originalWindow,
             document: originalDocument,
+        });
+    }
+});
+
+test("sidebar interaction controller autosaves draft edits on sidebar background click", async () => {
+    const originalHTMLElement = globalThis.HTMLElement;
+    const originalNode = globalThis.Node;
+    Object.assign(globalThis, {
+        HTMLElement: FakeSidebarElement,
+        Node: FakeNode,
+    });
+
+    try {
+        let currentDraft: DraftComment | null = createDraft({ id: "draft-1" });
+        const activeEl = createCommentElement({ draftId: "draft-1" });
+        const draftEl = new FakeSidebarElement();
+        const backgroundEl = new FakeSidebarElement();
+        const saveDraftCalls: string[] = [];
+        let clearRevealedCommentSelectionCalls = 0;
+
+        const controller = new SidebarInteractionController({
+            app: {
+                workspace: {
+                    activeLeaf: null,
+                    setActiveLeaf: () => {},
+                },
+            } as never,
+            leaf: {} as never,
+            containerEl: {
+                querySelector: (selector: string) => selector.includes("draft-1") ? draftEl : null,
+                querySelectorAll: () => [activeEl],
+                contains: () => true,
+            } as never,
+            getCurrentFile: () => ({ path: "docs/architecture.md" }) as never,
+            getDraftForView: () => currentDraft,
+            renderComments: async () => {},
+            saveDraft: async (commentId) => {
+                saveDraftCalls.push(commentId);
+                currentDraft = null;
+            },
+            cancelDraft: () => {},
+            clearRevealedCommentSelection: () => {
+                clearRevealedCommentSelectionCalls += 1;
+            },
+            revealComment: async () => {},
+            getPreferredFileLeaf: () => null,
+            openLinkText: async () => {},
+        });
+
+        controller.setActiveComment("draft-1");
+        await controller.sidebarClickHandler({ target: backgroundEl } as unknown as MouseEvent);
+
+        assert.deepEqual(saveDraftCalls, ["draft-1"]);
+        assert.equal(controller.getActiveCommentId(), null);
+        assert.equal(clearRevealedCommentSelectionCalls, 1);
+        assert.deepEqual(activeEl.removeClassCalls, ["active"]);
+    } finally {
+        Object.assign(globalThis, {
+            HTMLElement: originalHTMLElement,
+            Node: originalNode,
+        });
+    }
+});
+
+test("sidebar interaction controller autosaves without clearing active state when clicking another comment", async () => {
+    const originalHTMLElement = globalThis.HTMLElement;
+    const originalNode = globalThis.Node;
+    Object.assign(globalThis, {
+        HTMLElement: FakeSidebarElement,
+        Node: FakeNode,
+    });
+
+    try {
+        let currentDraft: DraftComment | null = createDraft({ id: "draft-1" });
+        const activeEl = createCommentElement({ draftId: "draft-1" });
+        const draftEl = new FakeSidebarElement();
+        const commentTargetEl = new FakeSidebarElement({ isCommentItem: true });
+        const saveDraftCalls: string[] = [];
+        let clearRevealedCommentSelectionCalls = 0;
+
+        const controller = new SidebarInteractionController({
+            app: {
+                workspace: {
+                    activeLeaf: null,
+                    setActiveLeaf: () => {},
+                },
+            } as never,
+            leaf: {} as never,
+            containerEl: {
+                querySelector: (selector: string) => selector.includes("draft-1") ? draftEl : null,
+                querySelectorAll: () => [activeEl],
+                contains: () => true,
+            } as never,
+            getCurrentFile: () => ({ path: "docs/architecture.md" }) as never,
+            getDraftForView: () => currentDraft,
+            renderComments: async () => {},
+            saveDraft: async (commentId) => {
+                saveDraftCalls.push(commentId);
+                currentDraft = null;
+            },
+            cancelDraft: () => {},
+            clearRevealedCommentSelection: () => {
+                clearRevealedCommentSelectionCalls += 1;
+            },
+            revealComment: async () => {},
+            getPreferredFileLeaf: () => null,
+            openLinkText: async () => {},
+        });
+
+        controller.setActiveComment("draft-1");
+        await controller.sidebarClickHandler({ target: commentTargetEl } as unknown as MouseEvent);
+
+        assert.deepEqual(saveDraftCalls, ["draft-1"]);
+        assert.equal(controller.getActiveCommentId(), "draft-1");
+        assert.equal(clearRevealedCommentSelectionCalls, 0);
+        assert.deepEqual(activeEl.removeClassCalls, []);
+    } finally {
+        Object.assign(globalThis, {
+            HTMLElement: originalHTMLElement,
+            Node: originalNode,
         });
     }
 });

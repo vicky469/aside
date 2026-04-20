@@ -61,7 +61,7 @@ export function getSidebarComments(
 }
 
 export function estimateDraftTextareaRows(commentText: string, isEditMode: boolean): number {
-    const minRows = isEditMode ? 6 : 2;
+    const minRows = 2;
     const maxRows = isEditMode ? 18 : 10;
     const approximateCharsPerRow = 48;
     const lines = commentText.split("\n");

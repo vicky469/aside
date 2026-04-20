@@ -765,6 +765,10 @@ export default class SideNote2 extends Plugin {
         return this.commentSessionController.shouldShowNestedComments();
     }
 
+    public shouldShowNestedCommentsForThread(threadId: string): boolean {
+        return this.commentSessionController.shouldShowNestedCommentsForThread(threadId);
+    }
+
     public shouldShowDeletedComments(): boolean {
         return this.commentSessionController.shouldShowDeletedComments();
     }
@@ -775,6 +779,10 @@ export default class SideNote2 extends Plugin {
 
     public async setShowNestedComments(showNested: boolean): Promise<boolean> {
         return this.commentSessionController.setShowNestedComments(showNested);
+    }
+
+    public async setShowNestedCommentsForThread(threadId: string, showNested: boolean): Promise<boolean> {
+        return this.commentSessionController.setShowNestedCommentsForThread(threadId, showNested);
     }
 
     private async persistCommentsForFile(

@@ -32,7 +32,7 @@ import SideNoteTagSuggestModal from "../modals/SideNoteTagSuggestModal";
 import { SIDE_NOTE2_ICON_ID } from "../sideNote2Icon";
 import { copyTextToClipboard } from "../copyTextToClipboard";
 import { SidebarDraftEditorController } from "./sidebarDraftEditor";
-import { renderDraftCommentCard } from "./sidebarDraftComment";
+import { renderDraftCommentCard, renderInlineEditDraftContent } from "./sidebarDraftComment";
 import {
     buildIndexFileFilterOptionsFromCounts,
     deriveIndexSidebarScopedFilePaths,
@@ -54,6 +54,7 @@ import {
 import { renderPersistedCommentCard } from "./sidebarPersistedComment";
 import {
     buildStoredOrderSidebarItems,
+    getNestedThreadIdForEditDraft,
     getNestedThreadIdForAppendDraft,
     getReplacedThreadIdForEditDraft,
     shouldRenderTopLevelDraftComment,
@@ -187,9 +188,7 @@ export default class SideNote2View extends ItemView {
             getCurrentFile: () => this.file,
             getDraftForView: (filePath) => this.plugin.getDraftForView(filePath),
             renderComments: () => this.renderComments(),
-            saveDraft: (commentId) => {
-                void this.plugin.saveDraft(commentId);
-            },
+            saveDraft: (commentId) => this.plugin.saveDraft(commentId),
             cancelDraft: (commentId) => {
                 void this.plugin.cancelDraft(commentId);
             },
@@ -472,7 +471,13 @@ export default class SideNote2View extends ItemView {
             const hasResolvedComments = resolvedCount > 0;
             const hasNestedComments = scopedAllThreads.some((thread) => thread.entries.length > 1)
                 || visibleDraftComment?.mode === "append";
-            const replacedThreadId = getReplacedThreadIdForEditDraft(
+            const nestedEditDraftThreadId = getNestedThreadIdForEditDraft(
+                scopedVisibleThreads,
+                visibleDraftComment,
+            );
+            const replacedThreadId = nestedEditDraftThreadId
+                ? null
+                : getReplacedThreadIdForEditDraft(
                 scopedVisibleThreads,
                 visibleDraftComment,
             );
@@ -491,6 +496,7 @@ export default class SideNote2View extends ItemView {
             const topLevelDraftComment = shouldRenderTopLevelDraftComment({
                 draft: visibleDraftComment,
                 nestedAppendDraftThreadId,
+                nestedEditDraftThreadId,
                 isAgentIndexMode,
                 agentThreadIds,
             });
@@ -591,6 +597,9 @@ export default class SideNote2View extends ItemView {
                     threadAgentRuns[0] ?? null,
                     this.plugin.getActiveAgentStreamForThread(item.thread.id),
                     threadAgentRuns,
+                    nestedEditDraftThreadId === item.thread.id && visibleDraftComment?.mode === "edit"
+                        ? visibleDraftComment
+                        : null,
                     nestedAppendDraftThreadId === item.thread.id && visibleDraftComment?.mode === "append"
                         ? visibleDraftComment
                         : null,
@@ -683,7 +692,13 @@ export default class SideNote2View extends ItemView {
         const hasResolvedComments = resolvedCount > 0;
         const hasNestedComments = persistedThreads.some((thread) => thread.entries.length > 1)
             || visibleDraftComment?.mode === "append";
-        const replacedThreadId = getReplacedThreadIdForEditDraft(
+        const nestedEditDraftThreadId = getNestedThreadIdForEditDraft(
+            visiblePersistedThreads,
+            visibleDraftComment,
+        );
+        const replacedThreadId = nestedEditDraftThreadId
+            ? null
+            : getReplacedThreadIdForEditDraft(
             visiblePersistedThreads,
             visibleDraftComment,
         );
@@ -694,6 +709,7 @@ export default class SideNote2View extends ItemView {
         const topLevelDraftComment = shouldRenderTopLevelDraftComment({
             draft: visibleDraftComment,
             nestedAppendDraftThreadId,
+            nestedEditDraftThreadId,
             isAgentIndexMode: false,
             agentThreadIds: new Set<string>(),
         });
@@ -737,6 +753,7 @@ export default class SideNote2View extends ItemView {
         const renderDescriptors = this.buildNoteSidebarRenderDescriptors(renderableItems, {
             allAgentRuns,
             enablePageThreadReorder: visiblePageThreadCount > 1,
+            nestedEditDraftThreadId,
             nestedAppendDraftThreadId,
             visibleDraftComment,
         });
@@ -795,6 +812,7 @@ export default class SideNote2View extends ItemView {
         options: {
             allAgentRuns: AgentRunRecord[];
             enablePageThreadReorder: boolean;
+            nestedEditDraftThreadId: string | null;
             nestedAppendDraftThreadId: string | null;
             visibleDraftComment: DraftComment | null;
         },
@@ -823,14 +841,21 @@ export default class SideNote2View extends ItemView {
             const appendDraftComment = options.nestedAppendDraftThreadId === item.thread.id && options.visibleDraftComment?.mode === "append"
                 ? options.visibleDraftComment
                 : null;
+            const editDraftComment = options.nestedEditDraftThreadId === item.thread.id && options.visibleDraftComment?.mode === "edit"
+                ? options.visibleDraftComment
+                : null;
             const threadAgentRuns = getAgentRunsForCommentThread(options.allAgentRuns, item.thread);
+            const showNestedComments = this.plugin.shouldShowNestedCommentsForThread(item.thread.id);
+            const canToggleThreadNestedComments = this.plugin.shouldShowNestedComments();
             return {
                 key: `thread:${item.thread.id}`,
                 signature: buildPageSidebarThreadRenderSignature({
                     thread: item.thread,
                     activeCommentId: this.interactionController.getActiveCommentId(),
-                    showNestedComments: this.plugin.shouldShowNestedComments(),
+                    showNestedComments,
+                    canToggleThreadNestedComments,
                     enablePageThreadReorder: options.enablePageThreadReorder,
+                    editDraftComment,
                     appendDraftComment,
                     threadAgentRuns,
                 }),
@@ -844,6 +869,7 @@ export default class SideNote2View extends ItemView {
                         threadAgentRuns[0] ?? null,
                         this.plugin.getActiveAgentStreamForThread(item.thread.id),
                         threadAgentRuns,
+                        editDraftComment,
                         appendDraftComment,
                     );
                     const nextNode = stagingEl.firstElementChild;
@@ -1247,7 +1273,12 @@ export default class SideNote2View extends ItemView {
             });
         }
 
-        button.onclick = options.onClick;
+        button.onclick = async () => {
+            if (!(await this.saveVisibleDraftIfPresent())) {
+                return;
+            }
+            options.onClick();
+        };
     }
 
     private renderToolbarIconButton(
@@ -1268,7 +1299,12 @@ export default class SideNote2View extends ItemView {
         button.setAttribute("aria-label", options.ariaLabel);
         button.disabled = options.disabled ?? false;
         setIcon(button, options.icon);
-        button.onclick = options.onClick;
+        button.onclick = async () => {
+            if (!(await this.saveVisibleDraftIfPresent())) {
+                return;
+            }
+            options.onClick();
+        };
     }
 
     private renderIndexModeControl(container: HTMLElement): void {
@@ -1347,7 +1383,12 @@ export default class SideNote2View extends ItemView {
         button.setAttribute("aria-selected", options.active ? "true" : "false");
         button.setAttribute("aria-label", options.ariaLabel);
         button.tabIndex = options.active ? 0 : -1;
-        button.onclick = options.onClick;
+        button.onclick = async () => {
+            if (!(await this.saveVisibleDraftIfPresent())) {
+                return;
+            }
+            options.onClick();
+        };
     }
 
     private renderActiveFileFilters(
@@ -1371,9 +1412,12 @@ export default class SideNote2View extends ItemView {
         clearButton.setAttribute("type", "button");
         clearButton.setAttribute("aria-label", `Clear file filter for ${rootFilePath}`);
         setIcon(clearButton, "x");
-        clearButton.onclick = (event) => {
+        clearButton.onclick = async (event) => {
             event.preventDefault();
             event.stopPropagation();
+            if (!(await this.saveVisibleDraftIfPresent())) {
+                return;
+            }
             void this.setIndexFileFilterRootPath(null);
         };
 
@@ -1469,6 +1513,7 @@ export default class SideNote2View extends ItemView {
         agentRun: ReturnType<SideNote2["getLatestAgentRunForThread"]>,
         agentStream: ReturnType<SideNote2["getActiveAgentStreamForThread"]>,
         threadAgentRuns: AgentRunRecord[],
+        editDraftComment: DraftComment | null = null,
         appendDraftComment: DraftComment | null = null,
     ) {
         const currentFilePath = this.file?.path ?? null;
@@ -1482,7 +1527,9 @@ export default class SideNote2View extends ItemView {
             showDeletedComments: this.plugin.shouldShowDeletedComments(),
             enablePageThreadReorder,
             enableSoftDeleteActions: !isIndexView,
-            showNestedComments: this.plugin.shouldShowNestedComments(),
+            showNestedComments: this.plugin.shouldShowNestedCommentsForThread(thread.id),
+            canToggleThreadNestedComments: this.plugin.shouldShowNestedComments(),
+            editDraftComment,
             appendDraftComment,
             agentRun,
             agentStream,
@@ -1509,6 +1556,10 @@ export default class SideNote2View extends ItemView {
                 const commentUrl = buildCommentLocationUrl(this.app.vault.getName(), persistedComment);
                 const copied = await copyTextToClipboard(commentUrl);
                 new Notice(copied ? "Copied side note link." : "Failed to copy side note link.");
+            },
+            saveVisibleDraftIfPresent: () => this.saveVisibleDraftIfPresent(),
+            setShowNestedCommentsForThread: (threadId, showNestedComments) => {
+                void this.plugin.setShowNestedCommentsForThread(threadId, showNestedComments);
             },
             resolveComment: (commentId) => {
                 void this.plugin.resolveComment(commentId);
@@ -1537,6 +1588,9 @@ export default class SideNote2View extends ItemView {
             deleteCommentWithConfirm: (commentId) => this.deleteCommentWithConfirm(commentId),
             renderAppendDraft: (container, comment) => {
                 this.renderDraftComment(container, comment);
+            },
+            renderInlineEditDraft: (container, comment) => {
+                this.renderInlineEditDraft(container, comment);
             },
             setIcon: (element, icon) => {
                 setIcon(element, icon);
@@ -1700,13 +1754,60 @@ export default class SideNote2View extends ItemView {
             updateDraftCommentText: (commentId, commentText) => {
                 this.plugin.updateDraftCommentText(commentId, commentText);
             },
-            saveDraft: (commentId) => {
-                void this.plugin.saveDraft(commentId);
+            saveDraft: async (commentId) => {
+                await this.saveDraftAndClearActiveState(commentId, comment.filePath);
             },
             cancelDraft: (commentId) => {
                 void this.plugin.cancelDraft(commentId);
             },
         }, this.draftEditorController);
+    }
+
+    private renderInlineEditDraft(commentsContainer: HTMLDivElement, comment: DraftComment) {
+        renderInlineEditDraftContent(commentsContainer, comment, {
+            activeCommentId: this.interactionController.getActiveCommentId(),
+            isSavingDraft: (commentId) => this.plugin.isSavingDraft(commentId),
+            updateDraftCommentText: (commentId, commentText) => {
+                this.plugin.updateDraftCommentText(commentId, commentText);
+            },
+            saveDraft: async (commentId) => {
+                await this.saveDraftAndClearActiveState(commentId, comment.filePath);
+            },
+            cancelDraft: (commentId) => {
+                void this.plugin.cancelDraft(commentId);
+            },
+        }, this.draftEditorController);
+    }
+
+    private async saveDraftAndClearActiveState(commentId: string, draftFilePath: string): Promise<void> {
+        const currentViewPath = this.file?.path ?? null;
+        await this.plugin.saveDraft(commentId);
+
+        const remainingDraft = (currentViewPath
+            ? this.plugin.getDraftForView(currentViewPath)
+            : null)
+            ?? this.plugin.getDraftForFile(draftFilePath);
+        if (remainingDraft?.id === commentId) {
+            return;
+        }
+
+        this.interactionController.clearActiveState();
+    }
+
+    private async saveVisibleDraftIfPresent(): Promise<boolean> {
+        const currentViewPath = this.file?.path ?? null;
+        if (!currentViewPath) {
+            return true;
+        }
+
+        const draft = this.plugin.getDraftForView(currentViewPath);
+        if (!draft) {
+            return true;
+        }
+
+        await this.plugin.saveDraft(draft.id);
+        const remainingDraft = this.plugin.getDraftForView(currentViewPath);
+        return remainingDraft?.id !== draft.id;
     }
 
     private async renderThoughtTrail(

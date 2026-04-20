@@ -1,28 +1,25 @@
 export interface EditDismissalDecision {
-    shouldCancelDraft: boolean;
+    shouldSaveDraft: boolean;
     shouldClearActiveState: boolean;
+    shouldClearRevealedCommentSelection: boolean;
 }
 
 export function decideEditDismissal(
     clickedInsideDraft: boolean,
     clickedCommentItem: boolean,
+    clickedSectionChrome: boolean,
 ): EditDismissalDecision {
     if (clickedInsideDraft) {
         return {
-            shouldCancelDraft: false,
+            shouldSaveDraft: false,
             shouldClearActiveState: false,
-        };
-    }
-
-    if (!clickedCommentItem) {
-        return {
-            shouldCancelDraft: false,
-            shouldClearActiveState: false,
+            shouldClearRevealedCommentSelection: false,
         };
     }
 
     return {
-        shouldCancelDraft: true,
+        shouldSaveDraft: true,
         shouldClearActiveState: !clickedCommentItem,
+        shouldClearRevealedCommentSelection: !clickedCommentItem && !clickedSectionChrome,
     };
 }

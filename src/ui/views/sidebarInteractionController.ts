@@ -42,7 +42,7 @@ export interface SidebarInteractionHost {
     getCurrentFile(): TFile | null;
     getDraftForView(filePath: string): DraftComment | null;
     renderComments(): Promise<void>;
-    saveDraft(commentId: string): void;
+    saveDraft(commentId: string): Promise<void> | void;
     cancelDraft(commentId: string): void;
     clearRevealedCommentSelection(): void;
     revealComment(comment: Comment): Promise<void>;
@@ -112,7 +112,7 @@ export class SidebarInteractionController {
         void copyTextToClipboard(selectedText);
     };
 
-    public readonly sidebarClickHandler = (event: MouseEvent) => {
+    public readonly sidebarClickHandler = async (event: MouseEvent) => {
         const file = this.host.getCurrentFile();
         if (!file) {
             return;
@@ -127,7 +127,7 @@ export class SidebarInteractionController {
             : null;
 
         const draft = this.host.getDraftForView(file.path);
-        if (draft && draft.mode === "edit") {
+        if (draft) {
             const draftEl = this.host.containerEl.querySelector(`[data-draft-id="${draft.id}"]`);
             if (!draftEl) {
                 return;
@@ -136,8 +136,16 @@ export class SidebarInteractionController {
             const decision = decideEditDismissal(
                 !!(target && draftEl.contains(target)),
                 !!clickedComment,
+                !!clickedSectionChrome,
             );
-            if (!decision.shouldCancelDraft) {
+            if (!decision.shouldSaveDraft) {
+                return;
+            }
+
+            await this.host.saveDraft(draft.id);
+
+            const remainingDraft = this.host.getDraftForView(file.path);
+            if (remainingDraft?.id === draft.id) {
                 return;
             }
 
@@ -145,7 +153,9 @@ export class SidebarInteractionController {
                 this.clearActiveState();
             }
 
-            this.host.cancelDraft(draft.id);
+            if (decision.shouldClearRevealedCommentSelection) {
+                this.host.clearRevealedCommentSelection();
+            }
             return;
         }
 

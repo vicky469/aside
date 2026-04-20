@@ -3,22 +3,33 @@ import test from "node:test";
 import { decideEditDismissal } from "../src/ui/views/editDismissal";
 
 test("decideEditDismissal keeps edit mode when clicking inside the draft", () => {
-    assert.deepEqual(decideEditDismissal(true, true), {
-        shouldCancelDraft: false,
+    assert.deepEqual(decideEditDismissal(true, true, false), {
+        shouldSaveDraft: false,
         shouldClearActiveState: false,
+        shouldClearRevealedCommentSelection: false,
     });
 });
 
-test("decideEditDismissal exits edit mode when clicking another comment", () => {
-    assert.deepEqual(decideEditDismissal(false, true), {
-        shouldCancelDraft: true,
+test("decideEditDismissal autosaves when clicking another comment", () => {
+    assert.deepEqual(decideEditDismissal(false, true, false), {
+        shouldSaveDraft: true,
         shouldClearActiveState: false,
+        shouldClearRevealedCommentSelection: false,
     });
 });
 
-test("decideEditDismissal keeps edit mode on sidebar background click", () => {
-    assert.deepEqual(decideEditDismissal(false, false), {
-        shouldCancelDraft: false,
-        shouldClearActiveState: false,
+test("decideEditDismissal autosaves and clears state on sidebar background click", () => {
+    assert.deepEqual(decideEditDismissal(false, false, false), {
+        shouldSaveDraft: true,
+        shouldClearActiveState: true,
+        shouldClearRevealedCommentSelection: true,
+    });
+});
+
+test("decideEditDismissal autosaves without clearing revealed selection on toolbar click", () => {
+    assert.deepEqual(decideEditDismissal(false, false, true), {
+        shouldSaveDraft: true,
+        shouldClearActiveState: true,
+        shouldClearRevealedCommentSelection: false,
     });
 });

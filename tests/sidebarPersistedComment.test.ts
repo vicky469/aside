@@ -203,6 +203,7 @@ test("shouldRenderNestedThreadEntries hides stored child comments when nested co
     assert.equal(shouldRenderNestedThreadEntries(thread, {
         activeCommentId: null,
         showNestedComments: false,
+        hasEditDraftComment: false,
         hasAppendDraftComment: false,
         hasAgentStream: false,
     }), false);
@@ -221,6 +222,26 @@ test("shouldRenderNestedThreadEntries keeps a targeted child comment visible eve
     assert.equal(shouldRenderNestedThreadEntries(thread, {
         activeCommentId: "entry-2",
         showNestedComments: false,
+        hasEditDraftComment: false,
+        hasAppendDraftComment: false,
+        hasAgentStream: false,
+    }), true);
+});
+
+test("shouldRenderNestedThreadEntries keeps stored child comments visible while editing a thread entry", () => {
+    const thread = createThreadWithEntries({
+        entries: [
+            { id: "entry-1", body: "Parent", timestamp: 100 },
+            { id: "entry-2", body: "Child", timestamp: 200 },
+        ],
+        createdAt: 100,
+        updatedAt: 200,
+    });
+
+    assert.equal(shouldRenderNestedThreadEntries(thread, {
+        activeCommentId: null,
+        showNestedComments: false,
+        hasEditDraftComment: true,
         hasAppendDraftComment: false,
         hasAgentStream: false,
     }), true);
@@ -232,6 +253,7 @@ test("shouldRenderNestedThreadEntries keeps append drafts visible even when nest
     assert.equal(shouldRenderNestedThreadEntries(thread, {
         activeCommentId: null,
         showNestedComments: false,
+        hasEditDraftComment: false,
         hasAppendDraftComment: true,
         hasAgentStream: false,
     }), true);
@@ -243,6 +265,7 @@ test("shouldRenderNestedThreadEntries keeps streamed agent replies visible even 
     assert.equal(shouldRenderNestedThreadEntries(thread, {
         activeCommentId: null,
         showNestedComments: false,
+        hasEditDraftComment: false,
         hasAppendDraftComment: false,
         hasAgentStream: true,
     }), true);

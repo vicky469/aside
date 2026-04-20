@@ -5,6 +5,7 @@ import type { DraftComment } from "../src/domain/drafts";
 import type { SidebarRenderableItem } from "../src/ui/views/sidebarRenderOrder";
 import {
     buildStoredOrderSidebarItems,
+    getNestedThreadIdForEditDraft,
     getNestedThreadIdForAppendDraft,
     getReplacedThreadIdForEditDraft,
     getSidebarSortCommentForThread,
@@ -128,6 +129,33 @@ test("getReplacedThreadIdForEditDraft replaces the parent thread when editing a 
     assert.equal(getReplacedThreadIdForEditDraft([thread], draft), "thread-1");
 });
 
+test("getNestedThreadIdForEditDraft keeps child edit drafts inside their parent thread", () => {
+    const thread = commentToThread(createComment({
+        id: "thread-1",
+        anchorKind: "selection",
+        timestamp: 100,
+    }));
+    thread.entries.push({
+        id: "reply-1",
+        body: "Child reply",
+        timestamp: 200,
+    });
+    thread.updatedAt = 200;
+
+    const draft: DraftComment = {
+        ...createComment({
+            id: "reply-1",
+            anchorKind: "selection",
+            comment: "Child reply",
+            timestamp: 200,
+        }),
+        mode: "edit",
+        threadId: "thread-1",
+    };
+
+    assert.equal(getNestedThreadIdForEditDraft([thread], draft), "thread-1");
+});
+
 test("getNestedThreadIdForAppendDraft resolves a child-targeted append draft to its parent thread", () => {
     const thread = commentToThread(createComment({
         id: "thread-1",
@@ -236,6 +264,7 @@ test("shouldRenderTopLevelDraftComment keeps normal note drafts visible even whe
     const visibleDraft = shouldRenderTopLevelDraftComment({
         draft,
         nestedAppendDraftThreadId: null,
+        nestedEditDraftThreadId: null,
         isAgentIndexMode: false,
         agentThreadIds: new Set<string>(),
     });
@@ -257,8 +286,32 @@ test("shouldRenderTopLevelDraftComment hides drafts that do not belong to the cu
     const hiddenDraft = shouldRenderTopLevelDraftComment({
         draft,
         nestedAppendDraftThreadId: null,
+        nestedEditDraftThreadId: null,
         isAgentIndexMode: true,
         agentThreadIds: new Set<string>(["other-thread"]),
+    });
+
+    assert.equal(hiddenDraft, null);
+});
+
+test("shouldRenderTopLevelDraftComment hides nested edit drafts", () => {
+    const draft: DraftComment = {
+        ...createComment({
+            id: "reply-1",
+            anchorKind: "selection",
+            comment: "Child reply",
+            timestamp: 250,
+        }),
+        mode: "edit",
+        threadId: "thread-1",
+    };
+
+    const hiddenDraft = shouldRenderTopLevelDraftComment({
+        draft,
+        nestedAppendDraftThreadId: null,
+        nestedEditDraftThreadId: "thread-1",
+        isAgentIndexMode: false,
+        agentThreadIds: new Set<string>(),
     });
 
     assert.equal(hiddenDraft, null);

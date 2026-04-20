@@ -68,6 +68,25 @@ export function getReplacedThreadIdForEditDraft(
     )?.id ?? draft.id;
 }
 
+export function getNestedThreadIdForEditDraft(
+    threads: readonly CommentThread[],
+    draft: DraftComment | null,
+): string | null {
+    if (!draft || draft.mode !== "edit") {
+        return null;
+    }
+
+    if (draft.threadId) {
+        return threads.find((thread) =>
+            thread.id === draft.threadId || thread.entries.some((entry) => entry.id === draft.threadId)
+        )?.id ?? null;
+    }
+
+    return threads.find((thread) =>
+        thread.id === draft.id || thread.entries.some((entry) => entry.id === draft.id)
+    )?.id ?? null;
+}
+
 export function getNestedThreadIdForAppendDraft(
     threads: readonly CommentThread[],
     draft: DraftComment | null,
@@ -84,12 +103,14 @@ export function getNestedThreadIdForAppendDraft(
 export function shouldRenderTopLevelDraftComment(options: {
     draft: DraftComment | null;
     nestedAppendDraftThreadId: string | null;
+    nestedEditDraftThreadId: string | null;
     isAgentIndexMode: boolean;
     agentThreadIds: ReadonlySet<string>;
 }): DraftComment | null {
     const {
         draft,
         nestedAppendDraftThreadId,
+        nestedEditDraftThreadId,
         isAgentIndexMode,
         agentThreadIds,
     } = options;
@@ -99,6 +120,10 @@ export function shouldRenderTopLevelDraftComment(options: {
     }
 
     if (draft.mode === "append" && nestedAppendDraftThreadId) {
+        return null;
+    }
+
+    if (draft.mode === "edit" && nestedEditDraftThreadId) {
         return null;
     }
 

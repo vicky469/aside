@@ -106,7 +106,9 @@ export class CommentMutationController {
         });
         this.host.setDraftCommentValue(trimmedDraft);
         this.host.setSavingDraftCommentId(commentId);
-        await this.host.refreshCommentViews();
+        if (trimmedDraft.mode !== "edit") {
+            await this.host.refreshCommentViews();
+        }
 
         let preparedDraft: DraftComment | null;
         try {

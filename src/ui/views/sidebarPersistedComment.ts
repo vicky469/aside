@@ -57,6 +57,8 @@ export interface SidebarPersistedCommentHost {
     enablePageThreadReorder: boolean;
     enableSoftDeleteActions: boolean;
     showNestedComments: boolean;
+    canToggleThreadNestedComments: boolean;
+    editDraftComment: DraftComment | null;
     appendDraftComment: DraftComment | null;
     agentRun: AgentRunRecord | null;
     agentStream: AgentRunStreamState | null;
@@ -69,6 +71,8 @@ export interface SidebarPersistedCommentHost {
     activateComment(comment: Comment): Promise<void>;
     openCommentInEditor(comment: Comment): Promise<void>;
     shareComment(comment: Comment): Promise<void>;
+    saveVisibleDraftIfPresent(): Promise<boolean>;
+    setShowNestedCommentsForThread(threadId: string, showNestedComments: boolean): void;
     resolveComment(commentId: string): void;
     unresolveComment(commentId: string): void;
     restoreComment(commentId: string): Promise<void> | void;
@@ -78,6 +82,7 @@ export interface SidebarPersistedCommentHost {
     reanchorCommentThreadToCurrentSelection(commentId: string): void;
     deleteCommentWithConfirm(commentId: string): Promise<void> | void;
     renderAppendDraft(container: HTMLDivElement, comment: DraftComment): void;
+    renderInlineEditDraft(container: HTMLDivElement, comment: DraftComment): void;
     setIcon(element: HTMLElement, icon: string): void;
 }
 
@@ -301,6 +306,7 @@ export function shouldRenderNestedThreadEntries(
     options: {
         activeCommentId: string | null;
         showNestedComments: boolean;
+        hasEditDraftComment: boolean;
         hasAppendDraftComment: boolean;
         hasAgentStream: boolean;
         hasDeletedEntriesVisible?: boolean;
@@ -308,10 +314,10 @@ export function shouldRenderNestedThreadEntries(
 ): boolean {
     const childEntries = getRenderableThreadEntries(thread).slice(1);
     if (childEntries.length === 0) {
-        return options.hasAppendDraftComment || options.hasAgentStream || options.hasDeletedEntriesVisible === true;
+        return options.hasEditDraftComment || options.hasAppendDraftComment || options.hasAgentStream || options.hasDeletedEntriesVisible === true;
     }
 
-    if (options.showNestedComments || options.hasAppendDraftComment || options.hasAgentStream || options.hasDeletedEntriesVisible) {
+    if (options.showNestedComments || options.hasEditDraftComment || options.hasAppendDraftComment || options.hasAgentStream || options.hasDeletedEntriesVisible) {
         return true;
     }
 
@@ -482,6 +488,7 @@ function renderSourceRedirectButton(
     const redirectButton = actionsEl.createEl("button", {
         cls: "clickable-icon sidenote2-comment-action-button sidenote2-comment-action-redirect",
     });
+    attachSidebarActionButtonInteractions(redirectButton, host);
     redirectButton.setAttribute("type", "button");
     redirectButton.setAttribute("aria-label", ariaLabel);
     if (icon === "obsidian-external-link") {
@@ -489,8 +496,11 @@ function renderSourceRedirectButton(
     } else {
         host.setIcon(redirectButton, icon);
     }
-    redirectButton.onclick = (event) => {
+    redirectButton.onclick = async (event) => {
         event.stopPropagation();
+        if (!(await host.saveVisibleDraftIfPresent())) {
+            return;
+        }
         void host.openCommentInEditor(comment);
     };
 }
@@ -504,11 +514,15 @@ function renderEditButton(
     const editButton = actionsEl.createEl("button", {
         cls: "clickable-icon sidenote2-comment-action-button sidenote2-comment-action-edit",
     });
+    attachSidebarActionButtonInteractions(editButton, host);
     editButton.setAttribute("type", "button");
     editButton.setAttribute("aria-label", ariaLabel);
     host.setIcon(editButton, "pencil");
-    editButton.onclick = (event) => {
+    editButton.onclick = async (event) => {
         event.stopPropagation();
+        if (!(await host.saveVisibleDraftIfPresent())) {
+            return;
+        }
         host.startEditDraft(commentId, host.currentFilePath);
     };
 }
@@ -522,12 +536,16 @@ function renderDeleteButton(
     const deleteButton = actionsEl.createEl("button", {
         cls: "clickable-icon sidenote2-comment-action-button sidenote2-comment-action-delete",
     });
+    attachSidebarActionButtonInteractions(deleteButton, host);
     deleteButton.setAttribute("type", "button");
     deleteButton.setAttribute("aria-label", ariaLabel);
     host.setIcon(deleteButton, "trash-2");
     deleteButton.onclick = async (event) => {
         event.preventDefault();
         event.stopPropagation();
+        if (!(await host.saveVisibleDraftIfPresent())) {
+            return;
+        }
         await host.deleteCommentWithConfirm(commentId);
     };
 }
@@ -541,12 +559,16 @@ function renderRestoreButton(
     const restoreButton = actionsEl.createEl("button", {
         cls: "clickable-icon sidenote2-comment-action-button sidenote2-comment-action-restore",
     });
+    attachSidebarActionButtonInteractions(restoreButton, host);
     restoreButton.setAttribute("type", "button");
     restoreButton.setAttribute("aria-label", ariaLabel);
     host.setIcon(restoreButton, "rotate-ccw");
     restoreButton.onclick = async (event) => {
         event.preventDefault();
         event.stopPropagation();
+        if (!(await host.saveVisibleDraftIfPresent())) {
+            return;
+        }
         await host.restoreComment(commentId);
     };
 }
@@ -569,11 +591,15 @@ function renderAddEntryButton(
             ...(options.extraClasses ?? []),
         ].join(" "),
     });
+    attachSidebarActionButtonInteractions(addEntryButton, host);
     addEntryButton.setAttribute("type", "button");
     addEntryButton.setAttribute("aria-label", options.ariaLabel);
     host.setIcon(addEntryButton, options.icon ?? "plus");
-    addEntryButton.onclick = (event) => {
+    addEntryButton.onclick = async (event) => {
         event.stopPropagation();
+        if (!(await host.saveVisibleDraftIfPresent())) {
+            return;
+        }
         host.startAppendEntryDraft(commentId, host.currentFilePath);
     };
 }
@@ -598,6 +624,16 @@ function renderReorderHandle(
     host.setIcon(handleEl, "grip-vertical");
 }
 
+function attachSidebarActionButtonInteractions(
+    buttonEl: HTMLButtonElement,
+    host: SidebarPersistedCommentHost,
+): void {
+    buttonEl.addEventListener("mousedown", (event: MouseEvent) => {
+        host.claimSidebarInteractionOwnership();
+        event.stopPropagation();
+    });
+}
+
 function renderPersistedEntryCard(
     container: HTMLDivElement,
     options: {
@@ -607,6 +643,7 @@ function renderPersistedEntryCard(
         presentation: BasePersistedCommentPresentation;
         host: SidebarPersistedCommentHost;
         interactive?: boolean;
+        inlineEditDraft?: DraftComment | null;
     },
 ): {
     commentEl: HTMLDivElement;
@@ -616,6 +653,10 @@ function renderPersistedEntryCard(
     const commentEl = container.createDiv(options.presentation.classes.join(" "));
     commentEl.setAttribute("data-comment-id", options.comment.id);
     commentEl.setAttribute("data-start-line", String(options.comment.startLine));
+    if (options.inlineEditDraft) {
+        commentEl.addClass("is-inline-editing");
+        commentEl.setAttribute("data-draft-id", options.inlineEditDraft.id);
+    }
 
     const headerEl = commentEl.createDiv("sidenote2-comment-header");
     const headerMainEl = headerEl.createDiv("sidenote2-comment-header-main");
@@ -631,7 +672,9 @@ function renderPersistedEntryCard(
     return {
         commentEl,
         actionsEl,
-        renderTask: renderThreadEntryContent(contentWrapper, options.thread, options.entryBody, options.host),
+        renderTask: options.inlineEditDraft
+            ? Promise.resolve(options.host.renderInlineEditDraft(contentWrapper, options.inlineEditDraft))
+            : renderThreadEntryContent(contentWrapper, options.thread, options.entryBody, options.host),
     };
 }
 
@@ -664,11 +707,15 @@ function renderThreadFooterActions(
         const shareButton = footerActionsEl.createEl("button", {
             cls: "clickable-icon sidenote2-comment-action-button sidenote2-comment-action-share sidenote2-thread-share-button",
         });
+        attachSidebarActionButtonInteractions(shareButton, host);
         shareButton.setAttribute("type", "button");
         shareButton.setAttribute("aria-label", "Share side note");
         host.setIcon(shareButton, "share");
-        shareButton.onclick = (event) => {
+        shareButton.onclick = async (event) => {
             event.stopPropagation();
+            if (!(await host.saveVisibleDraftIfPresent())) {
+                return;
+            }
             void host.shareComment(comment);
         };
     }
@@ -687,14 +734,40 @@ function renderThreadFooterActions(
     const retryButton = footerActionsEl.createEl("button", {
         cls: "clickable-icon sidenote2-comment-action-button sidenote2-comment-action-retry sidenote2-thread-footer-regenerate-button",
     });
+    attachSidebarActionButtonInteractions(retryButton, host);
     retryButton.setAttribute("type", "button");
     retryButton.setAttribute("aria-label", "Generate");
     host.setIcon(retryButton, SIDE_NOTE2_REGENERATE_ICON_ID);
-    retryButton.onclick = (event) => {
+    retryButton.onclick = async (event) => {
         event.stopPropagation();
+        if (!(await host.saveVisibleDraftIfPresent())) {
+            return;
+        }
         if (retryRunId) {
             host.retryAgentRun(retryRunId);
         }
+    };
+}
+
+function renderThreadNestedToggleButton(
+    commentEl: HTMLDivElement,
+    threadId: string,
+    showNestedComments: boolean,
+    host: SidebarPersistedCommentHost,
+): void {
+    const toggleButton = commentEl.createEl("button", {
+        cls: "clickable-icon sidenote2-comment-action-button sidenote2-thread-nested-toggle-button",
+    });
+    attachSidebarActionButtonInteractions(toggleButton, host);
+    toggleButton.setAttribute("type", "button");
+    toggleButton.setAttribute("aria-label", showNestedComments ? "Hide thread comments" : "Show thread comments");
+    host.setIcon(toggleButton, showNestedComments ? "chevrons-up" : "chevrons-down");
+    toggleButton.onclick = async (event) => {
+        event.stopPropagation();
+        if (!(await host.saveVisibleDraftIfPresent())) {
+            return;
+        }
+        host.setShowNestedCommentsForThread(threadId, !showNestedComments);
     };
 }
 
@@ -714,8 +787,11 @@ function renderThreadReanchorAction(
         text: label,
     });
     button.setAttribute("type", "button");
-    button.onclick = (event) => {
+    button.onclick = async (event) => {
         event.stopPropagation();
+        if (!(await host.saveVisibleDraftIfPresent())) {
+            return;
+        }
         host.reanchorCommentThreadToCurrentSelection(threadId);
     };
 }
@@ -739,72 +815,90 @@ export async function renderPersistedCommentCard(
     if (isDraggablePageThread) {
         threadEl.setAttribute("data-sidenote2-page-thread", "true");
     }
+    const hasChildEditDraft = !!host.editDraftComment && host.editDraftComment.id !== comment.id;
     const shouldRenderStoredChildren = host.showNestedComments
+        || hasChildEditDraft
         || entries.slice(1).some((entry) => entry.id === host.activeCommentId)
         || hasVisibleDeletedEntries(thread);
     const shouldRenderChildComments = shouldRenderNestedThreadEntries(thread, {
         activeCommentId: host.activeCommentId,
         showNestedComments: host.showNestedComments,
+        hasEditDraftComment: hasChildEditDraft,
         hasAppendDraftComment: !!host.appendDraftComment,
         hasAgentStream: !!host.agentStream,
         hasDeletedEntriesVisible: hasVisibleDeletedEntries(thread),
     });
     const appendDraftAfterEntryId = getAppendDraftInsertAfterEntryId(thread, host.appendDraftComment);
+    const hasStoredChildEntries = entries.length > 1;
+    const parentAuthor = resolveSidebarCommentAuthor(comment.id, host.threadAgentRuns, host.currentUserLabel);
+    const renderTasks: Array<Promise<void>> = [];
+    const parentEditDraft = host.editDraftComment?.id === comment.id
+        ? host.editDraftComment
+        : null;
     const renderedParent = renderPersistedEntryCard(threadEl, {
         comment,
         thread,
         entryBody: entries[0]?.body || "",
         presentation,
         host,
+        inlineEditDraft: parentEditDraft,
     });
-    const parentAuthor = resolveSidebarCommentAuthor(comment.id, host.threadAgentRuns, host.currentUserLabel);
     const commentEl = renderedParent.commentEl;
     const actionsEl = renderedParent.actionsEl;
-    const renderTasks: Array<Promise<void>> = [renderedParent.renderTask];
-    if (isDraggablePageThread) {
+    renderTasks.push(renderedParent.renderTask);
+    if (isDraggablePageThread && !parentEditDraft) {
         renderReorderHandle(actionsEl, thread.id, host);
     }
 
-    if (comment.deletedAt && host.enableSoftDeleteActions) {
-        renderRestoreButton(actionsEl, comment.id, host, "Restore deleted side note");
-    } else {
-        const resolveButton = actionsEl.createEl("button", {
-            cls: "clickable-icon sidenote2-comment-action-button sidenote2-comment-action-resolve",
-        });
-        resolveButton.setAttribute("type", "button");
-        resolveButton.setAttribute("aria-label", presentation.resolveAction.ariaLabel);
-        host.setIcon(resolveButton, presentation.resolveAction.icon);
-        resolveButton.onclick = (event) => {
-            event.stopPropagation();
-            if (thread.resolved) {
-                host.unresolveComment(thread.id);
-            } else {
-                host.resolveComment(thread.id);
-            }
-        };
+    if (!parentEditDraft) {
+        if (comment.deletedAt && host.enableSoftDeleteActions) {
+            renderRestoreButton(actionsEl, comment.id, host, "Restore deleted side note");
+        } else {
+            const resolveButton = actionsEl.createEl("button", {
+                cls: "clickable-icon sidenote2-comment-action-button sidenote2-comment-action-resolve",
+            });
+            attachSidebarActionButtonInteractions(resolveButton, host);
+            resolveButton.setAttribute("type", "button");
+            resolveButton.setAttribute("aria-label", presentation.resolveAction.ariaLabel);
+            host.setIcon(resolveButton, presentation.resolveAction.icon);
+            resolveButton.onclick = async (event) => {
+                event.stopPropagation();
+                if (!(await host.saveVisibleDraftIfPresent())) {
+                    return;
+                }
+                if (thread.resolved) {
+                    host.unresolveComment(thread.id);
+                } else {
+                    host.resolveComment(thread.id);
+                }
+            };
 
-        renderEditButton(actionsEl, comment.id, host, "Edit side note");
-        if (host.enableSoftDeleteActions) {
-            renderDeleteButton(actionsEl, comment.id, host, "Delete side note thread");
+            renderEditButton(actionsEl, comment.id, host, "Edit side note");
+            if (host.enableSoftDeleteActions) {
+                renderDeleteButton(actionsEl, comment.id, host, "Delete side note thread");
+            }
         }
+        if (host.showSourceRedirectAction && !comment.deletedAt) {
+            renderSourceRedirectButton(
+                actionsEl,
+                comment,
+                presentation.redirectHint.ariaLabel,
+                presentation.redirectHint.icon,
+                host,
+            );
+        }
+        if (presentation.reanchorAction && !comment.deletedAt) {
+            renderThreadReanchorAction(commentEl, thread.id, presentation.reanchorAction.label, host);
+        }
+        renderThreadFooterActions(commentEl, comment, null, parentAuthor, null, {
+            showShareAction: !comment.deletedAt,
+            showAddEntryAction: !comment.deletedAt,
+            showRetryAction: false,
+        }, host);
     }
-    if (host.showSourceRedirectAction && !comment.deletedAt) {
-        renderSourceRedirectButton(
-            actionsEl,
-            comment,
-            presentation.redirectHint.ariaLabel,
-            presentation.redirectHint.icon,
-            host,
-        );
+    if (hasStoredChildEntries && host.canToggleThreadNestedComments) {
+        renderThreadNestedToggleButton(commentEl, thread.id, host.showNestedComments, host);
     }
-    if (presentation.reanchorAction && !comment.deletedAt) {
-        renderThreadReanchorAction(commentEl, thread.id, presentation.reanchorAction.label, host);
-    }
-    renderThreadFooterActions(commentEl, comment, null, parentAuthor, null, {
-        showShareAction: !comment.deletedAt,
-        showAddEntryAction: !comment.deletedAt,
-        showRetryAction: false,
-    }, host);
 
     if (!shouldRenderChildComments) {
         await Promise.all(renderTasks);
@@ -817,44 +911,50 @@ export async function renderPersistedCommentCard(
         for (const entry of entries.slice(1)) {
             const entryComment = threadEntryToComment(thread, entry);
             const entryPresentation = buildPersistedThreadEntryPresentation(thread, entry, host.activeCommentId);
+            const entryEditDraft = host.editDraftComment?.id === entry.id
+                ? host.editDraftComment
+                : null;
             const renderedEntry = renderPersistedEntryCard(childCommentsEl, {
                 comment: entryComment,
                 thread,
                 entryBody: entry.body || "",
                 presentation: entryPresentation,
                 host,
+                inlineEditDraft: entryEditDraft,
             });
             const entryEl = renderedEntry.commentEl;
             const entryActionsEl = renderedEntry.actionsEl;
-            if (thread.deletedAt) {
-                // Parent restore controls the whole soft-deleted thread.
-            } else if (entryComment.deletedAt && host.enableSoftDeleteActions) {
-                renderRestoreButton(entryActionsEl, entryComment.id, host, "Restore deleted side note entry");
-            } else {
-                renderEditButton(entryActionsEl, entryComment.id, host, "Edit side note");
-                if (host.enableSoftDeleteActions) {
-                    renderDeleteButton(entryActionsEl, entryComment.id, host, "Delete side note entry");
-                }
-            }
-            if (host.showSourceRedirectAction && !entryComment.deletedAt && !thread.deletedAt) {
-                renderSourceRedirectButton(entryActionsEl, entryComment, "Open source note", "obsidian-external-link", host);
-            }
             renderTasks.push(renderedEntry.renderTask);
-            const entryAuthor = resolveSidebarCommentAuthor(entryComment.id, host.threadAgentRuns, host.currentUserLabel);
-            const entryAgentRun = getAgentRunByOutputEntryId(host.threadAgentRuns, entryComment.id);
-            renderThreadFooterActions(
-                entryEl,
-                entryComment,
-                entryAgentRun?.id ?? null,
-                entryAuthor,
-                entryAgentRun,
-                {
-                showShareAction: !entryComment.deletedAt && !thread.deletedAt,
-                showAddEntryAction: !entryComment.deletedAt && !thread.deletedAt,
-                showRetryAction: !!entryAgentRun && !entryComment.deletedAt && !thread.deletedAt,
-                },
-                host,
-            );
+            if (!entryEditDraft) {
+                if (thread.deletedAt) {
+                    // Parent restore controls the whole soft-deleted thread.
+                } else if (entryComment.deletedAt && host.enableSoftDeleteActions) {
+                    renderRestoreButton(entryActionsEl, entryComment.id, host, "Restore deleted side note entry");
+                } else {
+                    renderEditButton(entryActionsEl, entryComment.id, host, "Edit side note");
+                    if (host.enableSoftDeleteActions) {
+                        renderDeleteButton(entryActionsEl, entryComment.id, host, "Delete side note entry");
+                    }
+                }
+                if (host.showSourceRedirectAction && !entryComment.deletedAt && !thread.deletedAt) {
+                    renderSourceRedirectButton(entryActionsEl, entryComment, "Open source note", "obsidian-external-link", host);
+                }
+                const entryAuthor = resolveSidebarCommentAuthor(entryComment.id, host.threadAgentRuns, host.currentUserLabel);
+                const entryAgentRun = getAgentRunByOutputEntryId(host.threadAgentRuns, entryComment.id);
+                renderThreadFooterActions(
+                    entryEl,
+                    entryComment,
+                    entryAgentRun?.id ?? null,
+                    entryAuthor,
+                    entryAgentRun,
+                    {
+                        showShareAction: !entryComment.deletedAt && !thread.deletedAt,
+                        showAddEntryAction: !entryComment.deletedAt && !thread.deletedAt,
+                        showRetryAction: !!entryAgentRun && !entryComment.deletedAt && !thread.deletedAt,
+                    },
+                    host,
+                );
+            }
 
             if (host.appendDraftComment && appendDraftAfterEntryId === entry.id) {
                 host.renderAppendDraft(childCommentsEl, host.appendDraftComment);

@@ -16,6 +16,7 @@ export interface RevealedCommentStateUpdateOptions {
 export class CommentSessionController {
     private readonly draftSessionStore = new DraftSessionStore();
     private readonly revealedCommentSelectionStore = new RevealedCommentSelectionStore();
+    private readonly hiddenNestedCommentThreadIds = new Set<string>();
     private showResolvedComments = false;
     private showDeletedComments = false;
     private showNestedComments = true;
@@ -105,6 +106,10 @@ export class CommentSessionController {
         return this.showNestedComments;
     }
 
+    public shouldShowNestedCommentsForThread(threadId: string): boolean {
+        return this.showNestedComments && !this.hiddenNestedCommentThreadIds.has(threadId);
+    }
+
     public shouldShowDeletedComments(): boolean {
         return this.showDeletedComments;
     }
@@ -125,6 +130,22 @@ export class CommentSessionController {
         }
 
         this.showNestedComments = showNested;
+        this.hiddenNestedCommentThreadIds.clear();
+        await this.host.refreshCommentViews();
+        return true;
+    }
+
+    public async setShowNestedCommentsForThread(threadId: string, showNested: boolean): Promise<boolean> {
+        const isVisible = !this.hiddenNestedCommentThreadIds.has(threadId);
+        if (isVisible === showNested) {
+            return false;
+        }
+
+        if (showNested) {
+            this.hiddenNestedCommentThreadIds.delete(threadId);
+        } else {
+            this.hiddenNestedCommentThreadIds.add(threadId);
+        }
         await this.host.refreshCommentViews();
         return true;
     }

@@ -348,6 +348,8 @@ test("comment mutation controller does not dispatch edited entries to the agent 
     await host.controller.saveDraft(draft.id);
 
     assert.deepEqual(host.savedUserEntryEvents, []);
+    assert.equal(host.getRefreshCommentViewsCount(), 1);
+    assert.equal(host.getRefreshEditorDecorationsCount(), 1);
 });
 
 test("comment mutation controller keeps child edit drafts attached to their parent thread", async () => {

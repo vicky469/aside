@@ -99,7 +99,7 @@ test("getSidebarComments shows only resolved comments when the resolved toggle i
 
 test("estimateDraftTextareaRows keeps draft editors within their intended bounds", () => {
     assert.equal(estimateDraftTextareaRows("Short", false), 2);
-    assert.equal(estimateDraftTextareaRows("Short", true), 6);
+    assert.equal(estimateDraftTextareaRows("Short", true), 2);
 
     const longLine = "x".repeat(2_000);
     assert.equal(estimateDraftTextareaRows(longLine, false), 10);
