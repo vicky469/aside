@@ -78,6 +78,30 @@ test("sortSidebarRenderableItems keeps page-note thread order stable after later
     ]);
 });
 
+test("sortSidebarRenderableItems keeps root files ahead of nested folders to match index note ordering", () => {
+    const nestedThread = commentToThread(createComment({
+        id: "nested-note",
+        filePath: "SideNote2 Graph Fixtures/graph-1000/size-1/isolated/g01-isolated-c01-n01.md",
+        timestamp: 100,
+    }));
+    const rootThread = commentToThread(createComment({
+        id: "root-note",
+        filePath: "test.md",
+        timestamp: 200,
+    }));
+
+    const items: SidebarRenderableItem[] = [
+        { kind: "thread", thread: nestedThread },
+        { kind: "thread", thread: rootThread },
+    ];
+    const sorted = sortSidebarRenderableItems(items);
+
+    assert.deepEqual(sorted.map((item) => item.kind === "thread" ? item.thread.id : item.draft.id), [
+        "root-note",
+        "nested-note",
+    ]);
+});
+
 test("getReplacedThreadIdForEditDraft replaces the parent thread when editing a child entry", () => {
     const thread = commentToThread(createComment({
         id: "thread-1",
@@ -158,6 +182,43 @@ test("buildStoredOrderSidebarItems keeps file thread order and replaces the edit
     assert.deepEqual(items.map((item) => item.kind === "thread" ? item.thread.id : item.draft.id), [
         "thread-1",
         "draft-1",
+    ]);
+});
+
+test("buildStoredOrderSidebarItems inserts a new top-level draft into its natural sidebar position", () => {
+    const anchoredThread = commentToThread(createComment({
+        id: "anchored-1",
+        anchorKind: "selection",
+        startLine: 12,
+        startChar: 0,
+        timestamp: 200,
+    }));
+    const pageThread = commentToThread(createComment({
+        id: "page-note-1",
+        anchorKind: "page",
+        startLine: 0,
+        startChar: 0,
+        timestamp: 100,
+    }));
+    const draft: DraftComment = {
+        ...createComment({
+            id: "draft-1",
+            anchorKind: "page",
+            comment: "",
+            startLine: 0,
+            startChar: 0,
+            timestamp: 150,
+        }),
+        mode: "new",
+        threadId: "draft-1",
+    };
+
+    const items = buildStoredOrderSidebarItems([pageThread, anchoredThread], draft, null);
+
+    assert.deepEqual(items.map((item) => item.kind === "thread" ? item.thread.id : item.draft.id), [
+        "page-note-1",
+        "draft-1",
+        "anchored-1",
     ]);
 });
 

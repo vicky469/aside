@@ -1,6 +1,6 @@
 import type { Comment, CommentThread } from "../../commentManager";
 import { getFirstThreadEntry, threadEntryToComment } from "../../commentManager";
-import { compareCommentsForSidebarOrder } from "../../core/anchors/commentSectionOrder";
+import { compareCommentsForSidebarOrder, getCommentSectionKey } from "../../core/anchors/commentSectionOrder";
 import type { DraftComment } from "../../domain/drafts";
 
 export type SidebarRenderableItem =
@@ -14,6 +14,41 @@ export function getSidebarSortCommentForThread(thread: CommentThread): Comment {
         ...threadEntryToComment(thread, firstEntry),
         id: thread.id,
     };
+}
+
+function getNormalizedFolderPath(filePath: string): string {
+    const normalized = filePath.replace(/\\/g, "/");
+    const parts = normalized.split("/").filter(Boolean);
+    parts.pop();
+    return parts.join("/");
+}
+
+function compareCommentsForIndexListOrder<T extends Comment>(left: T, right: T): number {
+    const leftFolder = getNormalizedFolderPath(left.filePath);
+    const rightFolder = getNormalizedFolderPath(right.filePath);
+    if (leftFolder !== rightFolder) {
+        return leftFolder.localeCompare(rightFolder);
+    }
+
+    if (left.filePath !== right.filePath) {
+        return left.filePath.localeCompare(right.filePath);
+    }
+
+    const leftSection = getCommentSectionKey(left);
+    const rightSection = getCommentSectionKey(right);
+    if (leftSection !== rightSection) {
+        return leftSection === "page" ? -1 : 1;
+    }
+
+    if (left.startLine !== right.startLine) {
+        return left.startLine - right.startLine;
+    }
+
+    if (left.startChar !== right.startChar) {
+        return left.startChar - right.startChar;
+    }
+
+    return left.timestamp - right.timestamp;
 }
 
 export function getReplacedThreadIdForEditDraft(
@@ -93,7 +128,15 @@ export function buildStoredOrderSidebarItems(
     }
 
     if (draft && !insertedDraft) {
-        items.push({ kind: "draft", draft });
+        const insertAt = items.findIndex((item) => (
+            item.kind === "thread"
+            && compareCommentsForSidebarOrder(draft, getSidebarSortCommentForThread(item.thread)) < 0
+        ));
+        if (insertAt === -1) {
+            items.push({ kind: "draft", draft });
+        } else {
+            items.splice(insertAt, 0, { kind: "draft", draft });
+        }
     }
 
     return items;
@@ -103,6 +146,6 @@ export function sortSidebarRenderableItems(items: readonly SidebarRenderableItem
     return items.slice().sort((left, right) => {
         const leftComment = left.kind === "thread" ? getSidebarSortCommentForThread(left.thread) : left.draft;
         const rightComment = right.kind === "thread" ? getSidebarSortCommentForThread(right.thread) : right.draft;
-        return compareCommentsForSidebarOrder(leftComment, rightComment);
+        return compareCommentsForIndexListOrder(leftComment, rightComment);
     });
 }
