@@ -102,8 +102,9 @@ export class WorkspaceViewController {
 
     public getMarkdownViewForFile(file: TFile): MarkdownView | null {
         const recentLeaf = this.host.app.workspace.getMostRecentLeaf?.() ?? null;
-        if (isMarkdownViewLike(recentLeaf?.view) && recentLeaf.view.file?.path === file.path) {
-            return recentLeaf.view as MarkdownView;
+        const recentView = recentLeaf?.view;
+        if (isMarkdownViewLike(recentView) && recentView.file?.path === file.path) {
+            return recentView as MarkdownView;
         }
 
         let matchedView: MarkdownView | null = null;

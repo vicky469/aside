@@ -2,10 +2,10 @@ import type { AgentActorDefinition, SideNote2AgentTarget } from "./agentActorDef
 import { CLAUDE_AGENT_ACTOR } from "./claudeActor";
 import { CODEX_AGENT_ACTOR } from "./codexActor";
 
-export const SIDE_NOTE2_AGENT_ACTORS = [
+export const SIDE_NOTE2_AGENT_ACTORS: readonly AgentActorDefinition[] = [
     CODEX_AGENT_ACTOR,
     CLAUDE_AGENT_ACTOR,
-] as const satisfies readonly AgentActorDefinition[];
+];
 
 export const DEFAULT_SIDE_NOTE2_AGENT_ACTOR_ID: SideNote2AgentTarget = CODEX_AGENT_ACTOR.id;
 

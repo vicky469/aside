@@ -373,14 +373,14 @@ test("comment mutation controller dispatches saved new entries to the agent hook
 
 test("comment mutation controller dispatches saved append entries to the agent hook after persistence", async () => {
     const existing = createComment({ id: "thread-1", comment: "Original" });
-    const draft = {
+    const draft: DraftComment = {
         ...toDraft(existing, {
             id: "entry-2",
             comment: "@codex explain this",
             mode: "append",
         }),
         threadId: existing.id,
-    } satisfies DraftComment;
+    };
     const host = createHost({
         draftComment: draft,
         knownComments: [existing],
@@ -399,7 +399,7 @@ test("comment mutation controller dispatches saved append entries to the agent h
 
 test("comment mutation controller inserts child-targeted append drafts after the clicked child entry", async () => {
     const existing = createComment({ id: "thread-1", comment: "Original" });
-    const draft = {
+    const draft: DraftComment = {
         ...toDraft(existing, {
             comment: "Inserted after child",
             mode: "append",
@@ -407,7 +407,7 @@ test("comment mutation controller inserts child-targeted append drafts after the
         id: "entry-4",
         threadId: existing.id,
         appendAfterCommentId: "entry-2",
-    } satisfies DraftComment;
+    };
     const host = createHost({
         draftComment: draft,
         knownComments: [existing],
@@ -490,7 +490,7 @@ test("comment mutation controller can convert an edited note thread to bookmark 
         comment: "Existing idea",
         isBookmark: false,
     });
-    const draft = {
+    const draft: DraftComment = {
         ...toDraft(existing, {
             comment: "Existing idea",
             mode: "edit",
@@ -498,7 +498,7 @@ test("comment mutation controller can convert an edited note thread to bookmark 
             isBookmark: true,
         }),
         isBookmark: true,
-    } satisfies DraftComment;
+    };
     const host = createHost({
         draftComment: draft,
         knownComments: [existing],
