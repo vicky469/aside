@@ -182,6 +182,18 @@ export default class SideNote2View extends ItemView {
     private readonly streamedReplyControllers = new Map<string, StreamedAgentReplyController>();
     private unsubscribeFromAgentStreamUpdates: (() => void) | null = null;
 
+    private isNonDesktopClient(): boolean {
+        const electronRequire = typeof window !== "undefined"
+            ? (window as Window & { require?: unknown }).require
+            : undefined;
+        return typeof electronRequire !== "function";
+    }
+
+    private syncViewContainerClasses(): void {
+        this.containerEl.addClass("sidenote2-view-container");
+        this.containerEl.classList.toggle("is-non-desktop", this.isNonDesktopClient());
+    }
+
     constructor(leaf: WorkspaceLeaf, plugin: SideNote2, file: TFile | null = null) {
         super(leaf);
         this.plugin = plugin;
@@ -369,7 +381,7 @@ export default class SideNote2View extends ItemView {
         this.noteSidebarShell = null;
         this.resetStreamedReplyControllers();
         this.containerEl.empty();
-        this.containerEl.addClass("sidenote2-view-container");
+        this.syncViewContainerClasses();
         if (file) {
             this.indexFileFilterGraph = null;
             if (isAllCommentsView) {
@@ -382,7 +394,7 @@ export default class SideNote2View extends ItemView {
             }
 
             this.containerEl.empty();
-            this.containerEl.addClass("sidenote2-view-container");
+            this.syncViewContainerClasses();
             const showDeleted = this.plugin.shouldShowDeletedComments();
             const hasExistingSourceFile = (filePath: string): boolean => {
                 const sourceFile = this.app.vault.getAbstractFileByPath(filePath);
@@ -870,14 +882,14 @@ export default class SideNote2View extends ItemView {
             && this.noteSidebarShell.commentsContainerEl.isConnected
             && this.noteSidebarShell.supportSlotEl.isConnected
         ) {
-            this.containerEl.addClass("sidenote2-view-container");
+            this.syncViewContainerClasses();
             return this.noteSidebarShell;
         }
 
         this.noteSidebarShell = null;
         this.resetStreamedReplyControllers();
         this.containerEl.empty();
-        this.containerEl.addClass("sidenote2-view-container");
+        this.syncViewContainerClasses();
 
         const commentsContainerEl = this.containerEl.createDiv("sidenote2-comments-container");
         const toolbarSlotEl = commentsContainerEl.createDiv("sidenote2-note-sidebar-toolbar-slot");
@@ -1940,6 +1952,7 @@ export default class SideNote2View extends ItemView {
     private renderDraftComment(commentsContainer: HTMLDivElement, comment: DraftComment) {
         renderDraftCommentCard(commentsContainer, comment, {
             activeCommentId: this.interactionController.getActiveCommentId(),
+            shouldPinFocusedDraftToTop: this.isNonDesktopClient(),
             isSavingDraft: (commentId) => this.plugin.isSavingDraft(commentId),
             updateDraftCommentText: (commentId, commentText) => {
                 this.plugin.updateDraftCommentText(commentId, commentText);
@@ -1963,6 +1976,7 @@ export default class SideNote2View extends ItemView {
     private renderInlineEditDraft(commentsContainer: HTMLDivElement, comment: DraftComment) {
         renderInlineEditDraftContent(commentsContainer, comment, {
             activeCommentId: this.interactionController.getActiveCommentId(),
+            shouldPinFocusedDraftToTop: this.isNonDesktopClient(),
             isSavingDraft: (commentId) => this.plugin.isSavingDraft(commentId),
             updateDraftCommentText: (commentId, commentText) => {
                 this.plugin.updateDraftCommentText(commentId, commentText);
