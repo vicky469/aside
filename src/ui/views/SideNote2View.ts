@@ -1951,8 +1951,8 @@ export default class SideNote2View extends ItemView {
                 setIcon(element, icon);
             },
             claimSidebarInteractionOwnership: (focusTarget) => this.interactionController.claimSidebarInteractionOwnership(focusTarget),
-            saveDraft: async (commentId) => {
-                await this.saveDraftAndClearActiveState(commentId, comment.filePath);
+            saveDraft: async (commentId, options) => {
+                await this.saveDraftAndClearActiveState(commentId, comment.filePath, options);
             },
             cancelDraft: (commentId) => {
                 void this.plugin.cancelDraft(commentId);
@@ -1974,8 +1974,8 @@ export default class SideNote2View extends ItemView {
                 setIcon(element, icon);
             },
             claimSidebarInteractionOwnership: (focusTarget) => this.interactionController.claimSidebarInteractionOwnership(focusTarget),
-            saveDraft: async (commentId) => {
-                await this.saveDraftAndClearActiveState(commentId, comment.filePath);
+            saveDraft: async (commentId, options) => {
+                await this.saveDraftAndClearActiveState(commentId, comment.filePath, options);
             },
             cancelDraft: (commentId) => {
                 void this.plugin.cancelDraft(commentId);
@@ -1986,7 +1986,12 @@ export default class SideNote2View extends ItemView {
     private async saveDraftAndClearActiveState(
         commentId: string,
         draftFilePath: string,
-        options?: { skipPreSaveRefresh?: boolean },
+        options?: {
+            skipPreSaveRefresh?: boolean;
+            skipAnchorRevalidation?: boolean;
+            deferAggregateRefresh?: boolean;
+            skipPersistedViewRefresh?: boolean;
+        },
     ): Promise<void> {
         const currentViewPath = this.file?.path ?? null;
         await this.plugin.saveDraft(commentId, options);

@@ -20,7 +20,15 @@ export interface SidebarDraftCommentHost {
     updateDraftCommentBookmarkState(commentId: string, isBookmark: boolean): void;
     setIcon(element: HTMLElement, icon: string): void;
     claimSidebarInteractionOwnership(focusTarget?: HTMLElement | null): void;
-    saveDraft(commentId: string): Promise<void> | void;
+    saveDraft(
+        commentId: string,
+        options?: {
+            skipPreSaveRefresh?: boolean;
+            skipAnchorRevalidation?: boolean;
+            deferAggregateRefresh?: boolean;
+            skipPersistedViewRefresh?: boolean;
+        },
+    ): Promise<void> | void;
     cancelDraft(commentId: string): void;
 }
 
@@ -97,6 +105,22 @@ export function buildBookmarkDraftButtonPresentation(comment: Pick<DraftComment,
     title: string;
     active: boolean;
 } {
+    if (comment.mode === "new") {
+        if (comment.isBookmark === true) {
+            return {
+                ariaLabel: "Remove bookmark",
+                title: "Remove bookmark and keep editing",
+                active: true,
+            };
+        }
+
+        return {
+            ariaLabel: "Save as bookmark",
+            title: "Save as bookmark",
+            active: false,
+        };
+    }
+
     if (comment.isBookmark === true) {
         return {
             ariaLabel: "Remove bookmark",
@@ -114,6 +138,10 @@ export function buildBookmarkDraftButtonPresentation(comment: Pick<DraftComment,
 
 export function toggleBookmarkDraftState(isBookmark: boolean): boolean {
     return !isBookmark;
+}
+
+export function shouldAutoSaveBookmarkDraft(comment: Pick<DraftComment, "mode">, isBookmark: boolean): boolean {
+    return comment.mode === "new" && isBookmark;
 }
 
 function createDraftFormatButton(
@@ -390,6 +418,15 @@ function renderDraftEditor(
         isBookmark = toggleBookmarkDraftState(isBookmark);
         host.updateDraftCommentBookmarkState(comment.id, isBookmark);
         syncBookmarkButtons();
+        if (shouldAutoSaveBookmarkDraft(comment, isBookmark)) {
+            void host.saveDraft(comment.id, {
+                skipPreSaveRefresh: true,
+                skipAnchorRevalidation: true,
+                deferAggregateRefresh: true,
+                skipPersistedViewRefresh: true,
+            });
+            return;
+        }
         textarea.focus();
     };
     boldButton?.addEventListener("click", applyBold);

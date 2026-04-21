@@ -52,6 +52,7 @@ function createHost(options: {
     currentNoteContentByPath?: Record<string, string>;
     getCurrentNoteContent?: (file: TFile) => Promise<string>;
     currentSelectionByPath?: Record<string, DraftSelection | null>;
+    persistCommentsForFile?: (file: TFile, options?: { immediateAggregateRefresh?: boolean; skipCommentViewRefresh?: boolean }) => Promise<void> | void;
     now?: number;
     showResolvedComments?: boolean;
     handleSavedUserEntry?: (event: SavedUserEntryEvent) => Promise<void> | void;
@@ -63,7 +64,7 @@ function createHost(options: {
     let showResolvedComments = options.showResolvedComments ?? false;
     const notices: string[] = [];
     const loadedFiles: string[] = [];
-    const persistedFiles: Array<{ path: string; immediateAggregateRefresh?: boolean }> = [];
+    const persistedFiles: Array<{ path: string; immediateAggregateRefresh?: boolean; skipCommentViewRefresh?: boolean }> = [];
     const highlightedCommentIds: string[] = [];
     const setDraftCalls: Array<{ draftComment: DraftComment | null; hostFilePath?: string | null }> = [];
     const setShowResolvedCalls: boolean[] = [];
@@ -128,8 +129,14 @@ function createHost(options: {
         persistCommentsForFile: async (file, persistOptions) => {
             persistedFiles.push({
                 path: file.path,
-                immediateAggregateRefresh: persistOptions?.immediateAggregateRefresh,
+                ...(persistOptions?.immediateAggregateRefresh !== undefined
+                    ? { immediateAggregateRefresh: persistOptions.immediateAggregateRefresh }
+                    : {}),
+                ...(persistOptions?.skipCommentViewRefresh !== undefined
+                    ? { skipCommentViewRefresh: persistOptions.skipCommentViewRefresh }
+                    : {}),
             });
+            await options.persistCommentsForFile?.(file, persistOptions);
         },
         getCommentManager: () => manager,
         activateViewAndHighlightComment: async (commentId) => {
@@ -208,11 +215,12 @@ test("comment mutation controller saves a new draft by trimming and persisting i
     assert.equal(host.manager.getAllComments()[0].comment, "Ship it");
     assert.deepEqual(host.persistedFiles, [{
         path: draft.filePath,
-        immediateAggregateRefresh: true,
+        immediateAggregateRefresh: false,
+        skipCommentViewRefresh: true,
     }]);
     assert.equal(host.getDraftComment(), null);
     assert.equal(host.getSavingDraftCommentId(), null);
-    assert.equal(host.getRefreshCommentViewsCount() >= 2, true);
+    assert.equal(host.getRefreshCommentViewsCount(), 1);
     assert.equal(host.getRefreshEditorDecorationsCount(), 1);
     assert.deepEqual(host.notices, []);
 });
@@ -242,7 +250,8 @@ test("comment mutation controller saves an empty bookmarked draft without requir
     assert.deepEqual(host.savedUserEntryEvents, []);
     assert.deepEqual(host.persistedFiles, [{
         path: draft.filePath,
-        immediateAggregateRefresh: true,
+        immediateAggregateRefresh: false,
+        skipCommentViewRefresh: true,
     }]);
     assert.equal(host.getDraftComment(), null);
     assert.deepEqual(host.notices, []);
@@ -293,6 +302,49 @@ test("comment mutation controller can skip the pre-save rerender for quick draft
     assert.equal(host.getSavingDraftCommentId(), null);
     assert.equal(host.getRefreshCommentViewsCount(), 1);
     assert.equal(host.getRefreshEditorDecorationsCount(), 1);
+    assert.deepEqual(host.notices, []);
+});
+
+test("comment mutation controller can skip anchor revalidation for quick bookmark saves", async () => {
+    const draft = toDraft(createComment({
+        id: "draft-bookmark-fast-1",
+        comment: "  ",
+        isBookmark: true,
+        selectedText: "beta",
+        startLine: 2,
+        startChar: 6,
+        endLine: 2,
+        endChar: 10,
+    }), {
+        isBookmark: true,
+    });
+    let getCurrentNoteContentCalled = false;
+    const host = createHost({
+        draftComment: draft,
+        knownComments: [draft],
+        loadedComments: [],
+        getCurrentNoteContent: async () => {
+            getCurrentNoteContentCalled = true;
+            return "# Title\n\nAlpha beta gamma.\n";
+        },
+    });
+
+    await host.controller.saveDraft(draft.id, {
+        skipPreSaveRefresh: true,
+        skipAnchorRevalidation: true,
+        deferAggregateRefresh: true,
+        skipPersistedViewRefresh: true,
+    });
+
+    assert.equal(getCurrentNoteContentCalled, false);
+    assert.equal(host.manager.getAllComments().length, 1);
+    assert.equal(host.manager.getAllComments()[0].isBookmark, true);
+    assert.equal(host.getDraftComment(), null);
+    assert.deepEqual(host.persistedFiles, [{
+        path: draft.filePath,
+        immediateAggregateRefresh: false,
+        skipCommentViewRefresh: true,
+    }]);
     assert.deepEqual(host.notices, []);
 });
 
@@ -531,7 +583,7 @@ test("comment mutation controller marks a new draft as saving before anchor reso
 
     assert.equal(host.getDraftComment()?.comment, "Ship it");
     assert.equal(host.getSavingDraftCommentId(), draft.id);
-    assert.equal(host.getRefreshCommentViewsCount(), 1);
+    assert.equal(host.getRefreshCommentViewsCount(), 0);
     assert.equal(host.getRefreshEditorDecorationsCount(), 0);
 
     resolveCurrentNoteContent("# Title\n\nAlpha beta gamma.\n");
@@ -569,7 +621,7 @@ test("comment mutation controller keeps a new draft open when the selected text 
     assert.equal(host.getDraftComment()?.id, draft.id);
     assert.equal(host.getDraftComment()?.comment, "Ship it");
     assert.equal(host.getSavingDraftCommentId(), null);
-    assert.equal(host.getRefreshCommentViewsCount(), 2);
+    assert.equal(host.getRefreshCommentViewsCount(), 1);
     assert.equal(host.getRefreshEditorDecorationsCount(), 1);
     assert.deepEqual(host.notices, [
         "Selected text changed before save. Review the draft and reselect the anchor text.",
@@ -604,7 +656,8 @@ test("comment mutation controller re-resolves a moved anchor before saving a new
     assert.equal(host.manager.getAllComments()[0].endChar, 4);
     assert.deepEqual(host.persistedFiles, [{
         path: draft.filePath,
-        immediateAggregateRefresh: true,
+        immediateAggregateRefresh: false,
+        skipCommentViewRefresh: true,
     }]);
     assert.equal(host.getDraftComment(), null);
     assert.deepEqual(host.notices, []);

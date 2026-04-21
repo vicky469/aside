@@ -19,6 +19,9 @@ type AppendThreadEntryOptions = PersistOptions & {
 
 export type SaveDraftOptions = {
     skipPreSaveRefresh?: boolean;
+    skipAnchorRevalidation?: boolean;
+    deferAggregateRefresh?: boolean;
+    skipPersistedViewRefresh?: boolean;
 };
 
 export interface CommentMutationHost {
@@ -102,6 +105,7 @@ export class CommentMutationController {
             ...draft,
             comment: commentBody,
         };
+        const normalizedOptions = this.normalizeSaveDraftOptions(trimmedDraft, options);
         void this.host.log?.("info", "draft", "draft.save.begin", {
             commentId,
             draftMode: draft.mode,
@@ -110,14 +114,14 @@ export class CommentMutationController {
         });
         this.host.setDraftCommentValue(trimmedDraft);
         this.host.setSavingDraftCommentId(commentId);
-        if (trimmedDraft.mode !== "edit" && !options.skipPreSaveRefresh) {
+        if (trimmedDraft.mode !== "edit" && !normalizedOptions.skipPreSaveRefresh) {
             await this.host.refreshCommentViews();
         }
 
         let preparedDraft: DraftComment | null;
         try {
             preparedDraft = trimmedDraft.mode === "new"
-                ? await this.prepareNewDraftForSave(trimmedDraft)
+                ? await this.prepareNewDraftForSave(trimmedDraft, normalizedOptions)
                 : trimmedDraft;
         } catch (error) {
             this.host.setSavingDraftCommentId(null);
@@ -138,7 +142,10 @@ export class CommentMutationController {
         let saved = false;
         try {
             if (preparedDraft.mode === "new") {
-                saved = await this.addComment(this.toPersistedComment(preparedDraft));
+                saved = await this.addComment(this.toPersistedComment(preparedDraft), {
+                    immediateAggregateRefresh: normalizedOptions.deferAggregateRefresh !== true,
+                    skipCommentViewRefresh: normalizedOptions.skipPersistedViewRefresh === true,
+                });
             } else if (preparedDraft.mode === "append") {
                 saved = await this.appendEntry(preparedDraft);
             } else {
@@ -187,7 +194,21 @@ export class CommentMutationController {
         }
     }
 
-    public async addComment(newComment: Comment): Promise<boolean> {
+    private normalizeSaveDraftOptions(draft: DraftComment, options: SaveDraftOptions): SaveDraftOptions {
+        if (draft.mode !== "new") {
+            return options;
+        }
+
+        return {
+            ...options,
+            skipPreSaveRefresh: options.skipPreSaveRefresh ?? true,
+            deferAggregateRefresh: options.deferAggregateRefresh ?? true,
+            skipPersistedViewRefresh: options.skipPersistedViewRefresh ?? true,
+            skipAnchorRevalidation: options.skipAnchorRevalidation ?? (draft.isBookmark === true),
+        };
+    }
+
+    public async addComment(newComment: Comment, options: PersistOptions = {}): Promise<boolean> {
         if (newComment.filePath === this.host.getAllCommentsNotePath()) {
             this.host.showNotice(`Cannot add comments to ${this.host.getAllCommentsNotePath()}.`);
             return false;
@@ -212,7 +233,10 @@ export class CommentMutationController {
 
         this.lastAddFingerprint = { key: fingerprint, at: now };
         this.host.getCommentManager().addComment(newComment);
-        await this.host.persistCommentsForFile(file, { immediateAggregateRefresh: true });
+        await this.host.persistCommentsForFile(file, {
+            immediateAggregateRefresh: options.immediateAggregateRefresh ?? true,
+            ...(options.skipCommentViewRefresh === true ? { skipCommentViewRefresh: true } : {}),
+        });
         return true;
     }
 
@@ -423,8 +447,15 @@ export class CommentMutationController {
         return { file, latestComment };
     }
 
-    private async prepareNewDraftForSave(draftComment: DraftComment): Promise<DraftComment | null> {
+    private async prepareNewDraftForSave(
+        draftComment: DraftComment,
+        options: SaveDraftOptions = {},
+    ): Promise<DraftComment | null> {
         if (draftComment.anchorKind === "page") {
+            return draftComment;
+        }
+
+        if (options.skipAnchorRevalidation) {
             return draftComment;
         }
 

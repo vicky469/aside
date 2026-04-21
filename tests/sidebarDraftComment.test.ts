@@ -5,6 +5,7 @@ import {
     buildBookmarkDraftButtonPresentation,
     buildDraftCommentPresentation,
     shouldRenderBookmarkDraftButton,
+    shouldAutoSaveBookmarkDraft,
     toggleBookmarkDraftState,
 } from "../src/ui/views/sidebarDraftComment";
 
@@ -93,8 +94,8 @@ test("buildBookmarkDraftButtonPresentation keeps bookmark toggles lightweight", 
         mode: "new",
         isBookmark: false,
     }), {
-        ariaLabel: "Mark as bookmark",
-        title: "Mark as bookmark and keep editing",
+        ariaLabel: "Save as bookmark",
+        title: "Save as bookmark",
         active: false,
     });
     assert.deepEqual(buildBookmarkDraftButtonPresentation({
@@ -110,6 +111,12 @@ test("buildBookmarkDraftButtonPresentation keeps bookmark toggles lightweight", 
 test("toggleBookmarkDraftState flips bookmark state", () => {
     assert.equal(toggleBookmarkDraftState(false), true);
     assert.equal(toggleBookmarkDraftState(true), false);
+});
+
+test("shouldAutoSaveBookmarkDraft only quick-saves new bookmark drafts", () => {
+    assert.equal(shouldAutoSaveBookmarkDraft(createDraft({ mode: "new" }), true), true);
+    assert.equal(shouldAutoSaveBookmarkDraft(createDraft({ mode: "new" }), false), false);
+    assert.equal(shouldAutoSaveBookmarkDraft(createDraft({ mode: "edit" }), true), false);
 });
 
 test("shouldRenderBookmarkDraftButton supports new and edit drafts but not append or page-note drafts", () => {
