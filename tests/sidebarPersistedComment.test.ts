@@ -241,6 +241,26 @@ test("shouldRenderNestedThreadEntries keeps a targeted child comment visible eve
     }), true);
 });
 
+test("shouldRenderNestedThreadEntries keeps an active parent thread visible even when nested comments are off", () => {
+    const thread = createThreadWithEntries({
+        id: "entry-1",
+        entries: [
+            { id: "entry-1", body: "Parent", timestamp: 100 },
+            { id: "entry-2", body: "Child", timestamp: 200 },
+        ],
+        createdAt: 100,
+        updatedAt: 200,
+    });
+
+    assert.equal(shouldRenderNestedThreadEntries(thread, {
+        activeCommentId: "entry-1",
+        showNestedComments: false,
+        hasEditDraftComment: false,
+        hasAppendDraftComment: false,
+        hasAgentStream: false,
+    }), true);
+});
+
 test("shouldRenderNestedThreadEntries keeps stored child comments visible while editing a thread entry", () => {
     const thread = createThreadWithEntries({
         entries: [

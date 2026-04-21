@@ -301,6 +301,18 @@ export function getRenderableThreadEntries(
         : [getFirstThreadEntry(thread)];
 }
 
+function isActiveCommentInThread(thread: CommentThread, activeCommentId: string | null): boolean {
+    if (!activeCommentId) {
+        return false;
+    }
+
+    if (thread.id === activeCommentId) {
+        return true;
+    }
+
+    return getRenderableThreadEntries(thread).slice(1).some((entry) => entry.id === activeCommentId);
+}
+
 export function shouldRenderNestedThreadEntries(
     thread: CommentThread,
     options: {
@@ -321,7 +333,7 @@ export function shouldRenderNestedThreadEntries(
         return true;
     }
 
-    return childEntries.some((entry) => entry.id === options.activeCommentId);
+    return isActiveCommentInThread(thread, options.activeCommentId);
 }
 
 export function getAppendDraftInsertAfterEntryId(
@@ -852,7 +864,7 @@ export async function renderPersistedCommentCard(
     const hasChildEditDraft = !!host.editDraftComment && host.editDraftComment.id !== comment.id;
     const shouldRenderStoredChildren = host.showNestedComments
         || hasChildEditDraft
-        || entries.slice(1).some((entry) => entry.id === host.activeCommentId)
+        || isActiveCommentInThread(thread, host.activeCommentId)
         || hasVisibleDeletedEntries(thread);
     const shouldRenderChildComments = shouldRenderNestedThreadEntries(thread, {
         activeCommentId: host.activeCommentId,
