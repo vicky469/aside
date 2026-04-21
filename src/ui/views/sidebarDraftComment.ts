@@ -15,6 +15,7 @@ export interface DraftCommentPresentation {
 
 export interface SidebarDraftCommentHost {
     activeCommentId: string | null;
+    shouldPinFocusedDraftToTop: boolean;
     isSavingDraft(commentId: string): boolean;
     updateDraftCommentText(commentId: string, commentText: string): void;
     updateDraftCommentBookmarkState(commentId: string, isBookmark: boolean): void;
@@ -177,6 +178,37 @@ function attachDraftActionButtonInteractions(
     button.addEventListener("mousedown", (event: MouseEvent) => {
         host.claimSidebarInteractionOwnership();
         event.stopPropagation();
+    });
+}
+
+function getSidebarScrollContainer(textarea: HTMLTextAreaElement): HTMLElement | null {
+    const container = textarea.closest(".sidenote2-view-container");
+    return container instanceof HTMLElement
+        ? container
+        : null;
+}
+
+function pinDraftToTopOnMobile(textarea: HTMLTextAreaElement): void {
+    const draftEl = textarea.closest(".sidenote2-comment-draft");
+    const scrollContainer = getSidebarScrollContainer(textarea);
+    if (!(draftEl instanceof HTMLElement) || !scrollContainer) {
+        return;
+    }
+
+    const draftRect = draftEl.getBoundingClientRect();
+    const containerRect = scrollContainer.getBoundingClientRect();
+    const nextScrollTop = Math.max(
+        0,
+        scrollContainer.scrollTop + (draftRect.top - containerRect.top) - 8,
+    );
+    scrollContainer.scrollTo({
+        top: nextScrollTop,
+        behavior: "auto",
+    });
+    draftEl.scrollIntoView({
+        behavior: "auto",
+        block: "start",
+        inline: "nearest",
     });
 }
 
@@ -353,6 +385,41 @@ function renderDraftEditor(
     textarea.addEventListener("mouseup", stopPropagation);
     textarea.addEventListener("click", stopPropagation);
     textarea.addEventListener("dblclick", stopPropagation);
+    if (host.shouldPinFocusedDraftToTop) {
+        let viewportListenerAttached = false;
+        const viewport = window.visualViewport ?? null;
+        const pinFocusedDraft = () => {
+            if (document.activeElement === textarea) {
+                pinDraftToTopOnMobile(textarea);
+            }
+        };
+        const attachViewportListener = () => {
+            if (!viewport || viewportListenerAttached) {
+                return;
+            }
+
+            viewport.addEventListener("resize", pinFocusedDraft);
+            viewportListenerAttached = true;
+        };
+        const detachViewportListener = () => {
+            if (!viewport || !viewportListenerAttached) {
+                return;
+            }
+
+            viewport.removeEventListener("resize", pinFocusedDraft);
+            viewportListenerAttached = false;
+        };
+
+        textarea.addEventListener("focus", () => {
+            window.requestAnimationFrame(pinFocusedDraft);
+            window.setTimeout(pinFocusedDraft, 120);
+            window.setTimeout(pinFocusedDraft, 320);
+            attachViewportListener();
+        });
+        textarea.addEventListener("blur", () => {
+            detachViewportListener();
+        });
+    }
     textarea.addEventListener("input", (event) => {
         const target = event.target as HTMLTextAreaElement;
         host.updateDraftCommentText(comment.id, target.value);

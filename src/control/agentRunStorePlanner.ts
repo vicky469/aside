@@ -1,4 +1,5 @@
 import { cloneAgentRunRecords, type AgentRunRecord, type AgentRunRuntime, type AgentRunStatus } from "../core/agents/agentRuns";
+import { normalizeAgentRuntimeModePreference } from "../core/agents/agentRuntimePreferences";
 import { normalizeAgentTarget } from "../core/config/agentTargets";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -68,6 +69,11 @@ function normalizeAgentRunRecord(value: unknown): AgentRunRecord | null {
         retryOfRunId: normalizeOptionalString(value.retryOfRunId),
         outputEntryId: normalizeOptionalString(value.outputEntryId),
         error: normalizeOptionalString(value.error),
+        modePreference: normalizeOptionalString(value.modePreference)
+            ? normalizeAgentRuntimeModePreference(value.modePreference)
+            : undefined,
+        remoteExecutionId: normalizeOptionalString(value.remoteExecutionId),
+        remoteCursor: normalizeOptionalString(value.remoteCursor),
     };
 }
 

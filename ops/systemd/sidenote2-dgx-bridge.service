@@ -1,0 +1,18 @@
+[Unit]
+Description=SideNote2 DGX Bridge
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=bun
+Environment=HOME=/home/bun
+Environment=SHELL=/usr/bin/zsh
+WorkingDirectory=/home/bun/Documents/dev/SideNote2
+EnvironmentFile=/home/bun/Documents/dev/SideNote2/.env
+ExecStart=/usr/bin/env npm run dgx:bridge
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

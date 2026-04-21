@@ -219,6 +219,10 @@
     padding: 8px 8px 72px;
 }
 
+.sidenote2-view-container.is-non-desktop .sidenote2-comments-container {
+    padding-bottom: max(72px, 50vh);
+}
+
 .sidenote2-sidebar-toolbar {
     display: flex;
     align-items: center;
@@ -1421,6 +1425,7 @@
     display: flex;
     align-items: center;
     justify-content: flex-end;
+    flex-wrap: wrap;
     gap: 8px;
 }
 
@@ -1444,6 +1449,22 @@
 
 .sidenote2-inline-editor-actions button {
     min-height: 28px;
+    max-width: 100%;
+    white-space: normal;
+    word-break: break-word;
+}
+
+.sidenote2-inline-cancel-button,
+.sidenote2-inline-save-button {
+    flex: 0 1 auto;
+}
+
+.sidenote2-view-container.is-non-desktop .sidenote2-inline-cancel-button,
+.sidenote2-view-container.is-non-desktop .sidenote2-inline-save-button {
+    flex: 0 0 auto;
+    font-size: var(--font-ui-smaller);
+    line-height: 1.15;
+    padding-inline: 10px;
 }
 
 .sidenote2-comment-action-resolve {
@@ -2013,10 +2034,14 @@
         height: 28px;
     }
 
-    .sidenote2-agent-stream-cancel-button {
+    .sidenote2-comment-actions .sidenote2-agent-stream-cancel-button {
         width: auto;
+        min-width: 0;
         height: 18px;
         min-height: 18px;
         padding: 0 5px;
+        font-size: 9px;
+        line-height: 1;
+        flex: 0 0 auto;
     }
 }

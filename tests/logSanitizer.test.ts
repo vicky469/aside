@@ -43,3 +43,17 @@ test("sanitizeErrorForLog keeps concise error metadata and removes absolute path
         message: "Unable to read Folder/Note.md",
     });
 });
+
+test("sanitizeLogPayload redacts remote runtime credentials and strips url secrets", () => {
+    const payload = sanitizeLogPayload({
+        remoteRuntimeBearerToken: "secret-token",
+        authorization: "Bearer secret-token",
+        remoteRuntimeBaseUrl: "https://user:pass@remote.example.com/api?token=secret#frag",
+        endpoint: "https://remote.example.com/v1/sidenote2/runs?after=evt-9",
+    }, context);
+
+    assert.deepEqual(payload, {
+        remoteRuntimeBaseUrl: "https://remote.example.com/api",
+        endpoint: "https://remote.example.com/v1/sidenote2/runs",
+    });
+});

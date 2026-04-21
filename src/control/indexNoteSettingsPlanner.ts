@@ -1,4 +1,8 @@
 import {
+    normalizeAgentRuntimeModePreference,
+    normalizeRemoteRuntimeBaseUrl,
+} from "../core/agents/agentRuntimePreferences";
+import {
     isAllCommentsNotePath,
     normalizeAllCommentsNoteImageCaption,
     normalizeAllCommentsNoteImageUrl,
@@ -47,6 +51,12 @@ export function resolveLoadedSettings(
             indexHeaderImageCaption: hasOwn(loaded ?? {}, "indexHeaderImageCaption")
                 ? normalizeAllCommentsNoteImageCaption(loaded?.indexHeaderImageCaption)
                 : defaults.indexHeaderImageCaption,
+            agentRuntimeMode: hasOwn(loaded ?? {}, "agentRuntimeMode")
+                ? normalizeAgentRuntimeModePreference(loaded?.agentRuntimeMode)
+                : defaults.agentRuntimeMode,
+            remoteRuntimeBaseUrl: hasOwn(loaded ?? {}, "remoteRuntimeBaseUrl")
+                ? normalizeRemoteRuntimeBaseUrl(loaded?.remoteRuntimeBaseUrl)
+                : defaults.remoteRuntimeBaseUrl,
         },
         shouldRewriteLegacySettings: hasOwn(loaded ?? {}, "confirmDelete")
             || hasOwn(loaded ?? {}, "preferredAgentTarget")

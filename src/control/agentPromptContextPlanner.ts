@@ -8,6 +8,7 @@ export type AgentPromptContextScope = "anchor" | "section";
 export interface AgentPromptContext {
     scope: AgentPromptContextScope;
     promptText: string;
+    byteLength: number;
 }
 
 interface AgentPromptHeading {
@@ -77,6 +78,18 @@ function formatBulletList(label: string, values: string[]): string | null {
     }
 
     return `${label}:\n${values.map((value) => `- ${value}`).join("\n")}`;
+}
+
+function formatInlineList(label: string, values: string[]): string | null {
+    if (values.length === 0) {
+        return null;
+    }
+
+    return `${label}: ${values.join(" | ")}`;
+}
+
+function countUtf8Bytes(value: string): number {
+    return new TextEncoder().encode(value).length;
 }
 
 function parseMarkdownHeadings(noteContent: string): AgentPromptHeading[] {
@@ -263,13 +276,13 @@ export function buildAgentPromptContext(options: {
     );
 
     const sections = [
-        `Current note path: ${options.filePath}`,
-        `Context scope: ${scope}`,
+        `Note path: ${options.filePath}`,
+        `Scope: ${scope}`,
     ];
 
     if (scope === "anchor") {
         const anchorBlock = formatMultilineBlock(
-            "Anchored text",
+            "Anchor",
             clipText(options.thread.selectedText, MAX_ANCHOR_CHARS),
         );
         if (anchorBlock) {
@@ -277,7 +290,7 @@ export function buildAgentPromptContext(options: {
         }
     } else {
         const sectionBlock = formatMultilineBlock(
-            "Local section",
+            "Section",
             resolveSectionText(visibleNoteContent ?? "", options.thread.startLine) ?? "",
         );
         if (sectionBlock) {
@@ -285,23 +298,26 @@ export function buildAgentPromptContext(options: {
         }
     }
 
-    const headingsBlock = formatBulletList("Nearby headings", nearbyHeadings);
+    const headingsBlock = formatInlineList("Headings", nearbyHeadings);
     if (headingsBlock) {
         sections.push(headingsBlock);
     }
 
-    const transcriptBlock = formatBulletList("Thread transcript", transcriptLines);
+    const transcriptBlock = formatBulletList("Thread", transcriptLines);
     if (transcriptBlock) {
         sections.push(transcriptBlock);
     }
 
-    const requestBlock = formatMultilineBlock("Current request", currentRequestText);
+    const requestBlock = formatMultilineBlock("Request", currentRequestText);
     if (requestBlock) {
         sections.push(requestBlock);
     }
 
+    const promptText = sections.join("\n\n");
+
     return {
         scope,
-        promptText: sections.join("\n\n"),
+        promptText,
+        byteLength: countUtf8Bytes(promptText),
     };
 }

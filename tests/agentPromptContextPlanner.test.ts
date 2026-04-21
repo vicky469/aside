@@ -78,14 +78,15 @@ test("buildAgentPromptContext uses anchor scope for selection threads and includ
     });
 
     assert.equal(context.scope, "anchor");
-    assert.match(context.promptText, /Current note path: Folder\/Note\.md/);
-    assert.match(context.promptText, /Context scope: anchor/);
-    assert.match(context.promptText, /Anchored text:\n<<<\nImportant API contract\n>>>/);
-    assert.match(context.promptText, /Nearby headings:\n- # Project\n- ## APIs\n- ## Later/);
-    assert.match(context.promptText, /Thread transcript:\n- You: Please summarize the current contract\.\n- Codex: Old answer from Codex\.\n- You \(current\): @codex update this with the latest thread context\./);
-    assert.match(context.promptText, /Current request:\n<<<\n@codex update this with the latest thread context\.\n>>>/);
-    assert.doesNotMatch(context.promptText, /Local section:/);
+    assert.match(context.promptText, /Note path: Folder\/Note\.md/);
+    assert.match(context.promptText, /Scope: anchor/);
+    assert.match(context.promptText, /Anchor:\n<<<\nImportant API contract\n>>>/);
+    assert.match(context.promptText, /Headings: # Project \| ## APIs \| ## Later/);
+    assert.match(context.promptText, /Thread:\n- You: Please summarize the current contract\.\n- Codex: Old answer from Codex\.\n- You \(current\): @codex update this with the latest thread context\./);
+    assert.match(context.promptText, /Request:\n<<<\n@codex update this with the latest thread context\.\n>>>/);
+    assert.doesNotMatch(context.promptText, /Section:/);
     assert.doesNotMatch(context.promptText, /Ignore this later section body\./);
+    assert.equal(context.byteLength, Buffer.byteLength(context.promptText, "utf8"));
 });
 
 test("buildAgentPromptContext uses section scope for page threads and strips hidden comment blocks", () => {
@@ -120,11 +121,12 @@ test("buildAgentPromptContext uses section scope for page threads and strips hid
     });
 
     assert.equal(context.scope, "section");
-    assert.match(context.promptText, /Context scope: section/);
-    assert.match(context.promptText, /Local section:\n<<<\n## Focus\n\nAlpha detail\nBeta detail\n>>>/);
-    assert.match(context.promptText, /Nearby headings:\n- # Project\n- ## Focus\n- ## Later/);
+    assert.match(context.promptText, /Scope: section/);
+    assert.match(context.promptText, /Section:\n<<<\n## Focus\n\nAlpha detail\nBeta detail\n>>>/);
+    assert.match(context.promptText, /Headings: # Project \| ## Focus \| ## Later/);
     assert.doesNotMatch(context.promptText, /Gamma detail/);
     assert.doesNotMatch(context.promptText, /SideNote2 comments/);
+    assert.equal(context.byteLength, Buffer.byteLength(context.promptText, "utf8"));
 });
 
 test("buildAgentPromptContext falls back cleanly when note content is unavailable", () => {
@@ -142,7 +144,8 @@ test("buildAgentPromptContext falls back cleanly when note content is unavailabl
     });
 
     assert.equal(context.scope, "anchor");
-    assert.match(context.promptText, /Current note path: Folder\/Note\.md/);
-    assert.match(context.promptText, /Anchored text:\n<<<\nPage 4 chart\n>>>/);
-    assert.doesNotMatch(context.promptText, /Nearby headings:/);
+    assert.match(context.promptText, /Note path: Folder\/Note\.md/);
+    assert.match(context.promptText, /Anchor:\n<<<\nPage 4 chart\n>>>/);
+    assert.doesNotMatch(context.promptText, /Headings:/);
+    assert.equal(context.byteLength, Buffer.byteLength(context.promptText, "utf8"));
 });

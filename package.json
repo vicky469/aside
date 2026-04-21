@@ -8,6 +8,8 @@
 	},
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
+		"dev:install-built": "node scripts/install-built-plugin.mjs",
+		"dgx:bridge": "node scripts/run-dgx-runtime-bridge.mjs",
 		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
 		"lint": "eslint src",
 		"comment:create": "node bin/sidenote2.mjs comment:create",

@@ -8,6 +8,9 @@
 # npm
 node_modules
 .npmrc
+.env
+.env.*
+!.env.example
 
 # Don't include the compiled main.js file in the repo.
 # They should be uploaded to GitHub releases instead.

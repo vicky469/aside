@@ -1,4 +1,4 @@
-import { addIcon, WorkspaceLeaf, TFile, Notice, Plugin, normalizePath, MarkdownView, FileSystemAdapter, type Editor } from "obsidian";
+import { addIcon, WorkspaceLeaf, TFile, Notice, Plugin, normalizePath, MarkdownView, FileSystemAdapter, requestUrl, type Editor } from "obsidian";
 import { Comment, CommentManager, CommentThread, type ReorderPlacement } from "./commentManager";
 import { CommentEntryController } from "./control/commentEntryController";
 import {
@@ -25,7 +25,27 @@ import {
     runAgentRuntime,
     type CodexRuntimeDiagnostics,
 } from "./control/agentRuntimeAdapter";
+import {
+    getRemoteRuntimeAvailability as getRemoteRuntimeAvailabilitySnapshot,
+    resolveAgentRuntimeSelection as resolveAgentRuntimeSelectionPlan,
+    type AgentRuntimeSelection,
+    type RemoteRuntimeAvailability,
+} from "./control/agentRuntimeSelection";
+import {
+    cancelRemoteRuntimeRun,
+    createRemoteRuntimeRequester,
+    pollRemoteRuntimeRun,
+    probeRemoteRuntimeBridge,
+    startRemoteRuntimeRun,
+    type RemoteRuntimeHealthEnvelope,
+    type RemoteRuntimeResponseEnvelope,
+} from "./control/openclawRuntimeBridge";
+import { buildLocalSecretStorageKey, LocalSecretStore } from "./control/localSecretStore";
 import type { AgentRunRecord, AgentRunStreamState } from "./core/agents/agentRuns";
+import {
+    normalizeRemoteRuntimeBearerToken,
+    type AgentRuntimeModePreference,
+} from "./core/agents/agentRuntimePreferences";
 import { DraftComment, DraftSelection } from "./domain/drafts";
 import { parsePromptDeleteSetting } from "./core/config/appConfig";
 import { DerivedCommentMetadataManager } from "./core/derived/derivedCommentMetadata";
@@ -74,6 +94,18 @@ function getParentPath(filePath: string): string {
     return normalized.slice(0, slashIndex);
 }
 
+function getSafeLocalStorage(): Storage | null {
+    if (typeof window === "undefined") {
+        return null;
+    }
+
+    try {
+        return window.localStorage;
+    } catch {
+        return null;
+    }
+}
+
 // Main plugin class
 export default class SideNote2 extends Plugin {
     commentManager!: CommentManager;
@@ -81,6 +113,16 @@ export default class SideNote2 extends Plugin {
     private logService: SideNote2LogService | null = null;
     private supportLogLocationAvailable: boolean | null = null;
     private runtime: "local" | "release" = "release";
+    private readonly remoteRuntimeRequester = createRemoteRuntimeRequester({
+        primaryRequester: requestUrl,
+        fetcher: typeof globalThis.fetch === "function"
+            ? globalThis.fetch.bind(globalThis)
+            : undefined,
+    });
+    private readonly localSecretStore = new LocalSecretStore(
+        buildLocalSecretStorageKey(this.manifest.id, this.app.vault.getName()),
+        getSafeLocalStorage(),
+    );
     private readonly workspaceViewController: WorkspaceViewController = new WorkspaceViewController({
         app: this.app,
         isSidebarSupportedFile: (file): file is TFile => isSidebarSupportedFile(file, this.getAllCommentsNotePath()),
@@ -235,6 +277,7 @@ export default class SideNote2 extends Plugin {
     private readonly commentAgentController: CommentAgentController = new CommentAgentController({
         createCommentId: () => generateCommentId(),
         now: () => Date.now(),
+        getPluginVersion: () => this.manifest.version,
         refreshCommentViews: () => this.workspaceViewController.refreshCommentViews(),
         getRuntimeWorkingDirectory: (filePath: string) => this.getRuntimeWorkingDirectory(filePath),
         getCommentManager: () => this.commentManager,
@@ -259,6 +302,10 @@ export default class SideNote2 extends Plugin {
         deleteComment: (commentId: string, options?: { skipCommentViewRefresh?: boolean }): Promise<void> =>
             this.commentMutationController.deleteComment(commentId, options),
         runAgentRuntime: (invocation) => runAgentRuntime(invocation),
+        resolveAgentRuntimeSelection: () => this.resolveAgentRuntimeSelection(),
+        startRemoteRuntimeRun: (options) => this.startRemoteRuntimeRun(options),
+        pollRemoteRuntimeRun: (runId, afterCursor, waitMs) => this.pollRemoteRuntimeRun(runId, afterCursor, waitMs),
+        cancelRemoteRuntimeRun: (runId) => this.cancelRemoteRuntimeRun(runId),
         showNotice: (message) => {
             this.showNotice(message, "agents", "agents.notice");
         },
@@ -475,6 +522,33 @@ export default class SideNote2 extends Plugin {
         return this.indexNoteSettingsController.getIndexHeaderImageCaption();
     }
 
+    public getAgentRuntimeMode(): AgentRuntimeModePreference {
+        return this.indexNoteSettingsController.getAgentRuntimeMode();
+    }
+
+    public getRemoteRuntimeBaseUrl(): string {
+        return this.indexNoteSettingsController.getRemoteRuntimeBaseUrl();
+    }
+
+    public getRemoteRuntimeBearerToken(): string {
+        return this.localSecretStore.readSecrets().remoteRuntimeBearerToken ?? "";
+    }
+
+    public async setAgentRuntimeMode(nextMode: AgentRuntimeModePreference): Promise<void> {
+        await this.indexNoteSettingsController.setAgentRuntimeMode(nextMode);
+    }
+
+    public async setRemoteRuntimeBaseUrl(nextUrlInput: string): Promise<void> {
+        await this.indexNoteSettingsController.setRemoteRuntimeBaseUrl(nextUrlInput);
+    }
+
+    public async setRemoteRuntimeBearerToken(nextTokenInput: string): Promise<void> {
+        const nextToken = normalizeRemoteRuntimeBearerToken(nextTokenInput);
+        this.localSecretStore.writeSecrets({
+            remoteRuntimeBearerToken: nextToken,
+        });
+    }
+
     public getAgentRuns(): AgentRunRecord[] {
         return this.commentAgentController.getAgentRuns();
     }
@@ -516,6 +590,62 @@ export default class SideNote2 extends Plugin {
         }
 
         return probeCodexRuntimeDiagnostics();
+    }
+
+    public getRemoteRuntimeAvailability(): RemoteRuntimeAvailability {
+        return getRemoteRuntimeAvailabilitySnapshot({
+            remoteRuntimeBaseUrl: this.getRemoteRuntimeBaseUrl(),
+            remoteRuntimeBearerToken: this.getRemoteRuntimeBearerToken(),
+        });
+    }
+
+    public async resolveAgentRuntimeSelection(): Promise<AgentRuntimeSelection> {
+        return resolveAgentRuntimeSelectionPlan({
+            modePreference: this.getAgentRuntimeMode(),
+            isDesktopWithFilesystem: this.app.vault.adapter instanceof FileSystemAdapter,
+            localDiagnostics: await this.getCodexRuntimeDiagnostics(),
+            remoteRuntimeBaseUrl: this.getRemoteRuntimeBaseUrl(),
+            remoteRuntimeBearerToken: this.getRemoteRuntimeBearerToken(),
+        });
+    }
+
+    public async startRemoteRuntimeRun(options: {
+        agent: string;
+        promptText: string;
+        metadata: Record<string, unknown>;
+    }): Promise<RemoteRuntimeResponseEnvelope> {
+        return startRemoteRuntimeRun(this.remoteRuntimeRequester, {
+            baseUrl: this.getRemoteRuntimeBaseUrl(),
+            bearerToken: this.getRemoteRuntimeBearerToken(),
+            agent: options.agent,
+            promptText: options.promptText,
+            metadata: options.metadata,
+        });
+    }
+
+    public async pollRemoteRuntimeRun(runId: string, afterCursor?: string | null, waitMs?: number): Promise<RemoteRuntimeResponseEnvelope> {
+        return pollRemoteRuntimeRun(this.remoteRuntimeRequester, {
+            baseUrl: this.getRemoteRuntimeBaseUrl(),
+            bearerToken: this.getRemoteRuntimeBearerToken(),
+            runId,
+            afterCursor,
+            waitMs,
+        });
+    }
+
+    public async cancelRemoteRuntimeRun(runId: string): Promise<RemoteRuntimeResponseEnvelope> {
+        return cancelRemoteRuntimeRun(this.remoteRuntimeRequester, {
+            baseUrl: this.getRemoteRuntimeBaseUrl(),
+            bearerToken: this.getRemoteRuntimeBearerToken(),
+            runId,
+        });
+    }
+
+    public async probeRemoteRuntimeBridge(): Promise<RemoteRuntimeHealthEnvelope> {
+        return probeRemoteRuntimeBridge(this.remoteRuntimeRequester, {
+            baseUrl: this.getRemoteRuntimeBaseUrl(),
+            bearerToken: this.getRemoteRuntimeBearerToken(),
+        });
     }
 
     public async retryAgentRun(runId: string): Promise<boolean> {
