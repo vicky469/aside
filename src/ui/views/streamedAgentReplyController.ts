@@ -1,5 +1,6 @@
 import type { AgentRunStreamState } from "../../core/agents/agentRuns";
 import { getAgentActorLabel } from "../../core/agents/agentActorRegistry";
+import { getAgentRuntimeStatusLabel } from "../../control/agentRuntimeSelection";
 import { getAgentRunStatusPresentation } from "./sidebarPersistedComment";
 import { formatSidebarCommentMeta } from "./sidebarCommentSections";
 
@@ -144,6 +145,10 @@ export class StreamedAgentReplyController {
             textEl.textContent = statusText;
             statusEl.appendChild(textEl);
         }
+
+        const runtimeHintEl = createElement("span", "sidenote2-agent-run-status-hint");
+        runtimeHintEl.textContent = getAgentRuntimeStatusLabel(stream.runtime);
+        statusEl.appendChild(runtimeHintEl);
 
         if (statusHintText) {
             const hintEl = createElement("span", "sidenote2-agent-run-status-hint");

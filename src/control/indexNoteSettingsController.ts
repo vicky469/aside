@@ -1,5 +1,10 @@
 import type { Plugin, TFile } from "obsidian";
 import {
+    normalizeAgentRuntimeModePreference,
+    normalizeRemoteRuntimeBaseUrl,
+    type AgentRuntimeModePreference,
+} from "../core/agents/agentRuntimePreferences";
+import {
     LEGACY_ALL_COMMENTS_NOTE_PATH,
     isAllCommentsNotePath,
     normalizeAllCommentsNoteImageCaption,
@@ -68,6 +73,14 @@ export class IndexNoteSettingsController {
 
     public getIndexHeaderImageCaption(): string {
         return normalizeAllCommentsNoteImageCaption(this.host.getSettings().indexHeaderImageCaption);
+    }
+
+    public getAgentRuntimeMode(): AgentRuntimeModePreference {
+        return normalizeAgentRuntimeModePreference(this.host.getSettings().agentRuntimeMode);
+    }
+
+    public getRemoteRuntimeBaseUrl(): string {
+        return normalizeRemoteRuntimeBaseUrl(this.host.getSettings().remoteRuntimeBaseUrl);
     }
 
     public isAllCommentsNotePath(filePath: string): boolean {
@@ -161,6 +174,38 @@ export class IndexNoteSettingsController {
         });
         await this.saveSettings();
         await this.host.refreshAggregateNoteNow();
+    }
+
+    public async setAgentRuntimeMode(nextModeInput: AgentRuntimeModePreference): Promise<void> {
+        const settings = this.host.getSettings();
+        const nextMode = normalizeAgentRuntimeModePreference(nextModeInput);
+        if (settings.agentRuntimeMode === nextMode) {
+            return;
+        }
+
+        this.host.setSettings({
+            ...settings,
+            agentRuntimeMode: nextMode,
+        });
+        await this.saveSettings();
+    }
+
+    public async setRemoteRuntimeBaseUrl(nextUrlInput: string): Promise<void> {
+        const settings = this.host.getSettings();
+        const nextUrl = normalizeRemoteRuntimeBaseUrl(nextUrlInput);
+        if (!shouldApplyNormalizedSettingChange({
+            currentStoredValue: settings.remoteRuntimeBaseUrl,
+            currentNormalizedValue: this.getRemoteRuntimeBaseUrl(),
+            nextNormalizedValue: nextUrl,
+        })) {
+            return;
+        }
+
+        this.host.setSettings({
+            ...settings,
+            remoteRuntimeBaseUrl: nextUrl,
+        });
+        await this.saveSettings();
     }
 
     public readPersistedPluginData(): PersistedPluginData {

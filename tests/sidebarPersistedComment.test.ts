@@ -376,6 +376,7 @@ test("getRenderableThreadEntries keeps the persisted agent output entry visible 
             runId: "run-1",
             threadId: thread.id,
             requestedAgent: "codex",
+            runtime: "direct-cli",
             status: "succeeded",
             partialText: "Agent reply",
             startedAt: 100,

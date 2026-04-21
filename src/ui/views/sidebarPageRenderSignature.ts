@@ -33,6 +33,7 @@ type SerializableDraftComment = {
 type SerializableAgentRun = {
     id: string;
     requestedAgent: AgentRunRecord["requestedAgent"];
+    runtime: AgentRunRecord["runtime"];
     status: AgentRunRecord["status"];
     startedAt: number | null;
     endedAt: number | null;
@@ -71,6 +72,7 @@ function serializeAgentRun(run: AgentRunRecord): SerializableAgentRun {
     return {
         id: run.id,
         requestedAgent: run.requestedAgent,
+        runtime: run.runtime,
         status: run.status,
         startedAt: run.startedAt ?? null,
         endedAt: run.endedAt ?? null,

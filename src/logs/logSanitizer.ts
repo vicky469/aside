@@ -7,6 +7,10 @@ const DISALLOWED_TEXT_KEYS = new Set([
     "contentBase64",
     "body",
     "stack",
+    "token",
+    "authorization",
+    "bearerToken",
+    "remoteRuntimeBearerToken",
 ]);
 
 export interface LogSanitizerContext {
@@ -75,6 +79,15 @@ function sanitizePathString(value: string, context: LogSanitizerContext): string
     return "[absolute-path]";
 }
 
+function sanitizeUrlString(value: string): string {
+    try {
+        const url = new URL(value);
+        return truncateLogString(`${url.protocol}//${url.host}${url.pathname}`);
+    } catch {
+        return truncateLogString(value);
+    }
+}
+
 function sanitizeStringValue(
     key: string | null,
     value: string,
@@ -89,9 +102,16 @@ function sanitizeStringValue(
         || key === "logPath"
         || key === "path"
         || key?.endsWith("Path") === true;
+    const looksLikeUrl = key === "url"
+        || key === "baseUrl"
+        || key?.endsWith("Url") === true
+        || key?.endsWith("URL") === true
+        || key === "endpoint";
 
     const nextValue = looksLikePath
         ? sanitizePathString(value, context)
+        : looksLikeUrl
+            ? sanitizeUrlString(value)
         : truncateLogString(scrubAbsolutePathsInText(value, context));
 
     return nextValue || undefined;

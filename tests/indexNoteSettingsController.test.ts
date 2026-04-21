@@ -23,6 +23,8 @@ function createSettings(overrides: Partial<SideNote2Settings> = {}): SideNote2Se
         indexNotePath: overrides.indexNotePath ?? "SideNote2 index.md",
         indexHeaderImageUrl: overrides.indexHeaderImageUrl ?? "https://example.com/default.webp",
         indexHeaderImageCaption: overrides.indexHeaderImageCaption ?? "Default caption",
+        agentRuntimeMode: overrides.agentRuntimeMode ?? "auto",
+        remoteRuntimeBaseUrl: overrides.remoteRuntimeBaseUrl ?? "",
     };
 }
 
@@ -135,6 +137,8 @@ test("loaded settings resolution normalizes persisted values and marks legacy co
         indexNotePath: "notes/index.md",
         indexHeaderImageUrl: "https://example.com/header.webp",
         indexHeaderImageCaption: "Custom caption",
+        agentRuntimeMode: "auto",
+        remoteRuntimeBaseUrl: "",
     });
     assert.equal(resolved.shouldRewriteLegacySettings, true);
 });
@@ -239,11 +243,51 @@ test("index note settings controller rewrites legacy settings", async () => {
         indexNotePath: "docs/index.md",
         indexHeaderImageUrl: "https://example.com/header.webp",
         indexHeaderImageCaption: "Header",
+        agentRuntimeMode: "auto",
+        remoteRuntimeBaseUrl: "",
     });
     assert.equal(harness.savedPayloads.length, 1);
     assert.equal("preferredAgentTarget" in harness.savedPayloads[0], false);
     assert.equal("confirmDelete" in harness.savedPayloads[0], false);
     assert.equal("enableDebugMode" in harness.savedPayloads[0], false);
+});
+
+test("loaded settings resolution normalizes runtime settings", () => {
+    const resolved = resolveLoadedSettings({
+        agentRuntimeMode: " remote " as unknown as SideNote2Settings["agentRuntimeMode"],
+        remoteRuntimeBaseUrl: " https://remote.example.com/api/ ",
+    }, createSettings());
+
+    assert.deepEqual(resolved.settings, {
+        indexNotePath: "SideNote2 index.md",
+        indexHeaderImageUrl: "https://ichef.bbci.co.uk/images/ic/1920xn/p02vhq1v.jpg.webp",
+        indexHeaderImageCaption: "Default caption",
+        agentRuntimeMode: "remote",
+        remoteRuntimeBaseUrl: "https://remote.example.com/api",
+    });
+});
+
+test("index note settings controller saves runtime settings without aggregate refreshes", async () => {
+    const harness = createControllerHarness();
+
+    await harness.controller.setAgentRuntimeMode("remote");
+    await harness.controller.setRemoteRuntimeBaseUrl(" https://remote.example.com/api/ ");
+
+    assert.deepEqual(harness.getSettings(), {
+        indexNotePath: "SideNote2 index.md",
+        indexHeaderImageUrl: "https://example.com/default.webp",
+        indexHeaderImageCaption: "Default caption",
+        agentRuntimeMode: "remote",
+        remoteRuntimeBaseUrl: "https://remote.example.com/api",
+    });
+    assert.equal(harness.getRefreshAggregateNoteCount(), 0);
+    assert.deepEqual(harness.savedPayloads.at(-1), {
+        indexNotePath: "SideNote2 index.md",
+        indexHeaderImageUrl: "https://example.com/default.webp",
+        indexHeaderImageCaption: "Default caption",
+        agentRuntimeMode: "remote",
+        remoteRuntimeBaseUrl: "https://remote.example.com/api",
+    });
 });
 
 test("index note settings controller renames the index note and retargets sidebar and draft hosts", async () => {

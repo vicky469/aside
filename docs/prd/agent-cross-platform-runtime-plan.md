@@ -6,6 +6,7 @@ Draft plan
 
 Related docs:
 
+- [[agent-cross-platform-runtime-spec]]
 - [agent-mentions-plan.md](agent-mentions-plan.md)
 - [agent-runtime-experience-plan.md](agent-runtime-experience-plan.md)
 
@@ -271,3 +272,31 @@ This plan is successful when:
 - Should BYO remote mean raw API key entry, account linking, or a user-managed bridge service?
 - For BYO remote, should the first version support one provider shape only, or a generic bridge contract?
 - If hosted runtime is revisited later, should it keep the same `@codex` label or use distinct branding in settings?
+
+<!-- SideNote2 comments
+[
+  {
+    "id": "01269687-ee71-4842-ada1-48896fb457f0",
+    "startLine": 253,
+    "startChar": 0,
+    "endLine": 254,
+    "endChar": 58,
+    "selectedText": "1. Build runtime abstraction and explicit mode selection.\n2. Ship BYO remote reply generation on desktop and mobile.",
+    "selectedTextHash": "6d80330ad2eefe7b33571ba8f3181321c553cc40e30dcb2be2eed09e1a64e08a",
+    "entries": [
+      {
+        "id": "01269687-ee71-4842-ada1-48896fb457f0",
+        "body": "@codex create a spec under the same prd folder for this. use wiki link page",
+        "timestamp": 1776739676586
+      },
+      {
+        "id": "ed3a8d07-dc28-488d-b1fb-3794c637eabd",
+        "body": "Created [[agent-cross-platform-runtime-spec]].\n\nIt covers:\n- explicit `auto | local | remote` mode selection\n- `direct-cli` vs `openclaw-acp` runtime abstraction\n- BYO remote bridge contract for desktop + mobile reply generation\n- settings, availability gating, and ownership copy\n- remote run persistence, polling, cancel, and restart recovery\n- no-silent-fallback rules and data/logging constraints\n\nI also linked it from [[agent-cross-platform-runtime-plan]].",
+        "timestamp": 1776739691237
+      }
+    ],
+    "createdAt": 1776739676586,
+    "updatedAt": 1776739691237
+  }
+]
+-->

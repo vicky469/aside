@@ -5,6 +5,7 @@ import { getAgentActorLabel } from "../../core/agents/agentActorRegistry";
 import { getAgentRunByOutputEntryId, type AgentRunRecord, type AgentRunStreamState } from "../../core/agents/agentRuns";
 import type { SideNote2AgentTarget } from "../../core/config/agentTargets";
 import type { DraftComment } from "../../domain/drafts";
+import { getAgentRuntimeStatusLabel } from "../../control/agentRuntimeSelection";
 import { normalizeCommentMarkdownForRender } from "../editor/commentMarkdownRendering";
 import { decorateRenderedCommentMentions } from "../editor/commentEditorStyling";
 import { SIDE_NOTE2_REGENERATE_ICON_ID } from "../sideNote2Icon";
@@ -149,6 +150,11 @@ function renderAgentRunStatus(
     }
     const agentLabel = getAgentLabel(run.requestedAgent);
     statusEl.setAttribute("aria-label", `${agentLabel} ${run.status}`);
+    const runtimeHintEl = statusEl.createSpan({
+        cls: "sidenote2-agent-run-status-hint",
+        text: getAgentRuntimeStatusLabel(run.runtime),
+    });
+    runtimeHintEl.setAttribute("aria-hidden", "true");
     if (run.error) {
         statusEl.setAttribute("title", run.error);
     }

@@ -34,5 +34,8 @@ test("normalizePersistedAgentRuns keeps valid records and drops malformed ones",
         retryOfRunId: undefined,
         outputEntryId: undefined,
         error: undefined,
+        modePreference: undefined,
+        remoteExecutionId: undefined,
+        remoteCursor: undefined,
     }]);
 });

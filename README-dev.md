@@ -116,6 +116,8 @@ git push origin main --follow-tags
 
 ## Local Install
 
+For desktop-only development against a local vault, use a symlink:
+
 ```bash
 VAULT="/path/to/vault"
 mkdir -p "$VAULT/.obsidian/plugins"
@@ -129,6 +131,18 @@ ln -sfn "$(pwd)" "$VAULT/.obsidian/plugins/side-note2"
 ```bash
 obsidian plugin:reload id=side-note2 vault="<vault-name>"
 ```
+
+For mobile testing through Obsidian Sync, do not use a symlink. Copy the built plugin artifacts into the synced vault instead:
+
+```bash
+npm run build
+npm run dev:install-built -- --vault "/path/to/synced-vault"
+```
+
+- This copies exactly `main.js`, `manifest.json`, and `styles.css` into `"/path/to/synced-vault/.obsidian/plugins/side-note2/"`.
+- After Sync finishes, reload Obsidian on mobile or disable and re-enable the plugin there.
+- This is the right path when you want to test an unreleased build on mobile without pushing a new release.
+- The remote bridge token is stored only on the current device, so if you test remote `@codex` on mobile you still need to enter the token on the phone.
 
 ## Debugging
 
