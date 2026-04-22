@@ -134,6 +134,21 @@ export function shouldRenderTopLevelDraftComment(options: {
     return draft;
 }
 
+export function matchesPinnedSidebarDraftVisibility(
+    draft: Pick<DraftComment, "mode" | "threadId">,
+    pinnedThreadIds: ReadonlySet<string>,
+): boolean {
+    if (pinnedThreadIds.size === 0) {
+        return true;
+    }
+
+    if (draft.mode === "new") {
+        return true;
+    }
+
+    return !!draft.threadId && pinnedThreadIds.has(draft.threadId);
+}
+
 export function buildStoredOrderSidebarItems(
     threads: readonly CommentThread[],
     draft: DraftComment | null,

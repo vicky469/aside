@@ -6,6 +6,7 @@ import {
     buildSidebarSideNoteReferencePresentation,
     buildPersistedCommentPresentation,
     buildPersistedCommentBookmarkActionPresentation,
+    buildPersistedCommentPinActionPresentation,
     buildPersistedThreadEntryPresentation,
     formatSidebarCommentIndexLeadLabel,
     formatSidebarCommentSourceFileLabel,
@@ -18,6 +19,8 @@ import {
     resolveSidebarCommentAuthor,
     shouldRenderPersistedCommentBookmarkAction,
     shouldRenderPersistedCommentBookmarkIndicator,
+    shouldRenderPersistedCommentPinIndicator,
+    shouldRenderPersistedCommentPinAction,
     shouldRenderSidebarCommentAuthor,
     shouldRenderNestedThreadEntries,
     shouldRenderThreadNestedToggle,
@@ -137,6 +140,23 @@ test("buildPersistedCommentBookmarkActionPresentation marks bookmarked threads a
     );
 });
 
+test("buildPersistedCommentPinActionPresentation toggles the pin affordance label", () => {
+    assert.deepEqual(
+        buildPersistedCommentPinActionPresentation(true),
+        {
+            active: true,
+            ariaLabel: "Unpin this side note",
+        },
+    );
+    assert.deepEqual(
+        buildPersistedCommentPinActionPresentation(false),
+        {
+            active: false,
+            ariaLabel: "Pin this side note",
+        },
+    );
+});
+
 test("shouldRenderPersistedCommentBookmarkIndicator only enables bookmarked cards", () => {
     const rootThread = createThread({ id: "thread-1", isBookmark: true });
     const childThread = createThreadWithEntries({
@@ -158,6 +178,28 @@ test("shouldRenderPersistedCommentBookmarkIndicator only enables bookmarked card
         false,
     );
     assert.equal(shouldRenderPersistedCommentBookmarkIndicator(childComment, childThread), false);
+});
+
+test("shouldRenderPersistedCommentPinIndicator only enables pinned root cards", () => {
+    const rootThread = createThread({ id: "thread-1" });
+    const childThread = createThreadWithEntries({
+        id: "thread-2",
+        entries: [
+            { id: "thread-2", body: "Parent", timestamp: 100 },
+            { id: "entry-2", body: "Child", timestamp: 200 },
+        ],
+    });
+    const childComment = threadEntryToComment(childThread, childThread.entries[1]);
+
+    assert.equal(
+        shouldRenderPersistedCommentPinIndicator(createComment({ id: "thread-1" }), rootThread, true),
+        true,
+    );
+    assert.equal(
+        shouldRenderPersistedCommentPinIndicator(createComment({ id: "thread-1" }), rootThread, false),
+        false,
+    );
+    assert.equal(shouldRenderPersistedCommentPinIndicator(childComment, childThread, true), false);
 });
 
 test("threadHasLocalSideNoteReferences detects links anywhere in the thread", () => {
@@ -183,14 +225,39 @@ test("shouldRenderPersistedCommentBookmarkAction enables root cards and excludes
     const childComment = threadEntryToComment(rootThread, rootThread.entries[1]);
     const pageComment = createComment({ id: "thread-2", anchorKind: "page" });
     const pageThread = createThread({ id: "thread-2", anchorKind: "page" });
+    const bookmarkedComment = createComment({ id: "thread-4", isBookmark: true });
+    const bookmarkedThread = createThread({ id: "thread-4", isBookmark: true });
 
     assert.equal(shouldRenderPersistedCommentBookmarkAction(rootComment, rootThread), true);
     assert.equal(shouldRenderPersistedCommentBookmarkAction(childComment, rootThread), false);
     assert.equal(shouldRenderPersistedCommentBookmarkAction(pageComment, pageThread), true);
+    assert.equal(shouldRenderPersistedCommentBookmarkAction(bookmarkedComment, bookmarkedThread), false);
     assert.equal(
         shouldRenderPersistedCommentBookmarkAction(
             createComment({ id: "thread-3", deletedAt: 123 }),
             createThread({ id: "thread-3" }),
+        ),
+        false,
+    );
+});
+
+test("shouldRenderPersistedCommentPinAction hides the right-side action once a root thread is pinned", () => {
+    const rootComment = createComment({ id: "thread-1", anchorKind: "selection" });
+    const rootThread = createThread({ id: "thread-1", anchorKind: "selection" });
+    rootThread.entries.push({ id: "entry-2", body: "Child", timestamp: 200 });
+    const childComment = threadEntryToComment(rootThread, rootThread.entries[1]);
+    const bookmarkedComment = createComment({ id: "thread-4", isBookmark: true });
+    const bookmarkedThread = createThread({ id: "thread-4", isBookmark: true });
+
+    assert.equal(shouldRenderPersistedCommentPinAction(rootComment, rootThread, false), true);
+    assert.equal(shouldRenderPersistedCommentPinAction(bookmarkedComment, bookmarkedThread, false), true);
+    assert.equal(shouldRenderPersistedCommentPinAction(rootComment, rootThread, true), false);
+    assert.equal(shouldRenderPersistedCommentPinAction(childComment, rootThread, false), false);
+    assert.equal(
+        shouldRenderPersistedCommentPinAction(
+            createComment({ id: "thread-2", deletedAt: 123 }),
+            createThread({ id: "thread-2" }),
+            false,
         ),
         false,
     );

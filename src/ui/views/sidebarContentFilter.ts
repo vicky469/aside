@@ -79,6 +79,17 @@ export function filterThreadsByStableSidebarContentFilter<
     };
 }
 
+export function filterThreadsByPinnedSidebarThreadIds<T extends Pick<CommentThread, "id">>(
+    threads: readonly T[],
+    pinnedThreadIds: ReadonlySet<string>,
+): T[] {
+    if (pinnedThreadIds.size === 0) {
+        return threads.slice();
+    }
+
+    return threads.filter((thread) => pinnedThreadIds.has(thread.id));
+}
+
 export function matchesSidebarThreadSearchQuery<T extends Pick<CommentThread, "selectedText" | "entries">>(
     thread: T,
     query: string,

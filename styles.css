@@ -1075,6 +1075,36 @@ button.sidenote2-tab-button.sidenote2-tab-button--active {
     color: var(--text-accent, var(--interactive-accent));
 }
 
+.sidenote2-comment-pin-indicator {
+    color: var(--interactive-accent, var(--text-accent));
+}
+
+button.sidenote2-comment-bookmark-indicator {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    cursor: pointer;
+}
+
+button.sidenote2-comment-pin-indicator {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    cursor: pointer;
+}
+
+button.sidenote2-comment-bookmark-indicator:hover,
+button.sidenote2-comment-bookmark-indicator:focus-visible {
+    color: var(--interactive-accent-hover, var(--text-accent, var(--interactive-accent)));
+}
+
+button.sidenote2-comment-pin-indicator:hover,
+button.sidenote2-comment-pin-indicator:focus-visible {
+    color: var(--interactive-accent-hover, var(--interactive-accent, var(--text-accent)));
+}
+
 .sidenote2-comment-header-indicator .svg-icon {
     width: 12px;
     height: 12px;

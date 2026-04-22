@@ -78,6 +78,7 @@ test("buildPageSidebarThreadRenderSignature ignores unrelated active comment ids
     const base = buildPageSidebarThreadRenderSignature({
         thread,
         activeCommentId: null,
+        isPinned: false,
         showNestedComments: false,
         showNestedCommentsByDefault: false,
         enablePageThreadReorder: true,
@@ -88,6 +89,7 @@ test("buildPageSidebarThreadRenderSignature ignores unrelated active comment ids
     const withUnrelatedActiveComment = buildPageSidebarThreadRenderSignature({
         thread,
         activeCommentId: "other-thread",
+        isPinned: false,
         showNestedComments: false,
         showNestedCommentsByDefault: false,
         enablePageThreadReorder: true,
@@ -98,6 +100,7 @@ test("buildPageSidebarThreadRenderSignature ignores unrelated active comment ids
     const withRelatedActiveComment = buildPageSidebarThreadRenderSignature({
         thread,
         activeCommentId: "entry-2",
+        isPinned: false,
         showNestedComments: false,
         showNestedCommentsByDefault: false,
         enablePageThreadReorder: true,
@@ -115,6 +118,7 @@ test("buildPageSidebarThreadRenderSignature changes when nested draft or run sta
     const base = buildPageSidebarThreadRenderSignature({
         thread,
         activeCommentId: null,
+        isPinned: false,
         showNestedComments: false,
         showNestedCommentsByDefault: false,
         enablePageThreadReorder: true,
@@ -125,6 +129,7 @@ test("buildPageSidebarThreadRenderSignature changes when nested draft or run sta
     const withEditDraft = buildPageSidebarThreadRenderSignature({
         thread,
         activeCommentId: null,
+        isPinned: false,
         showNestedComments: false,
         showNestedCommentsByDefault: false,
         enablePageThreadReorder: true,
@@ -135,6 +140,7 @@ test("buildPageSidebarThreadRenderSignature changes when nested draft or run sta
     const withAppendDraft = buildPageSidebarThreadRenderSignature({
         thread,
         activeCommentId: null,
+        isPinned: false,
         showNestedComments: false,
         showNestedCommentsByDefault: false,
         enablePageThreadReorder: true,
@@ -145,6 +151,7 @@ test("buildPageSidebarThreadRenderSignature changes when nested draft or run sta
     const withFailedRun = buildPageSidebarThreadRenderSignature({
         thread,
         activeCommentId: null,
+        isPinned: false,
         showNestedComments: false,
         showNestedCommentsByDefault: false,
         enablePageThreadReorder: true,
@@ -163,6 +170,7 @@ test("buildPageSidebarThreadRenderSignature changes when nested comments are sho
     const hidden = buildPageSidebarThreadRenderSignature({
         thread,
         activeCommentId: null,
+        isPinned: false,
         showNestedComments: false,
         showNestedCommentsByDefault: false,
         enablePageThreadReorder: true,
@@ -173,6 +181,7 @@ test("buildPageSidebarThreadRenderSignature changes when nested comments are sho
     const visible = buildPageSidebarThreadRenderSignature({
         thread,
         activeCommentId: null,
+        isPinned: false,
         showNestedComments: true,
         showNestedCommentsByDefault: false,
         enablePageThreadReorder: true,
@@ -191,6 +200,7 @@ test("buildPageSidebarThreadRenderSignature changes when bookmark state changes"
     const noteSignature = buildPageSidebarThreadRenderSignature({
         thread: noteThread,
         activeCommentId: null,
+        isPinned: false,
         showNestedComments: false,
         showNestedCommentsByDefault: false,
         enablePageThreadReorder: true,
@@ -201,6 +211,7 @@ test("buildPageSidebarThreadRenderSignature changes when bookmark state changes"
     const bookmarkSignature = buildPageSidebarThreadRenderSignature({
         thread: bookmarkThread,
         activeCommentId: null,
+        isPinned: false,
         showNestedComments: false,
         showNestedCommentsByDefault: false,
         enablePageThreadReorder: true,
@@ -217,6 +228,7 @@ test("buildPageSidebarThreadRenderSignature ignores sidebar search query changes
     const withoutSearch = buildPageSidebarThreadRenderSignature({
         thread,
         activeCommentId: null,
+        isPinned: false,
         showNestedComments: false,
         showNestedCommentsByDefault: false,
         enablePageThreadReorder: true,
@@ -227,6 +239,7 @@ test("buildPageSidebarThreadRenderSignature ignores sidebar search query changes
     const withSearch = buildPageSidebarThreadRenderSignature({
         thread,
         activeCommentId: null,
+        isPinned: false,
         searchQuery: "architecture",
         showNestedComments: false,
         showNestedCommentsByDefault: false,
@@ -254,6 +267,7 @@ test("buildPageSidebarThreadRenderSignature changes when the global nested defau
     const hiddenByDefault = buildPageSidebarThreadRenderSignature({
         thread,
         activeCommentId: "thread-1",
+        isPinned: false,
         showNestedComments: false,
         showNestedCommentsByDefault: false,
         enablePageThreadReorder: true,
@@ -264,6 +278,7 @@ test("buildPageSidebarThreadRenderSignature changes when the global nested defau
     const explicitlyHidden = buildPageSidebarThreadRenderSignature({
         thread,
         activeCommentId: "thread-1",
+        isPinned: false,
         showNestedComments: false,
         showNestedCommentsByDefault: true,
         enablePageThreadReorder: true,
@@ -273,6 +288,35 @@ test("buildPageSidebarThreadRenderSignature changes when the global nested defau
     });
 
     assert.notEqual(hiddenByDefault, explicitlyHidden);
+});
+
+test("buildPageSidebarThreadRenderSignature changes when thread pin focus changes", () => {
+    const thread = createThread();
+
+    assert.notEqual(
+        buildPageSidebarThreadRenderSignature({
+            thread,
+            activeCommentId: null,
+            isPinned: false,
+            showNestedComments: false,
+            showNestedCommentsByDefault: false,
+            enablePageThreadReorder: true,
+            editDraftComment: null,
+            appendDraftComment: null,
+            threadAgentRuns: [],
+        }),
+        buildPageSidebarThreadRenderSignature({
+            thread,
+            activeCommentId: null,
+            isPinned: true,
+            showNestedComments: false,
+            showNestedCommentsByDefault: false,
+            enablePageThreadReorder: true,
+            editDraftComment: null,
+            appendDraftComment: null,
+            threadAgentRuns: [],
+        }),
+    );
 });
 
 test("buildPageSidebarDraftRenderSignature changes when draft bookmark state changes", () => {

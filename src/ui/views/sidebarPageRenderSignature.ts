@@ -105,6 +105,7 @@ function isActiveCommentInThread(thread: CommentThread, activeCommentId: string 
 export function buildPageSidebarThreadRenderSignature(options: {
     thread: CommentThread;
     activeCommentId: string | null;
+    isPinned: boolean;
     showNestedComments: boolean;
     showNestedCommentsByDefault: boolean;
     enablePageThreadReorder: boolean;
@@ -133,6 +134,7 @@ export function buildPageSidebarThreadRenderSignature(options: {
             entries: serializeThreadEntries(thread),
         },
         isActive: isActiveCommentInThread(thread, options.activeCommentId),
+        isPinned: options.isPinned,
         showNestedComments: options.showNestedComments,
         showNestedCommentsByDefault: options.showNestedCommentsByDefault,
         enablePageThreadReorder: options.enablePageThreadReorder,

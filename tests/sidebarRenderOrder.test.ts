@@ -9,6 +9,7 @@ import {
     getNestedThreadIdForAppendDraft,
     getReplacedThreadIdForEditDraft,
     getSidebarSortCommentForThread,
+    matchesPinnedSidebarDraftVisibility,
     shouldRenderTopLevelDraftComment,
     sortSidebarRenderableItems,
 } from "../src/ui/views/sidebarRenderOrder";
@@ -315,4 +316,31 @@ test("shouldRenderTopLevelDraftComment hides nested edit drafts", () => {
     });
 
     assert.equal(hiddenDraft, null);
+});
+
+test("matchesPinnedSidebarDraftVisibility keeps new page-note drafts visible while pins are active", () => {
+    assert.equal(
+        matchesPinnedSidebarDraftVisibility({
+            mode: "new",
+            threadId: undefined,
+        }, new Set(["thread-1"])),
+        true,
+    );
+});
+
+test("matchesPinnedSidebarDraftVisibility keeps append and edit drafts scoped to pinned threads", () => {
+    assert.equal(
+        matchesPinnedSidebarDraftVisibility({
+            mode: "append",
+            threadId: "thread-1",
+        }, new Set(["thread-1"])),
+        true,
+    );
+    assert.equal(
+        matchesPinnedSidebarDraftVisibility({
+            mode: "edit",
+            threadId: "thread-2",
+        }, new Set(["thread-1"])),
+        false,
+    );
 });
