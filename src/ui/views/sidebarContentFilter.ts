@@ -64,6 +64,22 @@ export function filterThreadsByPinnedSidebarThreadIds<T extends Pick<CommentThre
     return threads.filter((thread) => pinnedThreadIds.has(thread.id));
 }
 
+export function filterThreadsByPinnedSidebarViewState<T extends Pick<CommentThread, "id">>(
+    threads: readonly T[],
+    pinnedThreadIds: ReadonlySet<string>,
+    showPinnedThreadsOnly: boolean,
+): T[] {
+    if (!showPinnedThreadsOnly) {
+        return threads.slice();
+    }
+
+    if (pinnedThreadIds.size === 0) {
+        return [];
+    }
+
+    return filterThreadsByPinnedSidebarThreadIds(threads, pinnedThreadIds);
+}
+
 export function toggleSidebarContentFilterState(
     currentFilter: SidebarContentFilter,
     requestedFilter: SidebarContentFilter,
@@ -83,6 +99,7 @@ export function toggleDeletedSidebarViewState(options: {
     showDeleted: boolean;
     showResolved: boolean;
     contentFilter: SidebarContentFilter;
+    showPinnedThreadsOnly: boolean;
     pinnedThreadIds: ReadonlySet<string>;
     searchQuery: string;
     searchInputValue: string;
@@ -90,6 +107,7 @@ export function toggleDeletedSidebarViewState(options: {
     showDeleted: boolean;
     showResolved: boolean;
     contentFilter: SidebarContentFilter;
+    showPinnedThreadsOnly: boolean;
     pinnedThreadIds: Set<string>;
     searchQuery: string;
     searchInputValue: string;
@@ -99,6 +117,7 @@ export function toggleDeletedSidebarViewState(options: {
             showDeleted: false,
             showResolved: options.showResolved,
             contentFilter: options.contentFilter,
+            showPinnedThreadsOnly: options.showPinnedThreadsOnly,
             pinnedThreadIds: new Set(options.pinnedThreadIds),
             searchQuery: options.searchQuery,
             searchInputValue: options.searchInputValue,
@@ -109,7 +128,8 @@ export function toggleDeletedSidebarViewState(options: {
         showDeleted: true,
         showResolved: false,
         contentFilter: "all",
-        pinnedThreadIds: new Set<string>(),
+        showPinnedThreadsOnly: false,
+        pinnedThreadIds: new Set(options.pinnedThreadIds),
         searchQuery: "",
         searchInputValue: "",
     };

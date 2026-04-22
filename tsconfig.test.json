@@ -14,6 +14,7 @@
   },
   "include": [
     "tests/**/*.ts",
+    "src/**/*.d.ts",
     "src/commentManager.ts",
     "src/core/**/*.ts",
     "shared/sideNotePromptPolicy.js"

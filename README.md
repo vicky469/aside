@@ -3,8 +3,8 @@
   <img src="./assets/logo-readme.svg" alt="SideNote2 logo" width="72">
 </p>
 <p align="center">
-  <a href="https://github.com/vicky469/SideNote2/releases/tag/2.0.43">
-    <img src="https://img.shields.io/badge/beta-2.0.43-f97316?style=flat-square" alt="Current beta">
+  <a href="https://github.com/vicky469/SideNote2/releases/tag/2.0.44">
+    <img src="https://img.shields.io/badge/beta-2.0.44-f97316?style=flat-square" alt="Current beta">
   </a>
   <a href="https://buymeacoffee.com/vickyli">
     <img src="https://img.shields.io/badge/Buy%20me%20a%20coffee-support-FFDD00?style=flat-square&logo=buymeacoffee&logoColor=000000" alt="Buy Me a Coffee">
@@ -67,6 +67,17 @@ For development, setup, testing, and release workflow, see [README-dev.md](./REA
 3. Use desktop Obsidian with a filesystem-backed vault.
 4. Install and sign in to Codex on the same machine.
    Quick check: open Terminal in your vault or project folder and run `codex`.
+5. Optional: install the SideNote2 Codex skill if you also use external Codex handoff workflows.
+   Built-in `@codex` inside SideNote2 does not require this.
+   If that external `sidenote2` skill is already installed, SideNote2 refreshes it automatically when a newer plugin release starts up.
+
+install the public `sidenote2` skill from this repo inside Codex:
+
+```
+$skill-installer install https://github.com/vicky469/SideNote2/tree/main/skills/sidenote2
+```
+
+Restart Codex after installing the skill.
 
 ## Workflow
 
@@ -77,7 +88,6 @@ For development, setup, testing, and release workflow, see [README-dev.md](./REA
    Type `@codex` if you want Codex to take the task.
 4. Save the note.
 5. SideNote2 runs Codex locally and appends the reply back into the same thread.
-6. Review it later from the sidebar, from `SideNote2 index.md`, from the `Agent` tab, or from the thought trail.
 
 ## Glossary
 

@@ -54,6 +54,7 @@ import {
 import {
     countBookmarkThreads,
     filterThreadsByPinnedSidebarThreadIds,
+    filterThreadsByPinnedSidebarViewState,
     filterThreadsBySidebarContentFilter,
     filterThreadsBySidebarSearchQuery,
     toggleDeletedSidebarViewState,
@@ -103,6 +104,8 @@ import { normalizeSidebarViewFile } from "./sidebarViewFileState";
 function matchesResolvedVisibility(resolved: boolean | undefined, showResolved: boolean): boolean {
     return showResolved ? resolved === true : resolved !== true;
 }
+
+const EMPTY_PINNED_SIDEBAR_THREAD_IDS: ReadonlySet<string> = new Set<string>();
 
 function matchesPageSidebarVisibility(
     thread: CommentThread,
@@ -203,6 +206,7 @@ export default class SideNote2View extends ItemView {
     private noteSidebarSearchDebounceTimer: number | null = null;
     private noteSidebarSearchRequestVersion = 0;
     private pinnedSidebarThreadIds = new Set<string>();
+    private showPinnedSidebarThreadsOnly = false;
     private selectedIndexFileFilterRootPath: string | null = null;
     private indexFileFilterGraph: IndexFileFilterGraph | null = null;
     private reorderDragState: SidebarReorderDragState | null = null;
@@ -234,6 +238,7 @@ export default class SideNote2View extends ItemView {
             this.noteSidebarSearchQuery = "";
             this.noteSidebarSearchInputValue = "";
             this.pinnedSidebarThreadIds.clear();
+            this.showPinnedSidebarThreadsOnly = false;
         }
         this.file = nextFile;
     }
@@ -249,12 +254,23 @@ export default class SideNote2View extends ItemView {
         return this.pinnedSidebarThreadIds.has(threadId);
     }
 
+    private getPinnedSidebarFilterThreadIds(): ReadonlySet<string> {
+        return this.showPinnedSidebarThreadsOnly
+            ? this.pinnedSidebarThreadIds
+            : EMPTY_PINNED_SIDEBAR_THREAD_IDS;
+    }
+
     private async togglePinnedSidebarThread(threadId: string): Promise<void> {
         if (this.pinnedSidebarThreadIds.has(threadId)) {
             this.pinnedSidebarThreadIds.delete(threadId);
         } else {
             this.pinnedSidebarThreadIds.add(threadId);
         }
+        await this.renderComments();
+    }
+
+    private async togglePinnedSidebarMode(): Promise<void> {
+        this.showPinnedSidebarThreadsOnly = !this.showPinnedSidebarThreadsOnly;
         await this.renderComments();
     }
 
@@ -629,18 +645,20 @@ export default class SideNote2View extends ItemView {
                     scopedVisibleThreads: visiblePersistedThreads,
                     scopedAllThreads: persistedThreads,
                 };
-            const pinnedScopedVisibleThreads = filterThreadsByPinnedSidebarThreadIds(
+            const pinnedScopedVisibleThreads = filterThreadsByPinnedSidebarViewState(
                 scopedVisibleThreads,
                 this.pinnedSidebarThreadIds,
+                this.showPinnedSidebarThreadsOnly,
             );
-            const pinnedScopedAllThreads = filterThreadsByPinnedSidebarThreadIds(
+            const pinnedScopedAllThreads = filterThreadsByPinnedSidebarViewState(
                 scopedAllThreads,
                 this.pinnedSidebarThreadIds,
+                this.showPinnedSidebarThreadsOnly,
             );
             const draftComment = this.plugin.getDraftForView(file.path);
             const visibleDraftComment = draftComment
                 && matchesResolvedVisibility(draftComment.resolved, showResolved)
-                && matchesPinnedSidebarDraftVisibility(draftComment, this.pinnedSidebarThreadIds)
+                && matchesPinnedSidebarDraftVisibility(draftComment, this.getPinnedSidebarFilterThreadIds())
                 && (!filteredIndexFilePaths.length || filteredIndexFilePaths.includes(draftComment.filePath))
                 ? draftComment
                 : null;
@@ -859,9 +877,10 @@ export default class SideNote2View extends ItemView {
         const hasResolvedThreadsInFile = persistedThreads.some((thread) => thread.resolved);
         this.syncPinnedSidebarThreadIds(persistedThreads);
         const contentFilteredThreads = this.filterNoteSidebarThreadsByContentFilter(file.path, persistedThreads);
-        const pinnedContentFilteredThreads = filterThreadsByPinnedSidebarThreadIds(
+        const pinnedContentFilteredThreads = filterThreadsByPinnedSidebarViewState(
             contentFilteredThreads,
             this.pinnedSidebarThreadIds,
+            this.showPinnedSidebarThreadsOnly,
         );
         const searchMatchedThreads = filterThreadsBySidebarSearchQuery(
             pinnedContentFilteredThreads,
@@ -870,7 +889,7 @@ export default class SideNote2View extends ItemView {
         const allAgentRuns = this.plugin.getAgentRuns();
         const visibleDraftComment = draftComment
             && matchesResolvedVisibility(draftComment.resolved, showResolved)
-            && matchesPinnedSidebarDraftVisibility(draftComment, this.pinnedSidebarThreadIds)
+            && matchesPinnedSidebarDraftVisibility(draftComment, this.getPinnedSidebarFilterThreadIds())
             ? draftComment
             : null;
         const activeDraftHostThreadId = (visibleDraftComment?.mode === "edit" || visibleDraftComment?.mode === "append")
@@ -977,6 +996,7 @@ export default class SideNote2View extends ItemView {
             totalScopedCount,
             hasResolvedComments,
             contentFilter: this.noteSidebarContentFilter,
+            showPinnedThreadsOnly: this.showPinnedSidebarThreadsOnly,
             searchQuery: this.noteSidebarSearchQuery,
         });
         this.syncVisibleStreamedReplyControllers();
@@ -1261,6 +1281,7 @@ export default class SideNote2View extends ItemView {
             totalScopedCount: number;
             hasResolvedComments: boolean;
             contentFilter: SidebarContentFilter;
+            showPinnedThreadsOnly: boolean;
             searchQuery: string;
         },
     ): void {
@@ -1274,27 +1295,43 @@ export default class SideNote2View extends ItemView {
             return;
         }
 
-        const filterLabel = this.getNoteSidebarContentFilterLabel(options.contentFilter);
-        const pluralFilterLabel = this.getNoteSidebarContentFilterPluralLabel(options.contentFilter);
+        const filterLabel = options.showPinnedThreadsOnly
+            ? options.contentFilter === "all"
+                ? "pin filter"
+                : `pin + ${this.getNoteSidebarContentFilterLabel(options.contentFilter)}`
+            : this.getNoteSidebarContentFilterLabel(options.contentFilter);
+        const pluralFilterLabel = options.showPinnedThreadsOnly
+            ? options.contentFilter === "all"
+                ? "pinned comments"
+                : `pinned ${this.getNoteSidebarContentFilterPluralLabel(options.contentFilter)}`
+            : this.getNoteSidebarContentFilterPluralLabel(options.contentFilter);
         const trimmedSearchQuery = options.searchQuery.trim();
         const hasSearchQuery = trimmedSearchQuery.length > 0;
-        const searchSubjectLabel = options.contentFilter === "all"
-            ? "side notes"
-            : pluralFilterLabel;
+        const searchSubjectLabel = options.showPinnedThreadsOnly
+            ? options.contentFilter === "all"
+                ? "pinned side notes"
+                : pluralFilterLabel
+            : options.contentFilter === "all"
+                ? "side notes"
+                : pluralFilterLabel;
 
         if (options.showResolved && options.totalScopedCount > 0) {
             const emptyStateEl = commentsBody.createDiv("sidenote2-empty-state sidenote2-section-empty-state");
             emptyStateEl.createEl("p", {
                 text: hasSearchQuery
                     ? `No resolved ${searchSubjectLabel} match "${trimmedSearchQuery}" in this file.`
-                    : options.contentFilter === "all"
+                    : options.showPinnedThreadsOnly
+                        ? `No resolved ${pluralFilterLabel} for this file.`
+                        : options.contentFilter === "all"
                         ? "No resolved comments for this file."
                         : `No resolved ${pluralFilterLabel} for this file.`,
             });
             emptyStateEl.createEl("p", {
                 text: hasSearchQuery
                     ? "Turn off resolved or clear search to broaden the results."
-                    : options.contentFilter === "all"
+                    : options.showPinnedThreadsOnly
+                        ? `Turn off ${filterLabel} to return to the broader side note list.`
+                        : options.contentFilter === "all"
                         ? "Turn off resolved to return to active comments."
                         : `Turn off resolved to return to active ${pluralFilterLabel}.`,
             });
@@ -1306,14 +1343,18 @@ export default class SideNote2View extends ItemView {
             emptyStateEl.createEl("p", {
                 text: hasSearchQuery
                     ? `No active ${searchSubjectLabel} match "${trimmedSearchQuery}" in this file.`
-                    : options.contentFilter === "all"
+                    : options.showPinnedThreadsOnly
+                        ? `No active ${pluralFilterLabel} for this file.`
+                        : options.contentFilter === "all"
                         ? "No active comments for this file."
                         : `No active ${pluralFilterLabel} for this file.`,
             });
             emptyStateEl.createEl("p", {
                 text: hasSearchQuery
                     ? "Turn on resolved or clear search to broaden the results."
-                    : options.contentFilter === "all"
+                    : options.showPinnedThreadsOnly
+                        ? "Turn on resolved to review archived pinned comments only."
+                        : options.contentFilter === "all"
                         ? "Turn on resolved to review archived comments only."
                         : `Turn on resolved to review archived ${pluralFilterLabel} only.`,
             });
@@ -1324,14 +1365,18 @@ export default class SideNote2View extends ItemView {
         emptyStateEl.createEl("p", {
             text: hasSearchQuery
                 ? `No ${searchSubjectLabel} match "${trimmedSearchQuery}" in this file.`
-                : options.contentFilter === "all"
+                : options.showPinnedThreadsOnly
+                    ? `No ${pluralFilterLabel} for this file yet.`
+                    : options.contentFilter === "all"
                     ? "No comments for this file yet."
                     : `No ${pluralFilterLabel} for this file yet.`,
         });
         emptyStateEl.createEl("p", {
             text: hasSearchQuery
                 ? "Clear search or try different words."
-                : options.contentFilter === "all"
+                : options.showPinnedThreadsOnly
+                    ? "Pin one or more side notes, or turn off the pin filter."
+                    : options.contentFilter === "all"
                     ? "Use the add button to create a page side note."
                     : `Turn off ${filterLabel} to return to all side notes.`,
         });
@@ -1449,11 +1494,13 @@ export default class SideNote2View extends ItemView {
             showDeleted: options.showDeleted,
             showResolved: options.showResolved,
             contentFilter: options.contentFilter,
+            showPinnedThreadsOnly: this.showPinnedSidebarThreadsOnly,
             pinnedThreadIds: this.pinnedSidebarThreadIds,
             searchQuery: this.noteSidebarSearchQuery,
             searchInputValue: this.noteSidebarSearchInputValue,
         });
         this.noteSidebarContentFilter = nextState.contentFilter;
+        this.showPinnedSidebarThreadsOnly = nextState.showPinnedThreadsOnly;
         this.pinnedSidebarThreadIds = nextState.pinnedThreadIds;
         this.clearNoteSidebarSearchDebounceTimer();
         this.noteSidebarSearchQuery = nextState.searchQuery;
@@ -1509,6 +1556,8 @@ export default class SideNote2View extends ItemView {
         const showResolved = this.plugin.shouldShowResolvedComments();
         const showNestedComments = this.plugin.shouldShowNestedComments();
         const showDeletedComments = options.showDeletedComments;
+        const showPinnedThreadsOnly = this.showPinnedSidebarThreadsOnly;
+        const hasPinnedThreads = this.pinnedSidebarThreadIds.size > 0;
         const contentFilter = options.noteSidebarContentFilter;
         const activePrimaryMode = options.isAllCommentsView
             ? this.indexSidebarMode
@@ -1619,6 +1668,17 @@ export default class SideNote2View extends ItemView {
                 });
             }
             return;
+        }
+        if (showListOnlyToolbarChips) {
+            this.renderToolbarIconButton(actionGroup, {
+                icon: "pin",
+                active: showPinnedThreadsOnly,
+                ariaLabel: showPinnedThreadsOnly ? "Show all side notes" : "Show pinned side notes",
+                disabled: !hasPinnedThreads && !showPinnedThreadsOnly,
+                onClick: () => {
+                    void this.togglePinnedSidebarMode();
+                },
+            });
         }
         if (shouldShowContentFilterIcons && showListOnlyToolbarChips) {
             this.renderToolbarIconButton(actionGroup, {
@@ -1857,6 +1917,9 @@ export default class SideNote2View extends ItemView {
                 }
 
                 this.indexSidebarMode = mode;
+                if (mode !== "list") {
+                    this.showPinnedSidebarThreadsOnly = false;
+                }
                 void this.plugin.logEvent("info", "index", "index.mode.changed", {
                     mode,
                     source: "toolbar",
@@ -1875,6 +1938,9 @@ export default class SideNote2View extends ItemView {
                 }
 
                 this.noteSidebarMode = mode;
+                if (mode !== "list") {
+                    this.showPinnedSidebarThreadsOnly = false;
+                }
                 void this.plugin.logEvent("info", "note", "note.mode.changed", {
                     mode,
                     source: "toolbar",

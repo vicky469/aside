@@ -92,6 +92,9 @@ const context = await esbuild.context({
 	sourcemap: prod ? false : "inline",
 	treeShaking: true,
 	outfile: "main.js",
+	loader: {
+		".md": "text",
+	},
 	minify: prod,
 	plugins: prod
 		? []

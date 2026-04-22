@@ -62,6 +62,7 @@ import {
     buildSideNoteReferenceUrl,
     parseSideNoteReferenceUrl,
 } from "./core/text/commentReferences";
+import { syncInstalledCodexSkill, type CodexSkillSyncModules } from "./core/codexSkillSync";
 import { AggregateCommentIndex } from "./index/AggregateCommentIndex";
 import {
     buildSideNoteReferenceSearchIndex,
@@ -86,6 +87,7 @@ import {
     SideNote2LogService,
     type SideNote2LogLevel,
 } from "./logs/logService";
+import bundledSidenoteSkillContent from "../skills/sidenote2/SKILL.md";
 
 // Helper function to generate SHA256 hash using Web Crypto API (works on mobile)
 async function generateHash(text: string): Promise<string> {
@@ -136,6 +138,30 @@ function getFetchFallback(): RemoteRuntimeFetchFallback | undefined {
     }
 
     return (input, init) => globalThis.fetch(input, init);
+}
+
+function getNodeRequire(): ((moduleName: string) => unknown) | null {
+    if (typeof window === "undefined") {
+        return null;
+    }
+
+    const electronRequire = (window as Window & {
+        require?: (moduleName: string) => unknown;
+    }).require;
+    return typeof electronRequire === "function"
+        ? electronRequire
+        : null;
+}
+
+function getProcessEnv(): Record<string, string | undefined> {
+    const candidate = typeof globalThis !== "undefined"
+        ? (globalThis as typeof globalThis & {
+            process?: {
+                env?: Record<string, string | undefined>;
+            };
+        }).process
+        : undefined;
+    return candidate?.env ?? {};
 }
 
 // Main plugin class
@@ -461,6 +487,7 @@ export default class SideNote2 extends Plugin {
 
         this.commentManager = new CommentManager([]);
         await this.loadSettings();
+        await this.syncInstalledSidenoteSkill();
         this.commentAgentController.initialize();
         await this.commentAgentController.reconcilePendingRunsFromPreviousSession();
         await this.logEvent("info", "startup", "startup.settings.loaded", {
@@ -740,18 +767,112 @@ export default class SideNote2 extends Plugin {
             : null;
     }
 
+    private getSyncedBundledSidenoteSkillPluginVersion(): string | null {
+        const persistedData = this.indexNoteSettingsController.readPersistedPluginData();
+        return typeof persistedData.syncedBundledSidenoteSkillPluginVersion === "string"
+            ? persistedData.syncedBundledSidenoteSkillPluginVersion
+            : null;
+    }
+
+    private async setSyncedBundledSidenoteSkillPluginVersion(pluginVersion: string): Promise<void> {
+        const persistedData = this.indexNoteSettingsController.readPersistedPluginData();
+        if (persistedData.syncedBundledSidenoteSkillPluginVersion === pluginVersion) {
+            return;
+        }
+
+        await this.indexNoteSettingsController.writePersistedPluginData({
+            ...persistedData,
+            syncedBundledSidenoteSkillPluginVersion: pluginVersion,
+        });
+    }
+
+    private getCodexSkillSyncModules(): CodexSkillSyncModules | null {
+        const nodeRequire = getNodeRequire();
+        if (!nodeRequire) {
+            return null;
+        }
+
+        try {
+            return {
+                fsPromises: nodeRequire("node:fs/promises") as CodexSkillSyncModules["fsPromises"],
+                os: nodeRequire("node:os") as CodexSkillSyncModules["os"],
+                path: nodeRequire("node:path") as CodexSkillSyncModules["path"],
+            };
+        } catch {
+            return null;
+        }
+    }
+
+    private async syncInstalledSidenoteSkill(): Promise<void> {
+        if (this.runtime !== "release" || !(this.app.vault.adapter instanceof FileSystemAdapter)) {
+            return;
+        }
+
+        const modules = this.getCodexSkillSyncModules();
+        if (!modules) {
+            return;
+        }
+
+        try {
+            const result = await syncInstalledCodexSkill({
+                modules,
+                env: getProcessEnv(),
+                skillName: "sidenote2",
+                skillContent: bundledSidenoteSkillContent,
+                pluginVersion: this.manifest.version,
+                previouslySyncedPluginVersion: this.getSyncedBundledSidenoteSkillPluginVersion(),
+            });
+
+            if (result.kind === "updated" || result.kind === "current") {
+                await this.setSyncedBundledSidenoteSkillPluginVersion(this.manifest.version);
+            }
+
+            if (result.kind === "updated") {
+                await this.logEvent("info", "startup", "startup.codex-skill.updated", {
+                    pluginVersion: this.manifest.version,
+                    skillPath: result.skillFilePath,
+                });
+                return;
+            }
+
+            if (result.kind === "current") {
+                await this.logEvent("info", "startup", "startup.codex-skill.current", {
+                    pluginVersion: this.manifest.version,
+                    skillPath: result.skillFilePath,
+                });
+                return;
+            }
+
+            if (result.kind === "already-synced") {
+                await this.logEvent("info", "startup", "startup.codex-skill.already-synced", {
+                    pluginVersion: this.manifest.version,
+                    skillPath: result.skillFilePath,
+                });
+                return;
+            }
+
+            await this.logEvent("info", "startup", "startup.codex-skill.not-installed", {
+                pluginVersion: this.manifest.version,
+                skillPath: result.skillFilePath,
+            });
+        } catch (error) {
+            this.warn(
+                "Failed to refresh the installed SideNote2 Codex skill.",
+                error,
+                "startup",
+                "startup.codex-skill.warn",
+            );
+        }
+    }
+
     public getRuntimeWorkingDirectory(filePath: string): string | null {
         if (!(this.app.vault.adapter instanceof FileSystemAdapter)) {
             return null;
         }
 
         const vaultRootPath = this.app.vault.adapter.getBasePath();
-        const electronRequire = typeof window !== "undefined"
-            ? (window as Window & {
-                require?: (moduleName: string) => unknown;
-            }).require
-            : undefined;
-        if (typeof electronRequire !== "function") {
+        const electronRequire = getNodeRequire();
+        if (!electronRequire) {
             return vaultRootPath;
         }
 

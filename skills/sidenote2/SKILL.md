@@ -33,11 +33,32 @@ Use this skill when the user:
 - In this skill, a `page note` or `anchored note` normally means a simple SideNote2 note/thread inside the current markdown note.
 - Only create a separate wiki page when the user explicitly asks for one, or when the best useful reply would exceed the 250-word side-note limit.
 
+## Mode Selection
+
+First decide whether the current turn is:
+
+- chat-only
+- a SideNote2 write back into the note/thread
+
+Use these defaults:
+
+- If the request came from an in-note SideNote2 `@codex` reply path, default to write mode.
+- If the request came from CLI or normal chat, default to chat-only mode.
+
+Important:
+
+- A pasted `obsidian://side-note2-comment?...` URI, note path, selected text, or `commentId` is thread context, not automatic permission to write.
+- In CLI or normal chat, only write when the user explicitly asks to create, reply, append, update, resolve, or otherwise modify stored SideNote2 comments.
+- If the user explicitly says this is chat, asks for explanation only, or asks what a passage/comment means, answer in chat and do not mutate the note.
+- If the user explicitly asks to modify or append somewhere directly, treat that as a normal chat instruction to perform the write.
+- When unsure, default to chat-only and avoid mutating the note.
+
 ## Working Rules
 
 1. If the user provided an `obsidian://side-note2-comment?...` URI:
    - treat it as the exact thread target
-   - prefer the URI-based CLI path instead of re-discovering the note manually
+   - do not treat the URI alone as permission to write
+   - prefer the URI-based CLI path instead of re-discovering the note manually when you are actually writing
 2. If no URI is provided, locate the real markdown note and read the trailing SideNote2 managed block.
 3. Distinguish:
    - `create`, `new thread`, `new page note`, `new anchored note`
@@ -123,6 +144,8 @@ sidenote2 comment:resolve --file /abs/path/note.md --id "<comment-id>"
 
 ## Safety
 
+- Do not treat a pasted URI or `commentId` as an automatic instruction to append a reply.
+- Do not append/update/resolve/create anything when the interaction came from CLI or normal chat unless the user explicitly asked for that write.
 - Do not append to an existing thread when the user clearly asked to create a new page note or anchored note.
 - Do not overwrite a thread when the user asked to reply.
 - Do not interpret `create a note` as `create a new markdown page` unless the user explicitly asks for a separate wiki page.
