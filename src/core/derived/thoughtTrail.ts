@@ -5,7 +5,6 @@ import { extractSideNoteReferences } from "../text/commentReferences";
 
 const ALL_COMMENTS_NOTE_PATH = "SideNote2 index.md";
 const LEGACY_ALL_COMMENTS_NOTE_PATH = "SideNote2 comments.md";
-const MAX_PREVIEW_LENGTH = 80;
 const MAX_EDGE_LABEL_WORDS = 4;
 const THOUGHT_TRAIL_MERMAID_RENDER_CONFIG = {
     fontFamily: "var(--font-interface-theme)",
@@ -91,19 +90,6 @@ function normalizeNotePath(filePath: string): string {
 
 function isAllCommentsNotePath(filePath: string, currentPath: string = ALL_COMMENTS_NOTE_PATH): boolean {
     return filePath === normalizeNotePath(currentPath) || filePath === LEGACY_ALL_COMMENTS_NOTE_PATH;
-}
-
-function toInlinePreview(value: string, maxLength: number = MAX_PREVIEW_LENGTH): string {
-    const normalized = value.replace(/\r\n/g, "\n").replace(/\s+/g, " ").trim();
-    if (!normalized) {
-        return "(blank selection)";
-    }
-
-    if (normalized.length <= maxLength) {
-        return normalized;
-    }
-
-    return `${normalized.slice(0, maxLength - 3).trimEnd()}...`;
 }
 
 function toInlineWordPreview(value: string, maxWords: number): string {

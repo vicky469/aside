@@ -656,6 +656,7 @@ export default class SideNote2View extends ItemView {
                         },
                     }
                     : null,
+                exportNotesAction: null,
                 indexFileFilterOptions,
                 selectedIndexFileFilterRootPath,
                 filteredIndexFilePaths,
@@ -876,6 +877,13 @@ export default class SideNote2View extends ItemView {
                     void this.plugin.startPageCommentDraft(file);
                 },
             },
+            exportNotesAction: {
+                icon: "download",
+                ariaLabel: "Export side notes for this note",
+                onClick: () => {
+                    void this.plugin.exportSideNotesForFile(file);
+                },
+            },
             indexFileFilterOptions: [],
             selectedIndexFileFilterRootPath: null,
             filteredIndexFilePaths: [],
@@ -978,6 +986,13 @@ export default class SideNote2View extends ItemView {
                     void this.plugin.startPageCommentDraft(file);
                 },
             },
+            exportNotesAction: {
+                icon: "download",
+                ariaLabel: "Export side notes for this note",
+                onClick: () => {
+                    void this.plugin.exportSideNotesForFile(file);
+                },
+            },
             indexFileFilterOptions: [],
             selectedIndexFileFilterRootPath: null,
             filteredIndexFilePaths: [],
@@ -1015,7 +1030,7 @@ export default class SideNote2View extends ItemView {
         this.containerEl.empty();
         this.syncViewContainerClasses();
 
-        const commentsContainerEl = this.containerEl.createDiv("sidenote2-comments-container");
+        const commentsContainerEl = this.containerEl.createDiv("sidenote2-comments-container is-note-sidebar");
         const toolbarSlotEl = commentsContainerEl.createDiv("sidenote2-note-sidebar-toolbar-slot");
         const commentsBodyEl = this.renderCommentsList(commentsContainerEl);
         this.setupPageThreadReorderInteractions(commentsBodyEl, filePath);
@@ -1379,6 +1394,11 @@ export default class SideNote2View extends ItemView {
                 ariaLabel: string;
                 onClick: () => void;
             } | null;
+            exportNotesAction: {
+                icon: string;
+                ariaLabel: string;
+                onClick: () => void;
+            } | null;
             indexFileFilterOptions: IndexFileFilterOption[];
             selectedIndexFileFilterRootPath: string | null;
             filteredIndexFilePaths: string[];
@@ -1394,6 +1414,9 @@ export default class SideNote2View extends ItemView {
         const showListOnlyToolbarChips = options.isAllCommentsView
             ? shouldShowIndexListToolbarChips(options.isAllCommentsView, this.indexSidebarMode)
             : activePrimaryMode === "list";
+        const shouldShowNoteSearchInput = !options.isAllCommentsView && activePrimaryMode === "list";
+        const shouldShowAddPageCommentAction = !!options.addPageCommentAction
+            && (options.isAllCommentsView || activePrimaryMode === "list");
         const shouldShowResolvedChip = showListOnlyToolbarChips
             && !options.isAgentMode
             && shouldShowResolvedToolbarChip(options.hasResolvedComments, showResolved);
@@ -1408,7 +1431,8 @@ export default class SideNote2View extends ItemView {
             || shouldShowResolvedChip
             || shouldShowContentFilterIcons
             || shouldShowNestedChip
-            || !!options.addPageCommentAction;
+            || shouldShowAddPageCommentAction
+            || !!options.exportNotesAction;
         if (!shouldRenderToolbar) {
             return;
         }
@@ -1443,20 +1467,36 @@ export default class SideNote2View extends ItemView {
             const modeRow = toolbarEl.createDiv("sidenote2-sidebar-toolbar-row");
             modeRow.addClass("is-note-primary-row");
             this.renderNoteModeControl(modeRow);
+            if (options.exportNotesAction) {
+                const primaryActionGroup = modeRow.createDiv("sidenote2-sidebar-toolbar-group is-action-group is-primary-action-group");
+                this.renderToolbarIconButton(primaryActionGroup, {
+                    icon: options.exportNotesAction.icon,
+                    ariaLabel: options.exportNotesAction.ariaLabel,
+                    onClick: options.exportNotesAction.onClick,
+                });
+            }
 
-            const actionsRow = toolbarEl.createDiv("sidenote2-sidebar-toolbar-row");
-            actionsRow.addClass("is-note-secondary-row");
-            noteFilterGroup = actionsRow.createDiv("sidenote2-sidebar-toolbar-group is-filter-group");
-            noteActionGroup = actionsRow.createDiv("sidenote2-sidebar-toolbar-group is-action-group");
+            if (shouldShowNoteSearchInput || showListOnlyToolbarChips || shouldShowAddPageCommentAction) {
+                const actionsRow = toolbarEl.createDiv("sidenote2-sidebar-toolbar-row");
+                actionsRow.addClass("is-note-secondary-row");
+                noteFilterGroup = actionsRow.createDiv("sidenote2-sidebar-toolbar-group is-filter-group");
+                noteActionGroup = actionsRow.createDiv("sidenote2-sidebar-toolbar-group is-action-group");
+            }
         }
 
         if (!showListOnlyToolbarChips && options.isAllCommentsView) {
             return;
         }
 
-        const filterGroup = indexChipGroup ?? noteFilterGroup ?? (indexChipRow ?? toolbarEl).createDiv("sidenote2-sidebar-toolbar-group");
+        const filterGroup = options.isAllCommentsView
+            ? (indexChipGroup ?? (indexChipRow ?? toolbarEl).createDiv("sidenote2-sidebar-toolbar-group"))
+            : noteFilterGroup;
         const actionGroup = noteActionGroup ?? filterGroup;
-        if (!options.isAllCommentsView) {
+        if (!filterGroup || !actionGroup) {
+            return;
+        }
+
+        if (shouldShowNoteSearchInput) {
             this.renderNoteSearchInput(filterGroup);
         }
         if (shouldShowContentFilterIcons && showListOnlyToolbarChips) {
@@ -1520,7 +1560,7 @@ export default class SideNote2View extends ItemView {
             }
         }
 
-        if (options.addPageCommentAction) {
+        if (shouldShowAddPageCommentAction && options.addPageCommentAction) {
             this.renderToolbarIconButton(actionGroup, {
                 icon: options.addPageCommentAction.icon,
                 ariaLabel: options.addPageCommentAction.ariaLabel,
@@ -1636,6 +1676,10 @@ export default class SideNote2View extends ItemView {
     private renderNoteSearchInput(container: HTMLElement): void {
         const searchGroup = container.createDiv("sidenote2-sidebar-toolbar-group is-search-group");
         const fieldEl = searchGroup.createDiv("sidenote2-note-search-field");
+        const iconEl = fieldEl.createSpan({
+            cls: "sidenote2-note-search-icon",
+        });
+        setIcon(iconEl, "search");
         const inputEl = fieldEl.createEl("input", {
             cls: "sidenote2-note-search-input",
         });
@@ -1673,9 +1717,6 @@ export default class SideNote2View extends ItemView {
     private renderIndexModeControl(container: HTMLElement): void {
         this.renderSidebarModeControl(container, {
             mode: this.indexSidebarMode,
-            ariaLabel: "Index view mode",
-            listAriaLabel: "Show index list",
-            thoughtTrailAriaLabel: "Show thought trail",
             onChange: (mode) => {
                 if (this.indexSidebarMode === mode) {
                     return;
@@ -1694,9 +1735,6 @@ export default class SideNote2View extends ItemView {
     private renderNoteModeControl(container: HTMLElement): void {
         this.renderSidebarModeControl(container, {
             mode: this.noteSidebarMode,
-            ariaLabel: "Note view mode",
-            listAriaLabel: "Show note list",
-            thoughtTrailAriaLabel: "Show note thought trail",
             onChange: (mode) => {
                 if (this.noteSidebarMode === mode) {
                     return;
@@ -1716,20 +1754,15 @@ export default class SideNote2View extends ItemView {
         container: HTMLElement,
         options: {
             mode: SidebarPrimaryMode;
-            ariaLabel: string;
-            listAriaLabel: string;
-            thoughtTrailAriaLabel: string;
             onChange: (mode: SidebarPrimaryMode) => void;
         },
     ): void {
-        const modeGroup = container.createDiv("sidenote2-sidebar-toolbar-group");
+        const modeGroup = container.createDiv("sidenote2-sidebar-toolbar-group is-mode-group");
         const tabList = modeGroup.createDiv(`sidenote2-tablist is-${options.mode}`);
         tabList.setAttribute("role", "tablist");
-        tabList.setAttribute("aria-label", options.ariaLabel);
         this.renderTabButton(tabList, {
             label: "List",
             active: options.mode === "list",
-            ariaLabel: options.listAriaLabel,
             onClick: () => {
                 options.onChange("list");
             },
@@ -1737,7 +1770,6 @@ export default class SideNote2View extends ItemView {
         this.renderTabButton(tabList, {
             label: "Thought Trail",
             active: options.mode === "thought-trail",
-            ariaLabel: options.thoughtTrailAriaLabel,
             onClick: () => {
                 options.onChange("thought-trail");
             },
@@ -1749,18 +1781,16 @@ export default class SideNote2View extends ItemView {
         options: {
             label: string;
             active: boolean;
-            ariaLabel: string;
             onClick: () => void;
         },
     ): void {
         const button = container.createEl("button", {
-            cls: `sidenote2-tab-button${options.active ? " is-active" : ""}`,
+            cls: `sidenote2-tab-button${options.active ? " sidenote2-tab-button--active" : ""}`,
             text: options.label,
         });
         button.setAttribute("type", "button");
         button.setAttribute("role", "tab");
         button.setAttribute("aria-selected", options.active ? "true" : "false");
-        button.setAttribute("aria-label", options.ariaLabel);
         button.tabIndex = options.active ? 0 : -1;
         button.onclick = async () => {
             if (!(await this.saveVisibleDraftIfPresent())) {

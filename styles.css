@@ -3,6 +3,15 @@
     --sidenote2-highlight-hover-alpha: 0.24;
     --sidenote2-highlight-line-alpha: 0.38;
     --sidenote2-index-header-max-width: 40rem;
+    --sidenote2-luxury-accent: var(--interactive-accent);
+    --sidenote2-luxury-accent-muted: color-mix(in srgb, var(--sidenote2-luxury-accent) 56%, var(--text-muted) 44%);
+    --sidenote2-luxury-accent-soft: color-mix(in srgb, var(--sidenote2-luxury-accent) 18%, transparent);
+    --sidenote2-luxury-accent-line: color-mix(in srgb, var(--sidenote2-luxury-accent) 34%, transparent);
+    --sidenote2-note-toolbar-surface: transparent;
+    --sidenote2-note-toolbar-border: color-mix(in srgb, var(--background-modifier-border) 72%, transparent);
+    --sidenote2-note-toolbar-control-surface: var(--background-secondary);
+    --sidenote2-note-toolbar-control-hover: var(--background-modifier-hover);
+    --sidenote2-note-toolbar-radius: 4px;
 }
 
 .theme-dark {
@@ -219,6 +228,21 @@
     padding: 8px 8px 72px;
 }
 
+.sidenote2-comments-container.is-note-sidebar {
+    padding-top: 0;
+    padding-left: 8px;
+    padding-right: 8px;
+}
+
+.sidenote2-note-sidebar-toolbar-slot {
+    margin: 0 0 8px;
+    padding: 2px 6px 0;
+    background: var(--sidenote2-note-toolbar-surface);
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+    box-shadow: none;
+}
+
 .sidenote2-view-container.is-non-desktop .sidenote2-comments-container {
     padding-bottom: max(72px, 50vh);
 }
@@ -243,7 +267,10 @@
     display: flex;
     flex-direction: column;
     align-items: stretch;
-    gap: 6px;
+    gap: 2px;
+    margin-bottom: 0;
+    padding-bottom: 8px;
+    border-bottom: 1px solid color-mix(in srgb, var(--background-modifier-border) 88%, transparent);
 }
 
 .sidenote2-sidebar-toolbar-row {
@@ -261,8 +288,25 @@
     width: 100%;
 }
 
-.sidenote2-sidebar-toolbar-row.is-note-primary-row .sidenote2-sidebar-toolbar-group {
-    width: 100%;
+.sidenote2-sidebar-toolbar-row.is-note-primary-row {
+    justify-content: flex-start;
+    flex-wrap: nowrap;
+    gap: 6px;
+    padding: 2px 4px 0;
+    align-items: center;
+    border-bottom: 1px solid var(--sidenote2-note-toolbar-border);
+}
+
+.sidenote2-sidebar-toolbar-row.is-note-primary-row .sidenote2-sidebar-toolbar-group.is-mode-group {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.sidenote2-sidebar-toolbar-row.is-note-primary-row .sidenote2-sidebar-toolbar-group.is-primary-action-group {
+    flex: 0 0 auto;
+    margin-left: auto;
+    padding: 0 2px 0 0;
+    align-items: center;
 }
 
 .sidenote2-sidebar-toolbar-row.is-index-secondary-row {
@@ -272,6 +316,9 @@
 .sidenote2-sidebar-toolbar-row.is-note-secondary-row {
     justify-content: flex-start;
     flex-wrap: nowrap;
+    gap: 6px;
+    padding: 6px 4px 8px;
+    align-items: center;
 }
 
 .sidenote2-sidebar-toolbar-row.is-note-search-row {
@@ -301,28 +348,66 @@
     min-width: 0;
 }
 
+.sidenote2-sidebar-toolbar-group.is-primary-action-group {
+    flex: 0 0 auto;
+    margin-left: auto;
+    padding-bottom: 4px;
+}
+
 .sidenote2-sidebar-toolbar-group.is-search-group {
     width: auto;
-    flex: 1 1 150px;
-    min-width: 120px;
+    flex: 1 1 auto;
+    min-width: 0;
+    gap: 0;
 }
 
 .sidenote2-note-search-field {
     position: relative;
-    width: min(100%, clamp(144px, 34vw, 196px));
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    min-height: 28px;
+    padding: 0 8px;
+    border: 1px solid var(--sidenote2-note-toolbar-border);
+    border-radius: var(--sidenote2-note-toolbar-radius);
+    background: var(--sidenote2-note-toolbar-control-surface);
+    box-shadow: none;
+    transition: border-color 0.12s ease, background-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.sidenote2-note-search-field:focus-within {
+    border-color: color-mix(in srgb, var(--sidenote2-luxury-accent) 62%, var(--sidenote2-note-toolbar-border) 38%);
+    box-shadow: inset 0 0 0 1px var(--sidenote2-luxury-accent-soft);
+}
+
+.sidenote2-note-search-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 12px;
+    height: 12px;
+    flex: 0 0 auto;
+    color: var(--text-faint);
+}
+
+.sidenote2-note-search-icon svg {
+    width: 11px;
+    height: 11px;
+    stroke-width: 2.4;
 }
 
 .sidenote2-note-search-field > input.sidenote2-note-search-input {
     display: block;
     width: 100%;
-    min-height: 27px !important;
-    padding: 4px 10px !important;
-    border: 1px solid color-mix(in srgb, var(--background-modifier-border) 52%, transparent) !important;
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--background-primary) 97%, var(--background-secondary) 3%) !important;
+    min-height: 26px !important;
+    padding: 0 !important;
+    border: none !important;
+    border-radius: 0;
+    background: transparent !important;
     background-image: none !important;
     color: var(--text-normal) !important;
-    font-size: 11px;
+    font-size: 12px;
     line-height: 1.2;
     box-sizing: border-box;
     appearance: none !important;
@@ -342,16 +427,16 @@
 }
 
 .sidenote2-note-search-field > input.sidenote2-note-search-input::placeholder {
-    color: color-mix(in srgb, var(--text-faint) 84%, transparent) !important;
-    font-size: 11px;
+    color: color-mix(in srgb, var(--text-faint) 88%, transparent) !important;
+    font-size: 12px;
 }
 
 .sidenote2-note-search-field > input.sidenote2-note-search-input:focus,
 .sidenote2-note-search-field > input.sidenote2-note-search-input:focus-visible,
 .sidenote2-note-search-field > input.sidenote2-note-search-input.is-focused {
     outline: none !important;
-    border-color: color-mix(in srgb, var(--background-modifier-border) 64%, transparent) !important;
-    background: color-mix(in srgb, var(--background-primary) 98%, var(--background-secondary) 2%) !important;
+    border-color: transparent !important;
+    background: transparent !important;
     box-shadow: none !important;
 }
 
@@ -360,42 +445,47 @@
     color: inherit;
     border-radius: 4px;
     padding: 0 0.14em;
-    box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--interactive-accent) 34%, transparent);
+    box-shadow: inset 0 -1px 0 var(--sidenote2-luxury-accent-line);
     box-decoration-break: clone;
     -webkit-box-decoration-break: clone;
 }
 
 .sidenote2-tablist {
-    display: grid;
+    display: flex;
     align-items: center;
-    grid-template-columns: 0.9fr 1.35fr;
-    width: 100%;
-    gap: 3px;
-    padding: 3px;
+    width: auto;
+    min-width: 0;
+    gap: 14px;
+    padding: 0;
     border: none;
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--background-primary) 92%, var(--background-secondary) 8%);
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--background-modifier-border) 52%, transparent);
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
 }
 
-.sidenote2-tab-button {
+button.sidenote2-tab-button {
     all: unset;
     box-sizing: border-box;
-    display: inline-flex;
-    width: 100%;
+    display: inline-flex !important;
+    width: auto;
     align-items: center;
     justify-content: center;
     min-width: 0;
-    min-height: 24px;
-    padding: 4px 10px;
-    border: none;
-    border-radius: 999px;
-    background: transparent;
-    color: var(--text-faint, var(--text-muted)) !important;
+    min-height: 0 !important;
+    height: auto !important;
+    padding: 4px 0 5px !important;
+    border: 0 !important;
+    border-bottom: 1px solid transparent !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    background-color: transparent !important;
+    color: var(--text-muted) !important;
     font-size: var(--font-ui-smaller);
     font-family: inherit;
     line-height: 1.2;
-    font-weight: 400;
+    font-weight: 400 !important;
+    letter-spacing: 0.03em;
+    margin-bottom: -1px;
     white-space: nowrap;
     user-select: none;
     cursor: pointer;
@@ -404,25 +494,67 @@
     outline: none;
     text-decoration: none;
     box-shadow: none !important;
-    transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+    transition: color 0.12s ease, border-color 0.12s ease;
 }
 
-.sidenote2-tab-button:hover {
+button.sidenote2-tab-button:hover {
+    background: transparent !important;
+    background-color: transparent !important;
+    background-image: none !important;
+    box-shadow: none !important;
     color: var(--text-normal) !important;
 }
 
-.sidenote2-tab-button:focus-visible {
+button.sidenote2-tab-button:focus {
+    background: transparent !important;
+    background-color: transparent !important;
+    background-image: none !important;
     color: var(--text-normal) !important;
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--interactive-accent) 18%, transparent) !important;
+    box-shadow: none !important;
+    outline: none !important;
 }
 
-.sidenote2-tab-button.is-active {
-    background: var(--background-primary);
+button.sidenote2-tab-button:focus-visible {
+    background: transparent !important;
+    background-color: transparent !important;
+    background-image: none !important;
     color: var(--text-normal) !important;
-    font-weight: 500;
-    box-shadow:
-        0 1px 2px color-mix(in srgb, var(--background-modifier-box-shadow) 18%, transparent),
-        inset 0 0 0 1px color-mix(in srgb, var(--background-modifier-border) 60%, transparent) !important;
+    box-shadow: none !important;
+    border-bottom-color: var(--sidenote2-luxury-accent-line);
+}
+
+button.sidenote2-tab-button.sidenote2-tab-button--active {
+    color: var(--text-normal) !important;
+    font-weight: 500 !important;
+    border-bottom-color: var(--sidenote2-luxury-accent);
+    background: transparent !important;
+    background-color: transparent !important;
+    background-image: none !important;
+    box-shadow: none !important;
+}
+
+.sidenote2-sidebar-toolbar-row.is-note-primary-row .sidenote2-toolbar-icon-button {
+    width: 26px;
+    height: 26px;
+    border-radius: var(--sidenote2-note-toolbar-radius);
+    margin-bottom: -1px;
+    color: color-mix(in srgb, var(--icon-color, var(--text-faint, var(--text-muted))) 82%, var(--text-muted) 18%);
+    background: transparent;
+    box-shadow: none !important;
+}
+
+.sidenote2-sidebar-toolbar-row.is-note-secondary-row .sidenote2-toolbar-icon-button {
+    width: 26px;
+    height: 26px;
+    border-radius: var(--sidenote2-note-toolbar-radius);
+    background: transparent;
+    box-shadow: none !important;
+}
+
+.sidenote2-sidebar-toolbar.is-note-toolbar .sidenote2-toolbar-icon-button:hover,
+.sidenote2-sidebar-toolbar.is-note-toolbar .sidenote2-toolbar-icon-button:focus-visible {
+    background: var(--sidenote2-note-toolbar-control-hover);
+    box-shadow: none !important;
 }
 
 .sidenote2-filter-chip {
@@ -705,6 +837,11 @@
     height: 13px;
 }
 
+.sidenote2-sidebar-toolbar.is-note-toolbar .sidenote2-comment-section-add-button svg {
+    width: 15px;
+    height: 15px;
+}
+
 .sidenote2-comment-section-add-button:hover,
 .sidenote2-comment-section-add-button:focus-visible {
     color: var(--icon-color-hover, var(--text-normal));
@@ -916,6 +1053,10 @@
     margin-left: auto;
     font-size: 0.9em;
     white-space: nowrap;
+}
+
+.sidenote2-comment-item.active:not(.is-inline-editing) .sidenote2-comment-meta-value {
+    display: none;
 }
 
 .sidenote2-comment-meta-preview {
@@ -1307,14 +1448,21 @@
     border-radius: 999px;
     background: transparent;
     box-shadow: none;
-    pointer-events: auto;
-    opacity: 0.64;
-    transition: opacity 0.14s ease, color 0.14s ease;
+    pointer-events: none;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.14s ease, color 0.14s ease, visibility 0.14s ease;
 }
 
 .sidenote2-thread-nested-toggle-button svg {
     width: 12px;
     height: 12px;
+}
+
+.sidenote2-comment-item.active .sidenote2-thread-nested-toggle-button {
+    pointer-events: auto;
+    opacity: 0.64;
+    visibility: visible;
 }
 
 .sidenote2-thread-nested-toggle-button:hover,

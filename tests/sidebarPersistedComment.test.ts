@@ -385,14 +385,36 @@ test("shouldRenderNestedThreadEntries keeps streamed agent replies visible even 
     }), true);
 });
 
-test("shouldRenderThreadNestedToggle hides the toggle while the parent card is in inline edit draft mode", () => {
+test("shouldRenderThreadNestedToggle hides the toggle only while visible drafts are open", () => {
     assert.equal(shouldRenderThreadNestedToggle({
         hasStoredChildEntries: true,
         hasInlineEditDraft: true,
+        hasAppendDraftComment: false,
+        hasChildEditDraft: false,
     }), false);
     assert.equal(shouldRenderThreadNestedToggle({
         hasStoredChildEntries: true,
         hasInlineEditDraft: false,
+        hasAppendDraftComment: true,
+        hasChildEditDraft: false,
+    }), false);
+    assert.equal(shouldRenderThreadNestedToggle({
+        hasStoredChildEntries: true,
+        hasInlineEditDraft: false,
+        hasAppendDraftComment: false,
+        hasChildEditDraft: true,
+    }), false);
+    assert.equal(shouldRenderThreadNestedToggle({
+        hasStoredChildEntries: false,
+        hasInlineEditDraft: false,
+        hasAppendDraftComment: false,
+        hasChildEditDraft: false,
+    }), false);
+    assert.equal(shouldRenderThreadNestedToggle({
+        hasStoredChildEntries: true,
+        hasInlineEditDraft: false,
+        hasAppendDraftComment: false,
+        hasChildEditDraft: false,
     }), true);
 });
 

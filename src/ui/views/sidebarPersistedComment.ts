@@ -420,8 +420,13 @@ export function shouldRenderNestedThreadEntries(
 export function shouldRenderThreadNestedToggle(options: {
     hasStoredChildEntries: boolean;
     hasInlineEditDraft: boolean;
+    hasAppendDraftComment: boolean;
+    hasChildEditDraft: boolean;
 }): boolean {
-    return options.hasStoredChildEntries && !options.hasInlineEditDraft;
+    return options.hasStoredChildEntries
+        && !options.hasInlineEditDraft
+        && !options.hasAppendDraftComment
+        && !options.hasChildEditDraft;
 }
 
 export function getAppendDraftInsertAfterEntryId(
@@ -1114,9 +1119,10 @@ export async function renderPersistedCommentCard(
         threadEl.setAttribute("data-sidenote2-page-thread", "true");
     }
     const hasChildEditDraft = !!host.editDraftComment && host.editDraftComment.id !== comment.id;
+    const isActiveParent = isActiveParentThread(thread, host.activeCommentId);
     const shouldKeepActiveParentExpanded = host.showNestedCommentsByDefault === false
         && host.showNestedComments === false
-        && isActiveParentThread(thread, host.activeCommentId);
+        && isActiveParent;
     const shouldRenderStoredChildren = host.showNestedComments
         || hasChildEditDraft
         || isActiveChildCommentInThread(thread, host.activeCommentId)
@@ -1208,6 +1214,8 @@ export async function renderPersistedCommentCard(
     if (shouldRenderThreadNestedToggle({
         hasStoredChildEntries,
         hasInlineEditDraft: !!parentEditDraft,
+        hasAppendDraftComment: !!host.appendDraftComment,
+        hasChildEditDraft,
     })) {
         renderThreadNestedToggleButton(commentEl, thread.id, host.showNestedComments, host);
     }
