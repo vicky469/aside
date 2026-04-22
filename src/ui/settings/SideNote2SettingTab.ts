@@ -212,7 +212,7 @@ export default class SideNote2SettingTab extends PluginSettingTab {
         remoteBridgeDetails.createEl("summary", { text: "Advanced remote bridge" });
         new Setting(remoteBridgeDetails)
             .setName("Remote bridge base URL")
-            .setDesc("Developer-managed bridge endpoint. Use HTTPS, or HTTP only for localhost and private LAN development.")
+            .setDesc("Developer-managed bridge endpoint. Use HTTP or HTTPS for localhost and private LAN development.")
             .addText((text) =>
                 text
                     .setPlaceholder("https://remote.example.com")
