@@ -3,6 +3,9 @@
   <img src="./assets/logo-readme.svg" alt="SideNote2 logo" width="72">
 </p>
 <p align="center">
+SideNote2
+</p>
+<p align="center">
   <a href="https://github.com/vicky469/SideNote2/releases/tag/2.0.44">
     <img src="https://img.shields.io/badge/beta-2.0.44-f97316?style=flat-square" alt="Current beta">
   </a>
@@ -23,9 +26,6 @@
   <a href="https://lezer.codemirror.net/">
     <img src="https://img.shields.io/badge/Lezer-parser-f59e0b?style=flat-square" alt="Lezer">
   </a>
-</p>
-<p align="center">
-SideNote2
 </p>
 <table>
   <tr>
