@@ -511,6 +511,96 @@ test("comment agent controller runs local jobs in parallel across different thre
     assert.equal(harness.controller.getLatestAgentRunForThread("thread-2")?.status, "succeeded");
 });
 
+test("comment agent controller runs local jobs in parallel within the same thread", async () => {
+    const runtimeResolvers: Array<() => void> = [];
+    let replyIndex = 0;
+    const harness = createHarness({
+        customRunAgentRuntime: async () => {
+            await new Promise<void>((resolve) => {
+                runtimeResolvers.push(resolve);
+            });
+            replyIndex += 1;
+            return {
+                runtime: "direct-cli",
+                replyText: `Local same-thread reply ${replyIndex}`,
+            };
+        },
+    });
+    harness.commentManager.editComment("thread-1", "@codex review the parent");
+    harness.commentManager.appendEntry("thread-1", {
+        id: "entry-2",
+        body: "@codex review the follow-up",
+        timestamp: 20,
+    });
+    harness.commentManager.appendEntry("thread-1", {
+        id: "entry-3",
+        body: "Later child",
+        timestamp: 30,
+    });
+
+    await harness.controller.handleSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "@codex review the parent",
+    });
+    await harness.controller.handleSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "entry-2",
+        filePath: "Folder/Note.md",
+        body: "@codex review the follow-up",
+    });
+
+    for (let attempt = 0; attempt < 40 && harness.runtimeCalls.length < 2; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+
+    assert.equal(harness.runtimeCalls.length, 2);
+    const runningRuns = harness.controller.getAgentRuns()
+        .filter((run) => run.status === "running")
+        .slice()
+        .sort((left, right) => (
+            left.createdAt !== right.createdAt
+                ? left.createdAt - right.createdAt
+                : left.id.localeCompare(right.id)
+        ));
+    assert.equal(runningRuns.length, 2);
+    assert.deepEqual(runningRuns.map((run) => run.triggerEntryId), ["thread-1", "entry-2"]);
+
+    const parentOutputEntryId = runningRuns[0]?.outputEntryId ?? null;
+    const childOutputEntryId = runningRuns[1]?.outputEntryId ?? null;
+    assert.ok(parentOutputEntryId);
+    assert.ok(childOutputEntryId);
+    assert.deepEqual(harness.appendedEntries, [{
+        threadId: "thread-1",
+        body: "",
+        insertAfterCommentId: "thread-1",
+    }, {
+        threadId: "thread-1",
+        body: "",
+        insertAfterCommentId: "entry-2",
+    }]);
+    assert.deepEqual(
+        harness.commentManager.getThreadById("thread-1")?.entries.map((entry) => entry.id),
+        ["thread-1", "entry-2", childOutputEntryId, "entry-3", parentOutputEntryId],
+    );
+
+    runtimeResolvers.splice(0).forEach((resolve) => resolve());
+    await waitForAgentQueueToDrain(harness.controller);
+
+    assert.equal(
+        harness.controller.getAgentRuns().filter((run) => run.status === "succeeded").length,
+        2,
+    );
+    assert.deepEqual(
+        [parentOutputEntryId, childOutputEntryId]
+            .map((commentId) => harness.commentManager.getCommentById(commentId)?.comment ?? "")
+            .slice()
+            .sort(),
+        ["Local same-thread reply 1", "Local same-thread reply 2"],
+    );
+});
+
 test("comment agent controller inserts child-triggered replies after the triggering child entry", async () => {
     const harness = createHarness({
         runtimeReplyText: "Placed reply.",

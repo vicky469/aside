@@ -447,10 +447,6 @@ export class CommentAgentController {
                 continue;
             }
 
-            if (inFlightRuns.some((activeRun) => activeRun.threadId === run.threadId)) {
-                continue;
-            }
-
             const matchingRuntimeCount = inFlightRuns
                 .filter((activeRun) => activeRun.runtime === run.runtime)
                 .length;
