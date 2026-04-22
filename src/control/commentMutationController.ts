@@ -103,7 +103,6 @@ export class CommentMutationController {
 
         const commentBody = shortenBareUrlsInMarkdown(draft.comment).trim();
         if (!commentBody && draft.isBookmark !== true) {
-            this.host.showNotice("Please enter a comment before saving.");
             return;
         }
         if (exceedsCommentWordLimit(commentBody)) {

@@ -967,6 +967,7 @@ function renderPersistedEntryCard(
     const actionsEl = headerEl.createDiv("sidenote2-comment-actions");
 
     const contentWrapper = commentEl.createDiv("sidenote2-comment-content");
+    contentWrapper.addClass("markdown-rendered");
     contentWrapper.tabIndex = -1;
     if (options.interactive !== false) {
         attachSidebarCommentCardInteractions(commentEl, contentWrapper, options.comment, options.host);

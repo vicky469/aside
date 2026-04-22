@@ -30,6 +30,22 @@ test("normalizeCommentMarkdownForRender shortens legacy bare urls for rendering"
     );
 });
 
+test("normalizeCommentMarkdownForRender converts LaTeX delimiters into Obsidian math syntax", () => {
+    assert.equal(
+        normalizeCommentMarkdownForRender(
+            "Inline: \\(a+b\\)\n\n\\[\n\\mathrm{Var}(X+Y)=\\mathrm{Var}(X)+\\mathrm{Var}(Y)\n\\]",
+        ),
+        "Inline: $a+b$\n\n$$\n\\mathrm{Var}(X+Y)=\\mathrm{Var}(X)+\\mathrm{Var}(Y)\n$$",
+    );
+});
+
+test("normalizeCommentMarkdownForRender leaves LaTeX delimiters alone inside code", () => {
+    assert.equal(
+        normalizeCommentMarkdownForRender("Code `\\(a+b\\)` stays literal.\n\n```tex\n\\[\na+b\n\\]\n```"),
+        "Code `\\(a+b\\)` stays literal.\n\n```tex\n\\[\na+b\n\\]\n```",
+    );
+});
+
 test("normalizeCommentMarkdownForRender keeps follow-up paragraphs inside bullet items", () => {
     assert.equal(
         normalizeCommentMarkdownForRender(

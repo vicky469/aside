@@ -321,7 +321,7 @@ test("comment mutation controller still rejects empty non-bookmark drafts", asyn
     assert.equal(host.manager.getAllComments().length, 0);
     assert.equal(host.getDraftComment()?.id, draft.id);
     assert.deepEqual(host.persistedFiles, []);
-    assert.deepEqual(host.notices, ["Please enter a comment before saving."]);
+    assert.deepEqual(host.notices, []);
 });
 
 test("comment mutation controller can skip the pre-save rerender for quick draft saves", async () => {
