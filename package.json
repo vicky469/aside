@@ -10,7 +10,7 @@
 		"dev": "node esbuild.config.mjs",
 		"dev:install-built": "node scripts/install-built-plugin.mjs",
 		"dgx:bridge": "node scripts/run-dgx-runtime-bridge.mjs",
-		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+		"build": "npm run lint && tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
 		"lint": "eslint src",
 		"comment:create": "node bin/sidenote2.mjs comment:create",
 		"comment:append": "node bin/sidenote2.mjs comment:append",
@@ -21,7 +21,7 @@
 		"release:notes:check": "node scripts/check-release-notes.mjs",
 		"skill:install": "node bin/sidenote2.mjs install-skill",
 		"test": "rm -rf .test-dist && tsc -p tsconfig.test.json && find .test-dist/tests -type f -name '*.test.js' -exec node --test {} + && find tests -type f -name '*.test.mjs' -exec node --test {} +",
-		"release:check": "npm run lint && npm run test && npm run build && npm run release:artifacts:check && npm run release:notes:check",
+		"release:check": "npm run test && npm run build && npm run release:artifacts:check && npm run release:notes:check",
 		"version": "node version-bump.mjs && git add manifest.json versions.json README.md"
 	},
 	"keywords": [],
