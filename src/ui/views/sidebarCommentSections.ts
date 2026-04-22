@@ -5,6 +5,7 @@ export interface SidebarCommentPresentationLike {
     timestamp: number;
     resolved?: boolean;
     anchorKind?: CommentAnchorKind;
+    isBookmark?: boolean;
     orphaned?: boolean;
     deletedAt?: number;
     selectedText?: string;
@@ -66,9 +67,12 @@ export function formatSidebarCommentTimestamp(
 }
 
 export function formatSidebarCommentSelectedTextPreview(
-    comment: Pick<SidebarCommentPresentationLike, "anchorKind" | "selectedText">,
+    comment: Pick<SidebarCommentPresentationLike, "anchorKind" | "isBookmark" | "selectedText">,
 ): string | null {
-    if (comment.anchorKind !== "selection" || typeof comment.selectedText !== "string") {
+    if (
+        typeof comment.selectedText !== "string"
+        || (comment.isBookmark !== true && comment.anchorKind !== "selection")
+    ) {
         return null;
     }
 

@@ -43,6 +43,13 @@ test("formatSidebarCommentSelectedTextPreview normalizes anchored selections and
         }),
         null,
     );
+    assert.equal(
+        formatSidebarCommentSelectedTextPreview({
+            isBookmark: true,
+            selectedText: "Legacy bookmark label",
+        }),
+        "Legacy bookmark label",
+    );
 });
 
 test("formatSidebarCommentTimestamp uses compact calendar-style formatting for recent dates", () => {
