@@ -54,8 +54,10 @@ import {
 import {
     countBookmarkThreads,
     filterThreadsByPinnedSidebarThreadIds,
-    filterThreadsByStableSidebarContentFilter,
+    filterThreadsBySidebarContentFilter,
     filterThreadsBySidebarSearchQuery,
+    toggleDeletedSidebarViewState,
+    toggleSidebarContentFilterState,
     unlockSidebarContentFilterForDraft,
     type SidebarContentFilter,
 } from "./sidebarContentFilter";
@@ -201,8 +203,6 @@ export default class SideNote2View extends ItemView {
     private noteSidebarSearchDebounceTimer: number | null = null;
     private noteSidebarSearchRequestVersion = 0;
     private pinnedSidebarThreadIds = new Set<string>();
-    private retainedBookmarkFilterFilePath: string | null = null;
-    private retainedBookmarkFilterThreadIds = new Set<string>();
     private selectedIndexFileFilterRootPath: string | null = null;
     private indexFileFilterGraph: IndexFileFilterGraph | null = null;
     private reorderDragState: SidebarReorderDragState | null = null;
@@ -238,12 +238,11 @@ export default class SideNote2View extends ItemView {
         this.file = nextFile;
     }
 
-    private getPinnedSidebarThreads<T extends Pick<CommentThread, "id">>(threads: readonly T[]): T[] {
+    private syncPinnedSidebarThreadIds<T extends Pick<CommentThread, "id">>(threads: readonly T[]): void {
         const pinnedThreads = filterThreadsByPinnedSidebarThreadIds(threads, this.pinnedSidebarThreadIds);
         if (this.pinnedSidebarThreadIds.size > 0) {
             this.pinnedSidebarThreadIds = new Set(pinnedThreads.map((thread) => thread.id));
         }
-        return pinnedThreads;
     }
 
     private isPinnedSidebarThread(threadId: string): boolean {
@@ -620,45 +619,48 @@ export default class SideNote2View extends ItemView {
             const indexFileFilterOptions = isAllCommentsView && indexFileFilterGraph
                 ? buildIndexFileFilterOptionsFromCounts(indexFileFilterGraph.fileCommentCounts)
                 : [];
-            const pinnedThreads = this.getPinnedSidebarThreads(persistedThreads);
-            const hasPinnedThreads = pinnedThreads.length > 0;
+            this.syncPinnedSidebarThreadIds(persistedThreads);
             const {
                 scopedVisibleThreads,
                 scopedAllThreads,
-            } = isAllCommentsView && !hasPinnedThreads
+            } = isAllCommentsView
                 ? scopeIndexThreadsByFilePaths(visiblePersistedThreads, persistedThreads, filteredIndexFilePaths)
                 : {
-                    scopedVisibleThreads: hasPinnedThreads ? pinnedThreads : visiblePersistedThreads,
-                    scopedAllThreads: hasPinnedThreads ? pinnedThreads : persistedThreads,
+                    scopedVisibleThreads: visiblePersistedThreads,
+                    scopedAllThreads: persistedThreads,
                 };
+            const pinnedScopedVisibleThreads = filterThreadsByPinnedSidebarThreadIds(
+                scopedVisibleThreads,
+                this.pinnedSidebarThreadIds,
+            );
+            const pinnedScopedAllThreads = filterThreadsByPinnedSidebarThreadIds(
+                scopedAllThreads,
+                this.pinnedSidebarThreadIds,
+            );
             const draftComment = this.plugin.getDraftForView(file.path);
             const visibleDraftComment = draftComment
                 && matchesResolvedVisibility(draftComment.resolved, showResolved)
                 && matchesPinnedSidebarDraftVisibility(draftComment, this.pinnedSidebarThreadIds)
-                && (
-                    hasPinnedThreads
-                    || !filteredIndexFilePaths.length
-                    || filteredIndexFilePaths.includes(draftComment.filePath)
-                )
+                && (!filteredIndexFilePaths.length || filteredIndexFilePaths.includes(draftComment.filePath))
                 ? draftComment
                 : null;
-            const totalScopedCount = scopedAllThreads.length;
-            const resolvedCount = scopedAllThreads.filter((thread) => thread.resolved).length;
+            const totalScopedCount = pinnedScopedAllThreads.length;
+            const resolvedCount = pinnedScopedAllThreads.filter((thread) => thread.resolved).length;
             const hasResolvedComments = resolvedCount > 0;
-            const hasNestedComments = scopedAllThreads.some((thread) => thread.entries.length > 1)
+            const hasNestedComments = pinnedScopedAllThreads.some((thread) => thread.entries.length > 1)
                 || visibleDraftComment?.mode === "append";
             const nestedEditDraftThreadId = getNestedThreadIdForEditDraft(
-                scopedVisibleThreads,
+                pinnedScopedVisibleThreads,
                 visibleDraftComment,
             );
             const replacedThreadId = nestedEditDraftThreadId
                 ? null
                 : getReplacedThreadIdForEditDraft(
-                scopedVisibleThreads,
+                pinnedScopedVisibleThreads,
                 visibleDraftComment,
             );
             const nestedAppendDraftThreadId = getNestedThreadIdForAppendDraft(
-                scopedVisibleThreads,
+                pinnedScopedVisibleThreads,
                 visibleDraftComment,
             );
             const topLevelDraftComment = shouldRenderTopLevelDraftComment({
@@ -670,13 +672,13 @@ export default class SideNote2View extends ItemView {
             });
             const renderableItems = isAllCommentsView
                 ? sortSidebarRenderableItems(
-                    scopedVisibleThreads
+                    pinnedScopedVisibleThreads
                         .filter((thread) => thread.id !== replacedThreadId)
                         .map((thread) => ({ kind: "thread", thread } as SidebarRenderableItem))
                         .concat(topLevelDraftComment ? [{ kind: "draft", draft: topLevelDraftComment }] : []),
                 )
                 : buildStoredOrderSidebarItems(
-                    scopedVisibleThreads,
+                    pinnedScopedVisibleThreads,
                     topLevelDraftComment,
                     replacedThreadId,
                 );
@@ -735,7 +737,7 @@ export default class SideNote2View extends ItemView {
             }
 
             if (isAllCommentsView && this.indexSidebarMode === "thought-trail") {
-                const trailComments = scopedVisibleThreads;
+                const trailComments = pinnedScopedVisibleThreads;
                 await this.renderThoughtTrail(commentsContainer, trailComments, file, {
                     surface: "index",
                     hasRootScope: filteredIndexFilePaths.length > 0,
@@ -855,42 +857,37 @@ export default class SideNote2View extends ItemView {
         const showResolved = this.plugin.shouldShowResolvedComments();
         const bookmarkThreadCount = countBookmarkThreads(persistedThreads);
         const hasResolvedThreadsInFile = persistedThreads.some((thread) => thread.resolved);
+        this.syncPinnedSidebarThreadIds(persistedThreads);
         const contentFilteredThreads = this.filterNoteSidebarThreadsByContentFilter(file.path, persistedThreads);
-        const searchMatchedThreads = filterThreadsBySidebarSearchQuery(
+        const pinnedContentFilteredThreads = filterThreadsByPinnedSidebarThreadIds(
             contentFilteredThreads,
+            this.pinnedSidebarThreadIds,
+        );
+        const searchMatchedThreads = filterThreadsBySidebarSearchQuery(
+            pinnedContentFilteredThreads,
             this.noteSidebarSearchQuery,
         );
-        const pinnedThreads = this.getPinnedSidebarThreads(persistedThreads);
-        const hasPinnedThreads = pinnedThreads.length > 0;
         const allAgentRuns = this.plugin.getAgentRuns();
         const visibleDraftComment = draftComment
             && matchesResolvedVisibility(draftComment.resolved, showResolved)
             && matchesPinnedSidebarDraftVisibility(draftComment, this.pinnedSidebarThreadIds)
             ? draftComment
             : null;
-        const activeDraftHostThreadId = !hasPinnedThreads && (visibleDraftComment?.mode === "edit" || visibleDraftComment?.mode === "append")
+        const activeDraftHostThreadId = (visibleDraftComment?.mode === "edit" || visibleDraftComment?.mode === "append")
             ? visibleDraftComment.threadId ?? null
             : null;
-        const matchedThreadIds = !hasPinnedThreads
-            ? new Set(searchMatchedThreads.map((thread) => thread.id))
-            : new Set<string>();
+        const matchedThreadIds = new Set(searchMatchedThreads.map((thread) => thread.id));
         if (activeDraftHostThreadId) {
             matchedThreadIds.add(activeDraftHostThreadId);
         }
-        const searchScopedThreads = hasPinnedThreads
-            ? pinnedThreads
-            : contentFilteredThreads.filter((thread) => matchedThreadIds.has(thread.id));
-        const visiblePersistedThreads = hasPinnedThreads
-            ? pinnedThreads
-            : searchScopedThreads.filter((thread) =>
-                matchesPageSidebarVisibility(thread, {
-                    showResolved,
-                    showDeleted,
-                }));
-        const totalScopedCount = hasPinnedThreads ? pinnedThreads.length : searchMatchedThreads.length;
-        const resolvedCount = hasPinnedThreads
-            ? pinnedThreads.filter((thread) => thread.resolved).length
-            : searchMatchedThreads.filter((thread) => thread.resolved).length;
+        const searchScopedThreads = pinnedContentFilteredThreads.filter((thread) => matchedThreadIds.has(thread.id));
+        const visiblePersistedThreads = searchScopedThreads.filter((thread) =>
+            matchesPageSidebarVisibility(thread, {
+                showResolved,
+                showDeleted,
+            }));
+        const totalScopedCount = searchMatchedThreads.length;
+        const resolvedCount = searchMatchedThreads.filter((thread) => thread.resolved).length;
         const hasResolvedComments = resolvedCount > 0;
         const hasNestedComments = searchScopedThreads.some((thread) => thread.entries.length > 1)
             || visibleDraftComment?.mode === "append";
@@ -1437,21 +1434,36 @@ export default class SideNote2View extends ItemView {
     }
 
     private filterNoteSidebarThreadsByContentFilter(
-        filePath: string,
+        _filePath: string,
         threads: readonly CommentThread[],
     ): CommentThread[] {
-        const result = filterThreadsByStableSidebarContentFilter(
-            threads,
-            this.noteSidebarContentFilter,
-            this.retainedBookmarkFilterFilePath === filePath
-                ? this.retainedBookmarkFilterThreadIds
-                : new Set<string>(),
-        );
-        this.retainedBookmarkFilterFilePath = this.noteSidebarContentFilter === "bookmarks"
-            ? filePath
-            : null;
-        this.retainedBookmarkFilterThreadIds = result.retainedBookmarkThreadIds;
-        return result.threads;
+        return filterThreadsBySidebarContentFilter(threads, this.noteSidebarContentFilter);
+    }
+
+    private async toggleDeletedSidebarMode(options: {
+        showDeleted: boolean;
+        showResolved: boolean;
+        contentFilter: SidebarContentFilter;
+    }): Promise<void> {
+        const nextState = toggleDeletedSidebarViewState({
+            showDeleted: options.showDeleted,
+            showResolved: options.showResolved,
+            contentFilter: options.contentFilter,
+            pinnedThreadIds: this.pinnedSidebarThreadIds,
+            searchQuery: this.noteSidebarSearchQuery,
+            searchInputValue: this.noteSidebarSearchInputValue,
+        });
+        this.noteSidebarContentFilter = nextState.contentFilter;
+        this.pinnedSidebarThreadIds = nextState.pinnedThreadIds;
+        this.clearNoteSidebarSearchDebounceTimer();
+        this.noteSidebarSearchQuery = nextState.searchQuery;
+        this.noteSidebarSearchInputValue = nextState.searchInputValue;
+        if (nextState.showResolved !== options.showResolved) {
+            await this.plugin.setShowResolvedComments(nextState.showResolved);
+        }
+        if (nextState.showDeleted !== options.showDeleted) {
+            await this.plugin.setShowDeletedComments(nextState.showDeleted);
+        }
     }
 
     private resetStreamedReplyControllers(): void {
@@ -1617,7 +1629,13 @@ export default class SideNote2View extends ItemView {
                     : "Show bookmark comments",
                 disabled: options.bookmarkThreadCount === 0 && contentFilter !== "bookmarks",
                 onClick: () => {
-                    this.noteSidebarContentFilter = contentFilter === "bookmarks" ? "all" : "bookmarks";
+                    const nextState = toggleSidebarContentFilterState(
+                        contentFilter,
+                        "bookmarks",
+                        this.pinnedSidebarThreadIds,
+                    );
+                    this.noteSidebarContentFilter = nextState.filter;
+                    this.pinnedSidebarThreadIds = nextState.pinnedThreadIds;
                     void this.renderComments();
                 },
             });
@@ -1652,7 +1670,11 @@ export default class SideNote2View extends ItemView {
                 active: showDeletedComments,
                 disabled: !options.hasDeletedComments && !showDeletedComments,
                 onClick: () => {
-                    void this.plugin.setShowDeletedComments(!showDeletedComments);
+                    void this.toggleDeletedSidebarMode({
+                        showDeleted: showDeletedComments,
+                        showResolved,
+                        contentFilter,
+                    });
                 },
             });
 

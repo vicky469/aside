@@ -6,13 +6,14 @@ import {
     countBookmarkThreads,
     filterThreadsBySidebarContentFilter,
     filterThreadsByPinnedSidebarThreadIds,
-    filterThreadsByStableSidebarContentFilter,
     filterThreadsBySidebarSearchQuery,
     isAgentThread,
     isBookmarkThread,
     matchesSidebarDraftSearchQuery,
     matchesSidebarContentFilter,
     matchesSidebarThreadSearchQuery,
+    toggleDeletedSidebarViewState,
+    toggleSidebarContentFilterState,
     unlockSidebarContentFilterForDraft,
 } from "../src/ui/views/sidebarContentFilter";
 
@@ -146,38 +147,17 @@ test("sidebar content filters unlock when a new draft starts", () => {
     assert.equal(unlockSidebarContentFilterForDraft("bookmarks", null), "bookmarks");
 });
 
-test("stable bookmark filter retains visible threads after they are unbookmarked", () => {
-    const retainedThread = createThread({ id: "thread-bookmark", isBookmark: false });
+test("bookmark filter removes a thread immediately once it is unbookmarked", () => {
+    const removedBookmarkThread = createThread({ id: "thread-bookmark", isBookmark: false });
     const freshBookmarkThread = createThread({ id: "thread-new-bookmark", isBookmark: true });
     const noteThread = createThread({ id: "thread-note", isBookmark: false });
 
-    const filtered = filterThreadsByStableSidebarContentFilter(
-        [retainedThread, freshBookmarkThread, noteThread],
+    const filtered = filterThreadsBySidebarContentFilter(
+        [removedBookmarkThread, freshBookmarkThread, noteThread],
         "bookmarks",
-        new Set(["thread-bookmark"]),
     );
 
-    assert.deepEqual(
-        filtered.threads.map((thread) => thread.id),
-        ["thread-bookmark", "thread-new-bookmark"],
-    );
-    assert.deepEqual(
-        Array.from(filtered.retainedBookmarkThreadIds),
-        ["thread-bookmark", "thread-new-bookmark"],
-    );
-});
-
-test("stable bookmark filter clears retained ids when the filter is not bookmarks", () => {
-    const bookmarkThread = createThread({ id: "thread-bookmark", isBookmark: true });
-
-    const filtered = filterThreadsByStableSidebarContentFilter(
-        [bookmarkThread],
-        "all",
-        new Set(["thread-bookmark"]),
-    );
-
-    assert.deepEqual(filtered.threads.map((thread) => thread.id), ["thread-bookmark"]);
-    assert.equal(filtered.retainedBookmarkThreadIds.size, 0);
+    assert.deepEqual(filtered.map((thread) => thread.id), ["thread-new-bookmark"]);
 });
 
 test("pinned thread filter narrows the sidebar to the temporary pinned set", () => {
@@ -210,5 +190,82 @@ test("pinned thread filter drops pinned ids that are no longer available in the 
             new Set(["thread-missing", "thread-bookmark"]),
         ).map((thread) => thread.id),
         ["thread-bookmark"],
+    );
+});
+
+test("pin acts as an intersecting filter with bookmark results", () => {
+    const noteThread = createThread({ id: "thread-note", isBookmark: false });
+    const bookmarkThread = createThread({ id: "thread-bookmark", isBookmark: true });
+
+    const bookmarkFiltered = filterThreadsBySidebarContentFilter(
+        [noteThread, bookmarkThread],
+        "bookmarks",
+    );
+
+    assert.deepEqual(
+        filterThreadsByPinnedSidebarThreadIds(
+            bookmarkFiltered,
+            new Set(["thread-note", "thread-bookmark"]),
+        ).map((thread) => thread.id),
+        ["thread-bookmark"],
+    );
+});
+
+test("toggling the note bookmark filter preserves temporary pin filters", () => {
+    assert.deepEqual(
+        toggleSidebarContentFilterState("all", "bookmarks", new Set(["thread-1", "thread-2"])),
+        {
+            filter: "bookmarks",
+            pinnedThreadIds: new Set(["thread-1", "thread-2"]),
+        },
+    );
+    assert.deepEqual(
+        toggleSidebarContentFilterState("bookmarks", "bookmarks", new Set(["thread-1"])),
+        {
+            filter: "all",
+            pinnedThreadIds: new Set(["thread-1"]),
+        },
+    );
+});
+
+test("entering deleted mode clears filters and search so all soft-deleted threads are visible", () => {
+    assert.deepEqual(
+        toggleDeletedSidebarViewState({
+            showDeleted: false,
+            showResolved: true,
+            contentFilter: "bookmarks",
+            pinnedThreadIds: new Set(["thread-1"]),
+            searchQuery: "draft",
+            searchInputValue: "draft",
+        }),
+        {
+            showDeleted: true,
+            showResolved: false,
+            contentFilter: "all",
+            pinnedThreadIds: new Set<string>(),
+            searchQuery: "",
+            searchInputValue: "",
+        },
+    );
+});
+
+test("leaving deleted mode keeps the already-cleared sidebar state stable", () => {
+    assert.deepEqual(
+        toggleDeletedSidebarViewState({
+            showDeleted: true,
+            showResolved: false,
+            contentFilter: "all",
+            pinnedThreadIds: new Set<string>(),
+            searchQuery: "",
+            searchInputValue: "",
+        }),
+        {
+            showDeleted: false,
+            showResolved: false,
+            contentFilter: "all",
+            pinnedThreadIds: new Set<string>(),
+            searchQuery: "",
+            searchInputValue: "",
+        },
     );
 });

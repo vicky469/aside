@@ -53,32 +53,6 @@ export function filterThreadsBySidebarContentFilter<T extends Pick<CommentThread
     return threads.filter((thread) => matchesSidebarContentFilter(thread, filter));
 }
 
-export function filterThreadsByStableSidebarContentFilter<
-    T extends Pick<CommentThread, "entries" | "id" | "isBookmark">,
->(
-    threads: readonly T[],
-    filter: SidebarContentFilter,
-    retainedBookmarkThreadIds: ReadonlySet<string> = new Set(),
-): {
-    retainedBookmarkThreadIds: Set<string>;
-    threads: T[];
-} {
-    if (filter !== "bookmarks") {
-        return {
-            retainedBookmarkThreadIds: new Set(),
-            threads: filterThreadsBySidebarContentFilter(threads, filter),
-        };
-    }
-
-    const filteredThreads = threads.filter((thread) =>
-        isBookmarkThread(thread) || retainedBookmarkThreadIds.has(thread.id)
-    );
-    return {
-        retainedBookmarkThreadIds: new Set(filteredThreads.map((thread) => thread.id)),
-        threads: filteredThreads,
-    };
-}
-
 export function filterThreadsByPinnedSidebarThreadIds<T extends Pick<CommentThread, "id">>(
     threads: readonly T[],
     pinnedThreadIds: ReadonlySet<string>,
@@ -88,6 +62,57 @@ export function filterThreadsByPinnedSidebarThreadIds<T extends Pick<CommentThre
     }
 
     return threads.filter((thread) => pinnedThreadIds.has(thread.id));
+}
+
+export function toggleSidebarContentFilterState(
+    currentFilter: SidebarContentFilter,
+    requestedFilter: SidebarContentFilter,
+    pinnedThreadIds: ReadonlySet<string> = new Set(),
+): {
+    filter: SidebarContentFilter;
+    pinnedThreadIds: Set<string>;
+} {
+    const nextFilter = currentFilter === requestedFilter ? "all" : requestedFilter;
+    return {
+        filter: nextFilter,
+        pinnedThreadIds: new Set(pinnedThreadIds),
+    };
+}
+
+export function toggleDeletedSidebarViewState(options: {
+    showDeleted: boolean;
+    showResolved: boolean;
+    contentFilter: SidebarContentFilter;
+    pinnedThreadIds: ReadonlySet<string>;
+    searchQuery: string;
+    searchInputValue: string;
+}): {
+    showDeleted: boolean;
+    showResolved: boolean;
+    contentFilter: SidebarContentFilter;
+    pinnedThreadIds: Set<string>;
+    searchQuery: string;
+    searchInputValue: string;
+} {
+    if (options.showDeleted) {
+        return {
+            showDeleted: false,
+            showResolved: options.showResolved,
+            contentFilter: options.contentFilter,
+            pinnedThreadIds: new Set(options.pinnedThreadIds),
+            searchQuery: options.searchQuery,
+            searchInputValue: options.searchInputValue,
+        };
+    }
+
+    return {
+        showDeleted: true,
+        showResolved: false,
+        contentFilter: "all",
+        pinnedThreadIds: new Set<string>(),
+        searchQuery: "",
+        searchInputValue: "",
+    };
 }
 
 export function matchesSidebarThreadSearchQuery<T extends Pick<CommentThread, "selectedText" | "entries">>(
