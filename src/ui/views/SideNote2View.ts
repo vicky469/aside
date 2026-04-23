@@ -405,13 +405,31 @@ export default class SideNote2View extends ItemView {
         });
     }
 
-    private async setSidebarCommentBookmarkState(commentId: string, isBookmark: boolean): Promise<void> {
+    private getCurrentLocalNoteSidebarFilePath(): string | null {
         const currentFilePath = this.file?.path ?? null;
-        const isLocalNoteSidebar = !!currentFilePath && !this.plugin.isAllCommentsNotePath(currentFilePath);
+        if (!currentFilePath || this.plugin.isAllCommentsNotePath(currentFilePath)) {
+            return null;
+        }
+
+        return currentFilePath;
+    }
+
+    private async rerenderLocalNoteSidebarIfStillShowing(filePath: string | null): Promise<void> {
+        if (!filePath || this.file?.path !== filePath) {
+            return;
+        }
+
+        await this.renderComments({
+            skipDataRefresh: true,
+        });
+    }
+
+    private async setSidebarCommentBookmarkState(commentId: string, isBookmark: boolean): Promise<void> {
+        const currentFilePath = this.getCurrentLocalNoteSidebarFilePath();
         const updated = await this.plugin.setCommentBookmarkState(
             commentId,
             isBookmark,
-            isLocalNoteSidebar
+            currentFilePath
                 ? {
                     deferAggregateRefresh: true,
                     skipPersistedViewRefresh: true,
@@ -420,13 +438,124 @@ export default class SideNote2View extends ItemView {
                 }
                 : undefined,
         );
-        if (!updated || !isLocalNoteSidebar || this.file?.path !== currentFilePath) {
+        if (!updated) {
             return;
         }
 
-        await this.renderComments({
-            skipDataRefresh: true,
-        });
+        await this.rerenderLocalNoteSidebarIfStillShowing(currentFilePath);
+    }
+
+    private async setSidebarCommentResolvedState(commentId: string, resolved: boolean): Promise<void> {
+        const currentFilePath = this.getCurrentLocalNoteSidebarFilePath();
+        const updated = resolved
+            ? await this.plugin.resolveComment(
+                commentId,
+                currentFilePath
+                    ? {
+                        deferAggregateRefresh: true,
+                        skipPersistedViewRefresh: true,
+                    }
+                    : undefined,
+            )
+            : await this.plugin.unresolveComment(
+                commentId,
+                currentFilePath
+                    ? {
+                        deferAggregateRefresh: true,
+                        skipPersistedViewRefresh: true,
+                    }
+                    : undefined,
+            );
+        if (!updated) {
+            return;
+        }
+
+        await this.rerenderLocalNoteSidebarIfStillShowing(currentFilePath);
+    }
+
+    private async deleteSidebarComment(commentId: string): Promise<boolean> {
+        const currentFilePath = this.getCurrentLocalNoteSidebarFilePath();
+        let exitedDeletedMode = false;
+        if (currentFilePath && this.plugin.shouldShowDeletedComments()) {
+            exitedDeletedMode = await this.plugin.setShowDeletedComments(false, {
+                skipCommentViewRefresh: true,
+            });
+        } else if (!currentFilePath && this.plugin.shouldShowDeletedComments()) {
+            await this.plugin.setShowDeletedComments(false);
+        }
+
+        const deleted = await this.plugin.deleteComment(
+            commentId,
+            currentFilePath
+                ? {
+                    deferAggregateRefresh: true,
+                    skipPersistedViewRefresh: true,
+                }
+                : undefined,
+        );
+        if (!deleted) {
+            if (exitedDeletedMode) {
+                await this.rerenderLocalNoteSidebarIfStillShowing(currentFilePath);
+            }
+            return false;
+        }
+
+        await this.rerenderLocalNoteSidebarIfStillShowing(currentFilePath);
+        return true;
+    }
+
+    private async moveSidebarCommentThreadToFile(threadId: string, targetFilePath: string): Promise<boolean> {
+        const currentFilePath = this.getCurrentLocalNoteSidebarFilePath();
+        const moved = await this.plugin.moveCommentThreadToFile(
+            threadId,
+            targetFilePath,
+            currentFilePath
+                ? {
+                    deferAggregateRefresh: true,
+                    skipPersistedViewRefresh: true,
+                }
+                : undefined,
+        );
+        if (!moved) {
+            return false;
+        }
+
+        await this.rerenderLocalNoteSidebarIfStillShowing(currentFilePath);
+        return true;
+    }
+
+    private async moveSidebarCommentEntryToThread(entryId: string, targetThreadId: string): Promise<boolean> {
+        const currentFilePath = this.getCurrentLocalNoteSidebarFilePath();
+        const moved = await this.plugin.moveCommentEntryToThread(
+            entryId,
+            targetThreadId,
+            currentFilePath
+                ? {
+                    deferAggregateRefresh: true,
+                    skipPersistedViewRefresh: true,
+                    refreshEditorDecorations: false,
+                    refreshMarkdownPreviews: false,
+                }
+                : undefined,
+        );
+        if (!moved) {
+            return false;
+        }
+
+        await this.plugin.setShowNestedCommentsForThread(targetThreadId, true, currentFilePath
+            ? {
+                skipCommentViewRefresh: true,
+            }
+            : undefined);
+        if (currentFilePath && this.file?.path === currentFilePath) {
+            this.highlightComment(entryId, {
+                skipDataRefresh: true,
+            });
+            return true;
+        }
+
+        this.highlightComment(entryId);
+        return true;
     }
 
     private async togglePinnedSidebarMode(): Promise<void> {
@@ -772,9 +901,9 @@ export default class SideNote2View extends ItemView {
         return this.file;
     }
 
-    public highlightComment(commentId: string) {
+    public highlightComment(commentId: string, options: { skipDataRefresh?: boolean } = {}) {
         this.ensureListModeForCommentFocus();
-        this.interactionController.highlightComment(commentId);
+        this.interactionController.highlightComment(commentId, options);
         const currentFilePath = this.file?.path ?? null;
         if (currentFilePath && this.plugin.isAllCommentsNotePath(currentFilePath)) {
             void this.plugin.syncIndexCommentHighlightPair(commentId, currentFilePath);
@@ -2614,7 +2743,7 @@ export default class SideNote2View extends ItemView {
             detailLabel: "",
             emptyStateText: "No markdown files are available to move into.",
             onChooseFile: async (suggestion) => {
-                await this.plugin.moveCommentThreadToFile(threadId, suggestion.filePath);
+                await this.moveSidebarCommentThreadToFile(threadId, suggestion.filePath);
             },
             onCloseModal: () => {},
             placeholder: "Find a file to move into",
@@ -2638,13 +2767,7 @@ export default class SideNote2View extends ItemView {
             availableThreads,
             emptyStateText: "No other parent side notes are available in this file.",
             onChooseThread: async (targetThread) => {
-                const moved = await this.plugin.moveCommentEntryToThread(entryId, targetThread.id);
-                if (!moved) {
-                    return;
-                }
-
-                await this.plugin.setShowNestedCommentsForThread(targetThread.id, true);
-                this.highlightComment(entryId);
+                await this.moveSidebarCommentEntryToThread(entryId, targetThread.id);
             },
             onCloseModal: () => {},
             placeholder: "Find a parent side note",
@@ -2861,12 +2984,8 @@ export default class SideNote2View extends ItemView {
             setShowNestedCommentsForThread: (threadId, showNestedComments) => {
                 void this.plugin.setShowNestedCommentsForThread(threadId, showNestedComments);
             },
-            resolveComment: (commentId) => {
-                void this.plugin.resolveComment(commentId);
-            },
-            unresolveComment: (commentId) => {
-                void this.plugin.unresolveComment(commentId);
-            },
+            resolveComment: (commentId) => this.setSidebarCommentResolvedState(commentId, true),
+            unresolveComment: (commentId) => this.setSidebarCommentResolvedState(commentId, false),
             moveCommentEntry: (commentId, sourceThreadId, sourceFilePath) => {
                 this.openMoveCommentEntryModal(commentId, sourceThreadId, sourceFilePath);
             },
@@ -3380,11 +3499,8 @@ export default class SideNote2View extends ItemView {
         this.interactionController.clearPendingFocus();
     }
 
-    private async deleteCommentWithConfirm(commentId: string) {
-        if (this.plugin.shouldShowDeletedComments()) {
-            await this.plugin.setShowDeletedComments(false);
-        }
-        await this.plugin.deleteComment(commentId);
+    private async deleteCommentWithConfirm(commentId: string): Promise<boolean> {
+        return this.deleteSidebarComment(commentId);
     }
 
     private async clearDeletedCommentsForCurrentFile(): Promise<void> {

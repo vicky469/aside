@@ -29,12 +29,18 @@ export type SaveDraftOptions = {
     skipPersistedViewRefresh?: boolean;
 };
 
-export type SetCommentBookmarkStateOptions = {
+export type CommentMutationPersistBehaviorOptions = {
     deferAggregateRefresh?: boolean;
     skipPersistedViewRefresh?: boolean;
     refreshEditorDecorations?: boolean;
     refreshMarkdownPreviews?: boolean;
 };
+
+export type SetCommentBookmarkStateOptions = CommentMutationPersistBehaviorOptions;
+export type DeleteCommentOptions = CommentMutationPersistBehaviorOptions;
+export type ResolveCommentOptions = CommentMutationPersistBehaviorOptions;
+export type MoveCommentThreadOptions = CommentMutationPersistBehaviorOptions;
+export type MoveCommentEntryOptions = CommentMutationPersistBehaviorOptions;
 
 export interface CommentMutationHost {
     getAllCommentsNotePath(): string;
@@ -42,7 +48,13 @@ export interface CommentMutationHost {
     getDraftComment(): DraftComment | null;
     getSavingDraftCommentId(): string | null;
     shouldShowResolvedComments(): boolean;
-    setShowResolvedComments(showResolved: boolean): Promise<boolean>;
+    setShowResolvedComments(
+        showResolved: boolean,
+        options?: {
+            deferAggregateRefresh?: boolean;
+            skipCommentViewRefresh?: boolean;
+        },
+    ): Promise<boolean>;
     setDraftComment(
         draftComment: DraftComment | null,
         hostFilePath?: string | null,
@@ -295,12 +307,7 @@ export class CommentMutationController {
         }
 
         this.host.getCommentManager().setCommentBookmarkState(commentId, isBookmark);
-        await this.host.persistCommentsForFile(latestTarget.file, {
-            immediateAggregateRefresh: options.deferAggregateRefresh !== true,
-            ...(options.skipPersistedViewRefresh === true ? { skipCommentViewRefresh: true } : {}),
-            ...(options.refreshEditorDecorations === false ? { refreshEditorDecorations: false } : {}),
-            ...(options.refreshMarkdownPreviews === false ? { refreshMarkdownPreviews: false } : {}),
-        });
+        await this.host.persistCommentsForFile(latestTarget.file, this.buildPersistOptions(options));
         return true;
     }
 
@@ -369,18 +376,19 @@ export class CommentMutationController {
         return true;
     }
 
-    public async deleteComment(commentId: string, options: PersistOptions = {}): Promise<void> {
+    public async deleteComment(
+        commentId: string,
+        options: DeleteCommentOptions = {},
+    ): Promise<boolean> {
         void this.host.log?.("info", "draft", "thread.delete", { commentId });
         const latestTarget = await this.loadLatestCommentTarget(commentId);
         if (!latestTarget) {
-            return;
+            return false;
         }
 
         this.host.getCommentManager().deleteComment(commentId, this.host.now());
-        await this.host.persistCommentsForFile(latestTarget.file, {
-            immediateAggregateRefresh: true,
-            skipCommentViewRefresh: options.skipCommentViewRefresh,
-        });
+        await this.host.persistCommentsForFile(latestTarget.file, this.buildPersistOptions(options));
+        return true;
     }
 
     public async restoreComment(commentId: string): Promise<boolean> {
@@ -416,29 +424,40 @@ export class CommentMutationController {
         return true;
     }
 
-    public async resolveComment(commentId: string): Promise<void> {
+    public async resolveComment(
+        commentId: string,
+        options: ResolveCommentOptions = {},
+    ): Promise<boolean> {
         void this.host.log?.("info", "draft", "thread.resolve", { commentId });
         const latestTarget = await this.loadLatestCommentTarget(commentId);
         if (!latestTarget) {
-            return;
+            return false;
         }
 
         this.host.getCommentManager().resolveComment(commentId);
-        await this.host.persistCommentsForFile(latestTarget.file, { immediateAggregateRefresh: true });
+        await this.host.persistCommentsForFile(latestTarget.file, this.buildPersistOptions(options));
+        return true;
     }
 
-    public async unresolveComment(commentId: string): Promise<void> {
+    public async unresolveComment(
+        commentId: string,
+        options: ResolveCommentOptions = {},
+    ): Promise<boolean> {
         void this.host.log?.("info", "draft", "thread.reopen", { commentId });
         const latestTarget = await this.loadLatestCommentTarget(commentId);
         if (!latestTarget) {
-            return;
+            return false;
         }
 
         this.host.getCommentManager().unresolveComment(commentId);
-        await this.host.persistCommentsForFile(latestTarget.file, { immediateAggregateRefresh: true });
+        await this.host.persistCommentsForFile(latestTarget.file, this.buildPersistOptions(options));
         if (this.host.shouldShowResolvedComments()) {
-            await this.host.setShowResolvedComments(false);
+            await this.host.setShowResolvedComments(false, {
+                deferAggregateRefresh: options.deferAggregateRefresh === true,
+                skipCommentViewRefresh: options.skipPersistedViewRefresh === true,
+            });
         }
+        return true;
     }
 
     public async reanchorCommentThreadToCurrentSelection(commentId: string): Promise<boolean> {
@@ -478,7 +497,11 @@ export class CommentMutationController {
         return true;
     }
 
-    public async moveCommentThreadToFile(threadId: string, targetFilePath: string): Promise<boolean> {
+    public async moveCommentThreadToFile(
+        threadId: string,
+        targetFilePath: string,
+        options: MoveCommentThreadOptions = {},
+    ): Promise<boolean> {
         void this.host.log?.("info", "draft", "thread.move.begin", {
             threadId,
             targetFilePath,
@@ -515,11 +538,14 @@ export class CommentMutationController {
 
         this.host.getCommentManager().replaceThreadsForFile(latestTarget.file.path, sourceThreads);
         this.host.getCommentManager().replaceThreadsForFile(targetFile.path, [movedThread, ...targetThreads]);
-        await this.host.persistCommentsForFile(latestTarget.file, {
-            immediateAggregateRefresh: false,
-            skipCommentViewRefresh: true,
-        });
-        await this.host.persistCommentsForFile(targetFile, { immediateAggregateRefresh: true });
+        await this.host.persistCommentsForFile(
+            latestTarget.file,
+            this.buildPersistOptions(options, {
+                immediateAggregateRefresh: false,
+                skipCommentViewRefresh: true,
+            }),
+        );
+        await this.host.persistCommentsForFile(targetFile, this.buildPersistOptions(options));
         this.host.showNotice(`Moved side note to ${targetFile.basename}.`);
         try {
             await this.host.openMoveTargetFile(targetFile);
@@ -539,7 +565,11 @@ export class CommentMutationController {
         return true;
     }
 
-    public async moveCommentEntryToThread(commentId: string, targetThreadId: string): Promise<boolean> {
+    public async moveCommentEntryToThread(
+        commentId: string,
+        targetThreadId: string,
+        options: MoveCommentEntryOptions = {},
+    ): Promise<boolean> {
         void this.host.log?.("info", "draft", "thread.entry.move.begin", {
             commentId,
             targetThreadId,
@@ -601,7 +631,7 @@ export class CommentMutationController {
         });
 
         this.host.getCommentManager().replaceThreadsForFile(latestTarget.file.path, nextThreads);
-        await this.host.persistCommentsForFile(latestTarget.file, { immediateAggregateRefresh: true });
+        await this.host.persistCommentsForFile(latestTarget.file, this.buildPersistOptions(options));
 
         const targetLabel = this.formatThreadMoveTargetLabel(targetThread);
         this.host.showNotice(`Moved side note under ${targetLabel}.`);
@@ -637,6 +667,23 @@ export class CommentMutationController {
         }
 
         return { file, latestComment };
+    }
+
+    private buildPersistOptions(
+        options: CommentMutationPersistBehaviorOptions = {},
+        defaults: {
+            immediateAggregateRefresh?: boolean;
+            skipCommentViewRefresh?: boolean;
+        } = {},
+    ): PersistOptions {
+        return {
+            immediateAggregateRefresh: defaults.immediateAggregateRefresh ?? (options.deferAggregateRefresh !== true),
+            ...(options.skipPersistedViewRefresh === true || defaults.skipCommentViewRefresh === true
+                ? { skipCommentViewRefresh: true }
+                : {}),
+            ...(options.refreshEditorDecorations === false ? { refreshEditorDecorations: false } : {}),
+            ...(options.refreshMarkdownPreviews === false ? { refreshMarkdownPreviews: false } : {}),
+        };
     }
 
     private async buildMovedPageThread(

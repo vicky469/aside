@@ -9,6 +9,10 @@ import {
 import { CommentHighlightController } from "./control/commentHighlightController";
 import {
     CommentMutationController,
+    type DeleteCommentOptions,
+    type MoveCommentEntryOptions,
+    type MoveCommentThreadOptions,
+    type ResolveCommentOptions,
     type SaveDraftOptions,
     type SetCommentBookmarkStateOptions,
 } from "./control/commentMutationController";
@@ -16,6 +20,7 @@ import { CommentNavigationController } from "./control/commentNavigationControll
 import { pickPinnedCommentableFile, pickPreferredFileLeafCandidate, pickSidebarTargetFile, type PreferredFileLeafCandidate } from "./control/commentNavigationPlanner";
 import { CommentExportController } from "./control/commentExportController";
 import { CommentPersistenceController } from "./control/commentPersistenceController";
+import type { SetSidebarViewStateOptions } from "./control/commentSessionController";
 import { getResolvedVisibilityForCommentSelection } from "./control/commentSelectionVisibility";
 import { CommentSessionController } from "./control/commentSessionController";
 import { IndexNoteSettingsController } from "./control/indexNoteSettingsController";
@@ -240,7 +245,7 @@ export default class SideNote2 extends Plugin {
         getDraftComment: () => this.commentSessionController.getDraftComment(),
         getSavingDraftCommentId: () => this.commentSessionController.getSavingDraftCommentId(),
         shouldShowResolvedComments: () => this.commentSessionController.shouldShowResolvedComments(),
-        setShowResolvedComments: (showResolved) => this.setShowResolvedComments(showResolved),
+        setShowResolvedComments: (showResolved, options) => this.setShowResolvedComments(showResolved, options),
         setDraftComment: (draftComment, hostFilePath, options) =>
             this.commentSessionController.setDraftComment(draftComment, hostFilePath, options),
         setDraftCommentValue: (draftComment) => this.commentSessionController.setDraftCommentValue(draftComment),
@@ -379,8 +384,14 @@ export default class SideNote2 extends Plugin {
         ): Promise<boolean> => this.commentMutationController.appendThreadEntry(threadId, entry, options),
         editComment: (commentId: string, newCommentText: string, options?: { skipCommentViewRefresh?: boolean }): Promise<boolean> =>
             this.commentMutationController.editComment(commentId, newCommentText, options),
-        deleteComment: (commentId: string, options?: { skipCommentViewRefresh?: boolean }): Promise<void> =>
-            this.commentMutationController.deleteComment(commentId, options),
+        deleteComment: async (commentId: string, options?: { skipCommentViewRefresh?: boolean }): Promise<void> => {
+            await this.commentMutationController.deleteComment(
+                commentId,
+                options?.skipCommentViewRefresh
+                    ? { skipPersistedViewRefresh: true }
+                    : undefined,
+            );
+        },
         runAgentRuntime: (invocation) => runAgentRuntime(invocation),
         resolveAgentRuntimeSelection: () => this.resolveAgentRuntimeSelection(),
         startRemoteRuntimeRun: (options) => this.startRemoteRuntimeRun(options),
@@ -1065,13 +1076,25 @@ export default class SideNote2 extends Plugin {
         return this.commentSessionController.shouldShowResolvedComments();
     }
 
-    public async setShowResolvedComments(showResolved: boolean): Promise<boolean> {
-        const changed = await this.commentSessionController.setShowResolvedComments(showResolved);
+    public async setShowResolvedComments(
+        showResolved: boolean,
+        options: {
+            deferAggregateRefresh?: boolean;
+            skipCommentViewRefresh?: boolean;
+        } = {},
+    ): Promise<boolean> {
+        const changed = await this.commentSessionController.setShowResolvedComments(showResolved, {
+            skipCommentViewRefresh: options.skipCommentViewRefresh,
+        });
         if (!changed) {
             return false;
         }
 
-        await this.refreshAggregateNoteNow();
+        if (options.deferAggregateRefresh) {
+            this.scheduleAggregateNoteRefresh();
+        } else {
+            await this.refreshAggregateNoteNow();
+        }
         return true;
     }
 
@@ -1087,16 +1110,26 @@ export default class SideNote2 extends Plugin {
         return this.commentSessionController.shouldShowDeletedComments();
     }
 
-    public async setShowDeletedComments(showDeleted: boolean): Promise<boolean> {
-        return this.commentSessionController.setShowDeletedComments(showDeleted);
+    public async setShowDeletedComments(
+        showDeleted: boolean,
+        options: SetSidebarViewStateOptions = {},
+    ): Promise<boolean> {
+        return this.commentSessionController.setShowDeletedComments(showDeleted, options);
     }
 
-    public async setShowNestedComments(showNested: boolean): Promise<boolean> {
-        return this.commentSessionController.setShowNestedComments(showNested);
+    public async setShowNestedComments(
+        showNested: boolean,
+        options: SetSidebarViewStateOptions = {},
+    ): Promise<boolean> {
+        return this.commentSessionController.setShowNestedComments(showNested, options);
     }
 
-    public async setShowNestedCommentsForThread(threadId: string, showNested: boolean): Promise<boolean> {
-        return this.commentSessionController.setShowNestedCommentsForThread(threadId, showNested);
+    public async setShowNestedCommentsForThread(
+        threadId: string,
+        showNested: boolean,
+        options: SetSidebarViewStateOptions = {},
+    ): Promise<boolean> {
+        return this.commentSessionController.setShowNestedCommentsForThread(threadId, showNested, options);
     }
 
     public async exportSideNotesForFile(file: TFile | null): Promise<boolean> {
@@ -1305,12 +1338,20 @@ export default class SideNote2 extends Plugin {
         return this.commentMutationController.reanchorCommentThreadToCurrentSelection(commentId);
     }
 
-    public async moveCommentThreadToFile(threadId: string, targetFilePath: string): Promise<boolean> {
-        return this.commentMutationController.moveCommentThreadToFile(threadId, targetFilePath);
+    public async moveCommentThreadToFile(
+        threadId: string,
+        targetFilePath: string,
+        options?: MoveCommentThreadOptions,
+    ): Promise<boolean> {
+        return this.commentMutationController.moveCommentThreadToFile(threadId, targetFilePath, options);
     }
 
-    public async moveCommentEntryToThread(commentId: string, targetThreadId: string): Promise<boolean> {
-        return this.commentMutationController.moveCommentEntryToThread(commentId, targetThreadId);
+    public async moveCommentEntryToThread(
+        commentId: string,
+        targetThreadId: string,
+        options?: MoveCommentEntryOptions,
+    ): Promise<boolean> {
+        return this.commentMutationController.moveCommentEntryToThread(commentId, targetThreadId, options);
     }
 
     private markDraftFileActive(file: TFile) {
@@ -1571,9 +1612,12 @@ export default class SideNote2 extends Plugin {
         return this.commentMutationController.editComment(commentId, newCommentText);
     }
 
-    async deleteComment(commentId: string) {
+    async deleteComment(
+        commentId: string,
+        options?: DeleteCommentOptions,
+    ): Promise<boolean> {
         await this.commentAgentController.cancelRunsForComment(commentId);
-        await this.commentMutationController.deleteComment(commentId);
+        return this.commentMutationController.deleteComment(commentId, options);
     }
 
     async restoreComment(commentId: string): Promise<boolean> {
@@ -1584,12 +1628,18 @@ export default class SideNote2 extends Plugin {
         return this.commentMutationController.clearDeletedCommentsForFile(filePath);
     }
 
-    async resolveComment(commentId: string) {
-        await this.commentMutationController.resolveComment(commentId);
+    async resolveComment(
+        commentId: string,
+        options?: ResolveCommentOptions,
+    ): Promise<boolean> {
+        return this.commentMutationController.resolveComment(commentId, options);
     }
 
-    async unresolveComment(commentId: string) {
-        await this.commentMutationController.unresolveComment(commentId);
+    async unresolveComment(
+        commentId: string,
+        options?: ResolveCommentOptions,
+    ): Promise<boolean> {
+        return this.commentMutationController.unresolveComment(commentId, options);
     }
 
     private getCurrentSelectionForFile(file: TFile): DraftSelection | null {

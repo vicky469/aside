@@ -114,8 +114,8 @@ export interface SidebarPersistedCommentHost {
     getSideNoteReferenceDocument(commentId: string): SideNoteReferenceSearchDocument | null;
     saveVisibleDraftIfPresent(): Promise<boolean>;
     setShowNestedCommentsForThread(threadId: string, showNestedComments: boolean): void;
-    resolveComment(commentId: string): void;
-    unresolveComment(commentId: string): void;
+    resolveComment(commentId: string): Promise<boolean> | Promise<void> | boolean | void;
+    unresolveComment(commentId: string): Promise<boolean> | Promise<void> | boolean | void;
     moveCommentEntry(commentId: string, sourceThreadId: string, sourceFilePath: string): void;
     moveCommentThread(threadId: string, sourceFilePath: string): void;
     restoreComment(commentId: string): Promise<boolean> | Promise<void> | boolean | void;
@@ -126,7 +126,7 @@ export interface SidebarPersistedCommentHost {
     startAppendEntryDraft(commentId: string, hostFilePath: string | null): void;
     retryAgentRun(runId: string): Promise<boolean> | boolean;
     reanchorCommentThreadToCurrentSelection(commentId: string): void;
-    deleteCommentWithConfirm(commentId: string): Promise<void> | void;
+    deleteCommentWithConfirm(commentId: string): Promise<boolean> | Promise<void> | boolean | void;
     renderAppendDraft(container: HTMLDivElement, comment: DraftComment): void;
     renderInlineEditDraft(container: HTMLDivElement, comment: DraftComment): void;
     setIcon(element: HTMLElement, icon: string): void;
@@ -1081,12 +1081,9 @@ function renderDeleteButton(
     deleteButton.setAttribute("aria-label", ariaLabel);
     host.setIcon(deleteButton, "trash-2");
     deleteButton.onclick = async (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        if (!(await host.saveVisibleDraftIfPresent())) {
-            return;
-        }
-        await host.deleteCommentWithConfirm(commentId);
+        await runSidebarPendingButtonAction(deleteButton, host, event, async () => {
+            await host.deleteCommentWithConfirm(commentId);
+        });
     };
 }
 
@@ -1631,15 +1628,13 @@ export async function renderPersistedCommentCard(
             resolveButton.setAttribute("aria-label", presentation.resolveAction.ariaLabel);
             host.setIcon(resolveButton, presentation.resolveAction.icon);
             resolveButton.onclick = async (event) => {
-                event.stopPropagation();
-                if (!(await host.saveVisibleDraftIfPresent())) {
-                    return;
-                }
-                if (thread.resolved) {
-                    host.unresolveComment(thread.id);
-                } else {
-                    host.resolveComment(thread.id);
-                }
+                await runSidebarPendingButtonAction(resolveButton, host, event, async () => {
+                    if (thread.resolved) {
+                        await host.unresolveComment(thread.id);
+                    } else {
+                        await host.resolveComment(thread.id);
+                    }
+                });
             };
 
             if (

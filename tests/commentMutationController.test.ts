@@ -86,7 +86,11 @@ function createHost(options: {
         hostFilePath?: string | null;
         skipCommentViewRefresh?: boolean;
     }> = [];
-    const setShowResolvedCalls: boolean[] = [];
+    const setShowResolvedCalls: Array<{
+        showResolved: boolean;
+        skipCommentViewRefresh?: boolean;
+        deferAggregateRefresh?: boolean;
+    }> = [];
     const savedUserEntryEvents: SavedUserEntryEvent[] = [];
     let refreshCommentViewsCount = 0;
     let refreshEditorDecorationsCount = 0;
@@ -116,8 +120,16 @@ function createHost(options: {
         getDraftComment: () => draftComment,
         getSavingDraftCommentId: () => savingDraftCommentId,
         shouldShowResolvedComments: () => showResolvedComments,
-        setShowResolvedComments: async (nextShowResolved) => {
-            setShowResolvedCalls.push(nextShowResolved);
+        setShowResolvedComments: async (nextShowResolved, setShowResolvedOptions) => {
+            setShowResolvedCalls.push({
+                showResolved: nextShowResolved,
+                ...(setShowResolvedOptions?.skipCommentViewRefresh !== undefined
+                    ? { skipCommentViewRefresh: setShowResolvedOptions.skipCommentViewRefresh }
+                    : {}),
+                ...(setShowResolvedOptions?.deferAggregateRefresh !== undefined
+                    ? { deferAggregateRefresh: setShowResolvedOptions.deferAggregateRefresh }
+                    : {}),
+            });
             if (showResolvedComments === nextShowResolved) {
                 return false;
             }
@@ -688,6 +700,33 @@ test("comment mutation controller can toggle bookmark state without entering edi
     }]);
 });
 
+test("comment mutation controller can defer delete refresh work for lightweight local sidebar updates", async () => {
+    const existing = createComment({
+        id: "thread-1",
+        comment: "Existing idea",
+        resolved: false,
+    });
+    const deletedAt = Date.now();
+    const host = createHost({
+        knownComments: [existing],
+        loadedComments: [existing],
+        now: deletedAt,
+    });
+
+    const deleted = await host.controller.deleteComment(existing.id, {
+        deferAggregateRefresh: true,
+        skipPersistedViewRefresh: true,
+    });
+
+    assert.equal(deleted, true);
+    assert.equal(host.manager.getThreadById(existing.id)?.deletedAt, deletedAt);
+    assert.deepEqual(host.persistedFiles, [{
+        path: existing.filePath,
+        immediateAggregateRefresh: false,
+        skipCommentViewRefresh: true,
+    }]);
+});
+
 test("comment mutation controller can defer bookmark refresh work for lightweight local sidebar updates", async () => {
     const existing = createComment({
         id: "thread-1",
@@ -713,6 +752,57 @@ test("comment mutation controller can defer bookmark refresh work for lightweigh
         skipCommentViewRefresh: true,
         refreshEditorDecorations: false,
         refreshMarkdownPreviews: false,
+    }]);
+});
+
+test("comment mutation controller can defer resolve refresh work for lightweight local sidebar updates", async () => {
+    const comment = createComment({
+        id: "thread-1",
+        resolved: false,
+    });
+    const host = createHost({
+        knownComments: [comment],
+        loadedComments: [comment],
+    });
+
+    const resolved = await host.controller.resolveComment(comment.id, {
+        deferAggregateRefresh: true,
+        skipPersistedViewRefresh: true,
+    });
+
+    assert.equal(resolved, true);
+    assert.equal(host.manager.getCommentById(comment.id)?.resolved, true);
+    assert.deepEqual(host.persistedFiles, [{
+        path: comment.filePath,
+        immediateAggregateRefresh: false,
+        skipCommentViewRefresh: true,
+    }]);
+});
+
+test("comment mutation controller can defer reopen refresh work while exiting resolved mode", async () => {
+    const comment = createComment({ resolved: true });
+    const host = createHost({
+        knownComments: [comment],
+        loadedComments: [comment],
+        showResolvedComments: true,
+    });
+
+    const reopened = await host.controller.unresolveComment(comment.id, {
+        deferAggregateRefresh: true,
+        skipPersistedViewRefresh: true,
+    });
+
+    assert.equal(reopened, true);
+    assert.equal(host.manager.getCommentById(comment.id)?.resolved, false);
+    assert.deepEqual(host.persistedFiles, [{
+        path: comment.filePath,
+        immediateAggregateRefresh: false,
+        skipCommentViewRefresh: true,
+    }]);
+    assert.deepEqual(host.setShowResolvedCalls, [{
+        showResolved: false,
+        skipCommentViewRefresh: true,
+        deferAggregateRefresh: true,
     }]);
 });
 
@@ -951,7 +1041,11 @@ test("comment mutation controller exits resolved-only mode after reopening a com
         path: comment.filePath,
         immediateAggregateRefresh: true,
     }]);
-    assert.deepEqual(host.setShowResolvedCalls, [false]);
+    assert.deepEqual(host.setShowResolvedCalls, [{
+        showResolved: false,
+        skipCommentViewRefresh: false,
+        deferAggregateRefresh: false,
+    }]);
     assert.equal(host.getShowResolvedComments(), false);
 });
 
@@ -1033,6 +1127,50 @@ test("comment mutation controller moves a thread into another file as a page not
     assert.deepEqual(host.openedMoveTargetFiles, ["Folder/Other.md"]);
 });
 
+test("comment mutation controller can defer move-thread refresh work for lightweight local sidebar updates", async () => {
+    const source = createComment({
+        id: "thread-1",
+        filePath: "Folder/Source.md",
+        selectedText: "Source anchor",
+        selectedTextHash: "hash:Source anchor",
+        comment: "Root body",
+        timestamp: 300,
+    });
+    const targetExisting = createComment({
+        id: "thread-2",
+        filePath: "Folder/Other.md",
+        selectedText: "Existing target note",
+        selectedTextHash: "hash:Existing target note",
+        comment: "Existing body",
+        timestamp: 500,
+    });
+    const host = createHost({
+        knownComments: [source, targetExisting],
+        loadedComments: [source, targetExisting],
+        extraFiles: ["Folder/Other.md"],
+        now: 900,
+    });
+
+    const moved = await host.controller.moveCommentThreadToFile(source.id, "Folder/Other.md", {
+        deferAggregateRefresh: true,
+        skipPersistedViewRefresh: true,
+    });
+
+    assert.equal(moved, true);
+    assert.deepEqual(host.persistedFiles, [
+        {
+            path: "Folder/Source.md",
+            immediateAggregateRefresh: false,
+            skipCommentViewRefresh: true,
+        },
+        {
+            path: "Folder/Other.md",
+            immediateAggregateRefresh: false,
+            skipCommentViewRefresh: true,
+        },
+    ]);
+});
+
 test("comment mutation controller moves a child entry under another thread in the same file", async () => {
     const source = createComment({
         id: "thread-1",
@@ -1079,6 +1217,51 @@ test("comment mutation controller moves a child entry under another thread in th
     );
     assert.equal(host.manager.getCommentById("entry-2")?.comment, "Child reply");
     assert.deepEqual(host.notices, ["Moved side note under Target anchor."]);
+});
+
+test("comment mutation controller can defer move-entry refresh work for lightweight local sidebar updates", async () => {
+    const source = createComment({
+        id: "thread-1",
+        filePath: "Folder/Source.md",
+        selectedText: "Source anchor",
+        selectedTextHash: "hash:Source anchor",
+        comment: "Root body",
+        timestamp: 300,
+    });
+    const target = createComment({
+        id: "thread-2",
+        filePath: "Folder/Source.md",
+        selectedText: "Target anchor",
+        selectedTextHash: "hash:Target anchor",
+        comment: "Target root body",
+        timestamp: 500,
+    });
+    const host = createHost({
+        knownComments: [source, target],
+        loadedComments: [source, target],
+        now: 900,
+    });
+    host.manager.appendEntry(source.id, {
+        id: "entry-2",
+        body: "Child reply",
+        timestamp: 400,
+    });
+
+    const moved = await host.controller.moveCommentEntryToThread("entry-2", target.id, {
+        deferAggregateRefresh: true,
+        skipPersistedViewRefresh: true,
+        refreshEditorDecorations: false,
+        refreshMarkdownPreviews: false,
+    });
+
+    assert.equal(moved, true);
+    assert.deepEqual(host.persistedFiles, [{
+        path: "Folder/Source.md",
+        immediateAggregateRefresh: false,
+        skipCommentViewRefresh: true,
+        refreshEditorDecorations: false,
+        refreshMarkdownPreviews: false,
+    }]);
 });
 
 test("comment mutation controller rejects moving a root thread through the child move path", async () => {

@@ -18,6 +18,10 @@ export interface SetDraftCommentOptions {
     refreshEditorDecorations?: boolean;
 }
 
+export interface SetSidebarViewStateOptions {
+    skipCommentViewRefresh?: boolean;
+}
+
 export class CommentSessionController {
     private readonly draftSessionStore = new DraftSessionStore();
     private readonly revealedCommentSelectionStore = new RevealedCommentSelectionStore();
@@ -104,13 +108,18 @@ export class CommentSessionController {
         return this.showResolvedComments;
     }
 
-    public async setShowResolvedComments(showResolved: boolean): Promise<boolean> {
+    public async setShowResolvedComments(
+        showResolved: boolean,
+        options: SetSidebarViewStateOptions = {},
+    ): Promise<boolean> {
         if (this.showResolvedComments === showResolved) {
             return false;
         }
 
         this.showResolvedComments = showResolved;
-        await this.host.refreshCommentViews();
+        if (!options.skipCommentViewRefresh) {
+            await this.host.refreshCommentViews();
+        }
         this.host.refreshEditorDecorations();
         this.host.refreshMarkdownPreviews();
         return true;
@@ -132,28 +141,42 @@ export class CommentSessionController {
         return this.showDeletedComments;
     }
 
-    public async setShowDeletedComments(showDeleted: boolean): Promise<boolean> {
+    public async setShowDeletedComments(
+        showDeleted: boolean,
+        options: SetSidebarViewStateOptions = {},
+    ): Promise<boolean> {
         if (this.showDeletedComments === showDeleted) {
             return false;
         }
 
         this.showDeletedComments = showDeleted;
-        await this.host.refreshCommentViews();
+        if (!options.skipCommentViewRefresh) {
+            await this.host.refreshCommentViews();
+        }
         return true;
     }
 
-    public async setShowNestedComments(showNested: boolean): Promise<boolean> {
+    public async setShowNestedComments(
+        showNested: boolean,
+        options: SetSidebarViewStateOptions = {},
+    ): Promise<boolean> {
         if (this.showNestedComments === showNested) {
             return false;
         }
 
         this.showNestedComments = showNested;
         this.nestedCommentThreadOverrideIds.clear();
-        await this.host.refreshCommentViews();
+        if (!options.skipCommentViewRefresh) {
+            await this.host.refreshCommentViews();
+        }
         return true;
     }
 
-    public async setShowNestedCommentsForThread(threadId: string, showNested: boolean): Promise<boolean> {
+    public async setShowNestedCommentsForThread(
+        threadId: string,
+        showNested: boolean,
+        options: SetSidebarViewStateOptions = {},
+    ): Promise<boolean> {
         const isVisible = this.shouldShowNestedCommentsForThread(threadId);
         if (isVisible === showNested) {
             return false;
@@ -164,7 +187,9 @@ export class CommentSessionController {
         } else {
             this.nestedCommentThreadOverrideIds.add(threadId);
         }
-        await this.host.refreshCommentViews();
+        if (!options.skipCommentViewRefresh) {
+            await this.host.refreshCommentViews();
+        }
         return true;
     }
 

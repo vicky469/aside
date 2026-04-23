@@ -41,7 +41,7 @@ export interface SidebarInteractionHost {
     containerEl: HTMLElement;
     getCurrentFile(): TFile | null;
     getDraftForView(filePath: string): DraftComment | null;
-    renderComments(): Promise<void>;
+    renderComments(options?: { skipDataRefresh?: boolean }): Promise<void>;
     saveDraft(commentId: string): Promise<void> | void;
     cancelDraft(commentId: string): void;
     clearRevealedCommentSelection(): void;
@@ -226,9 +226,9 @@ export class SidebarInteractionController {
         return this.activeCommentId;
     }
 
-    public highlightComment(commentId: string): void {
+    public highlightComment(commentId: string, options: { skipDataRefresh?: boolean } = {}): void {
         this.activeCommentId = commentId;
-        void this.host.renderComments().then(() => {
+        void this.host.renderComments(options).then(() => {
             const commentEl = this.host.containerEl.querySelector(`[data-comment-id="${commentId}"], [data-draft-id="${commentId}"]`);
             if (commentEl) {
                 commentEl.scrollIntoView({ behavior: "smooth", block: "center" });

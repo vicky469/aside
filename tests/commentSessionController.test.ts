@@ -68,6 +68,18 @@ test("comment session controller refreshes comment visibility when resolved comm
     assert.equal(harness.getRefreshMarkdownPreviewsCount(), 1);
 });
 
+test("comment session controller can skip sidebar rerenders while still updating resolved visibility surfaces", async () => {
+    const harness = createHarness();
+
+    assert.equal(await harness.controller.setShowResolvedComments(true, {
+        skipCommentViewRefresh: true,
+    }), true);
+    assert.equal(harness.controller.shouldShowResolvedComments(), true);
+    assert.equal(harness.getRefreshCommentViewsCount(), 0);
+    assert.equal(harness.getRefreshEditorDecorationsCount(), 1);
+    assert.equal(harness.getRefreshMarkdownPreviewsCount(), 1);
+});
+
 test("comment session controller refreshes comment views when nested comments are toggled", async () => {
     const harness = createHarness();
 
@@ -108,6 +120,21 @@ test("comment session controller can override nested comment visibility per thre
     assert.equal(harness.controller.shouldShowNestedCommentsForThread("thread-1"), true);
     assert.equal(harness.controller.shouldShowNestedCommentsForThread("thread-2"), true);
     assert.equal(harness.getRefreshCommentViewsCount(), 4);
+});
+
+test("comment session controller can skip sidebar rerenders for deleted and nested visibility updates", async () => {
+    const harness = createHarness();
+
+    assert.equal(await harness.controller.setShowDeletedComments(true, {
+        skipCommentViewRefresh: true,
+    }), true);
+    assert.equal(harness.getRefreshCommentViewsCount(), 0);
+
+    assert.equal(await harness.controller.setShowNestedCommentsForThread("thread-1", false, {
+        skipCommentViewRefresh: true,
+    }), true);
+    assert.equal(harness.controller.shouldShowNestedCommentsForThread("thread-1"), false);
+    assert.equal(harness.getRefreshCommentViewsCount(), 0);
 });
 
 test("comment session controller tracks revealed comments and clears markdown selections on reset", () => {
