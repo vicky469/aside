@@ -18,7 +18,6 @@ import {
 } from "./control/commentMutationController";
 import { CommentNavigationController } from "./control/commentNavigationController";
 import { pickPinnedCommentableFile, pickPreferredFileLeafCandidate, pickSidebarTargetFile, type PreferredFileLeafCandidate } from "./control/commentNavigationPlanner";
-import { CommentExportController } from "./control/commentExportController";
 import { CommentPersistenceController } from "./control/commentPersistenceController";
 import type { SetSidebarViewStateOptions } from "./control/commentSessionController";
 import { getResolvedVisibilityForCommentSelection } from "./control/commentSelectionVisibility";
@@ -322,14 +321,6 @@ export default class SideNote2 extends Plugin {
         getCommentMentionedPageLabels: (comment) => this.getCommentMentionedPageLabels(comment),
         syncIndexNoteLeafMode: (leaf) => this.syncIndexNoteLeafMode(leaf),
         log: (level, area, event, payload) => this.logEvent(level, area, event, payload),
-    });
-    private readonly commentExportController: CommentExportController = new CommentExportController({
-        app: this.app,
-        isCommentableFile: (file): file is TFile => this.isCommentableFile(file),
-        loadCommentsForFile: (file) => this.loadCommentsForFile(file),
-        getAllIndexedThreads: () => this.getAllIndexedThreads(),
-        getThreadsForFile: (filePath) => this.getThreadsForFile(filePath),
-        now: () => Date.now(),
     });
     private readonly indexNoteSettingsController = new IndexNoteSettingsController({
         app: this.app,
@@ -1130,33 +1121,6 @@ export default class SideNote2 extends Plugin {
         options: SetSidebarViewStateOptions = {},
     ): Promise<boolean> {
         return this.commentSessionController.setShowNestedCommentsForThread(threadId, showNested, options);
-    }
-
-    public async exportSideNotesForFile(file: TFile | null): Promise<boolean> {
-        if (!this.isCommentableFile(file)) {
-            this.showNotice("Open a markdown note to export side notes.", "export", "export.markdown.no-file");
-            return false;
-        }
-
-        try {
-            const result = await this.commentExportController.exportCommentsForFile(file);
-            new Notice(`Exported side notes to ${result.exportFilePath}.`);
-            await this.logEvent("info", "export", "export.markdown.completed", {
-                filePath: result.filePath,
-                exportFilePath: result.exportFilePath,
-                threadCount: result.threadCount,
-                entryCount: result.entryCount,
-                updatedExistingFile: result.updatedExistingFile,
-            });
-            return true;
-        } catch (error) {
-            console.error("[SideNote2] Failed to export side notes.", error);
-            this.showNotice(`Failed to export side notes for ${file.basename}.`, "export", "export.markdown.error", {
-                filePath: file.path,
-                error,
-            });
-            return false;
-        }
     }
 
     private async persistCommentsForFile(

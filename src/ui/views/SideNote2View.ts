@@ -1164,7 +1164,6 @@ export default class SideNote2View extends ItemView {
                         },
                     }
                     : null,
-                exportNotesAction: null,
                 indexFileFilterOptions,
                 selectedIndexFileFilterRootPath,
                 filteredIndexFilePaths,
@@ -1393,13 +1392,6 @@ export default class SideNote2View extends ItemView {
                     void this.plugin.startPageCommentDraft(file);
                 },
             },
-            exportNotesAction: {
-                icon: "download",
-                ariaLabel: "Export side notes for this note",
-                onClick: () => {
-                    void this.plugin.exportSideNotesForFile(file);
-                },
-            },
             indexFileFilterOptions: [],
             selectedIndexFileFilterRootPath: null,
             filteredIndexFilePaths: [],
@@ -1501,13 +1493,6 @@ export default class SideNote2View extends ItemView {
                 ariaLabel: "Add page note",
                 onClick: () => {
                     void this.plugin.startPageCommentDraft(file);
-                },
-            },
-            exportNotesAction: {
-                icon: "download",
-                ariaLabel: "Export side notes for this note",
-                onClick: () => {
-                    void this.plugin.exportSideNotesForFile(file);
                 },
             },
             indexFileFilterOptions: [],
@@ -2062,11 +2047,6 @@ export default class SideNote2View extends ItemView {
                 ariaLabel: string;
                 onClick: () => void;
             } | null;
-            exportNotesAction: {
-                icon: string;
-                ariaLabel: string;
-                onClick: () => void;
-            } | null;
             indexFileFilterOptions: IndexFileFilterOption[];
             selectedIndexFileFilterRootPath: string | null;
             filteredIndexFilePaths: string[];
@@ -2105,8 +2085,7 @@ export default class SideNote2View extends ItemView {
             || shouldShowResolvedChip
             || shouldShowContentFilterIcons
             || shouldShowNestedChip
-            || shouldShowAddPageCommentAction
-            || !!options.exportNotesAction;
+            || shouldShowAddPageCommentAction;
         if (!shouldRenderToolbar) {
             return;
         }
@@ -2149,14 +2128,6 @@ export default class SideNote2View extends ItemView {
             const modeRow = toolbarEl.createDiv("sidenote2-sidebar-toolbar-row");
             modeRow.addClass("is-note-primary-row");
             this.renderNoteModeControl(modeRow);
-            if (options.exportNotesAction) {
-                const primaryActionGroup = modeRow.createDiv("sidenote2-sidebar-toolbar-group is-action-group is-primary-action-group");
-                this.renderToolbarIconButton(primaryActionGroup, {
-                    icon: options.exportNotesAction.icon,
-                    ariaLabel: options.exportNotesAction.ariaLabel,
-                    onClick: options.exportNotesAction.onClick,
-                });
-            }
 
             if (shouldShowNoteSearchInput || showListOnlyToolbarChips || shouldShowAddPageCommentAction) {
                 const actionsRow = toolbarEl.createDiv("sidenote2-sidebar-toolbar-row");
