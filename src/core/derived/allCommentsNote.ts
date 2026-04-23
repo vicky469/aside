@@ -25,6 +25,15 @@ export interface CommentLocationTarget {
     commentId: string;
 }
 
+export type IndexMarkdownLineTarget =
+    | ({
+        kind: "comment";
+    } & CommentLocationTarget)
+    | {
+        kind: "file";
+        filePath: string;
+    };
+
 export interface IndexNoteCommentNavigationTarget {
     commentId: string;
     filePath: string;
@@ -264,13 +273,33 @@ export function findCommentLocationLineNumber(noteContent: string, commentId: st
     return buildCommentLocationLineNumberMap(noteContent).get(commentId) ?? null;
 }
 
-function findFileHeadingPathInMarkdownLine(line: string): string | null {
+export function findFileHeadingPathInMarkdownLine(line: string): string | null {
     const match = line.match(/<strong class="sidenote2-index-heading-label" title="([^"]+)">/);
     if (!match?.[1]) {
         return null;
     }
 
     return unescapeHtmlText(match[1]);
+}
+
+export function findIndexMarkdownLineTarget(line: string): IndexMarkdownLineTarget | null {
+    const commentTarget = findCommentLocationTargetInMarkdownLine(line);
+    if (commentTarget) {
+        return {
+            kind: "comment",
+            ...commentTarget,
+        };
+    }
+
+    const fileHeadingPath = findFileHeadingPathInMarkdownLine(line);
+    if (fileHeadingPath) {
+        return {
+            kind: "file",
+            filePath: fileHeadingPath,
+        };
+    }
+
+    return null;
 }
 
 export function buildIndexNoteNavigationMap(noteContent: string): IndexNoteNavigationMap {

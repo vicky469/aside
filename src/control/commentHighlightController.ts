@@ -9,13 +9,14 @@ import {
     buildCommentLocationLineNumberMap,
     buildIndexNoteNavigationMap,
     COMMENT_LOCATION_PROTOCOL,
-    findCommentLocationTargetInMarkdownLine,
+    findIndexMarkdownLineTarget,
     parseCommentLocationUrl,
 } from "../core/derived/allCommentsNote";
 import { buildEditorHighlightRanges } from "../core/derived/editorHighlightRanges";
 import { matchesResolvedCommentVisibility } from "../core/rules/resolvedCommentVisibility";
 import { chooseCommentStateForOpenEditor } from "../core/rules/commentSyncPolicy";
 import { findClickedHighlightCommentId } from "./commentHighlightClickTarget";
+import { findClickedIndexLivePreviewTarget } from "./commentIndexClickTarget";
 import { buildPreviewHighlightWraps } from "./commentHighlightPlanner";
 import {
     estimateIndexPreviewScrollTop,
@@ -114,6 +115,7 @@ export interface CommentHighlightHost {
     getRevealedCommentId(filePath: string): string | null;
     activateViewAndHighlightComment(commentId: string): Promise<void>;
     activateIndexComment(commentId: string, indexFilePath: string, sourceFilePath?: string): Promise<void>;
+    activateIndexFileScope(indexFilePath: string, sourceFilePath: string): Promise<void>;
     log?(level: "info" | "warn" | "error", area: string, event: string, payload?: Record<string, unknown>): Promise<void>;
 }
 
@@ -122,6 +124,78 @@ export class CommentHighlightController {
 
     private readonly indexPreviewLinkSelector = "a.sidenote2-index-comment-link[data-sidenote2-comment-url]";
     private readonly indexPreviewFileHeadingSelector = ".sidenote2-index-heading-label[title]";
+
+    private findIndexMarkdownViewForEventTarget(target: EventTarget | null): MarkdownView | null {
+        if (!(target instanceof Node)) {
+            return null;
+        }
+
+        let matchedView: MarkdownView | null = null;
+        this.host.app.workspace.iterateAllLeaves((leaf) => {
+            if (matchedView || !(leaf.view instanceof MarkdownView)) {
+                return;
+            }
+
+            if (!leaf.view.contentEl.contains(target)) {
+                return;
+            }
+
+            const sourcePath = leaf.view.file?.path ?? "";
+            if (!this.host.isAllCommentsNotePath(sourcePath)) {
+                return;
+            }
+
+            matchedView = leaf.view;
+        });
+
+        return matchedView;
+    }
+
+    private resolveIndexInteractionContext(target: EventTarget | null): {
+        clickedTarget: ReturnType<typeof findClickedIndexLivePreviewTarget>;
+        indexFilePath: string;
+    } | null {
+        const clickedTarget = findClickedIndexLivePreviewTarget(
+            target instanceof Element ? target : null,
+        );
+        if (!clickedTarget) {
+            return null;
+        }
+
+        const markdownView = this.findIndexMarkdownViewForEventTarget(target);
+        const indexFilePath = markdownView?.file?.path ?? null;
+        if (!indexFilePath || !this.host.isAllCommentsNotePath(indexFilePath)) {
+            return null;
+        }
+
+        return {
+            clickedTarget,
+            indexFilePath,
+        };
+    }
+
+    private activateIndexInteraction(context: {
+        clickedTarget: ReturnType<typeof findClickedIndexLivePreviewTarget>;
+        indexFilePath: string;
+    }): void {
+        if (!context.clickedTarget) {
+            return;
+        }
+
+        if (context.clickedTarget.kind === "comment") {
+            void this.host.activateIndexComment(
+                context.clickedTarget.commentId,
+                context.indexFilePath,
+                context.clickedTarget.filePath,
+            );
+            return;
+        }
+
+        void this.host.activateIndexFileScope(
+            context.indexFilePath,
+            context.clickedTarget.filePath,
+        );
+    }
 
     private getIndexPreviewContext(indexFilePath: string): {
         previewRoot: HTMLElement;
@@ -363,7 +437,6 @@ export class CommentHighlightController {
                 return;
             }
 
-            link.dataset.sidenote2IndexBound = "true";
             const activateLink = () => {
                 const target = parseCommentLocationUrl(link.dataset.sidenote2CommentUrl ?? "");
                 if (!target) {
@@ -383,33 +456,104 @@ export class CommentHighlightController {
                 }
             };
 
-            link.addEventListener("mousedown", (event: MouseEvent) => {
-                if (!this.isPlainPrimaryClick(event)) {
+            const bindActivator = (targetEl: HTMLElement) => {
+                if (targetEl.dataset.sidenote2IndexBound === "true") {
                     return;
                 }
 
-                event.preventDefault();
-                event.stopPropagation();
-            });
-            link.addEventListener("click", (event: MouseEvent) => {
-                if (!this.isPlainPrimaryClick(event)) {
+                targetEl.dataset.sidenote2IndexBound = "true";
+                targetEl.addEventListener("mousedown", (event: MouseEvent) => {
+                    if (!this.isPlainPrimaryClick(event)) {
+                        return;
+                    }
+
+                    event.preventDefault();
+                    event.stopPropagation();
+                });
+                targetEl.addEventListener("click", (event: MouseEvent) => {
+                    if (!this.isPlainPrimaryClick(event)) {
+                        return;
+                    }
+
+                    event.preventDefault();
+                    event.stopPropagation();
+                    event.stopImmediatePropagation();
+                    activateLink();
+                });
+                targetEl.addEventListener("keydown", (event: KeyboardEvent) => {
+                    if (event.key !== "Enter" && event.key !== " ") {
+                        return;
+                    }
+
+                    event.preventDefault();
+                    event.stopPropagation();
+                    activateLink();
+                });
+            };
+
+            bindActivator(link);
+            const rowEl = link.closest("p, li");
+            if (rowEl instanceof HTMLElement) {
+                bindActivator(rowEl);
+            }
+        });
+    }
+
+    private bindIndexPreviewHeadingClicks(element: HTMLElement, sourcePath: string): void {
+        element.querySelectorAll(this.indexPreviewFileHeadingSelector).forEach((heading) => {
+            if (!(heading instanceof HTMLElement) || heading.dataset.sidenote2IndexBound === "true") {
+                return;
+            }
+
+            const filePath = heading.getAttribute("title")?.trim();
+            if (!filePath) {
+                return;
+            }
+
+            const activateHeading = () => {
+                void this.host.activateIndexFileScope(sourcePath, filePath);
+            };
+
+            const bindActivator = (targetEl: HTMLElement) => {
+                if (targetEl.dataset.sidenote2IndexBound === "true") {
                     return;
                 }
 
-                event.preventDefault();
-                event.stopPropagation();
-                event.stopImmediatePropagation();
-                activateLink();
-            });
-            link.addEventListener("keydown", (event: KeyboardEvent) => {
-                if (event.key !== "Enter" && event.key !== " ") {
-                    return;
-                }
+                targetEl.dataset.sidenote2IndexBound = "true";
+                targetEl.addEventListener("mousedown", (event: MouseEvent) => {
+                    if (!this.isPlainPrimaryClick(event)) {
+                        return;
+                    }
 
-                event.preventDefault();
-                event.stopPropagation();
-                activateLink();
-            });
+                    event.preventDefault();
+                    event.stopPropagation();
+                });
+                targetEl.addEventListener("click", (event: MouseEvent) => {
+                    if (!this.isPlainPrimaryClick(event)) {
+                        return;
+                    }
+
+                    event.preventDefault();
+                    event.stopPropagation();
+                    event.stopImmediatePropagation();
+                    activateHeading();
+                });
+                targetEl.addEventListener("keydown", (event: KeyboardEvent) => {
+                    if (event.key !== "Enter" && event.key !== " ") {
+                        return;
+                    }
+
+                    event.preventDefault();
+                    event.stopPropagation();
+                    activateHeading();
+                });
+            };
+
+            bindActivator(heading);
+            const rowEl = heading.closest("p, li");
+            if (rowEl instanceof HTMLElement) {
+                bindActivator(rowEl);
+            }
         });
     }
 
@@ -507,6 +651,46 @@ export class CommentHighlightController {
         plugin.registerMarkdownPostProcessor(async (element, context) => {
             await this.applyPreviewHighlights(element, context);
         });
+        plugin.registerDomEvent(document, "mousedown", (event) => {
+            if (!this.isPlainPrimaryClick(event)) {
+                return;
+            }
+
+            const context = this.resolveIndexInteractionContext(event.target);
+            if (!context) {
+                return;
+            }
+
+            event.preventDefault();
+            event.stopPropagation();
+            event.stopImmediatePropagation();
+            this.activateIndexInteraction(context);
+        }, true);
+        plugin.registerDomEvent(document, "click", (event) => {
+            const context = this.resolveIndexInteractionContext(event.target);
+            if (!context) {
+                return;
+            }
+
+            event.preventDefault();
+            event.stopPropagation();
+            event.stopImmediatePropagation();
+        }, true);
+        plugin.registerDomEvent(document, "keydown", (event) => {
+            if (event.key !== "Enter" && event.key !== " ") {
+                return;
+            }
+
+            const context = this.resolveIndexInteractionContext(event.target);
+            if (!context) {
+                return;
+            }
+
+            event.preventDefault();
+            event.stopPropagation();
+            event.stopImmediatePropagation();
+            this.activateIndexInteraction(context);
+        }, true);
     }
 
     public createLivePreviewManagedBlockPlugin() {
@@ -685,7 +869,54 @@ export class CommentHighlightController {
     public createAllCommentsLivePreviewLinkPlugin() {
         const host = this.host;
 
+        const activateClickedTarget = (
+            clickedTarget: ReturnType<typeof findClickedIndexLivePreviewTarget>,
+            indexFilePath: string,
+        ): void => {
+            if (!clickedTarget) {
+                return;
+            }
+
+            if (clickedTarget.kind === "comment") {
+                void host.activateIndexComment(clickedTarget.commentId, indexFilePath, clickedTarget.filePath);
+            } else {
+                void host.activateIndexFileScope(indexFilePath, clickedTarget.filePath);
+            }
+        };
+
         return EditorView.domEventHandlers({
+            mousedown(event, view) {
+                if (
+                    event.button !== 0
+                    || event.metaKey
+                    || event.ctrlKey
+                    || event.shiftKey
+                    || event.altKey
+                ) {
+                    return false;
+                }
+
+                const target = event.target;
+                if (!(target instanceof HTMLElement)) {
+                    return false;
+                }
+
+                const markdownView = host.getMarkdownViewForEditorView(view);
+                const filePath = markdownView?.file?.path ?? null;
+                if (!filePath || !host.isAllCommentsNotePath(filePath)) {
+                    return false;
+                }
+
+                const clickedTarget = findClickedIndexLivePreviewTarget(target);
+                if (!clickedTarget) {
+                    return false;
+                }
+
+                event.preventDefault();
+                event.stopPropagation();
+                activateClickedTarget(clickedTarget, filePath);
+                return true;
+            },
             click(event, view) {
                 if (
                     event.button !== 0
@@ -702,18 +933,20 @@ export class CommentHighlightController {
                     return false;
                 }
 
-                const linkEl = target.closest(".cm-link");
-                if (!(linkEl instanceof HTMLElement)) {
-                    return false;
-                }
-
                 const markdownView = host.getMarkdownViewForEditorView(view);
                 const filePath = markdownView?.file?.path ?? null;
                 if (!filePath || !host.isAllCommentsNotePath(filePath)) {
                     return false;
                 }
 
-                const lineEl = linkEl.closest(".cm-line");
+                const clickedTarget = findClickedIndexLivePreviewTarget(target);
+                if (clickedTarget) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    return true;
+                }
+
+                const lineEl = target.closest(".cm-line");
                 if (!(lineEl instanceof HTMLElement)) {
                     return false;
                 }
@@ -727,14 +960,18 @@ export class CommentHighlightController {
 
                 const safePos = Math.max(0, Math.min(pos, view.state.doc.length));
                 const lineText = view.state.doc.lineAt(safePos).text;
-                const commentTarget = findCommentLocationTargetInMarkdownLine(lineText);
-                if (!commentTarget) {
+                const lineTarget = findIndexMarkdownLineTarget(lineText);
+                if (!lineTarget) {
                     return false;
                 }
 
                 event.preventDefault();
                 event.stopPropagation();
-                void host.activateIndexComment(commentTarget.commentId, filePath, commentTarget.filePath);
+                if (lineTarget.kind === "comment") {
+                    void host.activateIndexComment(lineTarget.commentId, filePath, lineTarget.filePath);
+                } else {
+                    void host.activateIndexFileScope(filePath, lineTarget.filePath);
+                }
                 return true;
             },
         });
@@ -765,6 +1002,7 @@ export class CommentHighlightController {
             this.prepareIndexPreviewLinks(element);
             this.syncIndexPreviewLinkStates(element, context.sourcePath);
             this.bindIndexPreviewLinkClicks(element, context.sourcePath);
+            this.bindIndexPreviewHeadingClicks(element, context.sourcePath);
             return;
         }
 

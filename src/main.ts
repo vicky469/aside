@@ -226,6 +226,8 @@ export default class SideNote2 extends Plugin {
         activateViewAndHighlightComment: (commentId) => this.activateViewAndHighlightComment(commentId),
         activateIndexComment: (commentId, indexFilePath, sourceFilePath) =>
             this.activateIndexComment(commentId, indexFilePath, sourceFilePath),
+        activateIndexFileScope: (indexFilePath, sourceFilePath) =>
+            this.activateIndexFileScope(indexFilePath, sourceFilePath),
         log: (level, area, event, payload) => this.logEvent(level, area, event, payload),
     });
     private readonly commentMutationController: CommentMutationController = new CommentMutationController({
@@ -487,6 +489,15 @@ export default class SideNote2 extends Plugin {
 
         this.commentManager = new CommentManager([]);
         await this.loadSettings();
+        this.pluginRegistrationController.register();
+        this.registerEditorExtension([
+            this.commentHighlightController.createLivePreviewManagedBlockPlugin(),
+            this.commentHighlightController.createEditorHighlightPlugin(),
+            this.commentHighlightController.createAllCommentsLivePreviewLinkPlugin(),
+        ]);
+
+        // Also highlight commented text inside rendered Markdown (Live Preview/Reading view)
+        this.commentHighlightController.registerMarkdownPreviewHighlights(this);
         await this.syncInstalledSidenoteSkill();
         this.commentAgentController.initialize();
         await this.commentAgentController.reconcilePendingRunsFromPreviousSession();
@@ -497,15 +508,6 @@ export default class SideNote2 extends Plugin {
         const activeFile = this.app.workspace.getActiveFile();
         this.workspaceContextController.initializeActiveFiles(activeFile);
         await this.workspaceViewController.loadVisibleFiles();
-
-        this.registerEditorExtension([
-            this.commentHighlightController.createLivePreviewManagedBlockPlugin(),
-            this.commentHighlightController.createEditorHighlightPlugin(),
-            this.commentHighlightController.createAllCommentsLivePreviewLinkPlugin(),
-        ]);
-
-        // Also highlight commented text inside rendered Markdown (Live Preview/Reading view)
-        this.commentHighlightController.registerMarkdownPreviewHighlights(this);
         if (this.app.workspace.layoutReady) {
             await this.pluginLifecycleController.handleLayoutReady();
         } else {
@@ -513,8 +515,6 @@ export default class SideNote2 extends Plugin {
                 await this.pluginLifecycleController.handleLayoutReady();
             });
         }
-
-        this.pluginRegistrationController.register();
 
         // Listen for active leaf changes to update the comment view
         this.registerEvent(
@@ -955,6 +955,12 @@ export default class SideNote2 extends Plugin {
         await this.commentNavigationController.syncSidebarSelection(commentId, indexFile, {
             indexScopeRootFilePath: sourceFilePath ?? undefined,
         });
+    }
+
+    async activateIndexFileScope(indexFilePath: string, sourceFilePath: string) {
+        const indexFile = this.workspaceViewController.getFileByPath(indexFilePath);
+        await this.commentNavigationController.ensureSidebarView();
+        await this.commentNavigationController.syncSidebarIndexScope(indexFile, sourceFilePath);
     }
 
     public async revealIndexCommentFromSidebar(commentId: string, indexFilePath: string) {

@@ -139,6 +139,14 @@ export class CommentNavigationController {
 
         if (leaves.length > 0) {
             leaf = leaves[0];
+            if (!isSidebarViewLike(leaf.view)) {
+                createdLeaf = true;
+                await leaf.setViewState({
+                    type: "sidenote2-view",
+                    state: { filePath: sidebarFile?.path ?? null },
+                    active: true,
+                });
+            }
         } else {
             const rightLeaf = workspace.getRightLeaf(false);
             if (rightLeaf) {
@@ -258,6 +266,21 @@ export class CommentNavigationController {
                     await leaf.view.setIndexFileFilterRootPath(options.indexScopeRootFilePath);
                 }
                 leaf.view.highlightComment(commentId);
+            }
+        }
+    }
+
+    public async syncSidebarIndexScope(
+        file: TFile | null,
+        sourceFilePath: string,
+    ): Promise<void> {
+        const leaves = this.host.app.workspace.getLeavesOfType("sidenote2-view");
+        for (const leaf of leaves) {
+            if (isSidebarViewLike(leaf.view)) {
+                await leaf.view.updateActiveFile(file);
+                if (leaf.view.setIndexFileFilterRootPath) {
+                    await leaf.view.setIndexFileFilterRootPath(sourceFilePath);
+                }
             }
         }
     }

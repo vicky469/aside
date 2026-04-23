@@ -12,6 +12,8 @@ import {
     buildCommentLocationUrl,
     findCommentLocationLineNumber,
     findCommentLocationTargetInMarkdownLine,
+    findFileHeadingPathInMarkdownLine,
+    findIndexMarkdownLineTarget,
     isAllCommentsNotePath,
     LEGACY_ALL_COMMENTS_NOTE_PATH,
     normalizeAllCommentsNoteImageCaption,
@@ -70,6 +72,32 @@ test("findCommentLocationTargetInMarkdownLine finds the side note target in a ge
         },
     );
     assert.equal(findCommentLocationTargetInMarkdownLine("**Folder/Note.md**"), null);
+});
+
+test("findFileHeadingPathInMarkdownLine extracts the source file path from an index heading row", () => {
+    assert.equal(
+        findFileHeadingPathInMarkdownLine('  <strong class="sidenote2-index-heading-label" title="Folder/Note.md">Note.md</strong>'),
+        "Folder/Note.md",
+    );
+    assert.equal(findFileHeadingPathInMarkdownLine("### Folder"), null);
+});
+
+test("findIndexMarkdownLineTarget resolves both comment rows and file heading rows", () => {
+    assert.deepEqual(
+        findIndexMarkdownLineTarget('<span class="sidenote2-index-kind-dot sidenote2-index-kind-page"></span> [hello](obsidian://side-note2-comment?vault=dev&file=Folder%2FNote.md&commentId=comment-1&kind=page)  #hi'),
+        {
+            kind: "comment",
+            filePath: "Folder/Note.md",
+            commentId: "comment-1",
+        },
+    );
+    assert.deepEqual(
+        findIndexMarkdownLineTarget('  <strong class="sidenote2-index-heading-label" title="Folder/Note.md">Note.md</strong>'),
+        {
+            kind: "file",
+            filePath: "Folder/Note.md",
+        },
+    );
 });
 
 test("findCommentLocationLineNumber returns the generated index line for a comment id", () => {
