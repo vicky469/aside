@@ -57,7 +57,7 @@ import {
     filterThreadsByPinnedSidebarThreadIds,
     filterThreadsByPinnedSidebarViewState,
     filterThreadsBySidebarContentFilter,
-    filterThreadsBySidebarSearchQuery,
+    rankThreadsBySidebarSearchQuery,
     toggleDeletedSidebarViewState,
     toggleSidebarContentFilterState,
     unlockSidebarContentFilterForDraft,
@@ -271,7 +271,7 @@ async function ensureEditableMarkdownLeafForInsert(leaf: WorkspaceLeaf): Promise
 }
 
 export default class SideNote2View extends ItemView {
-    private static readonly NOTE_SIDEBAR_SEARCH_DEBOUNCE_MS = 240;
+    private static readonly NOTE_SIDEBAR_SEARCH_DEBOUNCE_MS = 120;
     private file: TFile | null = null;
     private plugin: SideNote2;
     private renderVersion = 0;
@@ -390,13 +390,17 @@ export default class SideNote2View extends ItemView {
             this.pinnedSidebarThreadIds.add(threadId);
         }
         this.savePinnedSidebarStateForFilePath(this.file?.path ?? null);
-        await this.renderComments();
+        await this.renderComments({
+            skipDataRefresh: true,
+        });
     }
 
     private async togglePinnedSidebarMode(): Promise<void> {
         this.showPinnedSidebarThreadsOnly = !this.showPinnedSidebarThreadsOnly;
         this.savePinnedSidebarStateForFilePath(this.file?.path ?? null);
-        await this.renderComments();
+        await this.renderComments({
+            skipDataRefresh: true,
+        });
     }
 
     private clearNoteSidebarSearchDebounceTimer(): void {
@@ -455,7 +459,9 @@ export default class SideNote2View extends ItemView {
 
         this.noteSidebarSearchQuery = query;
         const currentFilePath = this.file?.path ?? null;
-        await this.renderComments();
+        await this.renderComments({
+            skipDataRefresh: true,
+        });
         if (requestVersion !== this.noteSidebarSearchRequestVersion) {
             return;
         }
@@ -670,7 +676,9 @@ export default class SideNote2View extends ItemView {
         this.interactionController.clearActiveState();
     }
 
-    public async renderComments() {
+    public async renderComments(options: {
+        skipDataRefresh?: boolean;
+    } = {}) {
         const renderVersion = ++this.renderVersion;
         const normalizedFile = normalizeSidebarViewFile(
             this.file,
@@ -684,7 +692,9 @@ export default class SideNote2View extends ItemView {
         this.clearReorderDragState();
         if (file && !isAllCommentsView) {
             this.indexFileFilterGraph = null;
-            await this.plugin.loadCommentsForFile(file);
+            if (!options.skipDataRefresh) {
+                await this.plugin.loadCommentsForFile(file);
+            }
             if (renderVersion !== this.renderVersion || this.file?.path !== file.path) {
                 return;
             }
@@ -1021,7 +1031,7 @@ export default class SideNote2View extends ItemView {
             this.pinnedSidebarThreadIds,
             this.showPinnedSidebarThreadsOnly,
         );
-        const searchMatchedThreads = filterThreadsBySidebarSearchQuery(
+        const searchMatchedThreads = rankThreadsBySidebarSearchQuery(
             pinnedContentFilteredThreads,
             this.noteSidebarSearchQuery,
         );
@@ -1034,11 +1044,13 @@ export default class SideNote2View extends ItemView {
         const activeDraftHostThreadId = (visibleDraftComment?.mode === "edit" || visibleDraftComment?.mode === "append")
             ? visibleDraftComment.threadId ?? null
             : null;
-        const matchedThreadIds = new Set(searchMatchedThreads.map((thread) => thread.id));
-        if (activeDraftHostThreadId) {
-            matchedThreadIds.add(activeDraftHostThreadId);
+        const searchScopedThreads = searchMatchedThreads.slice();
+        if (activeDraftHostThreadId && !searchScopedThreads.some((thread) => thread.id === activeDraftHostThreadId)) {
+            const activeDraftHostThread = pinnedContentFilteredThreads.find((thread) => thread.id === activeDraftHostThreadId);
+            if (activeDraftHostThread) {
+                searchScopedThreads.push(activeDraftHostThread);
+            }
         }
-        const searchScopedThreads = pinnedContentFilteredThreads.filter((thread) => matchedThreadIds.has(thread.id));
         const visiblePersistedThreads = searchScopedThreads.filter((thread) =>
             matchesPageSidebarVisibility(thread, {
                 showResolved,
@@ -1997,14 +2009,9 @@ export default class SideNote2View extends ItemView {
             ".sidenote2-comment-content",
             ".sidenote2-comment-reference-section-list",
         ];
-        for (const selector of selectors) {
-            const targets = Array.from(container.querySelectorAll(selector));
-            for (const target of targets) {
-                if (target instanceof HTMLElement) {
-                    highlightSidebarSearchMatches(target, query);
-                }
-            }
-        }
+        highlightSidebarSearchMatches(container, query, {
+            allowedSelectors: selectors,
+        });
     }
 
     private renderNoteSearchInput(container: HTMLElement): void {
@@ -2020,7 +2027,6 @@ export default class SideNote2View extends ItemView {
         inputEl.type = "search";
         inputEl.value = this.noteSidebarSearchInputValue;
         inputEl.spellcheck = false;
-        inputEl.placeholder = "Search side notes";
         inputEl.setAttribute("aria-label", "Search side notes in this file");
         inputEl.addEventListener("focus", () => {
             this.interactionController.claimSidebarInteractionOwnership(inputEl);

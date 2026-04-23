@@ -8,6 +8,7 @@ import {
     filterThreadsBySidebarContentFilter,
     filterThreadsByPinnedSidebarThreadIds,
     filterThreadsBySidebarSearchQuery,
+    getSidebarThreadSearchScore,
     isAgentThread,
     isBookmarkThread,
     matchesSidebarDraftSearchQuery,
@@ -123,6 +124,88 @@ test("sidebar search matches selected text and entry bodies case-insensitively",
     assert.deepEqual(
         filterThreadsBySidebarSearchQuery([selectionThread, bodyThread], "api cleanup").map((thread) => thread.id),
         ["thread-body"],
+    );
+});
+
+test("sidebar search ranks exact selection matches ahead of body and unordered term matches", () => {
+    const unorderedBodyThread = createThread({
+        id: "thread-unordered-body",
+        selectedText: "Different note",
+        entries: [
+            { id: "thread-unordered-body", body: "Need cleanup before API release", timestamp: 100 },
+        ],
+    });
+    const exactBodyThread = createThread({
+        id: "thread-exact-body",
+        selectedText: "Different note",
+        entries: [
+            { id: "thread-exact-body", body: "Parent entry", timestamp: 100 },
+            { id: "entry-exact-body", body: "API cleanup", timestamp: 200 },
+        ],
+    });
+    const prefixSelectionThread = createThread({
+        id: "thread-prefix-selection",
+        selectedText: "API cleanup checklist",
+        entries: [
+            { id: "thread-prefix-selection", body: "Parent entry", timestamp: 100 },
+        ],
+    });
+    const exactSelectionThread = createThread({
+        id: "thread-exact-selection",
+        selectedText: "API cleanup",
+        entries: [
+            { id: "thread-exact-selection", body: "Parent entry", timestamp: 100 },
+        ],
+    });
+    const partialBodyThread = createThread({
+        id: "thread-partial-body",
+        selectedText: "Different note",
+        entries: [
+            { id: "thread-partial-body", body: "API follow-up only", timestamp: 100 },
+        ],
+    });
+
+    assert.deepEqual(
+        filterThreadsBySidebarSearchQuery(
+            [
+                unorderedBodyThread,
+                exactBodyThread,
+                prefixSelectionThread,
+                exactSelectionThread,
+                partialBodyThread,
+            ],
+            "api cleanup",
+        ).map((thread) => thread.id),
+        [
+            "thread-exact-selection",
+            "thread-prefix-selection",
+            "thread-exact-body",
+            "thread-unordered-body",
+        ],
+    );
+    assert.equal(getSidebarThreadSearchScore(exactSelectionThread, "api cleanup") > getSidebarThreadSearchScore(exactBodyThread, "api cleanup"), true);
+});
+
+test("sidebar search keeps the original thread order when scores tie", () => {
+    const firstThread = createThread({
+        id: "thread-first",
+        selectedText: "Different note",
+        entries: [
+            { id: "thread-first", body: "Alpha", timestamp: 100 },
+        ],
+    });
+    const secondThread = createThread({
+        id: "thread-second",
+        selectedText: "Different note",
+        entries: [
+            { id: "thread-second", body: "Alpha", timestamp: 100 },
+        ],
+    });
+
+    assert.equal(getSidebarThreadSearchScore(firstThread, "alpha"), getSidebarThreadSearchScore(secondThread, "alpha"));
+    assert.deepEqual(
+        filterThreadsBySidebarSearchQuery([secondThread, firstThread], "alpha").map((thread) => thread.id),
+        ["thread-second", "thread-first"],
     );
 });
 
