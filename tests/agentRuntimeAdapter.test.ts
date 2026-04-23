@@ -1,6 +1,7 @@
 import * as assert from "node:assert/strict";
 import test from "node:test";
 import {
+    extractCodexProgressTextDeltaFromJsonEvent,
     buildSideNotePrompt,
     createWorkspaceWriteSandboxPolicy,
     extractCodexProgressTextFromJsonEvent,
@@ -211,6 +212,27 @@ test("extractCodexProgressTextFromJsonEvent reads reasoning summaries and plan u
             },
         }),
         "Draft the reply",
+    );
+});
+
+test("extractCodexProgressTextDeltaFromJsonEvent preserves chunk spacing for buffering", () => {
+    assert.equal(
+        extractCodexProgressTextDeltaFromJsonEvent({
+            method: "item/reasoning/summaryTextDelta",
+            params: {
+                delta: " using the sidenote2 skill",
+            },
+        }),
+        " using the sidenote2 skill",
+    );
+    assert.equal(
+        extractCodexProgressTextDeltaFromJsonEvent({
+            method: "turn/plan/updated",
+            params: {
+                explanation: "ignore",
+            },
+        }),
+        null,
     );
 });
 

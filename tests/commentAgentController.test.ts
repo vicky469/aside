@@ -56,6 +56,7 @@ function createHarness(options: {
     runtimeReplyText?: string;
     runtimeError?: Error;
     runtimeStreamTexts?: string[];
+    nowIncrement?: number;
     onRefreshCommentViews?: (controller: CommentAgentController) => void;
     initialComments?: Comment[];
     runtimeSelection?: AgentRuntimeSelection;
@@ -82,12 +83,20 @@ function createHarness(options: {
     const appendedEntries: Array<{ threadId: string; body: string; insertAfterCommentId?: string }> = [];
     const editedEntries: Array<{ commentId: string; body: string }> = [];
     const notices: string[] = [];
+    const logEntries: Array<{
+        level: "info" | "warn" | "error";
+        area: string;
+        event: string;
+        payload?: Record<string, unknown>;
+    }> = [];
     const runtimeCalls: Array<{ target: "codex" | "claude"; prompt: string; cwd: string; vaultRootPath?: string | null }> = [];
     const remoteStartCalls: Array<{ agent: "codex" | "claude"; promptText: string; metadata: Record<string, unknown> }> = [];
     const remotePollCalls: Array<{ runId: string; afterCursor?: string | null; waitMs?: number }> = [];
+    const remoteCancelCalls: string[] = [];
     let refreshCount = 0;
     let idCounter = 1;
     let now = 100;
+    const nowIncrement = options.nowIncrement ?? 1;
     let controller: CommentAgentController;
 
     const store = new AgentRunStore({
@@ -99,7 +108,10 @@ function createHarness(options: {
 
     controller = new CommentAgentController({
         createCommentId: () => `generated-${idCounter++}`,
-        now: () => ++now,
+        now: () => {
+            now += nowIncrement;
+            return now;
+        },
         getPluginVersion: () => "2.0.39",
         getVaultRootPath: () => "/vault-root",
         refreshCommentViews: async () => {
@@ -197,6 +209,7 @@ function createHarness(options: {
             };
         },
         cancelRemoteRuntimeRun: async (runId) => {
+            remoteCancelCalls.push(runId);
             if (options.cancelRemoteRuntimeRun) {
                 return options.cancelRemoteRuntimeRun(runId);
             }
@@ -213,6 +226,9 @@ function createHarness(options: {
         showNotice: (message) => {
             notices.push(message);
         },
+        log: async (level, area, event, payload) => {
+            logEntries.push({ level, area, event, payload });
+        },
     }, store);
     controller.initialize();
 
@@ -223,9 +239,11 @@ function createHarness(options: {
         appendedEntries,
         editedEntries,
         notices,
+        logEntries,
         runtimeCalls,
         remoteStartCalls,
         remotePollCalls,
+        remoteCancelCalls,
         getRefreshCount: () => refreshCount,
         getPersistedData: () => persistedData,
     };
@@ -377,6 +395,99 @@ test("comment agent controller can run through the remote bridge and persist res
     assert.deepEqual(
         harness.remotePollCalls.map((call) => call.waitMs),
         [1_500, 1_500],
+    );
+    assert.equal(
+        harness.logEntries.find((entry) => entry.event === "agents.remote.start.response")?.payload?.status,
+        "queued",
+    );
+    assert.deepEqual(
+        harness.logEntries
+            .filter((entry) => entry.event === "agents.remote.poll.requested")
+            .map((entry) => ({
+                requestKind: entry.payload?.requestKind,
+                afterCursor: entry.payload?.afterCursor,
+                waitMs: entry.payload?.waitMs,
+            })),
+        [
+            { requestKind: "poll", afterCursor: "evt-1", waitMs: 1_500 },
+            { requestKind: "poll", afterCursor: "evt-2", waitMs: 1_500 },
+        ],
+    );
+    assert.deepEqual(
+        harness.logEntries
+            .filter((entry) => entry.event === "agents.remote.poll.response")
+            .map((entry) => ({
+                status: entry.payload?.status,
+                cursor: entry.payload?.cursor,
+                eventCount: entry.payload?.eventCount,
+                progressEventCount: entry.payload?.progressEventCount,
+                outputDeltaEventCount: entry.payload?.outputDeltaEventCount,
+            })),
+        [
+            {
+                status: "running",
+                cursor: "evt-2",
+                eventCount: 2,
+                progressEventCount: 1,
+                outputDeltaEventCount: 1,
+            },
+            {
+                status: "completed",
+                cursor: "evt-3",
+                eventCount: 0,
+                progressEventCount: 0,
+                outputDeltaEventCount: 0,
+            },
+        ],
+    );
+});
+
+test("comment agent controller auto-cancels remote runs after 3 minutes without reply text", async () => {
+    const harness = createHarness({
+        nowIncrement: 70_000,
+        runtimeSelection: {
+            kind: "resolved",
+            runtime: "openclaw-acp",
+            modePreference: "remote",
+            ownershipMessage: "Using remote runtime",
+        },
+        startRemoteRuntimeRun: async () => ({
+            httpStatus: 200,
+            status: "running",
+            cursor: "evt-1",
+            runId: "remote-run-1",
+            events: [{ type: "progress", text: "Queued remotely" }],
+            replyText: null,
+            error: null,
+        }),
+        pollRemoteRuntimeRun: async () => ({
+            httpStatus: 200,
+            status: "running",
+            cursor: "evt-1",
+            runId: "remote-run-1",
+            events: [],
+            replyText: null,
+            error: null,
+        }),
+    });
+
+    await harness.controller.handleSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "@codex review this",
+    });
+    await waitForAgentQueueToDrain(harness.controller);
+
+    const latestRun = harness.controller.getLatestAgentRunForThread("thread-1");
+    assert.equal(latestRun?.status, "cancelled");
+    assert.match(latestRun?.error ?? "", /3 minutes/i);
+    assert.match(latestRun?.error ?? "", /without a response/i);
+    assert.equal(harness.commentManager.getCommentById("generated-2")?.comment, "");
+    assert.deepEqual(harness.remoteCancelCalls, ["remote-run-1"]);
+    assert.equal(
+        harness.logEntries.find((entry) => entry.event === "agents.remote.auto_cancelled")?.payload?.cursor,
+        "evt-1",
     );
 });
 

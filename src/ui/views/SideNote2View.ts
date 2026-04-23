@@ -693,6 +693,8 @@ export default class SideNote2View extends ItemView {
                 ? buildIndexFileFilterOptionsFromCounts(indexFileFilterGraph.fileCommentCounts)
                 : [];
             this.syncPinnedSidebarThreadIds(persistedThreads);
+            const pinnedSidebarThreadIds = isAllCommentsView ? EMPTY_PINNED_SIDEBAR_THREAD_IDS : this.pinnedSidebarThreadIds;
+            const showPinnedThreadsOnly = !isAllCommentsView && this.showPinnedSidebarThreadsOnly;
             const {
                 scopedVisibleThreads,
                 scopedAllThreads,
@@ -704,18 +706,21 @@ export default class SideNote2View extends ItemView {
                 };
             const pinnedScopedVisibleThreads = filterThreadsByPinnedSidebarViewState(
                 scopedVisibleThreads,
-                this.pinnedSidebarThreadIds,
-                this.showPinnedSidebarThreadsOnly,
+                pinnedSidebarThreadIds,
+                showPinnedThreadsOnly,
             );
             const pinnedScopedAllThreads = filterThreadsByPinnedSidebarViewState(
                 scopedAllThreads,
-                this.pinnedSidebarThreadIds,
-                this.showPinnedSidebarThreadsOnly,
+                pinnedSidebarThreadIds,
+                showPinnedThreadsOnly,
             );
             const draftComment = this.plugin.getDraftForView(file.path);
             const visibleDraftComment = draftComment
                 && matchesResolvedVisibility(draftComment.resolved, showResolved)
-                && matchesPinnedSidebarDraftVisibility(draftComment, this.getPinnedSidebarFilterThreadIds())
+                && matchesPinnedSidebarDraftVisibility(
+                    draftComment,
+                    showPinnedThreadsOnly ? pinnedSidebarThreadIds : EMPTY_PINNED_SIDEBAR_THREAD_IDS,
+                )
                 && (!filteredIndexFilePaths.length || filteredIndexFilePaths.includes(draftComment.filePath))
                 ? draftComment
                 : null;
@@ -1727,7 +1732,7 @@ export default class SideNote2View extends ItemView {
             }
             return;
         }
-        if (showListOnlyToolbarChips) {
+        if (!options.isAllCommentsView && showListOnlyToolbarChips) {
             this.renderToolbarIconButton(actionGroup, {
                 icon: "pin",
                 active: showPinnedThreadsOnly,

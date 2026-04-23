@@ -434,6 +434,23 @@ function extractPlanProgressText(params: unknown): string | null {
     return null;
 }
 
+export function extractCodexProgressTextDeltaFromJsonEvent(event: unknown): string | null {
+    const eventKey = firstStringAtPaths(event, [
+        ["method"],
+        ["msg"],
+        ["event_type"],
+        ["type"],
+    ]);
+    if (eventKey !== "item/reasoning/summaryTextDelta") {
+        return null;
+    }
+
+    return firstStringAtPaths(event, [
+        ["params", "delta"],
+        ["delta"],
+    ]) ?? null;
+}
+
 export function extractCodexProgressTextFromJsonEvent(event: unknown): string | null {
     const eventKey = firstStringAtPaths(event, [
         ["method"],
@@ -447,10 +464,7 @@ export function extractCodexProgressTextFromJsonEvent(event: unknown): string | 
 
     switch (eventKey) {
         case "item/reasoning/summaryTextDelta":
-            return normalizeProgressText(firstStringAtPaths(event, [
-                ["params", "delta"],
-                ["delta"],
-            ]) ?? "");
+            return normalizeProgressText(extractCodexProgressTextDeltaFromJsonEvent(event) ?? "");
         case "turn/plan/updated":
             return extractPlanProgressText(getNestedValue(event, ["params"]));
         default:
@@ -904,7 +918,7 @@ async function runCodexDirect(
                         return;
                     }
 
-                    const delta = extractCodexProgressTextFromJsonEvent(message);
+                    const delta = extractCodexProgressTextDeltaFromJsonEvent(message);
                     if (!delta) {
                         return;
                     }
