@@ -138,6 +138,32 @@ test("buildEditorHighlightRanges falls back to the nearest matching occurrence",
     }]);
 });
 
+test("buildEditorHighlightRanges resolves anchors when multiline anchor text collapses onto one line", () => {
+    const docText = "# note\n\n## title title content\n";
+    const ranges = buildEditorHighlightRanges(
+        docText,
+        docText,
+        [createComment({
+            startLine: 2,
+            startChar: 0,
+            endLine: 3,
+            endChar: 13,
+            selectedText: "## title\ntitle content",
+        })],
+        null,
+        false,
+        "comment-1",
+    );
+
+    assert.deepEqual(ranges, [{
+        commentId: "comment-1",
+        from: 8,
+        to: 30,
+        resolved: false,
+        active: true,
+    }]);
+});
+
 test("buildEditorHighlightRanges skips orphaned comments", () => {
     const docText = "alpha beta gamma";
     const ranges = buildEditorHighlightRanges(

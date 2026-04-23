@@ -9,6 +9,7 @@ import {
     type AgentRunStreamState,
 } from "../../core/agents/agentRuns";
 import type { SideNote2AgentTarget } from "../../core/config/agentTargets";
+import { getVisibleNoteContent } from "../../core/storage/noteCommentStorage";
 import { splitTrailingSideNoteReferenceSection, type TrailingSideNoteReferenceSection } from "../../core/text/commentReferences";
 import type { DraftComment } from "../../domain/drafts";
 import type { SideNoteReferenceSearchDocument } from "../../index/SideNoteReferenceSearchIndex";
@@ -99,7 +100,7 @@ export interface SidebarPersistedCommentHost {
     getEventTargetElement(target: EventTarget | null): HTMLElement | null;
     isSelectionInsideSidebarContent(selection?: Selection | null): boolean;
     claimSidebarInteractionOwnership(focusTarget?: HTMLElement | null): void;
-    insertCommentMarkdownIntoNote(filePath: string, markdown: string): Promise<boolean>;
+    insertCommentMarkdownIntoFile(markdown: string): Promise<boolean>;
     renderMarkdown(markdown: string, container: HTMLElement, sourcePath: string): Promise<void>;
     openSidebarInternalLink(href: string, sourcePath: string, focusTarget: HTMLElement): Promise<void>;
     openSideNoteReference(url: string): Promise<void>;
@@ -114,7 +115,7 @@ export interface SidebarPersistedCommentHost {
     resolveComment(commentId: string): void;
     unresolveComment(commentId: string): void;
     moveCommentThread(threadId: string, sourceFilePath: string): void;
-    restoreComment(commentId: string): Promise<void> | void;
+    restoreComment(commentId: string): Promise<boolean> | Promise<void> | boolean | void;
     startEditDraft(commentId: string, hostFilePath: string | null): void;
     setCommentBookmarkState(commentId: string, isBookmark: boolean): Promise<void> | void;
     isPinnedThread(threadId: string): boolean;
@@ -430,7 +431,9 @@ export function getInsertableSidebarCommentMarkdown(
         return null;
     }
 
-    const markdown = splitTrailingSideNoteReferenceSection(entryBody).body.trim();
+    const markdown = splitTrailingSideNoteReferenceSection(
+        getVisibleNoteContent(entryBody).replace(/\n{3,}/g, "\n\n"),
+    ).body.trim();
     return markdown || null;
 }
 
@@ -1273,7 +1276,6 @@ function renderThreadFooterActions(
             icon: string;
         } | null;
         insertAction?: {
-            filePath: string;
             markdown: string;
         } | null;
     },
@@ -1293,7 +1295,7 @@ function renderThreadFooterActions(
         });
         const addButton = footerMetaEl.createSpan({
             cls: "sidenote2-thread-footer-meta-action",
-            text: "Add to source",
+            text: "Add to file",
         });
         attachSidebarActionButtonInteractions(addButton, host);
         addButton.tabIndex = 0;
@@ -1304,7 +1306,7 @@ function renderThreadFooterActions(
             if (!(await host.saveVisibleDraftIfPresent())) {
                 return;
             }
-            await host.insertCommentMarkdownIntoNote(insertAction.filePath, insertAction.markdown);
+            await host.insertCommentMarkdownIntoFile(insertAction.markdown);
         };
         addButton.addEventListener("click", (event) => {
             void runInsert(event);
@@ -1493,7 +1495,6 @@ function renderStoredThreadEntry(
                 moveAction: null,
                 insertAction: entryInsertMarkdown
                     ? {
-                        filePath: entryComment.filePath,
                         markdown: entryInsertMarkdown,
                     }
                     : null,
@@ -1646,7 +1647,6 @@ export async function renderPersistedCommentCard(
                 : null,
             insertAction: parentInsertMarkdown
                 ? {
-                    filePath: comment.filePath,
                     markdown: parentInsertMarkdown,
                 }
                 : null,

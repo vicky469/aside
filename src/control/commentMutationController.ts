@@ -366,15 +366,20 @@ export class CommentMutationController {
         });
     }
 
-    public async restoreComment(commentId: string): Promise<void> {
+    public async restoreComment(commentId: string): Promise<boolean> {
         void this.host.log?.("info", "draft", "thread.restore", { commentId });
         const latestTarget = await this.loadLatestCommentTarget(commentId);
         if (!latestTarget) {
-            return;
+            return false;
+        }
+
+        if (latestTarget.latestComment.deletedAt === undefined) {
+            return false;
         }
 
         this.host.getCommentManager().restoreComment(commentId, this.host.now());
         await this.host.persistCommentsForFile(latestTarget.file, { immediateAggregateRefresh: true });
+        return true;
     }
 
     public async clearDeletedCommentsForFile(filePath: string): Promise<boolean> {

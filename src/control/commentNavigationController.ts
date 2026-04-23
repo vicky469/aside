@@ -370,7 +370,7 @@ export class CommentNavigationController {
         if (resolvedAnchor) {
             editor.setSelection(
                 { line: resolvedAnchor.startLine, ch: resolvedAnchor.startChar },
-                { line: resolvedAnchor.startLine, ch: resolvedAnchor.startChar },
+                { line: resolvedAnchor.endLine, ch: resolvedAnchor.endChar },
             );
             editor.scrollIntoView(buildCommentRevealScrollTarget(comment, resolvedAnchor), true);
             void this.host.log?.("info", "navigation", "navigation.reveal.resolved", {

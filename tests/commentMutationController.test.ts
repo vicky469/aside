@@ -33,6 +33,7 @@ function createComment(overrides: Partial<Comment> = {}): Comment {
         isBookmark: overrides.isBookmark ?? false,
         orphaned: overrides.orphaned ?? false,
         resolved: overrides.resolved ?? false,
+        ...(overrides.deletedAt !== undefined ? { deletedAt: overrides.deletedAt } : {}),
     };
 }
 
@@ -1013,12 +1014,38 @@ test("comment mutation controller restores a soft deleted comment", async () => 
         now: deletedAt + 1_000,
     });
 
-    await host.controller.restoreComment(comment.id);
+    const restored = await host.controller.restoreComment(comment.id);
 
+    assert.equal(restored, true);
     assert.equal(host.manager.getCommentById(comment.id)?.deletedAt, undefined);
     assert.equal(host.manager.getCommentsForFile(comment.filePath)[0]?.id, comment.id);
     assert.deepEqual(host.persistedFiles, [{
         path: comment.filePath,
+        immediateAggregateRefresh: true,
+    }]);
+});
+
+test("comment mutation controller restores a soft deleted child entry", async () => {
+    const deletedAt = Date.now();
+    const parent = createComment({ id: "thread-1", timestamp: deletedAt - 2_000 });
+    const host = createHost({
+        knownComments: [parent],
+        loadedComments: [parent],
+        now: deletedAt + 1_000,
+    });
+    host.manager.appendEntry(parent.id, {
+        id: "entry-2",
+        body: "Deleted child entry",
+        timestamp: deletedAt - 1_000,
+        deletedAt,
+    });
+
+    const restored = await host.controller.restoreComment("entry-2");
+
+    assert.equal(restored, true);
+    assert.equal(host.manager.getCommentById("entry-2")?.deletedAt, undefined);
+    assert.deepEqual(host.persistedFiles, [{
+        path: parent.filePath,
         immediateAggregateRefresh: true,
     }]);
 });

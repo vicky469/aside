@@ -483,6 +483,10 @@ export class CommentManager {
 
         if (thread.id === id) {
             delete thread.deletedAt;
+            const rootEntry = thread.entries.find((candidate) => candidate.id === id);
+            if (rootEntry) {
+                delete rootEntry.deletedAt;
+            }
             thread.updatedAt = Math.max(thread.updatedAt, restoredAt);
             return;
         }

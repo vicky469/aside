@@ -29,6 +29,7 @@ import type SideNote2 from "../../main";
 import type { AgentStreamUpdate } from "../../control/commentAgentController";
 import SideNoteFileFilterModal from "../modals/SideNoteFileFilterModal";
 import SideNoteLinkSuggestModal from "../modals/SideNoteLinkSuggestModal";
+import SideNoteOpenFileSuggestModal from "../modals/SideNoteOpenFileSuggestModal";
 import SideNoteReferenceSuggestModal from "../modals/SideNoteReferenceSuggestModal";
 import SideNoteTagSuggestModal from "../modals/SideNoteTagSuggestModal";
 import { SIDE_NOTE2_ICON_ID } from "../sideNote2Icon";
@@ -165,6 +166,15 @@ type MermaidRuntimeLike = {
     render: (id: string, source: string) => Promise<MermaidRenderResult>;
 };
 
+type OpenMarkdownFileInsertTarget = {
+    file: TFile;
+    leaf: WorkspaceLeaf;
+    view: MarkdownView;
+    active: boolean;
+    recent: boolean;
+    editable: boolean;
+};
+
 function isMermaidRuntimeLike(value: unknown): value is MermaidRuntimeLike {
     if (!value || typeof value !== "object") {
         return false;
@@ -175,10 +185,8 @@ function isMermaidRuntimeLike(value: unknown): value is MermaidRuntimeLike {
         && typeof candidate.render === "function";
 }
 
-function buildBlockInsertionText(
+function buildAppendToFileEndText(
     noteContent: string,
-    fromOffset: number,
-    toOffset: number,
     blockMarkdown: string,
 ): string {
     const normalizedBlock = blockMarkdown.trim();
@@ -186,11 +194,80 @@ function buildBlockInsertionText(
         return "";
     }
 
-    const charBefore = fromOffset > 0 ? noteContent.charAt(fromOffset - 1) : "";
-    const charAfter = toOffset < noteContent.length ? noteContent.charAt(toOffset) : "";
-    const prefix = fromOffset === 0 || charBefore === "\n" ? "" : "\n\n";
-    const suffix = toOffset >= noteContent.length || charAfter === "\n" ? "" : "\n\n";
-    return `${prefix}${normalizedBlock}${suffix}`;
+    if (!noteContent) {
+        return normalizedBlock;
+    }
+
+    if (noteContent.endsWith("\n\n")) {
+        return normalizedBlock;
+    }
+
+    return noteContent.endsWith("\n")
+        ? `\n${normalizedBlock}`
+        : `\n\n${normalizedBlock}`;
+}
+
+function shouldReplaceOpenMarkdownFileInsertTarget(
+    current: OpenMarkdownFileInsertTarget,
+    candidate: OpenMarkdownFileInsertTarget,
+): boolean {
+    if (current.editable !== candidate.editable) {
+        return candidate.editable;
+    }
+
+    if (current.active !== candidate.active) {
+        return candidate.active;
+    }
+
+    if (current.recent !== candidate.recent) {
+        return candidate.recent;
+    }
+
+    return false;
+}
+
+function compareOpenMarkdownFileInsertTargets(
+    left: OpenMarkdownFileInsertTarget,
+    right: OpenMarkdownFileInsertTarget,
+): number {
+    if (left.active !== right.active) {
+        return left.active ? -1 : 1;
+    }
+
+    if (left.recent !== right.recent) {
+        return left.recent ? -1 : 1;
+    }
+
+    const fileNameComparison = left.file.basename.localeCompare(right.file.basename);
+    return fileNameComparison !== 0
+        ? fileNameComparison
+        : left.file.path.localeCompare(right.file.path);
+}
+
+async function ensureEditableMarkdownLeafForInsert(leaf: WorkspaceLeaf): Promise<MarkdownView | null> {
+    if (!(leaf.view instanceof MarkdownView)) {
+        return null;
+    }
+
+    if (leaf.view.getMode() !== "preview") {
+        return leaf.view;
+    }
+
+    const viewState = leaf.getViewState();
+    if (viewState.type !== "markdown") {
+        return null;
+    }
+
+    await leaf.setViewState({
+        ...viewState,
+        state: {
+            ...(viewState.state ?? {}),
+            mode: "source",
+            source: false,
+        },
+    });
+
+    return leaf.view instanceof MarkdownView ? leaf.view : null;
 }
 
 export default class SideNote2View extends ItemView {
@@ -2239,59 +2316,142 @@ export default class SideNote2View extends ItemView {
         });
     }
 
-    private async insertCommentMarkdownIntoNote(filePath: string, markdown: string): Promise<boolean> {
-        const targetFile = this.app.vault.getAbstractFileByPath(filePath);
-        if (!(targetFile instanceof TFile) || targetFile.extension !== "md") {
-            new Notice("Unable to open the source note.");
+    private getOpenMarkdownFileInsertTargets(): OpenMarkdownFileInsertTarget[] {
+        const workspace = this.app.workspace;
+        const activeLeaf = workspace.getActiveViewOfType(MarkdownView)?.leaf ?? null;
+        const recentLeaf = workspace.getMostRecentLeaf(workspace.rootSplit);
+        const targetsByPath = new Map<string, OpenMarkdownFileInsertTarget>();
+
+        workspace.iterateAllLeaves((leaf) => {
+            if (!(leaf.view instanceof MarkdownView)) {
+                return;
+            }
+
+            const file = leaf.view.file;
+            if (!(file instanceof TFile) || file.extension !== "md") {
+                return;
+            }
+
+            const target: OpenMarkdownFileInsertTarget = {
+                file,
+                leaf,
+                view: leaf.view,
+                active: leaf === activeLeaf,
+                recent: leaf === recentLeaf,
+                editable: leaf.view.getMode() !== "preview",
+            };
+            const current = targetsByPath.get(file.path);
+            if (!current) {
+                targetsByPath.set(file.path, target);
+                return;
+            }
+
+            const preferredTarget = shouldReplaceOpenMarkdownFileInsertTarget(current, target)
+                ? target
+                : current;
+            targetsByPath.set(file.path, {
+                ...preferredTarget,
+                active: current.active || target.active,
+                recent: current.recent || target.recent,
+                editable: current.editable || target.editable,
+            });
+        });
+
+        return Array.from(targetsByPath.values()).sort(compareOpenMarkdownFileInsertTargets);
+    }
+
+    private async insertCommentMarkdownIntoOpenFile(
+        target: OpenMarkdownFileInsertTarget,
+        markdown: string,
+    ): Promise<boolean> {
+        const normalizedMarkdown = markdown.trim();
+        if (!normalizedMarkdown) {
+            new Notice("Unable to add that content.");
             return false;
         }
 
-        let targetLeaf = this.plugin.getPreferredFileLeaf(targetFile.path) ?? this.app.workspace.getLeaf(false);
-        if (!targetLeaf) {
-            new Notice("Unable to open that note.");
+        this.app.workspace.setActiveLeaf(target.leaf, { focus: true });
+
+        const editableView = await ensureEditableMarkdownLeafForInsert(target.leaf);
+        if (!editableView) {
+            new Notice("Unable to open that file for editing.");
             return false;
         }
 
-        if (!(targetLeaf.view instanceof MarkdownView) || targetLeaf.view.file?.path !== targetFile.path) {
-            await targetLeaf.openFile(targetFile);
-        }
-
-        if (!(targetLeaf.view instanceof MarkdownView) || targetLeaf.view.file?.path !== targetFile.path) {
-            new Notice("Unable to insert into that note.");
-            return false;
-        }
-
-        if (targetLeaf.view.getMode() === "preview") {
-            new Notice("Switch the source note to editing mode to add the reply.");
-            return false;
-        }
-
-        this.app.workspace.setActiveLeaf(targetLeaf, { focus: true });
-
-        const editor = targetLeaf.view.editor;
-        const from = editor.getCursor("from");
-        const to = editor.getCursor("to");
-        const fromOffset = editor.posToOffset(from);
-        const insertionText = editor.somethingSelected()
-            ? markdown.trim()
-            : buildBlockInsertionText(
-                editor.getValue(),
-                fromOffset,
-                editor.posToOffset(to),
-                markdown,
-            );
+        const editor = editableView.editor;
+        const insertionText = buildAppendToFileEndText(editor.getValue(), normalizedMarkdown);
         if (!insertionText) {
-            new Notice("Unable to add that reply.");
+            new Notice("Unable to add that content.");
             return false;
         }
 
-        editor.replaceRange(insertionText, from, to);
-        const nextOffset = fromOffset + insertionText.length;
-        const nextPosition = editor.offsetToPos(nextOffset);
-        editor.setSelection(nextPosition, nextPosition);
-        editor.focus();
-        new Notice("Added to source note.");
+        const lastLine = editor.lastLine();
+        const endPosition = {
+            line: lastLine,
+            ch: editor.getLine(lastLine).length,
+        };
+        editor.replaceRange(insertionText, endPosition);
+        const nextEndPosition = {
+            line: editor.lastLine(),
+            ch: editor.getLine(editor.lastLine()).length,
+        };
+        editor.setSelection(nextEndPosition, nextEndPosition);
+        editableView.editor.focus();
+        new Notice("Added to file.");
         return true;
+    }
+
+    private async insertCommentMarkdownIntoFile(markdown: string): Promise<boolean> {
+        const availableTargets = this.getOpenMarkdownFileInsertTargets();
+        if (!availableTargets.length) {
+            new Notice("Open a markdown file first.");
+            return false;
+        }
+
+        return new Promise<boolean>((resolve) => {
+            let selectionStarted = false;
+            let settled = false;
+            const settle = (value: boolean) => {
+                if (settled) {
+                    return;
+                }
+
+                settled = true;
+                resolve(value);
+            };
+
+            new SideNoteOpenFileSuggestModal(this.app, {
+                availableFiles: availableTargets.map((target) => ({
+                    fileName: target.file.basename,
+                    filePath: target.file.path,
+                    active: target.active,
+                    recent: target.recent,
+                })),
+                onChooseFile: async (suggestion) => {
+                    selectionStarted = true;
+                    const latestTarget = this.getOpenMarkdownFileInsertTargets()
+                        .find((target) => target.file.path === suggestion.filePath);
+                    if (!latestTarget) {
+                        new Notice("That file is no longer open.");
+                        settle(false);
+                        return;
+                    }
+
+                    try {
+                        settle(await this.insertCommentMarkdownIntoOpenFile(latestTarget, markdown));
+                    } catch (error) {
+                        console.error("Failed to add comment markdown to file", error);
+                        new Notice("Unable to add to that file.");
+                        settle(false);
+                    }
+                },
+                onCloseModal: () => {
+                    if (!selectionStarted) {
+                        settle(false);
+                    }
+                },
+            }).open();
+        });
     }
 
     private async renderPersistedComment(
@@ -2326,7 +2486,7 @@ export default class SideNote2View extends ItemView {
             getEventTargetElement: (target) => this.interactionController.getEventTargetElement(target),
             isSelectionInsideSidebarContent: (selection) => this.interactionController.isSelectionInsideSidebarContent(selection),
             claimSidebarInteractionOwnership: (focusTarget) => this.interactionController.claimSidebarInteractionOwnership(focusTarget),
-            insertCommentMarkdownIntoNote: (filePath, markdown) => this.insertCommentMarkdownIntoNote(filePath, markdown),
+            insertCommentMarkdownIntoFile: (markdown) => this.insertCommentMarkdownIntoFile(markdown),
             renderMarkdown: async (markdown, container, sourcePath) => {
                 await MarkdownRenderer.render(this.app, markdown, container, sourcePath, this);
             },
@@ -2373,10 +2533,19 @@ export default class SideNote2View extends ItemView {
                 this.openMoveCommentThreadModal(threadId, sourceFilePath);
             },
             restoreComment: async (commentId) => {
-                await this.plugin.restoreComment(commentId);
+                const thread = this.plugin.getThreadById(commentId);
+                const restored = await this.plugin.restoreComment(commentId);
+                if (!restored) {
+                    return;
+                }
+
+                if (thread && thread.id !== commentId) {
+                    await this.plugin.setShowNestedCommentsForThread(thread.id, true);
+                }
                 if (this.plugin.shouldShowDeletedComments()) {
                     await this.plugin.setShowDeletedComments(false);
                 }
+                this.highlightComment(commentId);
             },
             startEditDraft: (commentId, hostFilePath) => {
                 void this.plugin.startEditDraft(commentId, hostFilePath);

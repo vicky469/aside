@@ -1189,6 +1189,10 @@ export default class SideNote2 extends Plugin {
         return this.commentManager.getThreadsForFile(filePath, options);
     }
 
+    public getThreadById(commentId: string): CommentThread | null {
+        return this.getKnownThreadById(commentId);
+    }
+
     public async reorderThreadsForFile(
         filePath: string,
         movedThreadId: string,
@@ -1547,8 +1551,8 @@ export default class SideNote2 extends Plugin {
         await this.commentMutationController.deleteComment(commentId);
     }
 
-    async restoreComment(commentId: string) {
-        await this.commentMutationController.restoreComment(commentId);
+    async restoreComment(commentId: string): Promise<boolean> {
+        return this.commentMutationController.restoreComment(commentId);
     }
 
     async clearDeletedCommentsForFile(filePath: string): Promise<boolean> {

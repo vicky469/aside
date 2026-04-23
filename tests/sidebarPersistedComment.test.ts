@@ -851,6 +851,29 @@ test("getInsertableSidebarCommentMarkdown keeps the full agent reply body withou
     );
 });
 
+test("getInsertableSidebarCommentMarkdown strips managed SideNote2 blocks before inserting into a file", () => {
+    assert.equal(
+        getInsertableSidebarCommentMarkdown(
+            "entry-2",
+            [
+                "Intro line.",
+                "",
+                "<!-- SideNote2 comments",
+                "[]",
+                "-->",
+                "",
+                "Trailing visible line.",
+            ].join("\n"),
+            [createAgentRun({ outputEntryId: "entry-2" })],
+        ),
+        [
+            "Intro line.",
+            "",
+            "Trailing visible line.",
+        ].join("\n"),
+    );
+});
+
 test("getInsertableSidebarCommentMarkdown returns null for user-authored comments", () => {
     assert.equal(getInsertableSidebarCommentMarkdown("entry-2", "Reply body", []), null);
 });

@@ -1,4 +1,5 @@
 import type { Comment } from "../../commentManager";
+import { resolveAnchorRange } from "../anchors/anchorResolver";
 import { isAnchoredComment } from "../anchors/commentAnchors";
 import { filterCommentsByResolvedVisibility, matchesResolvedCommentVisibility } from "../rules/resolvedCommentVisibility";
 import { sortCommentsByPosition } from "../storage/noteCommentStorage";
@@ -68,42 +69,21 @@ export function buildEditorHighlightRanges(
         let from = -1;
         let to = -1;
 
-        const storedFrom = lineChToOffset(docText, comment.startLine, comment.startChar);
-        const storedTo = lineChToOffset(docText, comment.endLine, comment.endChar);
-        if (
-            storedFrom !== null &&
-            storedTo !== null &&
-            storedFrom < storedTo &&
-            docText.slice(storedFrom, storedTo) === comment.selectedText
-        ) {
-            from = storedFrom;
-            to = storedTo;
-        }
-
-        if (from === -1 && comment.selectedText) {
-            const approximateOffset = lineChToOffset(docText, comment.startLine, comment.startChar) ?? 0;
-            let bestIndex = -1;
-            let bestDistance = Number.POSITIVE_INFINITY;
-            let searchFrom = 0;
-
-            while (searchFrom <= searchableText.length) {
-                const matchIndex = searchableText.indexOf(comment.selectedText, searchFrom);
-                if (matchIndex === -1) {
-                    break;
-                }
-
-                const distance = Math.abs(matchIndex - approximateOffset);
-                if (distance < bestDistance) {
-                    bestDistance = distance;
-                    bestIndex = matchIndex;
-                }
-
-                searchFrom = matchIndex + Math.max(comment.selectedText.length, 1);
-            }
-
-            if (bestIndex !== -1) {
-                from = bestIndex;
-                to = bestIndex + comment.selectedText.length;
+        const resolvedAnchor = resolveAnchorRange(searchableText, comment);
+        if (resolvedAnchor) {
+            from = resolvedAnchor.startOffset;
+            to = resolvedAnchor.endOffset;
+        } else {
+            const storedFrom = lineChToOffset(docText, comment.startLine, comment.startChar);
+            const storedTo = lineChToOffset(docText, comment.endLine, comment.endChar);
+            if (
+                storedFrom !== null &&
+                storedTo !== null &&
+                storedFrom < storedTo &&
+                docText.slice(storedFrom, storedTo) === comment.selectedText
+            ) {
+                from = storedFrom;
+                to = storedTo;
             }
         }
 
