@@ -2,6 +2,7 @@ import * as assert from "node:assert/strict";
 import test from "node:test";
 import {
     buildCommentRevealScrollTarget,
+    pickExactFileLeafCandidate,
     pickPinnedCommentableFile,
     pickPreferredFileLeafCandidate,
     pickSidebarTargetFile,
@@ -130,6 +131,21 @@ class MockPlugin {
         );
 
         return leaf?.id ?? "existing-or-new";
+    }
+
+    getMoveTargetFixed(leaves: MockLeaf[], filePath: string): string {
+        const leaf = pickExactFileLeafCandidate(
+            leaves.map((candidate) => ({
+                value: candidate,
+                filePath: candidate.filePath ?? null,
+                eligible: candidate.kind === "file",
+                active: candidate.active === true,
+                recent: candidate.recent === true,
+            })),
+            filePath,
+        );
+
+        return leaf?.id ?? "new-tab";
     }
 
     syncIndexLeafModeOld(leaf: MockLeaf): MockLeaf {
@@ -291,6 +307,27 @@ test("fixed reveal flow reuses an existing file leaf instead of forcing a new ta
     ], "Folder/Note.md");
 
     assert.equal(target, "main-1");
+});
+
+test("move flow reuses the exact open file leaf when the destination note is already open", () => {
+    const plugin = new MockPlugin();
+    const target = plugin.getMoveTargetFixed([
+        { id: "sidebar", kind: "sidebar", active: true },
+        { id: "main-1", kind: "file", filePath: "Folder/Other.md", recent: true },
+        { id: "main-2", kind: "file", filePath: ALL_COMMENTS_NOTE_PATH },
+    ], "Folder/Other.md");
+
+    assert.equal(target, "main-1");
+});
+
+test("move flow opens a new tab when the destination note is not already open", () => {
+    const plugin = new MockPlugin();
+    const target = plugin.getMoveTargetFixed([
+        { id: "sidebar", kind: "sidebar", active: true },
+        { id: "main-1", kind: "file", filePath: ALL_COMMENTS_NOTE_PATH, recent: true },
+    ], "Folder/Other.md");
+
+    assert.equal(target, "new-tab");
 });
 
 test("anchored reveal scroll target keeps the stored character range when no re-resolved anchor is available", () => {

@@ -69,7 +69,7 @@ function createHost(options: {
     const loadedFiles: string[] = [];
     const persistedFiles: Array<{ path: string; immediateAggregateRefresh?: boolean; skipCommentViewRefresh?: boolean }> = [];
     const highlightedCommentIds: string[] = [];
-    const openedFilesInNewTab: string[] = [];
+    const openedMoveTargetFiles: string[] = [];
     const setDraftCalls: Array<{
         draftComment: DraftComment | null;
         hostFilePath?: string | null;
@@ -166,8 +166,8 @@ function createHost(options: {
         activateViewAndHighlightComment: async (commentId) => {
             highlightedCommentIds.push(commentId);
         },
-        openFileInNewTab: async (file) => {
-            openedFilesInNewTab.push(file.path);
+        openMoveTargetFile: async (file) => {
+            openedMoveTargetFiles.push(file.path);
         },
         hashText: async (text) => `hash:${text}`,
         showNotice: (message) => {
@@ -187,7 +187,7 @@ function createHost(options: {
         loadedFiles,
         persistedFiles,
         highlightedCommentIds,
-        openedFilesInNewTab,
+        openedMoveTargetFiles,
         setShowResolvedCalls,
         setDraftCalls,
         savedUserEntryEvents,
@@ -971,7 +971,7 @@ test("comment mutation controller moves a thread into another file as a page not
         ["thread-1", "thread-2"],
     );
     assert.deepEqual(host.notices, ["Moved side note to Other."]);
-    assert.deepEqual(host.openedFilesInNewTab, ["Folder/Other.md"]);
+    assert.deepEqual(host.openedMoveTargetFiles, ["Folder/Other.md"]);
 });
 
 test("comment mutation controller rejects moving a thread into the same file", async () => {

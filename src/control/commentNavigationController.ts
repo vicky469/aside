@@ -8,6 +8,7 @@ import { resolveAnchorRange } from "../core/anchors/anchorResolver";
 import { parseNoteComments } from "../core/storage/noteCommentStorage";
 import {
     buildCommentRevealScrollTarget,
+    pickExactFileLeafCandidate,
     pickPreferredFileLeafCandidate,
     resolveIndexSidebarScopeRootPath,
     shouldRevealSidebarLeaf,
@@ -286,6 +287,14 @@ export class CommentNavigationController {
     }
 
     public getPreferredFileLeaf(filePath?: string): WorkspaceLeaf | null {
+        return pickPreferredFileLeafCandidate(this.getFileLeafCandidates(), filePath);
+    }
+
+    public getOpenFileLeaf(filePath: string): WorkspaceLeaf | null {
+        return pickExactFileLeafCandidate(this.getFileLeafCandidates(), filePath);
+    }
+
+    private getFileLeafCandidates(): PreferredFileLeafCandidate<WorkspaceLeaf>[] {
         const workspace = this.host.app.workspace;
         const activeLeaf = workspace.getActiveViewOfType(FileView)?.leaf ?? null;
         const recentLeaf = workspace.getMostRecentLeaf(workspace.rootSplit);
@@ -303,7 +312,7 @@ export class CommentNavigationController {
             });
         });
 
-        return pickPreferredFileLeafCandidate(candidates, filePath);
+        return candidates;
     }
 
     public async revealComment(comment: Comment): Promise<void> {

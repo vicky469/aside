@@ -62,11 +62,9 @@ export function pickPreferredFileLeafCandidate<T>(
     filePath?: string,
 ): T | null {
     if (filePath) {
-        const exactMatch = candidates.find((candidate) =>
-            candidate.eligible && candidate.filePath === filePath,
-        );
+        const exactMatch = pickExactFileLeafCandidate(candidates, filePath);
         if (exactMatch) {
-            return exactMatch.value;
+            return exactMatch;
         }
     }
 
@@ -81,6 +79,15 @@ export function pickPreferredFileLeafCandidate<T>(
     }
 
     return candidates.find((candidate) => candidate.eligible)?.value ?? null;
+}
+
+export function pickExactFileLeafCandidate<T>(
+    candidates: PreferredFileLeafCandidate<T>[],
+    filePath: string,
+): T | null {
+    return candidates.find((candidate) =>
+        candidate.eligible && candidate.filePath === filePath,
+    )?.value ?? null;
 }
 
 export function shouldRevealSidebarLeaf(

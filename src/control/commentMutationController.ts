@@ -54,7 +54,7 @@ export interface CommentMutationHost {
     persistCommentsForFile(file: TFile, options?: PersistOptions): Promise<void>;
     getCommentManager(): CommentManager;
     activateViewAndHighlightComment(commentId: string): Promise<void>;
-    openFileInNewTab(file: TFile): Promise<void>;
+    openMoveTargetFile(file: TFile): Promise<void>;
     hashText(text: string): Promise<string>;
     showNotice(message: string): void;
     now(): number;
@@ -506,7 +506,7 @@ export class CommentMutationController {
         await this.host.persistCommentsForFile(targetFile, { immediateAggregateRefresh: true });
         this.host.showNotice(`Moved side note to ${targetFile.basename}.`);
         try {
-            await this.host.openFileInNewTab(targetFile);
+            await this.host.openMoveTargetFile(targetFile);
         } catch (error) {
             void this.host.log?.("warn", "draft", "thread.move.open_target.error", {
                 sourceFilePath: latestTarget.file.path,

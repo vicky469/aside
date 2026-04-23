@@ -1,4 +1,4 @@
-import { addIcon, WorkspaceLeaf, TFile, Notice, Plugin, normalizePath, MarkdownView, FileSystemAdapter, requestUrl, type Editor } from "obsidian";
+import { addIcon, WorkspaceLeaf, TFile, Notice, Plugin, normalizePath, MarkdownView, FileSystemAdapter, requestUrl, FileView, type Editor } from "obsidian";
 import { Comment, CommentManager, CommentThread, type ReorderPlacement } from "./commentManager";
 import { CommentEntryController } from "./control/commentEntryController";
 import {
@@ -254,9 +254,12 @@ export default class SideNote2 extends Plugin {
         persistCommentsForFile: (file, options) => this.persistCommentsForFile(file, options),
         getCommentManager: () => this.commentManager,
         activateViewAndHighlightComment: (commentId) => this.activateViewAndHighlightComment(commentId),
-        openFileInNewTab: async (file) => {
-            const targetLeaf = this.app.workspace.getLeaf("tab");
-            await targetLeaf.openFile(file);
+        openMoveTargetFile: async (file) => {
+            const targetLeaf = this.commentNavigationController.getOpenFileLeaf(file.path)
+                ?? this.app.workspace.getLeaf("tab");
+            if (!(targetLeaf.view instanceof FileView) || targetLeaf.view.file?.path !== file.path) {
+                await targetLeaf.openFile(file);
+            }
             this.app.workspace.setActiveLeaf(targetLeaf, { focus: true });
         },
         hashText: (text) => generateHash(text),
