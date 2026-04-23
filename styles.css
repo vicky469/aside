@@ -1029,7 +1029,7 @@ button.sidenote2-tab-button.sidenote2-tab-button--active {
 
 .sidenote2-comment-header {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: space-between;
     gap: 8px;
     margin-bottom: 6px;
@@ -1052,12 +1052,11 @@ button.sidenote2-tab-button.sidenote2-tab-button--active {
 
 .sidenote2-comment-meta {
     display: inline-flex;
-    align-items: center;
+    align-items: flex-start;
     flex: 1 1 auto;
     gap: 4px;
     min-width: 0;
     max-width: 100%;
-    white-space: nowrap;
 }
 
 .sidenote2-comment-header-indicator {
@@ -1137,9 +1136,14 @@ button.sidenote2-comment-pin-indicator:focus-visible {
 .sidenote2-comment-meta-preview {
     flex: 1 1 auto;
     min-width: 0;
+    display: -webkit-box;
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    white-space: normal;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
 }
 
 .sidenote2-comment-content {
@@ -1629,6 +1633,7 @@ button.sidenote2-comment-pin-indicator:focus-visible {
 .sidenote2-comment-actions {
     display: flex;
     align-items: center;
+    align-self: flex-start;
     gap: 2px;
     flex: 0 0 auto;
     opacity: 1;
