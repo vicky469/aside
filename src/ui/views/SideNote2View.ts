@@ -31,6 +31,7 @@ import SideNoteFileFilterModal from "../modals/SideNoteFileFilterModal";
 import SideNoteLinkSuggestModal from "../modals/SideNoteLinkSuggestModal";
 import SideNoteOpenFileSuggestModal from "../modals/SideNoteOpenFileSuggestModal";
 import SideNoteReferenceSuggestModal from "../modals/SideNoteReferenceSuggestModal";
+import SideNoteThreadSuggestModal from "../modals/SideNoteThreadSuggestModal";
 import SideNoteTagSuggestModal from "../modals/SideNoteTagSuggestModal";
 import { SIDE_NOTE2_ICON_ID } from "../sideNote2Icon";
 import { copyTextToClipboard } from "../copyTextToClipboard";
@@ -399,6 +400,30 @@ export default class SideNote2View extends ItemView {
             this.pinnedSidebarThreadIds.add(threadId);
         }
         this.savePinnedSidebarStateForFilePath(this.file?.path ?? null);
+        await this.renderComments({
+            skipDataRefresh: true,
+        });
+    }
+
+    private async setSidebarCommentBookmarkState(commentId: string, isBookmark: boolean): Promise<void> {
+        const currentFilePath = this.file?.path ?? null;
+        const isLocalNoteSidebar = !!currentFilePath && !this.plugin.isAllCommentsNotePath(currentFilePath);
+        const updated = await this.plugin.setCommentBookmarkState(
+            commentId,
+            isBookmark,
+            isLocalNoteSidebar
+                ? {
+                    deferAggregateRefresh: true,
+                    skipPersistedViewRefresh: true,
+                    refreshEditorDecorations: false,
+                    refreshMarkdownPreviews: false,
+                }
+                : undefined,
+        );
+        if (!updated || !isLocalNoteSidebar || this.file?.path !== currentFilePath) {
+            return;
+        }
+
         await this.renderComments({
             skipDataRefresh: true,
         });
@@ -2597,6 +2622,36 @@ export default class SideNote2View extends ItemView {
         }).open();
     }
 
+    private openMoveCommentEntryModal(entryId: string, sourceThreadId: string, sourceFilePath: string): void {
+        const availableThreads = this.plugin.getThreadsForFile(sourceFilePath)
+            .filter((thread) =>
+                thread.id !== sourceThreadId
+                && !thread.deletedAt
+                && thread.resolved !== true
+            );
+        if (!availableThreads.length) {
+            new Notice("No other parent side notes are available in this file.");
+            return;
+        }
+
+        new SideNoteThreadSuggestModal(this.app, {
+            availableThreads,
+            emptyStateText: "No other parent side notes are available in this file.",
+            onChooseThread: async (targetThread) => {
+                const moved = await this.plugin.moveCommentEntryToThread(entryId, targetThread.id);
+                if (!moved) {
+                    return;
+                }
+
+                await this.plugin.setShowNestedCommentsForThread(targetThread.id, true);
+                this.highlightComment(entryId);
+            },
+            onCloseModal: () => {},
+            placeholder: "Find a parent side note",
+            title: "Move nested side note",
+        }).open();
+    }
+
     private getOpenMarkdownFileInsertTargets(): OpenMarkdownFileInsertTarget[] {
         const workspace = this.app.workspace;
         const activeLeaf = workspace.getActiveViewOfType(MarkdownView)?.leaf ?? null;
@@ -2754,8 +2809,10 @@ export default class SideNote2View extends ItemView {
             currentUserLabel: "You",
             localVaultName: this.app.vault.getName(),
             showSourceRedirectAction: isIndexView,
+            showBookmarkAndPinControls: !isIndexView,
             showDeletedComments: this.plugin.shouldShowDeletedComments(),
             enablePageThreadReorder,
+            enableChildEntryMove: !isIndexView,
             enableSoftDeleteActions: !isIndexView,
             showNestedComments: this.plugin.shouldShowNestedCommentsForThread(thread.id),
             showNestedCommentsByDefault: this.plugin.shouldShowNestedComments(),
@@ -2810,6 +2867,9 @@ export default class SideNote2View extends ItemView {
             unresolveComment: (commentId) => {
                 void this.plugin.unresolveComment(commentId);
             },
+            moveCommentEntry: (commentId, sourceThreadId, sourceFilePath) => {
+                this.openMoveCommentEntryModal(commentId, sourceThreadId, sourceFilePath);
+            },
             moveCommentThread: (threadId, sourceFilePath) => {
                 this.openMoveCommentThreadModal(threadId, sourceFilePath);
             },
@@ -2831,9 +2891,7 @@ export default class SideNote2View extends ItemView {
             startEditDraft: (commentId, hostFilePath) => {
                 void this.plugin.startEditDraft(commentId, hostFilePath);
             },
-            setCommentBookmarkState: (commentId, isBookmark) => {
-                void this.plugin.setCommentBookmarkState(commentId, isBookmark);
-            },
+            setCommentBookmarkState: (commentId, isBookmark) => this.setSidebarCommentBookmarkState(commentId, isBookmark),
             isPinnedThread: (threadId) => this.isPinnedSidebarThread(threadId),
             togglePinnedThread: (threadId) => this.togglePinnedSidebarThread(threadId),
             startAppendEntryDraft: (commentId, hostFilePath) => {

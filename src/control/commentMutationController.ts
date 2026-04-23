@@ -13,6 +13,8 @@ import type { SetDraftCommentOptions } from "./commentSessionController";
 type PersistOptions = {
     immediateAggregateRefresh?: boolean;
     skipCommentViewRefresh?: boolean;
+    refreshEditorDecorations?: boolean;
+    refreshMarkdownPreviews?: boolean;
 };
 
 type AppendThreadEntryOptions = PersistOptions & {
@@ -25,6 +27,13 @@ export type SaveDraftOptions = {
     skipAnchorRevalidation?: boolean;
     deferAggregateRefresh?: boolean;
     skipPersistedViewRefresh?: boolean;
+};
+
+export type SetCommentBookmarkStateOptions = {
+    deferAggregateRefresh?: boolean;
+    skipPersistedViewRefresh?: boolean;
+    refreshEditorDecorations?: boolean;
+    refreshMarkdownPreviews?: boolean;
 };
 
 export interface CommentMutationHost {
@@ -270,7 +279,11 @@ export class CommentMutationController {
         return true;
     }
 
-    public async setCommentBookmarkState(commentId: string, isBookmark: boolean): Promise<boolean> {
+    public async setCommentBookmarkState(
+        commentId: string,
+        isBookmark: boolean,
+        options: SetCommentBookmarkStateOptions = {},
+    ): Promise<boolean> {
         const latestTarget = await this.loadLatestCommentTarget(commentId);
         if (!latestTarget) {
             return false;
@@ -283,7 +296,10 @@ export class CommentMutationController {
 
         this.host.getCommentManager().setCommentBookmarkState(commentId, isBookmark);
         await this.host.persistCommentsForFile(latestTarget.file, {
-            immediateAggregateRefresh: true,
+            immediateAggregateRefresh: options.deferAggregateRefresh !== true,
+            ...(options.skipPersistedViewRefresh === true ? { skipCommentViewRefresh: true } : {}),
+            ...(options.refreshEditorDecorations === false ? { refreshEditorDecorations: false } : {}),
+            ...(options.refreshMarkdownPreviews === false ? { refreshMarkdownPreviews: false } : {}),
         });
         return true;
     }
@@ -523,6 +539,81 @@ export class CommentMutationController {
         return true;
     }
 
+    public async moveCommentEntryToThread(commentId: string, targetThreadId: string): Promise<boolean> {
+        void this.host.log?.("info", "draft", "thread.entry.move.begin", {
+            commentId,
+            targetThreadId,
+        });
+        const latestTarget = await this.loadLatestCommentTarget(commentId);
+        if (!latestTarget) {
+            return false;
+        }
+
+        const sourceThread = this.host.getCommentManager().getThreadById(commentId);
+        if (!sourceThread) {
+            this.host.showNotice("Unable to find that side note.");
+            return false;
+        }
+        if (sourceThread.id === commentId) {
+            this.host.showNotice("Only nested side notes can move under another parent side note.");
+            return false;
+        }
+
+        const targetThread = this.host.getCommentManager().getThreadById(targetThreadId);
+        if (!targetThread) {
+            this.host.showNotice("Unable to find that destination side note.");
+            return false;
+        }
+        if (sourceThread.id === targetThread.id) {
+            this.host.showNotice("Choose a different parent side note.");
+            return false;
+        }
+        if (sourceThread.filePath !== targetThread.filePath || sourceThread.filePath !== latestTarget.file.path) {
+            this.host.showNotice("Nested side notes can only move within the same file.");
+            return false;
+        }
+
+        const sourceEntry = sourceThread.entries.find((entry) => entry.id === commentId);
+        if (!sourceEntry) {
+            this.host.showNotice("Unable to find that side note.");
+            return false;
+        }
+
+        const movedAt = this.host.now();
+        const fileThreads = this.host.getCommentManager().getThreadsForFile(latestTarget.file.path, { includeDeleted: true });
+        const nextThreads = fileThreads.map((thread) => {
+            if (thread.id === sourceThread.id) {
+                return {
+                    ...thread,
+                    entries: thread.entries.filter((entry) => entry.id !== commentId).map((entry) => ({ ...entry })),
+                    updatedAt: Math.max(thread.updatedAt, movedAt),
+                };
+            }
+            if (thread.id === targetThread.id) {
+                return {
+                    ...thread,
+                    entries: [...thread.entries.map((entry) => ({ ...entry })), { ...sourceEntry }],
+                    updatedAt: Math.max(thread.updatedAt, movedAt),
+                };
+            }
+
+            return thread;
+        });
+
+        this.host.getCommentManager().replaceThreadsForFile(latestTarget.file.path, nextThreads);
+        await this.host.persistCommentsForFile(latestTarget.file, { immediateAggregateRefresh: true });
+
+        const targetLabel = this.formatThreadMoveTargetLabel(targetThread);
+        this.host.showNotice(`Moved side note under ${targetLabel}.`);
+        void this.host.log?.("info", "draft", "thread.entry.move.success", {
+            commentId,
+            filePath: latestTarget.file.path,
+            sourceThreadId: sourceThread.id,
+            targetThreadId: targetThread.id,
+        });
+        return true;
+    }
+
     private async loadLatestCommentTarget(
         commentId: string,
     ): Promise<{ file: TFile; latestComment: Comment } | null> {
@@ -531,6 +622,11 @@ export class CommentMutationController {
         if (!existingComment || !this.host.isCommentableFile(file)) {
             this.host.showNotice("Unable to find that side note.");
             return null;
+        }
+
+        const loadedComment = this.host.getLoadedCommentById(commentId);
+        if (loadedComment && loadedComment.filePath === existingComment.filePath) {
+            return { file, latestComment: loadedComment };
         }
 
         await this.host.loadCommentsForFile(file);
@@ -672,6 +768,17 @@ export class CommentMutationController {
             selectedText,
             selectedTextHash,
         };
+    }
+
+    private formatThreadMoveTargetLabel(thread: Pick<CommentThread, "filePath" | "selectedText">): string {
+        const normalizedSelectedText = thread.selectedText.replace(/\s+/g, " ").trim();
+        if (normalizedSelectedText) {
+            return normalizedSelectedText.length > 80
+                ? `${normalizedSelectedText.slice(0, 79).trimEnd()}…`
+                : normalizedSelectedText;
+        }
+
+        return getPageCommentLabel(thread.filePath);
     }
 
     private requireDraftSelectedTextHash(

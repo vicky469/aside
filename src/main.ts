@@ -7,7 +7,11 @@ import {
     type SavedUserEntryEvent,
 } from "./control/commentAgentController";
 import { CommentHighlightController } from "./control/commentHighlightController";
-import { CommentMutationController, type SaveDraftOptions } from "./control/commentMutationController";
+import {
+    CommentMutationController,
+    type SaveDraftOptions,
+    type SetCommentBookmarkStateOptions,
+} from "./control/commentMutationController";
 import { CommentNavigationController } from "./control/commentNavigationController";
 import { pickPinnedCommentableFile, pickPreferredFileLeafCandidate, pickSidebarTargetFile, type PreferredFileLeafCandidate } from "./control/commentNavigationPlanner";
 import { CommentExportController } from "./control/commentExportController";
@@ -1124,7 +1128,12 @@ export default class SideNote2 extends Plugin {
 
     private async persistCommentsForFile(
         file: TFile,
-        options: { immediateAggregateRefresh?: boolean } = {},
+        options: {
+            immediateAggregateRefresh?: boolean;
+            skipCommentViewRefresh?: boolean;
+            refreshEditorDecorations?: boolean;
+            refreshMarkdownPreviews?: boolean;
+        } = {},
     ): Promise<void> {
         await this.commentPersistenceController.persistCommentsForFile(file, options);
     }
@@ -1272,8 +1281,12 @@ export default class SideNote2 extends Plugin {
         await this.commentMutationController.saveDraft(commentId, options);
     }
 
-    public async setCommentBookmarkState(commentId: string, isBookmark: boolean) {
-        await this.commentMutationController.setCommentBookmarkState(commentId, isBookmark);
+    public async setCommentBookmarkState(
+        commentId: string,
+        isBookmark: boolean,
+        options?: SetCommentBookmarkStateOptions,
+    ): Promise<boolean> {
+        return this.commentMutationController.setCommentBookmarkState(commentId, isBookmark, options);
     }
 
     public async startPageCommentDraft(file: TFile | null = this.getPinnedCommentableFile()) {
@@ -1294,6 +1307,10 @@ export default class SideNote2 extends Plugin {
 
     public async moveCommentThreadToFile(threadId: string, targetFilePath: string): Promise<boolean> {
         return this.commentMutationController.moveCommentThreadToFile(threadId, targetFilePath);
+    }
+
+    public async moveCommentEntryToThread(commentId: string, targetThreadId: string): Promise<boolean> {
+        return this.commentMutationController.moveCommentEntryToThread(commentId, targetThreadId);
     }
 
     private markDraftFileActive(file: TFile) {

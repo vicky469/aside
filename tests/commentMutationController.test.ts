@@ -55,7 +55,12 @@ function createHost(options: {
     currentNoteContentByPath?: Record<string, string>;
     getCurrentNoteContent?: (file: TFile) => Promise<string>;
     currentSelectionByPath?: Record<string, DraftSelection | null>;
-    persistCommentsForFile?: (file: TFile, options?: { immediateAggregateRefresh?: boolean; skipCommentViewRefresh?: boolean }) => Promise<void> | void;
+    persistCommentsForFile?: (file: TFile, options?: {
+        immediateAggregateRefresh?: boolean;
+        skipCommentViewRefresh?: boolean;
+        refreshEditorDecorations?: boolean;
+        refreshMarkdownPreviews?: boolean;
+    }) => Promise<void> | void;
     now?: number;
     showResolvedComments?: boolean;
     handleSavedUserEntry?: (event: SavedUserEntryEvent) => Promise<void> | void;
@@ -67,7 +72,13 @@ function createHost(options: {
     let showResolvedComments = options.showResolvedComments ?? false;
     const notices: string[] = [];
     const loadedFiles: string[] = [];
-    const persistedFiles: Array<{ path: string; immediateAggregateRefresh?: boolean; skipCommentViewRefresh?: boolean }> = [];
+    const persistedFiles: Array<{
+        path: string;
+        immediateAggregateRefresh?: boolean;
+        skipCommentViewRefresh?: boolean;
+        refreshEditorDecorations?: boolean;
+        refreshMarkdownPreviews?: boolean;
+    }> = [];
     const highlightedCommentIds: string[] = [];
     const openedMoveTargetFiles: string[] = [];
     const setDraftCalls: Array<{
@@ -159,6 +170,12 @@ function createHost(options: {
                 ...(persistOptions?.skipCommentViewRefresh !== undefined
                     ? { skipCommentViewRefresh: persistOptions.skipCommentViewRefresh }
                     : {}),
+                ...(persistOptions?.refreshEditorDecorations !== undefined
+                    ? { refreshEditorDecorations: persistOptions.refreshEditorDecorations }
+                    : {}),
+                ...(persistOptions?.refreshMarkdownPreviews !== undefined
+                    ? { refreshMarkdownPreviews: persistOptions.refreshMarkdownPreviews }
+                    : {}),
             });
             await options.persistCommentsForFile?.(file, persistOptions);
         },
@@ -200,7 +217,7 @@ function createHost(options: {
     };
 }
 
-test("comment mutation controller starts an edit draft from the latest loaded comment", async () => {
+test("comment mutation controller starts an edit draft from an already loaded local comment without reloading the file", async () => {
     const comment = createComment({ comment: "Existing note" });
     const host = createHost({
         knownComments: [comment],
@@ -211,7 +228,7 @@ test("comment mutation controller starts an edit draft from the latest loaded co
     const started = await host.controller.startEditDraft(comment.id);
 
     assert.equal(started, true);
-    assert.deepEqual(host.loadedFiles, [comment.filePath]);
+    assert.deepEqual(host.loadedFiles, []);
     assert.deepEqual(host.highlightedCommentIds, [comment.id]);
     assert.equal(host.setDraftCalls.length, 1);
     assert.equal(host.setDraftCalls[0].skipCommentViewRefresh, true);
@@ -222,6 +239,20 @@ test("comment mutation controller starts an edit draft from the latest loaded co
         mode: "edit",
         threadId: comment.id,
     });
+});
+
+test("comment mutation controller reloads the file when the target comment is only known from aggregate state", async () => {
+    const comment = createComment({ comment: "Known from index" });
+    const host = createHost({
+        knownComments: [comment],
+        loadedComments: [],
+    });
+
+    const started = await host.controller.startEditDraft(comment.id);
+
+    assert.equal(started, false);
+    assert.deepEqual(host.loadedFiles, [comment.filePath]);
+    assert.deepEqual(host.notices, ["Unable to find that side note."]);
 });
 
 test("comment mutation controller saves a new draft by trimming and persisting it", async () => {
@@ -657,6 +688,34 @@ test("comment mutation controller can toggle bookmark state without entering edi
     }]);
 });
 
+test("comment mutation controller can defer bookmark refresh work for lightweight local sidebar updates", async () => {
+    const existing = createComment({
+        id: "thread-1",
+        comment: "Existing idea",
+        isBookmark: false,
+    });
+    const host = createHost({
+        knownComments: [existing],
+        loadedComments: [existing],
+    });
+
+    const updated = await host.controller.setCommentBookmarkState(existing.id, true, {
+        deferAggregateRefresh: true,
+        skipPersistedViewRefresh: true,
+        refreshEditorDecorations: false,
+        refreshMarkdownPreviews: false,
+    });
+
+    assert.equal(updated, true);
+    assert.deepEqual(host.persistedFiles, [{
+        path: existing.filePath,
+        immediateAggregateRefresh: false,
+        skipCommentViewRefresh: true,
+        refreshEditorDecorations: false,
+        refreshMarkdownPreviews: false,
+    }]);
+});
+
 test("comment mutation controller keeps child edit drafts attached to their parent thread", async () => {
     const parent = createComment({ id: "thread-1", comment: "@codex parent" });
     const host = createHost({
@@ -937,7 +996,7 @@ test("comment mutation controller moves a thread into another file as a page not
     const moved = await host.controller.moveCommentThreadToFile(source.id, "Folder/Other.md");
 
     assert.equal(moved, true);
-    assert.deepEqual(host.loadedFiles, ["Folder/Source.md", "Folder/Other.md"]);
+    assert.deepEqual(host.loadedFiles, ["Folder/Other.md"]);
     assert.deepEqual(host.persistedFiles, [
         {
             path: "Folder/Source.md",
@@ -974,6 +1033,101 @@ test("comment mutation controller moves a thread into another file as a page not
     assert.deepEqual(host.openedMoveTargetFiles, ["Folder/Other.md"]);
 });
 
+test("comment mutation controller moves a child entry under another thread in the same file", async () => {
+    const source = createComment({
+        id: "thread-1",
+        filePath: "Folder/Source.md",
+        selectedText: "Source anchor",
+        selectedTextHash: "hash:Source anchor",
+        comment: "Root body",
+        timestamp: 300,
+    });
+    const target = createComment({
+        id: "thread-2",
+        filePath: "Folder/Source.md",
+        selectedText: "Target anchor",
+        selectedTextHash: "hash:Target anchor",
+        comment: "Target root body",
+        timestamp: 500,
+    });
+    const host = createHost({
+        knownComments: [source, target],
+        loadedComments: [source, target],
+        now: 900,
+    });
+    host.manager.appendEntry(source.id, {
+        id: "entry-2",
+        body: "Child reply",
+        timestamp: 400,
+    });
+
+    const moved = await host.controller.moveCommentEntryToThread("entry-2", target.id);
+
+    assert.equal(moved, true);
+    assert.deepEqual(host.loadedFiles, []);
+    assert.deepEqual(host.persistedFiles, [{
+        path: "Folder/Source.md",
+        immediateAggregateRefresh: true,
+    }]);
+    assert.deepEqual(
+        host.manager.getThreadById(source.id)?.entries.map((entry) => entry.id),
+        ["thread-1"],
+    );
+    assert.deepEqual(
+        host.manager.getThreadById(target.id)?.entries.map((entry) => entry.id),
+        ["thread-2", "entry-2"],
+    );
+    assert.equal(host.manager.getCommentById("entry-2")?.comment, "Child reply");
+    assert.deepEqual(host.notices, ["Moved side note under Target anchor."]);
+});
+
+test("comment mutation controller rejects moving a root thread through the child move path", async () => {
+    const source = createComment({
+        id: "thread-1",
+        filePath: "Folder/Source.md",
+    });
+    const target = createComment({
+        id: "thread-2",
+        filePath: "Folder/Source.md",
+    });
+    const host = createHost({
+        knownComments: [source, target],
+        loadedComments: [source, target],
+    });
+
+    const moved = await host.controller.moveCommentEntryToThread(source.id, target.id);
+
+    assert.equal(moved, false);
+    assert.deepEqual(host.loadedFiles, []);
+    assert.deepEqual(host.persistedFiles, []);
+    assert.deepEqual(host.notices, [
+        "Only nested side notes can move under another parent side note.",
+    ]);
+});
+
+test("comment mutation controller rejects moving a child entry onto the same parent thread", async () => {
+    const source = createComment({
+        id: "thread-1",
+        filePath: "Folder/Source.md",
+    });
+    const host = createHost({
+        knownComments: [source],
+        loadedComments: [source],
+    });
+    host.manager.appendEntry(source.id, {
+        id: "entry-2",
+        body: "Child reply",
+        timestamp: 400,
+    });
+
+    const moved = await host.controller.moveCommentEntryToThread("entry-2", source.id);
+
+    assert.equal(moved, false);
+    assert.deepEqual(host.loadedFiles, []);
+    assert.deepEqual(host.persistedFiles, []);
+    assert.deepEqual(host.notices, ["Choose a different parent side note."]);
+});
+
 test("comment mutation controller rejects moving a thread into the same file", async () => {
     const comment = createComment({
         id: "thread-1",
@@ -987,7 +1141,7 @@ test("comment mutation controller rejects moving a thread into the same file", a
     const moved = await host.controller.moveCommentThreadToFile(comment.id, comment.filePath);
 
     assert.equal(moved, false);
-    assert.deepEqual(host.loadedFiles, ["Folder/Source.md"]);
+    assert.deepEqual(host.loadedFiles, []);
     assert.deepEqual(host.persistedFiles, []);
     assert.deepEqual(host.notices, ["Choose a different note to move this side note."]);
 });

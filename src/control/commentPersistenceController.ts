@@ -25,6 +25,8 @@ import { shouldSkipAggregateViewRefresh } from "./commentPersistencePlanner";
 type PersistOptions = {
     immediateAggregateRefresh?: boolean;
     skipCommentViewRefresh?: boolean;
+    refreshEditorDecorations?: boolean;
+    refreshMarkdownPreviews?: boolean;
 };
 
 type SyncedFileComments = {
@@ -401,8 +403,12 @@ export class CommentPersistenceController {
         } else if (!filePath || !this.consumeCommentViewRefreshSuppression(filePath)) {
             await this.host.refreshCommentViews();
         }
-        this.host.refreshEditorDecorations();
-        this.host.refreshMarkdownPreviews();
+        if (options.refreshEditorDecorations !== false) {
+            this.host.refreshEditorDecorations();
+        }
+        if (options.refreshMarkdownPreviews !== false) {
+            this.host.refreshMarkdownPreviews();
+        }
         if (options.immediateAggregateRefresh) {
             await this.refreshAggregateNoteNow();
         } else {

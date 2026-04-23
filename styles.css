@@ -1040,7 +1040,7 @@ button.sidenote2-tab-button.sidenote2-tab-button--active {
 
 .sidenote2-comment-header-main {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 6px;
     min-width: 0;
     flex: 1 1 auto;
@@ -1054,10 +1054,11 @@ button.sidenote2-tab-button.sidenote2-tab-button--active {
 }
 
 .sidenote2-comment-meta {
-    display: inline-flex;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: flex-start;
     flex: 1 1 auto;
-    gap: 4px;
+    column-gap: 6px;
     min-width: 0;
     max-width: 100%;
 }
@@ -1067,6 +1068,21 @@ button.sidenote2-tab-button.sidenote2-tab-button--active {
     align-items: center;
     justify-content: center;
     flex: 0 0 auto;
+}
+
+.sidenote2-comment-meta-indicators {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    align-self: flex-start;
+}
+
+.sidenote2-comment-meta-indicators .sidenote2-comment-header-indicator {
+    width: 16px;
+    height: 16px;
+    border-radius: 5px;
+    background: var(--background-modifier-hover);
 }
 
 .sidenote2-comment-reference-indicator {
@@ -1084,7 +1100,7 @@ button.sidenote2-tab-button.sidenote2-tab-button--active {
 button.sidenote2-comment-bookmark-indicator {
     padding: 0;
     border: 0;
-    background: transparent;
+    background: var(--background-modifier-hover);
     box-shadow: none;
     cursor: pointer;
 }
@@ -1092,7 +1108,7 @@ button.sidenote2-comment-bookmark-indicator {
 button.sidenote2-comment-pin-indicator {
     padding: 0;
     border: 0;
-    background: transparent;
+    background: var(--background-modifier-hover);
     box-shadow: none;
     cursor: pointer;
 }
@@ -1108,12 +1124,12 @@ button.sidenote2-comment-pin-indicator:focus-visible {
 }
 
 .sidenote2-comment-header-indicator .svg-icon {
-    width: 12px;
-    height: 12px;
+    width: 11px;
+    height: 11px;
 }
 
 .sidenote2-comment-source-label {
-    flex: 1 1 auto;
+    grid-column: 2;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1126,8 +1142,8 @@ button.sidenote2-comment-pin-indicator:focus-visible {
 }
 
 .sidenote2-comment-meta-value {
-    flex: 0 0 auto;
-    margin-left: auto;
+    grid-column: 3;
+    justify-self: end;
     font-size: 0.9em;
     white-space: nowrap;
 }
@@ -1137,7 +1153,7 @@ button.sidenote2-comment-pin-indicator:focus-visible {
 }
 
 .sidenote2-comment-meta-preview {
-    flex: 1 1 auto;
+    grid-column: 2;
     min-width: 0;
     display: -webkit-box;
     overflow: hidden;
@@ -1631,6 +1647,12 @@ button.sidenote2-comment-pin-indicator:focus-visible {
 .sidenote2-comment-action-button.is-active:hover,
 .sidenote2-comment-action-button.is-active:focus-visible {
     color: var(--interactive-accent-hover, var(--interactive-accent));
+}
+
+.sidenote2-comment-action-button.is-pending,
+.sidenote2-comment-header-indicator.is-pending {
+    opacity: 0.55;
+    cursor: progress;
 }
 
 .sidenote2-comment-actions {

@@ -87,8 +87,10 @@ export interface SidebarPersistedCommentHost {
     currentUserLabel: string;
     localVaultName: string | null;
     showSourceRedirectAction: boolean;
+    showBookmarkAndPinControls: boolean;
     showDeletedComments: boolean;
     enablePageThreadReorder: boolean;
+    enableChildEntryMove: boolean;
     enableSoftDeleteActions: boolean;
     showNestedComments: boolean;
     showNestedCommentsByDefault: boolean;
@@ -114,10 +116,11 @@ export interface SidebarPersistedCommentHost {
     setShowNestedCommentsForThread(threadId: string, showNestedComments: boolean): void;
     resolveComment(commentId: string): void;
     unresolveComment(commentId: string): void;
+    moveCommentEntry(commentId: string, sourceThreadId: string, sourceFilePath: string): void;
     moveCommentThread(threadId: string, sourceFilePath: string): void;
     restoreComment(commentId: string): Promise<boolean> | Promise<void> | boolean | void;
     startEditDraft(commentId: string, hostFilePath: string | null): void;
-    setCommentBookmarkState(commentId: string, isBookmark: boolean): Promise<void> | void;
+    setCommentBookmarkState(commentId: string, isBookmark: boolean): Promise<boolean> | Promise<void> | boolean | void;
     isPinnedThread(threadId: string): boolean;
     togglePinnedThread(threadId: string): Promise<void> | void;
     startAppendEntryDraft(commentId: string, hostFilePath: string | null): void;
@@ -867,12 +870,9 @@ function renderBookmarkStateIndicator(
     indicatorEl.setAttribute("title", "Remove bookmark");
     host.setIcon(indicatorEl, "bookmark");
     indicatorEl.onclick = async (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        if (!(await host.saveVisibleDraftIfPresent())) {
-            return;
-        }
-        await host.setCommentBookmarkState(commentId, false);
+        await runSidebarPendingButtonAction(indicatorEl, host, event, async () => {
+            await host.setCommentBookmarkState(commentId, false);
+        });
     };
 }
 
@@ -890,12 +890,9 @@ function renderPinStateIndicator(
     indicatorEl.setAttribute("aria-pressed", "true");
     host.setIcon(indicatorEl, "pin");
     indicatorEl.onclick = async (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        if (!(await host.saveVisibleDraftIfPresent())) {
-            return;
-        }
-        await host.togglePinnedThread(threadId);
+        await runSidebarPendingButtonAction(indicatorEl, host, event, async () => {
+            await host.togglePinnedThread(threadId);
+        });
     };
 }
 
@@ -914,14 +911,21 @@ function renderCommentMeta(
         cls: "sidenote2-timestamp sidenote2-comment-meta",
     });
     const renderLeadingIndicators = () => {
+        if (!options.showPinState && !options.showBookmarkState && !options.showSideNoteReferenceState) {
+            return;
+        }
+
+        const indicatorsEl = metaEl.createSpan({
+            cls: "sidenote2-comment-meta-indicators",
+        });
         if (options.showPinState) {
-            renderPinStateIndicator(metaEl, comment.id, host);
+            renderPinStateIndicator(indicatorsEl, comment.id, host);
         }
         if (options.showBookmarkState) {
-            renderBookmarkStateIndicator(metaEl, comment.id, host);
+            renderBookmarkStateIndicator(indicatorsEl, comment.id, host);
         }
         if (options.showSideNoteReferenceState) {
-            renderSideNoteReferenceStateIndicator(metaEl, host);
+            renderSideNoteReferenceStateIndicator(indicatorsEl, host);
         }
     };
 
@@ -1031,11 +1035,9 @@ function renderBookmarkButton(
     bookmarkButton.setAttribute("aria-pressed", presentation.active ? "true" : "false");
     host.setIcon(bookmarkButton, "bookmark");
     bookmarkButton.onclick = async (event) => {
-        event.stopPropagation();
-        if (!(await host.saveVisibleDraftIfPresent())) {
-            return;
-        }
-        await host.setCommentBookmarkState(commentId, !presentation.active);
+        await runSidebarPendingButtonAction(bookmarkButton, host, event, async () => {
+            await host.setCommentBookmarkState(commentId, !presentation.active);
+        });
     };
 }
 
@@ -1059,11 +1061,9 @@ function renderPinButton(
     pinButton.setAttribute("aria-pressed", presentation.active ? "true" : "false");
     host.setIcon(pinButton, "pin");
     pinButton.onclick = async (event) => {
-        event.stopPropagation();
-        if (!(await host.saveVisibleDraftIfPresent())) {
-            return;
-        }
-        await host.togglePinnedThread(threadId);
+        await runSidebarPendingButtonAction(pinButton, host, event, async () => {
+            await host.togglePinnedThread(threadId);
+        });
     };
 }
 
@@ -1090,14 +1090,13 @@ function renderDeleteButton(
     };
 }
 
-function renderMoveThreadButton(
+function renderMoveActionButton(
     actionsEl: HTMLDivElement,
-    threadId: string,
-    sourceFilePath: string,
     host: SidebarPersistedCommentHost,
     options: {
         ariaLabel: string;
         icon: string;
+        onMove: () => Promise<void> | void;
     },
 ): void {
     const moveButton = actionsEl.createEl("button", {
@@ -1112,7 +1111,7 @@ function renderMoveThreadButton(
         if (!(await host.saveVisibleDraftIfPresent())) {
             return;
         }
-        host.moveCommentThread(threadId, sourceFilePath);
+        await options.onMove();
     };
 }
 
@@ -1200,6 +1199,31 @@ function attachSidebarActionButtonInteractions(
     });
 }
 
+async function runSidebarPendingButtonAction(
+    buttonEl: HTMLButtonElement,
+    host: SidebarPersistedCommentHost,
+    event: MouseEvent,
+    action: () => Promise<void>,
+): Promise<void> {
+    event.preventDefault();
+    event.stopPropagation();
+    if (buttonEl.disabled) {
+        return;
+    }
+    if (!(await host.saveVisibleDraftIfPresent())) {
+        return;
+    }
+
+    buttonEl.disabled = true;
+    buttonEl.classList.add("is-pending");
+    try {
+        await action();
+    } finally {
+        buttonEl.classList.remove("is-pending");
+        buttonEl.disabled = false;
+    }
+}
+
 function renderPersistedEntryCard(
     container: HTMLDivElement,
     options: {
@@ -1232,12 +1256,13 @@ function renderPersistedEntryCard(
     const headerEl = commentEl.createDiv("sidenote2-comment-header");
     const headerMainEl = headerEl.createDiv("sidenote2-comment-header-main");
     renderCommentMeta(headerMainEl, options.comment, options.presentation, options.host, {
-        showPinState: shouldRenderPersistedCommentPinIndicator(
+        showPinState: options.host.showBookmarkAndPinControls && shouldRenderPersistedCommentPinIndicator(
             options.comment,
             options.thread,
             options.host.isPinnedThread(options.thread.id),
         ),
-        showBookmarkState: shouldRenderPersistedCommentBookmarkIndicator(options.comment, options.thread),
+        showBookmarkState: options.host.showBookmarkAndPinControls
+            && shouldRenderPersistedCommentBookmarkIndicator(options.comment, options.thread),
         showSideNoteReferenceState: options.showSideNoteReferenceState ?? parsedEntryBody.references.length > 0,
     });
     const actionsEl = headerEl.createDiv("sidenote2-comment-actions");
@@ -1270,10 +1295,9 @@ function renderThreadFooterActions(
         showRetryAction?: boolean;
         disableRetryAction?: boolean;
         moveAction?: {
-            threadId: string;
-            sourceFilePath: string;
             ariaLabel: string;
             icon: string;
+            onMove: () => Promise<void> | void;
         } | null;
         insertAction?: {
             markdown: string;
@@ -1326,9 +1350,10 @@ function renderThreadFooterActions(
 
     const footerActionsEl = footerEl.createDiv("sidenote2-thread-footer-actions");
     if (options.moveAction) {
-        renderMoveThreadButton(footerActionsEl, options.moveAction.threadId, options.moveAction.sourceFilePath, host, {
+        renderMoveActionButton(footerActionsEl, host, {
             ariaLabel: options.moveAction.ariaLabel,
             icon: options.moveAction.icon,
+            onMove: options.moveAction.onMove,
         });
     }
 
@@ -1492,7 +1517,15 @@ function renderStoredThreadEntry(
                 showAddEntryAction: !entryComment.deletedAt && !thread.deletedAt,
                 showRetryAction: !!entryRetryRun && !entryComment.deletedAt && !thread.deletedAt,
                 disableRetryAction: isRetryableAgentRunBusy(entryRetryRun),
-                moveAction: null,
+                moveAction: host.enableChildEntryMove && !entryComment.deletedAt && !thread.deletedAt
+                    ? {
+                        ariaLabel: "Move under another side note",
+                        icon: "arrow-right-left",
+                        onMove: () => {
+                            host.moveCommentEntry(entryComment.id, thread.id, thread.filePath);
+                        },
+                    }
+                    : null,
                 insertAction: entryInsertMarkdown
                     ? {
                         markdown: entryInsertMarkdown,
@@ -1609,10 +1642,16 @@ export async function renderPersistedCommentCard(
                 }
             };
 
-            if (shouldRenderPersistedCommentBookmarkAction(comment, thread)) {
+            if (
+                host.showBookmarkAndPinControls
+                && shouldRenderPersistedCommentBookmarkAction(comment, thread)
+            ) {
                 renderBookmarkButton(actionsEl, thread.id, comment.isBookmark === true, host);
             }
-            if (shouldRenderPersistedCommentPinAction(comment, thread, host.isPinnedThread(thread.id))) {
+            if (
+                host.showBookmarkAndPinControls
+                && shouldRenderPersistedCommentPinAction(comment, thread, host.isPinnedThread(thread.id))
+            ) {
                 renderPinButton(actionsEl, thread.id, host);
             }
             renderEditButton(actionsEl, comment.id, host, "Edit side note");
@@ -1639,10 +1678,11 @@ export async function renderPersistedCommentCard(
             disableRetryAction: isRetryableAgentRunBusy(parentRetryRun),
             moveAction: !comment.deletedAt && !thread.deletedAt
                 ? {
-                    threadId: thread.id,
-                    sourceFilePath: thread.filePath,
                     ariaLabel: presentation.moveAction.ariaLabel,
                     icon: presentation.moveAction.icon,
+                    onMove: () => {
+                        host.moveCommentThread(thread.id, thread.filePath);
+                    },
                 }
                 : null,
             insertAction: parentInsertMarkdown
