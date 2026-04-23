@@ -10,10 +10,6 @@ export interface SidebarCommentPointerActionState {
     selectionInsideSidebarCommentContent: boolean;
 }
 
-export interface SidebarCommentDoubleClickOpenState {
-    clickedInteractiveElement: boolean;
-}
-
 const SIDEBAR_COMMENT_OPEN_BLOCKING_SELECTOR = "button, a, textarea, input, select, [contenteditable='true'], .sidenote2-inline-editor";
 const SIDEBAR_COMMENT_CONTENT_REFOCUS_BLOCKING_SELECTOR = "textarea, input, select, [contenteditable='true'], .sidenote2-inline-editor";
 
@@ -33,12 +29,6 @@ export function shouldActivateSidebarComment(
     }
 
     return state.selection.isCollapsed && state.selection.toString().length === 0;
-}
-
-export function shouldOpenSidebarCommentOnDoubleClick(
-    state: SidebarCommentDoubleClickOpenState,
-): boolean {
-    return !state.clickedInteractiveElement;
 }
 
 export function isSidebarCommentOpenBlockingTarget(target: Element | null): boolean {

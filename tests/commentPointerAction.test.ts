@@ -4,7 +4,6 @@ import {
     isSidebarCommentOpenBlockingTarget,
     shouldRefocusSidebarCommentContent,
     shouldActivateSidebarComment,
-    shouldOpenSidebarCommentOnDoubleClick,
 } from "../src/ui/views/commentPointerAction";
 
 function createClosestTarget(
@@ -84,18 +83,6 @@ test("shouldActivateSidebarComment allows clicks when selection is outside the s
         }),
         true,
     );
-});
-
-test("shouldOpenSidebarCommentOnDoubleClick allows plain card double clicks", () => {
-    assert.equal(shouldOpenSidebarCommentOnDoubleClick({
-        clickedInteractiveElement: false,
-    }), true);
-});
-
-test("shouldOpenSidebarCommentOnDoubleClick blocks interactive targets", () => {
-    assert.equal(shouldOpenSidebarCommentOnDoubleClick({
-        clickedInteractiveElement: true,
-    }), false);
 });
 
 test("isSidebarCommentOpenBlockingTarget treats links as card-open blockers", () => {
