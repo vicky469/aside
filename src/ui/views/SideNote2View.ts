@@ -2297,23 +2297,45 @@ export default class SideNote2View extends ItemView {
     }
 
     private openMoveCommentThreadModal(threadId: string, sourceFilePath: string): void {
-        this.openSideNoteReferenceSuggestModal({
-            excludeThreadId: threadId,
-            initialQuery: "",
-            placeholder: "Find a note to move into",
-            sourcePath: sourceFilePath,
-            title: "Move side note",
-            onChooseReference: async (commentId) => {
-                const target = this.plugin.getSideNoteReferenceDocument(commentId);
-                if (!target) {
-                    new Notice("Unable to find that destination note.");
-                    return;
+        const openTargets = this.getOpenMarkdownFileInsertTargets();
+        const openTargetsByPath = new Map(openTargets.map((target) => [target.file.path, target]));
+        const availableFiles = this.app.vault
+            .getMarkdownFiles()
+            .filter((file) =>
+                file.path !== sourceFilePath
+                && file.path !== this.plugin.getAllCommentsNotePath()
+            )
+            .map((file) => {
+                const openTarget = openTargetsByPath.get(file.path);
+                return {
+                    fileName: file.basename,
+                    filePath: file.path,
+                    active: openTarget?.active ?? false,
+                    recent: openTarget?.recent ?? false,
+                };
+            })
+            .sort((left, right) => {
+                if (left.active !== right.active) {
+                    return left.active ? -1 : 1;
+                }
+                if (left.recent !== right.recent) {
+                    return left.recent ? -1 : 1;
                 }
 
-                await this.plugin.moveCommentThreadToFile(threadId, target.filePath);
+                return left.filePath.localeCompare(right.filePath);
+            });
+
+        new SideNoteOpenFileSuggestModal(this.app, {
+            availableFiles,
+            detailLabel: "",
+            emptyStateText: "No markdown files are available to move into.",
+            onChooseFile: async (suggestion) => {
+                await this.plugin.moveCommentThreadToFile(threadId, suggestion.filePath);
             },
             onCloseModal: () => {},
-        });
+            placeholder: "Find a file to move into",
+            title: "Move side note",
+        }).open();
     }
 
     private getOpenMarkdownFileInsertTargets(): OpenMarkdownFileInsertTarget[] {

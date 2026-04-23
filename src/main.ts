@@ -254,6 +254,11 @@ export default class SideNote2 extends Plugin {
         persistCommentsForFile: (file, options) => this.persistCommentsForFile(file, options),
         getCommentManager: () => this.commentManager,
         activateViewAndHighlightComment: (commentId) => this.activateViewAndHighlightComment(commentId),
+        openFileInNewTab: async (file) => {
+            const targetLeaf = this.app.workspace.getLeaf("tab");
+            await targetLeaf.openFile(file);
+            this.app.workspace.setActiveLeaf(targetLeaf, { focus: true });
+        },
         hashText: (text) => generateHash(text),
         showNotice: (message) => {
             this.showNotice(message, "draft", "draft.notice");
