@@ -346,7 +346,7 @@ export function buildPersistedCommentPresentation(
             icon: "link-2",
         },
         moveAction: {
-            ariaLabel: "Move side note",
+            ariaLabel: "Move side note to another file",
             icon: "arrow-right-left",
         },
         resolveAction: {

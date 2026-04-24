@@ -6,7 +6,7 @@ Partially implemented
 
 Already landed:
 
-- `Link side note` is available on the active persisted card, to the left of `Move side note`
+- `Link side note` is available on the active persisted card, to the left of `Move side note to another file`
 - the active-card link flow reuses the existing draft write path
 - inline edit no longer shows the bottom bookmark button
 - the old draft-surface `Link side note` button has been removed in favor of the active-card action
@@ -41,7 +41,7 @@ This PRD now tracks the remaining work after the first action-surface cleanup al
 This plan combines four product changes into one coherent feature:
 
 - let users create local chains between side notes in the same file
-- surface `Link side note` in the active persisted card, to the left of `Move side note`
+- surface `Link side note` in the active persisted card, to the left of `Move side note to another file`
 - let the side-note picker include notes from the current file
 - split Thought Trail into two stacked sections:
   - upper: local note-level chain
@@ -86,7 +86,7 @@ The current product model is stronger for cross-file linking than for local chai
 
 - introducing a new relationship type beyond normal side-note references
 - creating a separate local-chain storage block or global relationship store
-- changing the existing `Move side note` behavior
+- changing the existing `Move side note to another file` behavior
 - replacing the current cross-file Thought Trail
 - redesigning Mermaid visuals beyond stacking the two sections
 - turning child-entry drag/reparenting into the chaining model
@@ -105,11 +105,11 @@ But the picker currently filters out same-file results in [SideNoteReferenceSear
 
 ### Persisted Card Actions
 
-The active persisted card now renders both `Link side note` and `Move side note` in [sidebarPersistedComment.ts](../../src/ui/views/sidebarPersistedComment.ts).
+The active persisted card now renders both `Link side note` and `Move side note to another file` in [sidebarPersistedComment.ts](../../src/ui/views/sidebarPersistedComment.ts).
 
 Current behavior:
 
-- `Link side note` appears to the left of `Move side note`
+- `Link side note` appears to the left of `Move side note to another file`
 - clicking it starts inline edit for that comment, opens the picker, and appends into the `Mentioned:` section
 - this action currently applies to the parent/root persisted card, not child entries
 
@@ -148,12 +148,12 @@ This has already been implemented and should remain the product direction.
 Placement rule:
 
 - show it in the active persisted card footer actions
-- place it immediately to the left of `Move side note`
+- place it immediately to the left of `Move side note to another file`
 
 This keeps related structural actions together:
 
 - `Link side note`
-- `Move side note`
+- `Move side note to another file`
 
 ### Decision 3: Active-View Linking Uses The Existing Draft Write Path
 
@@ -251,10 +251,10 @@ This keeps the same mental model across both surfaces:
 Active persisted card footer order should become:
 
 - `Link side note`
-- `Move side note`
+- `Move side note to another file`
 - existing share / add / retry actions after that
 
-`Move side note` itself does not change behavior.
+`Move side note to another file` itself does not change behavior.
 
 ### Edit View
 
@@ -349,7 +349,7 @@ Status: complete
 
 - remove the bottom bookmark button from inline edit view
 - add `Link side note` to the active persisted card
-- place it left of `Move side note`
+- place it left of `Move side note to another file`
 - reuse the current draft insertion path
 
 ### Stage 2: Same-File Picker Support
@@ -394,7 +394,7 @@ Important scope note:
 
 ## Acceptance Criteria
 
-- [x] `Link side note` appears in the active persisted card, to the left of `Move side note`
+- [x] `Link side note` appears in the active persisted card, to the left of `Move side note to another file`
 - [x] inline edit no longer shows the noisy bottom bookmark button
 - [x] active-card linking reuses the existing draft insertion path instead of introducing a hidden direct-write path
 - [ ] users can link one side note to another within the same file

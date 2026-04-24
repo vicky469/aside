@@ -2774,7 +2774,7 @@ export default class SideNote2View extends ItemView {
             },
             onCloseModal: () => {},
             placeholder: "Find a file to move into",
-            title: "Move side note",
+            title: "Move side note to another file",
         }).open();
     }
 
