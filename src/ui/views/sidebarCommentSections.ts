@@ -71,6 +71,7 @@ export function formatSidebarCommentSelectedTextPreview(
 ): string | null {
     if (
         typeof comment.selectedText !== "string"
+        || comment.anchorKind === "page"
         || (comment.isBookmark !== true && comment.anchorKind !== "selection")
     ) {
         return null;
