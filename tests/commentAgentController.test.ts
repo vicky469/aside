@@ -796,6 +796,32 @@ test("comment agent controller regenerates a specific reply run using the curren
     assert.equal(harness.commentManager.getCommentById("generated-2")?.comment, "Second reply");
 });
 
+test("comment agent controller can retry a saved agent prompt when run metadata is missing", async () => {
+    const harness = createHarness({
+        initialComments: [createComment({
+            id: "thread-1",
+            filePath: "Folder/Note.md",
+            comment: "@codex recover this prompt",
+        })],
+        runtimeReplyText: "Recovered from prompt",
+    });
+
+    const started = await harness.controller.retryPromptForComment("thread-1", "Folder/Note.md");
+    await waitForAgentQueueToDrain(harness.controller);
+
+    assert.equal(started, true);
+    const latestRun = harness.controller.getLatestAgentRunForThread("thread-1");
+    assert.equal(latestRun?.requestedAgent, "codex");
+    assert.equal(latestRun?.retryOfRunId, undefined);
+    assert.equal(harness.runtimeCalls.at(-1)?.target, "codex");
+    assert.deepEqual(harness.appendedEntries, [{
+        threadId: "thread-1",
+        body: "",
+        insertAfterCommentId: "thread-1",
+    }]);
+    assert.equal(harness.commentManager.getCommentById("generated-2")?.comment, "Recovered from prompt");
+});
+
 test("comment agent controller keeps failed runs retryable through the same output entry", async () => {
     let attempt = 0;
     const harness = createHarness({

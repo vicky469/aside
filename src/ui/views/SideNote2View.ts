@@ -3016,6 +3016,7 @@ export default class SideNote2View extends ItemView {
                 void this.plugin.startAppendEntryDraft(commentId, hostFilePath);
             },
             retryAgentRun: (runId) => this.plugin.retryAgentRun(runId),
+            retryAgentPromptForComment: (commentId, filePath) => this.plugin.retryAgentPromptForComment(commentId, filePath),
             reanchorCommentThreadToCurrentSelection: (commentId) => {
                 void this.plugin.reanchorCommentThreadToCurrentSelection(commentId);
             },

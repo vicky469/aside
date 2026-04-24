@@ -10,6 +10,7 @@ import {
 } from "../../core/agents/agentRuns";
 import type { SideNote2AgentTarget } from "../../core/config/agentTargets";
 import { getVisibleNoteContent } from "../../core/storage/noteCommentStorage";
+import { parseAgentDirectives } from "../../core/text/agentDirectives";
 import { splitTrailingSideNoteReferenceSection, type TrailingSideNoteReferenceSection } from "../../core/text/commentReferences";
 import type { DraftComment } from "../../domain/drafts";
 import type { SideNoteReferenceSearchDocument } from "../../index/SideNoteReferenceSearchIndex";
@@ -127,6 +128,7 @@ export interface SidebarPersistedCommentHost {
     togglePinnedThread(threadId: string): Promise<void> | void;
     startAppendEntryDraft(commentId: string, hostFilePath: string | null): void;
     retryAgentRun(runId: string): Promise<boolean> | boolean;
+    retryAgentPromptForComment(commentId: string, filePath: string): Promise<boolean> | boolean;
     reanchorCommentThreadToCurrentSelection(commentId: string): void;
     deleteCommentWithConfirm(commentId: string): Promise<boolean> | Promise<void> | boolean | void;
     renderAppendDraft(container: HTMLDivElement, comment: DraftComment): void;
@@ -429,6 +431,18 @@ export function getRetryableAgentRunForSidebarComment(
     threadAgentRuns: readonly AgentRunRecord[],
 ): AgentRunRecord | null {
     return getLatestAgentRunForTriggerEntry(threadAgentRuns, commentId);
+}
+
+export function shouldShowRetryActionForSidebarComment(
+    commentId: string,
+    commentBody: string,
+    threadAgentRuns: readonly AgentRunRecord[],
+): boolean {
+    if (getRetryableAgentRunForSidebarComment(commentId, threadAgentRuns)) {
+        return true;
+    }
+
+    return parseAgentDirectives(commentBody).target !== null;
 }
 
 export function getInsertableSidebarCommentMarkdown(
@@ -1428,14 +1442,12 @@ function renderThreadFooterActions(
             retryButton.disabled = options.disableRetryAction === true;
             return;
         }
-        if (retryRunId) {
-            const started = await host.retryAgentRun(retryRunId);
-            if (!started) {
-                retryButton.disabled = options.disableRetryAction === true;
-            }
-            return;
+        const started = retryRunId
+            ? await host.retryAgentRun(retryRunId)
+            : await host.retryAgentPromptForComment(comment.id, comment.filePath);
+        if (!started) {
+            retryButton.disabled = options.disableRetryAction === true;
         }
-        retryButton.disabled = options.disableRetryAction === true;
     };
 }
 
@@ -1543,7 +1555,11 @@ function renderStoredThreadEntry(
             {
                 showShareAction: !entryComment.deletedAt && !thread.deletedAt,
                 showAddEntryAction: !entryComment.deletedAt && !thread.deletedAt,
-                showRetryAction: !!entryRetryRun && !entryComment.deletedAt && !thread.deletedAt,
+                showRetryAction: shouldShowRetryActionForSidebarComment(
+                    entryComment.id,
+                    entryComment.comment,
+                    host.threadAgentRuns,
+                ) && !entryComment.deletedAt && !thread.deletedAt,
                 disableRetryAction: isRetryableAgentRunBusy(entryRetryRun),
                 linkAction: null,
                 moveAction: null,
@@ -1703,7 +1719,11 @@ export async function renderPersistedCommentCard(
         renderThreadFooterActions(commentEl, comment, parentRetryRun?.id ?? null, parentAuthor, null, {
             showShareAction: !comment.deletedAt,
             showAddEntryAction: !comment.deletedAt,
-            showRetryAction: !!parentRetryRun && !comment.deletedAt && !thread.deletedAt,
+            showRetryAction: shouldShowRetryActionForSidebarComment(
+                comment.id,
+                comment.comment,
+                host.threadAgentRuns,
+            ) && !comment.deletedAt && !thread.deletedAt,
             disableRetryAction: isRetryableAgentRunBusy(parentRetryRun),
             nestedToggleAction: shouldRenderDetailsToggle
                 ? {

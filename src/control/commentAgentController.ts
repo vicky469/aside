@@ -3,6 +3,7 @@ import type { CommentManager } from "../commentManager";
 import {
     cloneAgentRunStreamState,
     getAgentRunsForCommentThread,
+    getLatestAgentRunForTriggerEntry,
     getLatestAgentRunForThread,
     getQueuedAgentRuns,
     type AgentRunRecord,
@@ -315,20 +316,45 @@ export class CommentAgentController {
             return false;
         }
 
-        const file = this.host.getFileByPath(previousRun.filePath);
+        return this.retryPromptForCommentInternal({
+            triggerEntryId: previousRun.triggerEntryId,
+            filePath: previousRun.filePath,
+            retryOfRunId: previousRun.id,
+            missingFileNotice: "Unable to reload that side note reply.",
+            missingCommentNotice: "Unable to find the latest saved side note entry.",
+        });
+    }
+
+    public async retryPromptForComment(commentId: string, filePath: string): Promise<boolean> {
+        return this.retryPromptForCommentInternal({
+            triggerEntryId: commentId,
+            filePath,
+            missingFileNotice: "Unable to reload that side note prompt.",
+            missingCommentNotice: "Unable to find that saved side note entry.",
+        });
+    }
+
+    private async retryPromptForCommentInternal(options: {
+        triggerEntryId: string;
+        filePath: string;
+        retryOfRunId?: string;
+        missingFileNotice: string;
+        missingCommentNotice: string;
+    }): Promise<boolean> {
+        const file = this.host.getFileByPath(options.filePath);
         if (!this.host.isCommentableFile(file)) {
-            this.host.showNotice("Unable to reload that side note reply.");
+            this.host.showNotice(options.missingFileNotice);
             return false;
         }
 
         await this.host.loadCommentsForFile(file);
-        const latestComment = this.host.getCommentManager().getCommentById(previousRun.triggerEntryId);
+        const latestComment = this.host.getCommentManager().getCommentById(options.triggerEntryId);
         if (!latestComment) {
-            this.host.showNotice("Unable to find the latest saved side note entry.");
+            this.host.showNotice(options.missingCommentNotice);
             return false;
         }
 
-        const thread = this.host.getCommentManager().getThreadById(previousRun.threadId);
+        const thread = this.host.getCommentManager().getThreadById(options.triggerEntryId);
         if (!thread) {
             this.host.showNotice("Unable to find that side note thread.");
             return false;
@@ -345,22 +371,24 @@ export class CommentAgentController {
             return false;
         }
 
+        const retryOfRunId = options.retryOfRunId
+            ?? getLatestAgentRunForTriggerEntry(this.store.getRuns(), latestComment.id)?.id;
         const run = this.buildQueuedRun({
             threadId: thread.id,
-            triggerEntryId: previousRun.triggerEntryId,
+            triggerEntryId: latestComment.id,
             filePath: latestComment.filePath,
             requestedAgent: resolvedTarget,
             runtime: runtimeSelection.runtime,
             modePreference: runtimeSelection.modePreference,
             promptText: latestComment.comment,
-            retryOfRunId: previousRun.id,
+            ...(retryOfRunId ? { retryOfRunId } : {}),
         });
         await this.enqueueRun(run);
         void this.host.log?.("info", "agents", "agents.retry.created", {
             runId: run.id,
-            retryOfRunId: previousRun.id,
+            ...(retryOfRunId ? { retryOfRunId } : {}),
             threadId: thread.id,
-            triggerEntryId: previousRun.triggerEntryId,
+            triggerEntryId: latestComment.id,
             requestedAgent: run.requestedAgent,
         });
         return true;

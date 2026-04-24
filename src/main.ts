@@ -738,6 +738,10 @@ export default class SideNote2 extends Plugin {
         return this.commentAgentController.retryRun(runId);
     }
 
+    public async retryAgentPromptForComment(commentId: string, filePath: string): Promise<boolean> {
+        return this.commentAgentController.retryPromptForComment(commentId, filePath);
+    }
+
     public async cancelAgentRun(runId: string): Promise<boolean> {
         return this.commentAgentController.cancelRun(runId);
     }
