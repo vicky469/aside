@@ -2,7 +2,20 @@
 
 ## Status
 
-Draft plan
+Partially implemented
+
+Already landed:
+
+- `Link side note` is available on the active persisted card, to the left of `Move side note`
+- the active-card link flow reuses the existing draft write path
+- inline edit no longer shows the bottom bookmark button
+- the old draft-surface `Link side note` button has been removed in favor of the active-card action
+
+Still pending:
+
+- same-file notes are still excluded from the side-note picker
+- local same-file chains are not yet rendered in Thought Trail
+- Thought Trail is still a single cross-file graph, not a stacked local-plus-file view
 
 Related docs:
 
@@ -22,6 +35,8 @@ Relevant current code:
 ## Summary
 
 SideNote2 should support local side-note chaining inside the same markdown file, not only cross-file linking.
+
+This PRD now tracks the remaining work after the first action-surface cleanup already landed in code.
 
 This plan combines four product changes into one coherent feature:
 
@@ -43,12 +58,10 @@ The important product direction is:
 
 Today the linking and trail experience is incomplete for local note chains.
 
-Current gaps:
+Remaining gaps:
 
-- `Link side note` is available in draft editing, but not as a first-class action from the active persisted card
 - the reference picker excludes same-file notes, so users cannot easily chain anchored notes within one book or chapter note
 - Thought Trail only renders the cross-file file graph, so same-file chains are invisible there
-- inline edit still shows a bookmark button in the lower action row, which adds noise in the editing surface
 
 This creates a mismatch between the user model and the product model.
 
@@ -82,17 +95,23 @@ The current product model is stronger for cross-file linking than for local chai
 
 ### Link Authoring
 
-Current draft link authoring already exists:
+The current authoring flow is now split into two layers:
 
-- draft toolbar buttons in [sidebarDraftComment.ts](../../src/ui/views/sidebarDraftComment.ts)
-- insertion flow in `openDraftSideNoteReferenceSuggest(...)` in [sidebarDraftEditor.ts](../../src/ui/views/sidebarDraftEditor.ts)
+- persisted-card entry point in `openCommentSideNoteReferenceSuggest(...)` in [SideNote2View.ts](../../src/ui/views/SideNote2View.ts)
+- shared insertion logic in `appendMentionedReference(...)` in [sidebarDraftEditor.ts](../../src/ui/views/sidebarDraftEditor.ts)
 - picker opening in `openSideNoteReferenceSuggestModal(...)` in [SideNote2View.ts](../../src/ui/views/SideNote2View.ts)
 
 But the picker currently filters out same-file results in [SideNoteReferenceSearchIndex.ts](../../src/index/SideNoteReferenceSearchIndex.ts).
 
 ### Persisted Card Actions
 
-The active persisted card already renders `Move side note` in [sidebarPersistedComment.ts](../../src/ui/views/sidebarPersistedComment.ts), but there is no matching `Link side note` action there yet.
+The active persisted card now renders both `Link side note` and `Move side note` in [sidebarPersistedComment.ts](../../src/ui/views/sidebarPersistedComment.ts).
+
+Current behavior:
+
+- `Link side note` appears to the left of `Move side note`
+- clicking it starts inline edit for that comment, opens the picker, and appends into the `Mentioned:` section
+- this action currently applies to the parent/root persisted card, not child entries
 
 ### Thought Trail
 
@@ -124,7 +143,7 @@ That means:
 
 ### Decision 2: `Link side note` Becomes A Persisted Card Action
 
-`Link side note` should move beyond the draft-only toolbar and become available on the active persisted card.
+This has already been implemented and should remain the product direction.
 
 Placement rule:
 
@@ -138,7 +157,7 @@ This keeps related structural actions together:
 
 ### Decision 3: Active-View Linking Uses The Existing Draft Write Path
 
-Clicking `Link side note` from the active persisted card should not mutate stored markdown invisibly.
+This has already been implemented and should remain the write model.
 
 Recommended behavior:
 
@@ -164,7 +183,7 @@ This is the core product unlock for local chaining.
 
 ### Decision 5: Remove The Bottom Bookmark Button From Inline Edit View
 
-The inline edit surface should remove the bookmark icon from the lower action row.
+This has already been implemented and should remain the edit-surface cleanup.
 
 This plan only removes the noisy bottom-row bookmark affordance in edit view.
 It does not require removing every bookmark control everywhere else.
@@ -242,9 +261,10 @@ Active persisted card footer order should become:
 Inline edit cleanup:
 
 - remove the bottom bookmark icon from the edit action row
-- keep `Link side note` in the edit surface
+- do not keep a separate `Link side note` button in the draft edit surface
+- use the active persisted card action as the entry point into linking
 
-This reduces visual duplication while local chaining becomes easier to access from the persisted view anyway.
+This reduces visual duplication while keeping the write path explicit.
 
 ### Link Picker
 
@@ -325,6 +345,8 @@ Recommended refactor:
 
 ### Stage 1: Action-Surface Cleanup
 
+Status: complete
+
 - remove the bottom bookmark button from inline edit view
 - add `Link side note` to the active persisted card
 - place it left of `Move side note`
@@ -372,17 +394,18 @@ Important scope note:
 
 ## Acceptance Criteria
 
-- users can link one side note to another within the same file
-- `Link side note` appears in the active persisted card, to the left of `Move side note`
-- inline edit no longer shows the noisy bottom bookmark button
-- picker results include same-file notes while excluding the current thread
-- same-file links rank ahead of other-file links when relevance is similar
-- Thought Trail renders two stacked sections
-- the upper section shows same-file note-level chains
-- the lower section shows the existing recursive cross-file file trail
-- local-chain clicks open the target side note
-- current cross-file Thought Trail behavior remains intact
-- optional chain pinning and consolidated-note workflows are explicitly deferred from the first implementation
+- [x] `Link side note` appears in the active persisted card, to the left of `Move side note`
+- [x] inline edit no longer shows the noisy bottom bookmark button
+- [x] active-card linking reuses the existing draft insertion path instead of introducing a hidden direct-write path
+- [ ] users can link one side note to another within the same file
+- [ ] picker results include same-file notes while excluding the current thread
+- [ ] same-file links rank ahead of other-file links when relevance is similar
+- [ ] Thought Trail renders two stacked sections
+- [ ] the upper section shows same-file note-level chains
+- [ ] the lower section shows the existing recursive cross-file file trail
+- [ ] local-chain clicks open the target side note
+- [ ] current cross-file Thought Trail behavior remains intact
+- [ ] optional chain pinning and consolidated-note workflows are explicitly deferred from the first implementation
 
 ## Open Questions
 
@@ -391,4 +414,52 @@ Important scope note:
   - `Local Chain` / `File Trail`
   - `Local Notes` / `Related Files`
 - whether the picker should visually separate same-file and cross-file matches or only rank them
+   sections like “This note” and “Other notes”
 - whether `Link side note` should be shown for child entries as well as parent thread cards in V1
+  no. it should be thread level.
+
+<!-- SideNote2 comments
+[
+  {
+    "id": "24b924e0-38a1-4c12-b19c-1aeab6f14a3b",
+    "startLine": 411,
+    "startChar": 2,
+    "endLine": 411,
+    "endChar": 27,
+    "selectedText": "final section label copy:",
+    "selectedTextHash": "175a91da5ce700b65667cba481ed4115d95eebd0ced89f8d864b9e67f5da9347",
+    "entries": [
+      {
+        "id": "24b924e0-38a1-4c12-b19c-1aeab6f14a3b",
+        "body": "`Local Notes` / `Related Files`",
+        "timestamp": 1776989859460
+      }
+    ],
+    "createdAt": 1776989859460,
+    "updatedAt": 1776989859460
+  },
+  {
+    "id": "78ba8ba8-8ceb-48bc-babe-0d1e8eba77ca",
+    "startLine": 415,
+    "startChar": 2,
+    "endLine": 415,
+    "endChar": 96,
+    "selectedText": "whether the picker should visually separate same-file and cross-file matches or only rank them",
+    "selectedTextHash": "cf7ca0a4f1cf94158d81348f09c0bf5193b9e1b21ce823cf350b5477e8e09d6b",
+    "entries": [
+      {
+        "id": "78ba8ba8-8ceb-48bc-babe-0d1e8eba77ca",
+        "body": "@codex i don't understand this question",
+        "timestamp": 1776989885646
+      },
+      {
+        "id": "18e4c7b8-0ef2-43fb-bcdd-e0bb47f2938a",
+        "body": "It means: when the picker finds possible matches, some will be in the note you’re currently in, and some will be in other notes.\n\nThe question is asking which UI is better:\n- split them into obvious groups, like “This note” vs “Other notes”\n- or keep one single list, but sort same-note matches higher\n\nSo this is about how results are shown, not how matching works.\n\nA simpler rewrite would be:\n“Should the picker group matches from the current note separately from matches in other notes, or just show one ranked list with current-note matches first?”",
+        "timestamp": 1776990693218
+      }
+    ],
+    "createdAt": 1776989885646,
+    "updatedAt": 1776990693218
+  }
+]
+-->

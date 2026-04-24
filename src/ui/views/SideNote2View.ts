@@ -20,6 +20,7 @@ import {
     type IndexFileFilterGraph,
 } from "../../core/derived/indexFileFilterGraph";
 import {
+    buildLocalThoughtTrailLines,
     buildThoughtTrailLines,
     extractThoughtTrailMermaidSource,
     getThoughtTrailMermaidRenderConfig,
@@ -1183,6 +1184,7 @@ export default class SideNote2View extends ItemView {
                 await this.renderThoughtTrail(commentsContainer, trailComments, file, {
                     surface: "index",
                     hasRootScope: filteredIndexFilePaths.length > 0,
+                    rootFilePath: selectedIndexFileFilterRootPath,
                 });
                 if (this.plugin.isLocalRuntime()) {
                     this.renderSupportButton({
@@ -1505,6 +1507,7 @@ export default class SideNote2View extends ItemView {
         await this.renderThoughtTrail(shell.commentsBodyEl, scopedThreads, file, {
             surface: "note",
             hasRootScope: scopedFilePaths.length > 0,
+            rootFilePath: file.path,
         });
 
         shell.supportSlotEl.empty();
@@ -2671,6 +2674,7 @@ export default class SideNote2View extends ItemView {
     private openSideNoteReferenceSuggestModal(options: {
         emptyStateText?: string;
         excludeThreadId?: string | null;
+        includeSameFile?: boolean;
         initialQuery: string;
         onChooseReference: (commentId: string) => void | Promise<void>;
         onCloseModal: () => void;
@@ -2682,6 +2686,7 @@ export default class SideNote2View extends ItemView {
             ...options,
             searchReferences: (query, searchOptions) => this.plugin.searchSideNoteReferenceDocuments(query, {
                 excludeThreadId: searchOptions.excludeThreadId,
+                includeSameFile: options.includeSameFile,
                 limit: searchOptions.limit,
                 sourceFilePath: options.sourcePath,
             }),
@@ -3354,10 +3359,11 @@ export default class SideNote2View extends ItemView {
         options: {
             surface: "index" | "note";
             hasRootScope: boolean;
+            rootFilePath: string | null;
         },
     ): Promise<void> {
         const thoughtTrailEl = commentsContainer.createDiv("sidenote2-thought-trail");
-        if (!options.hasRootScope) {
+        if (!options.hasRootScope || !options.rootFilePath) {
             const emptyStateEl = thoughtTrailEl.createDiv("sidenote2-empty-state sidenote2-section-empty-state");
             if (options.surface === "note") {
                 emptyStateEl.createEl("p", { text: "No thought trail is available for this file yet." });
@@ -3368,7 +3374,8 @@ export default class SideNote2View extends ItemView {
             return;
         }
 
-        const thoughtTrailLines = buildThoughtTrailLines(this.app.vault.getName(), comments, {
+        const rootFilePath = options.rootFilePath;
+        const relatedFileLines = buildThoughtTrailLines(this.app.vault.getName(), comments, {
             allCommentsNotePath: this.plugin.getAllCommentsNotePath(),
             localVaultName: this.app.vault.getName(),
             resolveSideNoteReferencePath: (commentId, filePathHint) =>
@@ -3378,22 +3385,67 @@ export default class SideNote2View extends ItemView {
                 return linkedFile instanceof TFile ? linkedFile.path : null;
             },
         });
+        const localNoteLines = buildLocalThoughtTrailLines(this.app.vault.getName(), comments, {
+            allCommentsNotePath: this.plugin.getAllCommentsNotePath(),
+            localVaultName: this.app.vault.getName(),
+            rootFilePath,
+        });
 
-        if (!thoughtTrailLines.length) {
-            const emptyStateEl = thoughtTrailEl.createDiv("sidenote2-empty-state sidenote2-section-empty-state");
-            if (options.surface === "note") {
-                emptyStateEl.createEl("p", { text: "No thought trail for this file yet." });
-                emptyStateEl.createEl("p", { text: "Add wiki links in side notes for this file or switch back to the list." });
-            } else {
-                emptyStateEl.createEl("p", { text: "No thought trail matches the selected file filter." });
-                emptyStateEl.createEl("p", { text: "Add wiki links in those notes or choose a different file." });
-            }
+        await this.renderThoughtTrailSection(thoughtTrailEl, {
+            emptyStateText: options.surface === "note"
+                ? [
+                    "No local note chains in this file yet.",
+                    "Link side notes inside this file to build the local graph.",
+                ]
+                : [
+                    "No local note chains for the selected file.",
+                    "Link side notes inside that file to build the local graph.",
+                ],
+            sourcePath: rootFilePath,
+            thoughtTrailLines: localNoteLines,
+            title: "Local Notes",
+        });
+        await this.renderThoughtTrailSection(thoughtTrailEl, {
+            emptyStateText: options.surface === "note"
+                ? [
+                    "No related files for this file yet.",
+                    "Add wiki links or cross-file side-note links in side notes for this file.",
+                ]
+                : [
+                    "No related files for the selected file.",
+                    "Add cross-file links in those notes or choose a different file.",
+                ],
+            sourcePath: rootFilePath || file.path,
+            thoughtTrailLines: relatedFileLines,
+            title: "Related Files",
+        });
+    }
+
+    private async renderThoughtTrailSection(
+        container: HTMLDivElement,
+        options: {
+            emptyStateText: string[];
+            sourcePath: string;
+            thoughtTrailLines: string[];
+            title: string;
+        },
+    ): Promise<void> {
+        const sectionEl = container.createDiv("sidenote2-thought-trail-section");
+        sectionEl.createEl("h4", {
+            cls: "sidenote2-thought-trail-section-title",
+            text: options.title,
+        });
+        if (!options.thoughtTrailLines.length) {
+            const emptyStateEl = sectionEl.createDiv("sidenote2-empty-state sidenote2-section-empty-state");
+            options.emptyStateText.forEach((text) => {
+                emptyStateEl.createEl("p", { text });
+            });
             return;
         }
 
-        await this.renderThoughtTrailMermaid(thoughtTrailEl, thoughtTrailLines, file.path);
-
-        this.bindThoughtTrailNodeLinks(thoughtTrailEl, thoughtTrailLines);
+        const graphEl = sectionEl.createDiv("sidenote2-thought-trail-section-graph");
+        await this.renderThoughtTrailMermaid(graphEl, options.thoughtTrailLines, options.sourcePath);
+        this.bindThoughtTrailNodeLinks(graphEl, options.thoughtTrailLines);
     }
 
     private async renderThoughtTrailMermaid(
@@ -3538,6 +3590,7 @@ export default class SideNote2View extends ItemView {
     private async openThoughtTrailTarget(targetUrl: string): Promise<void> {
         const filePath = parseThoughtTrailOpenFilePath(targetUrl);
         if (!filePath) {
+            await this.plugin.openSideNoteReferenceUrl(targetUrl);
             return;
         }
 

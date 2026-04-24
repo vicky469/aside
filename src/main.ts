@@ -1368,6 +1368,7 @@ export default class SideNote2 extends Plugin {
         query: string,
         options: {
             excludeThreadId?: string | null;
+            includeSameFile?: boolean;
             limit?: number;
             sourceFilePath?: string | null;
         } = {},

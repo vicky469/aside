@@ -775,6 +775,26 @@ button.sidenote2-tab-button.sidenote2-tab-button--active {
 .sidenote2-thought-trail {
     padding: 2px 4px 4px;
     font-size: var(--font-ui-smaller);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.sidenote2-thought-trail-section {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.sidenote2-thought-trail-section-title {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: var(--font-ui-small);
+    font-weight: var(--font-medium);
+}
+
+.sidenote2-thought-trail-section-graph {
+    min-width: 0;
 }
 
 .sidenote2-thought-trail ul {
@@ -1594,12 +1614,7 @@ button.sidenote2-comment-pin-indicator.is-active {
 }
 
 .sidenote2-thread-nested-toggle-button {
-    position: absolute;
-    left: 50%;
-    bottom: 6px;
-    transform: translateX(-50%);
-    z-index: 1;
-    display: inline-flex;
+    display: none;
     align-items: center;
     justify-content: center;
     width: 18px;
@@ -1611,8 +1626,7 @@ button.sidenote2-comment-pin-indicator.is-active {
     box-shadow: none;
     pointer-events: none;
     opacity: 0;
-    visibility: hidden;
-    transition: opacity 0.14s ease, color 0.14s ease, visibility 0.14s ease;
+    transition: opacity 0.14s ease, color 0.14s ease;
 }
 
 .sidenote2-thread-nested-toggle-button svg {
@@ -1622,9 +1636,9 @@ button.sidenote2-comment-pin-indicator.is-active {
 
 .sidenote2-comment-item.active .sidenote2-thread-nested-toggle-button,
 .sidenote2-thread-nested-toggle-button.is-expanded {
+    display: inline-flex;
     pointer-events: auto;
     opacity: 0.64;
-    visibility: visible;
 }
 
 .sidenote2-thread-nested-toggle-button:hover,

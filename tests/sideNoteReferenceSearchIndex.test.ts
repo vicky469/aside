@@ -27,7 +27,45 @@ function createThread(overrides: Partial<CommentThread> = {}): CommentThread {
     };
 }
 
-test("side note reference search excludes same-file matches for link suggestions", () => {
+test("side note reference search includes same-file matches and ranks them ahead of other files", () => {
+    const aggregateCommentIndex = new AggregateCommentIndex();
+    aggregateCommentIndex.updateFile("docs/current.md", [
+        createThread({
+            id: "thread-current",
+            filePath: "docs/current.md",
+            selectedText: "Alpha insight",
+        }),
+        createThread({
+            id: "thread-same-file",
+            filePath: "docs/current.md",
+            selectedText: "Alpha insight",
+            startLine: 10,
+            updatedAt: 150,
+        }),
+    ]);
+    aggregateCommentIndex.updateFile("docs/other.md", [
+        createThread({
+            id: "thread-other",
+            filePath: "docs/other.md",
+            selectedText: "Alpha insight",
+        }),
+    ]);
+
+    const index = buildSideNoteReferenceSearchIndex(aggregateCommentIndex, {
+        allCommentsNotePath: "SideNote2 index.md",
+    });
+    const results = index.search("alpha insight", {
+        excludeThreadId: "thread-current",
+        sourceFilePath: "docs/current.md",
+    });
+
+    assert.deepEqual(results.map((result) => result.threadId), [
+        "thread-same-file",
+        "thread-other",
+    ]);
+});
+
+test("side note reference search can still exclude same-file matches when requested", () => {
     const aggregateCommentIndex = new AggregateCommentIndex();
     aggregateCommentIndex.updateFile("docs/current.md", [
         createThread({
@@ -48,6 +86,7 @@ test("side note reference search excludes same-file matches for link suggestions
         allCommentsNotePath: "SideNote2 index.md",
     });
     const results = index.search("alpha insight", {
+        includeSameFile: false,
         sourceFilePath: "docs/current.md",
     });
 

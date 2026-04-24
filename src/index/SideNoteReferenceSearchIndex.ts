@@ -24,6 +24,7 @@ export interface SideNoteReferenceSearchDocument {
 
 export interface SideNoteReferenceSearchOptions {
     excludeThreadId?: string | null;
+    includeSameFile?: boolean;
     limit?: number;
     sourceFilePath?: string | null;
 }
@@ -153,19 +154,30 @@ export class SideNoteReferenceSearchIndex {
         const normalizedSourceFilePath = options.sourceFilePath
             ? normalizeNotePath(options.sourceFilePath)
             : null;
+        const includeSameFile = options.includeSameFile !== false;
         const limit = options.limit ?? 40;
 
         return this.documents
             .filter((document) => document.threadId !== options.excludeThreadId)
-            .filter((document) => normalizedSourceFilePath === null || normalizeNotePath(document.filePath) !== normalizedSourceFilePath)
+            .filter((document) => (
+                includeSameFile
+                || normalizedSourceFilePath === null
+                || normalizeNotePath(document.filePath) !== normalizedSourceFilePath
+            ))
             .map((document) => ({
                 document,
+                isSameFile: normalizedSourceFilePath !== null
+                    && normalizeNotePath(document.filePath) === normalizedSourceFilePath,
                 matchRank: getQueryMatchRank(normalizedQuery, document),
             }))
             .filter((candidate) => candidate.matchRank !== Number.POSITIVE_INFINITY)
             .sort((left, right) => {
                 if (left.matchRank !== right.matchRank) {
                     return left.matchRank - right.matchRank;
+                }
+
+                if (left.isSameFile !== right.isSameFile) {
+                    return left.isSameFile ? -1 : 1;
                 }
 
                 if (left.document.resolved !== right.document.resolved) {

@@ -1309,6 +1309,10 @@ function renderThreadFooterActions(
         showAddEntryAction: boolean;
         showRetryAction?: boolean;
         disableRetryAction?: boolean;
+        nestedToggleAction?: {
+            showNestedComments: boolean;
+            threadId: string;
+        } | null;
         linkAction?: {
             ariaLabel: string;
             icon: string;
@@ -1327,6 +1331,14 @@ function renderThreadFooterActions(
 ): void {
     const footerEl = commentEl.createDiv("sidenote2-thread-footer");
     const footerMetaEl = footerEl.createDiv("sidenote2-thread-footer-meta");
+    if (options.nestedToggleAction) {
+        renderThreadNestedToggleButton(
+            footerMetaEl,
+            options.nestedToggleAction.threadId,
+            options.nestedToggleAction.showNestedComments,
+            host,
+        );
+    }
     renderCommentAuthorIndicator(footerMetaEl, author);
     if (agentRun) {
         renderAgentRunStatus(footerMetaEl, agentRun);
@@ -1440,12 +1452,12 @@ function renderThreadFooterActions(
 }
 
 function renderThreadNestedToggleButton(
-    commentEl: HTMLDivElement,
+    container: HTMLElement,
     threadId: string,
     showNestedComments: boolean,
     host: SidebarPersistedCommentHost,
 ): void {
-    const toggleButton = commentEl.createEl("button", {
+    const toggleButton = container.createEl("button", {
         cls: "clickable-icon sidenote2-comment-action-button sidenote2-thread-nested-toggle-button",
     });
     attachSidebarActionButtonInteractions(toggleButton, host);
@@ -1602,10 +1614,22 @@ export async function renderPersistedCommentCard(
     const incomingSideNoteReferenceBacklinks = getIncomingSideNoteReferenceBacklinksForRender(thread.id, host);
     const threadHasOutgoingSideNoteReferences = outgoingSideNoteReferences.length > 0;
     const threadHasIncomingSideNoteReferences = incomingSideNoteReferenceBacklinks.length > 0;
+    const hasStoredChildEntries = entries.length > 1;
+    const parentEditDraft = host.editDraftComment?.id === comment.id
+        ? host.editDraftComment
+        : null;
     const shouldRenderStoredChildren = host.showNestedComments
         || hasChildEditDraft
         || host.agentStream !== null
         || !!host.appendDraftComment;
+    const shouldRenderDetailsToggle = shouldRenderThreadNestedToggle({
+        hasStoredChildEntries,
+        hasOutgoingSideNoteReferences: threadHasOutgoingSideNoteReferences,
+        hasIncomingSideNoteReferences: threadHasIncomingSideNoteReferences,
+        hasInlineEditDraft: !!parentEditDraft,
+        hasAppendDraftComment: !!host.appendDraftComment,
+        hasChildEditDraft,
+    });
     const shouldRenderChildComments = shouldRenderNestedThreadEntries(thread, {
         activeCommentId: host.activeCommentId,
         showNestedComments: host.showNestedComments,
@@ -1619,12 +1643,8 @@ export async function renderPersistedCommentCard(
         hasIncomingSideNoteReferences: threadHasIncomingSideNoteReferences,
     });
     const appendDraftAfterEntryId = getAppendDraftInsertAfterEntryId(thread, host.appendDraftComment);
-    const hasStoredChildEntries = entries.length > 1;
     const parentAuthor = resolveSidebarCommentAuthor(comment.id, host.threadAgentRuns, host.currentUserLabel);
     const renderTasks: Array<Promise<void>> = [];
-    const parentEditDraft = host.editDraftComment?.id === comment.id
-        ? host.editDraftComment
-        : null;
     const canShowHeaderBookmarkAndPinActions = host.showBookmarkAndPinControls
         && comment.id === thread.id
         && !comment.deletedAt
@@ -1705,6 +1725,12 @@ export async function renderPersistedCommentCard(
                 host.threadAgentRuns,
             ) && !comment.deletedAt && !thread.deletedAt,
             disableRetryAction: isRetryableAgentRunBusy(parentRetryRun),
+            nestedToggleAction: shouldRenderDetailsToggle
+                ? {
+                    threadId: thread.id,
+                    showNestedComments: host.showNestedComments,
+                }
+                : null,
             linkAction: !comment.deletedAt && !thread.deletedAt
                 ? {
                     ariaLabel: presentation.linkAction.ariaLabel,
@@ -1727,16 +1753,6 @@ export async function renderPersistedCommentCard(
                 }
                 : null,
         }, host);
-    }
-    if (shouldRenderThreadNestedToggle({
-        hasStoredChildEntries,
-        hasOutgoingSideNoteReferences: threadHasOutgoingSideNoteReferences,
-        hasIncomingSideNoteReferences: threadHasIncomingSideNoteReferences,
-        hasInlineEditDraft: !!parentEditDraft,
-        hasAppendDraftComment: !!host.appendDraftComment,
-        hasChildEditDraft,
-    })) {
-        renderThreadNestedToggleButton(commentEl, thread.id, host.showNestedComments, host);
     }
 
     if (!shouldRenderChildComments) {
