@@ -425,19 +425,6 @@ function renderDraftEditor(
             return;
         }
     });
-    textarea.addEventListener("paste", (event: ClipboardEvent) => {
-        const pastedText = event.clipboardData?.getData("text/plain");
-        if (!pastedText) {
-            return;
-        }
-
-        if (!draftEditorController.normalizePastedSideNoteReferences(comment, textarea, pastedText, comment.mode === "edit")) {
-            return;
-        }
-
-        event.preventDefault();
-        event.stopPropagation();
-    });
     textarea.addEventListener("keydown", (event: KeyboardEvent) => {
         const consumeShortcut = () => {
             event.preventDefault();

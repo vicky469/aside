@@ -7,7 +7,6 @@ const LEGACY_ALL_COMMENTS_NOTE_PATH = "SideNote2 comments.md";
 
 export interface IndexFileFilterGraphBuildOptions {
     allCommentsNotePath?: string;
-    referenceAdjacency?: Map<string, Set<string>>;
     showResolved?: boolean | null;
     resolveWikiLinkPath?: (linkPath: string, sourceFilePath: string) => string | null;
 }
@@ -183,31 +182,6 @@ export function buildIndexFileFilterGraph(
             }
         }
     }
-
-    for (const [sourceFilePathRaw, targetFilePaths] of options.referenceAdjacency ?? []) {
-        const sourceFilePath = normalizeNotePath(sourceFilePathRaw);
-        if (!availableFileSet.has(sourceFilePath)) {
-            continue;
-        }
-
-        const outgoingTargets = ensureAdjacencySet(outgoingAdjacency, sourceFilePath);
-        const sourceNeighbors = ensureAdjacencySet(undirectedAdjacency, sourceFilePath);
-        for (const targetFilePathRaw of targetFilePaths) {
-            const targetFilePath = normalizeNotePath(targetFilePathRaw);
-            if (
-                targetFilePath === sourceFilePath
-                || isAllCommentsNotePath(targetFilePath, options.allCommentsNotePath)
-                || !availableFileSet.has(targetFilePath)
-            ) {
-                continue;
-            }
-
-            outgoingTargets.add(targetFilePath);
-            sourceNeighbors.add(targetFilePath);
-            ensureAdjacencySet(undirectedAdjacency, targetFilePath).add(sourceFilePath);
-        }
-    }
-
     const {
         connectedComponentByFile,
         componentSizeByFile,

@@ -58,25 +58,10 @@ import {
 import { DraftComment, DraftSelection } from "./domain/drafts";
 import { parsePromptDeleteSetting } from "./core/config/appConfig";
 import { DerivedCommentMetadataManager } from "./core/derived/derivedCommentMetadata";
-import {
-    buildSideNoteReferenceIndex,
-    type SideNoteReferenceIndex,
-    type SideNoteReferenceRecord,
-} from "./core/derived/sideNoteReferenceIndex";
 import { isMarkdownCommentableFile, isSidebarSupportedFile } from "./core/rules/commentableFiles";
 import { extractWikiLinkPaths } from "./core/text/commentMentions";
-import {
-    buildSideNoteReferenceMarkdown,
-    buildSideNoteReferenceUrl,
-    parseSideNoteReferenceUrl,
-} from "./core/text/commentReferences";
 import { syncInstalledCodexSkill, type CodexSkillSyncModules } from "./core/codexSkillSync";
 import { AggregateCommentIndex } from "./index/AggregateCommentIndex";
-import {
-    buildSideNoteReferenceSearchIndex,
-    SideNoteReferenceSearchIndex,
-    type SideNoteReferenceSearchDocument,
-} from "./index/SideNoteReferenceSearchIndex";
 import { ParsedNoteCache } from "./cache/ParsedNoteCache";
 import { parseNoteComments, ParsedNoteComments } from "./core/storage/noteCommentStorage";
 import SideNote2SettingTab, {
@@ -118,12 +103,6 @@ function getParentPath(filePath: string): string {
     }
 
     return normalized.slice(0, slashIndex);
-}
-
-function getFileTitle(filePath: string): string {
-    const normalizedPath = filePath.replace(/\\/g, "/");
-    const fileName = normalizedPath.split("/").pop() ?? normalizedPath;
-    return fileName.replace(/\.md$/i, "");
 }
 
 function getSafeLocalStorage(): Storage | null {
@@ -460,10 +439,6 @@ export default class SideNote2 extends Plugin {
     private activeMarkdownFile: TFile | null = null;
     private activeSidebarFile: TFile | null = null;
     private aggregateCommentIndex = new AggregateCommentIndex();
-    private sideNoteReferenceIndex: SideNoteReferenceIndex | null = null;
-    private sideNoteReferenceIndexVersion = -1;
-    private sideNoteReferenceSearchIndex: SideNoteReferenceSearchIndex | null = null;
-    private sideNoteReferenceSearchIndexVersion = -1;
     private parsedNoteCache = new ParsedNoteCache(20);
 
     private async detectRuntimeMode(): Promise<"local" | "release"> {
@@ -1337,154 +1312,6 @@ export default class SideNote2 extends Plugin {
     private getKnownThreadById(commentId: string): CommentThread | null {
         return this.commentManager.getThreadById(commentId)
             ?? this.aggregateCommentIndex.getThreadById(commentId);
-    }
-
-    private getSideNoteReferenceIndex(): SideNoteReferenceIndex {
-        const nextVersion = this.aggregateCommentIndex.getVersion();
-        if (!this.sideNoteReferenceIndex || this.sideNoteReferenceIndexVersion !== nextVersion) {
-            this.sideNoteReferenceIndex = buildSideNoteReferenceIndex(this.aggregateCommentIndex, {
-                allCommentsNotePath: this.getAllCommentsNotePath(),
-                localVaultName: this.app.vault.getName(),
-            });
-            this.sideNoteReferenceIndexVersion = nextVersion;
-        }
-
-        return this.sideNoteReferenceIndex;
-    }
-
-    private getSideNoteReferenceSearchIndex(): SideNoteReferenceSearchIndex {
-        const nextVersion = this.aggregateCommentIndex.getVersion();
-        if (!this.sideNoteReferenceSearchIndex || this.sideNoteReferenceSearchIndexVersion !== nextVersion) {
-            this.sideNoteReferenceSearchIndex = buildSideNoteReferenceSearchIndex(this.aggregateCommentIndex, {
-                allCommentsNotePath: this.getAllCommentsNotePath(),
-            });
-            this.sideNoteReferenceSearchIndexVersion = nextVersion;
-        }
-
-        return this.sideNoteReferenceSearchIndex;
-    }
-
-    public searchSideNoteReferenceDocuments(
-        query: string,
-        options: {
-            excludeThreadId?: string | null;
-            includeSameFile?: boolean;
-            limit?: number;
-            sourceFilePath?: string | null;
-        } = {},
-    ): SideNoteReferenceSearchDocument[] {
-        return this.getSideNoteReferenceSearchIndex().search(query, options);
-    }
-
-    public getSideNoteReferenceDocument(commentId: string): SideNoteReferenceSearchDocument | null {
-        return this.getSideNoteReferenceSearchIndex().getDocument(commentId);
-    }
-
-    public buildSideNoteReferenceUrlForComment(commentId: string): string | null {
-        const comment = this.getKnownCommentById(commentId);
-        if (!comment) {
-            return null;
-        }
-
-        return buildSideNoteReferenceUrl(this.app.vault.getName(), {
-            commentId: comment.id,
-            filePath: comment.filePath,
-        });
-    }
-
-    public buildSideNoteReferenceMarkdownForComment(
-        commentId: string,
-        label?: string,
-    ): string | null {
-        const url = this.buildSideNoteReferenceUrlForComment(commentId);
-        if (!url) {
-            return null;
-        }
-
-        const document = this.getSideNoteReferenceDocument(commentId);
-        return buildSideNoteReferenceMarkdown(
-            url,
-            label ?? document?.insertionLabel ?? document?.primaryLabel ?? "Side note",
-        );
-    }
-
-    public async openSideNoteReferenceUrl(url: string): Promise<boolean> {
-        const target = parseSideNoteReferenceUrl(url);
-        if (!target) {
-            return false;
-        }
-
-        const localVaultName = this.app.vault.getName();
-        if (target.vaultName && target.vaultName !== localVaultName) {
-            return false;
-        }
-
-        await this.openCommentById(target.filePath, target.commentId);
-        return true;
-    }
-
-    public getIncomingSideNoteReferenceRecords(threadId: string): SideNoteReferenceRecord[] {
-        return this.getSideNoteReferenceIndex().incomingByThreadId.get(threadId)?.slice() ?? [];
-    }
-
-    public getIncomingSideNoteReferenceBacklinks(threadId: string): Array<{
-        filePath: string;
-        fileTitle: string;
-        preview: string;
-        resolved: boolean;
-        threadId: string;
-        url: string;
-    }> {
-        const backlinksBySourceThreadId = new Map<string, SideNoteReferenceRecord>();
-        for (const record of this.getIncomingSideNoteReferenceRecords(threadId)) {
-            if (!backlinksBySourceThreadId.has(record.sourceThreadId)) {
-                backlinksBySourceThreadId.set(record.sourceThreadId, record);
-            }
-        }
-
-        return Array.from(backlinksBySourceThreadId.values())
-            .map((record) => {
-                const document = this.getSideNoteReferenceDocument(record.sourceThreadId)
-                    ?? this.getSideNoteReferenceDocument(record.sourceCommentId);
-                const url = this.buildSideNoteReferenceUrlForComment(record.sourceThreadId);
-                if (!url) {
-                    return null;
-                }
-
-                const preview = (
-                    document?.bodyPreview
-                    || document?.selectedText
-                    || document?.primaryLabel
-                    || record.label
-                ).replace(/\s+/g, " ").trim() || "Side note";
-                return {
-                    filePath: record.sourceFilePath,
-                    fileTitle: document?.fileTitle ?? getFileTitle(record.sourceFilePath),
-                    preview,
-                    resolved: document?.resolved === true,
-                    threadId: record.sourceThreadId,
-                    url,
-                };
-            })
-            .filter((record): record is {
-                filePath: string;
-                fileTitle: string;
-                preview: string;
-                resolved: boolean;
-                threadId: string;
-                url: string;
-            } => record !== null);
-    }
-
-    public resolveSideNoteReferenceTargetFilePath(commentId: string, _filePathHint?: string | null): string | null {
-        return this.getKnownThreadById(commentId)?.filePath
-            ?? this.getKnownCommentById(commentId)?.filePath
-            ?? null;
-    }
-
-    public getSideNoteReferenceCrossFileAdjacency(): Map<string, Set<string>> {
-        const adjacency = this.getSideNoteReferenceIndex().crossFileOutgoingAdjacency;
-        return new Map(Array.from(adjacency.entries(), ([filePath, neighbors]) => [filePath, new Set(neighbors)]));
     }
 
     private async loadKnownCommentSelectionTarget(

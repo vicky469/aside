@@ -1,12 +1,10 @@
 import type { Comment, CommentThread } from "../../commentManager";
 import { getCommentSelectionLabel, getCommentStatusLabel, isAnchoredComment, isPageComment } from "../anchors/commentAnchors";
 import { extractWikiLinks } from "../text/commentMentions";
-import { buildSideNoteReferenceUrl, extractSideNoteReferences } from "../text/commentReferences";
 
 const ALL_COMMENTS_NOTE_PATH = "SideNote2 index.md";
 const LEGACY_ALL_COMMENTS_NOTE_PATH = "SideNote2 comments.md";
 const MAX_EDGE_LABEL_WORDS = 4;
-const MAX_LOCAL_NODE_LABEL_WORDS = 6;
 const THOUGHT_TRAIL_MERMAID_RENDER_CONFIG = {
     fontFamily: "var(--font-interface-theme)",
     themeVariables: {
@@ -27,19 +25,12 @@ const THOUGHT_TRAIL_MERMAID_INIT = `%%{init: ${JSON.stringify(THOUGHT_TRAIL_MERM
 
 export interface ThoughtTrailBuildOptions {
     allCommentsNotePath?: string;
-    localVaultName?: string | null;
-    resolveSideNoteReferencePath?: (commentId: string, filePathHint: string | null) => string | null;
     resolveWikiLinkPath?: (linkPath: string, sourceFilePath: string) => string | null;
 }
 
 interface ThoughtTrailEdge {
     comment: Comment | CommentThread;
     targetFilePath: string;
-}
-
-interface LocalThoughtTrailEdge {
-    sourceComment: Comment | CommentThread;
-    targetComment: Comment | CommentThread;
 }
 
 function isThreadLike(value: Comment | CommentThread): value is CommentThread {
@@ -72,14 +63,6 @@ function sortCommentItemsByPosition(items: Array<Comment | CommentThread>): Arra
 
 function cloneJsonValue<T>(value: T): T {
     return JSON.parse(JSON.stringify(value)) as T;
-}
-
-function stripMarkdownSyntax(value: string): string {
-    return value
-        .replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$1")
-        .replace(/[*_~`>#=-]+/g, " ")
-        .replace(/\s+/g, " ")
-        .trim();
 }
 
 function normalizeNotePath(filePath: string): string {
@@ -120,10 +103,6 @@ function toInlineWordPreview(value: string, maxWords: number): string {
     return `${words.slice(0, maxWords).join(" ")}...`;
 }
 
-function getCommentItemId(value: Comment | CommentThread): string {
-    return value.id;
-}
-
 function buildNoteOpenUrl(vaultName: string, filePath: string): string {
     return `obsidian://open?vault=${encodeURIComponent(vaultName)}&file=${encodeURIComponent(normalizeNotePath(filePath))}`;
 }
@@ -153,106 +132,6 @@ function formatEdgeLabel(comment: Comment | CommentThread): string | null {
     }
 
     return toMermaidText(label);
-}
-
-function formatLocalNodeBaseLabel(comment: Comment | CommentThread): string {
-    const selectedPreview = toInlineWordPreview(getCommentSelectionLabel(comment), MAX_LOCAL_NODE_LABEL_WORDS);
-    const firstBodyPreview = getCommentBodies(comment)
-        .map((body) => toInlineWordPreview(stripMarkdownSyntax(body), MAX_LOCAL_NODE_LABEL_WORDS))
-        .find((preview) => preview && preview !== "(blank selection)");
-    const label = isPageComment(comment)
-        ? firstBodyPreview || selectedPreview
-        : isAnchoredComment(comment)
-            ? selectedPreview
-            : `${getCommentStatusLabel(comment)} · ${selectedPreview}`;
-
-    return comment.resolved
-        ? `${label} (resolved)`
-        : label;
-}
-
-function buildUniqueLocalNodeLabels(comments: Array<Comment | CommentThread>): Map<string, string> {
-    const countsByBaseLabel = new Map<string, number>();
-    for (const comment of comments) {
-        const baseLabel = formatLocalNodeBaseLabel(comment);
-        countsByBaseLabel.set(baseLabel, (countsByBaseLabel.get(baseLabel) ?? 0) + 1);
-    }
-
-    const seenByBaseLabel = new Map<string, number>();
-    const labels = new Map<string, string>();
-    for (const comment of comments) {
-        const baseLabel = formatLocalNodeBaseLabel(comment);
-        const duplicateCount = countsByBaseLabel.get(baseLabel) ?? 0;
-        if (duplicateCount <= 1) {
-            labels.set(getCommentItemId(comment), baseLabel);
-            continue;
-        }
-
-        const occurrence = (seenByBaseLabel.get(baseLabel) ?? 0) + 1;
-        seenByBaseLabel.set(baseLabel, occurrence);
-        labels.set(getCommentItemId(comment), `${baseLabel} · ${occurrence}`);
-    }
-
-    return labels;
-}
-
-function buildLocalThoughtTrailEdges(
-    comments: Array<Comment | CommentThread>,
-    options: {
-        allCommentsNotePath?: string;
-        localVaultName?: string | null;
-        rootFilePath: string;
-    },
-): LocalThoughtTrailEdge[] {
-    const normalizedRootFilePath = normalizeNotePath(options.rootFilePath);
-    const commentById = new Map<string, Comment | CommentThread>();
-    for (const comment of comments) {
-        commentById.set(getCommentItemId(comment), comment);
-        if (!isThreadLike(comment)) {
-            continue;
-        }
-
-        for (const entry of comment.entries) {
-            commentById.set(entry.id, comment);
-        }
-    }
-
-    const edges: LocalThoughtTrailEdge[] = [];
-    for (const comment of sortCommentItemsByPosition(comments)) {
-        const seenTargetCommentIds = new Set<string>();
-        for (const body of getCommentBodies(comment)) {
-            for (const reference of extractSideNoteReferences(body, {
-                localOnly: true,
-                localVaultName: options.localVaultName ?? null,
-            })) {
-                const targetComment = commentById.get(reference.target.commentId);
-                if (!targetComment) {
-                    continue;
-                }
-
-                if (
-                    normalizeNotePath(targetComment.filePath) !== normalizedRootFilePath
-                    || isAllCommentsNotePath(targetComment.filePath, options.allCommentsNotePath)
-                ) {
-                    continue;
-                }
-
-                const sourceCommentId = getCommentItemId(comment);
-                const targetCommentId = getCommentItemId(targetComment);
-                if (sourceCommentId === targetCommentId || seenTargetCommentIds.has(targetCommentId)) {
-                    continue;
-                }
-
-                seenTargetCommentIds.add(targetCommentId);
-                edges.push({
-                    sourceComment: comment,
-                    targetComment,
-                });
-            }
-        }
-    }
-
-    return edges;
 }
 
 function formatNodeLabel(filePath: string): string {
@@ -320,8 +199,7 @@ function buildEdgesBySourceFile(
     options: ThoughtTrailBuildOptions,
 ): Map<string, ThoughtTrailEdge[]> {
     const resolveWikiLinkPath = options.resolveWikiLinkPath;
-    const resolveSideNoteReferencePath = options.resolveSideNoteReferencePath;
-    if (!resolveWikiLinkPath && !resolveSideNoteReferencePath) {
+    if (!resolveWikiLinkPath) {
         return new Map();
     }
 
@@ -333,37 +211,8 @@ function buildEdgesBySourceFile(
             const seenTargets = new Set<string>();
 
             for (const body of getCommentBodies(comment)) {
-                if (resolveWikiLinkPath) {
-                    for (const match of extractWikiLinks(body)) {
-                        const resolvedPath = resolveWikiLinkPath(match.linkPath, comment.filePath);
-                        if (!resolvedPath || resolvedPath === comment.filePath || isAllCommentsNotePath(resolvedPath, options.allCommentsNotePath)) {
-                            continue;
-                        }
-
-                        if (seenTargets.has(resolvedPath)) {
-                            continue;
-                        }
-
-                        seenTargets.add(resolvedPath);
-                        edges.push({
-                            comment,
-                            targetFilePath: resolvedPath,
-                        });
-                    }
-                }
-
-                if (!resolveSideNoteReferencePath) {
-                    continue;
-                }
-
-                for (const reference of extractSideNoteReferences(body, {
-                    localOnly: true,
-                    localVaultName: options.localVaultName ?? null,
-                })) {
-                    const resolvedPath = resolveSideNoteReferencePath(
-                        reference.target.commentId,
-                        reference.target.filePath,
-                    );
+                for (const match of extractWikiLinks(body)) {
+                    const resolvedPath = resolveWikiLinkPath(match.linkPath, comment.filePath);
                     if (!resolvedPath || resolvedPath === comment.filePath || isAllCommentsNotePath(resolvedPath, options.allCommentsNotePath)) {
                         continue;
                     }
@@ -526,75 +375,6 @@ export function buildThoughtTrailLines(
         }
 
         renderBranch(rootFilePath, new Set([rootFilePath]));
-    }
-
-    const lines = [
-        THOUGHT_TRAIL_MERMAID_INIT,
-        "```mermaid",
-        "flowchart TD",
-    ];
-    lines.push(...nodeLines, ...edgeLines, ...clickLines, "```");
-    return lines;
-}
-
-export function buildLocalThoughtTrailLines(
-    vaultName: string,
-    comments: Array<Comment | CommentThread>,
-    options: {
-        allCommentsNotePath?: string;
-        localVaultName?: string | null;
-        rootFilePath: string;
-    },
-): string[] {
-    const normalizedRootFilePath = normalizeNotePath(options.rootFilePath);
-    const rootFileComments = sortCommentItemsByPosition(
-        comments.filter((comment) =>
-            !isAllCommentsNotePath(comment.filePath, options.allCommentsNotePath)
-            && normalizeNotePath(comment.filePath) === normalizedRootFilePath
-        ),
-    );
-    if (!rootFileComments.length) {
-        return [];
-    }
-
-    const edges = buildLocalThoughtTrailEdges(rootFileComments, options);
-    if (!edges.length) {
-        return [];
-    }
-
-    const labelsByCommentId = buildUniqueLocalNodeLabels(rootFileComments);
-    const nodeLines: string[] = [];
-    const edgeLines: string[] = [];
-    const clickLines: string[] = [];
-    const nodeIds = new Map<string, string>();
-
-    const ensureNode = (comment: Comment | CommentThread): string => {
-        const commentId = getCommentItemId(comment);
-        const existing = nodeIds.get(commentId);
-        if (existing) {
-            return existing;
-        }
-
-        const nodeId = `n${nodeIds.size}`;
-        nodeIds.set(commentId, nodeId);
-        const label = JSON.stringify(toMermaidText(
-            labelsByCommentId.get(commentId)
-            ?? formatLocalNodeBaseLabel(comment),
-        ));
-        nodeLines.push(`    ${nodeId}[${label}]`);
-        clickLines.push(
-            `    click ${nodeId} href ${JSON.stringify(buildSideNoteReferenceUrl(vaultName, {
-                commentId,
-                filePath: comment.filePath,
-            }))} ${JSON.stringify("Open side note")}`,
-        );
-        return nodeId;
-    };
-
-    for (const edge of edges) {
-        const sourceId = ensureNode(edge.sourceComment);
-        const targetId = ensureNode(edge.targetComment);
-        edgeLines.push(`    ${sourceId} --> ${targetId}`);
     }
 
     const lines = [

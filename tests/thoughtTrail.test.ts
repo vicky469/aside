@@ -1,13 +1,11 @@
 import * as assert from "node:assert/strict";
 import test from "node:test";
 import {
-    buildLocalThoughtTrailLines,
     buildThoughtTrailLines,
     extractThoughtTrailMermaidSource,
     getThoughtTrailMermaidRenderConfig,
 } from "../src/core/derived/thoughtTrail";
 import type { Comment, CommentThread } from "../src/commentManager";
-import { buildSideNoteReferenceUrl } from "../src/core/text/commentReferences";
 
 const THOUGHT_TRAIL_INIT = "%%{init: {\"fontFamily\":\"var(--font-interface-theme)\",\"themeVariables\":{\"fontSize\":\"14px\"},\"flowchart\":{\"nodeSpacing\":3,\"rankSpacing\":14,\"padding\":3,\"diagramPadding\":0,\"useMaxWidth\":false,\"htmlLabels\":true}}}%%";
 
@@ -249,150 +247,6 @@ test("buildThoughtTrailLines includes links from older child entries in a thread
 
     assert.equal(lines.includes("    n0 -->|setup| n1"), true);
     assert.equal(lines.includes("    n1[\"file2\"]"), true);
-});
-
-test("buildThoughtTrailLines includes side note reference edges", () => {
-    const lines = buildThoughtTrailLines("dev", [
-        createComment({
-            id: "note-a",
-            filePath: "file1.md",
-            selectedText: "alpha",
-            comment: "[Target](obsidian://side-note2-comment?vault=dev&file=file2.md&commentId=comment-2)",
-        }),
-    ], {
-        localVaultName: "dev",
-        resolveSideNoteReferencePath: (commentId) => commentId === "comment-2" ? "file2.md" : null,
-    });
-
-    assert.equal(lines.includes("    n0 -->|alpha| n1"), true);
-    assert.equal(lines.includes("    n1[\"file2\"]"), true);
-});
-
-test("buildThoughtTrailLines keeps same-file side note references out of the related-files graph", () => {
-    const sameFileUrl = buildSideNoteReferenceUrl("dev", {
-        commentId: "thread-b",
-        filePath: "file1.md",
-    });
-    const lines = buildThoughtTrailLines("dev", [
-        createThread({
-            id: "thread-a",
-            filePath: "file1.md",
-            selectedText: "alpha",
-            entries: [{
-                id: "entry-a1",
-                body: `[Same file](${sameFileUrl})`,
-                timestamp: 100,
-            }],
-        }),
-        createThread({
-            id: "thread-b",
-            filePath: "file1.md",
-            selectedText: "beta",
-            entries: [{
-                id: "thread-b",
-                body: "",
-                timestamp: 110,
-            }],
-        }),
-    ], {
-        localVaultName: "dev",
-        resolveSideNoteReferencePath: (commentId) => commentId === "thread-b" ? "file1.md" : null,
-    });
-
-    assert.deepEqual(lines, []);
-});
-
-test("buildLocalThoughtTrailLines renders same-file note chains with side-note click targets", () => {
-    const sameFileUrl = buildSideNoteReferenceUrl("dev", {
-        commentId: "thread-b",
-        filePath: "book/chapter-1.md",
-    });
-    const crossFileUrl = buildSideNoteReferenceUrl("dev", {
-        commentId: "thread-c",
-        filePath: "book/chapter-2.md",
-    });
-    const lines = buildLocalThoughtTrailLines("dev", [
-        createThread({
-            id: "thread-a",
-            filePath: "book/chapter-1.md",
-            selectedText: "Alpha thread",
-            entries: [{
-                id: "entry-a1",
-                body: `[Beta](${sameFileUrl}) [Elsewhere](${crossFileUrl})`,
-                timestamp: 100,
-            }],
-        }),
-        createThread({
-            id: "thread-b",
-            filePath: "book/chapter-1.md",
-            selectedText: "Beta thread",
-            entries: [{
-                id: "thread-b",
-                body: "",
-                timestamp: 110,
-            }],
-        }),
-        createThread({
-            id: "thread-c",
-            filePath: "book/chapter-2.md",
-            selectedText: "Elsewhere",
-            entries: [{
-                id: "thread-c",
-                body: "",
-                timestamp: 120,
-            }],
-        }),
-    ], {
-        allCommentsNotePath: "SideNote2 index.md",
-        localVaultName: "dev",
-        rootFilePath: "book/chapter-1.md",
-    });
-
-    assert.deepEqual(lines, [
-        THOUGHT_TRAIL_INIT,
-        "```mermaid",
-        "flowchart TD",
-        "    n0[\"Alpha thread\"]",
-        "    n1[\"Beta thread\"]",
-        "    n0 --> n1",
-        `    click n0 href "${buildSideNoteReferenceUrl("dev", { commentId: "thread-a", filePath: "book/chapter-1.md" })}" "Open side note"`,
-        `    click n1 href "${buildSideNoteReferenceUrl("dev", { commentId: "thread-b", filePath: "book/chapter-1.md" })}" "Open side note"`,
-        "```",
-    ]);
-});
-
-test("buildLocalThoughtTrailLines returns no rows when the root file has no local note chain", () => {
-    const crossFileUrl = buildSideNoteReferenceUrl("dev", {
-        commentId: "thread-b",
-        filePath: "book/chapter-2.md",
-    });
-    const lines = buildLocalThoughtTrailLines("dev", [
-        createThread({
-            id: "thread-a",
-            filePath: "book/chapter-1.md",
-            selectedText: "Alpha thread",
-            entries: [{
-                id: "entry-a1",
-                body: `[Elsewhere](${crossFileUrl})`,
-                timestamp: 100,
-            }],
-        }),
-        createThread({
-            id: "thread-b",
-            filePath: "book/chapter-2.md",
-            selectedText: "Elsewhere",
-            entries: [{
-                id: "thread-b",
-                body: "",
-                timestamp: 110,
-            }],
-        }),
-    ], {
-        localVaultName: "dev",
-        rootFilePath: "book/chapter-1.md",
-    });
-
-    assert.deepEqual(lines, []);
 });
 
 test("extractThoughtTrailMermaidSource removes the init line and fences", () => {

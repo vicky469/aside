@@ -259,28 +259,3 @@ test("buildIndexFileFilterGraph keeps thread links from older child entries", ()
         "docs/b.md",
     ]);
 });
-
-test("buildIndexFileFilterGraph merges cross-file side note reference adjacency", () => {
-    const graph = buildIndexFileFilterGraph([
-        createComment({
-            id: "a-1",
-            filePath: "docs/a.md",
-            comment: "",
-        }),
-        createComment({
-            id: "b-1",
-            filePath: "docs/b.md",
-            comment: "",
-        }),
-    ], {
-        referenceAdjacency: new Map([
-            ["docs/a.md", new Set(["docs/a.md", "docs/b.md", "docs/missing.md"])],
-        ]),
-    });
-
-    assert.deepEqual(sortedNeighbors(graph.outgoingAdjacency, "docs/a.md"), ["docs/b.md"]);
-    assert.deepEqual(getIndexFileFilterConnectedComponent(graph, "docs/a.md"), [
-        "docs/a.md",
-        "docs/b.md",
-    ]);
-});

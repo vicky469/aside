@@ -3,7 +3,6 @@ import test from "node:test";
 import { commentToThread, threadEntryToComment, type Comment, type CommentThread } from "../src/commentManager";
 import type { AgentRunRecord } from "../src/core/agents/agentRuns";
 import {
-    buildSidebarSideNoteReferencePresentation,
     buildPersistedCommentPresentation,
     buildPersistedCommentBookmarkActionPresentation,
     buildPersistedCommentPinActionPresentation,
@@ -26,7 +25,6 @@ import {
     shouldRenderSidebarCommentAuthor,
     shouldRenderNestedThreadEntries,
     shouldRenderThreadNestedToggle,
-    threadHasLocalSideNoteReferences,
 } from "../src/ui/views/sidebarPersistedComment";
 import { formatSidebarCommentMeta } from "../src/ui/views/sidebarCommentSections";
 
@@ -204,22 +202,6 @@ test("shouldRenderPersistedCommentPinIndicator only enables pinned root cards", 
     assert.equal(shouldRenderPersistedCommentPinIndicator(childComment, childThread, true), false);
 });
 
-test("threadHasLocalSideNoteReferences detects links anywhere in the thread", () => {
-    const thread = createThreadWithEntries({
-        entries: [
-            { id: "entry-1", body: "Parent", timestamp: 100 },
-            {
-                id: "entry-2",
-                body: "Child body\n\nMentioned:\n- [Target](obsidian://side-note2-comment?vault=dev&file=docs%2Ftarget.md&commentId=target-1)",
-                timestamp: 200,
-            },
-        ],
-    });
-
-    assert.equal(threadHasLocalSideNoteReferences(thread, "dev"), true);
-    assert.equal(threadHasLocalSideNoteReferences(thread, "other-vault"), false);
-});
-
 test("shouldRenderPersistedCommentBookmarkAction enables root cards and excludes child or deleted cards", () => {
     const rootComment = createComment({ id: "thread-1", anchorKind: "selection" });
     const rootThread = createThread({ id: "thread-1", anchorKind: "selection" });
@@ -285,10 +267,6 @@ test("buildPersistedCommentPresentation chooses the right resolve action copy an
     assert.deepEqual(unresolved.shareAction, {
         ariaLabel: "Share side note",
         icon: "share",
-    });
-    assert.deepEqual(unresolved.linkAction, {
-        ariaLabel: "Link side note",
-        icon: "link-2",
     });
     assert.deepEqual(unresolved.moveAction, {
         ariaLabel: "Move side note to another file",
@@ -364,54 +342,6 @@ test("buildPersistedCommentPresentation omits anchored preview text for page not
     }), null);
 
     assert.equal(presentation.metaPreviewText, null);
-});
-
-test("buildSidebarSideNoteReferencePresentation renders note-title previews instead of raw urls", () => {
-    const presentation = buildSidebarSideNoteReferencePresentation({
-        bodyPreview: "This is a longer side note preview that should be trimmed once it crosses the display limit for related references.",
-        filePath: "docs/agent-cross-platform-runtime-plan.md",
-        fileTitle: "agent-cross-platform-runtime-plan",
-        primaryLabel: "Build runtime abstraction",
-        resolved: false,
-        selectedText: "runtime abstraction",
-    }, {
-        filePath: "docs/fallback.md",
-    });
-
-    assert.equal(presentation.title, "agent-cross-platform-runtime-plan");
-    assert.equal(
-        presentation.preview,
-        "This is a longer side note preview that should be trimmed once it crosses the display limit for related references.",
-    );
-    assert.equal(
-        presentation.tooltip,
-        "docs/agent-cross-platform-runtime-plan.md\nThis is a longer side note preview that should be trimmed once it crosses the display limit for related references.",
-    );
-    assert.equal(presentation.resolved, false);
-});
-
-test("buildSidebarSideNoteReferencePresentation falls back to the source file title when the target is not indexed", () => {
-    const presentation = buildSidebarSideNoteReferencePresentation(null, {
-        filePath: "docs/related-note.md",
-    });
-
-    assert.equal(presentation.title, "related-note");
-    assert.equal(presentation.preview, null);
-    assert.equal(presentation.tooltip, "docs/related-note.md");
-});
-
-test("buildSidebarSideNoteReferencePresentation normalizes whitespace without fixed truncation", () => {
-    assert.equal(
-        buildSidebarSideNoteReferencePresentation({
-            bodyPreview: "  one   two   three   four  ",
-            filePath: "docs/related-note.md",
-            fileTitle: "related-note",
-            primaryLabel: "related-note",
-            resolved: false,
-            selectedText: "",
-        }).preview,
-        "one two three four",
-    );
 });
 
 test("shouldRenderNestedThreadEntries hides stored child comments when nested comments are off", () => {
@@ -542,59 +472,6 @@ test("shouldRenderNestedThreadEntries keeps streamed agent replies visible even 
     }), true);
 });
 
-test("shouldRenderNestedThreadEntries shows outgoing mention details when expanded even without child comments", () => {
-    const thread = createThreadWithEntries({
-        entries: [
-            {
-                id: "entry-1",
-                body: [
-                    "Parent",
-                    "",
-                    "Mentioned:",
-                    "- [linked note](obsidian://side-note2-comment?vault=dev&file=docs%2Flinked.md&commentId=linked-1)",
-                ].join("\n"),
-                timestamp: 100,
-            },
-        ],
-        createdAt: 100,
-        updatedAt: 100,
-    });
-
-    assert.equal(shouldRenderNestedThreadEntries(thread, {
-        activeCommentId: null,
-        showNestedComments: true,
-        showNestedCommentsByDefault: false,
-        hasEditDraftComment: false,
-        hasAppendDraftComment: false,
-        hasAgentStream: false,
-        hasOutgoingSideNoteReferences: true,
-    }), true);
-});
-
-test("shouldRenderNestedThreadEntries shows incoming mention details when expanded even without child comments", () => {
-    const thread = createThreadWithEntries({
-        entries: [
-            {
-                id: "entry-1",
-                body: "Parent",
-                timestamp: 100,
-            },
-        ],
-        createdAt: 100,
-        updatedAt: 100,
-    });
-
-    assert.equal(shouldRenderNestedThreadEntries(thread, {
-        activeCommentId: null,
-        showNestedComments: true,
-        showNestedCommentsByDefault: false,
-        hasEditDraftComment: false,
-        hasAppendDraftComment: false,
-        hasAgentStream: false,
-        hasIncomingSideNoteReferences: true,
-    }), true);
-});
-
 test("shouldRenderNestedThreadEntries hides finished agent replies when nested comments are off", () => {
     const thread = createThreadWithEntries();
 
@@ -657,20 +534,6 @@ test("shouldRenderThreadNestedToggle hides the toggle only while visible drafts 
     }), false);
     assert.equal(shouldRenderThreadNestedToggle({
         hasStoredChildEntries: true,
-        hasInlineEditDraft: false,
-        hasAppendDraftComment: false,
-        hasChildEditDraft: false,
-    }), true);
-    assert.equal(shouldRenderThreadNestedToggle({
-        hasStoredChildEntries: false,
-        hasOutgoingSideNoteReferences: true,
-        hasInlineEditDraft: false,
-        hasAppendDraftComment: false,
-        hasChildEditDraft: false,
-    }), true);
-    assert.equal(shouldRenderThreadNestedToggle({
-        hasStoredChildEntries: false,
-        hasIncomingSideNoteReferences: true,
         hasInlineEditDraft: false,
         hasAppendDraftComment: false,
         hasChildEditDraft: false,

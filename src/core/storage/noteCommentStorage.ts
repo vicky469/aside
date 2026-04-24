@@ -1,5 +1,6 @@
 import type { Comment, CommentThread, CommentThreadEntry } from "../../commentManager";
 import { cloneCommentThreads, threadToComment } from "../../commentManager";
+import { splitTrailingSideNoteReferenceSection } from "../text/commentReferences";
 import {
     normalizeDeletedAt,
     purgeExpiredDeletedThreads,
@@ -89,7 +90,8 @@ interface ManagedSectionAnalysis {
 }
 
 function normalizeCommentBody(body: string): string {
-    return body.replace(/\r\n/g, "\n").replace(/\n+$/, "");
+    const normalized = body.replace(/\r\n/g, "\n").replace(/\n+$/, "");
+    return splitTrailingSideNoteReferenceSection(normalized).body;
 }
 
 function cloneThreadEntry(entry: CommentThreadEntry): CommentThreadEntry {

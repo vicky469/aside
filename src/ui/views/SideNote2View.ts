@@ -20,7 +20,6 @@ import {
     type IndexFileFilterGraph,
 } from "../../core/derived/indexFileFilterGraph";
 import {
-    buildLocalThoughtTrailLines,
     buildThoughtTrailLines,
     extractThoughtTrailMermaidSource,
     getThoughtTrailMermaidRenderConfig,
@@ -31,11 +30,10 @@ import type { AgentStreamUpdate } from "../../control/commentAgentController";
 import SideNoteFileFilterModal from "../modals/SideNoteFileFilterModal";
 import SideNoteLinkSuggestModal from "../modals/SideNoteLinkSuggestModal";
 import SideNoteOpenFileSuggestModal from "../modals/SideNoteOpenFileSuggestModal";
-import SideNoteReferenceSuggestModal from "../modals/SideNoteReferenceSuggestModal";
 import SideNoteTagSuggestModal from "../modals/SideNoteTagSuggestModal";
 import { SIDE_NOTE2_ICON_ID } from "../sideNote2Icon";
 import { copyTextToClipboard } from "../copyTextToClipboard";
-import { appendMentionedReference, SidebarDraftEditorController } from "./sidebarDraftEditor";
+import { SidebarDraftEditorController } from "./sidebarDraftEditor";
 import {
     renderDraftCommentCard,
     renderInlineEditDraftContent,
@@ -770,10 +768,7 @@ export default class SideNote2View extends ItemView {
             log: (level, area, event, payload) => this.plugin.logEvent(level, area, event, payload),
         });
         this.draftEditorController = new SidebarDraftEditorController({
-            buildSideNoteReferenceMarkdownForComment: (commentId, label) =>
-                this.plugin.buildSideNoteReferenceMarkdownForComment(commentId, label),
             getAllIndexedComments: () => this.plugin.getAllIndexedComments(),
-            localVaultName: this.app.vault.getName(),
             updateDraftCommentText: (commentId, commentText) => {
                 this.plugin.updateDraftCommentText(commentId, commentText);
             },
@@ -781,9 +776,6 @@ export default class SideNote2View extends ItemView {
             scheduleDraftFocus: (commentId) => this.interactionController.scheduleDraftFocus(commentId),
             openLinkSuggestModal: (options) => {
                 new SideNoteLinkSuggestModal(this.app, options).open();
-            },
-            openSideNoteReferenceSuggestModal: (options) => {
-                this.openSideNoteReferenceSuggestModal(options);
             },
             openTagSuggestModal: (options) => {
                 new SideNoteTagSuggestModal(this.app, options).open();
@@ -1005,7 +997,6 @@ export default class SideNote2View extends ItemView {
             const indexFileFilterGraph = isAllCommentsView
                 ? buildIndexFileFilterGraph(persistedThreads, {
                     allCommentsNotePath: this.plugin.getAllCommentsNotePath(),
-                    referenceAdjacency: this.plugin.getSideNoteReferenceCrossFileAdjacency(),
                     resolveWikiLinkPath: (linkPath, sourceFilePath) => {
                         const linkedFile = this.app.metadataCache.getFirstLinkpathDest(linkPath, sourceFilePath);
                         return linkedFile instanceof TFile ? linkedFile.path : null;
@@ -1466,7 +1457,6 @@ export default class SideNote2View extends ItemView {
         const { scopedFilePaths, scopedThreads } = buildRootedThoughtTrailScope(visibleTrailThreads, {
             rootFilePath: file.path,
             allCommentsNotePath: this.plugin.getAllCommentsNotePath(),
-            referenceAdjacency: this.plugin.getSideNoteReferenceCrossFileAdjacency(),
             resolveWikiLinkPath: (linkPath, sourceFilePath) => {
                 const linkedFile = this.app.metadataCache.getFirstLinkpathDest(linkPath, sourceFilePath);
                 return linkedFile instanceof TFile ? linkedFile.path : null;
@@ -2671,71 +2661,6 @@ export default class SideNote2View extends ItemView {
         return container.createDiv("sidenote2-comments-list");
     }
 
-    private openSideNoteReferenceSuggestModal(options: {
-        emptyStateText?: string;
-        excludeThreadId?: string | null;
-        includeSameFile?: boolean;
-        initialQuery: string;
-        onChooseReference: (commentId: string) => void | Promise<void>;
-        onCloseModal: () => void;
-        placeholder?: string;
-        sourcePath: string;
-        title?: string;
-    }): void {
-        new SideNoteReferenceSuggestModal(this.app, {
-            ...options,
-            searchReferences: (query, searchOptions) => this.plugin.searchSideNoteReferenceDocuments(query, {
-                excludeThreadId: searchOptions.excludeThreadId,
-                includeSameFile: options.includeSameFile,
-                limit: searchOptions.limit,
-                sourceFilePath: options.sourcePath,
-            }),
-        }).open();
-    }
-
-    private async openCommentSideNoteReferenceSuggest(
-        commentId: string,
-        sourceFilePath: string,
-        hostFilePath: string | null,
-    ): Promise<void> {
-        const targetHostPath = hostFilePath ?? sourceFilePath;
-        await this.plugin.startEditDraft(commentId, targetHostPath);
-
-        const getVisibleDraft = (): DraftComment | null => (
-            this.plugin.getDraftForView(targetHostPath)
-            ?? this.plugin.getDraftForFile(sourceFilePath)
-        );
-        const draft = getVisibleDraft();
-        if (!draft || draft.id !== commentId) {
-            return;
-        }
-
-        this.openSideNoteReferenceSuggestModal({
-            excludeThreadId: draft.threadId ?? commentId,
-            initialQuery: "",
-            onChooseReference: async (targetCommentId) => {
-                const markdown = this.plugin.buildSideNoteReferenceMarkdownForComment(targetCommentId);
-                if (!markdown) {
-                    return;
-                }
-
-                const latestDraft = getVisibleDraft();
-                if (!latestDraft || latestDraft.id !== commentId) {
-                    return;
-                }
-
-                const edit = appendMentionedReference(latestDraft.comment, markdown);
-                this.plugin.updateDraftCommentText(latestDraft.id, edit.value);
-                await this.renderComments();
-                this.interactionController.scheduleDraftFocus(latestDraft.id);
-            },
-            onCloseModal: () => {
-                this.interactionController.scheduleDraftFocus(commentId);
-            },
-            sourcePath: sourceFilePath,
-        });
-    }
-
     private openMoveCommentThreadModal(threadId: string, sourceFilePath: string): void {
         const openTargets = this.getOpenMarkdownFileInsertTargets();
         const openTargetsByPath = new Map(openTargets.map((target) => [target.file.path, target]));
@@ -2933,7 +2858,6 @@ export default class SideNote2View extends ItemView {
             activeCommentId: this.interactionController.getActiveCommentId(),
             currentFilePath,
             currentUserLabel: "You",
-            localVaultName: this.app.vault.getName(),
             showSourceRedirectAction: isIndexView,
             showBookmarkAndPinControls: !isIndexView,
             showDeletedComments: this.plugin.shouldShowDeletedComments(),
@@ -2971,23 +2895,12 @@ export default class SideNote2View extends ItemView {
                 const copied = await copyTextToClipboard(commentUrl);
                 new Notice(copied ? "Copied side note link." : "Failed to copy side note link.");
             },
-            getIncomingSideNoteReferenceBacklinks: (threadId) => this.plugin.getIncomingSideNoteReferenceBacklinks(threadId),
-            getSideNoteReferenceDocument: (commentId) => this.plugin.getSideNoteReferenceDocument(commentId),
-            openSideNoteReference: async (url) => {
-                const opened = await this.plugin.openSideNoteReferenceUrl(url);
-                if (!opened) {
-                    new Notice("Unable to open that side note reference.");
-                }
-            },
             saveVisibleDraftIfPresent: () => this.saveVisibleDraftIfPresent(),
             setShowNestedCommentsForThread: (threadId, showNestedComments) => {
                 void this.plugin.setShowNestedCommentsForThread(threadId, showNestedComments);
             },
             resolveComment: (commentId) => this.setSidebarCommentResolvedState(commentId, true),
             unresolveComment: (commentId) => this.setSidebarCommentResolvedState(commentId, false),
-            linkCommentThread: async (commentId, sourceFilePath, hostFilePath) => {
-                await this.openCommentSideNoteReferenceSuggest(commentId, sourceFilePath, hostFilePath);
-            },
             moveCommentThread: (threadId, sourceFilePath) => {
                 this.openMoveCommentThreadModal(threadId, sourceFilePath);
             },
@@ -3377,43 +3290,20 @@ export default class SideNote2View extends ItemView {
         const rootFilePath = options.rootFilePath;
         const relatedFileLines = buildThoughtTrailLines(this.app.vault.getName(), comments, {
             allCommentsNotePath: this.plugin.getAllCommentsNotePath(),
-            localVaultName: this.app.vault.getName(),
-            resolveSideNoteReferencePath: (commentId, filePathHint) =>
-                this.plugin.resolveSideNoteReferenceTargetFilePath(commentId, filePathHint),
             resolveWikiLinkPath: (linkPath, sourceFilePath) => {
                 const linkedFile = this.app.metadataCache.getFirstLinkpathDest(linkPath, sourceFilePath);
                 return linkedFile instanceof TFile ? linkedFile.path : null;
             },
         });
-        const localNoteLines = buildLocalThoughtTrailLines(this.app.vault.getName(), comments, {
-            allCommentsNotePath: this.plugin.getAllCommentsNotePath(),
-            localVaultName: this.app.vault.getName(),
-            rootFilePath,
-        });
-
-        await this.renderThoughtTrailSection(thoughtTrailEl, {
-            emptyStateText: options.surface === "note"
-                ? [
-                    "No local note chains in this file yet.",
-                    "Link side notes inside this file to build the local graph.",
-                ]
-                : [
-                    "No local note chains for the selected file.",
-                    "Link side notes inside that file to build the local graph.",
-                ],
-            sourcePath: rootFilePath,
-            thoughtTrailLines: localNoteLines,
-            title: "Local Notes",
-        });
         await this.renderThoughtTrailSection(thoughtTrailEl, {
             emptyStateText: options.surface === "note"
                 ? [
                     "No related files for this file yet.",
-                    "Add wiki links or cross-file side-note links in side notes for this file.",
+                    "Add wiki links in side notes for this file.",
                 ]
                 : [
                     "No related files for the selected file.",
-                    "Add cross-file links in those notes or choose a different file.",
+                    "Add links in those notes or choose a different file.",
                 ],
             sourcePath: rootFilePath || file.path,
             thoughtTrailLines: relatedFileLines,
@@ -3590,7 +3480,6 @@ export default class SideNote2View extends ItemView {
     private async openThoughtTrailTarget(targetUrl: string): Promise<void> {
         const filePath = parseThoughtTrailOpenFilePath(targetUrl);
         if (!filePath) {
-            await this.plugin.openSideNoteReferenceUrl(targetUrl);
             return;
         }
 

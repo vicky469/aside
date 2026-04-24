@@ -1,9 +1,4 @@
 import type { Comment } from "../../commentManager";
-import {
-    parseSideNoteReferenceUrl,
-    replaceRawSideNoteReferenceUrls,
-    SIDE_NOTE_REFERENCE_SECTION_HEADER,
-} from "../../core/text/commentReferences";
 import { compareCommentsForSidebarOrder } from "../../core/anchors/commentSectionOrder";
 import { matchesResolvedCommentVisibility, filterCommentsByResolvedVisibility } from "../../core/rules/resolvedCommentVisibility";
 import { extractTagsFromText } from "../../core/text/commentTags";
@@ -26,23 +21,12 @@ type TagSuggestCallbacks = {
     onCloseModal: () => void;
 };
 
-type SideNoteReferenceSuggestCallbacks = {
-    excludeThreadId?: string | null;
-    initialQuery: string;
-    onChooseReference: (commentId: string) => Promise<void>;
-    onCloseModal: () => void;
-    sourcePath: string;
-};
-
 export interface SidebarDraftEditorHost {
-    buildSideNoteReferenceMarkdownForComment(commentId: string, label?: string): string | null;
     getAllIndexedComments(): Comment[];
-    localVaultName: string | null;
     updateDraftCommentText(commentId: string, commentText: string): void;
     renderComments(): Promise<void>;
     scheduleDraftFocus(commentId: string): void;
     openLinkSuggestModal(options: LinkSuggestCallbacks): void;
-    openSideNoteReferenceSuggestModal(options: SideNoteReferenceSuggestCallbacks): void;
     openTagSuggestModal(options: TagSuggestCallbacks): void;
 }
 
@@ -89,7 +73,7 @@ export function estimateDraftTextareaRows(commentText: string, isEditMode: boole
 }
 
 export class SidebarDraftEditorController {
-    private activeInlineSuggest: "link" | "reference" | "tag" | null = null;
+    private activeInlineSuggest: "link" | "tag" | null = null;
 
     constructor(private readonly host: SidebarDraftEditorHost) {}
 
@@ -236,94 +220,6 @@ export class SidebarDraftEditorController {
         return true;
     }
 
-    public openDraftSideNoteReferenceSuggest(
-        comment: DraftComment,
-        textarea: HTMLTextAreaElement,
-        isEditMode: boolean,
-    ): boolean {
-        if (this.activeInlineSuggest) {
-            return false;
-        }
-
-        const initialValue = textarea.value;
-        const selectionStart = textarea.selectionStart;
-        const selectionEnd = textarea.selectionEnd;
-        const initialQuery = selectionStart === selectionEnd
-            ? ""
-            : initialValue.slice(selectionStart, selectionEnd).trim();
-        const initialCursor = selectionEnd;
-        let inserted = false;
-        this.activeInlineSuggest = "reference";
-
-        this.host.openSideNoteReferenceSuggestModal({
-            excludeThreadId: comment.threadId ?? comment.id,
-            initialQuery,
-            onChooseReference: async (commentId) => {
-                const markdown = this.host.buildSideNoteReferenceMarkdownForComment(commentId);
-                if (!markdown) {
-                    return;
-                }
-
-                inserted = true;
-                const edit = appendMentionedReference(initialValue, markdown);
-                if (textarea.isConnected) {
-                    this.applyDraftEditorEdit(comment.id, textarea, edit, isEditMode);
-                    textarea.focus();
-                    return;
-                }
-
-                this.host.updateDraftCommentText(comment.id, edit.value);
-                await this.host.renderComments();
-                this.host.scheduleDraftFocus(comment.id);
-            },
-            onCloseModal: () => {
-                this.activeInlineSuggest = null;
-                if (inserted || !textarea.isConnected) {
-                    return;
-                }
-
-                window.requestAnimationFrame(() => {
-                    textarea.focus();
-                    textarea.setSelectionRange(initialCursor, initialCursor);
-                });
-            },
-            sourcePath: comment.filePath,
-        });
-
-        return true;
-    }
-
-    public normalizePastedSideNoteReferences(
-        comment: DraftComment,
-        textarea: HTMLTextAreaElement,
-        pastedText: string,
-        isEditMode: boolean,
-    ): boolean {
-        const normalized = replaceRawSideNoteReferenceUrls(pastedText, (match) => {
-            const target = parseSideNoteReferenceUrl(match.url);
-            if (!target) {
-                return match.url;
-            }
-
-            return this.host.buildSideNoteReferenceMarkdownForComment(target.commentId) ?? match.url;
-        }, {
-            localOnly: true,
-            localVaultName: this.host.localVaultName,
-        });
-        if (normalized === pastedText) {
-            return false;
-        }
-
-        const edit = replaceSelection(
-            textarea.value,
-            textarea.selectionStart,
-            textarea.selectionEnd,
-            normalized,
-        );
-        this.applyDraftEditorEdit(comment.id, textarea, edit, isEditMode);
-        return true;
-    }
-
     private applyDraftEditorEdit(
         commentId: string,
         textarea: HTMLTextAreaElement,
@@ -335,63 +231,4 @@ export class SidebarDraftEditorController {
         textarea.setSelectionRange(edit.selectionStart, edit.selectionEnd);
         textarea.dispatchEvent(new Event("input", { bubbles: true }));
     }
-}
-
-function replaceSelection(
-    value: string,
-    selectionStart: number,
-    selectionEnd: number,
-    replacement: string,
-): TextEditResult {
-    const start = Math.min(selectionStart, selectionEnd);
-    const end = Math.max(selectionStart, selectionEnd);
-    const nextValue = value.slice(0, start) + replacement + value.slice(end);
-    const nextCursor = start + replacement.length;
-    return {
-        value: nextValue,
-        selectionStart: nextCursor,
-        selectionEnd: nextCursor,
-    };
-}
-
-export function appendMentionedReference(
-    value: string,
-    markdown: string,
-): TextEditResult {
-    const bullet = `- ${markdown}`;
-    const mentionedHeaderIndex = value.indexOf(SIDE_NOTE_REFERENCE_SECTION_HEADER);
-    if (mentionedHeaderIndex !== -1) {
-        const lines = value.split("\n");
-        const headerLineIndex = lines.findIndex((line) => line.trim() === SIDE_NOTE_REFERENCE_SECTION_HEADER);
-        if (headerLineIndex !== -1) {
-            let insertLineIndex = headerLineIndex + 1;
-            while (
-                insertLineIndex < lines.length
-                && (lines[insertLineIndex].trim() === "" || lines[insertLineIndex].startsWith("- "))
-            ) {
-                insertLineIndex += 1;
-            }
-            lines.splice(insertLineIndex, 0, bullet);
-            const nextValue = lines.join("\n");
-            const insertedPrefixLength = lines
-                .slice(0, insertLineIndex + 1)
-                .join("\n")
-                .length;
-            return {
-                value: nextValue,
-                selectionStart: insertedPrefixLength,
-                selectionEnd: insertedPrefixLength,
-            };
-        }
-    }
-
-    const trimmedValue = value.replace(/\s+$/, "");
-    const nextValue = trimmedValue
-        ? `${trimmedValue}\n\n${SIDE_NOTE_REFERENCE_SECTION_HEADER}\n${bullet}`
-        : `${SIDE_NOTE_REFERENCE_SECTION_HEADER}\n${bullet}`;
-    return {
-        value: nextValue,
-        selectionStart: nextValue.length,
-        selectionEnd: nextValue.length,
-    };
 }

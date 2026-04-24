@@ -26,6 +26,13 @@ export interface TrailingSideNoteReferenceSection {
     references: ExtractedSideNoteReference[];
 }
 
+export interface SideNoteReferenceTextEdit {
+    value: string;
+    selectionStart: number;
+    selectionEnd: number;
+}
+
+// Stored note content still uses the legacy header for backward compatibility.
 export const SIDE_NOTE_REFERENCE_SECTION_HEADER = "Mentioned:";
 
 const MARKDOWN_LINK_PATTERN = new RegExp(
@@ -91,6 +98,48 @@ function normalizeSideNoteReferenceLabel(label: string): string {
 
 export function buildSideNoteReferenceMarkdown(url: string, label: string): string {
     return `[${normalizeSideNoteReferenceLabel(label)}](${url})`;
+}
+
+export function appendSideNoteReference(
+    value: string,
+    markdown: string,
+): SideNoteReferenceTextEdit {
+    const bullet = `- ${markdown}`;
+    const referenceHeaderIndex = value.indexOf(SIDE_NOTE_REFERENCE_SECTION_HEADER);
+    if (referenceHeaderIndex !== -1) {
+        const lines = value.split("\n");
+        const headerLineIndex = lines.findIndex((line) => line.trim() === SIDE_NOTE_REFERENCE_SECTION_HEADER);
+        if (headerLineIndex !== -1) {
+            let insertLineIndex = headerLineIndex + 1;
+            while (
+                insertLineIndex < lines.length
+                && (lines[insertLineIndex].trim() === "" || lines[insertLineIndex].startsWith("- "))
+            ) {
+                insertLineIndex += 1;
+            }
+            lines.splice(insertLineIndex, 0, bullet);
+            const nextValue = lines.join("\n");
+            const insertedPrefixLength = lines
+                .slice(0, insertLineIndex + 1)
+                .join("\n")
+                .length;
+            return {
+                value: nextValue,
+                selectionStart: insertedPrefixLength,
+                selectionEnd: insertedPrefixLength,
+            };
+        }
+    }
+
+    const trimmedValue = value.replace(/\s+$/, "");
+    const nextValue = trimmedValue
+        ? `${trimmedValue}\n\n${SIDE_NOTE_REFERENCE_SECTION_HEADER}\n${bullet}`
+        : `${SIDE_NOTE_REFERENCE_SECTION_HEADER}\n${bullet}`;
+    return {
+        value: nextValue,
+        selectionStart: nextValue.length,
+        selectionEnd: nextValue.length,
+    };
 }
 
 export function extractSideNoteReferences(
