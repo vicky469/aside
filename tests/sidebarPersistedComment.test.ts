@@ -18,6 +18,7 @@ import {
     getRenderableThreadEntries,
     getAgentRunStatusPresentation,
     resolveSidebarCommentAuthor,
+    shouldShowRetryActionForSidebarComment,
     shouldRenderPersistedCommentBookmarkAction,
     shouldRenderPersistedCommentBookmarkIndicator,
     shouldRenderPersistedCommentPinIndicator,
@@ -951,6 +952,20 @@ test("getRetryableAgentRunForSidebarComment keeps the newest retryable run for t
     assert.equal(
         getRetryableAgentRunForSidebarComment("entry-1", [olderRun, newerRun])?.id,
         "run-2",
+    );
+});
+
+test("shouldShowRetryActionForSidebarComment falls back to explicit agent prompts without stored run metadata", () => {
+    assert.equal(
+        shouldShowRetryActionForSidebarComment("entry-1", "@codex explain this", []),
+        true,
+    );
+});
+
+test("shouldShowRetryActionForSidebarComment stays hidden for plain user comments without a stored run", () => {
+    assert.equal(
+        shouldShowRetryActionForSidebarComment("entry-1", "plain comment", []),
+        false,
     );
 });
 

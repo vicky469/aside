@@ -1663,6 +1663,22 @@ button.sidenote2-comment-pin-indicator.is-active {
     color: var(--interactive-accent-hover, var(--interactive-accent));
 }
 
+.sidenote2-comment-action-button:disabled {
+    color: var(--icon-color, var(--text-faint, var(--text-muted)));
+    opacity: 0.45;
+    background: color-mix(in srgb, var(--background-modifier-hover) 72%, transparent);
+    border-radius: 6px;
+    cursor: default;
+    pointer-events: none;
+}
+
+.sidenote2-comment-action-button:disabled:hover,
+.sidenote2-comment-action-button:disabled:focus-visible {
+    color: var(--icon-color, var(--text-faint, var(--text-muted)));
+    opacity: 0.45;
+    background: color-mix(in srgb, var(--background-modifier-hover) 72%, transparent);
+}
+
 .sidenote2-comment-action-button.is-pending,
 .sidenote2-comment-header-indicator.is-pending {
     opacity: 0.55;
