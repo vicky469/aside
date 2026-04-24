@@ -255,12 +255,6 @@ function renderDraftEditor(
             return button;
         })()
         : null;
-    const referenceButton = toolbarRow
-        ? createDraftFormatButton(toolbarRow, host, {
-            icon: "link-2",
-            ariaLabel: "Link side note",
-        })
-        : null;
     const editorShell = editorWrap.createDiv("sidenote2-inline-editor-shell");
     const preview = editorShell.createDiv("sidenote2-inline-editor-preview");
     const textarea = editorShell.createEl("textarea", {
@@ -302,30 +296,13 @@ function renderDraftEditor(
             ariaLabel: "Highlight",
         })
         : null;
-    const inlineEditBookmarkButton = layout === "inline-edit" && shouldRenderBookmarkDraftButton(comment)
-        ? (() => {
-            const presentation = buildBookmarkDraftButtonPresentation(comment);
-            const button = createDraftFormatButton(actionRow, host, {
-                icon: "bookmark",
-                ariaLabel: presentation.ariaLabel,
-            });
-            button.toggleClass("is-active", presentation.active);
-            return button;
-        })()
-        : null;
-    const inlineEditReferenceButton = layout === "inline-edit"
-        ? createDraftFormatButton(actionRow, host, {
-            icon: "link-2",
-            ariaLabel: "Link side note",
-        })
-        : null;
     let isBookmark = comment.isBookmark === true;
     const syncBookmarkButtons = () => {
         const bookmarkPresentation = buildBookmarkDraftButtonPresentation({
             mode: comment.mode,
             isBookmark,
         });
-        [bookmarkButton, inlineEditBookmarkButton]
+        [bookmarkButton]
             .filter((button): button is HTMLButtonElement => !!button)
             .forEach((button) => {
                 button.setAttribute("aria-label", bookmarkPresentation.ariaLabel);
@@ -345,11 +322,8 @@ function renderDraftEditor(
         boldButton,
         highlightButton,
         bookmarkButton,
-        referenceButton,
         inlineEditBoldButton,
         inlineEditHighlightButton,
-        inlineEditBookmarkButton,
-        inlineEditReferenceButton,
         cancelButton,
         saveButton,
     ]
@@ -373,20 +347,11 @@ function renderDraftEditor(
     if (bookmarkButton) {
         bookmarkButton.disabled = saving;
     }
-    if (referenceButton) {
-        referenceButton.disabled = saving;
-    }
     if (inlineEditBoldButton) {
         inlineEditBoldButton.disabled = saving;
     }
     if (inlineEditHighlightButton) {
         inlineEditHighlightButton.disabled = saving;
-    }
-    if (inlineEditBookmarkButton) {
-        inlineEditBookmarkButton.disabled = saving;
-    }
-    if (inlineEditReferenceButton) {
-        inlineEditReferenceButton.disabled = saving;
     }
     cancelButton.disabled = saving;
     saveButton.disabled = saving;
@@ -508,11 +473,6 @@ function renderDraftEditor(
         draftEditorController.applyDraftHighlight(comment.id, textarea, comment.mode === "edit");
         textarea.focus();
     };
-    const applySideNoteReference = (event: Event) => {
-        stopPropagation(event);
-        draftEditorController.openDraftSideNoteReferenceSuggest(comment, textarea, comment.mode === "edit");
-        textarea.focus();
-    };
     const applyBookmark = (event: Event) => {
         stopPropagation(event);
         isBookmark = toggleBookmarkDraftState(isBookmark);
@@ -531,12 +491,9 @@ function renderDraftEditor(
     };
     boldButton?.addEventListener("click", applyBold);
     highlightButton?.addEventListener("click", applyHighlight);
-    referenceButton?.addEventListener("click", applySideNoteReference);
     bookmarkButton?.addEventListener("click", applyBookmark);
     inlineEditBoldButton?.addEventListener("click", applyBold);
     inlineEditHighlightButton?.addEventListener("click", applyHighlight);
-    inlineEditReferenceButton?.addEventListener("click", applySideNoteReference);
-    inlineEditBookmarkButton?.addEventListener("click", applyBookmark);
     cancelButton.onclick = (event) => {
         stopPropagation(event);
         host.cancelDraft(comment.id);

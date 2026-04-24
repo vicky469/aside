@@ -354,7 +354,7 @@ function replaceSelection(
     };
 }
 
-function appendMentionedReference(
+export function appendMentionedReference(
     value: string,
     markdown: string,
 ): TextEditResult {

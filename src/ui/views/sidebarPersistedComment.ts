@@ -44,6 +44,10 @@ export interface PersistedCommentPresentation extends BasePersistedCommentPresen
         ariaLabel: string;
         icon: string;
     };
+    linkAction: {
+        ariaLabel: string;
+        icon: string;
+    };
     moveAction: {
         ariaLabel: string;
         icon: string;
@@ -115,6 +119,7 @@ export interface SidebarPersistedCommentHost {
     resolveComment(commentId: string): Promise<boolean> | Promise<void> | boolean | void;
     unresolveComment(commentId: string): Promise<boolean> | Promise<void> | boolean | void;
     moveCommentThread(threadId: string, sourceFilePath: string): void;
+    linkCommentThread(commentId: string, sourceFilePath: string, hostFilePath: string | null): Promise<void> | void;
     restoreComment(commentId: string): Promise<boolean> | Promise<void> | boolean | void;
     startEditDraft(commentId: string, hostFilePath: string | null): void;
     setCommentBookmarkState(commentId: string, isBookmark: boolean): Promise<boolean> | Promise<void> | boolean | void;
@@ -333,6 +338,10 @@ export function buildPersistedCommentPresentation(
         shareAction: {
             ariaLabel: "Share side note",
             icon: "share",
+        },
+        linkAction: {
+            ariaLabel: "Link side note",
+            icon: "link-2",
         },
         moveAction: {
             ariaLabel: "Move side note",
@@ -1053,6 +1062,31 @@ function renderMoveActionButton(
     };
 }
 
+function renderLinkActionButton(
+    actionsEl: HTMLDivElement,
+    host: SidebarPersistedCommentHost,
+    options: {
+        ariaLabel: string;
+        icon: string;
+        onLink: () => Promise<void> | void;
+    },
+): void {
+    const linkButton = actionsEl.createEl("button", {
+        cls: "clickable-icon sidenote2-comment-action-button sidenote2-comment-action-link",
+    });
+    attachSidebarActionButtonInteractions(linkButton, host);
+    linkButton.setAttribute("type", "button");
+    linkButton.setAttribute("aria-label", options.ariaLabel);
+    host.setIcon(linkButton, options.icon);
+    linkButton.onclick = async (event) => {
+        event.stopPropagation();
+        if (!(await host.saveVisibleDraftIfPresent())) {
+            return;
+        }
+        await options.onLink();
+    };
+}
+
 function renderRestoreButton(
     actionsEl: HTMLDivElement,
     commentId: string,
@@ -1261,6 +1295,11 @@ function renderThreadFooterActions(
         showAddEntryAction: boolean;
         showRetryAction?: boolean;
         disableRetryAction?: boolean;
+        linkAction?: {
+            ariaLabel: string;
+            icon: string;
+            onLink: () => Promise<void> | void;
+        } | null;
         moveAction?: {
             ariaLabel: string;
             icon: string;
@@ -1311,11 +1350,18 @@ function renderThreadFooterActions(
         });
     }
 
-    if (!(options.showShareAction || options.showAddEntryAction || options.showRetryAction || options.moveAction)) {
+    if (!(options.showShareAction || options.showAddEntryAction || options.showRetryAction || options.linkAction || options.moveAction)) {
         return;
     }
 
     const footerActionsEl = footerEl.createDiv("sidenote2-thread-footer-actions");
+    if (options.linkAction) {
+        renderLinkActionButton(footerActionsEl, host, {
+            ariaLabel: options.linkAction.ariaLabel,
+            icon: options.linkAction.icon,
+            onLink: options.linkAction.onLink,
+        });
+    }
     if (options.moveAction) {
         renderMoveActionButton(footerActionsEl, host, {
             ariaLabel: options.moveAction.ariaLabel,
@@ -1487,6 +1533,7 @@ function renderStoredThreadEntry(
                 showAddEntryAction: !entryComment.deletedAt && !thread.deletedAt,
                 showRetryAction: !!entryRetryRun && !entryComment.deletedAt && !thread.deletedAt,
                 disableRetryAction: isRetryableAgentRunBusy(entryRetryRun),
+                linkAction: null,
                 moveAction: null,
                 insertAction: entryInsertMarkdown
                     ? {
@@ -1638,6 +1685,13 @@ export async function renderPersistedCommentCard(
             showAddEntryAction: !comment.deletedAt,
             showRetryAction: !!parentRetryRun && !comment.deletedAt && !thread.deletedAt,
             disableRetryAction: isRetryableAgentRunBusy(parentRetryRun),
+            linkAction: !comment.deletedAt && !thread.deletedAt
+                ? {
+                    ariaLabel: presentation.linkAction.ariaLabel,
+                    icon: presentation.linkAction.icon,
+                    onLink: () => host.linkCommentThread(comment.id, thread.filePath, host.currentFilePath),
+                }
+                : null,
             moveAction: !comment.deletedAt && !thread.deletedAt
                 ? {
                     ariaLabel: presentation.moveAction.ariaLabel,

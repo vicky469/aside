@@ -34,7 +34,7 @@ import SideNoteReferenceSuggestModal from "../modals/SideNoteReferenceSuggestMod
 import SideNoteTagSuggestModal from "../modals/SideNoteTagSuggestModal";
 import { SIDE_NOTE2_ICON_ID } from "../sideNote2Icon";
 import { copyTextToClipboard } from "../copyTextToClipboard";
-import { SidebarDraftEditorController } from "./sidebarDraftEditor";
+import { appendMentionedReference, SidebarDraftEditorController } from "./sidebarDraftEditor";
 import {
     renderDraftCommentCard,
     renderInlineEditDraftContent,
@@ -2688,6 +2688,49 @@ export default class SideNote2View extends ItemView {
         }).open();
     }
 
+    private async openCommentSideNoteReferenceSuggest(
+        commentId: string,
+        sourceFilePath: string,
+        hostFilePath: string | null,
+    ): Promise<void> {
+        const targetHostPath = hostFilePath ?? sourceFilePath;
+        await this.plugin.startEditDraft(commentId, targetHostPath);
+
+        const getVisibleDraft = (): DraftComment | null => (
+            this.plugin.getDraftForView(targetHostPath)
+            ?? this.plugin.getDraftForFile(sourceFilePath)
+        );
+        const draft = getVisibleDraft();
+        if (!draft || draft.id !== commentId) {
+            return;
+        }
+
+        this.openSideNoteReferenceSuggestModal({
+            excludeThreadId: draft.threadId ?? commentId,
+            initialQuery: "",
+            onChooseReference: async (targetCommentId) => {
+                const markdown = this.plugin.buildSideNoteReferenceMarkdownForComment(targetCommentId);
+                if (!markdown) {
+                    return;
+                }
+
+                const latestDraft = getVisibleDraft();
+                if (!latestDraft || latestDraft.id !== commentId) {
+                    return;
+                }
+
+                const edit = appendMentionedReference(latestDraft.comment, markdown);
+                this.plugin.updateDraftCommentText(latestDraft.id, edit.value);
+                await this.renderComments();
+                this.interactionController.scheduleDraftFocus(latestDraft.id);
+            },
+            onCloseModal: () => {
+                this.interactionController.scheduleDraftFocus(commentId);
+            },
+            sourcePath: sourceFilePath,
+        });
+    }
+
     private openMoveCommentThreadModal(threadId: string, sourceFilePath: string): void {
         const openTargets = this.getOpenMarkdownFileInsertTargets();
         const openTargetsByPath = new Map(openTargets.map((target) => [target.file.path, target]));
@@ -2937,6 +2980,9 @@ export default class SideNote2View extends ItemView {
             },
             resolveComment: (commentId) => this.setSidebarCommentResolvedState(commentId, true),
             unresolveComment: (commentId) => this.setSidebarCommentResolvedState(commentId, false),
+            linkCommentThread: async (commentId, sourceFilePath, hostFilePath) => {
+                await this.openCommentSideNoteReferenceSuggest(commentId, sourceFilePath, hostFilePath);
+            },
             moveCommentThread: (threadId, sourceFilePath) => {
                 this.openMoveCommentThreadModal(threadId, sourceFilePath);
             },
