@@ -151,6 +151,21 @@ test("serializeNoteComments preserves page-note and orphaned anchor metadata", (
     assert.equal(parsed.comments[1].orphaned, true);
 });
 
+test("serializeNoteComments preserves pinned thread metadata", () => {
+    const serialized = serializeNoteComments("Body", [
+        createComment({
+            id: "comment-pinned",
+            isPinned: true,
+        }),
+    ]);
+
+    assert.match(serialized, /"isPinned": true/);
+
+    const parsed = parseNoteComments(serialized, "note.md");
+    assert.equal(parsed.comments[0].isPinned, true);
+    assert.equal(parsed.threads[0].isPinned, true);
+});
+
 test("parseNoteComments ignores legacy bookmark fields and drops them on rewrite", () => {
     const serialized = serializeNoteComments("Body", [
         createComment({

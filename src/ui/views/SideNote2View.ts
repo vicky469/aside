@@ -52,7 +52,6 @@ import {
     buildPageSidebarThreadRenderSignature,
 } from "./sidebarPageRenderSignature";
 import {
-    filterThreadsByPinnedSidebarThreadIds,
     filterThreadsByPinnedSidebarViewState,
     filterThreadsBySidebarContentFilter,
     rankThreadsBySidebarSearchQuery,
@@ -355,7 +354,7 @@ export default class SideNote2View extends ItemView {
             return;
         }
 
-        this.pinnedSidebarThreadIds = new Set(fileState.threadIds);
+        this.pinnedSidebarThreadIds.clear();
         this.showPinnedSidebarThreadsOnly = fileState.showPinnedThreadsOnly;
     }
 
@@ -379,12 +378,20 @@ export default class SideNote2View extends ItemView {
         }
     }
 
-    private syncPinnedSidebarThreadIds<T extends Pick<CommentThread, "id">>(threads: readonly T[]): void {
-        const pinnedThreads = filterThreadsByPinnedSidebarThreadIds(threads, this.pinnedSidebarThreadIds);
-        if (this.pinnedSidebarThreadIds.size > 0) {
-            this.pinnedSidebarThreadIds = new Set(pinnedThreads.map((thread) => thread.id));
-            this.savePinnedSidebarStateForFilePath(this.file?.path ?? null);
+    private syncPinnedSidebarThreadIds<T extends Pick<CommentThread, "id" | "isPinned">>(threads: readonly T[]): void {
+        const nextPinnedThreadIds = new Set(
+            threads
+                .filter((thread) => thread.isPinned === true)
+                .map((thread) => thread.id),
+        );
+        const hasChanged = nextPinnedThreadIds.size !== this.pinnedSidebarThreadIds.size
+            || Array.from(nextPinnedThreadIds).some((threadId) => !this.pinnedSidebarThreadIds.has(threadId));
+        if (!hasChanged) {
+            return;
         }
+
+        this.pinnedSidebarThreadIds = nextPinnedThreadIds;
+        this.savePinnedSidebarStateForFilePath(this.file?.path ?? null);
     }
 
     private isPinnedSidebarThread(threadId: string): boolean {
@@ -397,16 +404,29 @@ export default class SideNote2View extends ItemView {
             : EMPTY_PINNED_SIDEBAR_THREAD_IDS;
     }
 
-    private async togglePinnedSidebarThread(threadId: string): Promise<void> {
-        if (this.pinnedSidebarThreadIds.has(threadId)) {
-            this.pinnedSidebarThreadIds.delete(threadId);
-        } else {
-            this.pinnedSidebarThreadIds.add(threadId);
+    private async setSidebarCommentPinnedState(threadId: string, isPinned: boolean): Promise<void> {
+        const currentFilePath = this.getCurrentLocalNoteSidebarFilePath();
+        const updated = await this.plugin.setCommentPinnedState(
+            threadId,
+            isPinned,
+            currentFilePath
+                ? {
+                    deferAggregateRefresh: true,
+                    skipPersistedViewRefresh: true,
+                    refreshEditorDecorations: false,
+                    refreshMarkdownPreviews: false,
+                }
+                : undefined,
+        );
+        if (!updated) {
+            return;
         }
-        this.savePinnedSidebarStateForFilePath(this.file?.path ?? null);
-        await this.renderComments({
-            skipDataRefresh: true,
-        });
+
+        await this.rerenderLocalNoteSidebarIfStillShowing(currentFilePath);
+    }
+
+    private async togglePinnedSidebarThread(threadId: string): Promise<void> {
+        await this.setSidebarCommentPinnedState(threadId, !this.pinnedSidebarThreadIds.has(threadId));
     }
 
     private getCurrentLocalNoteSidebarFilePath(): string | null {

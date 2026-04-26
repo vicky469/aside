@@ -691,6 +691,34 @@ test("comment mutation controller can defer reopen refresh work while exiting re
     }]);
 });
 
+test("comment mutation controller can persist thread pin state with lightweight sidebar refresh options", async () => {
+    const comment = createComment({
+        id: "thread-1",
+        resolved: false,
+    });
+    const host = createHost({
+        knownComments: [comment],
+        loadedComments: [comment],
+    });
+
+    const pinned = await host.controller.setCommentPinnedState(comment.id, true, {
+        deferAggregateRefresh: true,
+        skipPersistedViewRefresh: true,
+        refreshEditorDecorations: false,
+        refreshMarkdownPreviews: false,
+    });
+
+    assert.equal(pinned, true);
+    assert.equal(host.manager.getCommentById(comment.id)?.isPinned, true);
+    assert.deepEqual(host.persistedFiles, [{
+        path: comment.filePath,
+        immediateAggregateRefresh: false,
+        skipCommentViewRefresh: true,
+        refreshEditorDecorations: false,
+        refreshMarkdownPreviews: false,
+    }]);
+});
+
 test("comment mutation controller keeps child edit drafts attached to their parent thread", async () => {
     const parent = createComment({ id: "thread-1", comment: "@codex parent" });
     const host = createHost({

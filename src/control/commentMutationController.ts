@@ -38,6 +38,7 @@ export type CommentMutationPersistBehaviorOptions = {
 
 export type DeleteCommentOptions = CommentMutationPersistBehaviorOptions;
 export type ResolveCommentOptions = CommentMutationPersistBehaviorOptions;
+export type SetCommentPinnedOptions = CommentMutationPersistBehaviorOptions;
 export type MoveCommentThreadOptions = CommentMutationPersistBehaviorOptions;
 export type MoveCommentEntryOptions = CommentMutationPersistBehaviorOptions;
 
@@ -408,6 +409,26 @@ export class CommentMutationController {
         }
 
         this.host.getCommentManager().resolveComment(commentId);
+        await this.host.persistCommentsForFile(latestTarget.file, this.buildPersistOptions(options));
+        return true;
+    }
+
+    public async setCommentPinnedState(
+        commentId: string,
+        isPinned: boolean,
+        options: SetCommentPinnedOptions = {},
+    ): Promise<boolean> {
+        void this.host.log?.("info", "draft", "thread.pin", { commentId, isPinned });
+        const latestTarget = await this.loadLatestCommentTarget(commentId);
+        if (!latestTarget) {
+            return false;
+        }
+
+        if (latestTarget.latestComment.isPinned === isPinned) {
+            return false;
+        }
+
+        this.host.getCommentManager().setCommentPinnedState(commentId, isPinned);
         await this.host.persistCommentsForFile(latestTarget.file, this.buildPersistOptions(options));
         return true;
     }

@@ -1075,7 +1075,7 @@ button.sidenote2-tab-button.sidenote2-tab-button--active {
 
 .sidenote2-comment-meta {
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) auto;
     align-items: flex-start;
     flex: 1 1 auto;
     column-gap: 6px;
@@ -1083,63 +1083,8 @@ button.sidenote2-tab-button.sidenote2-tab-button--active {
     max-width: 100%;
 }
 
-.sidenote2-comment-header-indicator {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex: 0 0 auto;
-}
-
-.sidenote2-comment-meta-indicators {
-    display: inline-flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 4px;
-    align-self: flex-start;
-    margin-right: 4px;
-}
-
-.sidenote2-comment-item.page-note .sidenote2-comment-meta-indicators {
-    flex-direction: row;
-    align-items: center;
-    align-self: center;
-}
-
-.sidenote2-comment-meta-indicators .sidenote2-comment-header-indicator {
-    width: 16px;
-    height: 16px;
-    border-radius: 5px;
-    background: var(--background-modifier-hover);
-}
-
-.sidenote2-comment-pin-indicator {
-    color: var(--text-faint, var(--text-muted));
-}
-
-button.sidenote2-comment-pin-indicator {
-    padding: 0;
-    border: 0;
-    background: var(--background-modifier-hover);
-    box-shadow: none;
-    cursor: pointer;
-}
-
-button.sidenote2-comment-pin-indicator:hover,
-button.sidenote2-comment-pin-indicator:focus-visible {
-    color: var(--interactive-accent-hover, var(--interactive-accent, var(--text-accent)));
-}
-
-button.sidenote2-comment-pin-indicator.is-active {
-    color: var(--interactive-accent, var(--text-accent));
-}
-
-.sidenote2-comment-header-indicator .svg-icon {
-    width: 11px;
-    height: 11px;
-}
-
 .sidenote2-comment-source-label {
-    grid-column: 2;
+    grid-column: 1;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1152,7 +1097,7 @@ button.sidenote2-comment-pin-indicator.is-active {
 }
 
 .sidenote2-comment-meta-value {
-    grid-column: 3;
+    grid-column: 2;
     justify-self: end;
     font-size: 0.9em;
     white-space: nowrap;
@@ -1163,7 +1108,7 @@ button.sidenote2-comment-pin-indicator.is-active {
 }
 
 .sidenote2-comment-meta-preview {
-    grid-column: 2;
+    grid-column: 1;
     min-width: 0;
     display: -webkit-box;
     overflow: hidden;
@@ -1593,8 +1538,7 @@ button.sidenote2-comment-pin-indicator.is-active {
     background: color-mix(in srgb, var(--background-modifier-hover) 72%, transparent);
 }
 
-.sidenote2-comment-action-button.is-pending,
-.sidenote2-comment-header-indicator.is-pending {
+.sidenote2-comment-action-button.is-pending {
     opacity: 0.55;
     cursor: progress;
 }

@@ -328,25 +328,6 @@ export function buildPersistedCommentPinActionPresentation(isPinned: boolean): P
     };
 }
 
-export function shouldRenderPersistedCommentPinIndicator(
-    comment: Pick<Comment, "id">,
-    thread: Pick<CommentThread, "id">,
-    isPinned: boolean,
-): boolean {
-    return comment.id === thread.id && isPinned;
-}
-
-export function shouldRenderPersistedCommentPinAction(
-    comment: Pick<Comment, "deletedAt" | "id">,
-    thread: Pick<CommentThread, "deletedAt" | "id">,
-    isPinned: boolean,
-): boolean {
-    return comment.id === thread.id
-        && !isPinned
-        && !comment.deletedAt
-        && !thread.deletedAt;
-}
-
 export function resolveSidebarCommentAuthor(
     commentId: string,
     threadAgentRuns: readonly AgentRunRecord[],
@@ -634,59 +615,15 @@ export function shouldRenderSidebarCommentAuthor(author: SidebarCommentAuthorPre
     return author.kind !== "user";
 }
 
-function renderPinStateIndicator(
-    metaEl: HTMLElement,
-    threadId: string,
-    isActive: boolean,
-    host: SidebarPersistedCommentHost,
-): void {
-    const indicatorEl = metaEl.createEl("button", {
-        cls: [
-            "sidenote2-comment-header-indicator",
-            "sidenote2-comment-pin-indicator",
-            "sidenote2-comment-meta-toggle-control",
-            "is-interactive",
-            isActive ? "is-active" : "",
-        ].filter((value) => value.length > 0).join(" "),
-    });
-    attachSidebarActionButtonInteractions(indicatorEl, host);
-    indicatorEl.setAttribute("type", "button");
-    indicatorEl.setAttribute("aria-label", isActive ? "Unpin this side note" : "Pin this side note");
-    indicatorEl.setAttribute("aria-pressed", isActive ? "true" : "false");
-    host.setIcon(indicatorEl, "pin");
-    indicatorEl.onclick = async (event) => {
-        await runSidebarPendingButtonAction(indicatorEl, host, event, async () => {
-            await host.togglePinnedThread(threadId);
-        });
-    };
-}
-
 function renderCommentMeta(
     headerEl: HTMLElement,
     comment: Comment,
     meta: Pick<BasePersistedCommentPresentation, "metaText" | "metaPreviewText">,
     host: SidebarPersistedCommentHost,
-    options: {
-        pinAction?: {
-            active: boolean;
-        } | null;
-    } = {},
 ): void {
     const metaEl = headerEl.createEl("small", {
         cls: "sidenote2-timestamp sidenote2-comment-meta",
     });
-    const renderLeadingIndicators = () => {
-        if (!options.pinAction) {
-            return;
-        }
-
-        const indicatorsEl = metaEl.createSpan({
-            cls: "sidenote2-comment-meta-indicators",
-        });
-        if (options.pinAction) {
-            renderPinStateIndicator(indicatorsEl, comment.id, options.pinAction.active, host);
-        }
-    };
 
     if (host.showSourceRedirectAction) {
         const leadLabel = formatSidebarCommentIndexLeadLabel(comment);
@@ -698,7 +635,6 @@ function renderCommentMeta(
             "title",
             comment.filePath,
         );
-        renderLeadingIndicators();
         metaEl.createSpan({
             cls: "sidenote2-comment-meta-value",
             text: meta.metaText,
@@ -707,15 +643,10 @@ function renderCommentMeta(
     }
 
     if (meta.metaPreviewText) {
-        renderLeadingIndicators();
         metaEl.createSpan({
             cls: "sidenote2-comment-meta-preview",
             text: meta.metaPreviewText,
         });
-    }
-
-    if (!meta.metaPreviewText) {
-        renderLeadingIndicators();
     }
 
     metaEl.createSpan({
@@ -815,6 +746,33 @@ function renderMoveActionButton(
             return;
         }
         await options.onMove();
+    };
+}
+
+function renderPinActionButton(
+    actionsEl: HTMLDivElement,
+    threadId: string,
+    isPinned: boolean,
+    host: SidebarPersistedCommentHost,
+): void {
+    const pinAction = buildPersistedCommentPinActionPresentation(isPinned);
+    const pinButton = actionsEl.createEl("button", {
+        cls: [
+            "clickable-icon",
+            "sidenote2-comment-action-button",
+            "sidenote2-comment-action-pin",
+            pinAction.active ? "is-active" : "",
+        ].filter(Boolean).join(" "),
+    });
+    attachSidebarActionButtonInteractions(pinButton, host);
+    pinButton.setAttribute("type", "button");
+    pinButton.setAttribute("aria-label", pinAction.ariaLabel);
+    pinButton.setAttribute("aria-pressed", pinAction.active ? "true" : "false");
+    host.setIcon(pinButton, "pin");
+    pinButton.onclick = async (event) => {
+        await runSidebarPendingButtonAction(pinButton, host, event, async () => {
+            await host.togglePinnedThread(threadId);
+        });
     };
 }
 
@@ -965,9 +923,6 @@ function renderPersistedEntryCard(
         host: SidebarPersistedCommentHost;
         interactive?: boolean;
         inlineEditDraft?: DraftComment | null;
-        pinAction?: {
-            active: boolean;
-        } | null;
     },
 ): {
     commentEl: HTMLDivElement;
@@ -985,9 +940,7 @@ function renderPersistedEntryCard(
 
     const headerEl = commentEl.createDiv("sidenote2-comment-header");
     const headerMainEl = headerEl.createDiv("sidenote2-comment-header-main");
-    renderCommentMeta(headerMainEl, options.comment, options.presentation, options.host, {
-        pinAction: options.pinAction ?? null,
-    });
+    renderCommentMeta(headerMainEl, options.comment, options.presentation, options.host);
     const actionsEl = headerEl.createDiv("sidenote2-comment-actions");
 
     const contentWrapper = commentEl.createDiv("sidenote2-comment-content");
@@ -1343,11 +1296,6 @@ export async function renderPersistedCommentCard(
         presentation,
         host,
         inlineEditDraft: parentEditDraft,
-        pinAction: canShowHeaderPinAction
-            ? {
-                active: host.isPinnedThread(thread.id),
-            }
-            : null,
     });
     const commentEl = renderedParent.commentEl;
     const actionsEl = renderedParent.actionsEl;
@@ -1363,6 +1311,9 @@ export async function renderPersistedCommentCard(
         if (comment.deletedAt && host.enableSoftDeleteActions) {
             renderRestoreButton(actionsEl, comment.id, host, "Restore deleted side note");
         } else {
+            if (canShowHeaderPinAction) {
+                renderPinActionButton(actionsEl, thread.id, host.isPinnedThread(thread.id), host);
+            }
             const resolveButton = actionsEl.createEl("button", {
                 cls: "clickable-icon sidenote2-comment-action-button sidenote2-comment-action-resolve",
             });

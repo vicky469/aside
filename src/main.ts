@@ -14,6 +14,7 @@ import {
     type MoveCommentThreadOptions,
     type ResolveCommentOptions,
     type SaveDraftOptions,
+    type SetCommentPinnedOptions,
 } from "./control/commentMutationController";
 import { CommentNavigationController } from "./control/commentNavigationController";
 import { pickPinnedCommentableFile, pickPreferredFileLeafCandidate, pickSidebarTargetFile, type PreferredFileLeafCandidate } from "./control/commentNavigationPlanner";
@@ -1421,6 +1422,14 @@ export default class SideNote2 extends Plugin {
         options?: ResolveCommentOptions,
     ): Promise<boolean> {
         return this.commentMutationController.resolveComment(commentId, options);
+    }
+
+    async setCommentPinnedState(
+        commentId: string,
+        isPinned: boolean,
+        options?: SetCommentPinnedOptions,
+    ): Promise<boolean> {
+        return this.commentMutationController.setCommentPinnedState(commentId, isPinned, options);
     }
 
     async unresolveComment(

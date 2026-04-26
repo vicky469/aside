@@ -26,6 +26,7 @@ export interface CommentThread {
     selectedTextHash: string;
     anchorKind?: CommentAnchorKind;
     orphaned?: boolean;
+    isPinned?: boolean;
     resolved?: boolean;
     deletedAt?: number;
     entries: CommentThreadEntry[];
@@ -46,6 +47,7 @@ export interface Comment {
     timestamp: number;
     anchorKind?: CommentAnchorKind;
     orphaned?: boolean;
+    isPinned?: boolean;
     resolved?: boolean;
     deletedAt?: number;
     entryCount?: number;
@@ -149,6 +151,7 @@ function normalizeThread(thread: CommentThread): CommentThread {
         ...thread,
         anchorKind: thread.anchorKind === "page" ? "page" : "selection",
         orphaned: thread.anchorKind === "page" ? false : thread.orphaned === true,
+        isPinned: thread.isPinned === true,
         resolved: thread.resolved === true,
         deletedAt: normalizeDeletedAt(thread.deletedAt),
         entries,
@@ -169,6 +172,7 @@ export function commentToThread(comment: Comment): CommentThread {
         selectedTextHash: comment.selectedTextHash,
         anchorKind: comment.anchorKind === "page" ? "page" : "selection",
         orphaned: comment.orphaned === true,
+        isPinned: comment.isPinned === true,
         resolved: comment.resolved === true,
         deletedAt: normalizeDeletedAt(comment.deletedAt),
         entries: [{
@@ -188,6 +192,7 @@ export function threadToComment(thread: CommentThread): Comment {
     return {
         ...threadEntryToComment(normalized, latestEntry),
         id: normalized.id,
+        isPinned: normalized.isPinned === true,
     };
 }
 
@@ -208,6 +213,7 @@ export function threadEntryToComment(thread: CommentThread, entry: CommentThread
         timestamp: entry.timestamp,
         anchorKind: normalized.anchorKind,
         orphaned: normalized.orphaned === true,
+        ...(normalized.id === entry.id && normalized.isPinned === true ? { isPinned: true } : {}),
         resolved: normalized.resolved === true,
         ...(deletedAt !== undefined ? { deletedAt } : {}),
         entryCount: normalized.entries.length,
@@ -535,6 +541,14 @@ export class CommentManager {
             candidate.id === id || candidate.entries.some((entry) => entry.id === id));
         if (thread) {
             thread.resolved = true;
+        }
+    }
+
+    setCommentPinnedState(id: string, isPinned: boolean) {
+        const thread = this.threads.find((candidate) =>
+            candidate.id === id || candidate.entries.some((entry) => entry.id === id));
+        if (thread) {
+            thread.isPinned = isPinned;
         }
     }
 

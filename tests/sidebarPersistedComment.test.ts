@@ -1,6 +1,6 @@
 import * as assert from "node:assert/strict";
 import test from "node:test";
-import { commentToThread, threadEntryToComment, type Comment, type CommentThread } from "../src/commentManager";
+import { commentToThread, type Comment, type CommentThread } from "../src/commentManager";
 import type { AgentRunRecord } from "../src/core/agents/agentRuns";
 import {
     buildPersistedCommentPresentation,
@@ -18,8 +18,6 @@ import {
     getAgentRunStatusPresentation,
     resolveSidebarCommentAuthor,
     shouldShowRetryActionForSidebarComment,
-    shouldRenderPersistedCommentPinIndicator,
-    shouldRenderPersistedCommentPinAction,
     shouldRenderSidebarCommentAuthor,
     shouldRenderNestedThreadEntries,
     shouldRenderThreadNestedToggle,
@@ -122,47 +120,6 @@ test("buildPersistedCommentPinActionPresentation toggles the pin affordance labe
             active: false,
             ariaLabel: "Pin this side note",
         },
-    );
-});
-
-test("shouldRenderPersistedCommentPinIndicator only enables pinned root cards", () => {
-    const rootThread = createThread({ id: "thread-1" });
-    const childThread = createThreadWithEntries({
-        id: "thread-2",
-        entries: [
-            { id: "thread-2", body: "Parent", timestamp: 100 },
-            { id: "entry-2", body: "Child", timestamp: 200 },
-        ],
-    });
-    const childComment = threadEntryToComment(childThread, childThread.entries[1]);
-
-    assert.equal(
-        shouldRenderPersistedCommentPinIndicator(createComment({ id: "thread-1" }), rootThread, true),
-        true,
-    );
-    assert.equal(
-        shouldRenderPersistedCommentPinIndicator(createComment({ id: "thread-1" }), rootThread, false),
-        false,
-    );
-    assert.equal(shouldRenderPersistedCommentPinIndicator(childComment, childThread, true), false);
-});
-
-test("shouldRenderPersistedCommentPinAction hides the right-side action once a root thread is pinned", () => {
-    const rootComment = createComment({ id: "thread-1", anchorKind: "selection" });
-    const rootThread = createThread({ id: "thread-1", anchorKind: "selection" });
-    rootThread.entries.push({ id: "entry-2", body: "Child", timestamp: 200 });
-    const childComment = threadEntryToComment(rootThread, rootThread.entries[1]);
-
-    assert.equal(shouldRenderPersistedCommentPinAction(rootComment, rootThread, false), true);
-    assert.equal(shouldRenderPersistedCommentPinAction(rootComment, rootThread, true), false);
-    assert.equal(shouldRenderPersistedCommentPinAction(childComment, rootThread, false), false);
-    assert.equal(
-        shouldRenderPersistedCommentPinAction(
-            createComment({ id: "thread-2", deletedAt: 123 }),
-            createThread({ id: "thread-2" }),
-            false,
-        ),
-        false,
     );
 });
 
