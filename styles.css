@@ -1555,6 +1555,7 @@ button.sidenote2-comment-pin-indicator.is-active {
 }
 
 .sidenote2-comment-item.active .sidenote2-thread-nested-toggle-button,
+.sidenote2-has-child-entries .sidenote2-thread-nested-toggle-button,
 .sidenote2-thread-nested-toggle-button.is-expanded {
     display: inline-flex;
     pointer-events: auto;
