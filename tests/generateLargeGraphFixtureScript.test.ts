@@ -1,4 +1,5 @@
 import * as assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { execFile as execFileCallback } from "node:child_process";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -6,9 +7,37 @@ import * as path from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
 import { commentToThread, type Comment } from "../src/commentManager";
-import { parseNoteComments, serializeNoteCommentThreads } from "../src/core/storage/noteCommentStorage";
+import { serializeNoteCommentThreads } from "../src/core/storage/noteCommentStorage";
 
 const execFile = promisify(execFileCallback);
+
+function hashText(text: string): string {
+    return createHash("sha256").update(text, "utf8").digest("hex");
+}
+
+function getSidecarPath(vaultRoot: string, noteRelativePath: string): string {
+    const hash = hashText(noteRelativePath);
+    const shard = hash.slice(0, 2);
+    return path.join(vaultRoot, ".obsidian", "plugins", "side-note2", "sidenotes", "by-note", shard, `${hash}.json`);
+}
+
+async function readSidecar(vaultRoot: string, noteRelativePath: string): Promise<{ version: number; notePath: string; threads: Array<{ id: string; resolved: boolean; entries: Array<{ id: string; body: string; timestamp: number }> }> } | null> {
+    const sidecarPath = getSidecarPath(vaultRoot, noteRelativePath);
+    try {
+        const raw = await readFile(sidecarPath, "utf8");
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== "object" || parsed.version !== 1 || !Array.isArray(parsed.threads)) {
+            return null;
+        }
+        return parsed;
+    } catch {
+        return null;
+    }
+}
+
+async function createVaultDir(tempDir: string): Promise<void> {
+    await mkdir(path.join(tempDir, ".obsidian", "plugins", "side-note2"), { recursive: true });
+}
 
 function createComment(overrides: Partial<Comment> = {}): Comment {
     return {
@@ -35,6 +64,7 @@ test("generate-large-graph-fixture preserves existing SideNote2 threads in fixtu
     const notePath = path.join(tempDir, noteRelativePath);
 
     await mkdir(path.dirname(notePath), { recursive: true });
+    await createVaultDir(tempDir);
 
     const syntheticThread = commentToThread(createComment({
         id: "lg-g30-chain-c01-n01",
@@ -77,13 +107,15 @@ test("generate-large-graph-fixture preserves existing SideNote2 threads in fixtu
         cwd: process.cwd(),
     });
 
-    const updated = await readFile(notePath, "utf8");
-    const parsed = parseNoteComments(updated, noteRelativePath);
+    const updatedNote = await readFile(notePath, "utf8");
+    assert.match(updatedNote, /^# g30-chain-c01-n01/m);
+    assert.doesNotMatch(updatedNote, /<!-- SideNote2 comments/);
 
-    assert.match(parsed.mainContent, /^# g30-chain-c01-n01/m);
-    assert.equal(parsed.threads.length, 2);
+    const sidecar = await readSidecar(tempDir, noteRelativePath);
+    assert.ok(sidecar);
+    assert.equal(sidecar!.threads.length, 2);
 
-    const updatedSyntheticThread = parsed.threads.find((thread) => thread.id === "lg-g30-chain-c01-n01");
+    const updatedSyntheticThread = sidecar!.threads.find((thread) => thread.id === "lg-g30-chain-c01-n01");
     assert.ok(updatedSyntheticThread);
     assert.equal(updatedSyntheticThread.resolved, true);
     assert.equal(updatedSyntheticThread.entries.length, 2);
@@ -91,7 +123,7 @@ test("generate-large-graph-fixture preserves existing SideNote2 threads in fixtu
     assert.match(updatedSyntheticThread.entries[0].body, /\[\[g30-chain-c01-n02\]\]/);
     assert.equal(updatedSyntheticThread.entries[1].body, "Keep this reply");
 
-    const preservedManualThread = parsed.threads.find((thread) => thread.id === "manual-1");
+    const preservedManualThread = sidecar!.threads.find((thread) => thread.id === "manual-1");
     assert.ok(preservedManualThread);
     assert.equal(preservedManualThread.entries[0].body, "Manual extra note");
 });

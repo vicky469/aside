@@ -1,18 +1,18 @@
 #!/usr/bin/env node
 
-import * as esbuild from "esbuild";
 import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
     createContentFingerprint,
+    loadThreadsWithFallback,
+    resolveVaultRootByPath,
+    getVaultRelativePath,
     runScriptMain,
+    stripLegacyBlockIfNeeded,
+    writeSidecar,
     writeObservedNoteSafely,
 } from "./lib/sideNote2RepoScripts.mjs";
-
-function getRepoRoot(metaUrl) {
-    return path.resolve(path.dirname(fileURLToPath(metaUrl)), "..");
-}
 
 function printUsage(stream = process.stderr) {
     stream.write(
@@ -60,28 +60,6 @@ function parseArgs(argv) {
     return options;
 }
 
-async function loadStorageModule() {
-    const repoRoot = getRepoRoot(import.meta.url);
-    const entryPoint = path.resolve(repoRoot, "src/core/storage/noteCommentStorage.ts");
-    const result = await esbuild.build({
-        entryPoints: [entryPoint],
-        bundle: true,
-        format: "esm",
-        platform: "node",
-        target: ["node18"],
-        write: false,
-        logLevel: "silent",
-    });
-
-    const output = result.outputFiles?.[0]?.text;
-    if (!output) {
-        throw new Error("Failed to bundle noteCommentStorage.ts");
-    }
-
-    const moduleUrl = `data:text/javascript;base64,${Buffer.from(output).toString("base64")}`;
-    return import(moduleUrl);
-}
-
 async function collectMarkdownFiles(targetPath, files) {
     const stats = await stat(targetPath);
     if (stats.isDirectory()) {
@@ -95,6 +73,10 @@ async function collectMarkdownFiles(targetPath, files) {
     if (stats.isFile() && targetPath.toLowerCase().endsWith(".md")) {
         files.push(targetPath);
     }
+}
+
+function stripWikiLinks(text) {
+    return text.replace(/\[\[([^\]|]+)(?:\|[^\]]+)?\]\]/g, "$1");
 }
 
 export async function runStripSideNoteLinks(
@@ -115,7 +97,6 @@ export async function runStripSideNoteLinks(
         return 0;
     }
 
-    const storageModule = await loadStorageModule();
     const targetFiles = [];
     for (const rawPath of options.paths) {
         await collectMarkdownFiles(path.resolve(process.cwd(), rawPath), targetFiles);
@@ -124,41 +105,60 @@ export async function runStripSideNoteLinks(
     const uniqueFiles = Array.from(new Set(targetFiles)).sort((left, right) => left.localeCompare(right));
     let cleanedCount = 0;
     let skippedCount = 0;
-    let unsupportedCount = 0;
+    let errorCount = 0;
 
     for (const notePath of uniqueFiles) {
-        const noteContent = await readFile(notePath, "utf8");
-        const managedSectionKind = storageModule.getManagedSectionKind(noteContent);
-        if (managedSectionKind === "none") {
+        let vaultRoot;
+        let noteRelativePath;
+        try {
+            vaultRoot = await resolveVaultRootByPath(notePath);
+            noteRelativePath = getVaultRelativePath(vaultRoot, notePath);
+        } catch {
             skippedCount += 1;
-            continue;
-        }
-        if (managedSectionKind === "unsupported") {
-            unsupportedCount += 1;
-            io.stderr.write(`Skipped unsupported SideNote2 block in ${notePath}\n`);
+            io.stderr.write(`Skipped ${notePath} — could not resolve vault root\n`);
             continue;
         }
 
-        const parsed = storageModule.parseNoteComments(noteContent, notePath);
-        const updated = storageModule.serializeNoteCommentThreads(noteContent, parsed.threads);
-        if (updated === noteContent) {
+        let threads;
+        let noteContent;
+        let hadLegacyBlock;
+        try {
+            ({ threads, noteContent, hadLegacyBlock } = await loadThreadsWithFallback(vaultRoot, notePath, noteRelativePath));
+        } catch (error) {
+            errorCount += 1;
+            io.stderr.write(`Skipped ${notePath} — ${error instanceof Error ? error.message : String(error)}\n`);
+            continue;
+        }
+
+        let modified = false;
+        const updatedThreads = threads.map((thread) => {
+            const updatedEntries = thread.entries.map((entry) => {
+                const strippedBody = stripWikiLinks(entry.body);
+                if (strippedBody !== entry.body) {
+                    modified = true;
+                    return { ...entry, body: strippedBody };
+                }
+                return entry;
+            });
+            if (updatedEntries.some((e, i) => e.body !== thread.entries[i].body)) {
+                return { ...thread, entries: updatedEntries };
+            }
+            return thread;
+        });
+
+        if (!modified) {
             skippedCount += 1;
             continue;
         }
 
-        const writeResult = await writeObservedNoteSafely(
-            notePath,
-            createContentFingerprint(noteContent),
-            updated,
-            { settleMs: options.settleMs },
-        );
-        if (writeResult.kind === "changed") {
+        await writeSidecar(vaultRoot, noteRelativePath, updatedThreads);
+
+        const migrationResult = await stripLegacyBlockIfNeeded(vaultRoot, notePath, noteRelativePath, noteContent, hadLegacyBlock, options.settleMs);
+        if (migrationResult.kind === "changed") {
             io.stderr.write(
-                `Skipped updating ${notePath} because ${writeResult.reason}. `
+                `Note content changed during sidecar migration; legacy block may still exist in ${notePath}. `
                 + "Rerun after Obsidian Sync or other local edits settle.\n",
             );
-            unsupportedCount += 1;
-            continue;
         }
 
         cleanedCount += 1;
@@ -166,9 +166,9 @@ export async function runStripSideNoteLinks(
     }
 
     io.stdout.write(
-        `Done. cleaned=${cleanedCount} skipped=${skippedCount} unsupported=${unsupportedCount}\n`,
+        `Done. cleaned=${cleanedCount} skipped=${skippedCount} error=${errorCount}\n`,
     );
-    return unsupportedCount > 0 ? 1 : 0;
+    return errorCount > 0 ? 1 : 0;
 }
 
 await runScriptMain(runStripSideNoteLinks);

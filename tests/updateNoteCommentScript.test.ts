@@ -1,14 +1,43 @@
 import * as assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { execFile as execFileCallback } from "node:child_process";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
-import { parseNoteComments, serializeNoteComments } from "../src/core/storage/noteCommentStorage";
+import { serializeNoteComments } from "../src/core/storage/noteCommentStorage";
 import type { Comment } from "../src/commentManager";
 
 const execFile = promisify(execFileCallback);
+
+function hashText(text: string): string {
+    return createHash("sha256").update(text, "utf8").digest("hex");
+}
+
+function getSidecarPath(vaultRoot: string, noteRelativePath: string): string {
+    const hash = hashText(noteRelativePath);
+    const shard = hash.slice(0, 2);
+    return path.join(vaultRoot, ".obsidian", "plugins", "side-note2", "sidenotes", "by-note", shard, `${hash}.json`);
+}
+
+async function readSidecar(vaultRoot: string, noteRelativePath: string): Promise<{ version: number; notePath: string; threads: Array<{ id: string; entries: Array<{ id: string; body: string; timestamp: number }> }> } | null> {
+    const sidecarPath = getSidecarPath(vaultRoot, noteRelativePath);
+    try {
+        const raw = await readFile(sidecarPath, "utf8");
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== "object" || parsed.version !== 1 || !Array.isArray(parsed.threads)) {
+            return null;
+        }
+        return parsed;
+    } catch {
+        return null;
+    }
+}
+
+async function createVaultDir(tempDir: string): Promise<void> {
+    await mkdir(path.join(tempDir, ".obsidian", "plugins", "side-note2"), { recursive: true });
+}
 
 async function writeObsidianVaultConfig(homeDir: string, vaultRoot: string): Promise<void> {
     const configPath = path.join(homeDir, ".config", "obsidian", "obsidian.json");
@@ -50,6 +79,7 @@ test("update-note-comment script replaces the targeted comment body", async () =
     const scriptPath = path.resolve(process.cwd(), "scripts/update-note-comment.mjs");
     const original = serializeNoteComments("# Title\n\nBody text.\n", [createComment()]);
 
+    await createVaultDir(tempDir);
     await writeFile(notePath, original, "utf8");
     await writeFile(commentPath, "Updated body\nSecond line\n", "utf8");
 
@@ -67,11 +97,14 @@ test("update-note-comment script replaces the targeted comment body", async () =
 
     assert.match(stdout, /Updated comment comment-1/);
 
-    const updated = await readFile(notePath, "utf8");
-    const parsed = parseNoteComments(updated, notePath);
-    assert.equal(parsed.comments.length, 1);
-    assert.equal(parsed.comments[0].comment, "Updated body\nSecond line");
-    assert.equal(parsed.mainContent, "# Title\n\nBody text.");
+    const sidecar = await readSidecar(tempDir, "note.md");
+    assert.ok(sidecar);
+    assert.equal(sidecar!.threads.length, 1);
+    assert.equal(sidecar!.threads[0].entries.length, 1);
+    assert.equal(sidecar!.threads[0].entries[0].body, "Updated body\nSecond line");
+
+    const noteContent = await readFile(notePath, "utf8");
+    assert.equal(noteContent, "# Title\n\nBody text.\n");
 });
 
 test("update-note-comment script can target a stored comment by obsidian side-note URI", async () => {
@@ -87,6 +120,7 @@ test("update-note-comment script can target a stored comment by obsidian side-no
     })]);
 
     await mkdir(path.dirname(notePath), { recursive: true });
+    await createVaultDir(vaultRoot);
     await writeObsidianVaultConfig(homeDir, vaultRoot);
     await writeFile(notePath, original, "utf8");
     await writeFile(commentPath, "Updated from URI\nSecond line\n", "utf8");
@@ -107,7 +141,8 @@ test("update-note-comment script can target a stored comment by obsidian side-no
 
     assert.match(stdout, /Updated comment comment-1/);
 
-    const updated = await readFile(notePath, "utf8");
-    const parsed = parseNoteComments(updated, notePath);
-    assert.equal(parsed.comments[0].comment, "Updated from URI\nSecond line");
+    const sidecar = await readSidecar(vaultRoot, noteFilePath);
+    assert.ok(sidecar);
+    assert.equal(sidecar!.threads[0].entries.length, 1);
+    assert.equal(sidecar!.threads[0].entries[0].body, "Updated from URI\nSecond line");
 });

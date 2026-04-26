@@ -1,18 +1,42 @@
 import * as assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { execFile as execFileCallback } from "node:child_process";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
-import { parseNoteComments, serializeNoteCommentThreads } from "../src/core/storage/noteCommentStorage";
+import { serializeNoteCommentThreads } from "../src/core/storage/noteCommentStorage";
 import type { CommentThread } from "../src/commentManager";
 
 const execFile = promisify(execFileCallback);
 
 function hashText(text: string): string {
     return createHash("sha256").update(text, "utf8").digest("hex");
+}
+
+function getSidecarPath(vaultRoot: string, noteRelativePath: string): string {
+    const hash = hashText(noteRelativePath);
+    const shard = hash.slice(0, 2);
+    return path.join(vaultRoot, ".obsidian", "plugins", "side-note2", "sidenotes", "by-note", shard, `${hash}.json`);
+}
+
+async function readSidecar(vaultRoot: string, noteRelativePath: string): Promise<{ version: number; notePath: string; threads: CommentThread[] } | null> {
+    const sidecarPath = getSidecarPath(vaultRoot, noteRelativePath);
+    try {
+        const raw = await readFile(sidecarPath, "utf8");
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== "object" || parsed.version !== 1 || !Array.isArray(parsed.threads)) {
+            return null;
+        }
+        return parsed;
+    } catch {
+        return null;
+    }
+}
+
+async function createVaultDir(tempDir: string): Promise<void> {
+    await mkdir(path.join(tempDir, ".obsidian", "plugins", "side-note2"), { recursive: true });
 }
 
 function createThread(overrides: Partial<CommentThread> = {}): CommentThread {
@@ -52,6 +76,7 @@ test("create-note-comment-thread script creates a page note thread", async () =>
     const commentPath = path.join(tempDir, "comment.md");
     const scriptPath = path.resolve(process.cwd(), "scripts/create-note-comment-thread.mjs");
 
+    await createVaultDir(tempDir);
     await writeFile(notePath, "# Title\n\nBody text.\n", "utf8");
     await writeFile(commentPath, "New page note\nSecond line\n", "utf8");
 
@@ -68,16 +93,18 @@ test("create-note-comment-thread script creates a page note thread", async () =>
 
     assert.match(stdout, /Created page note thread/);
 
-    const updated = await readFile(notePath, "utf8");
-    const parsed = parseNoteComments(updated, notePath);
-    assert.equal(parsed.threads.length, 1);
-    assert.equal(parsed.threads[0].anchorKind, "page");
-    assert.equal(parsed.threads[0].selectedText, "My Note");
-    assert.equal(parsed.threads[0].selectedTextHash, hashText("My Note"));
-    assert.equal(parsed.threads[0].startLine, 0);
-    assert.equal(parsed.threads[0].entries.length, 1);
-    assert.equal(parsed.threads[0].entries[0].body, "New page note\nSecond line");
-    assert.equal(parsed.mainContent, "# Title\n\nBody text.");
+    const sidecar = await readSidecar(tempDir, "My Note.md");
+    assert.ok(sidecar);
+    assert.equal(sidecar!.threads.length, 1);
+    assert.equal(sidecar!.threads[0].anchorKind, "page");
+    assert.equal(sidecar!.threads[0].selectedText, "My Note");
+    assert.equal(sidecar!.threads[0].selectedTextHash, hashText("My Note"));
+    assert.equal(sidecar!.threads[0].startLine, 0);
+    assert.equal(sidecar!.threads[0].entries.length, 1);
+    assert.equal(sidecar!.threads[0].entries[0].body, "New page note\nSecond line");
+
+    const noteContent = await readFile(notePath, "utf8");
+    assert.equal(noteContent, "# Title\n\nBody text.\n");
 });
 
 test("create-note-comment-thread script creates an anchored thread without flattening existing replies", async () => {
@@ -87,6 +114,7 @@ test("create-note-comment-thread script creates an anchored thread without flatt
     const scriptPath = path.resolve(process.cwd(), "scripts/create-note-comment-thread.mjs");
     const original = serializeNoteCommentThreads("# Title\n\nBody text.\n", [createThread()]);
 
+    await createVaultDir(tempDir);
     await writeFile(notePath, original, "utf8");
     await writeFile(commentPath, "New anchored note\nSecond line\n", "utf8");
 
@@ -112,14 +140,14 @@ test("create-note-comment-thread script creates an anchored thread without flatt
 
     assert.match(stdout, /Created anchored note thread/);
 
-    const updated = await readFile(notePath, "utf8");
-    const parsed = parseNoteComments(updated, notePath);
-    assert.equal(parsed.threads.length, 2);
-    assert.equal(parsed.threads[0].entries.length, 2);
-    assert.equal(parsed.threads[0].entries[0].body, "Original body");
-    assert.equal(parsed.threads[0].entries[1].body, "Follow-up reply");
+    const sidecar = await readSidecar(tempDir, "note.md");
+    assert.ok(sidecar);
+    assert.equal(sidecar!.threads.length, 2);
+    assert.equal(sidecar!.threads[0].entries.length, 2);
+    assert.equal(sidecar!.threads[0].entries[0].body, "Original body");
+    assert.equal(sidecar!.threads[0].entries[1].body, "Follow-up reply");
 
-    const nextThread = parsed.threads[1];
+    const nextThread = sidecar!.threads[1];
     assert.equal(nextThread.anchorKind, "selection");
     assert.equal(nextThread.selectedText, "Priority conflicts");
     assert.equal(nextThread.selectedTextHash, hashText("Priority conflicts"));
@@ -129,6 +157,9 @@ test("create-note-comment-thread script creates an anchored thread without flatt
     assert.equal(nextThread.endChar, 20);
     assert.equal(nextThread.entries.length, 1);
     assert.equal(nextThread.entries[0].body, "New anchored note\nSecond line");
+
+    const noteContent = await readFile(notePath, "utf8");
+    assert.equal(noteContent, "# Title\n\nBody text.\n");
 });
 
 test("create-note-comment-thread script rejects unsupported legacy flat payloads", async () => {
@@ -136,6 +167,7 @@ test("create-note-comment-thread script rejects unsupported legacy flat payloads
     const notePath = path.join(tempDir, "note.md");
     const scriptPath = path.resolve(process.cwd(), "scripts/create-note-comment-thread.mjs");
 
+    await createVaultDir(tempDir);
     await writeFile(notePath, [
         "# Title",
         "",
@@ -197,6 +229,7 @@ test("create-note-comment-thread script rejects notes with two SideNote2 managed
         updatedAt: 1710000002000,
     })]);
 
+    await createVaultDir(tempDir);
     await writeFile(
         notePath,
         `${first.trimEnd()}\n\n${second.slice(second.indexOf("<!-- SideNote2 comments"))}\n`,

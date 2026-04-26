@@ -1,34 +1,18 @@
 #!/usr/bin/env node
 
-import * as esbuild from "esbuild";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+    loadThreadsWithFallback,
+    readSidecar,
+    stripLegacyBlockIfNeeded,
+    writeSidecar,
+} from "./lib/sideNote2RepoScripts.mjs";
 
 function getRepoRoot(metaUrl) {
     return path.resolve(path.dirname(fileURLToPath(metaUrl)), "..");
-}
-
-async function loadStorageModule(repoRoot) {
-    const entryPoint = path.resolve(repoRoot, "src/core/storage/noteCommentStorage.ts");
-    const result = await esbuild.build({
-        entryPoints: [entryPoint],
-        bundle: true,
-        format: "esm",
-        platform: "node",
-        target: ["node18"],
-        write: false,
-        logLevel: "silent",
-    });
-
-    const output = result.outputFiles?.[0]?.text;
-    if (!output) {
-        throw new Error("Failed to bundle noteCommentStorage.ts");
-    }
-
-    const moduleUrl = `data:text/javascript;base64,${Buffer.from(output).toString("base64")}`;
-    return import(moduleUrl);
 }
 
 function normalizeVaultPath(targetPath) {
@@ -303,7 +287,6 @@ async function main() {
     const options = parseArgs(process.argv.slice(2));
     const vaultRoot = options.vaultRoot ?? path.resolve(repoRoot, "..");
     const outputRoot = path.join(vaultRoot, "SideNote2 Graph Fixtures", "graph-1000");
-    const { parseNoteComments, serializeNoteCommentThreads } = await loadStorageModule(repoRoot);
     const componentDefinitions = buildComponentDefinitions();
     let generatedNoteCount = 0;
     let timestamp = Date.UTC(2026, 0, 1, 0, 0, 0);
@@ -343,22 +326,31 @@ async function main() {
                 outgoingLinks,
                 timestamp,
             });
+
             let existingThreads = [];
+            let noteContent = null;
+            let hadLegacyBlock = false;
             try {
-                const existingContent = await readFile(absoluteFilePath, "utf8");
-                existingThreads = parseNoteComments(existingContent, vaultRelativePath).threads;
+                const fallback = await loadThreadsWithFallback(vaultRoot, absoluteFilePath, vaultRelativePath);
+                existingThreads = fallback.threads;
+                noteContent = fallback.noteContent;
+                hadLegacyBlock = fallback.hadLegacyBlock;
             } catch (error) {
-                if (!(error && typeof error === "object" && "code" in error && error.code === "ENOENT")) {
+                if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+                    existingThreads = [];
+                } else {
                     throw error;
                 }
             }
 
-            const serialized = serializeNoteCommentThreads(
-                noteBody,
-                mergeSyntheticThread(existingThreads, syntheticThread),
-            );
+            const mergedThreads = mergeSyntheticThread(existingThreads, syntheticThread);
+            await writeFile(absoluteFilePath, noteBody, "utf8");
+            await writeSidecar(vaultRoot, vaultRelativePath, mergedThreads);
 
-            await writeFile(absoluteFilePath, serialized, "utf8");
+            if (hadLegacyBlock && noteContent) {
+                await stripLegacyBlockIfNeeded(vaultRoot, absoluteFilePath, vaultRelativePath, noteContent, hadLegacyBlock, 0);
+            }
+
             generatedNoteCount += 1;
             timestamp += 1000;
         }

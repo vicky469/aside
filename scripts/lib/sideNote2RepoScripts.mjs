@@ -440,6 +440,118 @@ function hashCommentSelection(text) {
     return createHash("sha256").update(text, "utf8").digest("hex");
 }
 
+function normalizeCommentBody(body) {
+    return body.replace(/\r\n/g, "\n").replace(/\n+$/, "");
+}
+
+export function hashText(text) {
+    return createHash("sha256").update(text, "utf8").digest("hex");
+}
+
+function normalizeStoragePath(targetPath) {
+    return targetPath.replace(/\\/g, "/").replace(/\/+/g, "/").replace(/\/$/, "");
+}
+
+export function getSidecarPath(vaultRoot, noteRelativePath) {
+    const normalized = normalizeStoragePath(noteRelativePath);
+    const noteHash = hashText(normalized);
+    const shard = noteHash.slice(0, 2) || "00";
+    return path.join(vaultRoot, ".obsidian", "plugins", "side-note2", "sidenotes", "by-note", shard, `${noteHash}.json`);
+}
+
+export async function resolveVaultRootByPath(notePath) {
+    let current = path.resolve(notePath);
+    while (true) {
+        const parent = path.dirname(current);
+        if (parent === current) {
+            throw new Error(`Could not find an Obsidian vault (.obsidian directory) for ${notePath}`);
+        }
+        const obsidianDir = path.join(parent, ".obsidian");
+        if (await pathExists(obsidianDir)) {
+            return parent;
+        }
+        current = parent;
+    }
+}
+
+export function getVaultRelativePath(vaultRoot, absolutePath) {
+    const relative = path.relative(vaultRoot, path.resolve(absolutePath));
+    return relative.split(path.sep).join("/");
+}
+
+export async function readSidecar(vaultRoot, noteRelativePath) {
+    const sidecarPath = getSidecarPath(vaultRoot, noteRelativePath);
+    try {
+        const raw = await readFile(sidecarPath, "utf8");
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== "object" || parsed.version !== 1 || !Array.isArray(parsed.threads)) {
+            return null;
+        }
+        return parsed.threads.map((thread) => ({
+            ...thread,
+            filePath: noteRelativePath,
+            entries: Array.isArray(thread.entries) ? thread.entries.map((entry) => ({ ...entry })) : [],
+        }));
+    } catch (error) {
+        if (error && error.code === "ENOENT") {
+            return null;
+        }
+        throw error;
+    }
+}
+
+export async function writeSidecar(vaultRoot, noteRelativePath, threads) {
+    const sidecarPath = getSidecarPath(vaultRoot, noteRelativePath);
+    if (threads.length === 0) {
+        if (await pathExists(sidecarPath)) {
+            await rm(sidecarPath, { force: true });
+        }
+        return;
+    }
+    const payload = {
+        version: 1,
+        notePath: noteRelativePath,
+        threads: threads.map((thread) => ({
+            ...thread,
+            filePath: noteRelativePath,
+        })),
+    };
+    const serialized = `${JSON.stringify(payload)}\n`;
+    const tempPath = `${sidecarPath}.tmp-${process.pid}-${randomUUID()}`;
+    await mkdir(path.dirname(sidecarPath), { recursive: true });
+    await writeFile(tempPath, serialized, "utf8");
+    try {
+        await rename(tempPath, sidecarPath);
+    } catch (error) {
+        await rm(tempPath, { force: true });
+        throw error;
+    }
+}
+
+export async function loadThreadsWithFallback(vaultRoot, notePath, noteRelativePath) {
+    const sidecarThreads = await readSidecar(vaultRoot, noteRelativePath);
+    if (sidecarThreads) {
+        return { threads: sidecarThreads, noteContent: null, hadLegacyBlock: false };
+    }
+    const noteContent = await readFile(notePath, "utf8");
+    const storageModule = await loadStorageModule();
+    const managedSectionKind = storageModule.getManagedSectionKind(noteContent);
+    if (managedSectionKind === "unsupported") {
+        throw new Error(getManagedSectionErrorMessage(storageModule, noteContent, notePath));
+    }
+    const parsed = storageModule.parseNoteComments(noteContent, notePath);
+    return { threads: parsed.threads, noteContent, hadLegacyBlock: managedSectionKind === "threaded" };
+}
+
+export async function stripLegacyBlockIfNeeded(vaultRoot, notePath, noteRelativePath, noteContent, hadLegacyBlock, settleMs) {
+    if (!hadLegacyBlock || !noteContent) {
+        return { kind: "written" };
+    }
+    const storageModule = await loadStorageModule();
+    const stripped = storageModule.serializeNoteCommentThreads(noteContent, []);
+    return writeObservedNoteSafely(notePath, createContentFingerprint(noteContent), stripped, { settleMs });
+}
+
 const COMMENT_LOCATION_PROTOCOL = "side-note2-comment";
 
 function parseCommentProtocolUri(uri) {
@@ -539,15 +651,22 @@ async function resolveCommentWriteTarget(options) {
         }
 
         const vaultRoot = await resolveVaultRootByName(uriTarget.vaultName);
+        const notePath = resolveVaultRelativeNotePath(vaultRoot, uriTarget.filePath);
         return {
-            notePath: resolveVaultRelativeNotePath(vaultRoot, uriTarget.filePath),
+            notePath,
             commentId: uriTarget.commentId,
+            vaultRoot,
+            noteRelativePath: uriTarget.filePath,
         };
     }
 
+    const notePath = path.resolve(process.cwd(), options.file);
+    const vaultRoot = await resolveVaultRootByPath(notePath);
     return {
-        notePath: path.resolve(process.cwd(), options.file),
+        notePath,
         commentId: options.id,
+        vaultRoot,
+        noteRelativePath: getVaultRelativePath(vaultRoot, notePath),
     };
 }
 
@@ -631,24 +750,35 @@ export async function runCreateNoteCommentThread(argv, io = { stdout: process.st
     }
 
     const notePath = path.resolve(process.cwd(), options.file);
-    const nextCommentBody = await loadCommentBody(options);
-    const noteContent = await readFile(notePath, "utf8");
-    const storageModule = await loadStorageModule();
-    const managedSectionKind = storageModule.getManagedSectionKind(noteContent);
-    if (managedSectionKind === "unsupported") {
-        io.stderr.write(getManagedSectionErrorMessage(storageModule, noteContent, notePath));
+    let vaultRoot;
+    let noteRelativePath;
+    try {
+        vaultRoot = await resolveVaultRootByPath(notePath);
+        noteRelativePath = getVaultRelativePath(vaultRoot, notePath);
+    } catch (error) {
+        io.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
         return 1;
     }
 
-    const parsed = storageModule.parseNoteComments(noteContent, notePath);
+    const nextCommentBody = await loadCommentBody(options);
+    let threads;
+    let noteContent;
+    let hadLegacyBlock;
+    try {
+        ({ threads, noteContent, hadLegacyBlock } = await loadThreadsWithFallback(vaultRoot, notePath, noteRelativePath));
+    } catch (error) {
+        io.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+        return 1;
+    }
+
     const timestamp = Date.now();
     const threadId = randomUUID();
     const selectedText = options.page
-        ? getPageCommentLabelForPath(notePath)
+        ? getPageCommentLabelForPath(noteRelativePath)
         : options.selectedText;
     const nextThread = {
         id: threadId,
-        filePath: notePath,
+        filePath: noteRelativePath,
         startLine: options.page ? 0 : options.startLine,
         startChar: options.page ? 0 : options.startChar,
         endLine: options.page ? 0 : options.endLine,
@@ -660,23 +790,22 @@ export async function runCreateNoteCommentThread(argv, io = { stdout: process.st
         resolved: false,
         entries: [{
             id: threadId,
-            body: nextCommentBody,
+            body: normalizeCommentBody(nextCommentBody),
             timestamp,
         }],
         createdAt: timestamp,
         updatedAt: timestamp,
     };
-    const updated = storageModule.serializeNoteCommentThreads(noteContent, [...parsed.threads, nextThread]);
+    threads.push(nextThread);
 
-    const writeResult = await writeObservedNoteSafely(notePath, createContentFingerprint(noteContent), updated, {
-        settleMs: options.settleMs,
-    });
-    if (writeResult.kind === "changed") {
+    await writeSidecar(vaultRoot, noteRelativePath, threads);
+
+    const migrationResult = await stripLegacyBlockIfNeeded(vaultRoot, notePath, noteRelativePath, noteContent, hadLegacyBlock, options.settleMs);
+    if (migrationResult.kind === "changed") {
         io.stderr.write(
-            `Skipped creating a comment in ${notePath} because ${writeResult.reason}. `
+            `Note content changed during sidecar migration; legacy block may still exist in ${notePath}. `
             + "Rerun after Obsidian Sync or other local edits settle.\n",
         );
-        return 1;
     }
 
     const anchorLabel = options.page ? "page note" : "anchored note";
@@ -707,42 +836,47 @@ export async function runAppendNoteCommentEntry(argv, io = { stdout: process.std
         return 1;
     }
 
-    const notePath = writeTarget.notePath;
-    const commentId = writeTarget.commentId;
+    const { notePath, commentId, vaultRoot, noteRelativePath } = writeTarget;
     const nextCommentBody = await loadCommentBody(options);
-    const noteContent = await readFile(notePath, "utf8");
-    const storageModule = await loadStorageModule();
-    const updated = storageModule.appendNoteCommentEntryById(noteContent, notePath, commentId, {
-        id: randomUUID(),
-        body: nextCommentBody,
-        timestamp: Date.now(),
+
+    let threads;
+    let noteContent;
+    let hadLegacyBlock;
+    try {
+        ({ threads, noteContent, hadLegacyBlock } = await loadThreadsWithFallback(vaultRoot, notePath, noteRelativePath));
+    } catch (error) {
+        io.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+        return 1;
+    }
+
+    let found = false;
+    const timestamp = Date.now();
+    const updatedThreads = threads.map((thread) => {
+        const matchesThread = thread.id === commentId || thread.entries.some((entry) => entry.id === commentId);
+        if (!matchesThread) {
+            return thread;
+        }
+        found = true;
+        return {
+            ...thread,
+            entries: [...thread.entries, { id: randomUUID(), body: normalizeCommentBody(nextCommentBody), timestamp }],
+            updatedAt: Math.max(thread.updatedAt || 0, timestamp),
+        };
     });
 
-    if (typeof updated !== "string") {
-        const managedSectionKind = storageModule.getManagedSectionKind(noteContent);
-        if (managedSectionKind === "unsupported") {
-            io.stderr.write(getManagedSectionErrorMessage(storageModule, noteContent, notePath));
-            return 1;
-        }
-
-        if (managedSectionKind === "none") {
-            io.stderr.write(`No SideNote2 comments block found in ${notePath}\n`);
-            return 1;
-        }
-
+    if (!found) {
         io.stderr.write(`Comment id not found: ${commentId}\n`);
         return 1;
     }
 
-    const writeResult = await writeObservedNoteSafely(notePath, createContentFingerprint(noteContent), updated, {
-        settleMs: options.settleMs,
-    });
-    if (writeResult.kind === "changed") {
+    await writeSidecar(vaultRoot, noteRelativePath, updatedThreads);
+
+    const migrationResult = await stripLegacyBlockIfNeeded(vaultRoot, notePath, noteRelativePath, noteContent, hadLegacyBlock, options.settleMs);
+    if (migrationResult.kind === "changed") {
         io.stderr.write(
-            `Skipped appending to ${notePath} because ${writeResult.reason}. `
+            `Note content changed during sidecar migration; legacy block may still exist in ${notePath}. `
             + "Rerun after Obsidian Sync or other local edits settle.\n",
         );
-        return 1;
     }
 
     io.stdout.write(`Appended a new entry to comment ${commentId} in ${notePath}\n`);
@@ -772,32 +906,54 @@ export async function runUpdateNoteComment(argv, io = { stdout: process.stdout, 
         return 1;
     }
 
-    const notePath = writeTarget.notePath;
-    const commentId = writeTarget.commentId;
+    const { notePath, commentId, vaultRoot, noteRelativePath } = writeTarget;
     const nextCommentBody = await loadCommentBody(options);
-    const noteContent = await readFile(notePath, "utf8");
-    const storageModule = await loadStorageModule();
-    const updated = storageModule.replaceNoteCommentBodyById(noteContent, notePath, commentId, nextCommentBody);
+    const normalizedBody = normalizeCommentBody(nextCommentBody);
 
-    if (typeof updated !== "string") {
-        if (storageModule.getManagedSectionKind(noteContent) === "unsupported") {
-            io.stderr.write(getManagedSectionErrorMessage(storageModule, noteContent, notePath));
-            return 1;
+    let threads;
+    let noteContent;
+    let hadLegacyBlock;
+    try {
+        ({ threads, noteContent, hadLegacyBlock } = await loadThreadsWithFallback(vaultRoot, notePath, noteRelativePath));
+    } catch (error) {
+        io.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+        return 1;
+    }
+
+    let found = false;
+    const updatedThreads = threads.map((thread) => {
+        if (thread.id === commentId) {
+            found = true;
+            const entries = thread.entries.slice();
+            const latestEntry = entries[entries.length - 1];
+            if (latestEntry) {
+                latestEntry.body = normalizedBody;
+            }
+            return { ...thread, entries };
         }
+        const matchingEntryIndex = thread.entries.findIndex((entry) => entry.id === commentId);
+        if (matchingEntryIndex === -1) {
+            return thread;
+        }
+        found = true;
+        const entries = thread.entries.slice();
+        entries[matchingEntryIndex] = { ...entries[matchingEntryIndex], body: normalizedBody };
+        return { ...thread, entries };
+    });
 
+    if (!found) {
         io.stderr.write(`Comment id not found: ${commentId}\n`);
         return 1;
     }
 
-    const writeResult = await writeObservedNoteSafely(notePath, createContentFingerprint(noteContent), updated, {
-        settleMs: options.settleMs,
-    });
-    if (writeResult.kind === "changed") {
+    await writeSidecar(vaultRoot, noteRelativePath, updatedThreads);
+
+    const migrationResult = await stripLegacyBlockIfNeeded(vaultRoot, notePath, noteRelativePath, noteContent, hadLegacyBlock, options.settleMs);
+    if (migrationResult.kind === "changed") {
         io.stderr.write(
-            `Skipped updating ${notePath} because ${writeResult.reason}. `
+            `Note content changed during sidecar migration; legacy block may still exist in ${notePath}. `
             + "Rerun after Obsidian Sync or other local edits settle.\n",
         );
-        return 1;
     }
 
     io.stdout.write(`Updated comment ${commentId} in ${notePath}\n`);
@@ -827,37 +983,41 @@ export async function runResolveNoteComment(argv, io = { stdout: process.stdout,
         return 1;
     }
 
-    const notePath = writeTarget.notePath;
-    const commentId = writeTarget.commentId;
-    const noteContent = await readFile(notePath, "utf8");
-    const storageModule = await loadStorageModule();
-    const updated = storageModule.resolveNoteCommentById(noteContent, notePath, commentId);
+    const { notePath, commentId, vaultRoot, noteRelativePath } = writeTarget;
 
-    if (typeof updated !== "string") {
-        const managedSectionKind = storageModule.getManagedSectionKind(noteContent);
-        if (managedSectionKind === "unsupported") {
-            io.stderr.write(getManagedSectionErrorMessage(storageModule, noteContent, notePath));
-            return 1;
+    let threads;
+    let noteContent;
+    let hadLegacyBlock;
+    try {
+        ({ threads, noteContent, hadLegacyBlock } = await loadThreadsWithFallback(vaultRoot, notePath, noteRelativePath));
+    } catch (error) {
+        io.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+        return 1;
+    }
+
+    let found = false;
+    const updatedThreads = threads.map((thread) => {
+        const matchesThread = thread.id === commentId || thread.entries.some((entry) => entry.id === commentId);
+        if (!matchesThread) {
+            return thread;
         }
+        found = true;
+        return { ...thread, resolved: true };
+    });
 
-        if (managedSectionKind === "none") {
-            io.stderr.write(`No SideNote2 comments block found in ${notePath}\n`);
-            return 1;
-        }
-
+    if (!found) {
         io.stderr.write(`Comment id not found: ${commentId}\n`);
         return 1;
     }
 
-    const writeResult = await writeObservedNoteSafely(notePath, createContentFingerprint(noteContent), updated, {
-        settleMs: options.settleMs,
-    });
-    if (writeResult.kind === "changed") {
+    await writeSidecar(vaultRoot, noteRelativePath, updatedThreads);
+
+    const migrationResult = await stripLegacyBlockIfNeeded(vaultRoot, notePath, noteRelativePath, noteContent, hadLegacyBlock, options.settleMs);
+    if (migrationResult.kind === "changed") {
         io.stderr.write(
-            `Skipped resolving ${notePath} because ${writeResult.reason}. `
+            `Note content changed during sidecar migration; legacy block may still exist in ${notePath}. `
             + "Rerun after Obsidian Sync or other local edits settle.\n",
         );
-        return 1;
     }
 
     io.stdout.write(`Resolved comment ${commentId} in ${notePath}\n`);
