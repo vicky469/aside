@@ -141,9 +141,14 @@ function createHarness() {
     const otherActiveEl = createCommentElement({ commentId: "comment-2" });
     let renderCalls = 0;
     const revealedComments: string[] = [];
+    const openedCommentTargets: Array<{ filePath: string | null; commentId: string }> = [];
+    const openedLinks: Array<{ href: string; sourcePath: string }> = [];
 
     const controller = new SidebarInteractionController({
         app: {
+            vault: {
+                getName: () => "dev",
+            },
             workspace: {
                 activeLeaf: null,
                 setActiveLeaf: () => {},
@@ -171,8 +176,13 @@ function createHarness() {
         revealComment: async (comment) => {
             revealedComments.push(comment.id);
         },
+        openCommentById: async (filePath, commentId) => {
+            openedCommentTargets.push({ filePath, commentId });
+        },
         getPreferredFileLeaf: () => null,
-        openLinkText: async () => {},
+        openLinkText: async (href, sourcePath) => {
+            openedLinks.push({ href, sourcePath });
+        },
     });
 
     return {
@@ -181,6 +191,8 @@ function createHarness() {
         otherActiveEl,
         getRenderCalls: () => renderCalls,
         revealedComments,
+        openedCommentTargets,
+        openedLinks,
     };
 }
 
@@ -204,6 +216,22 @@ test("sidebar interaction controller opens a comment by marking it active and re
     assert.deepEqual(harness.revealedComments, ["comment-1"]);
     assert.deepEqual(harness.otherActiveEl.removeClassCalls, ["active"]);
     assert.deepEqual(harness.matchingCommentEl.addClassCalls, ["active"]);
+});
+
+test("sidebar interaction controller routes local side note protocol links through comment open flow", async () => {
+    const harness = createHarness();
+
+    await harness.controller.openSidebarInternalLink(
+        "obsidian://side-note2-comment?vault=dev&file=docs%2Ftarget.md&commentId=comment-9",
+        "docs/source.md",
+        {} as HTMLElement,
+    );
+
+    assert.deepEqual(harness.openedCommentTargets, [{
+        filePath: "docs/target.md",
+        commentId: "comment-9",
+    }]);
+    assert.deepEqual(harness.openedLinks, []);
 });
 
 test("sidebar interaction controller marks the targeted comment active", () => {

@@ -1,5 +1,9 @@
 import type { App, TFile, WorkspaceLeaf } from "obsidian";
 import type { Comment } from "../../commentManager";
+import {
+    isLocalSideNoteReferenceTarget,
+    parseSideNoteReferenceUrl,
+} from "../../core/text/commentReferences";
 import type { DraftComment } from "../../domain/drafts";
 import { copyTextToClipboard } from "../copyTextToClipboard";
 import { decideEditDismissal } from "./editDismissal";
@@ -46,6 +50,7 @@ export interface SidebarInteractionHost {
     cancelDraft(commentId: string): void;
     clearRevealedCommentSelection(): void;
     revealComment(comment: Comment): Promise<void>;
+    openCommentById?(filePath: string | null, commentId: string): Promise<void>;
     getPreferredFileLeaf(): WorkspaceLeaf | null;
     openLinkText(href: string, sourcePath: string): Promise<void>;
     shouldShowDeletedComments?(): boolean;
@@ -339,6 +344,18 @@ export class SidebarInteractionController {
         sourcePath: string,
         focusTarget: HTMLElement,
     ): Promise<void> {
+        const sideNoteTarget = parseSideNoteReferenceUrl(href);
+        const localVaultName = this.host.app.vault?.getName?.() ?? null;
+        if (
+            sideNoteTarget
+            && this.host.openCommentById
+            && isLocalSideNoteReferenceTarget(sideNoteTarget, localVaultName)
+        ) {
+            await this.host.openCommentById(sideNoteTarget.filePath, sideNoteTarget.commentId);
+            this.claimSidebarInteractionOwnership(focusTarget);
+            return;
+        }
+
         const targetLeaf = this.host.getPreferredFileLeaf();
         if (targetLeaf) {
             this.host.app.workspace.setActiveLeaf(targetLeaf, { focus: false });

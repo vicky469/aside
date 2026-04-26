@@ -56,6 +56,17 @@ export interface CommentNavigationHost {
 export class CommentNavigationController {
     constructor(private readonly host: CommentNavigationHost) {}
 
+    private resolveSidebarRevealFile(filePath: string | null): TFile | null {
+        if (filePath) {
+            const file = this.host.getFileByPath(filePath);
+            if (file) {
+                return file;
+            }
+        }
+
+        return this.host.getSidebarTargetFile();
+    }
+
     private async resolveCommentById(
         commentId: string,
         filePathHint?: string | null,
@@ -129,9 +140,10 @@ export class CommentNavigationController {
     private async activateSidebarView(options: {
         skipViewUpdate?: boolean;
         revealLeaf?: boolean;
+        targetFile?: TFile | null;
     } = {}): Promise<void> {
         const { workspace } = this.host.app;
-        const sidebarFile = this.host.getSidebarTargetFile();
+        const sidebarFile = options.targetFile ?? this.host.getSidebarTargetFile();
         const skipViewUpdate = options.skipViewUpdate === true;
 
         let leaf: WorkspaceLeaf | null = null;
@@ -207,11 +219,12 @@ export class CommentNavigationController {
         }
 
         const skipViewUpdate = this.host.getDraftComment() !== null;
-        const sidebarFile = this.host.getSidebarTargetFile();
         const scopeRootFilePath = comment?.filePath ?? revealedFilePath;
+        const sidebarFile = this.resolveSidebarRevealFile(scopeRootFilePath);
         await this.activateSidebarView({
             skipViewUpdate,
             revealLeaf: options.revealSidebar,
+            targetFile: sidebarFile,
         });
 
         const leaves = this.host.app.workspace.getLeavesOfType("sidenote2-view");

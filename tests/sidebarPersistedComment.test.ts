@@ -8,6 +8,7 @@ import {
     buildPersistedCommentPinActionPresentation,
     buildPersistedThreadEntryPresentation,
     formatSidebarCommentIndexLeadLabel,
+    formatSidebarSideNoteReferenceLabel,
     formatSidebarCommentSourceFileLabel,
     getDeletedRenderableThreadEntries,
     getInsertableSidebarCommentMarkdown,
@@ -690,6 +691,28 @@ test("formatSidebarCommentIndexLeadLabel uses the source page name for both page
             filePath: "docs/architecture.md",
         })),
         "architecture",
+    );
+});
+
+test("formatSidebarSideNoteReferenceLabel uses filename and selected text for anchored notes", () => {
+    assert.equal(
+        formatSidebarSideNoteReferenceLabel(createComment({
+            filePath: "books/the-goal.md",
+            anchorKind: "selection",
+            selectedText: "This is a long selected passage that should be trimmed for sidebar link rendering.",
+        }), "books/the-goal.md"),
+        "the-goal: This is a long selected passage that should b...",
+    );
+});
+
+test("formatSidebarSideNoteReferenceLabel uses filename and cleaned body preview for page notes", () => {
+    assert.equal(
+        formatSidebarSideNoteReferenceLabel(createComment({
+            filePath: "Notes/The Goal.md",
+            anchorKind: "page",
+            comment: "Continued from obsidian://side-note2-comment?vault=public&file=books%2Falpha.md&commentId=comment-1 and then a little more context.",
+        }), "Notes/The Goal.md"),
+        "The Goal: Continued from side note and then a little mo...",
     );
 });
 

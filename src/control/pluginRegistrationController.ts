@@ -48,6 +48,7 @@ export interface PluginRegistrationHost {
     createSidebarView(leaf: unknown): unknown;
     startDraftFromEditorSelection(editor: EditorSelectionLike, file: TFile | null): Promise<unknown>;
     highlightCommentById(filePath: string | null, commentId: string): Promise<void>;
+    openCommentById(filePath: string | null, commentId: string): Promise<void>;
     openIndexNote(): Promise<void> | void;
 }
 
@@ -73,7 +74,7 @@ export class PluginRegistrationController {
                 return;
             }
 
-            void this.host.highlightCommentById(target.filePath, target.commentId);
+            void this.host.openCommentById(target.filePath, target.commentId);
         });
         this.host.removeCommand(`${this.host.manifestId}:activate-view`);
 

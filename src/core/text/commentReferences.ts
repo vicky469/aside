@@ -261,7 +261,24 @@ export function replaceRawSideNoteReferenceUrls(
         localVaultName?: string | null;
     } = {},
 ): string {
-    const matches = findRawSideNoteReferenceUrls(value, options);
+    const occupiedRanges: Array<{ start: number; end: number }> = [];
+    for (const match of value.matchAll(MARKDOWN_LINK_PATTERN)) {
+        const fullMatch = match[0];
+        const index = match.index;
+        if (!fullMatch || index == null) {
+            continue;
+        }
+
+        occupiedRanges.push({
+            start: index,
+            end: index + fullMatch.length,
+        });
+    }
+
+    const matches = findRawSideNoteReferenceUrls(value, options).filter((match) => {
+        const end = match.index + match.length;
+        return !occupiedRanges.some((range) => match.index >= range.start && end <= range.end);
+    });
     if (!matches.length) {
         return value;
     }

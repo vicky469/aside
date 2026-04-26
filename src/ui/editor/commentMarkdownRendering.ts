@@ -1,4 +1,9 @@
 import { shortenBareUrlsInMarkdown } from "../../core/text/commentUrls";
+import {
+    buildSideNoteReferenceMarkdown,
+    replaceRawSideNoteReferenceUrls,
+    type RawSideNoteReferenceMatch,
+} from "../../core/text/commentReferences";
 
 const DASH_RULE_LINE = /^ {0,3}-(?:[ \t]*-){2,}[ \t]*$/;
 const FENCE_LINE = /^ {0,3}(`{3,}|~{3,})/;
@@ -98,7 +103,7 @@ function replaceLatexMathDelimitersOutsideInlineCode(line: string): string {
     return result;
 }
 
-export function normalizeCommentMarkdownForRender(markdown: string): string {
+function normalizePreparedCommentMarkdownForRender(markdown: string): string {
     if (!markdown) {
         return markdown;
     }
@@ -182,4 +187,31 @@ export function normalizeCommentMarkdownForRender(markdown: string): string {
     }
 
     return normalized.join("\n");
+}
+
+export interface NormalizeCommentMarkdownForRenderOptions {
+    resolveSideNoteReferenceLabel?: (match: RawSideNoteReferenceMatch) => string;
+}
+
+export function normalizeCommentMarkdownForRenderWithOptions(
+    markdown: string,
+    options: NormalizeCommentMarkdownForRenderOptions = {},
+): string {
+    if (!markdown) {
+        return markdown;
+    }
+
+    const normalizedSideNoteLinks = replaceRawSideNoteReferenceUrls(
+        markdown,
+        (match) => buildSideNoteReferenceMarkdown(
+            match.url,
+            options.resolveSideNoteReferenceLabel?.(match) ?? match.url,
+        ),
+    );
+
+    return normalizePreparedCommentMarkdownForRender(normalizedSideNoteLinks);
+}
+
+export function normalizeCommentMarkdownForRender(markdown: string): string {
+    return normalizeCommentMarkdownForRenderWithOptions(markdown);
 }

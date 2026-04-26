@@ -12,8 +12,9 @@ import type { SideNote2AgentTarget } from "../../core/config/agentTargets";
 import { getVisibleNoteContent } from "../../core/storage/noteCommentStorage";
 import { parseAgentDirectives } from "../../core/text/agentDirectives";
 import { splitTrailingSideNoteReferenceSection, type TrailingSideNoteReferenceSection } from "../../core/text/commentReferences";
+import { stripMarkdownLinksForPreview } from "../../core/text/commentUrls";
 import type { DraftComment } from "../../domain/drafts";
-import { normalizeCommentMarkdownForRender } from "../editor/commentMarkdownRendering";
+import { normalizeCommentMarkdownForRenderWithOptions } from "../editor/commentMarkdownRendering";
 import { decorateRenderedCommentMentions } from "../editor/commentEditorStyling";
 import { SIDE_NOTE2_REGENERATE_ICON_ID } from "../sideNote2Icon";
 import {
@@ -83,6 +84,7 @@ export interface SidebarPersistedCommentHost {
     enableSoftDeleteActions: boolean;
     showNestedComments: boolean;
     showNestedCommentsByDefault: boolean;
+    getKnownCommentById(commentId: string): Comment | null;
     editDraftComment: DraftComment | null;
     appendDraftComment: DraftComment | null;
     agentRun: AgentRunRecord | null;
@@ -191,6 +193,49 @@ export function formatSidebarCommentSourceFileLabel(filePath: string): string {
 
 export function formatSidebarCommentIndexLeadLabel(comment: Pick<Comment, "anchorKind" | "selectedText" | "filePath">): string {
     return formatSidebarCommentSourceFileLabel(comment.filePath);
+}
+
+const SIDEBAR_SIDE_NOTE_REFERENCE_PREVIEW_LIMIT = 48;
+const RAW_SIDE_NOTE_REFERENCE_URL_PATTERN = /obsidian:\/\/side-note2-comment\?[^)\]\s]+/g;
+
+function clipSidebarSideNoteReferencePreview(value: string): string {
+    const normalized = stripMarkdownLinksForPreview(
+        value.replace(RAW_SIDE_NOTE_REFERENCE_URL_PATTERN, "side note"),
+    )
+        .replace(/\r\n/g, "\n")
+        .replace(/\s+/g, " ")
+        .trim();
+
+    if (!normalized) {
+        return "";
+    }
+
+    if (normalized.length <= SIDEBAR_SIDE_NOTE_REFERENCE_PREVIEW_LIMIT) {
+        return normalized;
+    }
+
+    return `${normalized.slice(0, SIDEBAR_SIDE_NOTE_REFERENCE_PREVIEW_LIMIT - 3).trimEnd()}...`;
+}
+
+export function formatSidebarSideNoteReferenceLabel(
+    comment: Pick<Comment, "anchorKind" | "selectedText" | "comment" | "filePath"> | null,
+    targetFilePath: string | null,
+): string {
+    const fallbackFilePath = targetFilePath ?? comment?.filePath ?? "";
+    const fileLabel = formatSidebarCommentSourceFileLabel(fallbackFilePath);
+    if (!comment) {
+        return fileLabel || "Side note";
+    }
+
+    const preview = isPageComment(comment)
+        ? clipSidebarSideNoteReferencePreview(comment.comment)
+        : clipSidebarSideNoteReferencePreview(comment.selectedText);
+
+    if (!preview) {
+        return fileLabel || "Side note";
+    }
+
+    return fileLabel ? `${fileLabel}: ${preview}` : preview;
 }
 
 function renderObsidianExternalLinkIcon(container: HTMLElement): void {
@@ -433,7 +478,12 @@ async function renderThreadEntryContent(
     const bodyMarkdown = entryBodySection.body;
     if (bodyMarkdown.trim()) {
         await host.renderMarkdown(
-            normalizeCommentMarkdownForRender(bodyMarkdown),
+            normalizeCommentMarkdownForRenderWithOptions(bodyMarkdown, {
+                resolveSideNoteReferenceLabel: (match) => formatSidebarSideNoteReferenceLabel(
+                    host.getKnownCommentById(match.target.commentId),
+                    match.target.filePath,
+                ),
+            }),
             container,
             thread.filePath,
         );

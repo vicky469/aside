@@ -1,6 +1,9 @@
 import * as assert from "node:assert/strict";
 import test from "node:test";
-import { normalizeCommentMarkdownForRender } from "../src/ui/editor/commentMarkdownRendering";
+import {
+    normalizeCommentMarkdownForRender,
+    normalizeCommentMarkdownForRenderWithOptions,
+} from "../src/ui/editor/commentMarkdownRendering";
 
 test("normalizeCommentMarkdownForRender inserts a blank line before standalone dash rules", () => {
     assert.equal(
@@ -27,6 +30,27 @@ test("normalizeCommentMarkdownForRender shortens legacy bare urls for rendering"
     assert.equal(
         normalizeCommentMarkdownForRender("Check https://www.shipmonk.com/resources/content-hub/dropshipping-with-a-fulfillment-company?utm_source=google&utm_medium=cpc&utm_campaign=summer"),
         "Check [shipmonk.com/resources/.../dropshipping-with-a-fulfillment-company](https://www.shipmonk.com/resources/content-hub/dropshipping-with-a-fulfillment-company?utm_source=google&utm_medium=cpc&utm_campaign=summer)",
+    );
+});
+
+test("normalizeCommentMarkdownForRender converts raw side note urls into clickable markdown links", () => {
+    assert.equal(
+        normalizeCommentMarkdownForRender(
+            "See obsidian://side-note2-comment?vault=Dev&file=docs%2Falpha.md&commentId=comment-1 next.",
+        ),
+        "See [obsidian://side-note2-comment?vault=Dev&file=docs%2Falpha.md&commentId=comment-1](obsidian://side-note2-comment?vault=Dev&file=docs%2Falpha.md&commentId=comment-1) next.",
+    );
+});
+
+test("normalizeCommentMarkdownForRenderWithOptions uses custom side note link labels", () => {
+    assert.equal(
+        normalizeCommentMarkdownForRenderWithOptions(
+            "See obsidian://side-note2-comment?vault=Dev&file=docs%2Falpha.md&commentId=comment-1 next.",
+            {
+                resolveSideNoteReferenceLabel: () => "alpha: selected text",
+            },
+        ),
+        "See [alpha: selected text](obsidian://side-note2-comment?vault=Dev&file=docs%2Falpha.md&commentId=comment-1) next.",
     );
 });
 

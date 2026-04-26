@@ -759,6 +759,7 @@ export default class SideNote2View extends ItemView {
                 this.plugin.clearRevealedCommentSelection();
             },
             revealComment: (comment) => this.plugin.revealComment(comment),
+            openCommentById: (filePath, commentId) => this.plugin.openCommentById(filePath, commentId),
             getPreferredFileLeaf: () => this.plugin.getPreferredFileLeaf(),
             openLinkText: (href, sourcePath) => this.app.workspace.openLinkText(href, sourcePath, false),
             shouldShowDeletedComments: () => this.plugin.shouldShowDeletedComments(),
@@ -2866,6 +2867,7 @@ export default class SideNote2View extends ItemView {
             enableSoftDeleteActions: !isIndexView,
             showNestedComments: this.plugin.shouldShowNestedCommentsForThread(thread.id),
             showNestedCommentsByDefault: this.plugin.shouldShowNestedComments(),
+            getKnownCommentById: (commentId) => this.plugin.getCommentById(commentId),
             editDraftComment,
             appendDraftComment,
             agentRun,

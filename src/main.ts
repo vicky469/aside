@@ -419,6 +419,7 @@ export default class SideNote2 extends Plugin {
         startDraftFromEditorSelection: (editor, file) =>
             this.commentEntryController.startDraftFromEditorSelection(editor as unknown as Editor, file),
         highlightCommentById: (filePath, commentId) => this.highlightCommentById(filePath, commentId),
+        openCommentById: (filePath, commentId) => this.openCommentById(filePath, commentId),
         openIndexNote: () => this.openIndexNote(),
     });
     private readonly workspaceContextController = new WorkspaceContextController({
@@ -1157,7 +1158,7 @@ export default class SideNote2 extends Plugin {
         await this.commentNavigationController.highlightCommentById(filePath, commentId);
     }
 
-    private async openCommentById(filePath: string | null, commentId: string) {
+    public async openCommentById(filePath: string | null, commentId: string) {
         await this.ensureCommentSelectionVisible(commentId, filePath);
         await this.commentNavigationController.openCommentById(filePath, commentId);
     }
@@ -1180,6 +1181,10 @@ export default class SideNote2 extends Plugin {
 
     public getThreadsForFile(filePath: string, options: { includeDeleted?: boolean } = {}): CommentThread[] {
         return this.commentManager.getThreadsForFile(filePath, options);
+    }
+
+    public getCommentById(commentId: string): Comment | null {
+        return this.getKnownCommentById(commentId);
     }
 
     public getThreadById(commentId: string): CommentThread | null {

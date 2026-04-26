@@ -54,6 +54,18 @@ test("replaceRawSideNoteReferenceUrls normalizes pasted side note urls", () => {
     );
 });
 
+test("replaceRawSideNoteReferenceUrls leaves existing markdown links unchanged", () => {
+    const value = "See [Alpha insight](obsidian://side-note2-comment?vault=Dev&file=docs%2Falpha.md&commentId=comment-1) next.";
+    const normalized = replaceRawSideNoteReferenceUrls(value, (match) =>
+        buildSideNoteReferenceMarkdown(match.url, "Replaced"),
+    );
+
+    assert.equal(
+        normalized,
+        value,
+    );
+});
+
 test("buildSideNoteReferenceMarkdown normalizes labels into markdown-link-safe text", () => {
     assert.equal(
         buildSideNoteReferenceMarkdown(

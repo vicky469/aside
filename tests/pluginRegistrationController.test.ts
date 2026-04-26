@@ -75,6 +75,7 @@ function createHarness() {
     const createdSidebarLeaves: unknown[] = [];
     const draftCalls: Array<{ selected: boolean; filePath: string | null }> = [];
     const highlightedCommentTargets: Array<{ filePath: string | null; commentId: string }> = [];
+    const openedCommentTargets: Array<{ filePath: string | null; commentId: string }> = [];
     let openIndexNoteCount = 0;
 
     const controller = new PluginRegistrationController({
@@ -111,6 +112,9 @@ function createHarness() {
         highlightCommentById: async (filePath, commentId) => {
             highlightedCommentTargets.push({ filePath, commentId });
         },
+        openCommentById: async (filePath, commentId) => {
+            openedCommentTargets.push({ filePath, commentId });
+        },
         openIndexNote: async () => {
             openIndexNoteCount += 1;
         },
@@ -127,6 +131,7 @@ function createHarness() {
         createdSidebarLeaves,
         draftCalls,
         highlightedCommentTargets,
+        openedCommentTargets,
         getOpenIndexNoteCount: () => openIndexNoteCount,
     };
 }
@@ -159,7 +164,8 @@ test("plugin registration controller registers the view, protocol handler, comma
         commentId: "comment-1",
     });
     await Promise.resolve();
-    assert.deepEqual(harness.highlightedCommentTargets, [{
+    assert.deepEqual(harness.highlightedCommentTargets, []);
+    assert.deepEqual(harness.openedCommentTargets, [{
         filePath: "docs/file.md",
         commentId: "comment-1",
     }]);
