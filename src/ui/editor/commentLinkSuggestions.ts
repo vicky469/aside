@@ -13,6 +13,7 @@ export interface CreateNoteSuggestion {
 }
 
 export type SideNoteLinkSuggestion = ExistingNoteSuggestion | CreateNoteSuggestion;
+const INVALID_NOTE_PATH_SEGMENT_CHARACTER_PATTERN = /[:]/g;
 
 function joinPath(parentPath: string, childPath: string): string {
     if (!parentPath || parentPath === "/") {
@@ -24,6 +25,10 @@ function joinPath(parentPath: string, childPath: string): string {
 
 function ensureMarkdownExtension(path: string): string {
     return path.toLowerCase().endsWith(".md") ? path : `${path}.md`;
+}
+
+function stripMarkdownExtension(path: string): string {
+    return path.replace(/\.md$/i, "");
 }
 
 function extractLinkPath(rawQuery: string): string {
@@ -96,9 +101,14 @@ function resolveNewNotePath(app: App, sourcePath: string, query: string): string
         return null;
     }
 
-    const markdownPath = ensureMarkdownExtension(linkPath);
+    const sanitizedLinkPath = normalizeNotePath(linkPath, { sanitizeSegments: true });
+    if (!sanitizedLinkPath) {
+        return null;
+    }
+
+    const markdownPath = ensureMarkdownExtension(sanitizedLinkPath);
     if (markdownPath.includes("/")) {
-        return normalizeNotePath(markdownPath);
+        return normalizeNotePath(markdownPath, { sanitizeSegments: true });
     }
 
     const parentFolder = app.fileManager.getNewFileParent(sourcePath, markdownPath);
@@ -110,13 +120,18 @@ function getCreateSuggestion(app: App, sourcePath: string, query: string): Creat
         return null;
     }
 
+    const sanitizedDisplayName = normalizeNotePath(extractLinkPath(query), { sanitizeSegments: true });
+    if (!sanitizedDisplayName) {
+        return null;
+    }
+
     const notePath = resolveNewNotePath(app, sourcePath, query);
     if (!notePath) {
         return null;
     }
 
     const exactMatch = app.vault.getAbstractFileByPath(notePath);
-    const resolvedMatch = app.metadataCache.getFirstLinkpathDest(query, sourcePath);
+    const resolvedMatch = app.metadataCache.getFirstLinkpathDest(stripMarkdownExtension(notePath), sourcePath);
     if (exactMatch || resolvedMatch) {
         return null;
     }
@@ -124,7 +139,7 @@ function getCreateSuggestion(app: App, sourcePath: string, query: string): Creat
     return {
         type: "create",
         notePath,
-        displayName: extractLinkPath(query),
+        displayName: sanitizedDisplayName,
     };
 }
 
@@ -167,12 +182,24 @@ export function getSideNoteLinkSuggestions(
 }
 
 export async function createSideNoteLinkNote(app: App, notePath: string): Promise<TFile> {
-    const folderPath = getFolderPath(notePath);
+    const normalizedNotePath = normalizeNotePath(notePath, { sanitizeSegments: true });
+    if (!normalizedNotePath) {
+        throw new Error("Unable to create a note from an empty or invalid path.");
+    }
+
+    const folderPath = getFolderPath(normalizedNotePath);
     await ensureFolderPathExists(app, folderPath);
-    return app.vault.create(notePath, "");
+    return app.vault.create(normalizedNotePath, "");
 }
 
-function normalizeNotePath(path: string): string {
+function sanitizeNotePathSegment(segment: string): string {
+    return segment
+        .replace(INVALID_NOTE_PATH_SEGMENT_CHARACTER_PATTERN, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+}
+
+function normalizeNotePath(path: string, options: { sanitizeSegments?: boolean } = {}): string {
     const isAbsolute = path.startsWith("/");
     const segments = path
         .replace(/\\/g, "/")
@@ -186,7 +213,12 @@ function normalizeNotePath(path: string): string {
             continue;
         }
 
-        normalizedSegments.push(segment);
+        const normalizedSegment = options.sanitizeSegments ? sanitizeNotePathSegment(segment) : segment;
+        if (!normalizedSegment) {
+            return "";
+        }
+
+        normalizedSegments.push(normalizedSegment);
     }
 
     const normalized = normalizedSegments.join("/");

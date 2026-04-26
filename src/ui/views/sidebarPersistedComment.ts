@@ -408,6 +408,22 @@ export function buildPersistedThreadEntryPresentation(
     };
 }
 
+function interceptSideNoteProtocolLinks(
+    container: HTMLElement,
+    sourcePath: string,
+    host: SidebarPersistedCommentHost,
+): void {
+    const links = container.querySelectorAll<HTMLAnchorElement>('a[href^="obsidian://side-note2-comment"]');
+    for (let i = 0; i < links.length; i++) {
+        const linkEl = links[i];
+        linkEl.addEventListener("click", (event: MouseEvent) => {
+            event.preventDefault();
+            event.stopPropagation();
+            void host.openSidebarInternalLink(linkEl.href, sourcePath, linkEl);
+        });
+    }
+}
+
 async function renderThreadEntryContent(
     container: HTMLDivElement,
     thread: CommentThread,
@@ -422,6 +438,7 @@ async function renderThreadEntryContent(
             thread.filePath,
         );
         decorateRenderedCommentMentions(container);
+        interceptSideNoteProtocolLinks(container, thread.filePath, host);
     }
 }
 
@@ -1369,6 +1386,9 @@ export async function renderPersistedCommentCard(
     const commentEl = renderedParent.commentEl;
     const actionsEl = renderedParent.actionsEl;
     renderTasks.push(renderedParent.renderTask);
+    if (hasStoredChildEntries) {
+        commentEl.addClass("sidenote2-has-child-entries");
+    }
     if (!parentEditDraft) {
         const parentRetryRun = getRetryableAgentRunForSidebarComment(comment.id, host.threadAgentRuns);
         const parentInsertMarkdown = !comment.deletedAt && !thread.deletedAt

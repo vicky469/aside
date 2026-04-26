@@ -1,7 +1,7 @@
 import * as assert from "node:assert/strict";
 import test from "node:test";
 import type { App, TFile } from "obsidian";
-import { getSideNoteLinkSuggestions } from "../src/ui/editor/commentLinkSuggestions";
+import { createSideNoteLinkNote, getSideNoteLinkSuggestions } from "../src/ui/editor/commentLinkSuggestions";
 
 function createFile(path: string): TFile {
     const basename = path.split("/").pop()?.replace(/\.md$/i, "") ?? path;
@@ -11,11 +11,20 @@ function createFile(path: string): TFile {
     } as TFile;
 }
 
-function createApp(files: TFile[]): App {
+function createApp(files: TFile[]) {
+    const createdFolders: string[] = [];
+    const createdNotes: Array<{ path: string; content: string }> = [];
     return {
         vault: {
             getMarkdownFiles: () => files,
             getAbstractFileByPath: (path: string) => files.find((file) => file.path === path) ?? null,
+            createFolder: async (path: string) => {
+                createdFolders.push(path);
+            },
+            create: async (path: string, content: string) => {
+                createdNotes.push({ path, content });
+                return createFile(path);
+            },
         },
         metadataCache: {
             fileToLinktext: (file: TFile) => file.path.replace(/\.md$/i, ""),
@@ -27,7 +36,16 @@ function createApp(files: TFile[]): App {
         fileManager: {
             getNewFileParent: () => ({ path: "Inbox" }),
         },
-    } as unknown as App;
+        createdFolders,
+        createdNotes,
+    } as unknown as App & {
+        vault: {
+            createFolder(path: string): Promise<void>;
+            create(path: string, content: string): Promise<TFile>;
+        };
+        createdFolders: string[];
+        createdNotes: Array<{ path: string; content: string }>;
+    };
 }
 
 test("getSideNoteLinkSuggestions prepends a create suggestion for a new note", () => {
@@ -71,4 +89,34 @@ test("getSideNoteLinkSuggestions ranks closer basename matches first", () => {
 
     assert.equal(existingSuggestions[0] && existingSuggestions[0].type === "existing" ? existingSuggestions[0].file.path : null, "Projects/Alpha.md");
     assert.equal(existingSuggestions[1] && existingSuggestions[1].type === "existing" ? existingSuggestions[1].file.path : null, "Reference/Alpha summary.md");
+});
+
+test("getSideNoteLinkSuggestions sanitizes invalid path characters in create suggestions", () => {
+    const app = createApp([]);
+
+    const suggestions = getSideNoteLinkSuggestions(app, "Research: bottleneck/Chapter: 1", "Notes/Today.md");
+    const createSuggestion = suggestions[0];
+
+    assert.equal(createSuggestion?.type, "create");
+    assert.equal(
+        createSuggestion && createSuggestion.type === "create" ? createSuggestion.notePath : null,
+        "Research bottleneck/Chapter 1.md",
+    );
+    assert.equal(
+        createSuggestion && createSuggestion.type === "create" ? createSuggestion.displayName : null,
+        "Research bottleneck/Chapter 1",
+    );
+});
+
+test("createSideNoteLinkNote sanitizes invalid path characters before creating folders and files", async () => {
+    const app = createApp([]);
+
+    const created = await createSideNoteLinkNote(app, "Research: bottleneck/Chapter: 1.md");
+
+    assert.equal(created.path, "Research bottleneck/Chapter 1.md");
+    assert.deepEqual(app.createdFolders, ["Research bottleneck"]);
+    assert.deepEqual(app.createdNotes, [{
+        path: "Research bottleneck/Chapter 1.md",
+        content: "",
+    }]);
 });
