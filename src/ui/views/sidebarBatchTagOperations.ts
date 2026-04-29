@@ -31,7 +31,73 @@ export function threadHasTag(thread: CommentThread, targetTagKey: string): boole
     return thread.entries.some((entry) => hasTagText(entry.body, targetTagKey));
 }
 
-export function prependTagToCommentBody(commentBody: string, normalizedTagText: string): string {
+function isHorizontalWhitespace(char: string): boolean {
+    return char === " " || char === "\t";
+}
+
+function extractTagsFromTagOnlyLine(line: string): string[] | null {
+    const tags: string[] = [];
+    let index = 0;
+
+    while (index < line.length) {
+        while (index < line.length && isHorizontalWhitespace(line.charAt(index))) {
+            index += 1;
+        }
+
+        if (index >= line.length) {
+            break;
+        }
+
+        if (line.charAt(index) !== "#") {
+            return null;
+        }
+
+        let end = index + 1;
+        while (end < line.length && isTagCharacter(line.charAt(end))) {
+            end += 1;
+        }
+
+        if (end === index + 1) {
+            return null;
+        }
+
+        tags.push(normalizeTagText(line.slice(index, end)));
+        index = end;
+
+        if (index < line.length && !isHorizontalWhitespace(line.charAt(index))) {
+            return null;
+        }
+    }
+
+    return tags.length > 0 ? tags : null;
+}
+
+function extractLeadingTagLines(commentBody: string): { tags: string[]; remainder: string } | null {
+    const lines = commentBody.split("\n");
+    const tags: string[] = [];
+    let consumedLines = 0;
+
+    for (const line of lines) {
+        const lineTags = extractTagsFromTagOnlyLine(line);
+        if (!lineTags) {
+            break;
+        }
+
+        tags.push(...lineTags);
+        consumedLines += 1;
+    }
+
+    if (tags.length === 0) {
+        return null;
+    }
+
+    return {
+        tags,
+        remainder: lines.slice(consumedLines).join("\n"),
+    };
+}
+
+export function appendTagToCommentBody(commentBody: string, normalizedTagText: string): string {
     const normalizedTag = normalizeTagText(normalizedTagText);
     if (!normalizedTag) {
         return commentBody;
@@ -46,7 +112,18 @@ export function prependTagToCommentBody(commentBody: string, normalizedTagText: 
     if (!trimmedBody) {
         return normalizedTag;
     }
-    return `${normalizedTag}\n${trimmedBody}`;
+
+    const leadingTagLines = extractLeadingTagLines(trimmedBody);
+    if (!leadingTagLines) {
+        return `${normalizedTag}\n${trimmedBody}`;
+    }
+
+    const nextTagLine = [...leadingTagLines.tags, normalizedTag].join(" ");
+    if (!leadingTagLines.remainder) {
+        return nextTagLine;
+    }
+
+    return `${nextTagLine}\n${leadingTagLines.remainder}`;
 }
 
 export function removeTagFromCommentBody(commentBody: string, normalizedTagText: string): string {
@@ -153,7 +230,7 @@ export function applyBatchTagToThreads(options: {
             continue;
         }
 
-        const parentBody = prependTagToCommentBody(parentEntry.body, options.normalizedTagText);
+        const parentBody = appendTagToCommentBody(parentEntry.body, options.normalizedTagText);
         options.editComment(parentEntry.id, parentBody);
         hasMutations = true;
         successfulIds.push(threadId);

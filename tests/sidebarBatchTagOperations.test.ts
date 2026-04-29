@@ -2,6 +2,7 @@ import * as assert from "node:assert/strict";
 import test from "node:test";
 import { CommentManager, type CommentThread } from "../src/commentManager";
 import {
+    appendTagToCommentBody,
     applyBatchTagToThreads,
     persistBatchTagMutation,
     removeBatchTagFromThreads,
@@ -54,6 +55,44 @@ test("applyBatchTagToThreads treats an existing child tag as already tagged", ()
     assert.equal(result.hasMutations, false);
     assert.deepEqual(result.successfulIds, ["thread-1"]);
     assert.equal(manager.getThreadById("thread-1")?.entries[0]?.body, "Parent entry");
+});
+
+test("appendTagToCommentBody keeps added tags on one leading line", () => {
+    assert.equal(
+        appendTagToCommentBody("#project\nParent entry", "#todo"),
+        "#project #todo\nParent entry",
+    );
+});
+
+test("appendTagToCommentBody normalizes stacked leading tag lines when appending", () => {
+    assert.equal(
+        appendTagToCommentBody("#project\n#todo\nParent entry", "#later"),
+        "#project #todo #later\nParent entry",
+    );
+});
+
+test("applyBatchTagToThreads appends onto an existing leading tag line", () => {
+    const manager = new CommentManager([
+        createThread({
+            entries: [
+                { id: "thread-1", body: "#project\nParent entry", timestamp: 100 },
+                { id: "entry-2", body: "Child entry", timestamp: 200 },
+            ],
+        }),
+    ]);
+
+    const result = applyBatchTagToThreads({
+        filePath: "docs/note.md",
+        selectedThreadIds: ["thread-1"],
+        getThreadById: (threadId) => manager.getThreadById(threadId),
+        editComment: (commentId, nextBody) => {
+            manager.editComment(commentId, nextBody);
+        },
+        normalizedTagText: "#todo",
+    });
+
+    assert.equal(result.hasMutations, true);
+    assert.equal(manager.getThreadById("thread-1")?.entries[0]?.body, "#project #todo\nParent entry");
 });
 
 test("removeTagFromCommentBody preserves unrelated spacing and indentation", () => {
