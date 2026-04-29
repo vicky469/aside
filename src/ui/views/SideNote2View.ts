@@ -1072,6 +1072,7 @@ export default class SideNote2View extends ItemView {
     }
 
     async onOpen() {
+        this.interactionController.cancelPendingRevealedCommentSelectionClear();
         await Promise.resolve();
         if (!this.file) {
             this.file = this.plugin.getSidebarTargetFile();
@@ -1098,6 +1099,7 @@ export default class SideNote2View extends ItemView {
         document.removeEventListener("copy", this.interactionController.documentCopyHandler, true);
         document.removeEventListener("selectionchange", this.interactionController.documentSelectionChangeHandler);
         this.containerEl.removeEventListener("click", this.interactionController.sidebarClickHandler);
+        this.interactionController.cancelPendingRevealedCommentSelectionClear();
         await Promise.resolve();
     }
 
@@ -4315,6 +4317,7 @@ export default class SideNote2View extends ItemView {
         document.removeEventListener("selectionchange", this.interactionController.documentSelectionChangeHandler);
         this.containerEl.removeEventListener("click", this.interactionController.sidebarClickHandler);
         this.interactionController.clearPendingFocus();
+        this.interactionController.cancelPendingRevealedCommentSelectionClear();
     }
 
     private async deleteCommentWithConfirm(commentId: string): Promise<boolean> {

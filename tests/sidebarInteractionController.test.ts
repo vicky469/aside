@@ -481,9 +481,22 @@ test("sidebar interaction controller autosaves draft edits on sidebar background
 test("sidebar interaction controller autosaves draft edits on document clicks outside the sidebar", async () => {
     const originalHTMLElement = globalThis.HTMLElement;
     const originalNode = globalThis.Node;
+    const originalWindow = globalThis.window;
     Object.assign(globalThis, {
         HTMLElement: FakeSidebarElement,
         Node: FakeNode,
+    });
+
+    const rafCallbacks: Array<(time: number) => void> = [];
+    Object.assign(globalThis, {
+        window: {
+            requestAnimationFrame(callback: (time: number) => void) {
+                rafCallbacks.push(callback);
+                return rafCallbacks.length;
+            },
+            cancelAnimationFrame() {},
+            getSelection: () => null,
+        },
     });
 
     try {
@@ -532,12 +545,93 @@ test("sidebar interaction controller autosaves draft edits on document clicks ou
 
         assert.deepEqual(saveDraftCalls, ["draft-1"]);
         assert.equal(controller.getActiveCommentId(), null);
+        assert.equal(clearRevealedCommentSelectionCalls, 0);
+        assert.equal(rafCallbacks.length, 1);
+
+        const callback = rafCallbacks.shift();
+        assert.ok(callback);
+        callback?.(0);
+
         assert.equal(clearRevealedCommentSelectionCalls, 1);
         assert.deepEqual(activeEl.removeClassCalls, ["active"]);
     } finally {
         Object.assign(globalThis, {
             HTMLElement: originalHTMLElement,
             Node: originalNode,
+            window: originalWindow,
+        });
+    }
+});
+
+test("sidebar interaction controller defers revealed selection clearing until after outside editor clicks settle", () => {
+    const originalHTMLElement = globalThis.HTMLElement;
+    const originalNode = globalThis.Node;
+    const originalWindow = globalThis.window;
+    Object.assign(globalThis, {
+        HTMLElement: FakeSidebarElement,
+        Node: FakeNode,
+    });
+
+    const rafCallbacks: Array<(time: number) => void> = [];
+    Object.assign(globalThis, {
+        window: {
+            requestAnimationFrame(callback: (time: number) => void) {
+                rafCallbacks.push(callback);
+                return rafCallbacks.length;
+            },
+            cancelAnimationFrame() {},
+            getSelection: () => null,
+        },
+    });
+
+    try {
+        const outsideEl = new FakeSidebarElement();
+        let clearRevealedCommentSelectionCalls = 0;
+
+        const controller = new SidebarInteractionController({
+            app: {
+                workspace: {
+                    activeLeaf: null,
+                    setActiveLeaf: () => {},
+                },
+            } as never,
+            leaf: {} as never,
+            containerEl: {
+                querySelector: () => null,
+                querySelectorAll: () => [],
+                contains: (target: unknown) => target !== outsideEl,
+            } as never,
+            getCurrentFile: () => ({ path: "docs/architecture.md" }) as never,
+            getDraftForView: () => null,
+            renderComments: async () => {},
+            saveDraft: () => {},
+            cancelDraft: () => {},
+            clearRevealedCommentSelection: () => {
+                clearRevealedCommentSelectionCalls += 1;
+            },
+            revealComment: async () => {},
+            getPreferredFileLeaf: () => null,
+            openLinkText: async () => {},
+        });
+
+        controller.documentMouseDownHandler({
+            button: 0,
+            target: outsideEl,
+        } as unknown as MouseEvent);
+
+        assert.equal(clearRevealedCommentSelectionCalls, 0);
+        assert.equal(rafCallbacks.length, 1);
+
+        const callback = rafCallbacks.shift();
+        assert.ok(callback);
+        callback?.(0);
+
+        assert.equal(clearRevealedCommentSelectionCalls, 1);
+    } finally {
+        Object.assign(globalThis, {
+            HTMLElement: originalHTMLElement,
+            Node: originalNode,
+            window: originalWindow,
         });
     }
 });

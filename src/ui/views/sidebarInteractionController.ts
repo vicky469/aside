@@ -61,6 +61,7 @@ export interface SidebarInteractionHost {
 export class SidebarInteractionController {
     private activeCommentId: string | null = null;
     private pendingDraftFocusFrame: number | null = null;
+    private pendingRevealedCommentClearFrame: number | null = null;
 
     constructor(private readonly host: SidebarInteractionHost) {}
 
@@ -136,10 +137,12 @@ export class SidebarInteractionController {
         void this.handleDraftDismissal(target, {
             clickedComment: false,
             clickedSectionChrome: false,
+            deferRevealedCommentSelectionClear: true,
         });
     };
 
     private async handleSidebarClick(event: MouseEvent): Promise<void> {
+        this.cancelPendingRevealedCommentSelectionClear();
         const target = event.target as Node | null;
         const clickedComment = target instanceof HTMLElement
             ? target.closest(".sidenote2-comment-item")
@@ -181,6 +184,7 @@ export class SidebarInteractionController {
         options: {
             clickedComment: boolean;
             clickedSectionChrome: boolean;
+            deferRevealedCommentSelectionClear?: boolean;
         },
     ): Promise<void> {
         const file = this.host.getCurrentFile();
@@ -216,15 +220,58 @@ export class SidebarInteractionController {
             }
 
             if (decision.shouldClearRevealedCommentSelection) {
-                this.host.clearRevealedCommentSelection();
+                this.clearRevealedCommentSelection({
+                    defer: options.deferRevealedCommentSelectionClear,
+                });
             }
             return;
         }
 
         if (!options.clickedComment && !options.clickedSectionChrome) {
             this.clearActiveState();
-            this.host.clearRevealedCommentSelection();
+            this.clearRevealedCommentSelection({
+                defer: options.deferRevealedCommentSelectionClear,
+            });
         }
+    }
+
+    private clearRevealedCommentSelection(options: {
+        defer?: boolean;
+    } = {}): void {
+        if (options.defer) {
+            this.scheduleRevealedCommentSelectionClear();
+            return;
+        }
+
+        this.cancelPendingRevealedCommentSelectionClear();
+        this.host.clearRevealedCommentSelection();
+    }
+
+    private scheduleRevealedCommentSelectionClear(): void {
+        const win = globalThis.window;
+        if (!win || typeof win.requestAnimationFrame !== "function") {
+            this.cancelPendingRevealedCommentSelectionClear();
+            this.host.clearRevealedCommentSelection();
+            return;
+        }
+
+        this.cancelPendingRevealedCommentSelectionClear();
+        this.pendingRevealedCommentClearFrame = win.requestAnimationFrame(() => {
+            this.pendingRevealedCommentClearFrame = null;
+            this.host.clearRevealedCommentSelection();
+        });
+    }
+
+    public cancelPendingRevealedCommentSelectionClear(): void {
+        if (this.pendingRevealedCommentClearFrame === null) {
+            return;
+        }
+
+        const win = globalThis.window;
+        if (win && typeof win.cancelAnimationFrame === "function") {
+            win.cancelAnimationFrame(this.pendingRevealedCommentClearFrame);
+        }
+        this.pendingRevealedCommentClearFrame = null;
     }
 
     public getActiveCommentId(): string | null {
@@ -348,6 +395,7 @@ export class SidebarInteractionController {
         sourcePath: string,
         focusTarget: HTMLElement,
     ): Promise<void> {
+        this.cancelPendingRevealedCommentSelectionClear();
         const sideNoteTarget = parseSideNoteReferenceUrl(href);
         const localVaultName = this.host.app.vault?.getName?.() ?? null;
         if (
@@ -370,6 +418,7 @@ export class SidebarInteractionController {
     }
 
     public async openCommentInEditor(comment: Comment): Promise<void> {
+        this.cancelPendingRevealedCommentSelectionClear();
         this.setActiveComment(comment.id);
         await this.host.revealComment(comment);
     }

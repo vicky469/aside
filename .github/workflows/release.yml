@@ -55,10 +55,21 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_NOTES: ${{ steps.release_notes.outputs.notes }}
         run: |
-          gh release create "$GITHUB_REF_NAME" \
-            --title "$GITHUB_REF_NAME" \
-            --verify-tag \
-            --latest \
-            --generate-notes \
-            --notes "$RELEASE_NOTES" \
-            main.js manifest.json styles.css
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "Release $GITHUB_REF_NAME already exists; updating metadata and assets."
+            gh release edit "$GITHUB_REF_NAME" \
+              --title "$GITHUB_REF_NAME" \
+              --latest \
+              --verify-tag
+            gh release upload "$GITHUB_REF_NAME" \
+              --clobber \
+              main.js manifest.json styles.css
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              --title "$GITHUB_REF_NAME" \
+              --verify-tag \
+              --latest \
+              --generate-notes \
+              --notes "$RELEASE_NOTES" \
+              main.js manifest.json styles.css
+          fi
