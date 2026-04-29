@@ -30,11 +30,11 @@ SideNote2
 <table>
   <tr>
     <td align="center" valign="top" width="50%">
-      <strong>Light theme</strong><br>
+      <strong>Side note index</strong><br>
       <img src="./assets/demo.gif" alt="SideNote2 demo preview in Obsidian dark theme" width="100%">
     </td>
     <td align="center" valign="top" width="50%">
-      <strong>Dark theme</strong><br>
+      <strong>Agent reply</strong><br>
       <img src="./assets/demo2.gif" alt="SideNote2 demo preview in Obsidian light theme" width="100%">
     </td>
   </tr>
@@ -50,6 +50,7 @@ For development, setup, testing, and release workflow, see [README-dev.md](./REA
 - Uses a dedicated sidebar for drafting, editing, resolving, reopening, and deleting comments.
 - Supports Obsidian-style `[[wikilinks]]` inside side comments to link existing notes or create new markdown notes.
 - Type `#` in a side note to search existing tags or add a new one.
+- Browse, filter, and batch-apply local side-note tags from the active note sidebar.
 - Keeps resolved comments archived instead of removing them.
 - Generates `SideNote2 index.md` as a vault-wide comment index.
 - Lets the index sidebar switch between the comment list and a thought-trail graph built from side-note wiki links. The graph follows those links across connected markdown files, so it can show multi-step trails instead of only direct one-hop links.
@@ -68,11 +69,6 @@ For development, setup, testing, and release workflow, see [README-dev.md](./REA
 4. Install and sign in to Codex on the same machine.
    Quick check: open Terminal in your vault or project folder and run `codex`.
 5. Optional: install the SideNote2 Codex skill if you also use external Codex handoff workflows.
-   Built-in `@codex` inside SideNote2 does not require this.
-   If that external `sidenote2` skill is already installed, SideNote2 refreshes it automatically when a newer plugin release starts up.
-
-install the public `sidenote2` skill from this repo inside Codex:
-
 ```
 $skill-installer install https://github.com/vicky469/SideNote2/tree/main/skills/sidenote2
 ```
