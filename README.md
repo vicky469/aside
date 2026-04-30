@@ -6,8 +6,8 @@
 SideNote2
 </p>
 <p align="center">
-  <a href="https://github.com/vicky469/SideNote2/releases/tag/2.0.55">
-    <img src="https://img.shields.io/badge/beta-2.0.55-f97316?style=flat-square" alt="Current beta">
+  <a href="https://github.com/vicky469/SideNote2/releases/tag/2.0.56">
+    <img src="https://img.shields.io/badge/beta-2.0.56-f97316?style=flat-square" alt="Current beta">
   </a>
   <a href="https://buymeacoffee.com/vickyli">
     <img src="https://img.shields.io/badge/Buy%20me%20a%20coffee-support-FFDD00?style=flat-square&logo=buymeacoffee&logoColor=000000" alt="Buy Me a Coffee">
@@ -135,9 +135,9 @@ Restart Codex after installing the skill.
 
 ## Storage
 
-Side notes are stored in plugin data sidecars under `.obsidian/plugins/side-note2/sidenotes/by-note/<hash-prefix>/<full-hash>.json`.
+Side notes sync through SideNote2 plugin data when Obsidian Sync is syncing plugin data. The local sidecar files under `.obsidian/plugins/side-note2/sidenotes/by-note/<hash-prefix>/<full-hash>.json` are a hot cache that can be rebuilt from synced plugin data.
 
-On the first startup after the sidecar-storage release, SideNote2 auto-migrates legacy hidden `<!-- SideNote2 comments -->` blocks into those sidecar files and strips the managed block from the source note.
+On startup after storage migration releases, SideNote2 migrates legacy hidden `<!-- SideNote2 comments -->` blocks into canonical plugin data and sidecar cache files, then strips the managed block from the source note.
 
 `SideNote2 index.md` is still just a generated index, not separate storage.
 

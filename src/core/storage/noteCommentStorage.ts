@@ -277,6 +277,10 @@ function parseHiddenSectionJson(sectionContent: string): string | null {
     return jsonText.length ? jsonText : null;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
 function parseManagedSectionJson(sectionContent: string): unknown[] | null {
     const jsonText = parseHiddenSectionJson(sectionContent.trim());
     if (jsonText === null) {
@@ -284,8 +288,18 @@ function parseManagedSectionJson(sectionContent: string): unknown[] | null {
     }
 
     try {
-        const parsed: unknown = JSON.parse(jsonText);
-        return Array.isArray(parsed) ? parsed : null;
+		const parsed: unknown = JSON.parse(jsonText);
+		if (Array.isArray(parsed)) {
+			const threads: unknown[] = parsed;
+			return threads;
+		}
+
+		if (isRecord(parsed) && parsed.schemaVersion === 1 && Array.isArray(parsed.threads)) {
+			const threads: unknown[] = parsed.threads;
+			return threads;
+		}
+
+        return null;
     } catch {
         return null;
     }

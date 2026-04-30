@@ -82,7 +82,9 @@ import {
 } from "./logs/logService";
 import bundledSidenoteSkillContent from "../skills/sidenote2/SKILL.md";
 
-const SIDECAR_STORAGE_MIGRATION_VERSION = 1;
+const SIDECAR_STORAGE_MIGRATION_VERSION = 2;
+const SIDE_NOTE_SYNC_EVENT_MIGRATION_VERSION = 2;
+const SIDE_NOTE_SYNC_DEVICE_ID_STORAGE_PREFIX = "sidenote2.sync-device-id.v1";
 
 // Helper function to generate SHA256 hash using Web Crypto API (works on mobile)
 async function generateHash(text: string): Promise<string> {
@@ -117,6 +119,10 @@ function getSafeLocalStorage(): Storage | null {
     } catch {
         return null;
     }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return !!value && typeof value === "object" && !Array.isArray(value);
 }
 
 type RemoteRuntimeFetchFallback = NonNullable<Parameters<typeof createRemoteRuntimeRequester>[0]["fetcher"]>;
@@ -287,6 +293,10 @@ export default class SideNote2 extends Plugin {
         getStoredNoteContent: (file) => this.workspaceViewController.getStoredNoteContent(file),
         getParsedNoteComments: (filePath, noteContent) => this.getParsedNoteComments(filePath, noteContent),
         getPluginDataDirPath: () => this.getPluginDataDirPath(),
+        getSideNoteSyncDeviceId: () => this.getSideNoteSyncDeviceId(),
+        readPersistedPluginData: () => this.indexNoteSettingsController.readPersistedPluginData(),
+        loadPersistedPluginData: () => this.loadData(),
+        writePersistedPluginData: (data) => this.indexNoteSettingsController.writePersistedPluginData(data),
         isAllCommentsNotePath: (filePath) => this.isAllCommentsNotePath(filePath),
         isCommentableFile: (file): file is TFile => this.isCommentableFile(file),
         isMarkdownEditorFocused: (file) => this.workspaceViewController.isMarkdownEditorFocused(file),
@@ -447,6 +457,7 @@ export default class SideNote2 extends Plugin {
     private activeSidebarFile: TFile | null = null;
     private aggregateCommentIndex = new AggregateCommentIndex();
     private parsedNoteCache = new ParsedNoteCache(20);
+    private sideNoteSyncDeviceId: string | null = null;
 
     private async detectRuntimeMode(): Promise<"local" | "release"> {
         const pluginRootRelativePath = normalizePath(`${this.app.vault.configDir}/plugins/${this.manifest.id}`);
@@ -486,6 +497,8 @@ export default class SideNote2 extends Plugin {
         this.commentManager = new CommentManager([]);
         await this.loadSettings();
         await this.ensureSidecarStorageMigrated();
+        await this.ensureSideNoteSyncEventsMigrated();
+        await this.commentPersistenceController.replaySyncedSideNoteEvents();
         this.pluginRegistrationController.register();
         this.registerEditorExtension([
             this.commentHighlightController.createLivePreviewManagedBlockPlugin(),
@@ -572,6 +585,15 @@ export default class SideNote2 extends Plugin {
 
     async saveSettings() {
         await this.indexNoteSettingsController.saveSettings();
+    }
+
+    async onExternalSettingsChange() {
+        await this.loadSettings();
+        this.agentRunStore.load();
+        const appliedEventCount = await this.commentPersistenceController.replaySyncedSideNoteEvents();
+        await this.logEvent("info", "persistence", "sync.plugin-data.external-settings", {
+            appliedEventCount,
+        });
     }
 
     public readPersistedPluginData() {
@@ -772,6 +794,25 @@ export default class SideNote2 extends Plugin {
         return this.manifest.dir ?? normalizePath(`${this.app.vault.configDir}/plugins/${this.manifest.id}`);
     }
 
+    private getSideNoteSyncDeviceId(): string {
+        if (this.sideNoteSyncDeviceId) {
+            return this.sideNoteSyncDeviceId;
+        }
+
+        const storage = getSafeLocalStorage();
+        const storageKey = `${SIDE_NOTE_SYNC_DEVICE_ID_STORAGE_PREFIX}.${this.manifest.id}.${this.app.vault.getName()}`;
+        const storedDeviceId = storage?.getItem(storageKey);
+        if (storedDeviceId && storedDeviceId.trim()) {
+            this.sideNoteSyncDeviceId = storedDeviceId;
+            return storedDeviceId;
+        }
+
+        const nextDeviceId = generateCommentId();
+        storage?.setItem(storageKey, nextDeviceId);
+        this.sideNoteSyncDeviceId = nextDeviceId;
+        return nextDeviceId;
+    }
+
     private getSidecarStorageMigrationVersion(): number | null {
         const persistedData = this.indexNoteSettingsController.readPersistedPluginData();
         return typeof persistedData.sidecarStorageMigrationVersion === "number"
@@ -811,6 +852,60 @@ export default class SideNote2 extends Plugin {
                 error,
                 "persistence",
                 "storage.note.migrate.startup.warn",
+            );
+        }
+    }
+
+    private getSideNoteSyncEventMigrationVersion(): number | null {
+        const persistedData = this.indexNoteSettingsController.readPersistedPluginData();
+        const migrationVersions = isRecord(persistedData.sideNoteSyncEventMigrationVersions)
+            ? persistedData.sideNoteSyncEventMigrationVersions
+            : {};
+        const deviceMigrationVersion = migrationVersions[this.getSideNoteSyncDeviceId()];
+        return typeof deviceMigrationVersion === "number"
+            ? deviceMigrationVersion
+            : null;
+    }
+
+    private async setSideNoteSyncEventMigrationVersion(version: number): Promise<void> {
+        const persistedData = this.indexNoteSettingsController.readPersistedPluginData();
+        const deviceId = this.getSideNoteSyncDeviceId();
+        const migrationVersions = isRecord(persistedData.sideNoteSyncEventMigrationVersions)
+            ? persistedData.sideNoteSyncEventMigrationVersions
+            : {};
+        if (migrationVersions[deviceId] === version) {
+            return;
+        }
+
+        await this.indexNoteSettingsController.writePersistedPluginData({
+            ...persistedData,
+            sideNoteSyncEventMigrationVersions: {
+                ...migrationVersions,
+                [deviceId]: version,
+            },
+        });
+    }
+
+    private async ensureSideNoteSyncEventsMigrated(): Promise<void> {
+        if (this.getSideNoteSyncEventMigrationVersion() === SIDE_NOTE_SYNC_EVENT_MIGRATION_VERSION) {
+            return;
+        }
+
+        try {
+            await this.logEvent("info", "persistence", "sync.plugin-data.migrate.startup.begin", {
+                version: SIDE_NOTE_SYNC_EVENT_MIGRATION_VERSION,
+            });
+            await this.commentPersistenceController.migrateSidecarsToSyncedPluginDataOnStartup();
+            await this.setSideNoteSyncEventMigrationVersion(SIDE_NOTE_SYNC_EVENT_MIGRATION_VERSION);
+            await this.logEvent("info", "persistence", "sync.plugin-data.migrate.startup.success", {
+                version: SIDE_NOTE_SYNC_EVENT_MIGRATION_VERSION,
+            });
+        } catch (error) {
+            this.warn(
+                "Failed to migrate SideNote2 sidecar data into synced plugin data.",
+                error,
+                "persistence",
+                "sync.plugin-data.migrate.startup.warn",
             );
         }
     }

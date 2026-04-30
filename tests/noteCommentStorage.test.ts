@@ -33,6 +33,27 @@ function createComment(overrides: Partial<Comment> = {}): Comment {
     };
 }
 
+function createThread(overrides: Partial<CommentThread> = {}): CommentThread {
+    return {
+        id: "thread-1",
+        filePath: "note.md",
+        startLine: 1,
+        startChar: 2,
+        endLine: 1,
+        endChar: 7,
+        selectedText: "hello",
+        selectedTextHash: "hash-1",
+        entries: [{
+            id: "entry-1",
+            body: "Thread body",
+            timestamp: 1710000000000,
+        }],
+        createdAt: 1710000000000,
+        updatedAt: 1710000000000,
+        ...overrides,
+    };
+}
+
 test("serializeNoteComments stores comments inside a managed appendix", () => {
     const note = "# Title\n\nAlpha body.\n";
     const serialized = serializeNoteComments(note, [
@@ -380,6 +401,35 @@ test("getManagedSectionKind distinguishes threaded, unsupported, and missing man
     assert.equal(getManagedSectionKind(unsupported), "unsupported");
 
     assert.equal(getManagedSectionKind("Body\n"), "none");
+});
+
+test("parseNoteComments recognizes legacy object-shaped SideNote2 blocks as managed storage", () => {
+    const legacyEnvelope = [
+        "# Title",
+        "",
+        "Visible body.",
+        "",
+        "<!-- SideNote2 comments",
+        JSON.stringify({
+            schemaVersion: 1,
+            noteHash: "hash-note",
+            notePath: "note.md",
+            revisionId: "revision-1",
+            appliedWatermark: {},
+            threads: [createThread()],
+        }, null, 2),
+        "-->",
+        "",
+    ].join("\n");
+
+    const parsed = parseNoteComments(legacyEnvelope, "note.md");
+
+    assert.equal(getManagedSectionKind(legacyEnvelope), "threaded");
+    assert.equal(parsed.mainContent, "# Title\n\nVisible body.");
+    assert.equal(parsed.threads.length, 1);
+    assert.equal(parsed.threads[0].id, "thread-1");
+    assert.equal(parsed.threads[0].entries[0].body, "Thread body");
+    assert.equal(serializeNoteCommentThreads(legacyEnvelope, []), "# Title\n\nVisible body.\n");
 });
 
 test("getManagedSectionKind rejects notes with two valid SideNote2 managed blocks", () => {

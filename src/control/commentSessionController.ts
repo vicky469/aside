@@ -28,7 +28,7 @@ export class CommentSessionController {
     private readonly nestedCommentThreadOverrideIds = new Set<string>();
     private showResolvedComments = false;
     private showDeletedComments = false;
-    private showNestedComments = true;
+    private showNestedComments = false;
 
     constructor(private readonly host: CommentSessionHost) {}
 

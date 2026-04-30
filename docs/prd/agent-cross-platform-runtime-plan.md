@@ -210,6 +210,59 @@ They require one of:
 
 So remote mobile support should start with reply generation, not full arbitrary workspace automation.
 
+## Cross-Device Plugin State Sync
+
+The simplest cross-device state path to try first is Obsidian-synced plugin data, not source-note rewrites or a new visible vault folder.
+
+Use this only for small event/state metadata:
+
+- pending and completed agent run records
+- per-device event logs
+- side-note mutation events if the same event pipeline is reused
+- lightweight watermarks that say which device has processed which event
+
+Do not treat local plugin sidecars as synced truth. They remain a fast local cache.
+
+### Proposed first experiment
+
+Store synced event data in the plugin's `data.json` through `loadData()` and `saveData()`.
+
+Rationale:
+
+- `.obsidian` is the vault configuration folder and is eligible for Obsidian Sync.
+- Obsidian exposes `Plugin.onExternalSettingsChange()` specifically for externally modified plugin `data.json`.
+- Obsidian Sync can merge plugin/settings JSON conflicts key-wise, which is a better first test than writing one shared markdown file from multiple devices.
+- This avoids touching source note prose and avoids creating additional visible vault files for the first experiment.
+
+Recommended shape:
+
+```ts
+interface SyncedPluginEventState {
+  schemaVersion: 1;
+  deviceLogs: Record<string, {
+    lastClock: number;
+    events: SyncedPluginEvent[];
+  }>;
+  processedWatermarks: Record<string, Record<string, number>>;
+}
+```
+
+Rules:
+
+- Use one top-level key per device log so Sync's JSON merge has fewer overlapping writes.
+- Store a stable local `deviceId` outside the synced event payload if possible, or initialize it once and never rotate it automatically.
+- Keep event payloads compact and bounded; `data.json` should not become a permanent unbounded database.
+- On `onExternalSettingsChange()`, reload the synced event state, apply unseen events into the local cache, and refresh visible SideNote2 views.
+- Compact only events covered by all known-device watermarks.
+
+### Product caveats
+
+This depends on the user's Obsidian Sync settings. If vault/plugin configuration sync is off on a device, `data.json` will not be a reliable cross-device transport.
+
+Community plugin settings may also require reload or force-quit behavior on mobile before all changes are observed. The plugin should still implement `onExternalSettingsChange()`, but the product should not assume every external settings change is live-applied instantly on every platform.
+
+If the `data.json` experiment proves unreliable or too conflict-prone, choose an explicit fallback later. Do not pre-create visible sync storage until there is evidence that plugin data sync cannot satisfy the product requirement.
+
 ## Architecture Plan
 
 ### Phase 1: runtime abstraction
@@ -233,6 +286,25 @@ Add a remote transport that works on both desktop and mobile:
 - authentication
 
 This should reuse the existing in-thread run model rather than inventing a separate mobile UI.
+
+### Phase 2a: Synced plugin state experiment
+
+Use plugin `data.json` for the small event log needed for cross-device agent and side-note state. Do not add visible synced vault storage for this phase.
+
+Implementation requirements:
+
+- add a versioned synced event-state object under plugin data
+- use per-device event logs and logical clocks
+- keep local JSON caches as rebuildable caches only
+- implement `onExternalSettingsChange()` to replay remote events
+- add diagnostics for device ID, last processed event, pending outbox size, and last external settings reload
+
+Exit criteria:
+
+- desktop-to-mobile state appears after normal Obsidian Sync without source-note edits or visible sync folders
+- mobile-to-desktop state appears after normal Obsidian Sync without source-note edits or visible sync folders
+- simultaneous edits from two devices do not overwrite each other in `data.json`
+- event compaction does not remove an event before all known devices have processed it
 
 ### Phase 3: hosted paid runtime
 
@@ -259,8 +331,10 @@ After cross-platform reply generation is stable, evaluate richer modes for:
 
 1. Build runtime abstraction and explicit mode selection.
 2. Ship remote-runtime Codex execution on desktop and mobile.
-3. Revisit hosted paid runtime only after billing and entitlement are real.
-4. Expand hosted or remote productization beyond the first bridge after the base model is stable.
+3. Test plugin `data.json` sync for small cross-device event state.
+4. Decide on any fallback only after plugin data sync has been tested and shown unreliable.
+5. Revisit hosted paid runtime only after billing and entitlement are real.
+6. Expand hosted or remote productization beyond the first bridge after the base model is stable.
 
 ## Acceptance Criteria
 
@@ -272,9 +346,11 @@ This plan is successful when:
 - the first rollout uses only user-owned access
 - local or remote-runtime users are not silently switched onto operator-paid compute
 - the same SideNote2 thread UX works on both desktop and mobile
+- cross-device event state can sync through plugin data without creating a visible sync folder
 
 ## Open Questions
 
 - Should remote runtime mean raw API key entry, account linking, or a user-managed bridge service?
 - For remote runtime, should the first version support one provider shape only, or a generic bridge contract?
 - If hosted runtime is revisited later, should it keep the same `@codex` label or use distinct branding in settings?
+- Is plugin `data.json` sync reliable enough on mobile for event-state transport?

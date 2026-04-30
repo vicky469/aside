@@ -19,6 +19,8 @@ export type PersistedPluginData = Partial<SideNote2Settings> & {
     enableDebugMode?: unknown;
     syncedBundledSidenoteSkillPluginVersion?: unknown;
     sidecarStorageMigrationVersion?: unknown;
+    sideNoteSyncEventState?: unknown;
+    sideNoteSyncEventMigrationVersions?: unknown;
 };
 
 export interface LoadedSettingsResolution {

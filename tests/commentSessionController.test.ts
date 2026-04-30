@@ -83,42 +83,42 @@ test("comment session controller can skip sidebar rerenders while still updating
 test("comment session controller refreshes comment views when nested comments are toggled", async () => {
     const harness = createHarness();
 
-    assert.equal(harness.controller.shouldShowNestedComments(), true);
-    assert.equal(await harness.controller.setShowNestedComments(false), true);
     assert.equal(harness.controller.shouldShowNestedComments(), false);
+    assert.equal(await harness.controller.setShowNestedComments(true), true);
+    assert.equal(harness.controller.shouldShowNestedComments(), true);
     assert.equal(harness.getRefreshCommentViewsCount(), 1);
     assert.equal(harness.getRefreshEditorDecorationsCount(), 0);
     assert.equal(harness.getRefreshMarkdownPreviewsCount(), 0);
 
-    assert.equal(await harness.controller.setShowNestedComments(false), false);
+    assert.equal(await harness.controller.setShowNestedComments(true), false);
     assert.equal(harness.getRefreshCommentViewsCount(), 1);
 });
 
 test("comment session controller can override nested comment visibility per thread and reset with show all", async () => {
     const harness = createHarness();
 
-    assert.equal(harness.controller.shouldShowNestedCommentsForThread("thread-1"), true);
-    assert.equal(await harness.controller.setShowNestedCommentsForThread("thread-1", false), true);
     assert.equal(harness.controller.shouldShowNestedCommentsForThread("thread-1"), false);
-    assert.equal(harness.controller.shouldShowNestedCommentsForThread("thread-2"), true);
-    assert.equal(harness.getRefreshCommentViewsCount(), 1);
-
-    assert.equal(await harness.controller.setShowNestedCommentsForThread("thread-1", false), false);
-    assert.equal(harness.getRefreshCommentViewsCount(), 1);
-
-    assert.equal(await harness.controller.setShowNestedComments(false), true);
-    assert.equal(harness.controller.shouldShowNestedCommentsForThread("thread-1"), false);
-    assert.equal(harness.controller.shouldShowNestedCommentsForThread("thread-2"), false);
-    assert.equal(harness.getRefreshCommentViewsCount(), 2);
-
     assert.equal(await harness.controller.setShowNestedCommentsForThread("thread-1", true), true);
     assert.equal(harness.controller.shouldShowNestedCommentsForThread("thread-1"), true);
     assert.equal(harness.controller.shouldShowNestedCommentsForThread("thread-2"), false);
-    assert.equal(harness.getRefreshCommentViewsCount(), 3);
+    assert.equal(harness.getRefreshCommentViewsCount(), 1);
+
+    assert.equal(await harness.controller.setShowNestedCommentsForThread("thread-1", true), false);
+    assert.equal(harness.getRefreshCommentViewsCount(), 1);
 
     assert.equal(await harness.controller.setShowNestedComments(true), true);
     assert.equal(harness.controller.shouldShowNestedCommentsForThread("thread-1"), true);
     assert.equal(harness.controller.shouldShowNestedCommentsForThread("thread-2"), true);
+    assert.equal(harness.getRefreshCommentViewsCount(), 2);
+
+    assert.equal(await harness.controller.setShowNestedCommentsForThread("thread-1", false), true);
+    assert.equal(harness.controller.shouldShowNestedCommentsForThread("thread-1"), false);
+    assert.equal(harness.controller.shouldShowNestedCommentsForThread("thread-2"), true);
+    assert.equal(harness.getRefreshCommentViewsCount(), 3);
+
+    assert.equal(await harness.controller.setShowNestedComments(false), true);
+    assert.equal(harness.controller.shouldShowNestedCommentsForThread("thread-1"), false);
+    assert.equal(harness.controller.shouldShowNestedCommentsForThread("thread-2"), false);
     assert.equal(harness.getRefreshCommentViewsCount(), 4);
 });
 
@@ -130,10 +130,10 @@ test("comment session controller can skip sidebar rerenders for deleted and nest
     }), true);
     assert.equal(harness.getRefreshCommentViewsCount(), 0);
 
-    assert.equal(await harness.controller.setShowNestedCommentsForThread("thread-1", false, {
+    assert.equal(await harness.controller.setShowNestedCommentsForThread("thread-1", true, {
         skipCommentViewRefresh: true,
     }), true);
-    assert.equal(harness.controller.shouldShowNestedCommentsForThread("thread-1"), false);
+    assert.equal(harness.controller.shouldShowNestedCommentsForThread("thread-1"), true);
     assert.equal(harness.getRefreshCommentViewsCount(), 0);
 });
 

@@ -531,7 +531,14 @@ export async function writeSidecar(vaultRoot, noteRelativePath, threads) {
 export async function loadThreadsWithFallback(vaultRoot, notePath, noteRelativePath) {
     const sidecarThreads = await readSidecar(vaultRoot, noteRelativePath);
     if (sidecarThreads) {
-        return { threads: sidecarThreads, noteContent: null, hadLegacyBlock: false };
+        const noteContent = await readFile(notePath, "utf8");
+        const storageModule = await loadStorageModule();
+        const managedSectionKind = storageModule.getManagedSectionKind(noteContent);
+        return {
+            threads: sidecarThreads,
+            noteContent,
+            hadLegacyBlock: managedSectionKind === "threaded",
+        };
     }
     const noteContent = await readFile(notePath, "utf8");
     const storageModule = await loadStorageModule();
