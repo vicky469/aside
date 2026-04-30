@@ -109,6 +109,10 @@ import {
     type SidebarPrimaryMode,
 } from "./viewState";
 import { normalizeSidebarViewFile } from "./sidebarViewFileState";
+import {
+    buildSidebarFileInsertEdit,
+    getSingleOpenFileInsertTarget,
+} from "./sidebarFileInsertion";
 
 function matchesResolvedVisibility(resolved: boolean | undefined, showResolved: boolean): boolean {
     return showResolved ? resolved === true : resolved !== true;
@@ -206,28 +210,6 @@ function isMermaidRuntimeLike(value: unknown): value is MermaidRuntimeLike {
     const candidate = value as Partial<MermaidRuntimeLike>;
     return typeof candidate.initialize === "function"
         && typeof candidate.render === "function";
-}
-
-function buildAppendToFileEndText(
-    noteContent: string,
-    blockMarkdown: string,
-): string {
-    const normalizedBlock = blockMarkdown.trim();
-    if (!normalizedBlock) {
-        return "";
-    }
-
-    if (!noteContent) {
-        return normalizedBlock;
-    }
-
-    if (noteContent.endsWith("\n\n")) {
-        return normalizedBlock;
-    }
-
-    return noteContent.endsWith("\n")
-        ? `\n${normalizedBlock}`
-        : `\n\n${normalizedBlock}`;
 }
 
 function shouldReplaceOpenMarkdownFileInsertTarget(
@@ -3556,6 +3538,7 @@ export default class SideNote2View extends ItemView {
         }
 
         this.app.workspace.setActiveLeaf(target.leaf, { focus: true });
+        const cursorLine = target.editable ? target.view.editor.getCursor().line : null;
 
         const editableView = await ensureEditableMarkdownLeafForInsert(target.leaf);
         if (!editableView) {
@@ -3564,23 +3547,15 @@ export default class SideNote2View extends ItemView {
         }
 
         const editor = editableView.editor;
-        const insertionText = buildAppendToFileEndText(editor.getValue(), normalizedMarkdown);
-        if (!insertionText) {
+        const insertEdit = buildSidebarFileInsertEdit(editor.getValue(), normalizedMarkdown, cursorLine);
+        if (!insertEdit) {
             new Notice("Unable to add that content.");
             return false;
         }
 
-        const lastLine = editor.lastLine();
-        const endPosition = {
-            line: lastLine,
-            ch: editor.getLine(lastLine).length,
-        };
-        editor.replaceRange(insertionText, endPosition);
-        const nextEndPosition = {
-            line: editor.lastLine(),
-            ch: editor.getLine(editor.lastLine()).length,
-        };
-        editor.setSelection(nextEndPosition, nextEndPosition);
+        editor.replaceRange(insertEdit.text, insertEdit.position);
+        const nextPosition = editor.offsetToPos(editor.posToOffset(insertEdit.position) + insertEdit.text.length);
+        editor.setSelection(nextPosition, nextPosition);
         editableView.editor.focus();
         new Notice("Added to file.");
         return true;
@@ -3591,6 +3566,17 @@ export default class SideNote2View extends ItemView {
         if (!availableTargets.length) {
             new Notice("Open a markdown file first.");
             return false;
+        }
+
+        const directTarget = getSingleOpenFileInsertTarget(availableTargets);
+        if (directTarget) {
+            try {
+                return await this.insertCommentMarkdownIntoOpenFile(directTarget, markdown);
+            } catch (error) {
+                console.error("Failed to add comment markdown to the open file", error);
+                new Notice("Unable to add to that file.");
+                return false;
+            }
         }
 
         return new Promise<boolean>((resolve) => {
