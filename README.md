@@ -6,8 +6,8 @@
 SideNote2
 </p>
 <p align="center">
-  <a href="https://github.com/vicky469/SideNote2/releases/tag/2.0.57">
-    <img src="https://img.shields.io/badge/beta-2.0.57-f97316?style=flat-square" alt="Current beta">
+  <a href="https://github.com/vicky469/SideNote2/releases/tag/2.0.58">
+    <img src="https://img.shields.io/badge/beta-2.0.58-f97316?style=flat-square" alt="Current beta">
   </a>
   <a href="https://buymeacoffee.com/vickyli">
     <img src="https://img.shields.io/badge/Buy%20me%20a%20coffee-support-FFDD00?style=flat-square&logo=buymeacoffee&logoColor=000000" alt="Buy Me a Coffee">
