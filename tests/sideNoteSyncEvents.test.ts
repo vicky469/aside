@@ -4,8 +4,8 @@ import type { CommentThread } from "../src/commentManager";
 import {
     mergeSideNoteSyncEventStates,
     SideNoteSyncEventStore,
-} from "../src/control/sideNoteSyncEventStore";
-import type { PersistedPluginData } from "../src/control/indexNoteSettingsPlanner";
+} from "../src/sync/sideNoteSyncEventStore";
+import type { PersistedPluginData } from "../src/settings/indexNoteSettingsPlanner";
 import {
     buildSideNoteSyncEventInputsForThreadDiff,
     decodeSideNoteSyncEventLine,

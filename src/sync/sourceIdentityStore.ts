@@ -1,4 +1,4 @@
-import type { PersistedPluginData } from "./indexNoteSettingsPlanner";
+import type { PersistedPluginData } from "../settings/indexNoteSettingsPlanner";
 
 export const SOURCE_IDENTITY_STATE_SCHEMA_VERSION = 1;
 

@@ -1,8 +1,10 @@
 import esbuild from "esbuild";
 import { execFile } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import process from "process";
 import { promisify } from "node:util";
+import { pathToFileURL } from "node:url";
 import builtins from "builtin-modules";
 
 const banner =
@@ -14,11 +16,122 @@ if you want to view the source, please visit the github repository of this plugi
 
 const prod = (process.argv[2] === "production");
 const pluginId = "side-note2";
+const rootBundlePath = "main.js";
+const devBundlePath = ".sidenote2-dev/main.js";
 const hotReloadEnabled = !prod && process.env.SIDENOTE2_HOT_RELOAD !== "0";
+const hotReloadVault = process.env.SIDENOTE2_HOT_RELOAD_VAULT ?? process.env.OBSIDIAN_VAULT ?? "dev";
+const hotReloadCdpPort = process.env.SIDENOTE2_HOT_RELOAD_CDP_PORT ?? process.env.OBSIDIAN_REMOTE_DEBUGGING_PORT ?? "9222";
 const execFileAsync = promisify(execFile);
 
 let hotReloadInFlight = false;
 let hotReloadQueued = false;
+
+function formatError(error) {
+	return error instanceof Error ? error.message : String(error);
+}
+
+async function openCdpWebSocket(url) {
+	const socket = new WebSocket(url);
+	await new Promise((resolve, reject) => {
+		const timer = setTimeout(() => reject(new Error("Timed out opening CDP socket")), 2000);
+		socket.addEventListener("open", () => {
+			clearTimeout(timer);
+			resolve();
+		}, { once: true });
+		socket.addEventListener("error", (event) => {
+			clearTimeout(timer);
+			reject(new Error(`CDP socket error: ${event.type}`));
+		}, { once: true });
+	});
+	return socket;
+}
+
+async function reloadPluginViaCdp() {
+	if (typeof fetch !== "function" || typeof WebSocket !== "function") {
+		throw new Error("Current Node runtime does not expose fetch/WebSocket for CDP reload");
+	}
+
+	const targetsResponse = await fetch(`http://127.0.0.1:${hotReloadCdpPort}/json/list`);
+	if (!targetsResponse.ok) {
+		throw new Error(`CDP target list returned HTTP ${targetsResponse.status}`);
+	}
+
+	const targets = await targetsResponse.json();
+	const target = targets.find((candidate) => candidate.url === "app://obsidian.md/index.html") ?? targets[0];
+	if (!target?.webSocketDebuggerUrl) {
+		throw new Error("No Obsidian CDP target found");
+	}
+
+	const socket = await openCdpWebSocket(target.webSocketDebuggerUrl);
+	let nextId = 1;
+	const pending = new Map();
+
+	socket.addEventListener("message", (event) => {
+		const message = JSON.parse(event.data);
+		if (!message.id || !pending.has(message.id)) {
+			return;
+		}
+
+		const entry = pending.get(message.id);
+		pending.delete(message.id);
+		if (message.error) {
+			entry.reject(new Error(JSON.stringify(message.error)));
+			return;
+		}
+
+		entry.resolve(message.result);
+	});
+
+	const send = (method, params = {}) => new Promise((resolve, reject) => {
+		const id = nextId;
+		nextId += 1;
+		pending.set(id, { resolve, reject });
+		socket.send(JSON.stringify({ id, method, params }));
+	});
+
+	try {
+		const result = await send("Runtime.evaluate", {
+			returnByValue: true,
+			expression: `
+				(() => {
+					const pluginId = ${JSON.stringify(pluginId)};
+					if (!globalThis.app?.plugins) {
+						throw new Error("Obsidian app.plugins is unavailable");
+					}
+					setTimeout(async () => {
+						try {
+							if (app.plugins.plugins[pluginId]) {
+								await app.plugins.disablePlugin(pluginId);
+							}
+							await app.plugins.enablePlugin(pluginId);
+						} catch (error) {
+							console.error("[side-note2 hot-reload]", error);
+						}
+					}, 0);
+					return true;
+				})()
+			`,
+		});
+
+		if (result.exceptionDetails) {
+			throw new Error(result.exceptionDetails.text ?? "CDP plugin reload failed");
+		}
+
+		if (result.result?.value !== true) {
+			throw new Error("CDP reload was not scheduled");
+		}
+	} finally {
+		socket.close();
+	}
+}
+
+async function reloadPluginViaCli() {
+	const reloadArgs = ["plugin:reload", `id=${pluginId}`];
+	if (hotReloadVault.trim()) {
+		reloadArgs.push(`vault=${hotReloadVault.trim()}`);
+	}
+	await execFileAsync("obsidian", reloadArgs);
+}
 
 async function reloadPlugin() {
 	if (!hotReloadEnabled) {
@@ -35,14 +148,17 @@ async function reloadPlugin() {
 	do {
 		hotReloadQueued = false;
 		try {
-			await execFileAsync("obsidian", ["plugin:reload", `id=${pluginId}`]);
-			console.log(`[hot-reload] Reloaded ${pluginId}`);
+			await reloadPluginViaCdp();
+			console.log(`[hot-reload] Reloaded ${pluginId} via CDP`);
 		} catch (error) {
-			const message =
-				error instanceof Error
-					? error.message
-					: String(error);
-			console.warn(`[hot-reload] Failed to reload ${pluginId}: ${message}`);
+			try {
+				await reloadPluginViaCli();
+				console.log(`[hot-reload] Reloaded ${pluginId} via Obsidian CLI`);
+			} catch (cliError) {
+				console.warn(
+					`[hot-reload] Failed to reload ${pluginId}: CDP: ${formatError(error)}; CLI: ${formatError(cliError)}`,
+				);
+			}
 		}
 	} while (hotReloadQueued);
 
@@ -50,7 +166,7 @@ async function reloadPlugin() {
 }
 
 function assertNoProdSourceMapArtifacts() {
-	const mainJsPath = "main.js";
+	const mainJsPath = rootBundlePath;
 	const mainJs = readFileSync(mainJsPath, "utf8");
 	if (mainJs.includes("sourceMappingURL") || mainJs.includes("sourcesContent")) {
 		throw new Error(`Production build leaked source map markers into ${mainJsPath}`);
@@ -60,6 +176,27 @@ function assertNoProdSourceMapArtifacts() {
 	if (existsSync(rootSourceMapPath)) {
 		throw new Error(`Production build emitted unexpected source map ${rootSourceMapPath}`);
 	}
+}
+
+function writeDevBootstrap() {
+	const absoluteBundlePath = resolve(devBundlePath);
+	const sourceUrl = pathToFileURL(absoluteBundlePath).href;
+	const bootstrap = [
+		"const fs = require(\"fs\");",
+		`const bundlePath = ${JSON.stringify(absoluteBundlePath)};`,
+		`const sourceUrl = ${JSON.stringify(sourceUrl)};`,
+		"const source = fs.readFileSync(bundlePath, \"utf8\") + \"\\n//# sourceURL=\" + sourceUrl;",
+		"const devModule = { exports: {} };",
+		"new Function(\"require\", \"module\", \"exports\", source)(require, devModule, devModule.exports);",
+		"module.exports = devModule.exports;",
+		"",
+	].join("\n");
+
+	writeFileSync(rootBundlePath, bootstrap);
+}
+
+if (!prod) {
+	mkdirSync(dirname(devBundlePath), { recursive: true });
 }
 
 const context = await esbuild.context({
@@ -91,7 +228,7 @@ const context = await esbuild.context({
 	logLevel: "info",
 	sourcemap: prod ? false : "inline",
 	treeShaking: true,
-	outfile: "main.js",
+	outfile: prod ? rootBundlePath : devBundlePath,
 	loader: {
 		".md": "text",
 	},
@@ -107,6 +244,7 @@ const context = await esbuild.context({
 							return;
 						}
 
+						writeDevBootstrap();
 						await reloadPlugin();
 					});
 				},

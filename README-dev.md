@@ -56,7 +56,7 @@ The stored payload includes coordinates and a text hash so anchors can be re-mat
 - Most of the plugin logic is implemented in this repo.
 - The production bundle includes no third-party runtime packages.
 - Obsidian, Electron, CodeMirror, Lezer, and Node built-ins stay external at bundle time.
-  
+
 ```text
 +--------------------- Dependency Model ---------------------+
 | In-repo code (most plugin behavior)                        |
@@ -85,8 +85,9 @@ npm run dev
 ```
 
 - Keep `npm run dev` running while testing in Obsidian.
-- Dev mode rebuilds `main.js` and reloads the `side-note2` plugin after a successful build.
+- Dev mode rebuilds `main.js` and reloads the `side-note2` plugin in the `dev` vault after a successful build.
 - Open the target vault in Obsidian before starting dev mode.
+- To target another vault for hot reload, set `SIDENOTE2_HOT_RELOAD_VAULT=<vault-name>`.
 - If you want watch mode without automatic plugin reload, use:
 
 ```bash
@@ -176,3 +177,21 @@ Persistent local logs are always on.
 - Logs are written under `.obsidian/plugins/side-note2/logs/`
 - Files rotate daily and retain 3 days
 - Use the sidebar support button to review the attached log and submit a report
+
+### Electron DevTools
+
+Use this when you want to search TypeScript files and bind breakpoints while testing SideNote2 in Obsidian.
+
+1. Keep the dev watcher running:
+
+```bash
+npm run dev
+```
+
+2. Open Obsidian's Electron DevTools with `Command+I`.
+
+3. In DevTools, use file search to open `src/main.ts` or another `src/*.ts` file and set breakpoints there.
+
+Dev mode writes the sourcemapped bundle to `.sidenote2-dev/main.js` and keeps root `main.js` as a local bootstrap so Electron DevTools sees a real `file://` script with TypeScript sources.
+
+The production `npm run build` path still emits no source maps and fails if release artifacts contain `sourceMappingURL`, `sourcesContent`, or `main.js.map`.

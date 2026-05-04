@@ -15,8 +15,12 @@ Use five lenses:
 Read this as the structural map of the plugin.
 
 - `src/main.ts` is the composition root. It detects `runtime=local|release`, wires the controllers, manager, cache, aggregate index, metadata augmentation, logging, and the sidebar view registration.
-- `src/control/*` owns the side-effecting coordination layer: entry, mutation, session, workspace, workspace view, lifecycle, registration, navigation, highlight, persistence, and index settings controllers.
-- `src/control/*Planner.ts` holds the pure routing, normalization, and selection decisions that controllers call.
+- `src/app/*` owns the Obsidian plugin shell: event intake, lifecycle, registration, refresh coordination, workspace context, and workspace view adapters.
+- `src/comments/*` owns comment workflows: entry, mutation, session, navigation, highlight, persistence, index click routing, and related planners.
+- `src/agents/*` owns Codex and remote runtime orchestration: prompt context, run store, runtime selection, local adapter, and remote bridge.
+- `src/settings/*` owns persisted plugin settings and local secret storage.
+- `src/sync/*` owns synced side-note event and source-identity stores.
+- `*Planner.ts` files hold the pure routing, normalization, and selection decisions that app/comment/agent modules call.
 - `src/commentManager.ts` owns the in-memory comment list.
 - `src/domain/*` holds draft shapes and ephemeral draft/reveal session state.
 - `src/core/*` handles canonical storage, anchors, sync policy, text helpers, shared datetime formatting, derived metadata augmentation, editor highlight ranges, and index builders such as `allCommentsNote.ts`.
@@ -95,9 +99,9 @@ Use this shortcut table:
 | Sidebar or index sidebar shows wrong grouping or visibility | `src/ui/views/sidebarCommentSections.ts`, `src/ui/views/SideNote2View.ts`, `src/commentManager.ts` |
 | Sidebar card click, link, or action buttons behave incorrectly | `src/ui/views/sidebarPersistedComment.ts`, `src/ui/views/SideNote2View.ts`, `src/ui/views/commentPointerAction.ts` |
 | Sidebar focus, copy, selection, or draft-dismiss behavior is wrong | `src/ui/views/sidebarInteractionController.ts`, `src/ui/views/sidebarClipboardSelection.ts`, `src/ui/views/editDismissal.ts` |
-| Index note is stale or wrong | `src/index/AggregateCommentIndex.ts`, `src/core/derived/allCommentsNote.ts`, `src/control/commentPersistenceController.ts`, `src/cache/ParsedNoteCache.ts` |
+| Index note is stale or wrong | `src/index/AggregateCommentIndex.ts`, `src/core/derived/allCommentsNote.ts`, `src/comments/commentPersistenceController.ts`, `src/cache/ParsedNoteCache.ts` |
 | Index list, thought trail, or file filter behaves incorrectly | `src/ui/views/SideNote2View.ts`, `src/core/derived/thoughtTrail.ts`, `src/core/derived/indexFileFilterGraph.ts`, `src/ui/modals/SideNoteFileFilterModal.ts` |
-| Index click highlights the wrong sidebar card or opens the wrong target | `src/control/pluginRegistrationController.ts`, `src/control/commentHighlightController.ts`, `src/control/commentNavigationController.ts`, `src/ui/views/SideNote2View.ts` |
+| Index click highlights the wrong sidebar card or opens the wrong target | `src/app/pluginRegistrationController.ts`, `src/comments/commentHighlightController.ts`, `src/comments/commentNavigationController.ts`, `src/ui/views/SideNote2View.ts` |
 | Wiki links or tags inside comments behave incorrectly | `src/ui/editor/commentEditorLinks.ts`, `src/ui/editor/commentEditorTags.ts`, `src/core/text/commentMentions.ts` |
 | Local log inspector, JSONL parsing, or timestamp display is wrong | `src/main.ts`, `src/logs/logService.ts`, `src/logs/logSanitizer.ts`, `src/ui/modals/SupportLogInspectorModal.ts`, `src/ui/views/supportReportPlanner.ts`, `src/core/time/dateTime.ts` |
 

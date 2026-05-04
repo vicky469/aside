@@ -1,6 +1,6 @@
 import * as assert from "node:assert/strict";
 import test from "node:test";
-import { CommentSessionController } from "../src/control/commentSessionController";
+import { CommentSessionController } from "../src/comments/commentSessionController";
 import type { DraftComment } from "../src/domain/drafts";
 
 function createDraft(overrides: Partial<DraftComment> = {}): DraftComment {

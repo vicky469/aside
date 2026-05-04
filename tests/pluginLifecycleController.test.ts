@@ -2,7 +2,7 @@ import * as assert from "node:assert/strict";
 import test from "node:test";
 import type { TFile } from "obsidian";
 import { CommentManager, type Comment } from "../src/commentManager";
-import { PluginLifecycleController } from "../src/control/pluginLifecycleController";
+import { PluginLifecycleController } from "../src/app/pluginLifecycleController";
 import { AggregateCommentIndex } from "../src/index/AggregateCommentIndex";
 
 function createFile(path: string): TFile {

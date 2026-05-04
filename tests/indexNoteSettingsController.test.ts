@@ -1,14 +1,14 @@
 import * as assert from "node:assert/strict";
 import test from "node:test";
 import type { TFile } from "obsidian";
-import { IndexNoteSettingsController } from "../src/control/indexNoteSettingsController";
+import { IndexNoteSettingsController } from "../src/settings/indexNoteSettingsController";
 import {
     resolveIndexNotePathChange,
     resolveLoadedSettings,
     shouldApplyNormalizedSettingChange,
     type PersistedPluginData,
-} from "../src/control/indexNoteSettingsPlanner";
-import type { SideNote2Settings } from "../src/ui/settings/SideNote2SettingTab";
+} from "../src/settings/indexNoteSettingsPlanner";
+import type { SideNote2Settings } from "../src/ui/settings/SideNote2Setting";
 
 function createFile(path: string): TFile {
     return {

@@ -410,7 +410,7 @@ Owns:
 - removing old debug-toggle initialization path
 - wiring the logger into controllers and support UI
 
-### `src/control/*`
+### `src/app/*`, `src/comments/*`, `src/agents/*`, `src/settings/*`, `src/sync/*`
 
 Owns:
 

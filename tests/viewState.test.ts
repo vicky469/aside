@@ -1,6 +1,7 @@
 import * as assert from "node:assert/strict";
 import test from "node:test";
 import {
+    normalizeIndexSidebarMode,
     normalizeSidebarPrimaryMode,
     normalizeIndexFileFilterRootPath,
     resolvePinnedSidebarStateByFilePathFromState,
@@ -13,6 +14,14 @@ test("normalizeSidebarPrimaryMode accepts the supported sidebar modes only", () 
     assert.equal(normalizeSidebarPrimaryMode("thought-trail"), "thought-trail");
     assert.equal(normalizeSidebarPrimaryMode("agent"), null);
     assert.equal(normalizeSidebarPrimaryMode(undefined), null);
+});
+
+test("normalizeIndexSidebarMode accepts index modes and rejects tags", () => {
+    assert.equal(normalizeIndexSidebarMode("list"), "list");
+    assert.equal(normalizeIndexSidebarMode("thought-trail"), "thought-trail");
+    assert.equal(normalizeIndexSidebarMode("tags"), null);
+    assert.equal(normalizeIndexSidebarMode("agent"), null);
+    assert.equal(normalizeIndexSidebarMode(undefined), null);
 });
 
 test("normalizeIndexFileFilterRootPath normalizes one file path", () => {

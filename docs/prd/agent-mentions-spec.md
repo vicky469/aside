@@ -448,8 +448,8 @@ Recommended direction:
 
 Recommended store files:
 
-- `src/control/agentRunStore.ts`
-- `src/control/agentRunStorePlanner.ts`
+- `src/agents/agentRunStore.ts`
+- `src/agents/agentRunStorePlanner.ts`
 
 `PersistedPluginData` should grow a new field:
 
@@ -463,7 +463,7 @@ agentRuns?: unknown;
 
 Add a queue owned by:
 
-- `src/control/commentAgentController.ts`
+- `src/agents/commentAgentController.ts`
 
 Phase 1 queue rules:
 
@@ -635,7 +635,7 @@ Owns:
 - run record shape
 - helper selectors such as latest-run-by-thread
 
-### `src/control/agentRunStore.ts`
+### `src/agents/agentRunStore.ts`
 
 Owns:
 
@@ -643,7 +643,7 @@ Owns:
 - normalizing legacy or malformed stored payloads
 - writing updated run arrays back into plugin data
 
-### `src/control/commentAgentController.ts`
+### `src/agents/commentAgentController.ts`
 
 Owns:
 
@@ -655,7 +655,7 @@ Owns:
 - retry creation
 - raw reply append orchestration
 
-### `src/control/commentMutationController.ts`
+### `src/comments/commentMutationController.ts`
 
 Owns:
 

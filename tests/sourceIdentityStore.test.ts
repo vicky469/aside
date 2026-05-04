@@ -1,11 +1,11 @@
 import * as assert from "node:assert/strict";
 import test from "node:test";
-import type { PersistedPluginData } from "../src/control/indexNoteSettingsPlanner";
+import type { PersistedPluginData } from "../src/settings/indexNoteSettingsPlanner";
 import {
     mergeSourceIdentityStates,
     SourceIdentityStore,
     type SourceIdentityState,
-} from "../src/control/sourceIdentityStore";
+} from "../src/sync/sourceIdentityStore";
 
 function createStore(options: {
     read: () => PersistedPluginData;

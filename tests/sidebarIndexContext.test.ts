@@ -8,13 +8,13 @@ import {
     pickSidebarTargetFile,
     resolveIndexSidebarScopeRootPath,
     shouldRevealSidebarLeaf,
-} from "../src/control/commentNavigationPlanner";
+} from "../src/comments/commentNavigationPlanner";
 import {
     resolveWorkspaceTargetInput,
     resolveIndexLeafMode,
     resolveWorkspaceFileTargets,
-} from "../src/control/workspaceContextPlanner";
-import { shouldSkipAggregateViewRefresh } from "../src/control/commentPersistencePlanner";
+} from "../src/app/workspaceContextPlanner";
+import { shouldSkipAggregateViewRefresh } from "../src/comments/commentPersistencePlanner";
 import { ALL_COMMENTS_NOTE_PATH } from "../src/core/derived/allCommentsNote";
 
 interface MockFile {

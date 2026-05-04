@@ -3,9 +3,9 @@ import test from "node:test";
 import type { DataAdapter } from "obsidian";
 import type { MarkdownView, TFile } from "obsidian";
 import { CommentManager, type CommentThread } from "../src/commentManager";
-import { CommentPersistenceController } from "../src/control/commentPersistenceController";
-import type { PersistedPluginData } from "../src/control/indexNoteSettingsPlanner";
-import { SideNoteSyncEventStore } from "../src/control/sideNoteSyncEventStore";
+import { CommentPersistenceController } from "../src/comments/commentPersistenceController";
+import type { PersistedPluginData } from "../src/settings/indexNoteSettingsPlanner";
+import { SideNoteSyncEventStore } from "../src/sync/sideNoteSyncEventStore";
 import { serializeNoteCommentThreads, parseNoteComments } from "../src/core/storage/noteCommentStorage";
 import { AggregateCommentIndex } from "../src/index/AggregateCommentIndex";
 

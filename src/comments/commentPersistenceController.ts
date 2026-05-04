@@ -31,12 +31,12 @@ import {
     SideNoteSyncEventStore,
     type SideNoteSyncNoteSnapshot,
     type SideNoteSyncSnapshotInput,
-} from "./sideNoteSyncEventStore";
-import type { PersistedPluginData } from "./indexNoteSettingsPlanner";
+} from "../sync/sideNoteSyncEventStore";
+import type { PersistedPluginData } from "../settings/indexNoteSettingsPlanner";
 import {
     SourceIdentityStore,
     type SourceIdentityRecord,
-} from "./sourceIdentityStore";
+} from "../sync/sourceIdentityStore";
 
 type PersistOptions = {
     immediateAggregateRefresh?: boolean;

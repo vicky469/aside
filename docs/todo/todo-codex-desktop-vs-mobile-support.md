@@ -53,10 +53,10 @@ Key files:
 
 - [src/core/agents/codexActor.ts](../../src/core/agents/codexActor.ts)
 - [src/core/text/agentDirectives.ts](../../src/core/text/agentDirectives.ts)
-- [src/control/commentAgentController.ts](../../src/control/commentAgentController.ts)
-- [src/control/agentRuntimeAdapter.ts](../../src/control/agentRuntimeAdapter.ts)
-- [src/control/openclawRuntimeBridge.ts](../../src/control/openclawRuntimeBridge.ts)
-- [src/control/agentRuntimeSelection.ts](../../src/control/agentRuntimeSelection.ts)
+- [src/agents/commentAgentController.ts](../../src/agents/commentAgentController.ts)
+- [src/agents/agentRuntimeAdapter.ts](../../src/agents/agentRuntimeAdapter.ts)
+- [src/agents/openclawRuntimeBridge.ts](../../src/agents/openclawRuntimeBridge.ts)
+- [src/agents/agentRuntimeSelection.ts](../../src/agents/agentRuntimeSelection.ts)
 - [src/main.ts](../../src/main.ts)
 
 ## What "supported on desktop" currently means
@@ -75,13 +75,13 @@ The local runtime path depends on desktop-only capabilities:
 - launching local processes with `execFile(...)` and `spawn(...)`
 - a local `codex` binary available on the user's machine
 
-The actual runtime dispatch happens in [agentRuntimeAdapter.ts](../../src/control/agentRuntimeAdapter.ts):
+The actual runtime dispatch happens in [agentRuntimeAdapter.ts](../../src/agents/agentRuntimeAdapter.ts):
 
 - `runAgentRuntime(...)` resolves the actor runtime strategy
 - supported `codex` runs go through `runCodexDirect(...)`
 - if Node/Electron process access is unavailable, the call fails immediately
 
-Desktop remote support already exists in parallel through [commentAgentController.ts](../../src/control/commentAgentController.ts) and [openclawRuntimeBridge.ts](../../src/control/openclawRuntimeBridge.ts).
+Desktop remote support already exists in parallel through [commentAgentController.ts](../../src/agents/commentAgentController.ts) and [openclawRuntimeBridge.ts](../../src/agents/openclawRuntimeBridge.ts).
 
 Important capability distinction:
 
@@ -116,7 +116,7 @@ Local runtime diagnostic:
 
 Runtime probe:
 
-- [agentRuntimeAdapter.ts](../../src/control/agentRuntimeAdapter.ts)
+- [agentRuntimeAdapter.ts](../../src/agents/agentRuntimeAdapter.ts)
   `getCodexRuntimeDiagnostics(...)`
 
 What it checks:
@@ -137,7 +137,7 @@ Remote runtime availability:
 
 - [main.ts](../../src/main.ts)
   `getRemoteRuntimeAvailability()`
-- [agentRuntimeSelection.ts](../../src/control/agentRuntimeSelection.ts)
+- [agentRuntimeSelection.ts](../../src/agents/agentRuntimeSelection.ts)
   `getRemoteRuntimeAvailability(...)`
 
 What the remote check answers:
@@ -170,7 +170,7 @@ The settings tab now has an `Agent Runtime` section.
 
 Current settings UI file:
 
-- [src/ui/settings/SideNote2SettingTab.ts](../../src/ui/settings/SideNote2SettingTab.ts)
+- [src/ui/settings/SideNote2Setting.ts](../../src/ui/settings/SideNote2Setting.ts)
 
 What it currently exposes:
 
@@ -332,7 +332,7 @@ If we want `@codex` in the SideNote2 UI to keep the same meaning while making mo
 
 This is feasible, but there is one important engineering distinction:
 
-- the desktop plugin runtime cannot be copied as-is onto the DGX Spark because [agentRuntimeAdapter.ts](../../src/control/agentRuntimeAdapter.ts) currently depends on Obsidian/Electron-specific `window.require(...)` access
+- the desktop plugin runtime cannot be copied as-is onto the DGX Spark because [agentRuntimeAdapter.ts](../../src/agents/agentRuntimeAdapter.ts) currently depends on Obsidian/Electron-specific `window.require(...)` access
 - however, the underlying execution model is still just local process execution of `codex`, using `execFile(...)` and `spawn(...)`
 - so the DGX service can preserve behavior by launching the same `codex` executable server-side, while reimplementing the wrapper as a normal Node service instead of an Obsidian plugin module
 
@@ -345,11 +345,11 @@ So the answer is:
 Relevant current code:
 
 - desktop local runtime probe and process launch:
-  [src/control/agentRuntimeAdapter.ts](../../src/control/agentRuntimeAdapter.ts)
+  [src/agents/agentRuntimeAdapter.ts](../../src/agents/agentRuntimeAdapter.ts)
 - remote bridge request contract:
-  [src/control/openclawRuntimeBridge.ts](../../src/control/openclawRuntimeBridge.ts)
+  [src/agents/openclawRuntimeBridge.ts](../../src/agents/openclawRuntimeBridge.ts)
 - remote run lifecycle in the plugin:
-  [src/control/commentAgentController.ts](../../src/control/commentAgentController.ts)
+  [src/agents/commentAgentController.ts](../../src/agents/commentAgentController.ts)
 
 ## Recommended DGX Architecture
 
@@ -442,7 +442,7 @@ The bridge should intentionally stay close to the desktop-local runtime behavior
 
 Recommended implementation approach:
 
-1. Extract or copy the Codex process-launch logic from [agentRuntimeAdapter.ts](../../src/control/agentRuntimeAdapter.ts) into a server-safe module.
+1. Extract or copy the Codex process-launch logic from [agentRuntimeAdapter.ts](../../src/agents/agentRuntimeAdapter.ts) into a server-safe module.
 2. Remove the Obsidian/Electron-only pieces:
    - `window.require(...)`
    - plugin runtime assumptions

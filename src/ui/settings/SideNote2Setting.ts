@@ -14,13 +14,13 @@ import {
 import {
     resolveAgentRuntimeSelection,
     type AgentRuntimeSelection,
-} from "../../control/agentRuntimeSelection";
+} from "../../agents/agentRuntimeSelection";
 import {
     normalizeAllCommentsNoteImageCaption,
     normalizeAllCommentsNoteImageUrl,
     normalizeAllCommentsNotePath,
 } from "../../core/derived/allCommentsNote";
-import type { CodexRuntimeDiagnostics } from "../../control/agentRuntimeAdapter";
+import type { CodexRuntimeDiagnostics } from "../../agents/agentRuntimeAdapter";
 import {
     createCheckingCodexRuntimeDiagnostics,
     getLocalRuntimeOptionStatusPresentation,
@@ -45,7 +45,7 @@ export const DEFAULT_SETTINGS: SideNote2Settings = {
     remoteRuntimeBaseUrl: normalizeRemoteRuntimeBaseUrl(""),
 };
 
-export default class SideNote2SettingTab extends PluginSettingTab {
+export default class SideNote2Setting extends PluginSettingTab {
     plugin: SideNote2;
     private codexStatusRefreshToken = 0;
 

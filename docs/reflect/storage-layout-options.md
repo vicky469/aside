@@ -317,17 +317,17 @@ Key files:
   - Empty thread list deletes the sidecar file.
   - Uses 2-character hash prefix for sharding.
 
-- `src/control/commentPersistenceController.ts`
+- `src/comments/commentPersistenceController.ts`
   - `sidecarStorage` is the primary storage adapter.
   - `migrateLegacyInlineCommentsOnStartup()` scans all markdown files, reads legacy inline blocks, writes sidecars, and strips the managed block from the source note.
   - `handleMarkdownFileModified()` now reads sidecar-first; if no sidecar exists and the file was modified externally with a legacy block, it migrates on demand.
   - Anchor-coordinate updates and normal persistence write back to the sidecar, not the note body.
 
-- `src/control/pluginLifecycleController.ts`
+- `src/app/pluginLifecycleController.ts`
   - `handleFileRename()` moves the sidecar via `renameStoredComments()`.
   - `handleFileDelete()` removes the sidecar via `deleteStoredComments()`.
 
-- `src/control/indexNoteSettingsPlanner.ts` / `src/main.ts`
+- `src/settings/indexNoteSettingsPlanner.ts` / `src/main.ts`
   - `sidecarStorageMigrationVersion` is persisted in plugin data.
   - `ensureSidecarStorageMigrated()` runs once on startup after settings load.
 

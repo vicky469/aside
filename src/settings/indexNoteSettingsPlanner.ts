@@ -10,7 +10,7 @@ import {
 } from "../core/derived/allCommentsNote";
 import {
     type SideNote2Settings,
-} from "../ui/settings/SideNote2SettingTab";
+} from "../ui/settings/SideNote2Setting";
 
 export type PersistedPluginData = Partial<SideNote2Settings> & {
     preferredAgentTarget?: unknown;

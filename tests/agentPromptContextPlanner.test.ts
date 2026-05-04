@@ -1,7 +1,7 @@
 import * as assert from "node:assert/strict";
 import test from "node:test";
 import { commentToThread, type Comment, type CommentThread } from "../src/commentManager";
-import { buildAgentPromptContext } from "../src/control/agentPromptContextPlanner";
+import { buildAgentPromptContext } from "../src/agents/agentPromptContextPlanner";
 
 function createComment(overrides: Partial<Comment> = {}): Comment {
     return {

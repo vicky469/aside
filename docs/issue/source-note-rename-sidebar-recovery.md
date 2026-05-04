@@ -84,8 +84,8 @@ The plugin now polls focused/sidebar-visible files more frequently and replays s
 Files involved:
 
 - [main.ts](/Users/wenqingli/Obsidian/dev/SideNote2/src/main.ts)
-- [workspaceViewController.ts](/Users/wenqingli/Obsidian/dev/SideNote2/src/control/workspaceViewController.ts)
-- [commentPersistenceController.ts](/Users/wenqingli/Obsidian/dev/SideNote2/src/control/commentPersistenceController.ts)
+- [workspaceViewController.ts](/Users/wenqingli/Obsidian/dev/SideNote2/src/app/workspaceViewController.ts)
+- [commentPersistenceController.ts](/Users/wenqingli/Obsidian/dev/SideNote2/src/comments/commentPersistenceController.ts)
 
 This improves perceived mobile-to-desktop latency because the open note does not wait for a broad full replay.
 
@@ -97,8 +97,8 @@ This reduces stale desktop cache behavior when mobile has already written newer 
 
 Files involved:
 
-- [sideNoteSyncEventStore.ts](/Users/wenqingli/Obsidian/dev/SideNote2/src/control/sideNoteSyncEventStore.ts)
-- [commentPersistenceController.ts](/Users/wenqingli/Obsidian/dev/SideNote2/src/control/commentPersistenceController.ts)
+- [sideNoteSyncEventStore.ts](/Users/wenqingli/Obsidian/dev/SideNote2/src/sync/sideNoteSyncEventStore.ts)
+- [commentPersistenceController.ts](/Users/wenqingli/Obsidian/dev/SideNote2/src/comments/commentPersistenceController.ts)
 
 ### No-op Watermark Writes
 
@@ -108,7 +108,7 @@ This avoids unnecessary `data.json` churn during frequent focused polling.
 
 File involved:
 
-- [sideNoteSyncEventStore.ts](/Users/wenqingli/Obsidian/dev/SideNote2/src/control/sideNoteSyncEventStore.ts)
+- [sideNoteSyncEventStore.ts](/Users/wenqingli/Obsidian/dev/SideNote2/src/sync/sideNoteSyncEventStore.ts)
 
 ### Rename Event Handling For Normal Obsidian Renames
 
@@ -117,8 +117,8 @@ The plugin already listens to Obsidian vault rename events and moves sidecar sto
 Files involved:
 
 - [main.ts](/Users/wenqingli/Obsidian/dev/SideNote2/src/main.ts)
-- [pluginLifecycleController.ts](/Users/wenqingli/Obsidian/dev/SideNote2/src/control/pluginLifecycleController.ts)
-- [commentPersistenceController.ts](/Users/wenqingli/Obsidian/dev/SideNote2/src/control/commentPersistenceController.ts)
+- [pluginLifecycleController.ts](/Users/wenqingli/Obsidian/dev/SideNote2/src/app/pluginLifecycleController.ts)
+- [commentPersistenceController.ts](/Users/wenqingli/Obsidian/dev/SideNote2/src/comments/commentPersistenceController.ts)
 - [sidecarCommentStorage.ts](/Users/wenqingli/Obsidian/dev/SideNote2/src/core/storage/sidecarCommentStorage.ts)
 
 This covers the clean case:
@@ -136,7 +136,7 @@ This prevents the bad case where `books/The Goal.md` steals comments from `Notes
 
 File involved:
 
-- [commentPersistenceController.ts](/Users/wenqingli/Obsidian/dev/SideNote2/src/control/commentPersistenceController.ts)
+- [commentPersistenceController.ts](/Users/wenqingli/Obsidian/dev/SideNote2/src/comments/commentPersistenceController.ts)
 
 Regression coverage:
 
@@ -166,9 +166,9 @@ Implemented pieces:
 
 Files involved:
 
-- [sourceIdentityStore.ts](/Users/wenqingli/Obsidian/dev/SideNote2/src/control/sourceIdentityStore.ts)
+- [sourceIdentityStore.ts](/Users/wenqingli/Obsidian/dev/SideNote2/src/sync/sourceIdentityStore.ts)
 - [sidecarCommentStorage.ts](/Users/wenqingli/Obsidian/dev/SideNote2/src/core/storage/sidecarCommentStorage.ts)
-- [commentPersistenceController.ts](/Users/wenqingli/Obsidian/dev/SideNote2/src/control/commentPersistenceController.ts)
+- [commentPersistenceController.ts](/Users/wenqingli/Obsidian/dev/SideNote2/src/comments/commentPersistenceController.ts)
 - [sideNoteSyncEvents.ts](/Users/wenqingli/Obsidian/dev/SideNote2/src/core/storage/sideNoteSyncEvents.ts)
 - [main.ts](/Users/wenqingli/Obsidian/dev/SideNote2/src/main.ts)
 

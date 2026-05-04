@@ -20,7 +20,7 @@ Relevant current code:
 - [src/core/derived/indexFileFilterGraph.ts](../../src/core/derived/indexFileFilterGraph.ts)
 - [src/ui/views/sidebarDraftEditor.ts](../../src/ui/views/sidebarDraftEditor.ts)
 - [src/ui/views/sidebarPersistedComment.ts](../../src/ui/views/sidebarPersistedComment.ts)
-- [src/control/commentNavigationController.ts](../../src/control/commentNavigationController.ts)
+- [src/comments/commentNavigationController.ts](../../src/comments/commentNavigationController.ts)
 
 ## Objective
 
@@ -721,7 +721,7 @@ Owns:
 - incoming backlink derivation
 - reusable cross-file relationship edges for graph features
 
-### `src/control/commentNavigationController.ts`
+### `src/comments/commentNavigationController.ts`
 
 Must own rename-safe target resolution and open/highlight behavior for comment references.
 

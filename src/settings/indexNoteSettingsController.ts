@@ -13,7 +13,7 @@ import {
 } from "../core/derived/allCommentsNote";
 import {
     type SideNote2Settings,
-} from "../ui/settings/SideNote2SettingTab";
+} from "../ui/settings/SideNote2Setting";
 import {
     getIndexNoteParentPath,
     resolveIndexNotePathChange,

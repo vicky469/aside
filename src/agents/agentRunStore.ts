@@ -4,7 +4,7 @@ import {
     getAgentRunById,
     type AgentRunRecord,
 } from "../core/agents/agentRuns";
-import type { PersistedPluginData } from "./indexNoteSettingsPlanner";
+import type { PersistedPluginData } from "../settings/indexNoteSettingsPlanner";
 import { clonePersistedAgentRuns, normalizePersistedAgentRuns } from "./agentRunStorePlanner";
 
 export interface AgentRunStoreHost {

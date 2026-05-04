@@ -3,7 +3,7 @@ import test from "node:test";
 import {
     shouldIgnoreWorkspaceFileOpen,
     shouldIgnoreWorkspaceLeafChange,
-} from "../src/control/workspaceContextPlanner";
+} from "../src/app/workspaceContextPlanner";
 
 type LeafKind = "markdown" | "sidenote" | "other";
 

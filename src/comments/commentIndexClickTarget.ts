@@ -1,10 +1,15 @@
 import { parseCommentLocationUrl } from "../core/derived/allCommentsNote";
 
-export interface IndexLivePreviewClickTarget {
-    kind: "comment";
-    commentId: string;
-    filePath: string;
-}
+export type IndexLivePreviewClickTarget =
+    | {
+        kind: "comment";
+        commentId: string;
+        filePath: string;
+    }
+    | {
+        kind: "file";
+        filePath: string;
+    };
 
 export interface ClosestLookupTarget {
     closest(selector: string): {
@@ -19,6 +24,8 @@ const INDEX_NATIVE_COLLAPSE_CONTROL_SELECTOR = [
     ".collapse-icon",
     ".cm-fold-indicator",
 ].join(", ");
+const INDEX_COMMENT_LINK_SELECTOR = "a.sidenote2-index-comment-link[data-sidenote2-comment-url]";
+const INDEX_FILE_HEADING_SELECTOR = ".sidenote2-index-heading-label[title]";
 
 export function isIndexNativeCollapseControlTarget(target: ClosestLookupTarget | null): boolean {
     return !!target?.closest(INDEX_NATIVE_COLLAPSE_CONTROL_SELECTOR);
@@ -35,13 +42,22 @@ export function findClickedIndexLivePreviewTarget(
         return null;
     }
 
-    const commentLink = target.closest("a.sidenote2-index-comment-link[data-sidenote2-comment-url]");
+    const commentLink = target.closest(INDEX_COMMENT_LINK_SELECTOR);
     const commentUrl = commentLink?.dataset?.sidenote2CommentUrl ?? "";
     const commentTarget = commentUrl ? parseCommentLocationUrl(commentUrl) : null;
     if (commentTarget) {
         return {
             kind: "comment",
             ...commentTarget,
+        };
+    }
+
+    const fileHeading = target.closest(INDEX_FILE_HEADING_SELECTOR);
+    const filePath = fileHeading?.getAttribute("title")?.trim() ?? "";
+    if (filePath) {
+        return {
+            kind: "file",
+            filePath,
         };
     }
 

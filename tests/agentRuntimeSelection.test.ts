@@ -6,7 +6,7 @@ import {
     getAgentRuntimeStatusLabel,
     getRemoteRuntimeAvailability,
     resolveAgentRuntimeSelection,
-} from "../src/control/agentRuntimeSelection";
+} from "../src/agents/agentRuntimeSelection";
 
 test("resolveAgentRuntimeSelection prefers local in auto mode on desktop with a filesystem-backed vault", () => {
     assert.deepEqual(resolveAgentRuntimeSelection({

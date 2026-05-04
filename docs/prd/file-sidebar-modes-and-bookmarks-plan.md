@@ -29,7 +29,7 @@ Current rendering already separates index sidebars from normal file sidebars:
 
 Current draft saving also assumes a saved side note has non-empty text:
 
-- empty draft bodies are rejected in [src/control/commentMutationController.ts](../../src/control/commentMutationController.ts:81)
+- empty draft bodies are rejected in [src/comments/commentMutationController.ts](../../src/comments/commentMutationController.ts:81)
 
 That matters for bookmark capture, because an icon-only or empty-body bookmark does not fit the current persistence rules.
 
@@ -191,7 +191,7 @@ That is close to a bookmark, highlight, or idea marker.
 
 ## Current Constraint
 
-Today SideNote2 treats saved content as a normal side note thread with text content. Empty bodies are rejected at save time in [src/control/commentMutationController.ts](../../src/control/commentMutationController.ts:81).
+Today SideNote2 treats saved content as a normal side note thread with text content. Empty bodies are rejected at save time in [src/comments/commentMutationController.ts](../../src/comments/commentMutationController.ts:81).
 
 That means a pure icon-only bookmark does not fit cleanly right now.
 

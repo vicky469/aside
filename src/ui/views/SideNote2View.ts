@@ -6,7 +6,6 @@ import {
     TFile,
     WorkspaceLeaf,
     Platform,
-    loadMermaid,
     setIcon,
     type ViewStateResult,
 } from "obsidian";
@@ -20,14 +19,9 @@ import {
     buildIndexFileFilterGraph,
     type IndexFileFilterGraph,
 } from "../../core/derived/indexFileFilterGraph";
-import {
-    buildThoughtTrailLines,
-    extractThoughtTrailMermaidSource,
-    getThoughtTrailMermaidRenderConfig,
-} from "../../core/derived/thoughtTrail";
 import type { DraftComment } from "../../domain/drafts";
 import type SideNote2 from "../../main";
-import type { AgentStreamUpdate } from "../../control/commentAgentController";
+import type { AgentStreamUpdate } from "../../agents/commentAgentController";
 import SideNoteFileFilterModal from "../modals/SideNoteFileFilterModal";
 import SideNoteLinkSuggestModal from "../modals/SideNoteLinkSuggestModal";
 import SideNoteOpenFileSuggestModal from "../modals/SideNoteOpenFileSuggestModal";
@@ -43,7 +37,6 @@ import {
 import {
     buildIndexFileFilterOptionsFromCounts,
     deriveIndexSidebarScopedFilePaths,
-    getIndexFileFilterLabel,
     shouldLimitIndexSidebarList,
     type IndexFileFilterOption,
 } from "./indexFileFilter";
@@ -78,8 +71,6 @@ import {
     sortSidebarRenderableItems,
     type SidebarRenderableItem,
 } from "./sidebarRenderOrder";
-import { extractThoughtTrailClickTargets, parseThoughtTrailOpenFilePath, resolveThoughtTrailNodeId } from "./thoughtTrailNodeLinks";
-import { parseTrustedMermaidSvg } from "./thoughtTrailSvg";
 import { buildRootedThoughtTrailScope } from "./sidebarThoughtTrailScope";
 import { clearSidebarSearchHighlights, highlightSidebarSearchMatches } from "./sidebarSearchHighlight";
 import {
@@ -98,6 +89,7 @@ import {
     isSoftDeleted,
 } from "../../core/rules/deletedCommentVisibility";
 import {
+    normalizeIndexSidebarMode,
     normalizeSidebarPrimaryMode,
     normalizeIndexFileFilterRootPath,
     resolveIndexFileFilterRootPathFromState,
@@ -114,6 +106,26 @@ import {
     buildSidebarFileInsertEdit,
     getSingleOpenFileInsertTarget,
 } from "./sidebarFileInsertion";
+import {
+    renderSupportButton,
+    renderSupportButtonIn,
+} from "./sidebarSupportButton";
+import {
+    renderSidebarThoughtTrail,
+    type SidebarThoughtTrailOptions,
+} from "./sidebarThoughtTrailRenderer";
+import {
+    renderActiveFileFilters,
+    renderSidebarModeControl,
+    renderSidebarSearchInput,
+    renderToolbarChip,
+    renderToolbarIconButton,
+    type SidebarModeControlOptions,
+    type SidebarSearchInputOptions,
+    type ToolbarActionGuard,
+    type ToolbarChipOptions,
+    type ToolbarIconButtonOptions,
+} from "./sidebarToolbarRenderer";
 
 function matchesResolvedVisibility(resolved: boolean | undefined, showResolved: boolean): boolean {
     return showResolved ? resolved === true : resolved !== true;
@@ -180,20 +192,6 @@ type NoteSidebarRenderDescriptor = {
     render: () => Promise<HTMLElement>;
 };
 
-type MermaidRenderResult = string | {
-    bindFunctions?: (element: HTMLElement) => void;
-    svg?: string;
-};
-
-type MermaidRuntimeLike = {
-    getConfig?: () => unknown;
-    initialize: (config: unknown) => void;
-    mermaidAPI?: {
-        getConfig?: () => unknown;
-    };
-    render: (id: string, source: string) => Promise<MermaidRenderResult>;
-};
-
 type OpenMarkdownFileInsertTarget = {
     file: TFile;
     leaf: WorkspaceLeaf;
@@ -202,16 +200,6 @@ type OpenMarkdownFileInsertTarget = {
     recent: boolean;
     editable: boolean;
 };
-
-function isMermaidRuntimeLike(value: unknown): value is MermaidRuntimeLike {
-    if (!value || typeof value !== "object") {
-        return false;
-    }
-
-    const candidate = value as Partial<MermaidRuntimeLike>;
-    return typeof candidate.initialize === "function"
-        && typeof candidate.render === "function";
-}
 
 function shouldReplaceOpenMarkdownFileInsertTarget(
     current: OpenMarkdownFileInsertTarget,
@@ -283,6 +271,9 @@ export default class SideNote2View extends ItemView {
     private renderVersion = 0;
     private readonly draftEditorController: SidebarDraftEditorController;
     private readonly interactionController: SidebarInteractionController;
+    private readonly toolbarActionGuard: ToolbarActionGuard = {
+        beforeAction: () => this.saveVisibleDraftIfPresent(),
+    };
     private indexSidebarMode: IndexSidebarMode = "list";
     private noteSidebarMode: SidebarPrimaryMode = "list";
     private noteSidebarContentFilter: SidebarContentFilter = "all";
@@ -1097,7 +1088,7 @@ export default class SideNote2View extends ItemView {
             }
         }
 
-        const nextMode = parseSidebarPrimaryMode(state.indexSidebarMode);
+        const nextMode = normalizeIndexSidebarMode(state.indexSidebarMode);
         if (nextMode && nextMode !== this.indexSidebarMode) {
             this.indexSidebarMode = nextMode;
             void this.plugin.logEvent("info", "index", "index.mode.changed", {
@@ -1440,7 +1431,6 @@ export default class SideNote2View extends ItemView {
                     commentsContainer,
                     selectedIndexFileFilterRootPath,
                     filteredIndexFilePaths,
-                    indexFileFilterOptions,
                 );
             }
 
@@ -1452,7 +1442,7 @@ export default class SideNote2View extends ItemView {
                     rootFilePath: selectedIndexFileFilterRootPath,
                 });
                 if (this.plugin.isLocalRuntime()) {
-                    this.renderSupportButton({
+                    renderSupportButton(this.containerEl, this.plugin, {
                         filePath: file.path,
                         isAllCommentsView,
                         threadCount: supportThreadCount,
@@ -1530,7 +1520,7 @@ export default class SideNote2View extends ItemView {
         }
 
         if (this.plugin.isLocalRuntime()) {
-            this.renderSupportButton({
+            renderSupportButton(this.containerEl, this.plugin, {
                 filePath: file?.path ?? null,
                 isAllCommentsView,
                 threadCount: file
@@ -1705,7 +1695,7 @@ export default class SideNote2View extends ItemView {
 
         shell.supportSlotEl.empty();
         if (this.plugin.isLocalRuntime()) {
-            this.renderSupportButtonIn(shell.supportSlotEl, {
+            renderSupportButtonIn(shell.supportSlotEl, this.plugin, {
                 filePath: file.path,
                 isAllCommentsView: false,
                 threadCount: this.plugin.getThreadsForFile(file.path).length,
@@ -1788,7 +1778,7 @@ export default class SideNote2View extends ItemView {
 
         shell.supportSlotEl.empty();
         if (this.plugin.isLocalRuntime()) {
-            this.renderSupportButtonIn(shell.supportSlotEl, {
+            renderSupportButtonIn(shell.supportSlotEl, this.plugin, {
                 filePath: file.path,
                 isAllCommentsView: false,
                 threadCount: this.plugin.getThreadsForFile(file.path).length,
@@ -3024,94 +3014,16 @@ export default class SideNote2View extends ItemView {
 
     private renderToolbarChip(
         container: HTMLElement,
-        options: {
-            label: string;
-            active: boolean;
-            pressed?: boolean;
-            ariaLabel?: string;
-            onClick: () => void;
-            count?: string;
-            showIndicator?: boolean;
-            disabled?: boolean;
-            icon?: string;
-            hideLabel?: boolean;
-            chipClass?: string;
-        },
+        options: ToolbarChipOptions,
     ): void {
-        const isTagFilterChip = options.chipClass?.includes("is-tag-filter-chip") ?? false;
-        const button = container.createEl("button", {
-            cls: `sidenote2-filter-chip${options.active ? " is-active" : ""}${options.chipClass ? ` ${options.chipClass}` : ""}`,
-        });
-        button.setAttribute("type", "button");
-        button.setAttribute("aria-pressed", (options.pressed ?? options.active) ? "true" : "false");
-        if (options.ariaLabel) {
-            button.setAttribute("aria-label", options.ariaLabel);
-        }
-        button.disabled = options.disabled ?? false;
-
-        if (options.showIndicator) {
-            button.createSpan({
-                cls: "sidenote2-filter-chip-indicator",
-            });
-        }
-
-        if (options.icon) {
-            const iconEl = button.createSpan({
-                cls: "sidenote2-filter-chip-icon",
-            });
-            setIcon(iconEl, options.icon);
-        }
-
-        if (!options.hideLabel) {
-            button.createSpan({
-                text: options.label,
-                cls: `sidenote2-filter-chip-label${isTagFilterChip ? " is-visible" : ""}`,
-            });
-        }
-
-        if (options.count !== undefined) {
-            button.createSpan({
-                text: options.count,
-                cls: "sidenote2-filter-chip-count",
-            });
-        }
-
-        button.onclick = async () => {
-            if (!(await this.saveVisibleDraftIfPresent())) {
-                return;
-            }
-            options.onClick();
-        };
+        renderToolbarChip(container, options, this.toolbarActionGuard);
     }
 
     private renderToolbarIconButton(
         container: HTMLElement,
-        options: {
-            icon: string;
-            ariaLabel?: string;
-            active?: boolean;
-            activeVisual?: boolean;
-            disabled?: boolean;
-            onClick: () => void;
-        },
+        options: ToolbarIconButtonOptions,
     ): void {
-        const showActiveVisual = options.activeVisual ?? options.active ?? false;
-        const button = container.createEl("button", {
-            cls: `clickable-icon sidenote2-comment-section-add-button sidenote2-toolbar-icon-button${showActiveVisual ? " is-active" : ""}`,
-        });
-        button.setAttribute("type", "button");
-        button.setAttribute("aria-pressed", options.active ? "true" : "false");
-        if (options.ariaLabel) {
-            button.setAttribute("aria-label", options.ariaLabel);
-        }
-        button.disabled = options.disabled ?? false;
-        setIcon(button, options.icon);
-        button.onclick = async () => {
-            if (!(await this.saveVisibleDraftIfPresent())) {
-                return;
-            }
-            options.onClick();
-        };
+        renderToolbarIconButton(container, options, this.toolbarActionGuard);
     }
 
     private refreshSidebarSearchHighlights(container: HTMLElement, query: string): void {
@@ -3134,47 +3046,14 @@ export default class SideNote2View extends ItemView {
 
     private renderSidebarSearchInput(
         container: HTMLElement,
-        options: {
-            value: string;
-            ariaLabel?: string;
-            placeholder: string;
-            onClear: () => void;
-            onInput: (value: string, selection: { selectionStart: number | null; selectionEnd: number | null }) => void;
-        },
+        options: SidebarSearchInputOptions,
     ): void {
-        const searchGroup = container.createDiv("sidenote2-sidebar-toolbar-group is-search-group");
-        const fieldEl = searchGroup.createDiv("sidenote2-note-search-field");
-        const iconEl = fieldEl.createSpan({
-            cls: "sidenote2-note-search-icon",
-        });
-        setIcon(iconEl, "search");
-        const inputEl = fieldEl.createEl("input", {
-            cls: "sidenote2-note-search-input",
-        });
-        inputEl.type = "search";
-        inputEl.value = options.value;
-        inputEl.spellcheck = false;
-        inputEl.placeholder = options.placeholder;
-        if (options.ariaLabel) {
-            inputEl.setAttribute("aria-label", options.ariaLabel);
-        }
-        inputEl.addEventListener("focus", () => {
-            this.interactionController.claimSidebarInteractionOwnership(inputEl);
-        });
-        inputEl.addEventListener("keydown", (event) => {
-            if (event.key !== "Escape" || !inputEl.value) {
-                return;
-            }
-
-            event.preventDefault();
-            event.stopPropagation();
-            options.onClear();
-        });
-        inputEl.addEventListener("input", () => {
-            options.onInput(inputEl.value, {
-                selectionStart: inputEl.selectionStart,
-                selectionEnd: inputEl.selectionEnd,
-            });
+        renderSidebarSearchInput(container, {
+            ...options,
+            onFocus: (inputEl) => {
+                this.interactionController.claimSidebarInteractionOwnership(inputEl);
+                options.onFocus?.(inputEl);
+            },
         });
     }
 
@@ -3202,6 +3081,10 @@ export default class SideNote2View extends ItemView {
             mode: this.indexSidebarMode,
             showTagsTab: false,
             onChange: (mode) => {
+                if (mode === "tags") {
+                    return;
+                }
+
                 if (this.indexSidebarMode === mode) {
                     return;
                 }
@@ -3250,101 +3133,23 @@ export default class SideNote2View extends ItemView {
 
     private renderSidebarModeControl(
         container: HTMLElement,
-        options: {
-            mode: SidebarPrimaryMode;
-            showTagsTab: boolean;
-            onChange: (mode: SidebarPrimaryMode) => void;
-        },
+        options: SidebarModeControlOptions,
     ): void {
-        const modeGroup = container.createDiv("sidenote2-sidebar-toolbar-group is-mode-group");
-        const tabList = modeGroup.createDiv(`sidenote2-tablist is-${options.mode}`);
-        tabList.setAttribute("role", "tablist");
-        this.renderTabButton(tabList, {
-            label: "List",
-            active: options.mode === "list",
-            onClick: () => {
-                options.onChange("list");
-            },
-        });
-        if (options.showTagsTab) {
-            this.renderTabButton(tabList, {
-                label: "Tags",
-                active: options.mode === "tags",
-                onClick: () => {
-                    options.onChange("tags");
-                },
-            });
-        }
-        this.renderTabButton(tabList, {
-            label: "Thought Trail",
-            active: options.mode === "thought-trail",
-            onClick: () => {
-                options.onChange("thought-trail");
-            },
-        });
-    }
-
-    private renderTabButton(
-        container: HTMLElement,
-        options: {
-            label: string;
-            active: boolean;
-            onClick: () => void;
-        },
-    ): void {
-        const button = container.createEl("button", {
-            cls: `sidenote2-tab-button${options.active ? " sidenote2-tab-button--active" : ""}`,
-            text: options.label,
-        });
-        button.setAttribute("type", "button");
-        button.setAttribute("role", "tab");
-        button.setAttribute("aria-selected", options.active ? "true" : "false");
-        button.tabIndex = options.active ? 0 : -1;
-        button.onclick = async () => {
-            if (!(await this.saveVisibleDraftIfPresent())) {
-                return;
-            }
-            options.onClick();
-        };
+        renderSidebarModeControl(container, options, this.toolbarActionGuard);
     }
 
     private renderActiveFileFilters(
         container: HTMLElement,
         rootFilePath: string,
         filteredIndexFilePaths: string[],
-        indexFileFilterOptions: IndexFileFilterOption[],
     ): void {
-        const filterBar = container.createDiv("sidenote2-active-file-filters");
-        const rootChip = filterBar.createDiv("sidenote2-active-file-filter");
-        rootChip.addClass("is-root");
-
-        rootChip.createSpan({
-            text: getIndexFileFilterLabel(rootFilePath, filteredIndexFilePaths),
-            cls: "sidenote2-active-file-filter-label",
-        });
-
-        const clearButton = rootChip.createEl("button", {
-            cls: "sidenote2-active-file-filter-clear clickable-icon",
-        });
-        clearButton.setAttribute("type", "button");
-        clearButton.setAttribute("aria-label", `Clear file filter for ${rootFilePath}`);
-        setIcon(clearButton, "x");
-        clearButton.onclick = async (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            if (!(await this.saveVisibleDraftIfPresent())) {
-                return;
-            }
-            void this.setIndexFileFilterRootPath(null);
-        };
-
-        const linkedFileCount = Math.max(0, filteredIndexFilePaths.length - 1);
-        const summaryEl = filterBar.createDiv("sidenote2-active-file-filter-summary");
-        summaryEl.setText(
-            linkedFileCount > 0
-                ? `+${linkedFileCount} linked file${linkedFileCount === 1 ? "" : "s"}`
-                : "1 file",
-        );
+        renderActiveFileFilters(container, {
+            rootFilePath,
+            filteredIndexFilePaths,
+            onClear: () => {
+                void this.setIndexFileFilterRootPath(null);
+            },
+        }, this.toolbarActionGuard);
     }
 
     private openIndexFileFilterModal(indexFileFilterOptions: IndexFileFilterOption[]): void {
@@ -3363,15 +3168,26 @@ export default class SideNote2View extends ItemView {
 
     public async setIndexFileFilterRootPath(filePath: string | null): Promise<void> {
         const normalizedRootPath = normalizeIndexFileFilterRootPath(filePath);
-        if (this.selectedIndexFileFilterRootPath === normalizedRootPath) {
+        const shouldForceListMode = normalizedRootPath !== null && this.indexSidebarMode !== "list";
+        if (this.selectedIndexFileFilterRootPath === normalizedRootPath && !shouldForceListMode) {
             return;
         }
 
+        const didChangeFilter = this.selectedIndexFileFilterRootPath !== normalizedRootPath;
         this.selectedIndexFileFilterRootPath = normalizedRootPath;
-        void this.plugin.logEvent("info", "index", "index.filter.changed", {
-            rootFilePath: normalizedRootPath,
-            source: "sidebar",
-        });
+        if (didChangeFilter) {
+            void this.plugin.logEvent("info", "index", "index.filter.changed", {
+                rootFilePath: normalizedRootPath,
+                source: "sidebar",
+            });
+        }
+        if (shouldForceListMode) {
+            this.indexSidebarMode = "list";
+            void this.plugin.logEvent("info", "index", "index.mode.changed", {
+                mode: "list",
+                source: "file-filter",
+            });
+        }
         this.interactionController.clearActiveState();
         await this.renderComments();
     }
@@ -3403,39 +3219,6 @@ export default class SideNote2View extends ItemView {
             mode: "list",
             source: "comment-focus",
         });
-    }
-
-    private renderSupportButton(options: {
-        filePath: string | null;
-        isAllCommentsView: boolean;
-        threadCount: number;
-    }): void {
-        const slot = this.containerEl.createDiv("sidenote2-support-button-slot");
-        this.renderSupportButtonIn(slot, options);
-    }
-
-    private renderSupportButtonIn(
-        container: HTMLElement,
-        options: {
-            filePath: string | null;
-            isAllCommentsView: boolean;
-            threadCount: number;
-        },
-    ): void {
-        container.empty();
-        const button = container.createEl("button", {
-            cls: "clickable-icon sidenote2-support-button",
-        });
-        button.setAttribute("type", "button");
-        button.setAttribute("aria-label", "Open log inspector");
-        setIcon(button, "life-buoy");
-        button.onclick = () => {
-            void this.plugin.openSupportLogInspectorModal({
-                filePath: options.filePath,
-                surface: options.isAllCommentsView ? "index" : "note",
-                threadCount: options.threadCount,
-            });
-        };
     }
 
     private renderCommentsList(container: HTMLElement): HTMLDivElement {
@@ -4062,232 +3845,15 @@ export default class SideNote2View extends ItemView {
         commentsContainer: HTMLDivElement,
         comments: Array<Comment | CommentThread>,
         file: TFile,
-        options: {
-            surface: "index" | "note";
-            hasRootScope: boolean;
-            rootFilePath: string | null;
-        },
+        options: SidebarThoughtTrailOptions,
     ): Promise<void> {
-        const thoughtTrailEl = commentsContainer.createDiv("sidenote2-thought-trail");
-        if (!options.hasRootScope || !options.rootFilePath) {
-            const emptyStateEl = thoughtTrailEl.createDiv("sidenote2-empty-state sidenote2-section-empty-state");
-            if (options.surface === "note") {
-                emptyStateEl.createEl("p", { text: "No thought trail is available for this file yet." });
-                emptyStateEl.createEl("p", { text: "Add side notes in this note to create a rooted trail." });
-            } else {
-                emptyStateEl.createEl("p", { text: "Use files to choose a file and see its connected files." });
-            }
-            return;
-        }
-
-        const rootFilePath = options.rootFilePath;
-        const relatedFileLines = buildThoughtTrailLines(this.app.vault.getName(), comments, {
+        await renderSidebarThoughtTrail(commentsContainer, comments, file, options, {
             allCommentsNotePath: this.plugin.getAllCommentsNotePath(),
-            resolveWikiLinkPath: (linkPath, sourceFilePath) => {
-                const linkedFile = this.app.metadataCache.getFirstLinkpathDest(linkPath, sourceFilePath);
-                return linkedFile instanceof TFile ? linkedFile.path : null;
-            },
+            app: this.app,
+            component: this,
+            getPreferredFileLeaf: (filePath) => this.plugin.getPreferredFileLeaf(filePath),
+            renderVersion: this.renderVersion,
         });
-        await this.renderThoughtTrailSection(thoughtTrailEl, {
-            emptyStateText: options.surface === "note"
-                ? [
-                    "No related files for this file yet.",
-                    "Add wiki links in side notes for this file.",
-                ]
-                : [
-                    "No related files for the selected file.",
-                    "Add links in those notes or choose a different file.",
-                ],
-            sourcePath: rootFilePath || file.path,
-            thoughtTrailLines: relatedFileLines,
-            title: "Related Files",
-        });
-    }
-
-    private async renderThoughtTrailSection(
-        container: HTMLDivElement,
-        options: {
-            emptyStateText: string[];
-            sourcePath: string;
-            thoughtTrailLines: string[];
-            title: string;
-        },
-    ): Promise<void> {
-        const sectionEl = container.createDiv("sidenote2-thought-trail-section");
-        sectionEl.createEl("h4", {
-            cls: "sidenote2-thought-trail-section-title",
-            text: options.title,
-        });
-        if (!options.thoughtTrailLines.length) {
-            const emptyStateEl = sectionEl.createDiv("sidenote2-empty-state sidenote2-section-empty-state");
-            options.emptyStateText.forEach((text) => {
-                emptyStateEl.createEl("p", { text });
-            });
-            return;
-        }
-
-        const graphEl = sectionEl.createDiv("sidenote2-thought-trail-section-graph");
-        await this.renderThoughtTrailMermaid(graphEl, options.thoughtTrailLines, options.sourcePath);
-        this.bindThoughtTrailNodeLinks(graphEl, options.thoughtTrailLines);
-    }
-
-    private async renderThoughtTrailMermaid(
-        container: HTMLElement,
-        thoughtTrailLines: string[],
-        sourcePath: string,
-    ): Promise<void> {
-        const fallbackToMarkdownRenderer = async (): Promise<void> => {
-            await MarkdownRenderer.render(
-                this.app,
-                thoughtTrailLines.join("\n"),
-                container,
-                sourcePath,
-                this,
-            );
-
-            const fallbackMermaidEl = container.querySelector(".mermaid");
-            if (fallbackMermaidEl instanceof HTMLElement) {
-                fallbackMermaidEl.setAttribute("data-sidenote2-thought-trail-renderer", "markdown");
-            }
-        };
-
-        await loadMermaid().catch(() => undefined);
-        const mermaidRuntime = (globalThis as typeof globalThis & { mermaid?: unknown }).mermaid;
-        if (!isMermaidRuntimeLike(mermaidRuntime)) {
-            await fallbackToMarkdownRenderer();
-            return;
-        }
-
-        const previousConfig = this.cloneMermaidConfig(
-            mermaidRuntime.getConfig?.() ?? mermaidRuntime.mermaidAPI?.getConfig?.() ?? null,
-        );
-
-        try {
-            mermaidRuntime.initialize({
-                startOnLoad: false,
-                ...getThoughtTrailMermaidRenderConfig(),
-            });
-
-            const renderId = `sidenote2-thought-trail-${this.renderVersion}-${Date.now()}`;
-            const renderResult = await mermaidRuntime.render(
-                renderId,
-                extractThoughtTrailMermaidSource(thoughtTrailLines),
-            );
-            const svg = typeof renderResult === "string" ? renderResult : renderResult?.svg;
-            if (!svg) {
-                await fallbackToMarkdownRenderer();
-                return;
-            }
-
-            const mermaidEl = container.createDiv("mermaid");
-            mermaidEl.setAttribute("data-sidenote2-thought-trail-renderer", "direct");
-            const renderedSvg = parseTrustedMermaidSvg(svg);
-            if (!renderedSvg) {
-                mermaidEl.remove();
-                await fallbackToMarkdownRenderer();
-                return;
-            }
-
-            mermaidEl.replaceChildren(renderedSvg);
-            const bindFunctions = typeof renderResult === "object" && renderResult !== null
-                ? renderResult.bindFunctions
-                : undefined;
-            if (typeof bindFunctions === "function") {
-                bindFunctions(mermaidEl);
-            }
-        } catch {
-            container.querySelectorAll(".mermaid").forEach((element) => element.remove());
-            await fallbackToMarkdownRenderer();
-        } finally {
-            if (previousConfig) {
-                mermaidRuntime.initialize(previousConfig);
-            }
-        }
-    }
-
-    private cloneMermaidConfig<T>(config: T): T {
-        if (config == null) {
-            return config;
-        }
-
-        return JSON.parse(JSON.stringify(config)) as T;
-    }
-
-    private bindThoughtTrailNodeLinks(container: HTMLElement, thoughtTrailLines: string[]): void {
-        const clickTargets = extractThoughtTrailClickTargets(thoughtTrailLines);
-        if (!clickTargets.size) {
-            return;
-        }
-
-        const mermaidEl = container.querySelector(".mermaid");
-        if (!mermaidEl) {
-            return;
-        }
-
-        mermaidEl.querySelectorAll(".node, [data-id]").forEach((element) => {
-            if (!(element instanceof Element)) {
-                return;
-            }
-
-            const nodeId = resolveThoughtTrailNodeId(
-                element.getAttribute("data-id"),
-                element.getAttribute("id"),
-            );
-            if (!nodeId || !clickTargets.has(nodeId)) {
-                return;
-            }
-
-            element.setAttribute("data-sidenote2-thought-trail-node-link", "true");
-        });
-
-        mermaidEl.addEventListener("click", (event: Event) => {
-            const target = event.target;
-            if (!(target instanceof Element)) {
-                return;
-            }
-
-            const nodeEl = target.closest(".node, [data-id]");
-            if (!(nodeEl instanceof Element)) {
-                return;
-            }
-
-            const nodeId = resolveThoughtTrailNodeId(
-                nodeEl.getAttribute("data-id"),
-                nodeEl.getAttribute("id"),
-            );
-            if (!nodeId) {
-                return;
-            }
-
-            const targetUrl = clickTargets.get(nodeId);
-            if (!targetUrl) {
-                return;
-            }
-
-            event.preventDefault();
-            event.stopPropagation();
-            void this.openThoughtTrailTarget(targetUrl);
-        });
-    }
-
-    private async openThoughtTrailTarget(targetUrl: string): Promise<void> {
-        const filePath = parseThoughtTrailOpenFilePath(targetUrl);
-        if (!filePath) {
-            return;
-        }
-
-        const targetFile = this.app.vault.getAbstractFileByPath(filePath);
-        if (!(targetFile instanceof TFile)) {
-            return;
-        }
-
-        const targetLeaf = this.plugin.getPreferredFileLeaf(filePath) ?? this.app.workspace.getLeaf(false);
-        if (!targetLeaf) {
-            return;
-        }
-
-        await targetLeaf.openFile(targetFile);
-        this.app.workspace.setActiveLeaf(targetLeaf, { focus: true });
     }
 
     getState(): CustomViewState {

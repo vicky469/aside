@@ -5,7 +5,7 @@ import {
     type SideNoteSyncEventInput,
 } from "../core/storage/sideNoteSyncEvents";
 import { cloneCommentThreads, type CommentThread } from "../commentManager";
-import type { PersistedPluginData } from "./indexNoteSettingsPlanner";
+import type { PersistedPluginData } from "../settings/indexNoteSettingsPlanner";
 
 export const SIDE_NOTE_SYNC_EVENT_STATE_SCHEMA_VERSION = 1;
 

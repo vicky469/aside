@@ -46,7 +46,7 @@ Current sidebar-card click in index mode:
 Files involved:
 
 - [SideNote2View.ts](/Users/wenqingli/Obsidian/dev/SideNote2/src/ui/views/SideNote2View.ts)
-- [commentHighlightController.ts](/Users/wenqingli/Obsidian/dev/SideNote2/src/control/commentHighlightController.ts)
+- [commentHighlightController.ts](/Users/wenqingli/Obsidian/dev/SideNote2/src/comments/commentHighlightController.ts)
 - [allCommentsNote.ts](/Users/wenqingli/Obsidian/dev/SideNote2/src/core/derived/allCommentsNote.ts)
 
 There is no native `#^block` jump in the visible path anymore.

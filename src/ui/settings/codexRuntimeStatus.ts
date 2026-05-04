@@ -1,8 +1,8 @@
-import type { CodexRuntimeDiagnostics } from "../../control/agentRuntimeAdapter";
+import type { CodexRuntimeDiagnostics } from "../../agents/agentRuntimeAdapter";
 import type {
     AgentRuntimeSelection,
     RemoteRuntimeAvailability,
-} from "../../control/agentRuntimeSelection";
+} from "../../agents/agentRuntimeSelection";
 
 export interface CodexRuntimeStatusPresentation {
     title: string;

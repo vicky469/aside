@@ -5,8 +5,8 @@ import { CommentManager, type Comment } from "../src/commentManager";
 import {
     CommentMutationController,
     type CommentMutationHost,
-} from "../src/control/commentMutationController";
-import type { SavedUserEntryEvent } from "../src/control/commentAgentController";
+} from "../src/comments/commentMutationController";
+import type { SavedUserEntryEvent } from "../src/agents/commentAgentController";
 import type { DraftComment, DraftSelection } from "../src/domain/drafts";
 
 function createFile(path: string): TFile {

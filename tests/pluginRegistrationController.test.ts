@@ -6,7 +6,7 @@ import {
     resolveCommentProtocolTarget,
     type EditorMenuItemLike,
     type EditorMenuLike,
-} from "../src/control/pluginRegistrationController";
+} from "../src/app/pluginRegistrationController";
 
 function createFile(path: string): TFile {
     return {

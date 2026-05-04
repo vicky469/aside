@@ -1,6 +1,6 @@
 import * as assert from "node:assert/strict";
 import test from "node:test";
-import { normalizePersistedAgentRuns } from "../src/control/agentRunStorePlanner";
+import { normalizePersistedAgentRuns } from "../src/agents/agentRunStorePlanner";
 
 test("normalizePersistedAgentRuns keeps valid records and drops malformed ones", () => {
     assert.deepEqual(normalizePersistedAgentRuns([

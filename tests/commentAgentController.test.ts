@@ -2,11 +2,11 @@ import * as assert from "node:assert/strict";
 import test from "node:test";
 import type { TFile } from "obsidian";
 import { CommentManager, type Comment } from "../src/commentManager";
-import { AgentRunStore } from "../src/control/agentRunStore";
-import { CommentAgentController } from "../src/control/commentAgentController";
-import type { PersistedPluginData } from "../src/control/indexNoteSettingsPlanner";
-import type { AgentRuntimeSelection } from "../src/control/agentRuntimeSelection";
-import type { RemoteRuntimeResponseEnvelope } from "../src/control/openclawRuntimeBridge";
+import { AgentRunStore } from "../src/agents/agentRunStore";
+import { CommentAgentController } from "../src/agents/commentAgentController";
+import type { PersistedPluginData } from "../src/settings/indexNoteSettingsPlanner";
+import type { AgentRuntimeSelection } from "../src/agents/agentRuntimeSelection";
+import type { RemoteRuntimeResponseEnvelope } from "../src/agents/openclawRuntimeBridge";
 
 function createFile(path: string): TFile {
     return {

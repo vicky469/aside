@@ -175,10 +175,6 @@ export class WorkspaceViewController {
         return this.host.app.vault.cachedRead(file);
     }
 
-    public getVisibleSidebarFiles(): TFile[] {
-        return this.getOpenSidebarFiles();
-    }
-
     public async loadVisibleFiles(): Promise<void> {
         const visibleFiles = this.getOpenSidebarFiles();
         for (const file of visibleFiles) {

@@ -14,7 +14,7 @@ import {
     shouldRevealSidebarLeaf,
     type PreferredFileLeafCandidate,
 } from "./commentNavigationPlanner";
-import { resolveIndexLeafMode } from "./workspaceContextPlanner";
+import { resolveIndexLeafMode } from "../app/workspaceContextPlanner";
 
 interface SidebarViewLike {
     getViewType(): string;

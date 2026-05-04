@@ -27,16 +27,16 @@ It defines a private or allowlisted DGX-hosted remote runtime running on an NVID
 The plugin already contains most of the client-side remote runtime plumbing:
 
 - remote bridge request contract:
-  [src/control/openclawRuntimeBridge.ts](../../src/control/openclawRuntimeBridge.ts)
+  [src/agents/openclawRuntimeBridge.ts](../../src/agents/openclawRuntimeBridge.ts)
 - remote run lifecycle, persistence, restart reconciliation, cancel:
-  [src/control/commentAgentController.ts](../../src/control/commentAgentController.ts)
+  [src/agents/commentAgentController.ts](../../src/agents/commentAgentController.ts)
 - local desktop Codex process launch and event parsing:
-  [src/control/agentRuntimeAdapter.ts](../../src/control/agentRuntimeAdapter.ts)
+  [src/agents/agentRuntimeAdapter.ts](../../src/agents/agentRuntimeAdapter.ts)
 - runtime settings persistence and device-local secret storage:
-  [src/control/indexNoteSettingsController.ts](../../src/control/indexNoteSettingsController.ts),
-  [src/control/localSecretStore.ts](../../src/control/localSecretStore.ts)
+  [src/settings/indexNoteSettingsController.ts](../../src/settings/indexNoteSettingsController.ts),
+  [src/settings/localSecretStore.ts](../../src/settings/localSecretStore.ts)
 - current settings surface:
-  [src/ui/settings/SideNote2SettingTab.ts](../../src/ui/settings/SideNote2SettingTab.ts)
+  [src/ui/settings/SideNote2Setting.ts](../../src/ui/settings/SideNote2Setting.ts)
 
 That means the DGX route is not blocked on inventing a new plugin-side thread model.
 It is mainly blocked on:
@@ -95,7 +95,7 @@ Key boundary:
 The DGX bridge must behave like the current desktop local runtime from the point where Codex execution starts.
 
 That means it should mirror the behavior in
-[agentRuntimeAdapter.ts](../../src/control/agentRuntimeAdapter.ts):
+[agentRuntimeAdapter.ts](../../src/agents/agentRuntimeAdapter.ts):
 
 - recover a usable execution `PATH`
 - launch `codex app-server --listen stdio://`

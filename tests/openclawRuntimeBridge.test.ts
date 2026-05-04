@@ -7,7 +7,7 @@ import {
     pollRemoteRuntimeRun,
     probeRemoteRuntimeBridge,
     startRemoteRuntimeRun,
-} from "../src/control/openclawRuntimeBridge";
+} from "../src/agents/openclawRuntimeBridge";
 
 test("parseRemoteRuntimeResponseEnvelope normalizes streamed and terminal payloads", () => {
     assert.deepEqual(parseRemoteRuntimeResponseEnvelope({

@@ -10,7 +10,7 @@ import {
     resetResolvedAgentExecutionEnvForTests,
     resolveAgentExecutionEnv,
     sanitizeAgentReplyText,
-} from "../src/control/agentRuntimeAdapter";
+} from "../src/agents/agentRuntimeAdapter";
 
 type RuntimeModules = Parameters<typeof resolveAgentExecutionEnv>[0];
 

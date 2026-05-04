@@ -224,7 +224,7 @@ Manager invariants:
 - appending an entry updates `updatedAt`
 - resolving never removes entries
 
-### `src/control/commentEntryController.ts`
+### `src/comments/commentEntryController.ts`
 
 Owns:
 
@@ -232,7 +232,7 @@ Owns:
 - starting an append-entry draft from a thread card
 - passing draft mode into `DraftSessionStore`
 
-### `src/control/commentMutationController.ts`
+### `src/comments/commentMutationController.ts`
 
 Owns:
 
@@ -251,7 +251,7 @@ interface DraftValidationResult {
 }
 ```
 
-### `src/control/commentPersistenceController.ts`
+### `src/comments/commentPersistenceController.ts`
 
 Owns:
 

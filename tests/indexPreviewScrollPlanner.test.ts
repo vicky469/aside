@@ -1,6 +1,6 @@
 import * as assert from "node:assert/strict";
 import test from "node:test";
-import { estimateIndexPreviewScrollTop } from "../src/control/indexPreviewScrollPlanner";
+import { estimateIndexPreviewScrollTop } from "../src/comments/indexPreviewScrollPlanner";
 
 test("estimateIndexPreviewScrollTop uses rendered samples when available", () => {
     const scrollTop = estimateIndexPreviewScrollTop(

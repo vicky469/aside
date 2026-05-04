@@ -7,7 +7,7 @@ import { MAX_SIDENOTE_WORDS, countCommentWords, exceedsCommentWordLimit } from "
 import { resolveAnchorRange } from "../core/anchors/anchorResolver";
 import { getManagedSectionRange, getVisibleNoteContent } from "../core/storage/noteCommentStorage";
 import { canSaveDraftWithoutComment, type DraftComment, type DraftSelection } from "../domain/drafts";
-import type { SavedUserEntryEvent } from "./commentAgentController";
+import type { SavedUserEntryEvent } from "../agents/commentAgentController";
 import type { SetDraftCommentOptions } from "./commentSessionController";
 
 type PersistOptions = {

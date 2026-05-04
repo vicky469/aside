@@ -4,7 +4,7 @@ import type { Comment } from "../src/commentManager";
 import {
     getResolvedVisibilityForCommentSelection,
     shouldEnableResolvedVisibilityForComment,
-} from "../src/control/commentSelectionVisibility";
+} from "../src/comments/commentSelectionVisibility";
 
 function createComment(overrides: Partial<Comment> = {}): Comment {
     return {

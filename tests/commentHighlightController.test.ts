@@ -1,12 +1,12 @@
 import * as assert from "node:assert/strict";
 import test from "node:test";
 import type { Comment } from "../src/commentManager";
-import { findClickedHighlightCommentId } from "../src/control/commentHighlightClickTarget";
+import { findClickedHighlightCommentId } from "../src/comments/commentHighlightClickTarget";
 import {
     findClickedIndexLivePreviewTarget,
     isIndexNativeCollapseControlTarget,
-} from "../src/control/commentIndexClickTarget";
-import { buildPreviewHighlightWraps } from "../src/control/commentHighlightPlanner";
+} from "../src/comments/commentIndexClickTarget";
+import { buildPreviewHighlightWraps } from "../src/comments/commentHighlightPlanner";
 
 function createComment(overrides: Partial<Comment> = {}): Comment {
     return {
@@ -112,7 +112,7 @@ test("findClickedIndexLivePreviewTarget resolves comment links from live preview
     });
 });
 
-test("findClickedIndexLivePreviewTarget leaves file headings to native selection and collapse", () => {
+test("findClickedIndexLivePreviewTarget resolves file headings from live preview DOM", () => {
     const target = {
         closest: (selector: string) => {
             if (selector === "a.sidenote2-index-comment-link[data-sidenote2-comment-url]") {
@@ -132,7 +132,10 @@ test("findClickedIndexLivePreviewTarget leaves file headings to native selection
         },
     };
 
-    assert.equal(findClickedIndexLivePreviewTarget(target), null);
+    assert.deepEqual(findClickedIndexLivePreviewTarget(target), {
+        kind: "file",
+        filePath: "books/Note.md",
+    });
 });
 
 test("findClickedIndexLivePreviewTarget leaves native collapse controls alone", () => {

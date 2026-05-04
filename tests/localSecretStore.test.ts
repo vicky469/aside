@@ -1,6 +1,6 @@
 import * as assert from "node:assert/strict";
 import test from "node:test";
-import { buildLocalSecretStorageKey, LocalSecretStore } from "../src/control/localSecretStore";
+import { buildLocalSecretStorageKey, LocalSecretStore } from "../src/settings/localSecretStore";
 
 class MemoryStorage {
     private readonly values = new Map<string, string>();

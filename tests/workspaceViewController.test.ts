@@ -1,7 +1,7 @@
 import * as assert from "node:assert/strict";
 import test from "node:test";
 import type { TFile } from "obsidian";
-import { WorkspaceViewController } from "../src/control/workspaceViewController";
+import { WorkspaceViewController } from "../src/app/workspaceViewController";
 
 function createFile(path: string): TFile {
     return {

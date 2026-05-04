@@ -229,8 +229,16 @@ export class CommentHighlightController {
             return;
         }
 
-        void this.host.activateIndexComment(
-            context.clickedTarget.commentId,
+        if (context.clickedTarget.kind === "comment") {
+            void this.host.activateIndexComment(
+                context.clickedTarget.commentId,
+                context.indexFilePath,
+                context.clickedTarget.filePath,
+            );
+            return;
+        }
+
+        void this.host.activateIndexFileScope(
             context.indexFilePath,
             context.clickedTarget.filePath,
         );
@@ -920,7 +928,12 @@ export class CommentHighlightController {
                 return;
             }
 
-            void host.activateIndexComment(clickedTarget.commentId, indexFilePath, clickedTarget.filePath);
+            if (clickedTarget.kind === "comment") {
+                void host.activateIndexComment(clickedTarget.commentId, indexFilePath, clickedTarget.filePath);
+                return;
+            }
+
+            void host.activateIndexFileScope(indexFilePath, clickedTarget.filePath);
         };
 
         return EditorView.domEventHandlers({
@@ -972,7 +985,7 @@ export class CommentHighlightController {
                 const safePos = Math.max(0, Math.min(pos, view.state.doc.length));
                 const lineText = view.state.doc.lineAt(safePos).text;
                 const lineTarget = findIndexMarkdownLineTarget(lineText);
-                if (!lineTarget || lineTarget.kind !== "comment") {
+                if (!lineTarget) {
                     return false;
                 }
 
@@ -1029,13 +1042,17 @@ export class CommentHighlightController {
                 const safePos = Math.max(0, Math.min(pos, view.state.doc.length));
                 const lineText = view.state.doc.lineAt(safePos).text;
                 const lineTarget = findIndexMarkdownLineTarget(lineText);
-                if (!lineTarget || lineTarget.kind !== "comment") {
+                if (!lineTarget) {
                     return false;
                 }
 
                 event.preventDefault();
                 event.stopPropagation();
-                void host.activateIndexComment(lineTarget.commentId, filePath, lineTarget.filePath);
+                if (lineTarget.kind === "comment") {
+                    void host.activateIndexComment(lineTarget.commentId, filePath, lineTarget.filePath);
+                } else {
+                    void host.activateIndexFileScope(filePath, lineTarget.filePath);
+                }
                 return true;
             },
         });

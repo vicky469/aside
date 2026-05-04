@@ -1,12 +1,12 @@
 import { addIcon, WorkspaceLeaf, TFile, Notice, Plugin, normalizePath, MarkdownView, FileSystemAdapter, requestUrl, FileView, type Editor } from "obsidian";
 import { Comment, CommentManager, CommentThread, type ReorderPlacement } from "./commentManager";
-import { CommentEntryController } from "./control/commentEntryController";
+import { CommentEntryController } from "./comments/commentEntryController";
 import {
     CommentAgentController,
     type AgentStreamUpdate,
     type SavedUserEntryEvent,
-} from "./control/commentAgentController";
-import { CommentHighlightController } from "./control/commentHighlightController";
+} from "./agents/commentAgentController";
+import { CommentHighlightController } from "./comments/commentHighlightController";
 import {
     CommentMutationController,
     type DeleteCommentOptions,
@@ -15,31 +15,33 @@ import {
     type ResolveCommentOptions,
     type SaveDraftOptions,
     type SetCommentPinnedOptions,
-} from "./control/commentMutationController";
-import { CommentNavigationController } from "./control/commentNavigationController";
-import { pickPinnedCommentableFile, pickPreferredFileLeafCandidate, pickSidebarTargetFile, type PreferredFileLeafCandidate } from "./control/commentNavigationPlanner";
-import { CommentPersistenceController } from "./control/commentPersistenceController";
-import type { SetSidebarViewStateOptions } from "./control/commentSessionController";
-import { getResolvedVisibilityForCommentSelection } from "./control/commentSelectionVisibility";
-import { CommentSessionController } from "./control/commentSessionController";
-import { IndexNoteSettingsController } from "./control/indexNoteSettingsController";
-import { PluginLifecycleController } from "./control/pluginLifecycleController";
-import { PluginRegistrationController } from "./control/pluginRegistrationController";
-import { WorkspaceContextController } from "./control/workspaceContextController";
-import { WorkspaceViewController } from "./control/workspaceViewController";
-import { AgentRunStore } from "./control/agentRunStore";
+} from "./comments/commentMutationController";
+import { CommentNavigationController } from "./comments/commentNavigationController";
+import { pickPinnedCommentableFile, pickPreferredFileLeafCandidate, pickSidebarTargetFile, type PreferredFileLeafCandidate } from "./comments/commentNavigationPlanner";
+import { CommentPersistenceController } from "./comments/commentPersistenceController";
+import type { SetSidebarViewStateOptions } from "./comments/commentSessionController";
+import { getResolvedVisibilityForCommentSelection } from "./comments/commentSelectionVisibility";
+import { CommentSessionController } from "./comments/commentSessionController";
+import { IndexNoteSettingsController } from "./settings/indexNoteSettingsController";
+import { PluginEventRouter } from "./app/pluginEventRouter";
+import { PluginLifecycleController } from "./app/pluginLifecycleController";
+import { PluginRegistrationController } from "./app/pluginRegistrationController";
+import { RefreshCoordinator } from "./app/refreshCoordinator";
+import { WorkspaceContextController } from "./app/workspaceContextController";
+import { WorkspaceViewController } from "./app/workspaceViewController";
+import { AgentRunStore } from "./agents/agentRunStore";
 import {
     disposeAgentRuntimeProcesses,
     getCodexRuntimeDiagnostics as probeCodexRuntimeDiagnostics,
     runAgentRuntime,
     type CodexRuntimeDiagnostics,
-} from "./control/agentRuntimeAdapter";
+} from "./agents/agentRuntimeAdapter";
 import {
     getRemoteRuntimeAvailability as getRemoteRuntimeAvailabilitySnapshot,
     resolveAgentRuntimeSelection as resolveAgentRuntimeSelectionPlan,
     type AgentRuntimeSelection,
     type RemoteRuntimeAvailability,
-} from "./control/agentRuntimeSelection";
+} from "./agents/agentRuntimeSelection";
 import {
     cancelRemoteRuntimeRun,
     createRemoteRuntimeRequester,
@@ -48,8 +50,8 @@ import {
     startRemoteRuntimeRun,
     type RemoteRuntimeHealthEnvelope,
     type RemoteRuntimeResponseEnvelope,
-} from "./control/openclawRuntimeBridge";
-import { buildLocalSecretStorageKey, LocalSecretStore } from "./control/localSecretStore";
+} from "./agents/openclawRuntimeBridge";
+import { buildLocalSecretStorageKey, LocalSecretStore } from "./settings/localSecretStore";
 import type { AgentRunRecord, AgentRunStreamState } from "./core/agents/agentRuns";
 import {
     normalizeRemoteRuntimeBearerToken,
@@ -64,10 +66,10 @@ import { syncInstalledCodexSkill, type CodexSkillSyncModules } from "./core/code
 import { AggregateCommentIndex } from "./index/AggregateCommentIndex";
 import { ParsedNoteCache } from "./cache/ParsedNoteCache";
 import { parseNoteComments, ParsedNoteComments } from "./core/storage/noteCommentStorage";
-import SideNote2SettingTab, {
+import SideNote2Setting, {
     DEFAULT_SETTINGS,
     type SideNote2Settings,
-} from "./ui/settings/SideNote2SettingTab";
+} from "./ui/settings/SideNote2Setting";
 import {
     SIDE_NOTE2_ICON_ID,
     SIDE_NOTE2_ICON_SVG,
@@ -86,7 +88,6 @@ const SIDECAR_STORAGE_MIGRATION_VERSION = 2;
 const SIDE_NOTE_SYNC_EVENT_MIGRATION_VERSION = 2;
 const SOURCE_IDENTITY_MIGRATION_VERSION = 1;
 const SIDE_NOTE_SYNC_DEVICE_ID_STORAGE_PREFIX = "sidenote2.sync-device-id.v1";
-const FOCUSED_SYNC_POLL_INTERVAL_MS = 750;
 
 // Helper function to generate SHA256 hash using Web Crypto API (works on mobile)
 async function generateHash(text: string): Promise<string> {
@@ -412,6 +413,12 @@ export default class SideNote2 extends Plugin {
         },
         log: (level, area, event, payload) => this.logEvent(level, area, event, payload),
     });
+    private readonly refreshCoordinator = new RefreshCoordinator({
+        replaySyncedSideNoteEvents: (targetNotePath) =>
+            this.commentPersistenceController.replaySyncedSideNoteEvents(targetNotePath),
+        refreshCommentViews: (options) => this.workspaceViewController.refreshCommentViews(options),
+        scheduleAggregateNoteRefresh: () => this.scheduleAggregateNoteRefresh(),
+    });
     private readonly pluginRegistrationController = new PluginRegistrationController({
         manifestId: this.manifest.id,
         iconId: SIDE_NOTE2_ICON_ID,
@@ -455,12 +462,31 @@ export default class SideNote2 extends Plugin {
         updateSidebarViews: (file) => this.updateSidebarViews(file),
         refreshEditorDecorations: () => this.refreshEditorDecorations(),
     });
+    private readonly pluginEventRouter = new PluginEventRouter({
+        app: this.app,
+        registerEvent: (eventRef) => {
+            this.registerEvent(eventRef);
+        },
+        isTFile: (value): value is TFile => value instanceof TFile,
+        handleLayoutReady: () => this.pluginLifecycleController.handleLayoutReady(),
+        handleFileOpen: (file) => {
+            this.workspaceContextController.handleFileOpen(file);
+        },
+        handleActiveLeafChange: (leaf) => {
+            this.workspaceContextController.handleActiveLeafChange(leaf);
+        },
+        handleFileRename: (file, oldPath) => this.pluginLifecycleController.handleFileRename(file, oldPath),
+        handleFileDelete: (file) => this.pluginLifecycleController.handleFileDelete(file),
+        handleFileModify: (file) => this.pluginLifecycleController.handleFileModify(file),
+        handleEditorChange: (filePath) => {
+            this.pluginLifecycleController.handleEditorChange(filePath);
+        },
+    });
     private activeMarkdownFile: TFile | null = null;
     private activeSidebarFile: TFile | null = null;
     private aggregateCommentIndex = new AggregateCommentIndex();
     private parsedNoteCache = new ParsedNoteCache(20);
     private sideNoteSyncDeviceId: string | null = null;
-    private focusedSyncPollInFlight = false;
 
     private async detectRuntimeMode(): Promise<"local" | "release"> {
         const pluginRootRelativePath = normalizePath(`${this.app.vault.configDir}/plugins/${this.manifest.id}`);
@@ -522,59 +548,8 @@ export default class SideNote2 extends Plugin {
         const activeFile = this.app.workspace.getActiveFile();
         this.workspaceContextController.initializeActiveFiles(activeFile);
         await this.workspaceViewController.loadVisibleFiles();
-        if (this.app.workspace.layoutReady) {
-            await this.pluginLifecycleController.handleLayoutReady();
-        } else {
-            this.app.workspace.onLayoutReady(async () => {
-                await this.pluginLifecycleController.handleLayoutReady();
-            });
-        }
-
-        // Listen for active leaf changes to update the comment view
-        this.registerEvent(
-            this.app.workspace.on('file-open', (file) => {
-                this.workspaceContextController.handleFileOpen(file);
-            })
-        );
-
-        this.registerEvent(
-            this.app.workspace.on('active-leaf-change', (leaf) => {
-                this.workspaceContextController.handleActiveLeafChange(leaf);
-            })
-        );
-
-        // Keep cached comment paths aligned with renamed notes.
-        this.registerEvent(
-            this.app.vault.on('rename', async (file, oldPath) => {
-                await this.pluginLifecycleController.handleFileRename(file instanceof TFile ? file : null, oldPath);
-            })
-        );
-
-        this.registerEvent(
-            this.app.vault.on('delete', async (file) => {
-                await this.pluginLifecycleController.handleFileDelete(file instanceof TFile ? file : null);
-            })
-        );
-
-        // Keep in-memory comments in sync with their managed appendix section.
-        this.registerEvent(
-            this.app.vault.on('modify', async (file) => {
-                await this.pluginLifecycleController.handleFileModify(file instanceof TFile ? file : null);
-            })
-        );
-
-        // Live editor change - refresh decorations while edits are in flight.
-        this.registerEvent(
-            this.app.workspace.on('editor-change', (_editor, info) => {
-                this.pluginLifecycleController.handleEditorChange(info?.file?.path);
-            })
-        );
-
-        this.registerInterval(window.setInterval(() => {
-            void this.pollFocusedSyncedSideNoteEvents();
-        }, FOCUSED_SYNC_POLL_INTERVAL_MS));
-
-        this.addSettingTab(new SideNote2SettingTab(this.app, this));
+        await this.pluginEventRouter.register();
+        this.addSettingTab(new SideNote2Setting(this.app, this));
     }
 
     onunload() {
@@ -598,47 +573,10 @@ export default class SideNote2 extends Plugin {
     async onExternalSettingsChange() {
         await this.loadSettings();
         this.agentRunStore.load();
-        const appliedEventCount = await this.commentPersistenceController.replaySyncedSideNoteEvents();
+        const appliedEventCount = await this.refreshCoordinator.handleExternalPluginDataChange();
         await this.logEvent("info", "persistence", "sync.plugin-data.external-settings", {
             appliedEventCount,
         });
-    }
-
-    private getFocusedSyncFiles(): TFile[] {
-        const filesByPath = new Map<string, TFile>();
-        const addFile = (file: TFile | null): void => {
-            if (this.isCommentableFile(file)) {
-                filesByPath.set(file.path, file);
-            }
-        };
-
-        addFile(this.getSidebarTargetFile());
-        for (const file of this.workspaceViewController.getVisibleSidebarFiles()) {
-            addFile(file);
-        }
-        return Array.from(filesByPath.values());
-    }
-
-    private async pollFocusedSyncedSideNoteEvents(): Promise<void> {
-        if (this.focusedSyncPollInFlight) {
-            return;
-        }
-
-        const files = this.getFocusedSyncFiles();
-        if (files.length === 0) {
-            return;
-        }
-
-        this.focusedSyncPollInFlight = true;
-        try {
-            for (const file of files) {
-                await this.commentPersistenceController.replaySyncedSideNoteEvents(file.path);
-            }
-        } catch (error) {
-            this.warn("Failed to poll focused SideNote2 sync state.", error, "persistence", "sync.plugin-data.poll.warn");
-        } finally {
-            this.focusedSyncPollInFlight = false;
-        }
     }
 
     public readPersistedPluginData() {

@@ -18,6 +18,7 @@ import {
     getAgentRunStatusPresentation,
     resolveSidebarCommentAuthor,
     shouldShowRetryActionForSidebarComment,
+    shouldRenderChildEntryMoveHandle,
     shouldRenderSidebarCommentAuthor,
     shouldRenderNestedThreadEntries,
     shouldRenderThreadNestedToggle,
@@ -218,6 +219,36 @@ test("buildPersistedCommentPresentation omits anchored preview text for page not
     }), null);
 
     assert.equal(presentation.metaPreviewText, null);
+});
+
+test("shouldRenderChildEntryMoveHandle hides child drag handles in index/source cards", () => {
+    assert.equal(shouldRenderChildEntryMoveHandle({
+        enableChildEntryMove: true,
+        showSourceRedirectAction: true,
+        entryDeleted: false,
+        threadDeleted: false,
+    }), false);
+    assert.equal(shouldRenderChildEntryMoveHandle({
+        enableChildEntryMove: true,
+        showSourceRedirectAction: false,
+        entryDeleted: false,
+        threadDeleted: false,
+    }), true);
+});
+
+test("shouldRenderChildEntryMoveHandle hides child drag handles for deleted entries", () => {
+    assert.equal(shouldRenderChildEntryMoveHandle({
+        enableChildEntryMove: true,
+        showSourceRedirectAction: false,
+        entryDeleted: true,
+        threadDeleted: false,
+    }), false);
+    assert.equal(shouldRenderChildEntryMoveHandle({
+        enableChildEntryMove: true,
+        showSourceRedirectAction: false,
+        entryDeleted: false,
+        threadDeleted: true,
+    }), false);
 });
 
 test("shouldRenderNestedThreadEntries hides stored child comments when nested comments are off", () => {
