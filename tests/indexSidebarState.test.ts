@@ -3,7 +3,6 @@ import test from "node:test";
 import { commentToThread, type Comment } from "../src/commentManager";
 import {
     filterIndexThreadsByExistingSourceFiles,
-    resolveIndexModeWithTagAvailability,
     scopeIndexThreadsByFilePaths,
     shouldShowActiveIndexEmptyState,
     shouldShowGenericIndexEmptyState,
@@ -147,11 +146,4 @@ test("shouldShowGenericIndexEmptyState hides the generic selected-file-filter em
         hasSearchQuery: false,
         renderedItemCount: 1,
     }), false);
-});
-
-test("resolveIndexModeWithTagAvailability falls back from unavailable tags to list", () => {
-    assert.equal(resolveIndexModeWithTagAvailability("tags", false), "list");
-    assert.equal(resolveIndexModeWithTagAvailability("tags", true), "tags");
-    assert.equal(resolveIndexModeWithTagAvailability("thought-trail", false), "thought-trail");
-    assert.equal(resolveIndexModeWithTagAvailability("list", false), "list");
 });

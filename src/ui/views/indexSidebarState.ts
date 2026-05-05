@@ -43,15 +43,6 @@ export function shouldShowIndexListToolbarChips(
     return !isAllCommentsView || indexSidebarMode === "list" || indexSidebarMode === "tags";
 }
 
-export function resolveIndexModeWithTagAvailability(
-    indexSidebarMode: IndexSidebarMode,
-    isTagsEnabled: boolean,
-): IndexSidebarMode {
-    return indexSidebarMode === "tags" && !isTagsEnabled
-        ? "list"
-        : indexSidebarMode;
-}
-
 export function shouldShowResolvedIndexEmptyState(
     showResolved: boolean,
     totalScopedCount: number,

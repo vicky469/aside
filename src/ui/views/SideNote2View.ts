@@ -75,7 +75,6 @@ import { buildRootedThoughtTrailScope } from "./sidebarThoughtTrailScope";
 import { clearSidebarSearchHighlights, highlightSidebarSearchMatches } from "./sidebarSearchHighlight";
 import {
     filterIndexThreadsByExistingSourceFiles,
-    resolveIndexModeWithTagAvailability,
     scopeIndexThreadsByFilePaths,
     shouldShowActiveIndexEmptyState,
     shouldShowGenericIndexEmptyState,
@@ -1310,18 +1309,6 @@ export default class SideNote2View extends ItemView {
             ) {
                 this.noteSidebarVisibleTagFilterKey = null;
             }
-            const isIndexTagsEnabled = isAllCommentsView
-                ? (this.noteSidebarTagIndex?.threadIdsByTag.size ?? 0) > 0
-                : true;
-            if (isAllCommentsView) {
-                this.indexSidebarMode = resolveIndexModeWithTagAvailability(
-                    this.indexSidebarMode,
-                    isIndexTagsEnabled,
-                );
-                if (!isIndexTagsEnabled) {
-                    this.noteSidebarVisibleTagFilterKey = null;
-                }
-            }
             const visiblePersistedThreads = persistedThreads.filter((thread) =>
                 isAllCommentsView
                     ? matchesResolvedVisibility(thread.resolved, showResolved)
@@ -1503,7 +1490,7 @@ export default class SideNote2View extends ItemView {
                     succeeded: 0,
                     failed: 0,
                 },
-                isTagsEnabled: isIndexTagsEnabled,
+                isTagsEnabled: true,
                 isThoughtTrailEnabled: isIndexThoughtTrailEnabled,
                 noteSidebarContentFilter: "all",
                 noteSidebarMode: this.noteSidebarMode,
