@@ -1163,9 +1163,14 @@ button.sidenote2-tab-button.sidenote2-tab-button--active {
 .sidenote2-comment-source-label {
     grid-column: 1;
     min-width: 0;
+    display: -webkit-box;
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    white-space: normal;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
 }
 
 .sidenote2-comment-meta-separator {

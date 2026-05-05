@@ -198,7 +198,8 @@ export function formatSidebarCommentSourceFileLabel(filePath: string): string {
 }
 
 export function formatSidebarCommentIndexLeadLabel(comment: Pick<Comment, "anchorKind" | "selectedText" | "filePath">): string {
-    return formatSidebarCommentSourceFileLabel(comment.filePath);
+    return formatSidebarCommentSelectedTextPreview(comment)
+        ?? formatSidebarCommentSourceFileLabel(comment.filePath);
 }
 
 const SIDEBAR_SIDE_NOTE_REFERENCE_PREVIEW_LIMIT = 48;
@@ -617,13 +618,16 @@ function renderCommentMeta(
 
     if (host.showSourceRedirectAction) {
         const leadLabel = formatSidebarCommentIndexLeadLabel(comment);
+        const usesSelectedTextPreview = !isPageComment(comment) && !!meta.metaPreviewText;
         const sourceLabelEl = metaEl.createSpan({
-            cls: "sidenote2-comment-source-label",
+            cls: usesSelectedTextPreview
+                ? "sidenote2-comment-meta-preview"
+                : "sidenote2-comment-source-label",
             text: leadLabel,
         });
         sourceLabelEl.setAttribute(
             "title",
-            comment.filePath,
+            usesSelectedTextPreview ? leadLabel : comment.filePath,
         );
         metaEl.createSpan({
             cls: "sidenote2-comment-meta-value",

@@ -581,7 +581,7 @@ test("formatSidebarCommentSourceFileLabel keeps the basename without md, even fo
     );
 });
 
-test("formatSidebarCommentIndexLeadLabel uses the source page name for both page and anchored notes", () => {
+test("formatSidebarCommentIndexLeadLabel uses selected text for anchored notes and filename for page notes", () => {
     assert.equal(
         formatSidebarCommentIndexLeadLabel(createComment({
             anchorKind: "page",
@@ -596,7 +596,7 @@ test("formatSidebarCommentIndexLeadLabel uses the source page name for both page
             selectedText: "First line\nsecond line",
             filePath: "docs/architecture.md",
         })),
-        "architecture",
+        "First line second line",
     );
 });
 

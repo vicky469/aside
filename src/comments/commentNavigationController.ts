@@ -265,6 +265,13 @@ export class CommentNavigationController {
         await this.activateSidebarView({ skipViewUpdate });
     }
 
+    public async revealSidebarView(skipViewUpdate = false): Promise<void> {
+        await this.activateSidebarView({
+            skipViewUpdate,
+            revealLeaf: true,
+        });
+    }
+
     public async ensureSidebarView(skipViewUpdate = false): Promise<void> {
         await this.activateSidebarView({
             skipViewUpdate,

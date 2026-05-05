@@ -1,4 +1,4 @@
-import { addIcon, WorkspaceLeaf, TFile, Notice, Plugin, normalizePath, MarkdownView, FileSystemAdapter, requestUrl, FileView, type Editor } from "obsidian";
+import { addIcon, WorkspaceLeaf, TFile, Notice, Plugin, normalizePath, MarkdownView, FileSystemAdapter, requestUrl, FileView, Platform, type Editor } from "obsidian";
 import { Comment, CommentManager, CommentThread, type ReorderPlacement } from "./commentManager";
 import { CommentEntryController } from "./comments/commentEntryController";
 import {
@@ -1150,7 +1150,11 @@ export default class SideNote2 extends Plugin {
         }
 
         const indexFile = this.workspaceViewController.getMarkdownFileByPath(indexFilePath);
-        await this.commentNavigationController.ensureSidebarView(true);
+        if (Platform.isMobile || Platform.isMobileApp) {
+            await this.commentNavigationController.revealSidebarView(true);
+        } else {
+            await this.commentNavigationController.ensureSidebarView(true);
+        }
         await this.commentNavigationController.syncIndexFileFilter(indexFile, sourceFile.path);
     }
 
