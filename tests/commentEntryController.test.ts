@@ -40,6 +40,7 @@ function createHost(options: { knownComments?: Comment[]; threadIdsByCommentId?:
         draft: DraftComment | null;
         hostFilePath?: string | null;
         skipCommentViewRefresh?: boolean;
+        refreshEditorDecorations?: boolean;
     }> = [];
     const loadedFiles: string[] = [];
     const markedFiles: string[] = [];
@@ -64,6 +65,7 @@ function createHost(options: { knownComments?: Comment[]; threadIdsByCommentId?:
                 draft,
                 hostFilePath,
                 skipCommentViewRefresh: setDraftOptions?.skipCommentViewRefresh,
+                refreshEditorDecorations: setDraftOptions?.refreshEditorDecorations,
             });
         },
         activateViewAndHighlightComment: async (commentId) => {
@@ -110,6 +112,7 @@ test("comment entry controller starts a draft from editor selection", async () =
     assert.equal(draft.anchorKind, "selection");
     assert.equal(host.draftCalls[0].hostFilePath, file.path);
     assert.equal(host.draftCalls[0].skipCommentViewRefresh, true);
+    assert.equal(host.draftCalls[0].refreshEditorDecorations, undefined);
     assert.deepEqual(host.highlightedCommentIds, ["comment-1"]);
     assert.deepEqual(host.notices, []);
 });
@@ -168,6 +171,7 @@ test("comment entry controller starts page drafts for markdown files", async () 
     assert.equal(draft.selectedText, getPageCommentLabel(file.path));
     assert.equal(draft.selectedTextHash, "");
     assert.equal(host.draftCalls[0].skipCommentViewRefresh, true);
+    assert.equal(host.draftCalls[0].refreshEditorDecorations, false);
     assert.deepEqual(host.notices, []);
 });
 

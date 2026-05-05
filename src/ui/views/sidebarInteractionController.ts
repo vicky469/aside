@@ -433,7 +433,7 @@ export class SidebarInteractionController {
     public scheduleDraftFocus(commentId: string, attempts = 6): void {
         this.clearPendingFocus();
 
-        const tryFocus = (remainingAttempts: number) => {
+        const tryFocus = (remainingAttempts: number): void => {
             const textarea = this.host.containerEl.querySelector(
                 `[data-draft-id="${commentId}"] textarea`
             );
@@ -456,9 +456,7 @@ export class SidebarInteractionController {
             });
         };
 
-        this.pendingDraftFocusFrame = window.requestAnimationFrame(() => {
-            tryFocus(attempts);
-        });
+        tryFocus(attempts);
     }
 
     public setActiveComment(commentId: string): void {

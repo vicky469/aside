@@ -328,7 +328,7 @@ test("sidebar interaction controller clears active state classes", () => {
     assert.deepEqual(harness.otherActiveEl.removeClassCalls, ["active", "active"]);
 });
 
-test("sidebar interaction controller claims the sidebar leaf before focusing a draft textarea", () => {
+test("sidebar interaction controller claims the sidebar leaf immediately when focusing an existing draft textarea", () => {
     const setActiveLeafCalls: Array<{ leaf: unknown; options: unknown }> = [];
     const sidebarLeaf = { id: "sidebar-leaf" };
     let activeLeaf: unknown = { id: "editor-leaf" };
@@ -395,11 +395,6 @@ test("sidebar interaction controller claims the sidebar leaf before focusing a d
         });
 
         controller.scheduleDraftFocus("draft-1", 0);
-        assert.equal(rafCallbacks.length, 1);
-
-        const callback = rafCallbacks.shift();
-        assert.ok(callback);
-        callback?.(0);
 
         assert.deepEqual(setActiveLeafCalls, [{
             leaf: sidebarLeaf,
@@ -410,6 +405,7 @@ test("sidebar interaction controller claims the sidebar leaf before focusing a d
             start: textarea.value.length,
             end: textarea.value.length,
         }]);
+        assert.equal(rafCallbacks.length, 0);
     } finally {
         Object.assign(globalThis, {
             window: originalWindow,

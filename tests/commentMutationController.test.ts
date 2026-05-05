@@ -84,6 +84,7 @@ function createHost(options: {
         draftComment: DraftComment | null;
         hostFilePath?: string | null;
         skipCommentViewRefresh?: boolean;
+        refreshEditorDecorations?: boolean;
     }> = [];
     const setShowResolvedCalls: Array<{
         showResolved: boolean;
@@ -143,6 +144,7 @@ function createHost(options: {
                 draftComment: nextDraftComment,
                 hostFilePath,
                 skipCommentViewRefresh: setDraftOptions?.skipCommentViewRefresh,
+                refreshEditorDecorations: setDraftOptions?.refreshEditorDecorations,
             });
         },
         setDraftCommentValue: (nextDraftComment) => {
@@ -243,6 +245,7 @@ test("comment mutation controller starts an edit draft from an already loaded lo
     assert.deepEqual(host.highlightedCommentIds, [comment.id]);
     assert.equal(host.setDraftCalls.length, 1);
     assert.equal(host.setDraftCalls[0].skipCommentViewRefresh, true);
+    assert.equal(host.setDraftCalls[0].refreshEditorDecorations, false);
     assert.equal(host.getDraftHostFilePath(), "SideNote2 index.md");
     assert.deepEqual(host.getDraftComment(), {
         ...comment,

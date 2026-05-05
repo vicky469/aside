@@ -999,7 +999,7 @@ export default class SideNote2View extends ItemView {
             containerEl: this.containerEl,
             getCurrentFile: () => this.file,
             getDraftForView: (filePath) => this.plugin.getDraftForView(filePath),
-            renderComments: () => this.renderComments(),
+            renderComments: (options) => this.renderComments(options),
             saveDraft: (commentId) => this.plugin.saveDraft(commentId),
             cancelDraft: (commentId) => {
                 void this.plugin.cancelDraft(commentId);

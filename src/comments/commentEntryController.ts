@@ -109,9 +109,13 @@ export class CommentEntryController {
 
         const draft = this.buildDraftComment(selection);
         this.host.markDraftFileActive(selection.file);
-        await this.host.setDraftComment(draft, selection.file.path, {
+        const setDraftOptions: SetDraftCommentOptions = {
             skipCommentViewRefresh: true,
-        });
+        };
+        if (draft.anchorKind === "page") {
+            setDraftOptions.refreshEditorDecorations = false;
+        }
+        await this.host.setDraftComment(draft, selection.file.path, setDraftOptions);
         void this.host.log?.("info", "draft", selection.anchorKind === "page" ? "draft.page.created" : "draft.selection.created", {
             filePath: selection.file.path,
             commentId: draft.id,

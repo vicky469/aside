@@ -111,6 +111,7 @@ export class CommentMutationController {
             hostFilePath ?? latestTarget.latestComment.filePath,
             {
                 skipCommentViewRefresh: true,
+                refreshEditorDecorations: false,
             },
         );
         await this.host.activateViewAndHighlightComment(latestTarget.latestComment.id);
