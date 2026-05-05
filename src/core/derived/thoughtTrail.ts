@@ -136,7 +136,7 @@ function formatEdgeLabel(comment: Comment | CommentThread): string | null {
     }
 
     if (comment.resolved) {
-        return `${label} (resolved)`;
+        return toMermaidText(`${label} (resolved)`);
     }
 
     return toMermaidText(label);
@@ -354,11 +354,11 @@ export function buildThoughtTrailLines(
     ): void => {
         const sourceId = ensureNode(sourceFilePath);
         for (const edge of edgesBySourceFile.get(sourceFilePath) ?? []) {
-			const targetId = ensureNode(edge.targetFilePath);
-			const label = formatEdgeLabel(edge.comment);
-			edgeLines.push(label
-				? `    ${sourceId} -->|${JSON.stringify(label)}| ${targetId}`
-				: `    ${sourceId} --> ${targetId}`);
+            const targetId = ensureNode(edge.targetFilePath);
+            const label = formatEdgeLabel(edge.comment);
+            edgeLines.push(label
+                ? `    ${sourceId} -->|${JSON.stringify(label)}| ${targetId}`
+                : `    ${sourceId} --> ${targetId}`);
 
             if (
                 branchVisited.has(edge.targetFilePath)

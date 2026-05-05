@@ -3168,9 +3168,12 @@ export default class SideNote2View extends ItemView {
     private async buildIndexFileFilterOptionsFromIndexNote(file: TFile): Promise<IndexFileFilterOption[]> {
         const commentCounts = new Map<string, number>();
         const decodeHtmlAttributeValue = (value: string): string => {
-            const textarea = document.createElement("textarea");
-            textarea.innerHTML = value;
-            return textarea.value;
+            return value
+                .replace(/&quot;/g, "\"")
+                .replace(/&#39;/g, "'")
+                .replace(/&lt;/g, "<")
+                .replace(/&gt;/g, ">")
+                .replace(/&amp;/g, "&");
         };
         const addFilePath = (filePath: string | null): void => {
             const normalizedFilePath = filePath?.trim() ?? "";

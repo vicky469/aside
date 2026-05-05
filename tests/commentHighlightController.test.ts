@@ -118,7 +118,7 @@ test("findClickedIndexLivePreviewTarget resolves file headings from live preview
             if (selector === "a.sidenote2-index-comment-link[data-sidenote2-comment-url]") {
                 return null;
             }
-            if (selector === ".sidenote2-index-heading-label[title]") {
+            if (selector.includes(".sidenote2-index-heading-label[title]")) {
                 return {
                     dataset: {},
                     getAttribute: (name: string) => {
@@ -141,7 +141,7 @@ test("findClickedIndexLivePreviewTarget resolves file headings from live preview
 test("findClickedIndexLivePreviewTarget resolves plain generated file links", () => {
     const target = {
         closest: (selector: string) => {
-            if (selector === "a[href^=\"obsidian://open\"]") {
+            if (selector.includes("a[href^=\"obsidian://open\"]")) {
                 return {
                     dataset: {},
                     getAttribute: (name: string) => {

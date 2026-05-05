@@ -72,9 +72,9 @@ test("buildThoughtTrailLines renders a mermaid graph from wiki links", () => {
         "    n1[\"file3\"]",
         "    n2[\"file4\"]",
         "    n3[\"file2\"]",
-        "    n0 -->|setup| n1",
-        "    n1 -->|internals| n2",
-        "    n0 -->|setup| n3",
+        "    n0 -->|\"setup\"| n1",
+        "    n1 -->|\"internals\"| n2",
+        "    n0 -->|\"setup\"| n3",
         "    click n0 href \"obsidian://open?vault=dev&file=file1.md\" \"Open file1.md\"",
         "    click n1 href \"obsidian://open?vault=dev&file=file3.md\" \"Open file3.md\"",
         "    click n2 href \"obsidian://open?vault=dev&file=file4.md\" \"Open file4.md\"",
@@ -118,8 +118,8 @@ test("buildThoughtTrailLines marks cycles and avoids duplicate roots", () => {
     assert.equal(lines[0], THOUGHT_TRAIL_INIT);
     assert.equal(lines[1], "```mermaid");
     assert.equal(lines[2], "flowchart TD");
-    assert.equal(lines.includes("    n0 -->|alpha| n1"), true);
-    assert.equal(lines.includes("    n1 -->|beta| n0"), true);
+    assert.equal(lines.includes("    n0 -->|\"alpha\"| n1"), true);
+    assert.equal(lines.includes("    n1 -->|\"beta\"| n0"), true);
     assert.equal(lines.includes("    n1[\"file2\"]"), true);
     assert.equal(lines.filter((line) => line === "    n1[\"file2\"]").length, 1);
 });
@@ -162,7 +162,23 @@ test("buildThoughtTrailLines truncates anchored edge labels to a few words", () 
         resolveWikiLinkPath: (linkPath) => `${linkPath}.md`,
     });
 
-    assert.equal(lines.includes("    n0 -->|this is a longer...| n1"), true);
+    assert.equal(lines.includes("    n0 -->|\"this is a longer...\"| n1"), true);
+});
+
+test("buildThoughtTrailLines strips markdown link targets from edge labels", () => {
+    const lines = buildThoughtTrailLines("dev", [
+        createComment({
+            id: "markdown-link-label",
+            filePath: "file1.md",
+            selectedText: "[Program synthesis](https://en.wikipedia.org/wiki/Program_synthesis)",
+            comment: "Connects to [[target]].",
+        }),
+    ], {
+        resolveWikiLinkPath: (linkPath) => `${linkPath}.md`,
+    });
+
+    assert.equal(lines.includes("    n0 -->|\"Program synthesis\"| n1"), true);
+    assert.equal(lines.some((line) => line.includes("https://en.wikipedia.org/wiki/Program_synthesis")), false);
 });
 
 test("buildThoughtTrailLines renders a full chain without a depth limit", () => {
@@ -196,7 +212,7 @@ test("buildThoughtTrailLines renders a full chain without a depth limit", () => 
     });
 
     assert.equal(lines.includes("    n4[\"file5\"]"), true);
-    assert.equal(lines.includes("    n3 -->|four| n4"), true);
+    assert.equal(lines.includes("    n3 -->|\"four\"| n4"), true);
 });
 
 test("buildThoughtTrailLines uses compact unique suffix labels instead of full file paths", () => {
@@ -245,7 +261,7 @@ test("buildThoughtTrailLines includes links from older child entries in a thread
         resolveWikiLinkPath: (linkPath) => `${linkPath}.md`,
     });
 
-    assert.equal(lines.includes("    n0 -->|setup| n1"), true);
+    assert.equal(lines.includes("    n0 -->|\"setup\"| n1"), true);
     assert.equal(lines.includes("    n1[\"file2\"]"), true);
 });
 

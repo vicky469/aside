@@ -68,7 +68,7 @@ test("filterCommentsByFilePaths returns only matching comment files", () => {
     );
 });
 
-test("deriveIndexSidebarScopedFilePaths returns connected files for manual filter scope", () => {
+test("deriveIndexSidebarScopedFilePaths returns only the selected manual filter file", () => {
     const graph = buildIndexFileFilterGraph([
         createComment({ id: "a", filePath: "docs/a.md", comment: "[[B]]" }),
         createComment({ id: "b", filePath: "docs/b.md", comment: "" }),
@@ -81,11 +81,11 @@ test("deriveIndexSidebarScopedFilePaths returns connected files for manual filte
 
     assert.deepEqual(
         deriveIndexSidebarScopedFilePaths(graph, "docs/a.md"),
-        ["docs/a.md", "docs/b.md"],
+        ["docs/a.md"],
     );
 });
 
-test("deriveIndexSidebarScopedFilePaths uses the same connected scope for any root source", () => {
+test("deriveIndexSidebarScopedFilePaths keeps index filters to one file at a time", () => {
     const graph = buildIndexFileFilterGraph([
         createComment({ id: "a", filePath: "docs/a.md", comment: "[[B]]" }),
         createComment({ id: "b", filePath: "docs/b.md", comment: "" }),
@@ -97,7 +97,7 @@ test("deriveIndexSidebarScopedFilePaths uses the same connected scope for any ro
 
     assert.deepEqual(
         deriveIndexSidebarScopedFilePaths(graph, "docs/a.md"),
-        ["docs/a.md", "docs/b.md"],
+        ["docs/a.md"],
     );
 });
 

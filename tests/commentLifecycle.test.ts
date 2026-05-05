@@ -11,6 +11,8 @@ import { parseNoteComments, serializeNoteComments, serializeNoteCommentThreads }
 import type { Comment } from "../src/commentManager";
 import { CommentManager } from "../src/commentManager";
 
+const FOLDER_NOTE_INDEX_ROW = '- <a href="#" class="sidenote2-index-file-filter-link sidenote2-index-heading-label" title="Folder/Note.md" data-sidenote2-file-path="Folder/Note.md">Note.md</a>';
+
 function createComment(overrides: Partial<Comment> = {}): Comment {
     return {
         id: "comment-1",
@@ -55,10 +57,7 @@ test("note-backed comment lifecycle stays aligned with aggregate output", () => 
     const aggregateWhenResolved = buildAllCommentsNoteContent("dev", parsed.comments, {
         showResolved: true,
     });
-    assert.match(
-        aggregateWhenResolved,
-        /- \[Note\.md\]\(obsidian:\/\/open\?vault=dev&file=Folder%2FNote\.md\)/
-    );
+    assert.equal(aggregateWhenResolved.includes(FOLDER_NOTE_INDEX_ROW), true);
 
     manager.replaceCommentsForFile(filePath, parsed.comments);
     manager.unresolveComment("comment-1");
@@ -70,10 +69,7 @@ test("note-backed comment lifecycle stays aligned with aggregate output", () => 
     const aggregateWhenReopened = buildAllCommentsNoteContent("dev", parsed.comments, {
         showResolved: false,
     });
-    assert.match(
-        aggregateWhenReopened,
-        /- \[Note\.md\]\(obsidian:\/\/open\?vault=dev&file=Folder%2FNote\.md\)/
-    );
+    assert.equal(aggregateWhenReopened.includes(FOLDER_NOTE_INDEX_ROW), true);
 
     manager.replaceCommentsForFile(filePath, parsed.comments);
     manager.deleteComment("comment-1", deletedAt);

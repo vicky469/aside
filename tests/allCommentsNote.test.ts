@@ -41,6 +41,24 @@ function createComment(overrides: Partial<Comment> = {}): Comment {
     };
 }
 
+function escapeHtmlText(value: string): string {
+    return value
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+}
+
+function expectedFileRow(filePath: string): string {
+    const fileName = filePath.split("/").pop() ?? filePath;
+    const escapedPath = escapeHtmlText(filePath);
+    return `- <a href="#" class="sidenote2-index-file-filter-link sidenote2-index-heading-label" title="${escapedPath}" data-sidenote2-file-path="${escapedPath}">${escapeHtmlText(fileName)}</a>`;
+}
+
+function countOccurrences(value: string, needle: string): number {
+    return value.split(needle).length - 1;
+}
+
 test("buildCommentLocationUrl encodes vault, file, and comment id", () => {
     const url = buildCommentLocationUrl("dev vault", createComment({
         filePath: "Folder/My Note.md",
@@ -162,8 +180,8 @@ test("buildIndexNoteNavigationMap tracks simplified file link rows", () => {
     assert.equal(navigationMap.fileLineByFilePath.get("Projects/Alpha/Note A.md") === undefined, false);
     assert.equal(navigationMap.fileLineByFilePath.get("Projects/Alpha/Note B.md") === undefined, false);
     assert.equal(navigationMap.targetsByCommentId.size, 0);
-    assert.match(content.split("\n")[navigationMap.fileLineByFilePath.get("Projects/Alpha/Note A.md") ?? -1] ?? "", /\[Note A\.md\]\(obsidian:\/\/open\?vault=dev&file=Projects%2FAlpha%2FNote%20A\.md\)/);
-    assert.match(content.split("\n")[navigationMap.fileLineByFilePath.get("Projects/Alpha/Note B.md") ?? -1] ?? "", /\[Note B\.md\]\(obsidian:\/\/open\?vault=dev&file=Projects%2FAlpha%2FNote%20B\.md\)/);
+    assert.equal(content.split("\n")[navigationMap.fileLineByFilePath.get("Projects/Alpha/Note A.md") ?? -1] ?? "", expectedFileRow("Projects/Alpha/Note A.md"));
+    assert.equal(content.split("\n")[navigationMap.fileLineByFilePath.get("Projects/Alpha/Note B.md") ?? -1] ?? "", expectedFileRow("Projects/Alpha/Note B.md"));
 });
 
 test("buildIndexCommentBlockId normalizes comment ids into stable block ids", () => {
@@ -190,12 +208,11 @@ test("buildAllCommentsNoteContent lists unique files grouped by folder", () => {
     ]);
 
     assert.equal(content.match(/^Projects\/Alpha$/gm)?.length ?? 0, 1);
-    assert.equal(content.match(/\[Note A\.md\]\(obsidian:\/\/open\?vault=dev&file=Projects%2FAlpha%2FNote%20A\.md\)/g)?.length ?? 0, 1);
-    assert.equal(content.match(/\[Note B\.md\]\(obsidian:\/\/open\?vault=dev&file=Projects%2FAlpha%2FNote%20B\.md\)/g)?.length ?? 0, 1);
-    assert.match(content, /Projects\/Alpha\n- \[Note A\.md\]\(obsidian:\/\/open\?vault=dev&file=Projects%2FAlpha%2FNote%20A\.md\)\n- \[Note B\.md\]\(obsidian:\/\/open\?vault=dev&file=Projects%2FAlpha%2FNote%20B\.md\)/);
+    assert.equal(countOccurrences(content, expectedFileRow("Projects/Alpha/Note A.md")), 1);
+    assert.equal(countOccurrences(content, expectedFileRow("Projects/Alpha/Note B.md")), 1);
+    assert.equal(content.includes(`Projects/Alpha\n${expectedFileRow("Projects/Alpha/Note A.md")}\n${expectedFileRow("Projects/Alpha/Note B.md")}`), true);
     assert.doesNotMatch(content, /commentId=/);
     assert.doesNotMatch(content, /sidenote2-index-kind-dot/);
-    assert.doesNotMatch(content, /sidenote2-index-heading-label/);
 });
 
 test("buildAllCommentsNoteContent keeps resolved visibility filtering", () => {
@@ -212,8 +229,8 @@ test("buildAllCommentsNoteContent keeps resolved visibility filtering", () => {
         showResolved: false,
     });
 
-    assert.match(content, /\[B\.md\]\(obsidian:\/\/open\?vault=dev&file=B\.md\)/);
-    assert.doesNotMatch(content, /\[A\.md\]/);
+    assert.equal(content.includes(expectedFileRow("B.md")), true);
+    assert.equal(content.includes('data-sidenote2-file-path="A.md"'), false);
 });
 
 test("buildAllCommentsNoteContent renders only the header when there are no comments", () => {
@@ -239,7 +256,7 @@ test("buildAllCommentsNoteContent ignores comments attached to the generated agg
     ]);
 
     assert.doesNotMatch(content, /SideNote2 index\.md/);
-    assert.match(content, /\[Z\.md\]\(obsidian:\/\/open\?vault=dev&file=Z\.md\)/);
+    assert.equal(content.includes(expectedFileRow("Z.md")), true);
 });
 
 test("buildAllCommentsNoteContent ignores comments whose source file no longer exists", () => {
@@ -259,7 +276,7 @@ test("buildAllCommentsNoteContent ignores comments whose source file no longer e
     });
 
     assert.doesNotMatch(content, /Missing\.md/);
-    assert.match(content, /\[Real\.md\]\(obsidian:\/\/open\?vault=dev&file=Real\.md\)/);
+    assert.equal(content.includes(expectedFileRow("Real.md")), true);
 });
 
 test("buildAllCommentsNoteContent escapes folder and file link HTML", () => {
@@ -270,7 +287,7 @@ test("buildAllCommentsNoteContent escapes folder and file link HTML", () => {
     ]);
 
     assert.match(content, /^A&B$/m);
-    assert.match(content, /\[\\<Note\\>\.md\]\(obsidian:\/\/open\?vault=dev&file=A%26B%2F%3CNote%3E\.md\)/);
+    assert.equal(content.includes(expectedFileRow("A&B/<Note>.md")), true);
 });
 
 test("buildAllCommentsNoteContent groups files under a shared folder heading", () => {
@@ -283,7 +300,7 @@ test("buildAllCommentsNoteContent groups files under a shared folder heading", (
 
     assert.match(
         content,
-        /Clippings\n- \[Vlad Tenev and Tudor Achim on mathematical superintelligence and the end of buggy software\.md\]\(obsidian:\/\/open\?vault=dev&file=Clippings%2FVlad%20Tenev%20and%20Tudor%20Achim%20on%20mathematical%20superintelligence%20and%20the%20end%20of%20buggy%20software\.md\)/,
+        new RegExp(`Clippings\\n${expectedFileRow(longPath).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`),
     );
 });
 
@@ -302,8 +319,8 @@ test("buildAllCommentsNoteContent groups multiple files under the same path head
     ]);
 
     assert.equal(content.match(/^Projects\/Alpha$/gm)?.length ?? 0, 1);
-    assert.match(content, /Projects\/Alpha\n- \[Note A\.md\]\(obsidian:\/\/open\?vault=dev&file=Projects%2FAlpha%2FNote%20A\.md\)/);
-    assert.match(content, /- \[Note B\.md\]\(obsidian:\/\/open\?vault=dev&file=Projects%2FAlpha%2FNote%20B\.md\)/);
+    assert.equal(content.includes(`Projects/Alpha\n${expectedFileRow("Projects/Alpha/Note A.md")}`), true);
+    assert.equal(content.includes(expectedFileRow("Projects/Alpha/Note B.md")), true);
 });
 
 test("isAllCommentsNotePath matches the generated note path", () => {

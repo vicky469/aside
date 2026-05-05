@@ -193,6 +193,10 @@ export class WorkspaceViewController {
         }
 
         if (this.host.isAllCommentsNotePath(file.path)) {
+            await this.host.ensureIndexedCommentsLoaded();
+            if (this.host.hasPendingAggregateRefresh()) {
+                await this.host.refreshAggregateNoteNow();
+            }
             return;
         }
 

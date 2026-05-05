@@ -1,6 +1,9 @@
 import type { CommentThread } from "../../commentManager";
-import { buildIndexFileFilterGraph } from "../../core/derived/indexFileFilterGraph";
-import { deriveIndexSidebarScopedFilePaths, filterCommentsByFilePaths } from "./indexFileFilter";
+import {
+    buildIndexFileFilterGraph,
+    getIndexFileFilterConnectedComponent,
+} from "../../core/derived/indexFileFilterGraph";
+import { filterCommentsByFilePaths } from "./indexFileFilter";
 
 export function buildRootedThoughtTrailScope(
     threads: CommentThread[],
@@ -18,7 +21,7 @@ export function buildRootedThoughtTrailScope(
         resolveWikiLinkPath: options.resolveWikiLinkPath,
         showResolved: null,
     });
-    const scopedFilePaths = deriveIndexSidebarScopedFilePaths(graph, options.rootFilePath);
+    const scopedFilePaths = getIndexFileFilterConnectedComponent(graph, options.rootFilePath);
 
     return {
         scopedFilePaths,
