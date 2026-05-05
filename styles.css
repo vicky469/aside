@@ -639,13 +639,22 @@ button.sidenote2-tab-button:focus-visible {
 }
 
 button.sidenote2-tab-button.sidenote2-tab-button--active {
-    color: var(--text-normal) !important;
-    font-weight: 500 !important;
-    border-bottom-color: var(--sidenote2-luxury-accent);
+    color: #000 !important;
+    font-weight: 700 !important;
+    border-bottom-color: #000 !important;
     background: transparent !important;
     background-color: transparent !important;
     background-image: none !important;
     box-shadow: none !important;
+}
+
+button.sidenote2-tab-button:disabled,
+button.sidenote2-tab-button[aria-disabled="true"] {
+    color: var(--text-faint) !important;
+    border-bottom-color: transparent !important;
+    opacity: 0.55;
+    cursor: default;
+    pointer-events: none;
 }
 
 .sidenote2-sidebar-toolbar-row.is-note-primary-row .sidenote2-toolbar-icon-button {
@@ -1014,6 +1023,17 @@ button.sidenote2-tab-button.sidenote2-tab-button--active {
 .sidenote2-comment-section-add-button:focus-visible {
     color: var(--icon-color-hover, var(--text-normal));
     opacity: 1;
+}
+
+button.sidenote2-toolbar-icon-button:disabled,
+button.sidenote2-toolbar-icon-button[aria-disabled="true"] {
+    color: var(--text-faint) !important;
+    opacity: 0.42;
+    background: transparent !important;
+    border-color: transparent !important;
+    box-shadow: none !important;
+    cursor: default;
+    pointer-events: none;
 }
 
 .sidenote2-comments-list .sidenote2-comment-item:last-child {

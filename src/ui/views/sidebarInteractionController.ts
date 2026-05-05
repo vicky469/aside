@@ -154,20 +154,6 @@ export class SidebarInteractionController {
             clickedComment: !!clickedComment,
             clickedSectionChrome: !!clickedSectionChrome,
         });
-        await this.exitDeletedModeIfNeeded(target);
-    }
-
-    private async exitDeletedModeIfNeeded(target: Node | null): Promise<void> {
-        if (!this.host.shouldShowDeletedComments?.() || !this.host.setShowDeletedComments) {
-            return;
-        }
-
-        const targetEl = this.getEventTargetElement(target);
-        if (!targetEl?.closest(".sidenote2-sidebar-toolbar.is-deleted-toolbar-mode")) {
-            return;
-        }
-
-        await this.host.setShowDeletedComments(false);
     }
 
     private isDraftDismissalExemptTarget(target: Node | null): boolean {

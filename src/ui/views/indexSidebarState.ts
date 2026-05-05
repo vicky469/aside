@@ -43,6 +43,15 @@ export function shouldShowIndexListToolbarChips(
     return !isAllCommentsView || indexSidebarMode === "list" || indexSidebarMode === "tags";
 }
 
+export function resolveIndexModeWithTagAvailability(
+    indexSidebarMode: IndexSidebarMode,
+    isTagsEnabled: boolean,
+): IndexSidebarMode {
+    return indexSidebarMode === "tags" && !isTagsEnabled
+        ? "list"
+        : indexSidebarMode;
+}
+
 export function shouldShowResolvedIndexEmptyState(
     showResolved: boolean,
     totalScopedCount: number,
@@ -57,4 +66,16 @@ export function shouldShowActiveIndexEmptyState(
     renderedItemCount: number,
 ): boolean {
     return !showResolved && resolvedCount > 0 && renderedItemCount === 0;
+}
+
+export function shouldShowGenericIndexEmptyState(options: {
+    hasFileFilter: boolean;
+    hasSearchQuery: boolean;
+    renderedItemCount: number;
+}): boolean {
+    if (options.renderedItemCount !== 0) {
+        return false;
+    }
+
+    return options.hasSearchQuery || !options.hasFileFilter;
 }

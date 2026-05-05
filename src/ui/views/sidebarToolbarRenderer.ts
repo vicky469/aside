@@ -41,6 +41,8 @@ export interface SidebarSearchInputOptions {
 export interface SidebarModeControlOptions {
     mode: SidebarPrimaryMode;
     showTagsTab: boolean;
+    isTagsEnabled: boolean;
+    isThoughtTrailEnabled: boolean;
     onChange(mode: SidebarPrimaryMode): void;
 }
 
@@ -184,6 +186,7 @@ export function renderSidebarModeControl(
         renderTabButton(tabList, {
             label: "Tags",
             active: options.mode === "tags",
+            disabled: !options.isTagsEnabled,
             onClick: () => {
                 options.onChange("tags");
             },
@@ -192,6 +195,7 @@ export function renderSidebarModeControl(
     renderTabButton(tabList, {
         label: "Thought Trail",
         active: options.mode === "thought-trail",
+        disabled: !options.isThoughtTrailEnabled,
         onClick: () => {
             options.onChange("thought-trail");
         },
@@ -241,6 +245,7 @@ function renderTabButton(
     options: {
         label: string;
         active: boolean;
+        disabled?: boolean;
         onClick: () => void;
     },
     guard: ToolbarActionGuard,
@@ -252,8 +257,15 @@ function renderTabButton(
     button.setAttribute("type", "button");
     button.setAttribute("role", "tab");
     button.setAttribute("aria-selected", options.active ? "true" : "false");
-    button.tabIndex = options.active ? 0 : -1;
+    button.disabled = options.disabled ?? false;
+    if (options.disabled) {
+        button.setAttribute("aria-disabled", "true");
+    }
+    button.tabIndex = options.active && !options.disabled ? 0 : -1;
     button.onclick = async () => {
+        if (options.disabled) {
+            return;
+        }
         if (!(await guard.beforeAction())) {
             return;
         }

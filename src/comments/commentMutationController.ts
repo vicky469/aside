@@ -417,6 +417,22 @@ export class CommentMutationController {
         return true;
     }
 
+    public async clearDeletedComment(commentId: string): Promise<boolean> {
+        void this.host.log?.("info", "draft", "thread.delete.clear.one", { commentId });
+        const latestTarget = await this.loadLatestCommentTarget(commentId);
+        if (!latestTarget || latestTarget.latestComment.deletedAt === undefined) {
+            return false;
+        }
+
+        const changed = this.host.getCommentManager().clearDeletedComment(commentId, this.host.now());
+        if (!changed) {
+            return false;
+        }
+
+        await this.host.persistCommentsForFile(latestTarget.file, { immediateAggregateRefresh: true });
+        return true;
+    }
+
     public async resolveComment(
         commentId: string,
         options: ResolveCommentOptions = {},

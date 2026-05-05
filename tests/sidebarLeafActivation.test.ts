@@ -79,6 +79,10 @@ test("file-open null is ignored because it should not clear the sidebar context"
     assert.equal(shouldIgnoreWorkspaceFileOpen(null), true);
 });
 
+test("file-open null is handled when the workspace has an active file", () => {
+    assert.equal(shouldIgnoreWorkspaceFileOpen(null, { path: "docs/paper.pdf" }), false);
+});
+
 test("file-open with a file is still handled", () => {
     assert.equal(shouldIgnoreWorkspaceFileOpen({ path: "note.md" }), false);
 });

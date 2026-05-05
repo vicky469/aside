@@ -547,7 +547,7 @@ test("getDeletedRenderableThreadEntries keeps only deleted child entries for del
     });
 });
 
-test("getDeletedRenderableThreadEntries keeps the deleted root only for a deleted thread", () => {
+test("getDeletedRenderableThreadEntries keeps the deleted root and children for a deleted thread", () => {
     const thread = createThreadWithEntries({
         deletedAt: 250,
         entries: [
@@ -560,7 +560,7 @@ test("getDeletedRenderableThreadEntries keeps the deleted root only for a delete
 
     assert.deepEqual(getDeletedRenderableThreadEntries(thread), {
         parentEntry: thread.entries[0],
-        childEntries: [],
+        childEntries: [thread.entries[1]],
     });
 });
 

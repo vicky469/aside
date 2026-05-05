@@ -13,6 +13,52 @@ export function resolveWorkspaceTargetInput<T>(
     return eventFile ?? workspaceActiveFile;
 }
 
+export function resolveWorkspaceLeafFile<T>(
+    leaf: unknown,
+    isFile: (value: unknown) => value is T,
+): T | null {
+    const fileValue = getWorkspaceLeafFileValue(leaf);
+    return fileValue.hasValue && isFile(fileValue.value) ? fileValue.value : null;
+}
+
+export function resolveWorkspaceLeafTargetInput<T>(
+    leaf: unknown,
+    workspaceActiveFile: T | null,
+    isFile: (value: unknown) => value is T,
+): T | null {
+    const fileValue = getWorkspaceLeafFileValue(leaf);
+    if (!fileValue.hasValue) {
+        return workspaceActiveFile;
+    }
+
+    return isFile(fileValue.value) ? fileValue.value : null;
+}
+
+function getWorkspaceLeafFileValue(leaf: unknown): {
+    hasValue: boolean;
+    value: unknown;
+} {
+    if (!leaf || typeof leaf !== "object" || !("view" in leaf)) {
+        return {
+            hasValue: false,
+            value: null,
+        };
+    }
+
+    const view = leaf.view;
+    if (!view || typeof view !== "object" || !("file" in view)) {
+        return {
+            hasValue: false,
+            value: null,
+        };
+    }
+
+    return {
+        hasValue: view.file !== null && view.file !== undefined,
+        value: view.file,
+    };
+}
+
 export function resolveWorkspaceFileTargets<T>(
     file: T | null,
     activeMarkdownFile: T | null,
@@ -45,8 +91,11 @@ export function shouldIgnoreWorkspaceLeafChange(viewType: string | null): boolea
     return viewType === "sidenote2-view";
 }
 
-export function shouldIgnoreWorkspaceFileOpen<T>(eventFile: T | null): boolean {
-    return eventFile === null;
+export function shouldIgnoreWorkspaceFileOpen<T>(
+    eventFile: T | null,
+    workspaceActiveFile: T | null = null,
+): boolean {
+    return eventFile === null && workspaceActiveFile === null;
 }
 
 export interface ResolvedMarkdownViewState {

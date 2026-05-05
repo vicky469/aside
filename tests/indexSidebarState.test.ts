@@ -3,8 +3,10 @@ import test from "node:test";
 import { commentToThread, type Comment } from "../src/commentManager";
 import {
     filterIndexThreadsByExistingSourceFiles,
+    resolveIndexModeWithTagAvailability,
     scopeIndexThreadsByFilePaths,
     shouldShowActiveIndexEmptyState,
+    shouldShowGenericIndexEmptyState,
     shouldShowIndexListToolbarChips,
     shouldShowNestedToolbarChip,
     shouldShowResolvedIndexEmptyState,
@@ -122,4 +124,34 @@ test("shouldShowActiveIndexEmptyState points to resolved notes when active mode 
     assert.equal(shouldShowActiveIndexEmptyState(true, 3, 0), false);
     assert.equal(shouldShowActiveIndexEmptyState(false, 0, 0), false);
     assert.equal(shouldShowActiveIndexEmptyState(false, 3, 1), false);
+});
+
+test("shouldShowGenericIndexEmptyState hides the generic selected-file-filter empty panel", () => {
+    assert.equal(shouldShowGenericIndexEmptyState({
+        hasFileFilter: true,
+        hasSearchQuery: false,
+        renderedItemCount: 0,
+    }), false);
+    assert.equal(shouldShowGenericIndexEmptyState({
+        hasFileFilter: true,
+        hasSearchQuery: true,
+        renderedItemCount: 0,
+    }), true);
+    assert.equal(shouldShowGenericIndexEmptyState({
+        hasFileFilter: false,
+        hasSearchQuery: false,
+        renderedItemCount: 0,
+    }), true);
+    assert.equal(shouldShowGenericIndexEmptyState({
+        hasFileFilter: false,
+        hasSearchQuery: false,
+        renderedItemCount: 1,
+    }), false);
+});
+
+test("resolveIndexModeWithTagAvailability falls back from unavailable tags to list", () => {
+    assert.equal(resolveIndexModeWithTagAvailability("tags", false), "list");
+    assert.equal(resolveIndexModeWithTagAvailability("tags", true), "tags");
+    assert.equal(resolveIndexModeWithTagAvailability("thought-trail", false), "thought-trail");
+    assert.equal(resolveIndexModeWithTagAvailability("list", false), "list");
 });

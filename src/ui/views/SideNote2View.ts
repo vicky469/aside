@@ -75,8 +75,10 @@ import { buildRootedThoughtTrailScope } from "./sidebarThoughtTrailScope";
 import { clearSidebarSearchHighlights, highlightSidebarSearchMatches } from "./sidebarSearchHighlight";
 import {
     filterIndexThreadsByExistingSourceFiles,
+    resolveIndexModeWithTagAvailability,
     scopeIndexThreadsByFilePaths,
     shouldShowActiveIndexEmptyState,
+    shouldShowGenericIndexEmptyState,
     shouldShowIndexListToolbarChips,
     shouldShowNestedToolbarChip,
     shouldShowResolvedIndexEmptyState,
@@ -110,10 +112,16 @@ import {
     renderSupportButton,
     renderSupportButtonIn,
 } from "./sidebarSupportButton";
+import { renderNoSidebarFileEmptyState } from "./sidebarEmptyState";
 import {
     renderSidebarThoughtTrail,
     type SidebarThoughtTrailOptions,
 } from "./sidebarThoughtTrailRenderer";
+import {
+    hasAvailableThoughtTrail,
+    mergeCurrentFileThreadsForThoughtTrail,
+    resolveModeWithThoughtTrailAvailability,
+} from "./sidebarThoughtTrailState";
 import {
     renderActiveFileFilters,
     renderSidebarModeControl,
@@ -766,6 +774,28 @@ export default class SideNote2View extends ItemView {
         return true;
     }
 
+    private async clearDeletedSidebarComment(commentId: string): Promise<boolean> {
+        const currentFilePath = this.getCurrentLocalNoteSidebarFilePath();
+        const cleared = await this.plugin.clearDeletedComment(commentId);
+        if (!cleared) {
+            return false;
+        }
+
+        if (currentFilePath) {
+            const stillHasDeletedComments = this.plugin
+                .getThreadsForFile(currentFilePath, { includeDeleted: true })
+                .some((thread) => hasDeletedComments(thread));
+            if (!stillHasDeletedComments && this.plugin.shouldShowDeletedComments()) {
+                await this.plugin.setShowDeletedComments(false, {
+                    skipCommentViewRefresh: true,
+                });
+            }
+            await this.rerenderLocalNoteSidebarIfStillShowing(currentFilePath);
+        }
+
+        return true;
+    }
+
     private async moveSidebarCommentThreadToFile(threadId: string, targetFilePath: string): Promise<boolean> {
         const currentFilePath = this.getCurrentLocalNoteSidebarFilePath();
         const moved = await this.plugin.moveCommentThreadToFile(
@@ -1280,6 +1310,18 @@ export default class SideNote2View extends ItemView {
             ) {
                 this.noteSidebarVisibleTagFilterKey = null;
             }
+            const isIndexTagsEnabled = isAllCommentsView
+                ? (this.noteSidebarTagIndex?.threadIdsByTag.size ?? 0) > 0
+                : true;
+            if (isAllCommentsView) {
+                this.indexSidebarMode = resolveIndexModeWithTagAvailability(
+                    this.indexSidebarMode,
+                    isIndexTagsEnabled,
+                );
+                if (!isIndexTagsEnabled) {
+                    this.noteSidebarVisibleTagFilterKey = null;
+                }
+            }
             const visiblePersistedThreads = persistedThreads.filter((thread) =>
                 isAllCommentsView
                     ? matchesResolvedVisibility(thread.resolved, showResolved)
@@ -1287,14 +1329,13 @@ export default class SideNote2View extends ItemView {
                         showResolved,
                         showDeleted,
                     }));
+            const resolveWikiLinkPath = (linkPath: string, sourceFilePath: string): string | null =>
+                this.resolveThoughtTrailWikiLinkPath(linkPath, sourceFilePath);
             const indexFileFilterGraph = isAllCommentsView
                 ? selectedIndexFileFilterRootPath
                     ? buildIndexFileFilterGraph(persistedThreads, {
                     allCommentsNotePath: this.plugin.getAllCommentsNotePath(),
-                    resolveWikiLinkPath: (linkPath, sourceFilePath) => {
-                        const linkedFile = this.app.metadataCache.getFirstLinkpathDest(linkPath, sourceFilePath);
-                        return linkedFile instanceof TFile ? linkedFile.path : null;
-                    },
+                    resolveWikiLinkPath,
                     showResolved,
                 })
                     : null
@@ -1339,15 +1380,32 @@ export default class SideNote2View extends ItemView {
                 pinnedSidebarThreadIds,
                 showPinnedThreadsOnly,
             );
+            const isIndexThoughtTrailEnabled = isAllCommentsView && hasAvailableThoughtTrail({
+                allCommentsNotePath: this.plugin.getAllCommentsNotePath(),
+                comments: pinnedScopedVisibleThreads,
+                hasRootScope: filteredIndexFilePaths.length > 0,
+                resolveWikiLinkPath,
+                vaultName: this.app.vault.getName(),
+            });
+            if (isAllCommentsView) {
+                this.indexSidebarMode = resolveModeWithThoughtTrailAvailability(
+                    this.indexSidebarMode,
+                    isIndexThoughtTrailEnabled,
+                );
+            }
             const isIndexTagsMode = isAllCommentsView && this.indexSidebarMode === "tags";
             const indexTagThreadIds = isIndexTagsMode && this.noteSidebarVisibleTagFilterKey
                 ? this.noteSidebarTagIndex?.threadIdsByTag.get(this.noteSidebarVisibleTagFilterKey) ?? null
                 : null;
-            const tagFilteredScopedVisibleThreads = indexTagThreadIds
-                ? pinnedScopedVisibleThreads.filter((thread) => indexTagThreadIds.has(thread.id))
+            const tagFilteredScopedVisibleThreads = isIndexTagsMode
+                ? indexTagThreadIds
+                    ? pinnedScopedVisibleThreads.filter((thread) => indexTagThreadIds.has(thread.id))
+                    : []
                 : pinnedScopedVisibleThreads;
-            const tagFilteredScopedAllThreads = indexTagThreadIds
-                ? pinnedScopedAllThreads.filter((thread) => indexTagThreadIds.has(thread.id))
+            const tagFilteredScopedAllThreads = isIndexTagsMode
+                ? indexTagThreadIds
+                    ? pinnedScopedAllThreads.filter((thread) => indexTagThreadIds.has(thread.id))
+                    : []
                 : pinnedScopedAllThreads;
             const searchMatchedVisibleThreads = rankThreadsBySidebarSearchQuery(
                 tagFilteredScopedVisibleThreads,
@@ -1445,6 +1503,8 @@ export default class SideNote2View extends ItemView {
                     succeeded: 0,
                     failed: 0,
                 },
+                isTagsEnabled: isIndexTagsEnabled,
+                isThoughtTrailEnabled: isIndexThoughtTrailEnabled,
                 noteSidebarContentFilter: "all",
                 noteSidebarMode: this.noteSidebarMode,
                 addPageCommentAction: !isAllCommentsView
@@ -1549,9 +1609,8 @@ export default class SideNote2View extends ItemView {
             }
         } else {
             this.resetStreamedReplyControllers();
-            const emptyStateEl = this.containerEl.createDiv("sidenote2-empty-state");
-            emptyStateEl.createEl("p", { text: "No file selected." });
-            emptyStateEl.createEl("p", { text: "Open a file to see its comments." });
+            this.syncViewContainerClasses();
+            renderNoSidebarFileEmptyState(this.containerEl);
         }
 
         if (this.plugin.isLocalRuntime()) {
@@ -1568,6 +1627,7 @@ export default class SideNote2View extends ItemView {
     private async renderPageSidebar(file: TFile, renderVersion: number): Promise<void> {
         const shell = this.ensureNoteSidebarShell(file.path);
         const showDeleted = this.plugin.shouldShowDeletedComments();
+        const showResolved = this.plugin.shouldShowResolvedComments();
         const draftComment = this.plugin.getDraftForView(file.path);
         if (draftComment && this.noteSidebarMode === "thought-trail") {
             this.noteSidebarMode = "list";
@@ -1581,17 +1641,24 @@ export default class SideNote2View extends ItemView {
             draftComment,
         );
         this.normalizeNoteSidebarContentFilter();
+        const persistedThreads = this.plugin.getThreadsForFile(file.path, { includeDeleted: showDeleted });
+        const pageThreadsWithDeleted = this.plugin.getThreadsForFile(file.path, { includeDeleted: true });
+        const deletedCommentCount = countDeletedComments(pageThreadsWithDeleted);
+        const hasResolvedThreadsInFile = persistedThreads.some((thread) => thread.resolved);
+        const isThoughtTrailEnabled = this.hasAvailableNoteThoughtTrailFromLoadedThreads(
+            file,
+            persistedThreads.filter((thread) => matchesResolvedVisibility(thread.resolved, showResolved)),
+        );
+        this.noteSidebarMode = resolveModeWithThoughtTrailAvailability(
+            this.noteSidebarMode,
+            isThoughtTrailEnabled,
+        );
         if (this.noteSidebarMode === "thought-trail") {
             await this.renderNoteThoughtTrailSidebar(shell, file, renderVersion, {
                 showDeleted,
             });
             return;
         }
-        const persistedThreads = this.plugin.getThreadsForFile(file.path, { includeDeleted: showDeleted });
-        const pageThreadsWithDeleted = this.plugin.getThreadsForFile(file.path, { includeDeleted: true });
-        const deletedCommentCount = countDeletedComments(pageThreadsWithDeleted);
-        const showResolved = this.plugin.shouldShowResolvedComments();
-        const hasResolvedThreadsInFile = persistedThreads.some((thread) => thread.resolved);
         this.noteSidebarTagIndex = this.rebuildNoteSidebarTagIndex(file.path, persistedThreads);
         if (
             this.noteSidebarVisibleTagFilterKey
@@ -1685,6 +1752,8 @@ export default class SideNote2View extends ItemView {
                 succeeded: 0,
                 failed: 0,
             },
+            isTagsEnabled: true,
+            isThoughtTrailEnabled,
             noteSidebarContentFilter: this.noteSidebarContentFilter,
             noteSidebarMode: this.noteSidebarMode,
             addPageCommentAction: {
@@ -1758,22 +1827,19 @@ export default class SideNote2View extends ItemView {
             return;
         }
 
-        const hasExistingSourceFile = (filePath: string): boolean => {
-            const sourceFile = this.app.vault.getAbstractFileByPath(filePath);
-            return sourceFile instanceof TFile;
-        };
-        const visibleTrailThreads = filterIndexThreadsByExistingSourceFiles(
-            this.plugin.getAllIndexedThreads(),
-            hasExistingSourceFile,
-        ).filter((thread) => matchesResolvedVisibility(thread.resolved, showResolved));
-        const { scopedFilePaths, scopedThreads } = buildRootedThoughtTrailScope(visibleTrailThreads, {
-            rootFilePath: file.path,
+        const { scopedFilePaths, scopedThreads } = this.buildNoteThoughtTrailScope(file, showResolved);
+        const isThoughtTrailEnabled = hasAvailableThoughtTrail({
             allCommentsNotePath: this.plugin.getAllCommentsNotePath(),
-            resolveWikiLinkPath: (linkPath, sourceFilePath) => {
-                const linkedFile = this.app.metadataCache.getFirstLinkpathDest(linkPath, sourceFilePath);
-                return linkedFile instanceof TFile ? linkedFile.path : null;
-            },
+            comments: scopedThreads,
+            hasRootScope: scopedFilePaths.length > 0,
+            resolveWikiLinkPath: (linkPath, sourceFilePath) => this.resolveThoughtTrailWikiLinkPath(linkPath, sourceFilePath),
+            vaultName: this.app.vault.getName(),
         });
+        if (!isThoughtTrailEnabled) {
+            this.noteSidebarMode = "list";
+            await this.renderPageSidebar(file, renderVersion);
+            return;
+        }
 
         shell.toolbarSlotEl.empty();
         this.renderSidebarToolbar(shell.toolbarSlotEl, {
@@ -1789,6 +1855,8 @@ export default class SideNote2View extends ItemView {
                 succeeded: 0,
                 failed: 0,
             },
+            isTagsEnabled: true,
+            isThoughtTrailEnabled,
             noteSidebarContentFilter: this.noteSidebarContentFilter,
             noteSidebarMode: this.noteSidebarMode,
             addPageCommentAction: {
@@ -1819,6 +1887,58 @@ export default class SideNote2View extends ItemView {
                 threadCount: this.plugin.getThreadsForFile(file.path).length,
             });
         }
+    }
+
+    private buildNoteThoughtTrailScope(
+        file: TFile,
+        showResolved: boolean,
+    ): {
+        scopedFilePaths: string[];
+        scopedThreads: CommentThread[];
+    } {
+        const hasExistingSourceFile = (filePath: string): boolean => {
+            const sourceFile = this.app.vault.getAbstractFileByPath(filePath);
+            return sourceFile instanceof TFile;
+        };
+        const visibleTrailThreads = filterIndexThreadsByExistingSourceFiles(
+            this.plugin.getAllIndexedThreads(),
+            hasExistingSourceFile,
+        ).filter((thread) => matchesResolvedVisibility(thread.resolved, showResolved));
+
+        return buildRootedThoughtTrailScope(visibleTrailThreads, {
+            rootFilePath: file.path,
+            allCommentsNotePath: this.plugin.getAllCommentsNotePath(),
+            resolveWikiLinkPath: (linkPath, sourceFilePath) => this.resolveThoughtTrailWikiLinkPath(linkPath, sourceFilePath),
+        });
+    }
+
+    private hasAvailableNoteThoughtTrailFromLoadedThreads(
+        file: TFile,
+        currentFileThreads: CommentThread[],
+    ): boolean {
+        const mergedThreads = mergeCurrentFileThreadsForThoughtTrail(
+            this.plugin.getAllIndexedThreads(),
+            file.path,
+            currentFileThreads,
+        );
+        const scope = buildRootedThoughtTrailScope(mergedThreads, {
+            rootFilePath: file.path,
+            allCommentsNotePath: this.plugin.getAllCommentsNotePath(),
+            resolveWikiLinkPath: (linkPath, sourceFilePath) => this.resolveThoughtTrailWikiLinkPath(linkPath, sourceFilePath),
+        });
+
+        return hasAvailableThoughtTrail({
+            allCommentsNotePath: this.plugin.getAllCommentsNotePath(),
+            comments: scope.scopedThreads,
+            hasRootScope: scope.scopedFilePaths.length > 0,
+            resolveWikiLinkPath: (linkPath, sourceFilePath) => this.resolveThoughtTrailWikiLinkPath(linkPath, sourceFilePath),
+            vaultName: this.app.vault.getName(),
+        });
+    }
+
+    private resolveThoughtTrailWikiLinkPath(linkPath: string, sourceFilePath: string): string | null {
+        const linkedFile = this.app.metadataCache.getFirstLinkpathDest(linkPath, sourceFilePath);
+        return linkedFile instanceof TFile ? linkedFile.path : null;
     }
 
     private ensureNoteSidebarShell(filePath: string): NoteSidebarShell {
@@ -2476,9 +2596,30 @@ export default class SideNote2View extends ItemView {
         const hasSearchQuery = trimmedSearchQuery.length > 0;
         const hasFileFilter = options.filteredIndexFilePaths.length > 0;
         const scopeLabel = hasFileFilter ? "the selected file filter" : "the current index view";
+        const showResolvedEmptyState = shouldShowResolvedIndexEmptyState(
+            options.showResolved,
+            options.totalScopedCount,
+            options.renderedItemCount,
+        );
+        const showActiveEmptyState = shouldShowActiveIndexEmptyState(
+            options.showResolved,
+            options.resolvedCount,
+            options.renderedItemCount,
+        );
+        if (
+            !showResolvedEmptyState
+            && !showActiveEmptyState
+            && !shouldShowGenericIndexEmptyState({
+                hasFileFilter,
+                hasSearchQuery,
+                renderedItemCount: options.renderedItemCount,
+            })
+        ) {
+            return;
+        }
         const emptyStateEl = commentsBody.createDiv("sidenote2-empty-state sidenote2-section-empty-state");
 
-        if (shouldShowResolvedIndexEmptyState(options.showResolved, options.totalScopedCount, options.renderedItemCount)) {
+        if (showResolvedEmptyState) {
             emptyStateEl.createEl("p", {
                 text: hasSearchQuery
                     ? `No resolved side notes match "${trimmedSearchQuery}" in ${scopeLabel}.`
@@ -2498,7 +2639,7 @@ export default class SideNote2View extends ItemView {
             return;
         }
 
-        if (shouldShowActiveIndexEmptyState(options.showResolved, options.resolvedCount, options.renderedItemCount)) {
+        if (showActiveEmptyState) {
             emptyStateEl.createEl("p", {
                 text: hasSearchQuery
                     ? `No active side notes match "${trimmedSearchQuery}" in ${scopeLabel}.`
@@ -2527,12 +2668,6 @@ export default class SideNote2View extends ItemView {
                     ? "Clear search or choose a different root file."
                     : "Clear search or try different words.",
             });
-            return;
-        }
-
-        if (hasFileFilter) {
-            emptyStateEl.createEl("p", { text: "No side notes match the selected file filter." });
-            emptyStateEl.createEl("p", { text: "Use files to choose a different root file." });
             return;
         }
 
@@ -2690,6 +2825,8 @@ export default class SideNote2View extends ItemView {
                 succeeded: number;
                 failed: number;
             };
+            isTagsEnabled: boolean;
+            isThoughtTrailEnabled: boolean;
             noteSidebarContentFilter: SidebarContentFilter;
             noteSidebarMode: SidebarPrimaryMode;
             addPageCommentAction: {
@@ -2750,7 +2887,10 @@ export default class SideNote2View extends ItemView {
         if (options.isAllCommentsView) {
             const modeRow = toolbarEl.createDiv("sidenote2-sidebar-toolbar-row");
             modeRow.addClass("is-note-primary-row");
-            this.renderIndexModeControl(modeRow);
+            this.renderIndexModeControl(modeRow, {
+                isTagsEnabled: options.isTagsEnabled,
+                isThoughtTrailEnabled: options.isThoughtTrailEnabled,
+            });
 
             indexChipRow = toolbarEl.createDiv("sidenote2-sidebar-toolbar-row");
             indexChipRow.addClass("is-index-secondary-row");
@@ -2769,7 +2909,7 @@ export default class SideNote2View extends ItemView {
         } else {
             const modeRow = toolbarEl.createDiv("sidenote2-sidebar-toolbar-row");
             modeRow.addClass("is-note-primary-row");
-            this.renderNoteModeControl(modeRow);
+            this.renderNoteModeControl(modeRow, options.isThoughtTrailEnabled);
 
             if (shouldShowNoteSearchInput || showListOrTagToolbarChips || shouldShowAddPageCommentAction || options.noteSidebarMode === "tags") {
                 const actionsRow = toolbarEl.createDiv("sidenote2-sidebar-toolbar-row");
@@ -2796,21 +2936,6 @@ export default class SideNote2View extends ItemView {
 
         if (shouldShowNoteSearchInput) {
             this.renderNoteSearchInput(filterGroup);
-        }
-        if (isDeletedToolbarMode) {
-            if (options.deletedCommentCount > 0) {
-                this.renderToolbarChip(actionGroup, {
-                    label: "Permanently delete notes",
-                    active: false,
-                    ariaLabel: `Permanently delete ${options.deletedCommentCount} deleted side note${options.deletedCommentCount === 1 ? "" : "s"} from this note`,
-                    count: String(options.deletedCommentCount),
-                    icon: "trash",
-                    onClick: () => {
-                        void this.clearDeletedCommentsForCurrentFile();
-                    },
-                });
-            }
-            return;
         }
         if (!options.isAllCommentsView && showListOrTagToolbarChips) {
             this.renderToolbarIconButton(actionGroup, {
@@ -2861,18 +2986,6 @@ export default class SideNote2View extends ItemView {
                 },
             });
 
-            if (showDeletedComments && options.deletedCommentCount > 0) {
-                this.renderToolbarChip(actionGroup, {
-                    label: "Empty trash",
-                    active: false,
-                    ariaLabel: `Permanently delete ${options.deletedCommentCount} deleted side note${options.deletedCommentCount === 1 ? "" : "s"} from this note`,
-                    count: String(options.deletedCommentCount),
-                    icon: "trash",
-                    onClick: () => {
-                        void this.clearDeletedCommentsForCurrentFile();
-                    },
-                });
-            }
         }
 
         if (shouldShowAddPageCommentAction && options.addPageCommentAction) {
@@ -3122,11 +3235,25 @@ export default class SideNote2View extends ItemView {
         });
     }
 
-    private renderIndexModeControl(container: HTMLElement): void {
+    private renderIndexModeControl(
+        container: HTMLElement,
+        options: {
+            isTagsEnabled: boolean;
+            isThoughtTrailEnabled: boolean;
+        },
+    ): void {
         this.renderSidebarModeControl(container, {
             mode: this.indexSidebarMode,
             showTagsTab: true,
+            isTagsEnabled: options.isTagsEnabled,
+            isThoughtTrailEnabled: options.isThoughtTrailEnabled,
             onChange: (mode) => {
+                if (mode === "tags" && !options.isTagsEnabled) {
+                    return;
+                }
+                if (mode === "thought-trail" && !options.isThoughtTrailEnabled) {
+                    return;
+                }
                 if (this.indexSidebarMode === mode) {
                     return;
                 }
@@ -3145,11 +3272,16 @@ export default class SideNote2View extends ItemView {
         });
     }
 
-    private renderNoteModeControl(container: HTMLElement): void {
+    private renderNoteModeControl(container: HTMLElement, isThoughtTrailEnabled: boolean): void {
         this.renderSidebarModeControl(container, {
             mode: this.noteSidebarMode,
             showTagsTab: true,
+            isTagsEnabled: true,
+            isThoughtTrailEnabled,
             onChange: (mode) => {
+                if (mode === "thought-trail" && !isThoughtTrailEnabled) {
+                    return;
+                }
                 if (this.noteSidebarMode === mode) {
                     return;
                 }
@@ -3583,6 +3715,7 @@ export default class SideNote2View extends ItemView {
                 }
                 this.highlightComment(commentId);
             },
+            clearDeletedComment: (commentId) => this.clearDeletedSidebarComment(commentId),
             startEditDraft: (commentId, hostFilePath) => {
                 void this.plugin.startEditDraft(commentId, hostFilePath);
             },
@@ -3961,20 +4094,5 @@ export default class SideNote2View extends ItemView {
 
     private async deleteCommentWithConfirm(commentId: string): Promise<boolean> {
         return this.deleteSidebarComment(commentId);
-    }
-
-    private async clearDeletedCommentsForCurrentFile(): Promise<void> {
-        const filePath = this.file?.path ?? null;
-        if (!filePath || this.plugin.isAllCommentsNotePath(filePath)) {
-            return;
-        }
-        const changed = await this.plugin.clearDeletedCommentsForFile(filePath);
-        if (!changed) {
-            return;
-        }
-
-        if (this.plugin.shouldShowDeletedComments()) {
-            await this.plugin.setShowDeletedComments(false);
-        }
     }
 }

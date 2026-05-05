@@ -905,7 +905,7 @@ test("sidebar interaction controller keeps deleted mode while clicking a normal 
     }
 });
 
-test("sidebar interaction controller exits deleted mode while clicking the deleted toolbar", async () => {
+test("sidebar interaction controller keeps deleted mode while clicking the deleted toolbar", async () => {
     const originalHTMLElement = globalThis.HTMLElement;
     const originalNode = globalThis.Node;
     Object.assign(globalThis, {
@@ -951,7 +951,7 @@ test("sidebar interaction controller exits deleted mode while clicking the delet
 
         await controller.sidebarClickHandler({ target: toolbarEl } as unknown as MouseEvent);
 
-        assert.deepEqual(setShowDeletedCommentsCalls, [false]);
+        assert.deepEqual(setShowDeletedCommentsCalls, []);
     } finally {
         Object.assign(globalThis, {
             HTMLElement: originalHTMLElement,

@@ -1,10 +1,11 @@
-import { FileView, MarkdownView, TFile, WorkspaceLeaf } from "obsidian";
+import { MarkdownView, TFile, WorkspaceLeaf } from "obsidian";
 import type { Plugin } from "obsidian";
 import type { MarkdownViewModeType } from "obsidian";
 import {
     resolveWorkspaceTargetInput,
     resolveIndexLeafMode,
     resolveWorkspaceFileTargets,
+    resolveWorkspaceLeafTargetInput,
     shouldIgnoreWorkspaceFileOpen,
     shouldIgnoreWorkspaceLeafChange,
 } from "./workspaceContextPlanner";
@@ -39,7 +40,8 @@ export class WorkspaceContextController {
     }
 
     public handleFileOpen(file: TFile | null): void {
-        if (shouldIgnoreWorkspaceFileOpen(file)) {
+        const activeFile = this.host.app.workspace.getActiveFile();
+        if (shouldIgnoreWorkspaceFileOpen(file, activeFile)) {
             return;
         }
 
@@ -47,7 +49,7 @@ export class WorkspaceContextController {
         this.syncIndexNoteViewClasses();
         this.applyWorkspaceFileTargets(resolveWorkspaceTargetInput(
             file,
-            this.host.app.workspace.getActiveFile(),
+            activeFile,
         ));
     }
 
@@ -57,9 +59,10 @@ export class WorkspaceContextController {
             return;
         }
 
-        const file = resolveWorkspaceTargetInput(
-            this.getFileForLeaf(leaf),
+        const file = resolveWorkspaceLeafTargetInput(
+            leaf,
             this.host.app.workspace.getActiveFile(),
+            (value): value is TFile => value instanceof TFile,
         );
         void this.syncIndexNoteLeafMode(leaf);
         this.syncIndexNoteViewClasses();
@@ -118,12 +121,6 @@ export class WorkspaceContextController {
             await this.host.updateSidebarViews(nextState.sidebarFile, { skipDataRefresh: true });
             this.host.refreshEditorDecorations();
         });
-    }
-
-    private getFileForLeaf(leaf: WorkspaceLeaf | null): TFile | null {
-        return leaf?.view instanceof FileView && leaf.view.file instanceof TFile
-            ? leaf.view.file
-            : null;
     }
 
     private async setLeafMarkdownMode(leaf: WorkspaceLeaf, targetMode: {

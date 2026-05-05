@@ -157,6 +157,26 @@ export function renderRestoreButton(
     };
 }
 
+export function renderPermanentDeleteButton(
+    actionsEl: HTMLDivElement,
+    commentId: string,
+    host: SidebarPersistedCommentHost,
+    ariaLabel: string,
+): void {
+    const permanentDeleteButton = actionsEl.createEl("button", {
+        cls: "clickable-icon sidenote2-comment-action-button sidenote2-comment-action-permanent-delete",
+    });
+    attachSidebarActionButtonInteractions(permanentDeleteButton, host);
+    permanentDeleteButton.setAttribute("type", "button");
+    permanentDeleteButton.setAttribute("aria-label", ariaLabel);
+    host.setIcon(permanentDeleteButton, "x");
+    permanentDeleteButton.onclick = async (event) => {
+        await runSidebarPendingButtonAction(permanentDeleteButton, host, event, async () => {
+            await host.clearDeletedComment(commentId);
+        });
+    };
+}
+
 export function renderAddEntryButton(
     actionsEl: HTMLDivElement,
     commentId: string,

@@ -28,7 +28,7 @@ export class CommentSessionController {
     private readonly nestedCommentThreadOverrideIds = new Set<string>();
     private showResolvedComments = false;
     private showDeletedComments = false;
-    private showNestedComments = false;
+    private showNestedComments = true;
 
     constructor(private readonly host: CommentSessionHost) {}
 
@@ -164,7 +164,8 @@ export class CommentSessionController {
         showNested: boolean,
         options: SetSidebarViewStateOptions = {},
     ): Promise<boolean> {
-        if (this.showNestedComments === showNested) {
+        const hasThreadOverrides = this.nestedCommentThreadOverrideIds.size > 0;
+        if (this.showNestedComments === showNested && !hasThreadOverrides) {
             return false;
         }
 

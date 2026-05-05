@@ -29,6 +29,7 @@ import {
     renderEditButton,
     renderEntryMoveHandle,
     renderMoveActionButton,
+    renderPermanentDeleteButton,
     renderPinActionButton,
     renderReorderHandle,
     renderRestoreButton,
@@ -112,6 +113,7 @@ export interface SidebarPersistedCommentHost {
     unresolveComment(commentId: string): Promise<boolean> | Promise<void> | boolean | void;
     moveCommentThread(threadId: string, sourceFilePath: string): void;
     restoreComment(commentId: string): Promise<boolean> | Promise<void> | boolean | void;
+    clearDeletedComment(commentId: string): Promise<boolean> | Promise<void> | boolean | void;
     startEditDraft(commentId: string, hostFilePath: string | null): void;
     isPinnedThread(threadId: string): boolean;
     togglePinnedThread(threadId: string): Promise<void> | void;
@@ -450,7 +452,7 @@ export function getDeletedRenderableThreadEntries(
     if (thread.deletedAt || parentEntry.deletedAt) {
         return {
             parentEntry,
-            childEntries: [],
+            childEntries: entries.slice(1),
         };
     }
 
@@ -902,6 +904,7 @@ function renderStoredThreadEntry(
         entryBody: entry.body || "",
         presentation: entryPresentation,
         host,
+        interactive: !entryComment.deletedAt && !thread.deletedAt,
         inlineEditDraft: options.inlineEditDraft ?? null,
     });
     const entryEl = renderedEntry.commentEl;
@@ -911,13 +914,14 @@ function renderStoredThreadEntry(
     if (!entryEditDraft) {
         if (thread.deletedAt) {
             // Parent restore controls the whole soft-deleted thread.
-        } else if (entryComment.deletedAt && host.enableSoftDeleteActions) {
+        } else if (entryComment.deletedAt && host.enableSoftDeleteActions && !host.showSourceRedirectAction) {
             renderRestoreButton(entryActionsEl, entryComment.id, host, "Restore deleted side note entry");
+            renderPermanentDeleteButton(entryActionsEl, entryComment.id, host, "Permanently delete side note entry");
         } else {
             if (!host.showSourceRedirectAction) {
                 renderEditButton(entryActionsEl, entryComment.id, host, "Edit side note");
             }
-            if (host.enableSoftDeleteActions) {
+            if (host.enableSoftDeleteActions && !host.showSourceRedirectAction) {
                 renderDeleteButton(entryActionsEl, entryComment.id, host, "Delete side note entry");
             }
         }
@@ -942,16 +946,16 @@ function renderStoredThreadEntry(
             entryAuthor,
             entryAgentRun,
             {
-                showShareAction: !entryComment.deletedAt && !thread.deletedAt,
+                showShareAction: !host.showSourceRedirectAction && !entryComment.deletedAt && !thread.deletedAt,
                 showAddEntryAction: !host.showSourceRedirectAction && !entryComment.deletedAt && !thread.deletedAt,
                 showRetryAction: shouldShowRetryActionForSidebarComment(
                     entryComment.id,
                     entryComment.comment,
                     host.threadAgentRuns,
-                ) && !entryComment.deletedAt && !thread.deletedAt,
+                ) && !host.showSourceRedirectAction && !entryComment.deletedAt && !thread.deletedAt,
                 disableRetryAction: isRetryableAgentRunBusy(entryRetryRun),
                 moveAction: null,
-                insertAction: entryInsertMarkdown
+                insertAction: entryInsertMarkdown && !host.showSourceRedirectAction
                     ? {
                         markdown: entryInsertMarkdown,
                     }
@@ -973,7 +977,7 @@ export async function renderPersistedCommentCard(
         ? getDeletedRenderableThreadEntries(thread, host.agentStream)
         : null;
     const entries = deletedRenderableEntries?.parentEntry
-        ? [deletedRenderableEntries.parentEntry]
+        ? [deletedRenderableEntries.parentEntry, ...deletedRenderableEntries.childEntries]
         : getRenderableThreadEntries(thread, host.agentStream);
     const comment = threadEntryToComment(thread, entries[0]);
     const presentation = buildPersistedCommentPresentation(thread, host.activeCommentId);
@@ -1035,6 +1039,7 @@ export async function renderPersistedCommentCard(
         entryBody: entries[0]?.body || "",
         presentation,
         host,
+        interactive: !comment.deletedAt && !thread.deletedAt,
         inlineEditDraft: parentEditDraft,
     });
     const commentEl = renderedParent.commentEl;
@@ -1048,8 +1053,9 @@ export async function renderPersistedCommentCard(
         const parentInsertMarkdown = !comment.deletedAt && !thread.deletedAt
             ? getInsertableSidebarCommentMarkdown(comment.id, entries[0]?.body || "", host.threadAgentRuns)
             : null;
-        if (comment.deletedAt && host.enableSoftDeleteActions) {
+        if (comment.deletedAt && host.enableSoftDeleteActions && !host.showSourceRedirectAction) {
             renderRestoreButton(actionsEl, comment.id, host, "Restore deleted side note");
+            renderPermanentDeleteButton(actionsEl, comment.id, host, "Permanently delete side note");
         } else {
             if (canShowHeaderPinAction) {
                 renderPinActionButton(actionsEl, thread.id, host.isPinnedThread(thread.id), host);
@@ -1082,7 +1088,7 @@ export async function renderPersistedCommentCard(
             if (!host.showSourceRedirectAction) {
                 renderEditButton(actionsEl, comment.id, host, "Edit side note");
             }
-            if (host.enableSoftDeleteActions) {
+            if (host.enableSoftDeleteActions && !host.showSourceRedirectAction) {
                 renderDeleteButton(actionsEl, comment.id, host, "Delete side note thread");
             }
         }
@@ -1093,13 +1099,13 @@ export async function renderPersistedCommentCard(
             renderThreadReanchorAction(commentEl, thread.id, presentation.reanchorAction.label, host);
         }
         renderThreadFooterActions(commentEl, comment, parentRetryRun?.id ?? null, parentAuthor, null, {
-            showShareAction: !comment.deletedAt,
+            showShareAction: !host.showSourceRedirectAction && !comment.deletedAt,
             showAddEntryAction: !host.showSourceRedirectAction && !comment.deletedAt,
             showRetryAction: shouldShowRetryActionForSidebarComment(
                 comment.id,
                 comment.comment,
                 host.threadAgentRuns,
-            ) && !comment.deletedAt && !thread.deletedAt,
+            ) && !host.showSourceRedirectAction && !comment.deletedAt && !thread.deletedAt,
             disableRetryAction: isRetryableAgentRunBusy(parentRetryRun),
             nestedToggleAction: shouldRenderDetailsToggle
                 ? {
@@ -1107,7 +1113,7 @@ export async function renderPersistedCommentCard(
                     showNestedComments: host.showNestedComments,
                 }
                 : null,
-            moveAction: !comment.deletedAt && !thread.deletedAt
+            moveAction: !host.showSourceRedirectAction && !comment.deletedAt && !thread.deletedAt
                 ? {
                     ariaLabel: presentation.moveAction.ariaLabel,
                     icon: presentation.moveAction.icon,
@@ -1116,7 +1122,7 @@ export async function renderPersistedCommentCard(
                     },
                 }
                 : null,
-            insertAction: parentInsertMarkdown
+            insertAction: parentInsertMarkdown && !host.showSourceRedirectAction
                 ? {
                     markdown: parentInsertMarkdown,
                 }

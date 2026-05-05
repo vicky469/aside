@@ -536,6 +536,44 @@ export class CommentManager {
         return changed;
     }
 
+    clearDeletedComment(id: string, clearedAt: number = Date.now()): boolean {
+        this.purgeExpiredDeletedComments(clearedAt);
+        const threadIndex = this.threads.findIndex((thread) =>
+            thread.id === id || thread.entries.some((entry) => entry.id === id));
+        if (threadIndex === -1) {
+            return false;
+        }
+
+        const thread = this.threads[threadIndex];
+        if (thread.id === id) {
+            const rootEntry = thread.entries.find((entry) => entry.id === id);
+            if (!thread.deletedAt && !rootEntry?.deletedAt) {
+                return false;
+            }
+
+            this.threads.splice(threadIndex, 1);
+            return true;
+        }
+
+        const entryIndex = thread.entries.findIndex((entry) => entry.id === id);
+        if (entryIndex === -1 || !thread.entries[entryIndex].deletedAt) {
+            return false;
+        }
+
+        const retainedEntries = thread.entries.filter((entry) => entry.id !== id);
+        if (!retainedEntries.length) {
+            this.threads.splice(threadIndex, 1);
+            return true;
+        }
+
+        this.threads[threadIndex] = {
+            ...thread,
+            entries: retainedEntries.map((entry) => ({ ...entry })),
+            updatedAt: clearedAt,
+        };
+        return true;
+    }
+
     resolveComment(id: string) {
         const thread = this.threads.find((candidate) =>
             candidate.id === id || candidate.entries.some((entry) => entry.id === id));
