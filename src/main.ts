@@ -332,7 +332,7 @@ export default class SideNote2 extends Plugin {
         getDraftHostFilePath: () => this.commentSessionController.getDraftHostFilePath(),
         setDraftHostFilePath: (filePath) => this.commentSessionController.setDraftHostFilePath(filePath),
         getSidebarTargetFile: () => this.getSidebarTargetFile(),
-        updateSidebarViews: (file) => this.updateSidebarViews(file),
+        updateSidebarViews: (file, options) => this.updateSidebarViews(file, options),
         refreshAggregateNoteNow: () => this.refreshAggregateNoteNow(),
         loadData: () => this.loadData(),
         saveData: (data) => this.saveData(data),
@@ -459,7 +459,7 @@ export default class SideNote2 extends Plugin {
         isMarkdownCommentableFile: (file): file is TFile => isMarkdownCommentableFile(file, this.getAllCommentsNotePath()),
         isSidebarSupportedFile: (file): file is TFile => isSidebarSupportedFile(file, this.getAllCommentsNotePath()),
         syncSidebarFile: (file) => this.workspaceViewController.syncSidebarFile(file),
-        updateSidebarViews: (file) => this.updateSidebarViews(file),
+        updateSidebarViews: (file, options) => this.updateSidebarViews(file, options),
         refreshEditorDecorations: () => this.refreshEditorDecorations(),
     });
     private readonly pluginEventRouter = new PluginEventRouter({
@@ -1138,9 +1138,16 @@ export default class SideNote2 extends Plugin {
     }
 
     async activateIndexFileScope(indexFilePath: string, sourceFilePath: string) {
-        const indexFile = this.workspaceViewController.getFileByPath(indexFilePath);
-        await this.commentNavigationController.ensureSidebarView();
-        await this.commentNavigationController.syncSidebarIndexScope(indexFile, sourceFilePath);
+        const sourceFile = this.workspaceViewController.getMarkdownFileByPath(sourceFilePath);
+        if (!sourceFile) {
+            this.showNotice(`Unable to open ${sourceFilePath}.`, "index", "index.file.open.error", {
+                indexFilePath,
+                sourceFilePath,
+            });
+            return;
+        }
+
+        await this.app.workspace.openLinkText(sourceFilePath, indexFilePath, "tab");
     }
 
     public async revealIndexCommentFromSidebar(commentId: string, indexFilePath: string) {
@@ -1225,8 +1232,8 @@ export default class SideNote2 extends Plugin {
         await this.commentPersistenceController.ensureIndexedCommentsLoaded();
     }
 
-    private async updateSidebarViews(file: TFile | null): Promise<void> {
-        await this.commentNavigationController.updateSidebarViews(file);
+    private async updateSidebarViews(file: TFile | null, options: { skipDataRefresh?: boolean } = {}): Promise<void> {
+        await this.commentNavigationController.updateSidebarViews(file, options);
     }
 
     public shouldShowResolvedComments(): boolean {

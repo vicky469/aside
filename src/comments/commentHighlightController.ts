@@ -11,6 +11,7 @@ import {
     COMMENT_LOCATION_PROTOCOL,
     findIndexMarkdownLineTarget,
     parseCommentLocationUrl,
+    parseIndexFileOpenUrl,
 } from "../core/derived/allCommentsNote";
 import { buildEditorHighlightRanges } from "../core/derived/editorHighlightRanges";
 import { matchesResolvedCommentVisibility } from "../core/rules/resolvedCommentVisibility";
@@ -132,7 +133,7 @@ export class CommentHighlightController {
     constructor(private readonly host: CommentHighlightHost) {}
 
     private readonly indexPreviewLinkSelector = "a.sidenote2-index-comment-link[data-sidenote2-comment-url]";
-    private readonly indexPreviewFileHeadingSelector = ".sidenote2-index-heading-label[title]";
+    private readonly indexPreviewFileHeadingSelector = ".sidenote2-index-heading-label[title], a[href^=\"obsidian://open\"]";
     private readonly previewManagedSectionStartLineCache =
         new Map<string, PreviewManagedSectionStartLineCacheEntry>();
 
@@ -340,7 +341,7 @@ export class CommentHighlightController {
                 return;
             }
 
-            const filePath = heading.getAttribute("title")?.trim();
+            const filePath = this.getIndexPreviewFilePathFromElement(heading);
             if (!filePath) {
                 return;
             }
@@ -400,7 +401,7 @@ export class CommentHighlightController {
                 return;
             }
 
-            if (headingLabel.getAttribute("title")?.trim() !== filePath) {
+            if (this.getIndexPreviewFilePathFromElement(headingLabel) !== filePath) {
                 return;
             }
 
@@ -479,6 +480,19 @@ export class CommentHighlightController {
             && !event.altKey;
     }
 
+    private getIndexPreviewFilePathFromElement(element: HTMLElement): string | null {
+        const titlePath = element.getAttribute("title")?.trim();
+        if (titlePath) {
+            return titlePath;
+        }
+
+        if (element instanceof HTMLAnchorElement) {
+            return parseIndexFileOpenUrl(element.getAttribute("href")?.trim() ?? "");
+        }
+
+        return null;
+    }
+
     private prepareIndexPreviewLinks(element: HTMLElement): void {
         element.querySelectorAll(`a[href^="obsidian://${COMMENT_LOCATION_PROTOCOL}"], ${this.indexPreviewLinkSelector}`).forEach((link) => {
             if (!(link instanceof HTMLAnchorElement)) {
@@ -525,6 +539,41 @@ export class CommentHighlightController {
     }
 
     private bindIndexPreviewLinkClicks(element: HTMLElement, sourcePath: string): void {
+        const bindActivator = (targetEl: HTMLElement, activate: () => void) => {
+            if (targetEl.dataset.sidenote2IndexBound === "true") {
+                return;
+            }
+
+            targetEl.dataset.sidenote2IndexBound = "true";
+            targetEl.addEventListener("mousedown", (event: MouseEvent) => {
+                if (!this.isPlainPrimaryClick(event)) {
+                    return;
+                }
+
+                event.preventDefault();
+                event.stopPropagation();
+            });
+            targetEl.addEventListener("click", (event: MouseEvent) => {
+                if (!this.isPlainPrimaryClick(event)) {
+                    return;
+                }
+
+                event.preventDefault();
+                event.stopPropagation();
+                event.stopImmediatePropagation();
+                activate();
+            });
+            targetEl.addEventListener("keydown", (event: KeyboardEvent) => {
+                if (event.key !== "Enter" && event.key !== " ") {
+                    return;
+                }
+
+                event.preventDefault();
+                event.stopPropagation();
+                activate();
+            });
+        };
+
         element.querySelectorAll(this.indexPreviewLinkSelector).forEach((link) => {
             if (!(link instanceof HTMLAnchorElement) || link.dataset.sidenote2IndexBound === "true") {
                 return;
@@ -549,45 +598,31 @@ export class CommentHighlightController {
                 }
             };
 
-            const bindActivator = (targetEl: HTMLElement) => {
-                if (targetEl.dataset.sidenote2IndexBound === "true") {
-                    return;
-                }
-
-                targetEl.dataset.sidenote2IndexBound = "true";
-                targetEl.addEventListener("mousedown", (event: MouseEvent) => {
-                    if (!this.isPlainPrimaryClick(event)) {
-                        return;
-                    }
-
-                    event.preventDefault();
-                    event.stopPropagation();
-                });
-                targetEl.addEventListener("click", (event: MouseEvent) => {
-                    if (!this.isPlainPrimaryClick(event)) {
-                        return;
-                    }
-
-                    event.preventDefault();
-                    event.stopPropagation();
-                    event.stopImmediatePropagation();
-                    activateLink();
-                });
-                targetEl.addEventListener("keydown", (event: KeyboardEvent) => {
-                    if (event.key !== "Enter" && event.key !== " ") {
-                        return;
-                    }
-
-                    event.preventDefault();
-                    event.stopPropagation();
-                    activateLink();
-                });
-            };
-
-            bindActivator(link);
+            bindActivator(link, activateLink);
             const rowEl = link.closest("p, li");
             if (rowEl instanceof HTMLElement) {
-                bindActivator(rowEl);
+                bindActivator(rowEl, activateLink);
+            }
+        });
+
+        element.querySelectorAll(this.indexPreviewFileHeadingSelector).forEach((link) => {
+            if (!(link instanceof HTMLElement) || link.dataset.sidenote2IndexBound === "true") {
+                return;
+            }
+
+            const filePath = this.getIndexPreviewFilePathFromElement(link);
+            if (!filePath) {
+                return;
+            }
+
+            const activateFile = () => {
+                void this.host.activateIndexFileScope(sourcePath, filePath);
+            };
+
+            bindActivator(link, activateFile);
+            const rowEl = link.closest("p, li");
+            if (rowEl instanceof HTMLElement) {
+                bindActivator(rowEl, activateFile);
             }
         });
     }

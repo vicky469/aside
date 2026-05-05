@@ -1,14 +1,10 @@
 import type { Comment } from "../../commentManager";
-import { compareCommentsForSidebarOrder } from "../anchors/commentSectionOrder";
-import { getCommentSelectionLabel, getCommentStatusLabel, isAnchoredComment, isPageComment } from "../anchors/commentAnchors";
 import { filterCommentsByResolvedVisibility } from "../rules/resolvedCommentVisibility";
 import {
     buildSideNoteReferenceUrl,
     parseSideNoteReferenceUrl,
     SIDE_NOTE_REFERENCE_PROTOCOL,
 } from "../text/commentReferences";
-import { stripMarkdownLinksForPreview } from "../text/commentUrls";
-import { extractTagsFromText } from "../text/commentTags";
 
 export const ALL_COMMENTS_NOTE_PATH = "SideNote2 index.md";
 export const LEGACY_ALL_COMMENTS_NOTE_PATH = "SideNote2 comments.md";
@@ -16,9 +12,7 @@ export const COMMENT_LOCATION_PROTOCOL = SIDE_NOTE_REFERENCE_PROTOCOL;
 export const ALL_COMMENTS_NOTE_IMAGE_URL = "https://ichef.bbci.co.uk/images/ic/1920xn/p02vhq1v.jpg.webp";
 export const ALL_COMMENTS_NOTE_IMAGE_CAPTION = "Relativity (Credit: 2015 The M.C. Escher Company - Baarn, The Netherlands)";
 export const ALL_COMMENTS_NOTE_IMAGE_ALT = "SideNote2 index header image";
-const MAX_PREVIEW_LENGTH = 80;
-const PAGE_NOTE_LABEL_WORD_LIMIT = 10;
-const RESOLVED_COMMENTS_MODE_LABEL = "Showing: Resolved comments only";
+export const ALL_COMMENTS_NOTE_IMAGE_CAPTION_STYLE = "display: block; color: #8a8a8a; font-size: 12px; line-height: 1.2; text-align: center;";
 
 export interface CommentLocationTarget {
     filePath: string;
@@ -99,19 +93,6 @@ export function normalizeAllCommentsNoteImageCaption(caption: string | null | un
     return caption.trim();
 }
 
-function toInlinePreview(value: string, maxLength: number = MAX_PREVIEW_LENGTH): string {
-    const normalized = stripMarkdownLinksForPreview(value).replace(/\r\n/g, "\n").replace(/\s+/g, " ").trim();
-    if (!normalized) {
-        return "(blank selection)";
-    }
-
-    if (normalized.length <= maxLength) {
-        return normalized;
-    }
-
-    return `${normalized.slice(0, maxLength - 3).trimEnd()}...`;
-}
-
 function escapeMarkdownText(value: string): string {
     return value
         .replace(/\\/g, "\\\\")
@@ -136,11 +117,31 @@ function unescapeHtmlText(value: string): string {
         .replace(/&amp;/g, "&");
 }
 
-function formatFileHeadingLabel(filePath: string): string {
+function buildFileOpenUrl(vaultName: string, filePath: string): string {
+    return `obsidian://open?vault=${encodeURIComponent(vaultName)}&file=${encodeURIComponent(filePath)}`;
+}
+
+export function parseIndexFileOpenUrl(url: string): string | null {
+    let parsedUrl: URL;
+    try {
+        parsedUrl = new URL(url);
+    } catch {
+        return null;
+    }
+
+    if (parsedUrl.protocol !== "obsidian:" || parsedUrl.hostname !== "open") {
+        return null;
+    }
+
+    const filePath = parsedUrl.searchParams.get("file")?.trim() ?? "";
+    return filePath || null;
+}
+
+function formatFileLink(vaultName: string, filePath: string): string {
     const normalizedPath = normalizeNotePath(filePath);
     const pathSegments = normalizedPath.split("/").filter(Boolean);
     const fileName = pathSegments.pop() ?? normalizedPath;
-    return `<span class="sidenote2-index-heading-label" title="${escapeHtmlText(filePath)}">${escapeHtmlText(fileName)}</span>`;
+    return `[${escapeMarkdownText(fileName)}](${buildFileOpenUrl(vaultName, filePath)})`;
 }
 
 function getFolderPath(filePath: string): string {
@@ -148,59 +149,6 @@ function getFolderPath(filePath: string): string {
     const pathSegments = normalizedPath.split("/").filter(Boolean);
     pathSegments.pop();
     return pathSegments.join("/");
-}
-
-function toWordPreview(value: string, maxWords: number): string {
-    const normalized = stripMarkdownLinksForPreview(value).replace(/\r\n/g, "\n").replace(/\s+/g, " ").trim();
-    if (!normalized) {
-        return "";
-    }
-
-    const words = normalized.split(/\s+/);
-    if (words.length <= maxWords) {
-        return normalized;
-    }
-
-    return `${words.slice(0, maxWords).join(" ")}...`;
-}
-
-function getCommentLinkLabelText(comment: Comment): string {
-    const selectedPreview = toInlinePreview(getCommentSelectionLabel(comment));
-    if (isPageComment(comment)) {
-        return toWordPreview(comment.comment ?? "", PAGE_NOTE_LABEL_WORD_LIMIT) || selectedPreview;
-    }
-
-    return isAnchoredComment(comment)
-        ? selectedPreview
-        : `${getCommentStatusLabel(comment)} · ${selectedPreview}`;
-}
-
-function formatCommentLinkLabel(comment: Comment): string {
-    const escapedLabel = escapeMarkdownText(getCommentLinkLabelText(comment));
-    if (comment.resolved) {
-        return `~~${escapedLabel}~~`;
-    }
-
-    return escapedLabel;
-}
-
-function formatCommentKindMarker(comment: Comment): string {
-    return isPageComment(comment)
-        ? '<span class="sidenote2-index-kind-dot sidenote2-index-kind-page"></span>'
-        : '<span class="sidenote2-index-kind-dot sidenote2-index-kind-anchored"></span>';
-}
-
-function formatCommentTags(comment: Comment): string | null {
-    const uniqueTags = Array.from(new Set(extractTagsFromText(comment.comment ?? "")));
-    if (!uniqueTags.length) {
-        return null;
-    }
-
-    return uniqueTags.join(" ");
-}
-
-function getCommentKindKey(comment: Comment): "page" | "anchored" {
-    return isPageComment(comment) ? "page" : "anchored";
 }
 
 export function isAllCommentsNotePath(filePath: string, currentPath: string = ALL_COMMENTS_NOTE_PATH): boolean {
@@ -274,12 +222,26 @@ export function findCommentLocationLineNumber(noteContent: string, commentId: st
 }
 
 export function findFileHeadingPathInMarkdownLine(line: string): string | null {
-    const match = line.match(/<(?:span|strong) class="sidenote2-index-heading-label" title="([^"]+)">/);
-    if (!match?.[1]) {
-        return null;
+    const elementMatch = line.match(/<(?:span|strong|a)\b[^>]*class="[^"]*\bsidenote2-index-heading-label\b[^"]*"[^>]*>/);
+    const titleMatch = elementMatch?.[0]?.match(/\btitle="([^"]+)"/);
+    if (titleMatch?.[1]) {
+        return unescapeHtmlText(titleMatch[1]);
     }
 
-    return unescapeHtmlText(match[1]);
+    const markdownLinkPattern = /\[[^\]]*]\((obsidian:\/\/open\?[^)\s]+)\)/g;
+    for (const match of line.matchAll(markdownLinkPattern)) {
+        const url = match[1];
+        if (!url) {
+            continue;
+        }
+
+        const filePath = parseIndexFileOpenUrl(url);
+        if (filePath) {
+            return filePath;
+        }
+    }
+
+    return null;
 }
 
 export function findIndexMarkdownLineTarget(line: string): IndexMarkdownLineTarget | null {
@@ -337,30 +299,9 @@ export function buildIndexNoteNavigationMap(noteContent: string): IndexNoteNavig
     };
 }
 
-function appendFileCommentLines(
-    lines: string[],
-    fileComments: Comment[],
-    vaultName: string,
-): void {
-    for (const comment of fileComments) {
-        const tagLine = formatCommentTags(comment);
-        const commentUrl = `${buildCommentLocationUrl(vaultName, comment)}&kind=${getCommentKindKey(comment)}`;
-        const blockId = buildIndexCommentBlockId(comment.id);
-        const marker = formatCommentKindMarker(comment);
-
-        lines.push(
-            tagLine
-                ? `${marker} [${formatCommentLinkLabel(comment)}](${commentUrl})  ${tagLine} ^${blockId}`
-                : `${marker} [${formatCommentLinkLabel(comment)}](${commentUrl}) ^${blockId}`
-        );
-        lines.push("");
-    }
-}
-
 function appendFileSections(
     lines: string[],
     filePaths: readonly string[],
-    commentsByFile: ReadonlyMap<string, Comment[]>,
     vaultName: string,
 ): void {
     const filePathsByFolder = new Map<string, string[]>();
@@ -377,27 +318,17 @@ function appendFileSections(
     const folderPaths = Array.from(filePathsByFolder.keys()).sort((left, right) => left.localeCompare(right));
     for (const folderPath of folderPaths) {
         if (folderPath) {
-            lines.push(`### ${escapeMarkdownText(folderPath)}`);
-            lines.push("");
+            lines.push(escapeMarkdownText(folderPath));
         }
 
         const folderFilePaths = (filePathsByFolder.get(folderPath) ?? [])
             .slice()
             .sort((left, right) => left.localeCompare(right));
         for (const filePath of folderFilePaths) {
-            lines.push(`##### ${formatFileHeadingLabel(filePath)}`);
-            lines.push("");
-
-            const fileComments = (commentsByFile.get(filePath) ?? [])
-                .slice()
-                .sort(compareCommentsForSidebarOrder);
-            appendFileCommentLines(lines, fileComments, vaultName);
-            lines.push("");
+            lines.push(`- ${formatFileLink(vaultName, filePath)}`);
         }
 
-        if (folderPath) {
-            lines.push("");
-        }
+        lines.push("");
     }
 }
 
@@ -413,12 +344,7 @@ export function buildAllCommentsNoteContent(
         `![${ALL_COMMENTS_NOTE_IMAGE_ALT}](${headerImageUrl})`,
     ];
     if (headerImageCaption) {
-        lines.push(`<div class="sidenote2-index-header-caption">${headerImageCaption}</div>`);
-    }
-    if (options.showResolved) {
-        lines.push(
-            `<div class="sidenote2-index-visibility-label">${RESOLVED_COMMENTS_MODE_LABEL}</div>`,
-        );
+        lines.push(`<div class="sidenote2-index-header-caption" style="${ALL_COMMENTS_NOTE_IMAGE_CAPTION_STYLE}">${escapeHtmlText(headerImageCaption)}</div>`);
     }
     lines.push("");
     const visibleComments = filterCommentsByResolvedVisibility(
@@ -433,17 +359,12 @@ export function buildAllCommentsNoteContent(
         return `${lines.join("\n").trimEnd()}\n`;
     }
 
-    const commentsByFile = new Map<string, Comment[]>();
+    const filePathsByKey = new Map<string, string>();
     for (const comment of visibleComments) {
-        const existing = commentsByFile.get(comment.filePath);
-        if (existing) {
-            existing.push(comment);
-        } else {
-            commentsByFile.set(comment.filePath, [comment]);
-        }
+        filePathsByKey.set(normalizeNotePath(comment.filePath), comment.filePath);
     }
-    const filePaths = Array.from(commentsByFile.keys()).sort((left, right) => left.localeCompare(right));
-    appendFileSections(lines, filePaths, commentsByFile, vaultName);
+    const filePaths = Array.from(filePathsByKey.values()).sort((left, right) => left.localeCompare(right));
+    appendFileSections(lines, filePaths, vaultName);
 
     return `${lines.join("\n").trimEnd()}\n`;
 }

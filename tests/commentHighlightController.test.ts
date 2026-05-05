@@ -138,6 +138,29 @@ test("findClickedIndexLivePreviewTarget resolves file headings from live preview
     });
 });
 
+test("findClickedIndexLivePreviewTarget resolves plain generated file links", () => {
+    const target = {
+        closest: (selector: string) => {
+            if (selector === "a[href^=\"obsidian://open\"]") {
+                return {
+                    dataset: {},
+                    getAttribute: (name: string) => {
+                        assert.equal(name, "href");
+                        return "obsidian://open?vault=public&file=books%2FNote.md";
+                    },
+                };
+            }
+
+            return null;
+        },
+    };
+
+    assert.deepEqual(findClickedIndexLivePreviewTarget(target), {
+        kind: "file",
+        filePath: "books/Note.md",
+    });
+});
+
 test("findClickedIndexLivePreviewTarget leaves native collapse controls alone", () => {
     const target = {
         closest: (selector: string) => {

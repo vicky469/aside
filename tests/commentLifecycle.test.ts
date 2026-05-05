@@ -57,7 +57,7 @@ test("note-backed comment lifecycle stays aligned with aggregate output", () => 
     });
     assert.match(
         aggregateWhenResolved,
-        /\[~~beta~~\]\(obsidian:\/\/side-note2-comment\?vault=dev&file=Folder%2FNote\.md&commentId=comment-1&kind=anchored\)/
+        /- \[Note\.md\]\(obsidian:\/\/open\?vault=dev&file=Folder%2FNote\.md\)/
     );
 
     manager.replaceCommentsForFile(filePath, parsed.comments);
@@ -72,7 +72,7 @@ test("note-backed comment lifecycle stays aligned with aggregate output", () => 
     });
     assert.match(
         aggregateWhenReopened,
-        /\[beta\]\(obsidian:\/\/side-note2-comment\?vault=dev&file=Folder%2FNote\.md&commentId=comment-1&kind=anchored\)/
+        /- \[Note\.md\]\(obsidian:\/\/open\?vault=dev&file=Folder%2FNote\.md\)/
     );
 
     manager.replaceCommentsForFile(filePath, parsed.comments);
@@ -85,7 +85,7 @@ test("note-backed comment lifecycle stays aligned with aggregate output", () => 
     assert.match(note, new RegExp(`"deletedAt": ${deletedAt}`));
     assert.equal(
         buildAllCommentsNoteContent("dev", manager.getCommentsForFile(filePath)),
-        `![${ALL_COMMENTS_NOTE_IMAGE_ALT}](${ALL_COMMENTS_NOTE_IMAGE_URL})\n<div class="sidenote2-index-header-caption">${ALL_COMMENTS_NOTE_IMAGE_CAPTION}</div>\n`,
+        `![${ALL_COMMENTS_NOTE_IMAGE_ALT}](${ALL_COMMENTS_NOTE_IMAGE_URL})\n<div class="sidenote2-index-header-caption" style="display: block; color: #8a8a8a; font-size: 12px; line-height: 1.2; text-align: center;">${ALL_COMMENTS_NOTE_IMAGE_CAPTION}</div>\n`,
     );
 
     note = note.replace(String(deletedAt), String(deletedAt - SOFT_DELETE_RETENTION_MS - 1));

@@ -1,7 +1,7 @@
 export function shouldSkipAggregateViewRefresh(
     currentContent: string,
     nextContent: string,
-    hasOpenView: boolean,
+    _hasOpenView: boolean,
 ): boolean {
-    return currentContent === nextContent && !hasOpenView;
+    return currentContent === nextContent;
 }

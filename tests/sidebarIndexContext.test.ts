@@ -396,12 +396,12 @@ test("index sidebar scope root stays unchanged for non-index sidebar targets", (
     );
 });
 
-test("fixed aggregate refresh still updates an open index view when content is unchanged", () => {
+test("fixed aggregate refresh skips open index view when content is unchanged", () => {
     const shouldSkipOldAggregateRefresh = (currentContent: string, nextContent: string): boolean =>
         currentContent === nextContent;
 
     assert.equal(shouldSkipOldAggregateRefresh("same", "same"), true);
-    assert.equal(shouldSkipAggregateViewRefresh("same", "same", true), false);
+    assert.equal(shouldSkipAggregateViewRefresh("same", "same", true), true);
     assert.equal(shouldSkipAggregateViewRefresh("same", "same", false), true);
 });
 

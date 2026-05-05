@@ -1141,11 +1141,11 @@ export default class SideNote2View extends ItemView {
         await super.setState(state, result);
     }
 
-    public async updateActiveFile(file: TFile | null) {
+    public async updateActiveFile(file: TFile | null, options: { skipDataRefresh?: boolean } = {}) {
         this.setCurrentFile(
             normalizeSidebarViewFile(file, (candidate): candidate is TFile => this.plugin.isSidebarSupportedFile(candidate)),
         );
-        await this.renderComments();
+        await this.renderComments(options);
     }
 
     public getCurrentFile(): TFile | null {
@@ -1204,6 +1204,14 @@ export default class SideNote2View extends ItemView {
         const file = normalizedFile;
         const isAllCommentsView = !!file && this.plugin.isAllCommentsNotePath(file.path);
         this.clearReorderDragState();
+        if (isAllCommentsView) {
+            this.noteSidebarShell = null;
+            this.indexFileFilterGraph = null;
+            this.resetStreamedReplyControllers();
+            this.containerEl.empty();
+            this.syncViewContainerClasses();
+            return;
+        }
         if (file && !isAllCommentsView) {
             this.indexFileFilterGraph = null;
             if (!options.skipDataRefresh) {

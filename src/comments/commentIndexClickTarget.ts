@@ -1,4 +1,7 @@
-import { parseCommentLocationUrl } from "../core/derived/allCommentsNote";
+import {
+    parseCommentLocationUrl,
+    parseIndexFileOpenUrl,
+} from "../core/derived/allCommentsNote";
 
 export type IndexLivePreviewClickTarget =
     | {
@@ -26,6 +29,7 @@ const INDEX_NATIVE_COLLAPSE_CONTROL_SELECTOR = [
 ].join(", ");
 const INDEX_COMMENT_LINK_SELECTOR = "a.sidenote2-index-comment-link[data-sidenote2-comment-url]";
 const INDEX_FILE_HEADING_SELECTOR = ".sidenote2-index-heading-label[title]";
+const INDEX_FILE_LINK_SELECTOR = "a[href^=\"obsidian://open\"]";
 
 export function isIndexNativeCollapseControlTarget(target: ClosestLookupTarget | null): boolean {
     return !!target?.closest(INDEX_NATIVE_COLLAPSE_CONTROL_SELECTOR);
@@ -58,6 +62,15 @@ export function findClickedIndexLivePreviewTarget(
         return {
             kind: "file",
             filePath,
+        };
+    }
+
+    const fileLink = target.closest(INDEX_FILE_LINK_SELECTOR);
+    const linkedFilePath = parseIndexFileOpenUrl(fileLink?.getAttribute("href")?.trim() ?? "");
+    if (linkedFilePath) {
+        return {
+            kind: "file",
+            filePath: linkedFilePath,
         };
     }
 

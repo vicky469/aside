@@ -10,7 +10,7 @@ export function resolveWorkspaceTargetInput<T>(
     eventFile: T | null,
     workspaceActiveFile: T | null,
 ): T | null {
-    return workspaceActiveFile ?? eventFile;
+    return eventFile ?? workspaceActiveFile;
 }
 
 export function resolveWorkspaceFileTargets<T>(

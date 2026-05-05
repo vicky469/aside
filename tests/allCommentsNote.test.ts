@@ -20,6 +20,7 @@ import {
     normalizeAllCommentsNoteImageUrl,
     normalizeAllCommentsNotePath,
     parseCommentLocationUrl,
+    parseIndexFileOpenUrl,
 } from "../src/core/derived/allCommentsNote";
 import type { Comment } from "../src/commentManager";
 
@@ -83,7 +84,23 @@ test("findFileHeadingPathInMarkdownLine extracts the source file path from an in
         findFileHeadingPathInMarkdownLine('##### <strong class="sidenote2-index-heading-label" title="Folder/Legacy.md">Legacy.md</strong>'),
         "Folder/Legacy.md",
     );
+    assert.equal(
+        findFileHeadingPathInMarkdownLine('- <a class="sidenote2-index-heading-label" title="Folder/Linked.md" href="obsidian://open?vault=dev&amp;file=Folder%2FLinked.md">Linked.md</a>'),
+        "Folder/Linked.md",
+    );
+    assert.equal(
+        findFileHeadingPathInMarkdownLine('- [Linked.md](obsidian://open?vault=dev&file=Folder%2FLinked.md)'),
+        "Folder/Linked.md",
+    );
     assert.equal(findFileHeadingPathInMarkdownLine("### Folder"), null);
+});
+
+test("parseIndexFileOpenUrl extracts file paths from generated file links", () => {
+    assert.equal(
+        parseIndexFileOpenUrl("obsidian://open?vault=dev&file=Folder%2FLinked.md"),
+        "Folder/Linked.md",
+    );
+    assert.equal(parseIndexFileOpenUrl("obsidian://side-note2-comment?vault=dev&file=Folder%2FLinked.md"), null);
 });
 
 test("findIndexMarkdownLineTarget resolves both comment rows and file heading rows", () => {
@@ -104,91 +121,49 @@ test("findIndexMarkdownLineTarget resolves both comment rows and file heading ro
     );
 });
 
-test("findCommentLocationLineNumber returns the generated index line for a comment id", () => {
+test("findCommentLocationLineNumber returns null for the simplified generated index", () => {
     const content = buildAllCommentsNoteContent("dev", [
         createComment({
             id: "comment-1",
             filePath: "Folder/Note.md",
-            selectedText: "alpha",
-            startLine: 1,
-        }),
-        createComment({
-            id: "comment-2",
-            filePath: "Folder/Other.md",
-            selectedText: "beta",
-            startLine: 2,
         }),
     ]);
 
-    const lineNumber = findCommentLocationLineNumber(content, "comment-2");
-    assert.equal(lineNumber === null, false);
-    assert.match(content.split("\n")[lineNumber ?? -1] ?? "", /commentId=comment-2/);
-    assert.equal(findCommentLocationLineNumber(content, "missing-comment"), null);
+    assert.equal(findCommentLocationLineNumber(content, "comment-1"), null);
 });
 
-test("buildCommentLocationLineNumberMap indexes generated comment rows once per comment id", () => {
-    const content = buildAllCommentsNoteContent("dev", [
-        createComment({
-            id: "comment-1",
-            filePath: "Folder/Note.md",
-            selectedText: "alpha",
-            startLine: 1,
-        }),
-        createComment({
-            id: "comment-2",
-            filePath: "Folder/Other.md",
-            selectedText: "beta",
-            startLine: 2,
-        }),
-    ]);
+test("buildCommentLocationLineNumberMap still indexes legacy comment rows", () => {
+    const content = [
+        '<span class="sidenote2-index-kind-dot sidenote2-index-kind-anchored"></span> [alpha](obsidian://side-note2-comment?vault=dev&file=Folder%2FNote.md&commentId=comment-1&kind=anchored)',
+        '<span class="sidenote2-index-kind-dot sidenote2-index-kind-anchored"></span> [beta](obsidian://side-note2-comment?vault=dev&file=Folder%2FOther.md&commentId=comment-2&kind=anchored)',
+    ].join("\n");
 
     const lineNumbersByCommentId = buildCommentLocationLineNumberMap(content);
 
-    assert.equal(lineNumbersByCommentId.get("comment-1") === undefined, false);
-    assert.equal(lineNumbersByCommentId.get("comment-2") === undefined, false);
+    assert.equal(lineNumbersByCommentId.get("comment-1"), 0);
+    assert.equal(lineNumbersByCommentId.get("comment-2"), 1);
     assert.equal(lineNumbersByCommentId.get("missing-comment"), undefined);
-    assert.match(content.split("\n")[lineNumbersByCommentId.get("comment-1") ?? -1] ?? "", /commentId=comment-1/);
-    assert.match(content.split("\n")[lineNumbersByCommentId.get("comment-2") ?? -1] ?? "", /commentId=comment-2/);
 });
 
-test("buildIndexNoteNavigationMap tracks file headings and comment rows by exact file path", () => {
+test("buildIndexNoteNavigationMap tracks simplified file link rows", () => {
     const content = buildAllCommentsNoteContent("dev", [
         createComment({
             id: "comment-1",
             filePath: "Projects/Alpha/Note A.md",
-            selectedText: "alpha",
-            startLine: 1,
         }),
         createComment({
             id: "comment-2",
             filePath: "Projects/Alpha/Note B.md",
-            selectedText: "beta",
-            startLine: 2,
         }),
     ]);
 
     const navigationMap = buildIndexNoteNavigationMap(content);
-    const targetA = navigationMap.targetsByCommentId.get("comment-1");
-    const targetB = navigationMap.targetsByCommentId.get("comment-2");
 
     assert.equal(navigationMap.fileLineByFilePath.get("Projects/Alpha/Note A.md") === undefined, false);
     assert.equal(navigationMap.fileLineByFilePath.get("Projects/Alpha/Note B.md") === undefined, false);
-    assert.deepEqual(targetA, {
-        commentId: "comment-1",
-        filePath: "Projects/Alpha/Note A.md",
-        fileLine: navigationMap.fileLineByFilePath.get("Projects/Alpha/Note A.md") ?? null,
-        commentLine: targetA?.commentLine ?? -1,
-    });
-    assert.deepEqual(targetB, {
-        commentId: "comment-2",
-        filePath: "Projects/Alpha/Note B.md",
-        fileLine: navigationMap.fileLineByFilePath.get("Projects/Alpha/Note B.md") ?? null,
-        commentLine: targetB?.commentLine ?? -1,
-    });
-    assert.match(content.split("\n")[targetA?.fileLine ?? -1] ?? "", /title="Projects\/Alpha\/Note A\.md"/);
-    assert.match(content.split("\n")[targetA?.commentLine ?? -1] ?? "", /commentId=comment-1/);
-    assert.match(content.split("\n")[targetB?.fileLine ?? -1] ?? "", /title="Projects\/Alpha\/Note B\.md"/);
-    assert.match(content.split("\n")[targetB?.commentLine ?? -1] ?? "", /commentId=comment-2/);
+    assert.equal(navigationMap.targetsByCommentId.size, 0);
+    assert.match(content.split("\n")[navigationMap.fileLineByFilePath.get("Projects/Alpha/Note A.md") ?? -1] ?? "", /\[Note A\.md\]\(obsidian:\/\/open\?vault=dev&file=Projects%2FAlpha%2FNote%20A\.md\)/);
+    assert.match(content.split("\n")[navigationMap.fileLineByFilePath.get("Projects/Alpha/Note B.md") ?? -1] ?? "", /\[Note B\.md\]\(obsidian:\/\/open\?vault=dev&file=Projects%2FAlpha%2FNote%20B\.md\)/);
 });
 
 test("buildIndexCommentBlockId normalizes comment ids into stable block ids", () => {
@@ -198,96 +173,55 @@ test("buildIndexCommentBlockId normalizes comment ids into stable block ids", ()
     );
 });
 
-test("buildAllCommentsNoteContent groups comments by file and shows selected text and comment", () => {
+test("buildAllCommentsNoteContent lists unique files grouped by folder", () => {
     const content = buildAllCommentsNoteContent("dev", [
         createComment({
-            filePath: "B.md",
-            selectedText: "beta",
-            comment: "Comment B",
-            startLine: 8,
+            id: "comment-1",
+            filePath: "Projects/Alpha/Note B.md",
         }),
         createComment({
             id: "comment-2",
-            filePath: "A.md",
-            selectedText: "alpha",
-            comment: "Comment A",
-            startLine: 2,
-            resolved: true,
+            filePath: "Projects/Alpha/Note A.md",
         }),
-    ], {
-        showResolved: true,
-    });
+        createComment({
+            id: "comment-3",
+            filePath: "Projects/Alpha/Note A.md",
+        }),
+    ]);
 
-    assert.match(content, new RegExp(`!\\[${ALL_COMMENTS_NOTE_IMAGE_ALT.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\]\\(${ALL_COMMENTS_NOTE_IMAGE_URL.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\)`));
-    assert.match(content, new RegExp(`<div class="sidenote2-index-header-caption">${ALL_COMMENTS_NOTE_IMAGE_CAPTION.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}</div>`));
-    assert.match(content, /<div class="sidenote2-index-visibility-label">Showing: Resolved comments only<\/div>/);
-    assert.doesNotMatch(content, /# Side comments/);
-    assert.doesNotMatch(content, /Generated by SideNote2/);
-    assert.doesNotMatch(content, /Total comments:/);
-    assert.doesNotMatch(content, /## Connected Notes/);
-    assert.doesNotMatch(content, /Page notes/);
-    assert.doesNotMatch(content, /Anchored notes/);
-    assert.match(content, /<span class="sidenote2-index-heading-label" title="A\.md">A\.md<\/span>[\s\S]*<span class="sidenote2-index-kind-dot sidenote2-index-kind-anchored"><\/span> \[~~alpha~~\]\(obsidian:\/\/side-note2-comment\?vault=dev&file=A\.md&commentId=comment-2&kind=anchored\)/);
-    assert.doesNotMatch(content, /<span class="sidenote2-index-heading-label" title="B\.md">B\.md<\/span>/);
-    assert.doesNotMatch(content, /Comment A/);
-    assert.doesNotMatch(content, /\[\[[^\]]+\]\]/);
-    assert.doesNotMatch(content, /sidenote2-index-heading-link/);
+    assert.equal(content.match(/^Projects\/Alpha$/gm)?.length ?? 0, 1);
+    assert.equal(content.match(/\[Note A\.md\]\(obsidian:\/\/open\?vault=dev&file=Projects%2FAlpha%2FNote%20A\.md\)/g)?.length ?? 0, 1);
+    assert.equal(content.match(/\[Note B\.md\]\(obsidian:\/\/open\?vault=dev&file=Projects%2FAlpha%2FNote%20B\.md\)/g)?.length ?? 0, 1);
+    assert.match(content, /Projects\/Alpha\n- \[Note A\.md\]\(obsidian:\/\/open\?vault=dev&file=Projects%2FAlpha%2FNote%20A\.md\)\n- \[Note B\.md\]\(obsidian:\/\/open\?vault=dev&file=Projects%2FAlpha%2FNote%20B\.md\)/);
+    assert.doesNotMatch(content, /commentId=/);
+    assert.doesNotMatch(content, /sidenote2-index-kind-dot/);
+    assert.doesNotMatch(content, /sidenote2-index-heading-label/);
 });
 
-test("buildAllCommentsNoteContent active mode hides resolved comments without adding a mode label", () => {
+test("buildAllCommentsNoteContent keeps resolved visibility filtering", () => {
     const content = buildAllCommentsNoteContent("dev", [
         createComment({
             filePath: "B.md",
-            selectedText: "beta",
-            startLine: 8,
         }),
         createComment({
             id: "comment-2",
             filePath: "A.md",
-            selectedText: "alpha",
-            startLine: 2,
             resolved: true,
         }),
     ], {
         showResolved: false,
     });
 
-    assert.doesNotMatch(content, /<div class="sidenote2-index-visibility-label">/);
-    assert.match(content, /<span class="sidenote2-index-heading-label" title="B\.md">B\.md<\/span>[\s\S]*commentId=comment-1/);
-    assert.doesNotMatch(content, /commentId=comment-2/);
+    assert.match(content, /\[B\.md\]\(obsidian:\/\/open\?vault=dev&file=B\.md\)/);
+    assert.doesNotMatch(content, /\[A\.md\]/);
 });
 
-test("buildAllCommentsNoteContent renders an empty file when there are no comments", () => {
+test("buildAllCommentsNoteContent renders only the header when there are no comments", () => {
     const content = buildAllCommentsNoteContent("dev", []);
 
     assert.equal(
         content,
-        `![${ALL_COMMENTS_NOTE_IMAGE_ALT}](${ALL_COMMENTS_NOTE_IMAGE_URL})\n<div class="sidenote2-index-header-caption">${ALL_COMMENTS_NOTE_IMAGE_CAPTION}</div>\n`,
-    );
-});
-
-test("buildAllCommentsNoteContent uses a custom header image URL when provided", () => {
-    const customImageUrl = "https://example.com/relativity.webp";
-    const customCaption = "Custom caption";
-    const content = buildAllCommentsNoteContent("dev", [], {
-        headerImageUrl: customImageUrl,
-        headerImageCaption: customCaption,
-    });
-
-    assert.equal(
-        content,
-        `![${ALL_COMMENTS_NOTE_IMAGE_ALT}](${customImageUrl})\n<div class="sidenote2-index-header-caption">${customCaption}</div>\n`,
-    );
-});
-
-test("buildAllCommentsNoteContent omits the figcaption when the custom caption is blank", () => {
-    const content = buildAllCommentsNoteContent("dev", [], {
-        headerImageCaption: "",
-    });
-
-    assert.equal(
-        content,
-        `![${ALL_COMMENTS_NOTE_IMAGE_ALT}](${ALL_COMMENTS_NOTE_IMAGE_URL})\n`,
+        `![${ALL_COMMENTS_NOTE_IMAGE_ALT}](${ALL_COMMENTS_NOTE_IMAGE_URL})\n<div class="sidenote2-index-header-caption" style="display: block; color: #8a8a8a; font-size: 12px; line-height: 1.2; text-align: center;">${ALL_COMMENTS_NOTE_IMAGE_CAPTION}</div>\n`,
     );
 });
 
@@ -304,8 +238,8 @@ test("buildAllCommentsNoteContent ignores comments attached to the generated agg
         }),
     ]);
 
-    assert.doesNotMatch(content, /\[\[SideNote2 comments\.md\]\]/);
-    assert.match(content, /<span class="sidenote2-index-heading-label" title="Z\.md">Z\.md<\/span>/);
+    assert.doesNotMatch(content, /SideNote2 index\.md/);
+    assert.match(content, /\[Z\.md\]\(obsidian:\/\/open\?vault=dev&file=Z\.md\)/);
 });
 
 test("buildAllCommentsNoteContent ignores comments whose source file no longer exists", () => {
@@ -325,17 +259,18 @@ test("buildAllCommentsNoteContent ignores comments whose source file no longer e
     });
 
     assert.doesNotMatch(content, /Missing\.md/);
-    assert.match(content, /<span class="sidenote2-index-heading-label" title="Real\.md">Real\.md<\/span>/);
+    assert.match(content, /\[Real\.md\]\(obsidian:\/\/open\?vault=dev&file=Real\.md\)/);
 });
 
-test("buildAllCommentsNoteContent escapes markdown-heavy selections and truncates long previews", () => {
+test("buildAllCommentsNoteContent escapes folder and file link HTML", () => {
     const content = buildAllCommentsNoteContent("dev", [
         createComment({
-            selectedText: "Use `/path/to/SideNote2`, `[Vault]`, and `<tag>` placeholders instead of machine-local paths in docs.",
+            filePath: "A&B/<Note>.md",
         }),
     ]);
 
-    assert.match(content, /\[Use \\`\/path\/to\/SideNote2\\`, \\`\\\[Vault\\\]\\`, and \\`\\<tag\\>\\` placeholders instead of mach\.\.\.\]/);
+    assert.match(content, /^A&B$/m);
+    assert.match(content, /\[\\<Note\\>\.md\]\(obsidian:\/\/open\?vault=dev&file=A%26B%2F%3CNote%3E\.md\)/);
 });
 
 test("buildAllCommentsNoteContent groups files under a shared folder heading", () => {
@@ -348,7 +283,7 @@ test("buildAllCommentsNoteContent groups files under a shared folder heading", (
 
     assert.match(
         content,
-        /### Clippings\n\n##### <span class="sidenote2-index-heading-label" title="Clippings\/Vlad Tenev and Tudor Achim on mathematical superintelligence and the end of buggy software\.md">Vlad Tenev and Tudor Achim on mathematical superintelligence and the end of buggy software\.md<\/span>/,
+        /Clippings\n- \[Vlad Tenev and Tudor Achim on mathematical superintelligence and the end of buggy software\.md\]\(obsidian:\/\/open\?vault=dev&file=Clippings%2FVlad%20Tenev%20and%20Tudor%20Achim%20on%20mathematical%20superintelligence%20and%20the%20end%20of%20buggy%20software\.md\)/,
     );
 });
 
@@ -366,217 +301,9 @@ test("buildAllCommentsNoteContent groups multiple files under the same path head
         }),
     ]);
 
-    assert.equal(content.match(/### Projects\/Alpha/g)?.length ?? 0, 1);
-    assert.match(content, /### Projects\/Alpha\n\n##### <span class="sidenote2-index-heading-label" title="Projects\/Alpha\/Note A\.md">Note A\.md<\/span>/);
-    assert.match(content, /##### <span class="sidenote2-index-heading-label" title="Projects\/Alpha\/Note B\.md">Note B\.md<\/span>/);
-});
-
-test("buildAllCommentsNoteContent includes extracted comment tags for search", () => {
-    const content = buildAllCommentsNoteContent("dev", [
-        createComment({
-            comment: "Track this with #hi and #follow/up next.",
-        }),
-    ]);
-
-    assert.match(content, /<span class="sidenote2-index-kind-dot sidenote2-index-kind-anchored"><\/span> \[hello\]\(obsidian:\/\/side-note2-comment\?vault=dev&file=Folder%2FNote\.md&commentId=comment-1&kind=anchored\)  #hi #follow\/up/);
-});
-
-test("buildAllCommentsNoteContent labels page notes and orphaned notes", () => {
-    const content = buildAllCommentsNoteContent("dev", [
-        createComment({
-            id: "page-note",
-            anchorKind: "page",
-            selectedText: "Note",
-            startLine: 0,
-            startChar: 0,
-            endLine: 0,
-            endChar: 0,
-        }),
-        createComment({
-            id: "orphan-note",
-            orphaned: true,
-            selectedText: "missing text",
-            startLine: 10,
-        }),
-    ]);
-
-    assert.equal(content.match(/### Folder/g)?.length ?? 0, 1);
-    assert.match(content, /### Folder\n\n##### <span class="sidenote2-index-heading-label" title="Folder\/Note\.md">Note\.md<\/span>[\s\S]*<span class="sidenote2-index-kind-dot sidenote2-index-kind-page"><\/span> \[This is a side note\.\]\(obsidian:\/\/side-note2-comment\?vault=dev&file=Folder%2FNote\.md&commentId=page-note&kind=page\) \^sidenote2-index-comment-page-note\n\n<span class="sidenote2-index-kind-dot sidenote2-index-kind-anchored"><\/span> \[orphaned · missing text\]\(obsidian:\/\/side-note2-comment\?vault=dev&file=Folder%2FNote\.md&commentId=orphan-note&kind=anchored\) \^sidenote2-index-comment-orphan-note/);
-});
-
-test("buildAllCommentsNoteContent uses page note comment previews and truncates them to 10 words", () => {
-    const content = buildAllCommentsNoteContent("dev", [
-        createComment({
-            id: "page-note-1",
-            filePath: "Folder/Note.md",
-            anchorKind: "page",
-            selectedText: "Note",
-            comment: "Page note preview one from the comment body.",
-            startLine: 0,
-            startChar: 0,
-            endLine: 0,
-            endChar: 0,
-            timestamp: 1,
-        }),
-        createComment({
-            id: "page-note-2",
-            filePath: "Folder/Note.md",
-            anchorKind: "page",
-            selectedText: "Note",
-            comment: "one two three four five six seven eight nine ten eleven twelve",
-            startLine: 0,
-            startChar: 0,
-            endLine: 0,
-            endChar: 0,
-            timestamp: 2,
-        }),
-        createComment({
-            id: "page-note-other-file",
-            filePath: "Folder/Other.md",
-            anchorKind: "page",
-            selectedText: "Other",
-            comment: "Other file page note body.",
-            startLine: 0,
-            startChar: 0,
-            endLine: 0,
-            endChar: 0,
-            timestamp: 3,
-        }),
-    ]);
-
-    assert.equal(content.match(/### Folder/g)?.length ?? 0, 1);
-    assert.match(content, /### Folder[\s\S]*##### <span class="sidenote2-index-heading-label" title="Folder\/Note\.md">Note\.md<\/span>[\s\S]*\[Page note preview one from the comment body\.\]\(obsidian:\/\/side-note2-comment\?vault=dev&file=Folder%2FNote\.md&commentId=page-note-1&kind=page\)/);
-    assert.match(content, /### Folder[\s\S]*##### <span class="sidenote2-index-heading-label" title="Folder\/Note\.md">Note\.md<\/span>[\s\S]*\[one two three four five six seven eight nine ten\.\.\.\]\(obsidian:\/\/side-note2-comment\?vault=dev&file=Folder%2FNote\.md&commentId=page-note-2&kind=page\)/);
-    assert.match(content, /### Folder[\s\S]*##### <span class="sidenote2-index-heading-label" title="Folder\/Other\.md">Other\.md<\/span>[\s\S]*\[Other file page note body\.\]\(obsidian:\/\/side-note2-comment\?vault=dev&file=Folder%2FOther\.md&commentId=page-note-other-file&kind=page\)/);
-});
-
-test("buildAllCommentsNoteContent shows markdown link labels in page note previews", () => {
-    const content = buildAllCommentsNoteContent("dev", [
-        createComment({
-            id: "page-note-1",
-            filePath: "Folder/Note.md",
-            anchorKind: "page",
-            selectedText: "Note",
-            comment: "Read [shipmonk.com/resources/.../dropshipping-with-a-fulfillment-company](https://www.shipmonk.com/resources/content-hub/dropshipping-with-a-fulfillment-company?utm_source=google&utm_medium=cpc&utm_campaign=summer) later.",
-            startLine: 0,
-            startChar: 0,
-            endLine: 0,
-            endChar: 0,
-            timestamp: 1,
-        }),
-    ]);
-
-    assert.match(content, /\[Read shipmonk\.com\/resources\/\.\.\.\/dropshipping-with-a-fulfillment-company later\.\]\(obsidian:\/\/side-note2-comment\?vault=dev&file=Folder%2FNote\.md&commentId=page-note-1&kind=page\)/);
-    assert.doesNotMatch(content, /\[Read \[shipmonk\.com/);
-});
-
-test("buildAllCommentsNoteContent keeps anchored index rows to the selected text only", () => {
-    const content = buildAllCommentsNoteContent("dev", [
-        createComment({
-            id: "page-note",
-            anchorKind: "page",
-            selectedText: "Folder/Note",
-            comment: "Page note preview body",
-            startLine: 0,
-            startChar: 0,
-            endLine: 0,
-            endChar: 0,
-        }),
-        createComment({
-            id: "anchored-note",
-            selectedText: "hello",
-            comment: "Track [[note_French School of Programming, B-Method, and Line 14]] for this",
-            startLine: 4,
-        }),
-    ], {
-        getMentionedPageLabels: (comment) => {
-            if (comment.id === "page-note") {
-                return ["Another page", "Another page", "Third page"];
-            }
-
-            if (comment.id === "anchored-note") {
-                return ["note_French School of Programming, B-Method, and Line 14"];
-            }
-
-            return [];
-        },
-        resolveWikiLinkPath: (linkPath) => `${linkPath}.md`,
-    });
-
-    assert.match(content, /<span class="sidenote2-index-kind-dot sidenote2-index-kind-page"><\/span> \[Page note preview body\]\(obsidian:\/\/side-note2-comment\?vault=dev&file=Folder%2FNote\.md&commentId=page-note&kind=page\)/);
-    assert.equal(
-        content.match(/\[Page note preview body\]\(obsidian:\/\/side-note2-comment\?vault=dev&file=Folder%2FNote\.md&commentId=page-note&kind=page\)/g)?.length ?? 0,
-        1,
-    );
-    assert.match(
-        content,
-        /<span class="sidenote2-index-kind-dot sidenote2-index-kind-anchored"><\/span> \[hello\]\(obsidian:\/\/side-note2-comment\?vault=dev&file=Folder%2FNote\.md&commentId=anchored-note&kind=anchored\)/,
-    );
-    assert.equal(
-        content.match(/\[hello\]\(obsidian:\/\/side-note2-comment\?vault=dev&file=Folder%2FNote\.md&commentId=anchored-note&kind=anchored\)/g)?.length ?? 0,
-        1,
-    );
-    assert.doesNotMatch(content, /note\\_French School of Programming/);
-    assert.doesNotMatch(content, />Another page<\/a>/);
-    assert.doesNotMatch(content, />Third page<\/a>/);
-    assert.doesNotMatch(content, /sidenote2-index-target-link/);
-    assert.doesNotMatch(content, / -> /);
-});
-
-test("buildAllCommentsNoteContent separates index comment rows into distinct markdown blocks", () => {
-    const content = buildAllCommentsNoteContent("dev", [
-        createComment({
-            id: "comment-1",
-            filePath: "Folder/Note.md",
-            selectedText: "alpha",
-            startLine: 1,
-        }),
-        createComment({
-            id: "comment-2",
-            filePath: "Folder/Note.md",
-            selectedText: "beta",
-            startLine: 2,
-        }),
-    ]);
-
-    assert.match(
-        content,
-        /### Folder\n\n##### <span class="sidenote2-index-heading-label" title="Folder\/Note\.md">Note\.md<\/span>\n\n<span class="sidenote2-index-kind-dot sidenote2-index-kind-anchored"><\/span> \[alpha\]\(obsidian:\/\/side-note2-comment\?vault=dev&file=Folder%2FNote\.md&commentId=comment-1&kind=anchored\) \^sidenote2-index-comment-comment-1\n\n<span class="sidenote2-index-kind-dot sidenote2-index-kind-anchored"><\/span> \[beta\]\(obsidian:\/\/side-note2-comment\?vault=dev&file=Folder%2FNote\.md&commentId=comment-2&kind=anchored\) \^sidenote2-index-comment-comment-2/,
-    );
-});
-
-test("buildAllCommentsNoteContent keeps page notes first within the same file without splitting sections", () => {
-    const content = buildAllCommentsNoteContent("dev", [
-        createComment({
-            id: "anchored-note",
-            filePath: "Folder/Note.md",
-            selectedText: "alpha",
-            anchorKind: "selection",
-            startLine: 2,
-        }),
-        createComment({
-            id: "page-note",
-            filePath: "Folder/Note.md",
-            selectedText: "Page",
-            anchorKind: "page",
-            startLine: 8,
-            startChar: 0,
-            endLine: 8,
-            endChar: 0,
-        }),
-        createComment({
-            id: "anchored-note-2",
-            filePath: "Folder/Note.md",
-            selectedText: "beta",
-            anchorKind: "selection",
-            startLine: 10,
-        }),
-    ]);
-
-    assert.match(
-        content,
-        /### Folder\n\n##### <span class="sidenote2-index-heading-label" title="Folder\/Note\.md">Note\.md<\/span>\n\n<span class="sidenote2-index-kind-dot sidenote2-index-kind-page"><\/span> \[This is a side note\.\]\(obsidian:\/\/side-note2-comment\?vault=dev&file=Folder%2FNote\.md&commentId=page-note&kind=page\) \^sidenote2-index-comment-page-note\n\n<span class="sidenote2-index-kind-dot sidenote2-index-kind-anchored"><\/span> \[alpha\]\(obsidian:\/\/side-note2-comment\?vault=dev&file=Folder%2FNote\.md&commentId=anchored-note&kind=anchored\) \^sidenote2-index-comment-anchored-note\n\n<span class="sidenote2-index-kind-dot sidenote2-index-kind-anchored"><\/span> \[beta\]\(obsidian:\/\/side-note2-comment\?vault=dev&file=Folder%2FNote\.md&commentId=anchored-note-2&kind=anchored\) \^sidenote2-index-comment-anchored-note-2/,
-    );
+    assert.equal(content.match(/^Projects\/Alpha$/gm)?.length ?? 0, 1);
+    assert.match(content, /Projects\/Alpha\n- \[Note A\.md\]\(obsidian:\/\/open\?vault=dev&file=Projects%2FAlpha%2FNote%20A\.md\)/);
+    assert.match(content, /- \[Note B\.md\]\(obsidian:\/\/open\?vault=dev&file=Projects%2FAlpha%2FNote%20B\.md\)/);
 });
 
 test("isAllCommentsNotePath matches the generated note path", () => {

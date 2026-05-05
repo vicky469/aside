@@ -18,11 +18,13 @@ export interface WorkspaceContextHost {
     isMarkdownCommentableFile(file: TFile | null): file is TFile;
     isSidebarSupportedFile(file: TFile | null): file is TFile;
     syncSidebarFile(file: TFile | null): Promise<void>;
-    updateSidebarViews(file: TFile | null): Promise<void>;
+    updateSidebarViews(file: TFile | null, options?: { skipDataRefresh?: boolean }): Promise<void>;
     refreshEditorDecorations(): void;
 }
 
 export class WorkspaceContextController {
+    private workspaceTargetVersion = 0;
+
     constructor(private readonly host: WorkspaceContextHost) {}
 
     public initializeActiveFiles(activeFile: TFile | null): void {
@@ -97,6 +99,7 @@ export class WorkspaceContextController {
     }
 
     private applyWorkspaceFileTargets(file: TFile | null): void {
+        const targetVersion = ++this.workspaceTargetVersion;
         const nextState = resolveWorkspaceFileTargets(
             file,
             this.host.getActiveMarkdownFile(),
@@ -106,9 +109,13 @@ export class WorkspaceContextController {
         );
         this.host.setWorkspaceFiles(nextState.activeMarkdownFile, nextState.activeSidebarFile);
 
+        void this.host.updateSidebarViews(nextState.sidebarFile, { skipDataRefresh: true });
         const syncPromise = this.host.syncSidebarFile(nextState.sidebarFile);
         void syncPromise.finally(async () => {
-            await this.host.updateSidebarViews(nextState.sidebarFile);
+            if (targetVersion !== this.workspaceTargetVersion) {
+                return;
+            }
+            await this.host.updateSidebarViews(nextState.sidebarFile, { skipDataRefresh: true });
             this.host.refreshEditorDecorations();
         });
     }

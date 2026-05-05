@@ -1852,15 +1852,17 @@ export class CommentPersistenceController {
 
             const currentContent = await this.host.getCurrentNoteContent(existingFile);
             const openView = this.host.getMarkdownViewForFile(existingFile);
+            const contentChanged = currentContent !== nextContent;
             if (openView) {
                 await this.host.syncIndexNoteLeafMode(openView.leaf);
-                if (openView.getViewData() !== nextContent) {
+                const viewContentChanged = openView.getViewData() !== nextContent;
+                if (viewContentChanged) {
                     openView.setViewData(nextContent, false);
                 }
-                if (currentContent !== nextContent) {
+                if (contentChanged) {
                     await openView.save();
                 }
-                if (openView.getMode() === "preview") {
+                if ((contentChanged || viewContentChanged) && openView.getMode() === "preview") {
                     openView.previewMode.rerender(true);
                 }
             }
