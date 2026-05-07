@@ -639,9 +639,9 @@ button.sidenote2-tab-button:focus-visible {
 }
 
 button.sidenote2-tab-button.sidenote2-tab-button--active {
-    color: #000 !important;
+    color: var(--text-normal) !important;
     font-weight: 700 !important;
-    border-bottom-color: #000 !important;
+    border-bottom-color: var(--text-normal) !important;
     background: transparent !important;
     background-color: transparent !important;
     background-image: none !important;
