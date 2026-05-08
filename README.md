@@ -137,7 +137,7 @@ Restart Codex after installing the skill.
 
 Side notes sync through SideNote2 plugin data when Obsidian Sync is syncing plugin data. The local sidecar files under `.obsidian/plugins/side-note2/sidenotes/by-note/<hash-prefix>/<full-hash>.json` are a hot cache that can be rebuilt from synced plugin data.
 
-On startup after storage migration releases, SideNote2 migrates legacy hidden `<!-- SideNote2 comments -->` blocks into canonical plugin data and sidecar cache files, then strips the managed block from the source note.
+On startup after storage migration releases, SideNote2 automatically migrates legacy hidden `<!-- SideNote2 comments -->` blocks into canonical plugin data and sidecar cache files, then strips the managed block from the source note.
 
 `SideNote2 index.md` is still just a generated index, not separate storage.
 

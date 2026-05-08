@@ -23,33 +23,11 @@ See [feature-map.canvas](./docs/feature-map.canvas) for the feature-first overvi
 
 ## Storage
 
-Each note stores comments in a trailing hidden `<!-- SideNote2 comments -->` block:
+Side notes sync through SideNote2 plugin data when Obsidian Sync is syncing plugin data. Local sidecar JSON files under `.obsidian/plugins/side-note2/sidenotes/` are the runtime cache and helper-script write surface.
 
-```
-<!-- SideNote2 comments
-[
-  {
-    "id": "thread-1",
-    "startLine": 12,
-    "startChar": 4,
-    "endLine": 12,
-    "endChar": 19,
-    "selectedText": "selected words",
-    "selectedTextHash": "hash-selected-words",
-    "entries": [
-      {
-        "id": "entry-1",
-      {
-        "id": "entry-2",
-        "body": "Follow-up reply.",
-        "timestamp": 1710000005000
-    "updatedAt": 1710000005000
-  }
-]
--->
-```
+Legacy trailing hidden `<!-- SideNote2 comments -->` blocks are still parsed so old notes and source-mode workflows can be migrated automatically. During startup or the next storage touch for a note, SideNote2 writes the data into plugin data plus sidecar cache files and strips the managed block from the source note.
 
-The stored payload includes coordinates and a text hash so anchors can be re-matched after edits. The block is hidden in Reading view, but still present in raw markdown for source-mode workflows and LLM ingestion.
+The canonical storage precedence is encoded in `src/core/storage/canonicalCommentStorage.ts`: use an existing sidecar/source record first, migrate inline legacy threads only when no sidecar exists, and strip empty legacy blocks while checking source-rename recovery. `SideNote2 index.md` is generated output, not separate storage.
 
 ## Dependencies
 

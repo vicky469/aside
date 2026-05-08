@@ -69,7 +69,7 @@ This is a separate canvas so you can zoom the flow without crowding the main arc
 Read this when debugging a specific comment. The route map shows flow; this one shows allowed status changes.
 
 - `draft` is UI-only and not yet persisted.
-- `saved` means persisted in markdown note storage.
+- `saved` means persisted in SideNote2 storage, which is synced plugin data plus the local sidecar cache.
 - `resolved` is still stored, but normally hidden in the sidebar.
 - `orphaned` means the stored comment still exists, but its anchor could not currently be matched back to the file text.
 
@@ -94,7 +94,7 @@ Use this shortcut table:
 | Symptom | First files to inspect |
 | --- | --- |
 | Draft does not save or disappears | `src/ui/views/SideNote2View.ts`, `src/ui/views/sidebarDraftEditor.ts`, `src/domain/drafts.ts` |
-| Comment saved but not persisted to note | `src/core/storage/noteCommentStorage.ts`, `src/core/rules/commentSyncPolicy.ts` |
+| Comment saved but not persisted to canonical storage | `src/comments/commentPersistenceController.ts`, `src/core/storage/canonicalCommentStorage.ts`, `src/core/storage/sidecarCommentStorage.ts`, `src/core/storage/sideNoteSyncEvents.ts` |
 | Comment exists but highlight is wrong | `src/core/anchors/anchorResolver.ts`, `src/core/derived/editorHighlightRanges.ts`, `src/commentManager.ts` |
 | Sidebar or index sidebar shows wrong grouping or visibility | `src/ui/views/sidebarCommentSections.ts`, `src/ui/views/SideNote2View.ts`, `src/commentManager.ts` |
 | Sidebar card click, link, or action buttons behave incorrectly | `src/ui/views/sidebarPersistedComment.ts`, `src/ui/views/SideNote2View.ts`, `src/ui/views/commentPointerAction.ts` |
@@ -109,7 +109,7 @@ Use this shortcut table:
 
 SideNote2 is easiest to understand if you keep one rule in mind:
 
-- The note-backed comment data is the source of truth.
+- Synced plugin data is the durable sync surface for side notes, and sidecar JSON files are the local hot cache. Legacy hidden note blocks are migration input only.
 - The sidebar is a working view over that data plus any current draft.
 - The index surfaces are derived views: the note is built by `allCommentsNote.ts`, and the index sidebar can render either the sectioned comment list or the thought-trail graph over the aggregate comments.
 - Index clicks highlight the sidebar first. The sidebar card is what then redirects you back into the source note.

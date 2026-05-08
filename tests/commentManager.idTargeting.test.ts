@@ -174,6 +174,30 @@ test("CommentManager reorders child entries only within their parent thread", ()
     assert.equal(manager.reorderThreadEntries("thread-1", "entry-4", "thread-1", "before"), false);
 });
 
+test("CommentManager keeps id and file lookups current after replacement and rename", () => {
+    const manager = new CommentManager([
+        createComment("old-thread", 1710000000000, "old"),
+    ]);
+    const nextThread = commentToThread(createComment("new-thread", 1710000001000, "new"));
+    nextThread.entries.push({
+        id: "new-child",
+        body: "child",
+        timestamp: 1710000002000,
+    });
+
+    manager.replaceThreadsForFile("note.md", [nextThread]);
+    assert.equal(manager.getThreadById("old-thread"), undefined);
+    assert.equal(manager.getCommentById("new-child")?.comment, "child");
+
+    manager.renameFile("note.md", "renamed.md");
+    assert.equal(manager.getThreadsForFile("note.md").length, 0);
+    assert.equal(manager.getThreadById("new-child")?.filePath, "renamed.md");
+    assert.deepEqual(
+        manager.getThreadsForFile("renamed.md").map((thread) => thread.id),
+        ["new-thread"],
+    );
+});
+
 test("CommentManager preserves a comment when its anchor text is gone", async () => {
     const manager = new CommentManager([
         createComment("id-1", 1710000000000, "first"),

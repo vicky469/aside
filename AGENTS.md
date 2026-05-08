@@ -30,8 +30,9 @@ Switch to `skills/sidenote2/SKILL.md` when the user:
 
 ## Source Of Truth
 
-- The markdown note is canonical.
-- The trailing `<!-- SideNote2 comments -->` block is the canonical stored comment data.
+- The markdown note path plus comment id identify the user-facing write target.
+- Current persisted side note data lives in SideNote2 plugin data and local sidecar JSON cache files.
+- The trailing `<!-- SideNote2 comments -->` block is legacy import/migration data, not current canonical storage. Built-in plugin startup/storage flows migrate it automatically; helper scripts should use the same write path and strip the managed block when they encounter one.
 - `SideNote2 index.md` is derived output. Use it for discovery only.
 
 ## Write Path

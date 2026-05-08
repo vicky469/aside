@@ -2,9 +2,15 @@ import { resolveAnchorRange } from "./core/anchors/anchorResolver";
 import { getPageCommentLabel, isPageComment } from "./core/anchors/commentAnchors";
 import {
     isSoftDeleted,
+    isSoftDeletedExpired,
     normalizeDeletedAt,
     purgeExpiredDeletedThreads,
 } from "./core/rules/deletedCommentVisibility";
+import {
+    buildCommentLookupIndexes,
+    type CommentEntryLookup,
+    type CommentLookupIndexes,
+} from "./core/commentLookupIndex";
 
 export type CommentAnchorKind = "selection" | "page";
 
@@ -160,6 +166,12 @@ function normalizeThread(thread: CommentThread): CommentThread {
     };
 }
 
+function hasExpiredDeletedComments(threads: readonly CommentThread[], now: number): boolean {
+    return threads.some((thread) =>
+        isSoftDeletedExpired(thread.deletedAt, now)
+        || thread.entries.some((entry) => isSoftDeletedExpired(entry.deletedAt, now)));
+}
+
 export function commentToThread(comment: Comment): CommentThread {
     return normalizeThread({
         id: comment.id,
@@ -255,25 +267,50 @@ function moveItemByIdRelative<T extends { id: string }>(
 
 export class CommentManager {
     private threads: CommentThread[];
+    private lookupIndexes: CommentLookupIndexes = buildCommentLookupIndexes([]);
     private coordinateSyncVersionByFile = new Map<string, number>();
 
     constructor(items: Array<Comment | CommentThread>) {
         this.threads = items.map((item) => normalizeThread(isThreadLike(item) ? item : commentToThread(item)));
+        this.rebuildLookupIndexes();
         this.purgeExpiredDeletedComments();
+    }
+
+    private rebuildLookupIndexes(): void {
+        this.lookupIndexes = buildCommentLookupIndexes(this.threads);
+    }
+
+    private setThreads(threads: CommentThread[]): void {
+        this.threads = threads;
+        this.rebuildLookupIndexes();
+    }
+
+    private findThreadById(id: string): CommentThread | undefined {
+        return this.lookupIndexes.threadByThreadId.get(id)
+            ?? this.lookupIndexes.threadByEntryId.get(id);
+    }
+
+    private findEntryById(id: string): CommentEntryLookup | undefined {
+        const entryLookup = this.lookupIndexes.entryById.get(id);
+        if (entryLookup) {
+            return entryLookup;
+        }
+
+        const thread = this.lookupIndexes.threadByThreadId.get(id);
+        const entry = thread?.entries[0];
+        return thread && entry ? { thread, entry } : undefined;
     }
 
     getThreadsForFile(filePath: string, options: CommentQueryOptions = {}): CommentThread[] {
         this.purgeExpiredDeletedComments();
-        return this.threads
-            .filter((thread) => thread.filePath === filePath)
+        return (this.lookupIndexes.threadsByFilePath.get(filePath) ?? [])
             .map((thread) => cloneThreadForVisibility(thread, options))
             .filter((thread): thread is CommentThread => thread !== null);
     }
 
     getThreadById(id: string): CommentThread | undefined {
         this.purgeExpiredDeletedComments();
-        const thread = this.threads.find((candidate) =>
-            candidate.id === id || candidate.entries.some((entry) => entry.id === id));
+        const thread = this.findThreadById(id);
         return thread ? cloneCommentThread(thread) : undefined;
     }
 
@@ -313,9 +350,9 @@ export class CommentManager {
     }
 
     replaceThreadsForFile(filePath: string, nextThreads: CommentThread[]) {
-        this.threads = this.threads
+        this.setThreads(this.threads
             .filter((thread) => thread.filePath !== filePath)
-            .concat(nextThreads.map((thread) => normalizeThread(thread)));
+            .concat(nextThreads.map((thread) => normalizeThread(thread))));
         this.purgeExpiredDeletedComments();
     }
 
@@ -331,21 +368,23 @@ export class CommentManager {
 
         if (insertionIndex === -1) {
             this.threads.push(normalizedThread);
+            this.rebuildLookupIndexes();
             return;
         }
 
         this.threads.splice(insertionIndex, 0, normalizedThread);
+        this.rebuildLookupIndexes();
     }
 
     appendEntry(threadId: string, entry: CommentThreadEntry) {
-        const thread = this.threads.find((candidate) =>
-            candidate.id === threadId || candidate.entries.some((candidateEntry) => candidateEntry.id === threadId));
+        const thread = this.findThreadById(threadId);
         if (!thread) {
             return;
         }
 
         thread.entries.push(cloneThreadEntry(entry));
         thread.updatedAt = Math.max(thread.updatedAt, entry.timestamp);
+        this.rebuildLookupIndexes();
     }
 
     reorderThreadsForFile(
@@ -380,7 +419,7 @@ export class CommentManager {
             }
         }
 
-        this.threads = nextThreads;
+        this.setThreads(nextThreads);
         return true;
     }
 
@@ -390,8 +429,7 @@ export class CommentManager {
         targetEntryId: string,
         placement: ReorderPlacement,
     ): boolean {
-        const thread = this.threads.find((candidate) =>
-            candidate.id === threadId || candidate.entries.some((entry) => entry.id === threadId));
+        const thread = this.findThreadById(threadId);
         if (!thread || thread.entries.length < 2) {
             return false;
         }
@@ -426,13 +464,7 @@ export class CommentManager {
     }
 
     editComment(id: string, newCommentText: string) {
-        const thread = this.threads.find((candidate) =>
-            candidate.id === id || candidate.entries.some((entry) => entry.id === id));
-        if (!thread) {
-            return;
-        }
-
-        const matchingEntry = thread.entries.find((entry) => entry.id === id) ?? thread.entries[0];
+        const matchingEntry = this.findEntryById(id)?.entry;
         if (!matchingEntry) {
             return;
         }
@@ -442,13 +474,10 @@ export class CommentManager {
 
     deleteComment(id: string, deletedAt: number = Date.now()) {
         this.purgeExpiredDeletedComments(deletedAt);
-        const indexToDelete = this.threads.findIndex((thread) =>
-            thread.id === id || thread.entries.some((entry) => entry.id === id));
-        if (indexToDelete === -1) {
+        const thread = this.findThreadById(id);
+        if (!thread) {
             return;
         }
-
-        const thread = this.threads[indexToDelete];
         if (thread.id === id) {
             thread.deletedAt = deletedAt;
             thread.updatedAt = Math.max(thread.updatedAt, deletedAt);
@@ -466,8 +495,7 @@ export class CommentManager {
 
     restoreComment(id: string, restoredAt: number = Date.now()) {
         this.purgeExpiredDeletedComments(restoredAt);
-        const thread = this.threads.find((candidate) =>
-            candidate.id === id || candidate.entries.some((entry) => entry.id === id));
+        const thread = this.findThreadById(id);
         if (!thread) {
             return;
         }
@@ -530,7 +558,7 @@ export class CommentManager {
         }
 
         if (changed) {
-            this.threads = nextThreads;
+            this.setThreads(nextThreads);
         }
 
         return changed;
@@ -538,13 +566,12 @@ export class CommentManager {
 
     clearDeletedComment(id: string, clearedAt: number = Date.now()): boolean {
         this.purgeExpiredDeletedComments(clearedAt);
-        const threadIndex = this.threads.findIndex((thread) =>
-            thread.id === id || thread.entries.some((entry) => entry.id === id));
-        if (threadIndex === -1) {
+        const thread = this.findThreadById(id);
+        const threadIndex = thread ? this.threads.indexOf(thread) : -1;
+        if (!thread || threadIndex === -1) {
             return false;
         }
 
-        const thread = this.threads[threadIndex];
         if (thread.id === id) {
             const rootEntry = thread.entries.find((entry) => entry.id === id);
             if (!thread.deletedAt && !rootEntry?.deletedAt) {
@@ -552,17 +579,20 @@ export class CommentManager {
             }
 
             this.threads.splice(threadIndex, 1);
+            this.rebuildLookupIndexes();
             return true;
         }
 
         const entryIndex = thread.entries.findIndex((entry) => entry.id === id);
-        if (entryIndex === -1 || !thread.entries[entryIndex].deletedAt) {
+        const entry = entryIndex === -1 ? undefined : thread.entries[entryIndex];
+        if (!entry?.deletedAt) {
             return false;
         }
 
         const retainedEntries = thread.entries.filter((entry) => entry.id !== id);
         if (!retainedEntries.length) {
             this.threads.splice(threadIndex, 1);
+            this.rebuildLookupIndexes();
             return true;
         }
 
@@ -571,28 +601,26 @@ export class CommentManager {
             entries: retainedEntries.map((entry) => ({ ...entry })),
             updatedAt: clearedAt,
         };
+        this.rebuildLookupIndexes();
         return true;
     }
 
     resolveComment(id: string) {
-        const thread = this.threads.find((candidate) =>
-            candidate.id === id || candidate.entries.some((entry) => entry.id === id));
+        const thread = this.findThreadById(id);
         if (thread) {
             thread.resolved = true;
         }
     }
 
     setCommentPinnedState(id: string, isPinned: boolean) {
-        const thread = this.threads.find((candidate) =>
-            candidate.id === id || candidate.entries.some((entry) => entry.id === id));
+        const thread = this.findThreadById(id);
         if (thread) {
             thread.isPinned = isPinned;
         }
     }
 
     unresolveComment(id: string) {
-        const thread = this.threads.find((candidate) =>
-            candidate.id === id || candidate.entries.some((entry) => entry.id === id));
+        const thread = this.findThreadById(id);
         if (thread) {
             thread.resolved = false;
         }
@@ -609,8 +637,7 @@ export class CommentManager {
             selectedTextHash: string;
         },
     ) {
-        const thread = this.threads.find((candidate) =>
-            candidate.id === id || candidate.entries.some((entry) => entry.id === id));
+        const thread = this.findThreadById(id);
         if (!thread) {
             return;
         }
@@ -626,23 +653,27 @@ export class CommentManager {
     }
 
     renameFile(oldPath: string, newPath: string) {
+        let changed = false;
         this.threads.forEach((thread) => {
             if (thread.filePath === oldPath) {
                 thread.filePath = newPath;
+                changed = true;
                 if (isPageComment(thread)) {
                     thread.selectedText = getPageCommentLabel(newPath);
                     thread.orphaned = false;
                 }
             }
         });
+        if (changed) {
+            this.rebuildLookupIndexes();
+        }
     }
 
     async updateCommentCoordinatesForFile(fileContent: string, filePath: string): Promise<void> {
         const runVersion = (this.coordinateSyncVersionByFile.get(filePath) ?? 0) + 1;
         this.coordinateSyncVersionByFile.set(filePath, runVersion);
 
-        const candidateThreads = this.threads
-            .filter((thread) => thread.filePath === filePath)
+        const candidateThreads = (this.lookupIndexes.threadsByFilePath.get(filePath) ?? [])
             .map((thread) => cloneCommentThread(thread));
         const coordinateUpdates: CoordinateUpdate[] = [];
         let batchStartedAt = getMonotonicNow();
@@ -683,8 +714,7 @@ export class CommentManager {
         }
 
         const currentThreadsById = new Map(
-            this.threads
-                .filter((thread) => thread.filePath === filePath)
+            (this.lookupIndexes.threadsByFilePath.get(filePath) ?? [])
                 .map((thread) => [thread.id, thread] as const),
         );
 
@@ -713,8 +743,12 @@ export class CommentManager {
     }
 
     purgeExpiredDeletedComments(now: number = Date.now()): void {
-        this.threads = purgeExpiredDeletedThreads(this.threads, now)
-            .map((thread) => normalizeThread(thread));
+        if (!hasExpiredDeletedComments(this.threads, now)) {
+            return;
+        }
+
+        this.setThreads(purgeExpiredDeletedThreads(this.threads, now)
+            .map((thread) => normalizeThread(thread)));
     }
 }
 

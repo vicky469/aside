@@ -17,6 +17,10 @@ import {
     serializeNoteCommentThreads,
     type ParsedNoteComments,
 } from "../core/storage/noteCommentStorage";
+import {
+    planCanonicalCommentStorage,
+    type CanonicalCommentStorageSource,
+} from "../core/storage/canonicalCommentStorage";
 import { normalizeDeletedAt, purgeExpiredDeletedThreads } from "../core/rules/deletedCommentVisibility";
 import { SidecarCommentStorage } from "../core/storage/sidecarCommentStorage";
 import {
@@ -49,7 +53,7 @@ type SyncedFileComments = {
     mainContent: string;
     threads: CommentThread[];
     comments: Comment[];
-    source: "none" | "inline" | "sidecar";
+    source: CanonicalCommentStorageSource;
 };
 
 type VisibleSyncedFileComments = Omit<SyncedFileComments, "source">;
@@ -1568,32 +1572,37 @@ export class CommentPersistenceController {
     private async getCanonicalThreadState(file: TFile, noteContent: string): Promise<{
         mainContent: string;
         threads: CommentThread[];
-        source: "none" | "inline" | "sidecar";
+        source: CanonicalCommentStorageSource;
     }> {
         const inlineParsed = await this.parseAndNormalizeFileComments(file.path, noteContent);
         const sourceRecord = await this.ensureSourceIdentityForFilePath(file.path, noteContent);
         const sidecarResult = await this.readSourceOrPathSidecar(sourceRecord, file.path);
         const sidecarThreads = sidecarResult?.threads ?? null;
+        const storagePlan = planCanonicalCommentStorage({
+            sidecarRecordFound: sidecarResult !== null,
+            inlineThreadCount: inlineParsed.threads.length,
+            hasThreadedInlineBlock: getManagedSectionKind(noteContent) === "threaded",
+        });
 
-        if (sidecarThreads) {
+        if (storagePlan.action === "use-sidecar" && sidecarThreads) {
             const canonicalThreads = await this.reconcileLegacyInlineThreadsWithSidecar(
                 file.path,
                 sidecarThreads,
                 inlineParsed.threads,
             );
-            if (getManagedSectionKind(noteContent) === "threaded") {
+            if (storagePlan.shouldStripInlineBlock) {
                 await this.stripInlineManagedSectionIfPresent(file, noteContent);
             }
 
             return {
                 mainContent: inlineParsed.mainContent,
                 threads: canonicalThreads,
-                source: "sidecar",
+                source: storagePlan.source,
             };
         }
 
-        if (inlineParsed.threads.length === 0) {
-            if (getManagedSectionKind(noteContent) === "threaded") {
+        if (storagePlan.shouldRecoverRenamedSource) {
+            if (storagePlan.shouldStripInlineBlock) {
                 await this.stripInlineManagedSectionIfPresent(file, noteContent);
             }
             const recoveredThreads = await this.recoverRenamedSourceThreadsForFile(file, noteContent);
@@ -1607,7 +1616,7 @@ export class CommentPersistenceController {
             return {
                 mainContent: inlineParsed.mainContent,
                 threads: [],
-                source: "none",
+                source: storagePlan.source,
             };
         }
 
@@ -1620,7 +1629,9 @@ export class CommentPersistenceController {
             notePath: file.path,
             threads: inlineParsed.threads,
         }]);
-        await this.stripInlineManagedSectionIfPresent(file, noteContent);
+        if (storagePlan.shouldStripInlineBlock) {
+            await this.stripInlineManagedSectionIfPresent(file, noteContent);
+        }
         void this.host.log?.("info", "persistence", "storage.note.migrate.success", {
             filePath: file.path,
             threadCount: inlineParsed.threads.length,
@@ -1628,7 +1639,7 @@ export class CommentPersistenceController {
         return {
             mainContent: inlineParsed.mainContent,
             threads: inlineParsed.threads,
-            source: "inline",
+            source: storagePlan.source,
         };
     }
 
