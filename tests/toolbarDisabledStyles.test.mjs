@@ -37,3 +37,13 @@ test("disabled sidebar tabs use a faded unavailable state", () => {
     assert.match(disabledTabRule.groups.body, /opacity:\s*0\.55;/);
     assert.doesNotMatch(disabledTabRule.groups.body, /#000|black/i);
 });
+
+test("index note file names are larger than metadata text", () => {
+    const indexListRule = css.match(
+        /\.sidenote2-index-note-view \.markdown-preview-view li,[\s\S]*?\.sidenote2-index-note-view \.cm-line\.HyperMD-list-line \.cm-hmd-internal-link\s*\{(?<body>[\s\S]*?)\}/,
+    );
+
+    assert.ok(indexListRule?.groups?.body, "missing index note list font rule");
+    assert.match(indexListRule.groups.body, /font-size:\s*14px\s*!important;/);
+    assert.doesNotMatch(indexListRule.groups.body, /font-size:\s*12px\s*!important;/);
+});
