@@ -1,7 +1,7 @@
 {
 	"id": "aside",
 	"name": "Aside",
-	"version": "2.0.64",
+	"version": "2.0.65",
 	"minAppVersion": "1.12.7",
 	"description": "Side comments for both humans and agents.",
 	"author": "vicky",
