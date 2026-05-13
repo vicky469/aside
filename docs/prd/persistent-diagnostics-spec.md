@@ -10,7 +10,7 @@ Draft implementation spec based on:
 
 Implement always-on local logging plus an in-product bug-report flow so that:
 
-1. SideNote2 keeps a recent diagnostic trail on the user's machine.
+1. Aside keeps a recent diagnostic trail on the user's machine.
 2. The user does not need to enable a debug flag before reporting an issue.
 3. The user can open a support form from the sidebar, review the attached log, and send the report from the same flow.
 4. The user can attach screenshots to the same support report.
@@ -48,7 +48,7 @@ Out of scope:
 
 ### Rule 1: Logging Is Always On
 
-SideNote2 writes local logs by default.
+Aside writes local logs by default.
 There is no user-facing debug toggle for enabling or disabling logging.
 
 ### Rule 2: Logs Stay Local Until The User Sends A Report
@@ -90,7 +90,7 @@ User-added screenshot attachments must also be visible before send.
 
 Logs are stored under the plugin directory:
 
-- `.obsidian/plugins/side-note2/logs/`
+- `.obsidian/plugins/aside/logs/`
 
 Recommended runtime path resolution:
 
@@ -117,7 +117,7 @@ Recommended runtime path resolution:
 ```ts
 type LogLevel = "info" | "warn" | "error";
 
-interface SideNote2LogEntry {
+interface AsideLogEntry {
   at: string;
   level: LogLevel;
   area: string;
@@ -174,7 +174,7 @@ Examples:
 
 - allowed:
   - `Folder/Note.md`
-  - `.obsidian/plugins/side-note2/logs/2026-04-13.jsonl`
+  - `.obsidian/plugins/aside/logs/2026-04-13.jsonl`
 - disallowed:
   - `/Users/name/Vault/Folder/Note.md`
   - `C:\Users\name\Vault\Folder\Note.md`
@@ -242,18 +242,18 @@ Error stacks should be omitted by default or scrubbed before persistence.
 
 ### Support Icon Visibility
 
-Show a small support icon at the bottom-right of the sidebar only when the current surface is relevant to SideNote2-managed comments.
+Show a small support icon at the bottom-right of the sidebar only when the current surface is relevant to Aside-managed comments.
 
 Visible when:
 
-- the sidebar is showing a markdown note that has SideNote2-managed comments
-- the sidebar is showing `SideNote2 index.md`
+- the sidebar is showing a markdown note that has Aside-managed comments
+- the sidebar is showing `Aside index.md`
 
 Hidden when:
 
 - no supported file is selected
 - the sidebar is on an unsupported file type
-- the sidebar is empty and unrelated to SideNote2 content
+- the sidebar is empty and unrelated to Aside content
 
 ### Support Form
 
@@ -298,7 +298,7 @@ Recommended screenshot constraints:
 
 ### Attachment Preview
 
-Opening a log attachment should show a read-only log preview inside SideNote2.
+Opening a log attachment should show a read-only log preview inside Aside.
 
 Recommended behavior:
 
@@ -308,7 +308,7 @@ Recommended behavior:
   - either full content for small files
   - or truncated preview with clear indication if large
 
-Opening a screenshot attachment should show an image preview inside SideNote2.
+Opening a screenshot attachment should show an image preview inside Aside.
 
 Do not require the user to leave Obsidian or browse the raw plugin folder.
 
@@ -475,7 +475,7 @@ If support attachment resolution fails:
 
 ### UI / support flow
 
-- support icon visibility matches relevant SideNote2 surfaces only
+- support icon visibility matches relevant Aside surfaces only
 - support form auto-attaches the current log file
 - support form allows user-added screenshot attachments
 - preview opens the same attached log file
@@ -492,12 +492,12 @@ If support attachment resolution fails:
 
 ## Acceptance Criteria
 
-1. SideNote2 writes local logs by default on every startup.
-2. Logs live under `.obsidian/plugins/side-note2/logs/`.
+1. Aside writes local logs by default on every startup.
+2. Logs live under `.obsidian/plugins/aside/logs/`.
 3. Only the latest 3 days of logs are retained automatically.
 4. Logged file paths are vault-relative or plugin-relative, never absolute machine paths.
 5. A reported issue can be reconstructed from logs without reading note bodies or selected text.
-6. The sidebar shows a support icon only when the current surface is relevant to SideNote2-managed comments.
+6. The sidebar shows a support icon only when the current surface is relevant to Aside-managed comments.
 7. The support form auto-attaches the current log file.
 8. The user can add screenshots as extra attachments.
 9. The user can preview the attachments before send.

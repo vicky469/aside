@@ -13,7 +13,7 @@ Implemented in current branch:
 Still pending from this plan:
 
 - smarter default context packing
-- built-in SideNote2 runtime knowledge primer
+- built-in Aside runtime knowledge primer
 - cold-start reduction work
 
 Related docs:
@@ -29,14 +29,14 @@ The main issue is not only raw runtime latency. It is also:
 
 - opaque progress while the agent is starting
 - weak default context packing
-- missing built-in SideNote2-specific operating knowledge
+- missing built-in Aside-specific operating knowledge
 - limited control when a run is taking too long or no longer matters
 
 This plan focuses on the next iteration of built-in agent UX:
 
 - make long runs feel understandable instead of stuck
 - improve first-pass answer quality by sending better default context
-- carry the most important SideNote2 knowledge in the built-in prompt path
+- carry the most important Aside knowledge in the built-in prompt path
 - make cancellation and deletion feel immediate and predictable
 - reduce first-run startup friction where possible
 
@@ -50,8 +50,8 @@ Today the user-visible pain points are:
 2. The built-in request path does not make context scope explicit enough.
    The current markdown note, current thread, anchored text, or nearby section context may not be represented clearly enough in the runtime prompt.
 
-3. Built-in `@codex` does not carry enough SideNote2-specific knowledge by default.
-   Users should not need external `skills/sidenote2` knowledge just to get good built-in results.
+3. Built-in `@codex` does not carry enough Aside-specific knowledge by default.
+   Users should not need external `skills/aside` knowledge just to get good built-in results.
 
 4. Long-running work lacks strong interruption controls.
    If the user deletes the note or decides the run is no longer useful, the UI should stop feeling live immediately and the underlying run should be cancelled.
@@ -61,13 +61,13 @@ Today the user-visible pain points are:
 
 ## Product Goal
 
-Make built-in `@codex` feel native, informed, and responsive inside SideNote2.
+Make built-in `@codex` feel native, informed, and responsive inside Aside.
 
 The target user impression should be:
 
 - I can see what phase the agent is in.
 - The agent already understands the current note and thread.
-- The built-in flow knows enough about SideNote2 to answer usefully without extra setup.
+- The built-in flow knows enough about Aside to answer usefully without extra setup.
 - If I no longer want the run, I can stop it cleanly.
 - Even when the work takes time, it does not feel stuck or mysterious.
 
@@ -137,13 +137,13 @@ Default recommendation:
 - selection-anchored thread: `anchor`
 - page note thread: `section`
 
-### 3. Carry built-in SideNote2 knowledge in the prompt
+### 3. Carry built-in Aside knowledge in the prompt
 
-Built-in `@codex` should not depend on an external `skills/sidenote2` install to behave well.
+Built-in `@codex` should not depend on an external `skills/aside` install to behave well.
 
-The runtime prompt should include a compact built-in primer for SideNote2 behavior, for example:
+The runtime prompt should include a compact built-in primer for Aside behavior, for example:
 
-- SideNote2 replies are appended back into the same thread
+- Aside replies are appended back into the same thread
 - the reply should be concise and thread-friendly
 - anchored notes refer to a local selection in the current markdown file
 - page notes refer to the file or current section rather than one exact range
@@ -151,7 +151,7 @@ The runtime prompt should include a compact built-in primer for SideNote2 behavi
 
 This should be treated as product knowledge, not optional external skill packaging.
 
-The public `skills/sidenote2` package can still exist for external handoff workflows, but built-in `@codex` should not rely on it.
+The public `skills/aside` package can still exist for external handoff workflows, but built-in `@codex` should not rely on it.
 
 ### 4. Add strong cancellation behavior
 
@@ -210,15 +210,15 @@ Reason:
 
 - this should improve answer quality while also keeping prompts smaller than full-note defaulting
 
-### Phase 3: built-in SideNote2 primer
+### Phase 3: built-in Aside primer
 
 Ship next:
 
-- compact built-in product knowledge block derived from the old `skills/sidenote2` assumptions
+- compact built-in product knowledge block derived from the old `skills/aside` assumptions
 
 Reason:
 
-- this improves reliability for SideNote2-specific tasks without making built-in use depend on external setup
+- this improves reliability for Aside-specific tasks without making built-in use depend on external setup
 
 ### Phase 4: startup optimization
 
@@ -239,13 +239,13 @@ This plan is successful when:
 - a running `@codex` request no longer looks indistinguishable from a stuck request
 - the user can see a meaningful phase before the first streamed text arrives
 - deleting or cancelling an active run removes the live spinning state immediately
-- built-in `@codex` behaves well without requiring SideNote2 skill installation
+- built-in `@codex` behaves well without requiring Aside skill installation
 - default context includes the current note and the most relevant local thread scope
-- built-in responses improve on SideNote2-specific tasks without needing full-note prompts by default
+- built-in responses improve on Aside-specific tasks without needing full-note prompts by default
 
 ## Open Questions
 
 1. Should page-note requests default to `section` or `full note` context scope?
 2. Should warm-up happen automatically on plugin load, or only after the user first opens the sidebar?
 3. Should cancelled runs remain visible as historical rows in the `Agent` tab, or disappear completely from the local thread surface?
-4. Do we want the built-in SideNote2 primer to be hardcoded, or generated from a maintained local reference file?
+4. Do we want the built-in Aside primer to be hardcoded, or generated from a maintained local reference file?

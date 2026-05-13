@@ -14,10 +14,10 @@ Related docs:
 Define a concrete remote runtime path so that:
 
 1. a user on Obsidian mobile can type `@codex`
-2. SideNote2 routes that run to a specific macOS machine
-3. that macOS machine launches the same local `codex` CLI family that desktop SideNote2 uses today
+2. Aside routes that run to a specific macOS machine
+3. that macOS machine launches the same local `codex` CLI family that desktop Aside uses today
 4. the remote macOS machine returns reply text only
-5. SideNote2 on the user's device writes that reply back into the original markdown thread
+5. Aside on the user's device writes that reply back into the original markdown thread
 
 This is a user-facing mobile spec.
 That means the route must stay simple, safe, and non-destructive.
@@ -35,15 +35,15 @@ The remote macOS machine must not:
 
 The remote macOS machine may:
 
-- receive the final prompt text and SideNote2 context
+- receive the final prompt text and Aside context
 - generate reply text
 - stream progress and partial output
 - return final reply text to the plugin
 
-SideNote2 on the client remains responsible for:
+Aside on the client remains responsible for:
 
 - canonical note writes
-- appending the reply into the original SideNote2 thread
+- appending the reply into the original Aside thread
 - preserving the source markdown as the source of truth
 
 ## Core Question
@@ -102,11 +102,11 @@ Preferred deployment:
 
 ```text
 Obsidian mobile
-  -> SideNote2 remote bridge client
+  -> Aside remote bridge client
   -> HTTPS bridge running on the target Mac
   -> local codex CLI on that same Mac
   -> streamed progress + final reply text
-  -> SideNote2 appends the reply into the original thread
+  -> Aside appends the reply into the original thread
 ```
 
 Why this is preferred:
@@ -120,7 +120,7 @@ Optional deployment:
 
 ```text
 Obsidian mobile
-  -> SideNote2 remote bridge client
+  -> Aside remote bridge client
   -> HTTPS bridge / relay
   -> SSH target session on the Mac
   -> local codex CLI on the Mac
@@ -139,7 +139,7 @@ The mobile client can safely send:
 - note path relative to the vault root
 - selected text or section context already included in the final prompt
 - thread transcript already included in the final prompt
-- final prompt text built by SideNote2
+- final prompt text built by Aside
 - plugin metadata needed for run display and debugging
 
 The remote Mac must not need:
@@ -185,7 +185,7 @@ That also means:
 
 - it cannot safely inspect neighboring repo files
 - it cannot safely make project changes
-- it cannot safely patch the original note body outside the SideNote2 thread
+- it cannot safely patch the original note body outside the Aside thread
 
 The right user-facing capability label is:
 
@@ -209,7 +209,7 @@ The phone and plugin own:
 
 ## Prompt Construction
 
-SideNote2 should keep building the final prompt locally on the client.
+Aside should keep building the final prompt locally on the client.
 
 That prompt should already contain enough context for a high-quality reply:
 
@@ -225,10 +225,10 @@ The remote Mac should receive that final prompt and generate a reply from it.
 This is the key behavior:
 
 1. user types `@codex` on mobile
-2. SideNote2 saves the user entry into the canonical note
-3. SideNote2 sends final prompt text to the remote Mac
+2. Aside saves the user entry into the canonical note
+3. Aside sends final prompt text to the remote Mac
 4. remote Mac returns reply text only
-5. SideNote2 appends that reply as a normal thread entry in the original markdown note
+5. Aside appends that reply as a normal thread entry in the original markdown note
 
 So the remote machine does not edit the note directly.
 The plugin does.
@@ -286,16 +286,16 @@ codex --help
 ### Phase 2: Run the bridge on the Mac
 
 1. Start a small HTTPS service on the Mac.
-2. Implement the existing SideNote2 remote endpoints:
-   - `POST /v1/sidenote2/runs`
-   - `GET /v1/sidenote2/runs/{runId}?after=<cursor>`
-   - `POST /v1/sidenote2/runs/{runId}/cancel`
+2. Implement the existing Aside remote endpoints:
+   - `POST /v1/aside/runs`
+   - `GET /v1/aside/runs/{runId}?after=<cursor>`
+   - `POST /v1/aside/runs/{runId}/cancel`
 3. Make the bridge launch `codex` locally on the Mac.
 4. Protect the bridge with a dedicated bearer token.
 
-### Phase 3: Configure mobile SideNote2
+### Phase 3: Configure mobile Aside
 
-1. In SideNote2 settings on mobile, open `Advanced Remote Bridge`.
+1. In Aside settings on mobile, open `Advanced Remote Bridge`.
 2. Enter the Mac bridge HTTPS URL.
 3. Enter the bridge token.
 4. Trigger a new `@codex` thread.
@@ -308,7 +308,7 @@ Use these tests:
    Expected:
    - remote run starts
    - progress can stream
-   - final reply is appended into the original SideNote2 thread
+   - final reply is appended into the original Aside thread
 
 2. bridge unreachable
    Expected:

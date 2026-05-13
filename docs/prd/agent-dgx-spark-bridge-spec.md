@@ -11,15 +11,15 @@ Draft implementation spec based on:
 
 ## Objective
 
-Define one concrete remote runtime deployment for SideNote2 `@codex`:
+Define one concrete remote runtime deployment for Aside `@codex`:
 
-- SideNote2 keeps the current thread UX
+- Aside keeps the current thread UX
 - desktop can continue using local Codex when available
 - mobile can use the same `@codex` trigger through a private DGX-hosted bridge
-- the DGX bridge runs the same Codex CLI execution family that desktop SideNote2 uses today
+- the DGX bridge runs the same Codex CLI execution family that desktop Aside uses today
 
 This spec is intentionally narrower than the general cross-platform runtime spec.
-It does not define a generic public hosted SideNote2 product.
+It does not define a generic public hosted Aside product.
 It defines a private or allowlisted DGX-hosted remote runtime running on an NVIDIA DGX Spark.
 
 ## Current Repo State
@@ -36,7 +36,7 @@ The plugin already contains most of the client-side remote runtime plumbing:
   [src/settings/indexNoteSettingsController.ts](../../src/settings/indexNoteSettingsController.ts),
   [src/settings/localSecretStore.ts](../../src/settings/localSecretStore.ts)
 - current settings surface:
-  [src/ui/settings/SideNote2Setting.ts](../../src/ui/settings/SideNote2Setting.ts)
+  [src/ui/settings/AsideSetting.ts](../../src/ui/settings/AsideSetting.ts)
 
 That means the DGX route is not blocked on inventing a new plugin-side thread model.
 It is mainly blocked on:
@@ -48,7 +48,7 @@ It is mainly blocked on:
 ## Final Decisions
 
 - DGX Spark is not a new runtime id in the plugin. It is one deployment target for the existing remote runtime family: `openclaw-acp`.
-- SideNote2 remains the source of truth for note writes. The DGX bridge returns reply text only.
+- Aside remains the source of truth for note writes. The DGX bridge returns reply text only.
 - The DGX bridge launches `codex app-server --listen stdio://` and translates Codex app-server notifications into the existing remote bridge event contract.
 - The first DGX rollout is a private or allowlisted bridge, not a public shared SaaS surface.
 - Bridge access and any initial free allowance live on the DGX service side and may be configured from `.env`.
@@ -69,7 +69,7 @@ Not part of this spec:
 
 - public multi-tenant bridge hosting
 - OAuth or OpenAI account linking in the plugin
-- raw provider API key entry in SideNote2 settings
+- raw provider API key entry in Aside settings
 - DGX-side vault writes
 - cross-device job sync beyond the existing run resume model
 
@@ -77,17 +77,17 @@ Not part of this spec:
 
 ```text
 Obsidian desktop/mobile
-  -> SideNote2 remote bridge client
+  -> Aside remote bridge client
   -> HTTPS bridge on DGX Spark
   -> local codex app-server process on DGX
   -> streamed progress + output delta events
   -> final reply text
-  -> SideNote2 writes the reply into the note thread
+  -> Aside writes the reply into the note thread
 ```
 
 Key boundary:
 
-- SideNote2 owns note context assembly, thread state, and note writes
+- Aside owns note context assembly, thread state, and note writes
 - the DGX bridge owns process execution, event buffering, and remote cancellation
 
 ## Compatibility Rule
@@ -109,29 +109,29 @@ But it should preserve the same runtime model and event semantics.
 
 ## Prompt Handling
 
-### Rule 1: Preserve the current SideNote2 reply envelope
+### Rule 1: Preserve the current Aside reply envelope
 
-Today the local runtime adds a SideNote2-specific reply wrapper in
+Today the local runtime adds a Aside-specific reply wrapper in
 `buildSideNotePrompt(...)` before sending the request to Codex.
 
 For DGX parity, the remote bridge should use the same wrapper behavior.
 
 Practical v1 rule:
 
-- SideNote2 sends the same context-rich `promptText` it already builds for remote runs
-- the DGX bridge prepends the same SideNote2 reply envelope the local runtime uses today
+- Aside sends the same context-rich `promptText` it already builds for remote runs
+- the DGX bridge prepends the same Aside reply envelope the local runtime uses today
 
 Later cleanup:
 
 - extract this prompt-envelope builder into a shared package or shared module so local desktop and DGX do not drift
 
-### Rule 2: SideNote2 still owns note writes
+### Rule 2: Aside still owns note writes
 
-The bridge may run the same Codex runtime family and tool flow as desktop local, but SideNote2 remains the canonical writer for note-thread replies.
+The bridge may run the same Codex runtime family and tool flow as desktop local, but Aside remains the canonical writer for note-thread replies.
 
 That means:
 
-- the bridge returns reply text back to SideNote2
+- the bridge returns reply text back to Aside
 - the plugin appends or edits the thread entry locally
 - the bridge must not write markdown note threads directly
 
@@ -160,11 +160,11 @@ Treat it as client metadata, not as the sole source of truth for what the bridge
 
 ## DGX Bridge API
 
-The DGX bridge implements the existing SideNote2 remote contract:
+The DGX bridge implements the existing Aside remote contract:
 
-- `POST /v1/sidenote2/runs`
-- `GET /v1/sidenote2/runs/{runId}?after=<cursor>`
-- `POST /v1/sidenote2/runs/{runId}/cancel`
+- `POST /v1/aside/runs`
+- `GET /v1/aside/runs/{runId}?after=<cursor>`
+- `POST /v1/aside/runs/{runId}/cancel`
 
 Authentication:
 
@@ -178,7 +178,7 @@ Request:
 ```json
 {
   "agent": "codex",
-  "promptText": "SideNote2 runtime prompt text",
+  "promptText": "Aside runtime prompt text",
   "metadata": {
     "notePath": "docs/prd/agent-cross-platform-runtime-plan.md",
     "contextScope": "anchor",
@@ -200,14 +200,14 @@ Response:
 Rules:
 
 - reject unsupported agents with a user-safe `failed` response
-- assign `runId` before process spawn so SideNote2 can persist it immediately
+- assign `runId` before process spawn so Aside can persist it immediately
 - create the run record even if Codex startup is still pending
 
 ### Poll Run
 
 Request:
 
-- `GET /v1/sidenote2/runs/{runId}?after=<cursor>`
+- `GET /v1/aside/runs/{runId}?after=<cursor>`
 
 Response shape:
 
@@ -233,7 +233,7 @@ Rules:
 
 Request:
 
-- `POST /v1/sidenote2/runs/{runId}/cancel`
+- `POST /v1/aside/runs/{runId}/cancel`
 
 Rules:
 
@@ -243,7 +243,7 @@ Rules:
 
 ## Event Mapping
 
-The DGX bridge should map Codex app-server notifications into SideNote2 bridge events as follows.
+The DGX bridge should map Codex app-server notifications into Aside bridge events as follows.
 
 ### Required bridge events
 
@@ -280,9 +280,9 @@ Normalization rules:
 
 ## DGX Run Lifecycle
 
-### Rule 1: One Codex app-server process per SideNote2 run in v1
+### Rule 1: One Codex app-server process per Aside run in v1
 
-For the first rollout, each SideNote2 run gets its own short-lived Codex app-server child process.
+For the first rollout, each Aside run gets its own short-lived Codex app-server child process.
 
 Reason:
 
@@ -297,13 +297,13 @@ The DGX bridge should launch Codex inside a server-side working directory chosen
 Recommended environment variable:
 
 ```text
-SIDENOTE2_DGX_WORKSPACE_ROOT=/srv/sidenote2/workspace
+ASIDE_DGX_WORKSPACE_ROOT=/srv/aside/workspace
 ```
 
 If no stable workspace is configured, the bridge may fall back to a per-run scratch directory such as:
 
 ```text
-/tmp/sidenote2-dgx/<runId>
+/tmp/aside-dgx/<runId>
 ```
 
 For exact parity with desktop-local behavior, point the DGX runtime at the server-side workspace or repository Codex should use.
@@ -311,7 +311,7 @@ The Codex sandbox policy should still restrict writes to the configured runtime 
 
 ### Rule 3: Retain terminal state long enough for reconnect
 
-The bridge must retain run metadata, cursor state, terminal payload, and buffered events long enough for SideNote2 restart recovery.
+The bridge must retain run metadata, cursor state, terminal payload, and buffered events long enough for Aside restart recovery.
 
 Minimum retention target:
 
@@ -322,12 +322,12 @@ This lets a restarted mobile client poll the final state instead of immediately 
 
 ### Rule 4: Unknown resumed runs return `404`
 
-If SideNote2 resumes a previously known `runId` and the bridge no longer has it, return `404`.
+If Aside resumes a previously known `runId` and the bridge no longer has it, return `404`.
 
 This matches the plugin's current resume failure path:
 
 - unknown prior run
-  -> SideNote2 marks the local run failed with a concise recovery notice
+  -> Aside marks the local run failed with a concise recovery notice
 
 ## Security Requirements
 
@@ -409,18 +409,18 @@ Before and during runs, keep the runtime explicit:
 1. Build the DGX bridge service as a standalone Node process that mirrors the local Codex adapter behavior.
 2. Verify `codex` install, `PATH`, and non-interactive launch on the DGX service account.
 3. Validate start, poll, cancel, and reconnect against the current plugin.
-4. Productize SideNote2 settings and runtime-mode UI so DGX is not framed as dev-only.
+4. Productize Aside settings and runtime-mode UI so DGX is not framed as dev-only.
 5. Extract shared prompt-envelope or event-parsing helpers only after the end-to-end route works.
 
 ## Acceptance Criteria
 
 This spec is complete when:
 
-- mobile SideNote2 can run `@codex` through a DGX-hosted remote bridge
+- mobile Aside can run `@codex` through a DGX-hosted remote bridge
 - `Auto` resolves to remote before local when the remote runtime is configured and available
 - local desktop Codex still works as explicit local mode and as fallback when remote is unavailable
 - DGX runs stream progress and partial text back into the same thread
-- cancel in SideNote2 stops the DGX child process and the thread state cleanly
+- cancel in Aside stops the DGX child process and the thread state cleanly
 - plugin restart can resume polling a still-running DGX run by `runId`
 - the DGX bridge never writes vault files directly
 - no bridge token or prompt text is exposed in client or server logs

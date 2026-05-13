@@ -32,9 +32,9 @@ The remote bridge path is now also implemented in the plugin runtime and is the 
 
 High-level flow:
 
-1. The user types `@codex` in a SideNote2 comment.
-2. SideNote2 parses the comment for supported agent mentions.
-3. SideNote2 resolves the runtime before queuing the run.
+1. The user types `@codex` in a Aside comment.
+2. Aside parses the comment for supported agent mentions.
+3. Aside resolves the runtime before queuing the run.
 4. If the resolved runtime is local, the plugin launches the local `codex` executable from desktop Obsidian.
 5. Streamed progress and final reply are appended back into the same thread.
 
@@ -42,12 +42,12 @@ High-level flow:
 
 High-level flow:
 
-1. The user types `@codex` in a SideNote2 comment.
-2. SideNote2 resolves the runtime before queuing the run.
+1. The user types `@codex` in a Aside comment.
+2. Aside resolves the runtime before queuing the run.
 3. If the resolved runtime is remote, the plugin builds the thread/note prompt context locally.
 4. The plugin calls the configured remote bridge endpoint.
 5. The remote bridge streams progress and output deltas back through poll responses.
-6. SideNote2 appends the final reply into the same thread.
+6. Aside appends the final reply into the same thread.
 
 Key files:
 
@@ -96,7 +96,7 @@ The current mobile-capable route is:
 
 - configure a remote bridge base URL
 - configure a device-local bearer token
-- let SideNote2 run `@codex` through `openclaw-acp`
+- let Aside run `@codex` through `openclaw-acp`
 
 So mobile support is no longer purely hypothetical in the codebase.
 What is still incomplete is the product surface around it:
@@ -123,7 +123,7 @@ What it checks:
 
 1. Is this Obsidian environment desktop with a filesystem-backed vault?
 2. Is Node/Electron runtime access available?
-3. Can SideNote2 recover a usable login-shell `PATH`?
+3. Can Aside recover a usable login-shell `PATH`?
 4. Can it launch `codex --help` successfully?
 
 Possible statuses:
@@ -170,7 +170,7 @@ The settings tab now has an `Agent Runtime` section.
 
 Current settings UI file:
 
-- [src/ui/settings/SideNote2Setting.ts](../../src/ui/settings/SideNote2Setting.ts)
+- [src/ui/settings/AsideSetting.ts](../../src/ui/settings/AsideSetting.ts)
 
 What it currently exposes:
 
@@ -220,7 +220,7 @@ The repo is already following the broad multi-runtime plan:
 - keep the local desktop path
 - add a remote runtime path
 - preserve the same thread UX
-- keep SideNote2-owned note writes even when the remote runtime is workspace-aware
+- keep Aside-owned note writes even when the remote runtime is workspace-aware
 - make runtime selection explicit in settings
 - keep mobile-safe streaming and cancellation
 
@@ -231,7 +231,7 @@ This is already the direction described in [agent-cross-platform-runtime-plan.md
 
 ## User-Facing Mobile Rule
 
-Normal mobile support should keep note writes in SideNote2, even when the remote bridge is workspace-aware.
+Normal mobile support should keep note writes in Aside, even when the remote bridge is workspace-aware.
 
 This does not mean the remote runtime must stay permanently reply-only.
 It means the vault remains client-owned and the plugin remains the execution owner for vault mutations.
@@ -256,12 +256,12 @@ It may:
 
 Instead:
 
-- SideNote2 builds and sends the relevant context
+- Aside builds and sends the relevant context
 - the remote host can inspect or update its configured server-side workspace
-- the remote host may request local vault operations through SideNote2
-- SideNote2 executes approved note, attachment, and thread operations locally
+- the remote host may request local vault operations through Aside
+- Aside executes approved note, attachment, and thread operations locally
 - the remote host returns reply text plus any intermediate tool requests
-- SideNote2 writes that reply back into the original markdown thread
+- Aside writes that reply back into the original markdown thread
 
 This keeps mobile support:
 
@@ -302,14 +302,14 @@ Concrete tasks:
 
 5. Start attachment support with SVG first.
    - DGX can generate diagram content remotely
-   - SideNote2 writes the resulting asset into `Attachments/` locally
+   - Aside writes the resulting asset into `Attachments/` locally
    - PNG or video can come after the protocol is proven
 
-6. Keep SideNote2 thread writes behind safe local helpers only.
-   - `sidenote2.append_thread_reply`
-   - `sidenote2.update_thread_entry`
-   - `sidenote2.resolve_thread`
-   - never raw-edit the serialized `<!-- SideNote2 comments -->` block from DGX
+6. Keep Aside thread writes behind safe local helpers only.
+   - `aside.append_thread_reply`
+   - `aside.update_thread_entry`
+   - `aside.resolve_thread`
+   - never raw-edit the serialized `<!-- Aside comments -->` block from DGX
 
 7. Advertise the new capability explicitly in remote start metadata.
    - move beyond the current generic `workspace-aware` flag
@@ -323,12 +323,12 @@ Detailed implementation spec:
 
 - [agent-dgx-spark-bridge-spec.md](../prd/agent-dgx-spark-bridge-spec.md)
 
-If we want `@codex` in the SideNote2 UI to keep the same meaning while making mobile usable, the cleanest near-term route is:
+If we want `@codex` in the Aside UI to keep the same meaning while making mobile usable, the cleanest near-term route is:
 
 - keep `@codex` as the trigger in the UI
 - route mobile and remote-capable clients through the existing remote bridge path
 - run that remote bridge on an NVIDIA DGX Spark
-- have the DGX bridge launch the same `codex` CLI family that desktop SideNote2 launches today
+- have the DGX bridge launch the same `codex` CLI family that desktop Aside launches today
 
 This is feasible, but there is one important engineering distinction:
 
@@ -355,26 +355,26 @@ Relevant current code:
 
 ```text
 Obsidian desktop/mobile
-  -> SideNote2 remote bridge client
+  -> Aside remote bridge client
   -> HTTPS bridge running on DGX Spark
   -> local codex CLI on DGX Spark
   -> streamed progress + final reply
-  -> SideNote2 appends the reply into the note thread
+  -> Aside appends the reply into the note thread
 ```
 
 Key idea:
 
-- SideNote2 should continue to build the note/thread context locally
+- Aside should continue to build the note/thread context locally
 - the DGX bridge should receive that prompt context
-- the DGX bridge should apply the same SideNote2 reply envelope that the local runtime uses today
+- the DGX bridge should apply the same Aside reply envelope that the local runtime uses today
 - the DGX bridge should invoke `codex` on the DGX host
-- the DGX bridge should translate Codex progress/output into the remote event contract SideNote2 already expects
+- the DGX bridge should translate Codex progress/output into the remote event contract Aside already expects
 
 That preserves:
 
 - the `@codex` user-facing mental model
 - prompt parity between desktop-local and DGX-backed runs
-- SideNote2 ownership of note writes
+- Aside ownership of note writes
 
 ## Detailed DGX Setup Steps
 
@@ -396,7 +396,7 @@ Reason:
 ### Phase 2: Install and verify the local Codex runtime on the DGX
 
 1. SSH into the DGX Spark.
-2. Install the same `codex` CLI that SideNote2 expects on desktop.
+2. Install the same `codex` CLI that Aside expects on desktop.
 3. Verify it is on `PATH`.
 4. Verify it can launch non-interactively:
 
@@ -410,17 +410,17 @@ This matters because the current desktop availability probe is effectively check
 
 - can a local process on this machine launch `codex` successfully?
 
-### Phase 3: Build a small SideNote2 bridge service on the DGX
+### Phase 3: Build a small Aside bridge service on the DGX
 
 Create a standalone service on the DGX Spark, preferably in Node.js, with these endpoints:
 
-- `POST /v1/sidenote2/runs`
-- `GET /v1/sidenote2/runs/{runId}?after=<cursor>`
-- `POST /v1/sidenote2/runs/{runId}/cancel`
+- `POST /v1/aside/runs`
+- `GET /v1/aside/runs/{runId}?after=<cursor>`
+- `POST /v1/aside/runs/{runId}/cancel`
 
 The service should:
 
-1. Accept the final `promptText` from SideNote2.
+1. Accept the final `promptText` from Aside.
 2. Start a local `codex` process on the DGX host.
 3. Track the running process by `runId`.
 4. Buffer progress and output-delta events.
@@ -468,7 +468,7 @@ Minimum requirements:
 
 1. Put the bridge behind HTTPS.
 2. Require `Authorization: Bearer <token>`.
-3. Generate a dedicated bridge token only for SideNote2.
+3. Generate a dedicated bridge token only for Aside.
 4. Do not reuse:
    - OpenAI API keys
    - ChatGPT/Codex account cookies or login tokens
@@ -478,18 +478,18 @@ Minimum requirements:
    - VPN
    - private LAN + reverse proxy
 
-The token in SideNote2 settings should be:
+The token in Aside settings should be:
 
 - a bridge-specific token
 - revocable
 - rotatable
 - scoped only to this DGX bridge
 
-### Phase 6: Point SideNote2 at the DGX bridge
+### Phase 6: Point Aside at the DGX bridge
 
 On the client device running Obsidian:
 
-1. Open SideNote2 settings.
+1. Open Aside settings.
 2. Expand `Advanced Remote Bridge`.
 3. Enter the DGX bridge HTTPS URL.
 4. Enter the DGX bridge token.
@@ -500,7 +500,7 @@ Expected behavior:
 - `Auto` should prefer remote when remote is configured and available
 - local should still work as explicit local mode and as fallback when remote is unavailable
 - mobile should use the DGX bridge path
-- the final reply still lands back in the SideNote2 thread
+- the final reply still lands back in the Aside thread
 
 ### Phase 7: Validate end-to-end behavior
 
@@ -521,25 +521,25 @@ Validate these cases:
 
 4. Cancel.
    Expected:
-   - SideNote2 cancel propagates to the DGX bridge
+   - Aside cancel propagates to the DGX bridge
    - DGX bridge terminates the underlying `codex` process
 
 5. Restart / reconnect.
    Expected:
-   - SideNote2 can resume polling a still-running remote run by `runId`
+   - Aside can resume polling a still-running remote run by `runId`
 
 ## What Not To Do
 
 Avoid these shortcuts:
 
-- do not put an OpenAI API key directly into SideNote2 settings
-- do not put ChatGPT/Codex session cookies into SideNote2 settings
+- do not put an OpenAI API key directly into Aside settings
+- do not put ChatGPT/Codex session cookies into Aside settings
 - do not expose the DGX bridge directly to the public internet without auth
 - do not assume mobile can launch the local desktop runtime directly
 - do not make the DGX bridge write vault notes directly
 
 The note should remain canonical.
-The DGX bridge should not write SideNote2 note threads directly.
+The DGX bridge should not write Aside note threads directly.
 
 ## Recommended First Deliverable
 
@@ -551,7 +551,7 @@ The smallest useful DGX-backed milestone is:
    - start
    - poll
    - cancel
-4. SideNote2 configured to call that bridge from mobile
+4. Aside configured to call that bridge from mobile
 
 This should be treated as the first practical mobile `@codex` path.
 
@@ -565,7 +565,7 @@ But it does solve:
 
 - private or allowlisted remote compute
 - mobile-capable `@codex` replies
-- preservation of the current SideNote2 thread UX
+- preservation of the current Aside thread UX
 
 ## Later Follow-Up
 
@@ -586,4 +586,4 @@ That would reduce drift between:
 - keep the settings surface generic: `Remote runtime`, not provider-specific branding
 - change `Auto` to prefer remote first, then local
 - do not depend on an Obsidian logged-in user id for DGX access or allowance
-- keep note-thread writes owned by SideNote2 even when the DGX backend runs Codex
+- keep note-thread writes owned by Aside even when the DGX backend runs Codex

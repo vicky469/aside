@@ -6,7 +6,7 @@ import { getPageCommentLabel } from "../src/core/anchors/commentAnchors";
 import { CommentEntryController, type CommentEntryHost } from "../src/comments/commentEntryController";
 import type { DraftComment } from "../src/domain/drafts";
 
-const ALL_COMMENTS_NOTE_PATH = "SideNote2/index.md";
+const ALL_COMMENTS_NOTE_PATH = "Aside/index.md";
 
 function createFile(path: string): TFile {
     return {

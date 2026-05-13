@@ -84,7 +84,7 @@ function isSidebarViewLike(view: unknown): view is SidebarViewLike {
 
     const candidate = view as Partial<SidebarViewLike>;
     return typeof candidate.getViewType === "function"
-        && candidate.getViewType() === "sidenote2-view"
+        && candidate.getViewType() === "aside-view"
         && typeof candidate.renderComments === "function";
 }
 
@@ -218,7 +218,7 @@ export class WorkspaceViewController {
         predicate: (view: SidebarViewLike) => boolean,
         options: { skipDataRefresh?: boolean } = {},
     ): Promise<void> {
-        const leaves = this.host.app.workspace.getLeavesOfType("sidenote2-view");
+        const leaves = this.host.app.workspace.getLeavesOfType("aside-view");
         for (const leaf of leaves) {
             if (isSidebarViewLike(leaf.view) && predicate(leaf.view)) {
                 await leaf.view.renderComments(options);

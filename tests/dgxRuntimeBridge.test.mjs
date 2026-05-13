@@ -65,7 +65,7 @@ pCxwchwUnPP1HU2lomzG5A==
 `;
 
 function createTlsFiles(t) {
-    const directory = mkdtempSync(path.join(os.tmpdir(), "sidenote2-dgx-tls-"));
+    const directory = mkdtempSync(path.join(os.tmpdir(), "aside-dgx-tls-"));
     t.after(() => {
         rmSync(directory, { recursive: true, force: true });
     });
@@ -112,12 +112,12 @@ function readTrimmedFile(filePath) {
 }
 
 function isDgxSparkDevice() {
-    const forcedEnabled = parseBooleanEnv(process.env.SIDENOTE2_RUN_DGX_BRIDGE_SOCKET_TESTS);
+    const forcedEnabled = parseBooleanEnv(process.env.ASIDE_RUN_DGX_BRIDGE_SOCKET_TESTS);
     if (forcedEnabled !== null) {
         return forcedEnabled;
     }
 
-    const forcedDisabled = parseBooleanEnv(process.env.SIDENOTE2_SKIP_DGX_BRIDGE_SOCKET_TESTS);
+    const forcedDisabled = parseBooleanEnv(process.env.ASIDE_SKIP_DGX_BRIDGE_SOCKET_TESTS);
     if (forcedDisabled === true) {
         return false;
     }
@@ -138,7 +138,7 @@ function isDgxSparkDevice() {
 }
 
 const SHOULD_RUN_DGX_BRIDGE_SOCKET_TESTS = isDgxSparkDevice();
-const DGX_BRIDGE_SOCKET_SKIP_REASON = "DGX bridge socket integration tests run only on DGX Spark devices. Set SIDENOTE2_RUN_DGX_BRIDGE_SOCKET_TESTS=1 to force them.";
+const DGX_BRIDGE_SOCKET_SKIP_REASON = "DGX bridge socket integration tests run only on DGX Spark devices. Set ASIDE_RUN_DGX_BRIDGE_SOCKET_TESTS=1 to force them.";
 
 function dgxBridgeSocketTest(name, fn) {
     test(name, { skip: SHOULD_RUN_DGX_BRIDGE_SOCKET_TESTS ? false : DGX_BRIDGE_SOCKET_SKIP_REASON }, fn);
@@ -147,9 +147,9 @@ function dgxBridgeSocketTest(name, fn) {
 async function startBridge(t, options = {}) {
     const config = createBridgeConfig({
         env: {
-            SIDENOTE2_DGX_BRIDGE_BEARER_TOKEN: "secret-token",
-            SIDENOTE2_DGX_WORKSPACE_ROOT: ".test-dgx-workspace",
-            SIDENOTE2_DGX_FREE_ALLOWANCE_ENABLED: "false",
+            ASIDE_DGX_BRIDGE_BEARER_TOKEN: "secret-token",
+            ASIDE_DGX_WORKSPACE_ROOT: ".test-dgx-workspace",
+            ASIDE_DGX_FREE_ALLOWANCE_ENABLED: "false",
             ...options.env,
         },
         rootDir: process.cwd(),
@@ -245,13 +245,13 @@ async function pollUntil(url, token, predicate, attempts = 30) {
 test("createBridgeConfig resolves relative workspace roots", () => {
     const config = createBridgeConfig({
         env: {
-            SIDENOTE2_DGX_BRIDGE_BEARER_TOKEN: "secret-token",
-            SIDENOTE2_DGX_WORKSPACE_ROOT: ".dgx-workspace",
+            ASIDE_DGX_BRIDGE_BEARER_TOKEN: "secret-token",
+            ASIDE_DGX_WORKSPACE_ROOT: ".dgx-workspace",
         },
-        rootDir: "/tmp/sidenote2",
+        rootDir: "/tmp/aside",
     });
 
-    assert.equal(config.workspaceRoot, "/tmp/sidenote2/.dgx-workspace");
+    assert.equal(config.workspaceRoot, "/tmp/aside/.dgx-workspace");
     assert.equal(config.bindHost, "127.0.0.1");
     assert.equal(config.port, 4215);
     assert.equal(config.codexBin, "codex");
@@ -272,11 +272,11 @@ test("createBridgeConfig enables HTTPS when TLS files are configured", (t) => {
     const tls = createTlsFiles(t);
     const config = createBridgeConfig({
         env: {
-            SIDENOTE2_DGX_BRIDGE_BEARER_TOKEN: "secret-token",
-            SIDENOTE2_DGX_TLS_KEY_FILE: tls.keyPath,
-            SIDENOTE2_DGX_TLS_CERT_FILE: tls.certPath,
+            ASIDE_DGX_BRIDGE_BEARER_TOKEN: "secret-token",
+            ASIDE_DGX_TLS_KEY_FILE: tls.keyPath,
+            ASIDE_DGX_TLS_CERT_FILE: tls.certPath,
         },
-        rootDir: "/tmp/sidenote2",
+        rootDir: "/tmp/aside",
     });
 
     assert.equal(config.tlsEnabled, true);
@@ -288,8 +288,8 @@ dgxBridgeSocketTest("DGX bridge serves HTTPS when TLS files are configured", asy
     const tls = createTlsFiles(t);
     const { baseUrl } = await startBridge(t, {
         env: {
-            SIDENOTE2_DGX_TLS_KEY_FILE: tls.keyPath,
-            SIDENOTE2_DGX_TLS_CERT_FILE: tls.certPath,
+            ASIDE_DGX_TLS_KEY_FILE: tls.keyPath,
+            ASIDE_DGX_TLS_CERT_FILE: tls.certPath,
         },
         executeRun: async () => ({ replyText: "Done" }),
     });
@@ -335,7 +335,7 @@ dgxBridgeSocketTest("DGX bridge starts, streams, completes, and honors cursors",
 
     const startResponse = await requestJson({
         method: "POST",
-        url: `${baseUrl}/v1/sidenote2/runs`,
+        url: `${baseUrl}/v1/aside/runs`,
         token,
         body: {
             agent: "codex",
@@ -349,7 +349,7 @@ dgxBridgeSocketTest("DGX bridge starts, streams, completes, and honors cursors",
     assert.equal(startResponse.statusCode, 200);
     assert.equal(typeof startResponse.json.runId, "string");
 
-    const runUrl = `${baseUrl}/v1/sidenote2/runs/${encodeURIComponent(startResponse.json.runId)}`;
+    const runUrl = `${baseUrl}/v1/aside/runs/${encodeURIComponent(startResponse.json.runId)}`;
     const completedResponse = await pollUntil(runUrl, token, (response) => response.json?.status === "completed");
 
     assert.equal(completedResponse.json.replyText, "Hello world");
@@ -382,7 +382,7 @@ dgxBridgeSocketTest("DGX bridge long-polls until the next event when waitMs is p
 
     const startResponse = await requestJson({
         method: "POST",
-        url: `${baseUrl}/v1/sidenote2/runs`,
+        url: `${baseUrl}/v1/aside/runs`,
         token,
         body: {
             agent: "codex",
@@ -393,7 +393,7 @@ dgxBridgeSocketTest("DGX bridge long-polls until the next event when waitMs is p
         },
     });
 
-    const runUrl = `${baseUrl}/v1/sidenote2/runs/${encodeURIComponent(startResponse.json.runId)}`;
+    const runUrl = `${baseUrl}/v1/aside/runs/${encodeURIComponent(startResponse.json.runId)}`;
     const startedAt = Date.now();
     const pollResponse = await requestJson({
         method: "GET",
@@ -416,7 +416,7 @@ dgxBridgeSocketTest("DGX bridge responds to CORS preflight and includes CORS hea
 
     const optionsResponse = await requestJson({
         method: "OPTIONS",
-        url: `${baseUrl}/v1/sidenote2/runs`,
+        url: `${baseUrl}/v1/aside/runs`,
     });
 
     assert.equal(optionsResponse.statusCode, 204);
@@ -451,7 +451,7 @@ dgxBridgeSocketTest("DGX bridge cancels an in-flight run", async (t) => {
 
     const startResponse = await requestJson({
         method: "POST",
-        url: `${baseUrl}/v1/sidenote2/runs`,
+        url: `${baseUrl}/v1/aside/runs`,
         token,
         body: {
             agent: "codex",
@@ -460,7 +460,7 @@ dgxBridgeSocketTest("DGX bridge cancels an in-flight run", async (t) => {
         },
     });
     const runId = startResponse.json.runId;
-    const runUrl = `${baseUrl}/v1/sidenote2/runs/${encodeURIComponent(runId)}`;
+    const runUrl = `${baseUrl}/v1/aside/runs/${encodeURIComponent(runId)}`;
 
     const cancelResponse = await requestJson({
         method: "POST",
@@ -480,8 +480,8 @@ dgxBridgeSocketTest("DGX bridge cancels an in-flight run", async (t) => {
 dgxBridgeSocketTest("DGX bridge enforces auth and free-allowance limits", async (t) => {
     const { baseUrl, token } = await startBridge(t, {
         env: {
-            SIDENOTE2_DGX_FREE_ALLOWANCE_ENABLED: "true",
-            SIDENOTE2_DGX_FREE_ALLOWANCE_RUNS_PER_DAY: "1",
+            ASIDE_DGX_FREE_ALLOWANCE_ENABLED: "true",
+            ASIDE_DGX_FREE_ALLOWANCE_RUNS_PER_DAY: "1",
         },
         executeRun: async () => ({ replyText: "Done" }),
         createId: (() => {
@@ -492,7 +492,7 @@ dgxBridgeSocketTest("DGX bridge enforces auth and free-allowance limits", async 
 
     const unauthorizedResponse = await requestJson({
         method: "POST",
-        url: `${baseUrl}/v1/sidenote2/runs`,
+        url: `${baseUrl}/v1/aside/runs`,
         token: "wrong-token",
         body: {
             agent: "codex",
@@ -506,7 +506,7 @@ dgxBridgeSocketTest("DGX bridge enforces auth and free-allowance limits", async 
 
     const firstRun = await requestJson({
         method: "POST",
-        url: `${baseUrl}/v1/sidenote2/runs`,
+        url: `${baseUrl}/v1/aside/runs`,
         token,
         body: {
             agent: "codex",
@@ -520,7 +520,7 @@ dgxBridgeSocketTest("DGX bridge enforces auth and free-allowance limits", async 
 
     const secondRun = await requestJson({
         method: "POST",
-        url: `${baseUrl}/v1/sidenote2/runs`,
+        url: `${baseUrl}/v1/aside/runs`,
         token,
         body: {
             agent: "codex",

@@ -183,7 +183,7 @@ export default class SideNoteTagSuggestModal extends SuggestModal<SideNoteTagSug
 
     renderSuggestion(suggestion: SideNoteTagSuggestion, el: HTMLElement): void {
         const titleEl = el.createDiv();
-        const detailEl = el.createDiv({ cls: "sidenote2-tag-suggest-note" });
+        const detailEl = el.createDiv({ cls: "aside-tag-suggest-note" });
 
         if (suggestion.type === "create") {
             titleEl.setText(`Create tag: ${suggestion.tag}`);

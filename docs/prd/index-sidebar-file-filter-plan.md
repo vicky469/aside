@@ -21,7 +21,7 @@ Required behavior:
 
 Current index sidebar state is file-path-set based:
 
-- `SideNote2View` stores `filteredIndexFilePaths: string[]`
+- `AsideView` stores `filteredIndexFilePaths: string[]`
 - `CustomViewState` persists `indexFileFilterPaths?: string[]`
 - `SideNoteFileFilterModal` is a multi-select toggle modal
 - `List` and `Thought Trail` both consume the same filtered file path array
@@ -297,7 +297,7 @@ Reason:
 
 - both `List` and `Thought Trail` need the same graph universe
 - the modal should reuse the same cache
-- recomputing inside `SideNote2View` makes repeated opens more expensive
+- recomputing inside `AsideView` makes repeated opens more expensive
 
 ## UI Plan
 

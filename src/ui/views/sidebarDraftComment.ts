@@ -48,8 +48,8 @@ export function buildDraftCommentPresentation(
     activeCommentId: string | null,
 ): DraftCommentPresentation {
     const classes = [
-        "sidenote2-comment-item",
-        "sidenote2-comment-draft",
+        "aside-comment-item",
+        "aside-comment-draft",
         comment.mode === "edit" ? "is-edit" : comment.mode === "append" ? "is-append" : "is-new",
     ];
     if (isPageComment(comment)) {
@@ -86,10 +86,10 @@ export function renderDraftCommentCard(
     commentEl.setAttribute("data-draft-id", comment.id);
     commentEl.setAttribute("data-start-line", String(comment.startLine));
 
-    const headerEl = commentEl.createDiv("sidenote2-comment-header");
+    const headerEl = commentEl.createDiv("aside-comment-header");
     headerEl.createEl("small", {
         text: presentation.metaText,
-        cls: "sidenote2-timestamp",
+        cls: "aside-timestamp",
     });
 
     renderDraftEditor(commentEl, comment, presentation, host, draftEditorController, "card");
@@ -115,7 +115,7 @@ function createDraftFormatButton(
     },
 ): HTMLButtonElement {
     const button = container.createEl("button", {
-        cls: "sidenote2-inline-format-button",
+        cls: "aside-inline-format-button",
     });
     button.setAttribute("type", "button");
     button.setAttribute("aria-label", options.ariaLabel);
@@ -140,7 +140,7 @@ function attachDraftActionButtonInteractions(
 }
 
 function getSidebarScrollContainer(textarea: HTMLTextAreaElement): HTMLElement | null {
-    const container = textarea.closest(".sidenote2-view-container");
+    const container = textarea.closest(".aside-view-container");
     return container instanceof HTMLElement
         ? container
         : null;
@@ -169,7 +169,7 @@ export function computePinnedDraftScrollTop(
 }
 
 function getDraftBottomObstructionTop(scrollContainer: HTMLElement, containerRect: DOMRect): number | undefined {
-    const supportSlot = scrollContainer.querySelector?.(".sidenote2-support-button-slot");
+    const supportSlot = scrollContainer.querySelector?.(".aside-support-button-slot");
     if (!(supportSlot instanceof HTMLElement)) {
         return undefined;
     }
@@ -181,7 +181,7 @@ function getDraftBottomObstructionTop(scrollContainer: HTMLElement, containerRec
 }
 
 export function pinDraftToTopOnMobile(textarea: HTMLTextAreaElement): void {
-    const draftEl = textarea.closest(".sidenote2-comment-draft");
+    const draftEl = textarea.closest(".aside-comment-draft");
     const scrollContainer = getSidebarScrollContainer(textarea);
     if (!(draftEl instanceof HTMLElement) || !scrollContainer) {
         return;
@@ -215,13 +215,13 @@ function renderDraftEditor(
     layout: DraftEditorLayout,
 ): void {
     const editorWrap = container.createDiv([
-        "sidenote2-inline-editor",
+        "aside-inline-editor",
         layout === "inline-edit" ? "is-inline-edit" : "is-card-edit",
     ].join(" "));
     // Sidebar draft formatting is button-only for now. Keyboard shortcuts such as Cmd+B
     // and Option+H are unreliable in this editor surface, so keep the explicit controls.
     const toolbarRow = layout === "card"
-        ? editorWrap.createDiv("sidenote2-inline-editor-toolbar")
+        ? editorWrap.createDiv("aside-inline-editor-toolbar")
         : null;
     const boldButton = toolbarRow
         ? createDraftFormatButton(toolbarRow, host, {
@@ -235,10 +235,10 @@ function renderDraftEditor(
             ariaLabel: "Highlight",
         })
         : null;
-    const editorShell = editorWrap.createDiv("sidenote2-inline-editor-shell");
-    const preview = editorShell.createDiv("sidenote2-inline-editor-preview");
+    const editorShell = editorWrap.createDiv("aside-inline-editor-shell");
+    const preview = editorShell.createDiv("aside-inline-editor-preview");
     const textarea = editorShell.createEl("textarea", {
-        cls: "sidenote2-inline-textarea",
+        cls: "aside-inline-textarea",
     });
     textarea.value = comment.comment;
     textarea.setAttribute("placeholder", presentation.placeholder);
@@ -259,11 +259,11 @@ function renderDraftEditor(
     };
     syncPreview();
 
-    const actionRow = editorWrap.createDiv("sidenote2-inline-editor-actions");
+    const actionRow = editorWrap.createDiv("aside-inline-editor-actions");
     if (layout === "inline-edit") {
         actionRow.addClass("is-inline-edit");
     }
-    const wordCountEl = actionRow.createDiv("sidenote2-inline-word-count");
+    const wordCountEl = actionRow.createDiv("aside-inline-word-count");
     const inlineEditBoldButton = layout === "inline-edit"
         ? createDraftFormatButton(actionRow, host, {
             label: "B",
@@ -278,11 +278,11 @@ function renderDraftEditor(
         : null;
     const cancelButton = actionRow.createEl("button", {
         text: "Cancel",
-        cls: "sidenote2-inline-cancel-button",
+        cls: "aside-inline-cancel-button",
     });
     const saveButton = actionRow.createEl("button", {
         text: presentation.saveLabel,
-        cls: "mod-cta sidenote2-inline-save-button",
+        cls: "mod-cta aside-inline-save-button",
     });
     [
         boldButton,

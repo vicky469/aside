@@ -30,7 +30,7 @@ class MockPlugin {
     }
 
     async handleActiveLeafChangeFixed(kind: LeafKind): Promise<void> {
-        if (shouldIgnoreWorkspaceLeafChange(kind === "sidenote" ? "sidenote2-view" : "markdown")) {
+        if (shouldIgnoreWorkspaceLeafChange(kind === "sidenote" ? "aside-view" : "markdown")) {
             return;
         }
 
@@ -48,7 +48,7 @@ class MockPlugin {
     }
 }
 
-test("old active-leaf-change logic refreshes when the SideNote2 leaf becomes active", async () => {
+test("old active-leaf-change logic refreshes when the Aside leaf becomes active", async () => {
     const plugin = new MockPlugin();
 
     await plugin.handleActiveLeafChangeOld("sidenote");
@@ -57,7 +57,7 @@ test("old active-leaf-change logic refreshes when the SideNote2 leaf becomes act
     assert.deepStrictEqual(plugin.activeMarkdownFile, { path: "note.md" });
 });
 
-test("fixed active-leaf-change logic ignores SideNote2 leaf activation", async () => {
+test("fixed active-leaf-change logic ignores Aside leaf activation", async () => {
     const plugin = new MockPlugin();
 
     await plugin.handleActiveLeafChangeFixed("sidenote");

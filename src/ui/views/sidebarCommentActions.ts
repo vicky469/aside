@@ -21,7 +21,7 @@ export function renderSourceRedirectButton(
     host: SidebarPersistedCommentHost,
 ): void {
     const redirectButton = actionsEl.createEl("button", {
-        cls: "clickable-icon sidenote2-comment-action-button sidenote2-comment-action-redirect",
+        cls: "clickable-icon aside-comment-action-button aside-comment-action-redirect",
     });
     attachSidebarActionButtonInteractions(redirectButton, host);
     redirectButton.setAttribute("type", "button");
@@ -47,7 +47,7 @@ export function renderEditButton(
     ariaLabel: string,
 ): void {
     const editButton = actionsEl.createEl("button", {
-        cls: "clickable-icon sidenote2-comment-action-button sidenote2-comment-action-edit",
+        cls: "clickable-icon aside-comment-action-button aside-comment-action-edit",
     });
     attachSidebarActionButtonInteractions(editButton, host);
     editButton.setAttribute("type", "button");
@@ -69,7 +69,7 @@ export function renderDeleteButton(
     ariaLabel: string,
 ): void {
     const deleteButton = actionsEl.createEl("button", {
-        cls: "clickable-icon sidenote2-comment-action-button sidenote2-comment-action-delete",
+        cls: "clickable-icon aside-comment-action-button aside-comment-action-delete",
     });
     attachSidebarActionButtonInteractions(deleteButton, host);
     deleteButton.setAttribute("type", "button");
@@ -92,7 +92,7 @@ export function renderMoveActionButton(
     },
 ): void {
     const moveButton = actionsEl.createEl("button", {
-        cls: "clickable-icon sidenote2-comment-action-button sidenote2-comment-action-move",
+        cls: "clickable-icon aside-comment-action-button aside-comment-action-move",
     });
     attachSidebarActionButtonInteractions(moveButton, host);
     moveButton.setAttribute("type", "button");
@@ -117,8 +117,8 @@ export function renderPinActionButton(
     const pinButton = actionsEl.createEl("button", {
         cls: [
             "clickable-icon",
-            "sidenote2-comment-action-button",
-            "sidenote2-comment-action-pin",
+            "aside-comment-action-button",
+            "aside-comment-action-pin",
             pinAction.active ? "is-active" : "",
         ].filter(Boolean).join(" "),
     });
@@ -141,7 +141,7 @@ export function renderRestoreButton(
     ariaLabel: string,
 ): void {
     const restoreButton = actionsEl.createEl("button", {
-        cls: "clickable-icon sidenote2-comment-action-button sidenote2-comment-action-restore",
+        cls: "clickable-icon aside-comment-action-button aside-comment-action-restore",
     });
     attachSidebarActionButtonInteractions(restoreButton, host);
     restoreButton.setAttribute("type", "button");
@@ -164,7 +164,7 @@ export function renderPermanentDeleteButton(
     ariaLabel: string,
 ): void {
     const permanentDeleteButton = actionsEl.createEl("button", {
-        cls: "clickable-icon sidenote2-comment-action-button sidenote2-comment-action-permanent-delete",
+        cls: "clickable-icon aside-comment-action-button aside-comment-action-permanent-delete",
     });
     attachSidebarActionButtonInteractions(permanentDeleteButton, host);
     permanentDeleteButton.setAttribute("type", "button");
@@ -190,8 +190,8 @@ export function renderAddEntryButton(
     const addEntryButton = actionsEl.createEl("button", {
         cls: [
             "clickable-icon",
-            "sidenote2-comment-action-button",
-            "sidenote2-comment-action-add-entry",
+            "aside-comment-action-button",
+            "aside-comment-action-add-entry",
             ...(options.extraClasses ?? []),
         ].join(" "),
     });
@@ -214,14 +214,14 @@ export function renderReorderHandle(
     host: SidebarPersistedCommentHost,
 ): void {
     const handleEl = actionsEl.createEl("button", {
-        cls: "clickable-icon sidenote2-comment-action-button sidenote2-comment-drag-handle",
+        cls: "clickable-icon aside-comment-action-button aside-comment-drag-handle",
     });
     attachSidebarActionButtonInteractions(handleEl, host);
     handleEl.setAttribute("type", "button");
     handleEl.setAttribute("draggable", "true");
     handleEl.setAttribute("aria-label", "Drag to reorder");
-    handleEl.setAttribute("data-sidenote2-drag-kind", "thread");
-    handleEl.setAttribute("data-sidenote2-thread-id", threadId);
+    handleEl.setAttribute("data-aside-drag-kind", "thread");
+    handleEl.setAttribute("data-aside-thread-id", threadId);
 
     const blockClick = (event: Event) => {
         event.preventDefault();
@@ -238,15 +238,15 @@ export function renderEntryMoveHandle(
     host: SidebarPersistedCommentHost,
 ): void {
     const handleEl = actionsEl.createEl("button", {
-        cls: "clickable-icon sidenote2-comment-action-button sidenote2-comment-drag-handle",
+        cls: "clickable-icon aside-comment-action-button aside-comment-drag-handle",
     });
     attachSidebarActionButtonInteractions(handleEl, host);
     handleEl.setAttribute("type", "button");
     handleEl.setAttribute("draggable", "true");
     handleEl.setAttribute("aria-label", "Drag to reorder");
-    handleEl.setAttribute("data-sidenote2-drag-kind", "thread-entry");
-    handleEl.setAttribute("data-sidenote2-thread-id", sourceThreadId);
-    handleEl.setAttribute("data-sidenote2-entry-id", entryId);
+    handleEl.setAttribute("data-aside-drag-kind", "thread-entry");
+    handleEl.setAttribute("data-aside-thread-id", sourceThreadId);
+    handleEl.setAttribute("data-aside-entry-id", entryId);
 
     const blockClick = (event: Event) => {
         event.preventDefault();
@@ -295,7 +295,7 @@ function renderObsidianExternalLinkIcon(container: HTMLElement): void {
     const svgNamespace = "http://www.w3.org/2000/svg";
     const svgEl = document.createElementNS(svgNamespace, "svg");
     svgEl.setAttribute("xmlns", svgNamespace);
-    svgEl.setAttribute("class", "svg-icon sidenote2-obsidian-external-link-icon");
+    svgEl.setAttribute("class", "svg-icon aside-obsidian-external-link-icon");
     svgEl.setAttribute("viewBox", "0 0 32 32");
     svgEl.setAttribute("fill", "none");
     svgEl.setAttribute("stroke", "currentColor");

@@ -83,7 +83,7 @@ test("sortSidebarRenderableItems keeps page-note thread order stable after later
 test("sortSidebarRenderableItems keeps root files ahead of nested folders to match index note ordering", () => {
     const nestedThread = commentToThread(createComment({
         id: "nested-note",
-        filePath: "SideNote2 Graph Fixtures/graph-1000/size-1/isolated/g01-isolated-c01-n01.md",
+        filePath: "Aside Graph Fixtures/graph-1000/size-1/isolated/g01-isolated-c01-n01.md",
         timestamp: 100,
     }));
     const rootThread = commentToThread(createComment({

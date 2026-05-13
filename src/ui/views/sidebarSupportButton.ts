@@ -19,7 +19,7 @@ export function renderSupportButton(
     host: SidebarSupportButtonHost,
     options: SidebarSupportButtonOptions,
 ): void {
-    const slot = container.createDiv("sidenote2-support-button-slot");
+    const slot = container.createDiv("aside-support-button-slot");
     renderSupportButtonIn(slot, host, options);
 }
 
@@ -30,7 +30,7 @@ export function renderSupportButtonIn(
 ): void {
     container.empty();
     const button = container.createEl("button", {
-        cls: "clickable-icon sidenote2-support-button",
+        cls: "clickable-icon aside-support-button",
     });
     button.setAttribute("type", "button");
     button.setAttribute("aria-label", "Open log inspector");

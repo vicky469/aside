@@ -82,22 +82,22 @@ export default class SideNoteFileFilterModal extends SuggestModal<IndexFileFilte
 
     renderSuggestion(option: IndexFileFilterOption, el: HTMLElement): void {
         const isSelected = option.filePath === this.selectedRootFilePath;
-        el.addClass("sidenote2-file-filter-suggestion");
+        el.addClass("aside-file-filter-suggestion");
         if (isSelected) {
             el.addClass("is-selected");
         }
 
-        const contentEl = el.createDiv("sidenote2-file-filter-suggestion-main");
+        const contentEl = el.createDiv("aside-file-filter-suggestion-main");
         contentEl.createDiv({
             text: getIndexFileFilterFileName(option.filePath),
-            cls: "sidenote2-file-filter-suggestion-title",
+            cls: "aside-file-filter-suggestion-title",
         });
         contentEl.createDiv({
             text: `${option.filePath} · ${formatCommentCount(option.commentCount)}`,
-            cls: "sidenote2-file-filter-note",
+            cls: "aside-file-filter-note",
         });
 
-        const statusEl = el.createSpan("sidenote2-file-filter-suggestion-status");
+        const statusEl = el.createSpan("aside-file-filter-suggestion-status");
         if (isSelected) {
             setIcon(statusEl, "check");
         }
@@ -116,16 +116,16 @@ export default class SideNoteFileFilterModal extends SuggestModal<IndexFileFilte
             return;
         }
 
-        this.summaryEl = this.contentEl.createDiv("sidenote2-file-filter-selection-summary");
+        this.summaryEl = this.contentEl.createDiv("aside-file-filter-selection-summary");
         anchorEl.insertAdjacentElement("afterend", this.summaryEl);
         this.summaryEl.createEl("p", {
             text: `${this.selectedFilePaths.length} file${this.selectedFilePaths.length === 1 ? "" : "s"} selected`,
-            cls: "sidenote2-file-filter-selection-note",
+            cls: "aside-file-filter-selection-note",
         });
 
-        const chipsEl = this.summaryEl.createDiv("sidenote2-file-filter-selection-chips");
+        const chipsEl = this.summaryEl.createDiv("aside-file-filter-selection-chips");
         for (const filePath of this.selectedFilePaths) {
-            const chipEl = chipsEl.createSpan("sidenote2-file-filter-selection-chip");
+            const chipEl = chipsEl.createSpan("aside-file-filter-selection-chip");
             if (filePath === this.selectedRootFilePath) {
                 chipEl.addClass("is-root");
             }

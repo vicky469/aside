@@ -38,6 +38,33 @@ export function normalizeIndexFileFilterPaths(filePaths: Iterable<string> | null
     return Array.from(uniquePaths).sort((left, right) => left.localeCompare(right));
 }
 
+export function isIndexFileFilterPathSelected(
+    filePath: string,
+    selectedRootPath: string | null | undefined,
+): boolean {
+    const normalizedFilePath = getNormalizedFilterPath(filePath);
+    const normalizedSelectedRootPath = getNormalizedFilterPath(selectedRootPath ?? "");
+    return !!normalizedFilePath && normalizedFilePath === normalizedSelectedRootPath;
+}
+
+export function resolveAutoIndexFileFilterRootPath(options: {
+    currentRootPath: string | null | undefined;
+    firstIndexFilePath: string | null | undefined;
+    autoSelectSuppressed: boolean;
+}): string | null {
+    const currentRootPath = getNormalizedFilterPath(options.currentRootPath ?? "");
+    if (currentRootPath) {
+        return currentRootPath;
+    }
+
+    if (options.autoSelectSuppressed) {
+        return null;
+    }
+
+    const firstIndexFilePath = getNormalizedFilterPath(options.firstIndexFilePath ?? "");
+    return firstIndexFilePath || null;
+}
+
 export function filterCommentsByFilePaths<T extends { filePath: string }>(
     comments: T[],
     selectedFilePaths: readonly string[],

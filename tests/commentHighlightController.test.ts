@@ -67,7 +67,7 @@ test("buildPreviewHighlightWraps respects section line offsets for later lines",
 test("findClickedHighlightCommentId returns the clicked highlight comment id", () => {
     const target = {
         closest: (selector: string) => {
-            assert.equal(selector, ".sidenote2-highlight");
+            assert.equal(selector, ".aside-highlight");
             return {
                 getAttribute: (name: string) => {
                     assert.equal(name, "data-comment-id");
@@ -92,10 +92,10 @@ test("findClickedHighlightCommentId returns null when the target is not inside a
 test("findClickedIndexLivePreviewTarget resolves comment links from live preview DOM", () => {
     const target = {
         closest: (selector: string) => {
-            if (selector === "a.sidenote2-index-comment-link[data-sidenote2-comment-url]") {
+            if (selector === "a.aside-index-comment-link[data-aside-comment-url]") {
                 return {
                     dataset: {
-                        sidenote2CommentUrl: "obsidian://side-note2-comment?vault=public&file=books%2FNote.md&commentId=comment-7",
+                        asideCommentUrl: "obsidian://aside-comment?vault=public&file=books%2FNote.md&commentId=comment-7",
                     },
                     getAttribute: () => null,
                 };
@@ -115,10 +115,10 @@ test("findClickedIndexLivePreviewTarget resolves comment links from live preview
 test("findClickedIndexLivePreviewTarget resolves file headings from live preview DOM", () => {
     const target = {
         closest: (selector: string) => {
-            if (selector === "a.sidenote2-index-comment-link[data-sidenote2-comment-url]") {
+            if (selector === "a.aside-index-comment-link[data-aside-comment-url]") {
                 return null;
             }
-            if (selector.includes(".sidenote2-index-heading-label[title]")) {
+            if (selector.includes(".aside-index-heading-label[title]")) {
                 return {
                     dataset: {},
                     getAttribute: (name: string) => {
@@ -170,10 +170,10 @@ test("findClickedIndexLivePreviewTarget leaves native collapse controls alone", 
                     getAttribute: () => null,
                 };
             }
-            if (selector === "a.sidenote2-index-comment-link[data-sidenote2-comment-url]") {
+            if (selector === "a.aside-index-comment-link[data-aside-comment-url]") {
                 return {
                     dataset: {
-                        sidenote2CommentUrl: "obsidian://side-note2-comment?vault=public&file=books%2FNote.md&commentId=comment-7",
+                        asideCommentUrl: "obsidian://aside-comment?vault=public&file=books%2FNote.md&commentId=comment-7",
                     },
                     getAttribute: () => null,
                 };

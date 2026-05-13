@@ -76,17 +76,17 @@ test("sidecar comment storage writes hashed per-note files and reads them back",
     const adapter = new FakeAdapter();
     const storage = new SidecarCommentStorage({
         adapter: adapter as unknown as DataAdapter,
-        pluginDirPath: ".obsidian/plugins/side-note2",
+        pluginDirPath: ".obsidian/plugins/aside",
         hashText: async (text) => hashText(text),
     });
     const notePath = "books/example.md";
     const expectedHash = hashText(notePath);
-    const expectedPath = `.obsidian/plugins/side-note2/sidenotes/by-note/${expectedHash.slice(0, 2)}/${expectedHash}.json`;
+    const expectedPath = `.obsidian/plugins/aside/sidenotes/by-note/${expectedHash.slice(0, 2)}/${expectedHash}.json`;
 
     await storage.write(notePath, [createThread(notePath)]);
 
     assert.equal(await storage.exists(notePath), true);
-    assert.equal(adapter.directories.has(".obsidian/plugins/side-note2/sidenotes/by-note"), true);
+    assert.equal(adapter.directories.has(".obsidian/plugins/aside/sidenotes/by-note"), true);
     assert.equal(adapter.files.has(expectedPath), true);
 
     const readThreads = await storage.read(notePath);
@@ -100,7 +100,7 @@ test("sidecar comment storage renames the hashed file when the note path changes
     const adapter = new FakeAdapter();
     const storage = new SidecarCommentStorage({
         adapter: adapter as unknown as DataAdapter,
-        pluginDirPath: ".obsidian/plugins/side-note2",
+        pluginDirPath: ".obsidian/plugins/aside",
         hashText: async (text) => hashText(text),
     });
     const originalNotePath = "books/original.md";
@@ -124,14 +124,14 @@ test("sidecar comment storage writes source-id keyed files and retargets threads
     const adapter = new FakeAdapter();
     const storage = new SidecarCommentStorage({
         adapter: adapter as unknown as DataAdapter,
-        pluginDirPath: ".obsidian/plugins/side-note2",
+        pluginDirPath: ".obsidian/plugins/aside",
         hashText: async (text) => hashText(text),
     });
     const sourceId = "src-123";
     const originalNotePath = "books/original.md";
     const renamedNotePath = "books/renamed.md";
     const expectedHash = hashText(sourceId);
-    const expectedPath = `.obsidian/plugins/side-note2/sidenotes/by-source/${expectedHash.slice(0, 2)}/${expectedHash}.json`;
+    const expectedPath = `.obsidian/plugins/aside/sidenotes/by-source/${expectedHash.slice(0, 2)}/${expectedHash}.json`;
 
     await storage.writeForSource(sourceId, originalNotePath, [createThread(originalNotePath)]);
 
@@ -144,11 +144,35 @@ test("sidecar comment storage writes source-id keyed files and retargets threads
     assert.equal(readThreads[0].entries[0]?.body, "hello");
 });
 
+test("sidecar comment storage reads legacy SideNote2 cache paths", async () => {
+    const adapter = new FakeAdapter();
+    const storage = new SidecarCommentStorage({
+        adapter: adapter as unknown as DataAdapter,
+        pluginDirPath: ".obsidian/plugins/aside",
+        legacyPluginDirPaths: [".obsidian/plugins/side-note2"],
+        hashText: async (text) => hashText(text),
+    });
+    const notePath = "books/example.md";
+    const expectedHash = hashText(notePath);
+    const legacyPath = `.obsidian/plugins/side-note2/sidenotes/by-note/${expectedHash.slice(0, 2)}/${expectedHash}.json`;
+    adapter.files.set(legacyPath, `${JSON.stringify({
+        version: 1,
+        notePath,
+        threads: [createThread(notePath)],
+    })}\n`);
+
+    assert.equal(await storage.exists(notePath), true);
+    const readThreads = await storage.read(notePath);
+    assert.ok(readThreads);
+    assert.equal(readThreads[0].filePath, notePath);
+    assert.equal(readThreads[0].entries[0]?.body, "hello");
+});
+
 test("sidecar comment storage removes the sidecar file when the thread list becomes empty", async () => {
     const adapter = new FakeAdapter();
     const storage = new SidecarCommentStorage({
         adapter: adapter as unknown as DataAdapter,
-        pluginDirPath: ".obsidian/plugins/side-note2",
+        pluginDirPath: ".obsidian/plugins/aside",
         hashText: async (text) => hashText(text),
     });
     const notePath = "books/example.md";

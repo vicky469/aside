@@ -18,7 +18,7 @@ function hashText(text: string): string {
 function getSidecarPath(vaultRoot: string, noteRelativePath: string): string {
     const hash = hashText(noteRelativePath);
     const shard = hash.slice(0, 2);
-    return path.join(vaultRoot, ".obsidian", "plugins", "side-note2", "sidenotes", "by-note", shard, `${hash}.json`);
+    return path.join(vaultRoot, ".obsidian", "plugins", "aside", "sidenotes", "by-note", shard, `${hash}.json`);
 }
 
 async function readSidecar(vaultRoot: string, noteRelativePath: string): Promise<{ version: number; notePath: string; threads: Array<{ id: string; resolved: boolean; entries: Array<{ id: string; body: string; timestamp: number }> }> } | null> {
@@ -36,7 +36,7 @@ async function readSidecar(vaultRoot: string, noteRelativePath: string): Promise
 }
 
 async function createVaultDir(tempDir: string): Promise<void> {
-    await mkdir(path.join(tempDir, ".obsidian", "plugins", "side-note2"), { recursive: true });
+    await mkdir(path.join(tempDir, ".obsidian", "plugins", "aside"), { recursive: true });
 }
 
 function createComment(overrides: Partial<Comment> = {}): Comment {
@@ -57,10 +57,10 @@ function createComment(overrides: Partial<Comment> = {}): Comment {
     };
 }
 
-test("generate-large-graph-fixture preserves existing SideNote2 threads in fixture notes", async () => {
-    const tempDir = await mkdtemp(path.join(tmpdir(), "sidenote2-graph-fixture-"));
+test("generate-large-graph-fixture preserves existing Aside threads in fixture notes", async () => {
+    const tempDir = await mkdtemp(path.join(tmpdir(), "aside-graph-fixture-"));
     const scriptPath = path.resolve(process.cwd(), "scripts/generate-large-graph-fixture.mjs");
-    const noteRelativePath = "SideNote2 Graph Fixtures/graph-1000/size-30/chain/g30-chain-c01-n01.md";
+    const noteRelativePath = "Aside Graph Fixtures/graph-1000/size-30/chain/g30-chain-c01-n01.md";
     const notePath = path.join(tempDir, noteRelativePath);
 
     await mkdir(path.dirname(notePath), { recursive: true });
@@ -109,7 +109,7 @@ test("generate-large-graph-fixture preserves existing SideNote2 threads in fixtu
 
     const updatedNote = await readFile(notePath, "utf8");
     assert.match(updatedNote, /^# g30-chain-c01-n01/m);
-    assert.doesNotMatch(updatedNote, /<!-- SideNote2 comments/);
+    assert.doesNotMatch(updatedNote, /<!-- Aside comments/);
 
     const sidecar = await readSidecar(tempDir, noteRelativePath);
     assert.ok(sidecar);

@@ -10,7 +10,7 @@ import {
 
 test("parseSideNoteReferenceUrl extracts the vault, file, and comment id", () => {
     assert.deepEqual(
-        parseSideNoteReferenceUrl("obsidian://side-note2-comment?vault=Dev%20Vault&file=docs%2Falpha.md&commentId=comment-1"),
+        parseSideNoteReferenceUrl("obsidian://aside-comment?vault=Dev%20Vault&file=docs%2Falpha.md&commentId=comment-1"),
         {
             vaultName: "Dev Vault",
             filePath: "docs/alpha.md",
@@ -20,10 +20,21 @@ test("parseSideNoteReferenceUrl extracts the vault, file, and comment id", () =>
     assert.equal(parseSideNoteReferenceUrl("obsidian://open?vault=Dev&file=docs%2Falpha.md"), null);
 });
 
+test("parseSideNoteReferenceUrl accepts legacy SideNote2 comment links", () => {
+    assert.deepEqual(
+        parseSideNoteReferenceUrl("obsidian://side-note2-comment?vault=Dev%20Vault&file=docs%2Falpha.md&commentId=comment-1"),
+        {
+            vaultName: "Dev Vault",
+            filePath: "docs/alpha.md",
+            commentId: "comment-1",
+        },
+    );
+});
+
 test("extractSideNoteReferences keeps only local-vault markdown links when requested", () => {
     const markdown = [
-        "[Local](obsidian://side-note2-comment?vault=Dev%20Vault&file=docs%2Falpha.md&commentId=comment-1)",
-        "[Remote](obsidian://side-note2-comment?vault=Other%20Vault&file=docs%2Fbeta.md&commentId=comment-2)",
+        "[Local](obsidian://aside-comment?vault=Dev%20Vault&file=docs%2Falpha.md&commentId=comment-1)",
+        "[Remote](obsidian://aside-comment?vault=Other%20Vault&file=docs%2Fbeta.md&commentId=comment-2)",
     ].join(" ");
 
     const references = extractSideNoteReferences(markdown, {
@@ -43,19 +54,19 @@ test("extractSideNoteReferences keeps only local-vault markdown links when reque
 });
 
 test("replaceRawSideNoteReferenceUrls normalizes pasted side note urls", () => {
-    const value = "See obsidian://side-note2-comment?vault=Dev&file=docs%2Falpha.md&commentId=comment-1 next.";
+    const value = "See obsidian://aside-comment?vault=Dev&file=docs%2Falpha.md&commentId=comment-1 next.";
     const normalized = replaceRawSideNoteReferenceUrls(value, (match) =>
         buildSideNoteReferenceMarkdown(match.url, "Alpha insight"),
     );
 
     assert.equal(
         normalized,
-        "See [Alpha insight](obsidian://side-note2-comment?vault=Dev&file=docs%2Falpha.md&commentId=comment-1) next.",
+        "See [Alpha insight](obsidian://aside-comment?vault=Dev&file=docs%2Falpha.md&commentId=comment-1) next.",
     );
 });
 
 test("replaceRawSideNoteReferenceUrls leaves existing markdown links unchanged", () => {
-    const value = "See [Alpha insight](obsidian://side-note2-comment?vault=Dev&file=docs%2Falpha.md&commentId=comment-1) next.";
+    const value = "See [Alpha insight](obsidian://aside-comment?vault=Dev&file=docs%2Falpha.md&commentId=comment-1) next.";
     const normalized = replaceRawSideNoteReferenceUrls(value, (match) =>
         buildSideNoteReferenceMarkdown(match.url, "Replaced"),
     );
@@ -69,16 +80,16 @@ test("replaceRawSideNoteReferenceUrls leaves existing markdown links unchanged",
 test("buildSideNoteReferenceMarkdown normalizes labels into markdown-link-safe text", () => {
     assert.equal(
         buildSideNoteReferenceMarkdown(
-            "obsidian://side-note2-comment?vault=Dev&file=docs%2Falpha.md&commentId=comment-1",
+            "obsidian://aside-comment?vault=Dev&file=docs%2Falpha.md&commentId=comment-1",
             "  Alpha [draft]\nplan  ",
         ),
-        "[Alpha (draft) plan](obsidian://side-note2-comment?vault=Dev&file=docs%2Falpha.md&commentId=comment-1)",
+        "[Alpha (draft) plan](obsidian://aside-comment?vault=Dev&file=docs%2Falpha.md&commentId=comment-1)",
     );
 });
 
 test("extractSideNoteReferences finds raw side note urls as references", () => {
     const references = extractSideNoteReferences(
-        "See obsidian://side-note2-comment?vault=Dev&file=docs%2Falpha.md&commentId=comment-1 next.",
+        "See obsidian://aside-comment?vault=Dev&file=docs%2Falpha.md&commentId=comment-1 next.",
         {
             localOnly: true,
             localVaultName: "Dev",
@@ -87,7 +98,7 @@ test("extractSideNoteReferences finds raw side note urls as references", () => {
 
     assert.equal(references.length, 1);
     assert.equal(references[0]?.target.commentId, "comment-1");
-    assert.equal(references[0]?.url, "obsidian://side-note2-comment?vault=Dev&file=docs%2Falpha.md&commentId=comment-1");
+    assert.equal(references[0]?.url, "obsidian://aside-comment?vault=Dev&file=docs%2Falpha.md&commentId=comment-1");
 });
 
 test("splitTrailingSideNoteReferenceSection strips the generated trailing Mentioned appendix", () => {
@@ -95,8 +106,8 @@ test("splitTrailingSideNoteReferenceSection strips the generated trailing Mentio
         "Body copy",
         "",
         "Mentioned:",
-        "- [Alpha](obsidian://side-note2-comment?vault=Dev&file=docs%2Falpha.md&commentId=comment-1)",
-        "- obsidian://side-note2-comment?vault=Dev&file=docs%2Fbeta.md&commentId=comment-2",
+        "- [Alpha](obsidian://aside-comment?vault=Dev&file=docs%2Falpha.md&commentId=comment-1)",
+        "- obsidian://aside-comment?vault=Dev&file=docs%2Fbeta.md&commentId=comment-2",
         "",
     ].join("\n");
 
@@ -114,7 +125,7 @@ test("splitTrailingSideNoteReferenceSection keeps the body intact when content f
         "Body copy",
         "",
         "Mentioned:",
-        "- [Alpha](obsidian://side-note2-comment?vault=Dev&file=docs%2Falpha.md&commentId=comment-1)",
+        "- [Alpha](obsidian://aside-comment?vault=Dev&file=docs%2Falpha.md&commentId=comment-1)",
         "",
         "Follow-up paragraph",
     ].join("\n");
@@ -130,7 +141,7 @@ test("splitTrailingSideNoteReferenceSection does not strip mixed-content bullets
         "Body copy",
         "",
         "Mentioned:",
-        "- see [Alpha](obsidian://side-note2-comment?vault=Dev&file=docs%2Falpha.md&commentId=comment-1)",
+        "- see [Alpha](obsidian://aside-comment?vault=Dev&file=docs%2Falpha.md&commentId=comment-1)",
     ].join("\n");
 
     const section = splitTrailingSideNoteReferenceSection(markdown);
@@ -144,7 +155,7 @@ test("splitTrailingSideNoteReferenceSection can ignore foreign-vault references 
         "Body copy",
         "",
         "Mentioned:",
-        "- [Remote](obsidian://side-note2-comment?vault=Other%20Vault&file=docs%2Falpha.md&commentId=comment-1)",
+        "- [Remote](obsidian://aside-comment?vault=Other%20Vault&file=docs%2Falpha.md&commentId=comment-1)",
     ].join("\n");
 
     const section = splitTrailingSideNoteReferenceSection(markdown, {

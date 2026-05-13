@@ -1,6 +1,6 @@
 export type AgentRuntimeModePreference = "auto" | "local" | "remote";
 
-export interface SideNote2LocalSecrets {
+export interface AsideLocalSecrets {
     remoteRuntimeBearerToken?: string;
 }
 

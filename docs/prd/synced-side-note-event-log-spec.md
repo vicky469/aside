@@ -3,7 +3,7 @@
 ## Status
 
 - Active first-pass implementation.
-- Goal: sync SideNote2 comments across desktop and mobile without adding visible vault folders or rewriting source note prose for every sidebar operation.
+- Goal: sync Aside comments across desktop and mobile without adding visible vault folders or rewriting source note prose for every sidebar operation.
 
 ## Product Decision
 
@@ -56,14 +56,14 @@ interface SideNoteSyncNoteSnapshot {
 Stored under:
 
 ```text
-.obsidian/plugins/side-note2/data.json
+.obsidian/plugins/aside/data.json
   sideNoteSyncEventState
 ```
 
 Local cache:
 
 ```text
-.obsidian/plugins/side-note2/sidenotes/by-note/<shard>/<noteHash>.json
+.obsidian/plugins/aside/sidenotes/by-note/<shard>/<noteHash>.json
 ```
 
 The local cache path is not a user-facing vault folder and is not required as the sync source of truth.
@@ -72,7 +72,7 @@ The local cache path is not a user-facing vault folder and is not required as th
 
 - Do not create visible sync folders in V1.
 - Do not store side-note sync events inside source markdown notes.
-- Do not require a hidden `<!-- SideNote2 comments -->` block for the current design.
+- Do not require a hidden `<!-- Aside comments -->` block for the current design.
 - Keep event payloads compact; `data.json` must not become an unbounded database.
 - Use one device log per device to reduce JSON merge conflicts.
 - Store processed watermarks per processing device.

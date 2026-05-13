@@ -7,9 +7,9 @@ For `bridge.vickyli.xyz` to reach this DGX, update DNS so that hostname points h
 
 The local bridge env is configured for reverse proxy mode:
 
-- `SIDENOTE2_DGX_BIND_HOST=127.0.0.1`
-- `SIDENOTE2_DGX_PORT=4215`
-- `SIDENOTE2_DGX_PUBLIC_BASE_URL=https://bridge.vickyli.xyz`
+- `ASIDE_DGX_BIND_HOST=127.0.0.1`
+- `ASIDE_DGX_PORT=4215`
+- `ASIDE_DGX_PUBLIC_BASE_URL=https://bridge.vickyli.xyz`
 
 That keeps the Node bridge private on localhost and lets Caddy own HTTPS.
 
@@ -18,7 +18,7 @@ That keeps the Node bridge private on localhost and lets Caddy own HTTPS.
 1. Point `bridge.vickyli.xyz` DNS at this host's reachable public IP.
 2. Install Caddy on the DGX host.
 3. Place `ops/caddy/bridge.vickyli.xyz.Caddyfile` into the active Caddy config.
-4. Place `ops/systemd/sidenote2-dgx-bridge.service` into `/etc/systemd/system/`.
+4. Place `ops/systemd/aside-dgx-bridge.service` into `/etc/systemd/system/`.
 5. Start and enable both services.
 6. Make sure inbound TCP `80` and `443` are allowed.
 
@@ -33,9 +33,9 @@ sudo apt-get update
 sudo apt-get install -y caddy
 
 sudo cp ops/caddy/bridge.vickyli.xyz.Caddyfile /etc/caddy/Caddyfile
-sudo cp ops/systemd/sidenote2-dgx-bridge.service /etc/systemd/system/sidenote2-dgx-bridge.service
+sudo cp ops/systemd/aside-dgx-bridge.service /etc/systemd/system/aside-dgx-bridge.service
 sudo systemctl daemon-reload
-sudo systemctl enable --now sidenote2-dgx-bridge.service
+sudo systemctl enable --now aside-dgx-bridge.service
 sudo systemctl reload caddy
 ```
 

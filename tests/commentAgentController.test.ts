@@ -869,18 +869,18 @@ test("comment agent controller keeps failed runs retryable through the same outp
 
 test("comment agent controller uses the resolved working directory for runtime execution", async () => {
     const harness = createHarness({
-        runtimeWorkingDirectory: "/vault/SideNote2",
+        runtimeWorkingDirectory: "/vault/Aside",
     });
 
     await harness.controller.handleSavedUserEntry({
         threadId: "thread-1",
         entryId: "thread-1",
-        filePath: "SideNote2/Note.md",
+        filePath: "Aside/Note.md",
         body: "@codex inspect this repo",
     });
     await waitForAgentQueueToDrain(harness.controller);
 
-    assert.equal(harness.runtimeCalls[0]?.cwd, "/vault/SideNote2");
+    assert.equal(harness.runtimeCalls[0]?.cwd, "/vault/Aside");
 });
 
 test("comment agent controller packs note path, section context, and transcript into the runtime prompt", async () => {

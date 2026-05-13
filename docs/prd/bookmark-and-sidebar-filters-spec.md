@@ -203,7 +203,7 @@ type SidebarContentFilter = "all" | "bookmarks" | "agents";
 
 Recommended first implementation:
 
-- keep it in `SideNote2View`
+- keep it in `AsideView`
 - do not persist it in `CustomViewState` yet
 
 Reason:
@@ -336,7 +336,7 @@ Owns:
 - writing bookmark kind only when non-default
 - compatibility behavior for old threads without `kind`
 
-### `src/ui/views/SideNote2View.ts`
+### `src/ui/views/AsideView.ts`
 
 Owns:
 

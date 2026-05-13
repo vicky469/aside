@@ -42,7 +42,7 @@ test("buildRootedThoughtTrailScope keeps note thought trails rooted on the curre
         [currentThread, connectedThread, unrelatedThread],
         {
             rootFilePath: "docs/current.md",
-            allCommentsNotePath: "SideNote2 index.md",
+            allCommentsNotePath: "Aside index.md",
             resolveWikiLinkPath: (linkPath) => {
                 if (linkPath === "connected") {
                     return "docs/connected.md";
@@ -73,7 +73,7 @@ test("buildRootedThoughtTrailScope returns no scope when the current file is abs
         [unrelatedThread],
         {
             rootFilePath: "docs/current.md",
-            allCommentsNotePath: "SideNote2 index.md",
+            allCommentsNotePath: "Aside index.md",
             resolveWikiLinkPath: () => null,
         },
     );

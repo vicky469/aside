@@ -10,7 +10,7 @@ Implementation spec:
 
 ## Summary
 
-SideNote2 should evolve from:
+Aside should evolve from:
 
 - one anchor or page note = one comment body
 
@@ -65,7 +65,7 @@ That creates product and UX limits:
 
 ## Product Goal
 
-Make SideNote2 threads feel like:
+Make Aside threads feel like:
 
 - one discussion per anchor or page note
 - many short entries over time
@@ -105,7 +105,7 @@ Not in phase 1:
    User reopens a previous note and adds another entry instead of editing history away.
 
 4. Index review
-   In `SideNote2 index.md`, each row still corresponds to a thread anchor, but the sidebar card shows thread context and multiple entries.
+   In `Aside index.md`, each row still corresponds to a thread anchor, but the sidebar card shows thread context and multiple entries.
 
 ## Product Principles
 
@@ -185,7 +185,7 @@ Phase 1:
 
 ### Index behavior
 
-`SideNote2 index.md` and index sidebar still organize by thread anchor:
+`Aside index.md` and index sidebar still organize by thread anchor:
 
 - page note thread = one page-note thread
 - anchored thread = one anchored thread
@@ -387,7 +387,7 @@ Phase 1 requirement:
 
 ### Generated note
 
-`SideNote2 index.md` should continue to be thread-oriented:
+`Aside index.md` should continue to be thread-oriented:
 
 - one row block per thread
 - thread row still highlights correctly
@@ -512,7 +512,7 @@ They will need thread-level reinterpretation.
 4. Sidebar renders one card per thread, not one card per entry.
 5. Resolving hides a whole thread.
 6. Reopening restores the whole thread.
-7. `SideNote2 index.md` remains usable and thread-oriented.
+7. `Aside index.md` remains usable and thread-oriented.
 8. Index/sidebar pairing still works at thread level.
 9. Every saved side comment body is at or under 500 words.
 10. The composer exposes word-count feedback before save.

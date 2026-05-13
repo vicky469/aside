@@ -38,8 +38,8 @@ test("buildDraftCommentPresentation includes draft state classes and add/save la
     }), null);
 
     assert.deepEqual(createPresentation.classes, [
-        "sidenote2-comment-item",
-        "sidenote2-comment-draft",
+        "aside-comment-item",
+        "aside-comment-draft",
         "is-new",
         "page-note",
         "resolved",
@@ -48,8 +48,8 @@ test("buildDraftCommentPresentation includes draft state classes and add/save la
     assert.equal(createPresentation.saveLabel, "Add");
 
     assert.deepEqual(editPresentation.classes, [
-        "sidenote2-comment-item",
-        "sidenote2-comment-draft",
+        "aside-comment-item",
+        "aside-comment-draft",
         "is-edit",
         "orphaned",
     ]);
@@ -62,8 +62,8 @@ test("buildDraftCommentPresentation keeps append drafts distinct from new drafts
     }), null);
 
     assert.deepEqual(appendPresentation.classes, [
-        "sidenote2-comment-item",
-        "sidenote2-comment-draft",
+        "aside-comment-item",
+        "aside-comment-draft",
         "is-append",
     ]);
     assert.equal(appendPresentation.saveLabel, "Add");

@@ -79,8 +79,8 @@ function createHarness() {
     let openIndexNoteCount = 0;
 
     const controller = new PluginRegistrationController({
-        manifestId: "side-note2",
-        iconId: "side-note2-icon",
+        manifestId: "aside",
+        iconId: "aside-icon",
         registerView: (viewType, creator) => {
             registerViewCalls.push({ viewType, creator });
         },
@@ -142,10 +142,11 @@ test("plugin registration controller registers the view, protocol handler, comma
 
     harness.controller.register();
 
-    assert.deepEqual(harness.registerViewCalls.map((call) => call.viewType), ["sidenote2-view"]);
+    assert.deepEqual(harness.registerViewCalls.map((call) => call.viewType), ["aside-view"]);
     assert.equal(harness.registerViewCalls[0].creator({ id: "leaf-1" }) instanceof Object, true);
     assert.deepEqual(harness.createdSidebarLeaves, [{ id: "leaf-1" }]);
-    assert.deepEqual(harness.removedCommandIds, ["side-note2:activate-view"]);
+    assert.deepEqual(Array.from(harness.protocolHandlers.keys()).sort(), ["aside-comment", "side-note2-comment"]);
+    assert.deepEqual(harness.removedCommandIds, ["aside:activate-view"]);
     assert.deepEqual(harness.commands.map((command) => command.id), ["add-comment-to-selection"]);
     assert.deepEqual(harness.ribbonActions.map((action) => action.title), ["Open index"]);
 
@@ -158,8 +159,8 @@ test("plugin registration controller registers the view, protocol handler, comma
         filePath: editorFile.path,
     }]);
 
-    harness.protocolHandlers.get("side-note2-comment")?.({});
-    harness.protocolHandlers.get("side-note2-comment")?.({
+    harness.protocolHandlers.get("aside-comment")?.({});
+    harness.protocolHandlers.get("aside-comment")?.({
         file: "docs/file.md",
         commentId: "comment-1",
     });
@@ -169,6 +170,16 @@ test("plugin registration controller registers the view, protocol handler, comma
         filePath: "docs/file.md",
         commentId: "comment-1",
     }]);
+
+    harness.protocolHandlers.get("side-note2-comment")?.({
+        file: "docs/legacy.md",
+        commentId: "comment-legacy",
+    });
+    await Promise.resolve();
+    assert.deepEqual(harness.openedCommentTargets.at(-1), {
+        filePath: "docs/legacy.md",
+        commentId: "comment-legacy",
+    });
 
     harness.ribbonActions[0].callback();
     await Promise.resolve();
@@ -205,7 +216,7 @@ test("plugin registration controller only adds the editor menu item for active s
         icon: item.icon,
     })), [{
         title: "Add comment to selection",
-        icon: "side-note2-icon",
+        icon: "aside-icon",
     }]);
 
     await selectedMenuHarness.items[0].onClick?.();

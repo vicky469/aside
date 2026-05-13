@@ -78,7 +78,7 @@ export default class SideNoteOpenFileSuggestModal extends SuggestModal<SideNoteO
 
     renderSuggestion(suggestion: SideNoteOpenFileSuggestion, el: HTMLElement): void {
         const titleEl = el.createDiv();
-        const noteEl = el.createDiv({ cls: "sidenote2-link-suggest-note" });
+        const noteEl = el.createDiv({ cls: "aside-link-suggest-note" });
 
         titleEl.setText(suggestion.fileName);
         noteEl.setText(formatSuggestionNote(suggestion, this.detailLabel));

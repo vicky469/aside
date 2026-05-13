@@ -10,12 +10,12 @@ import { getPageCommentLabel } from "../src/core/anchors/commentAnchors";
 test("commentable file helpers distinguish markdown and index files", () => {
     assert.equal(isMarkdownCommentablePath("notes/tmp.md"), true);
     assert.equal(isMarkdownCommentablePath(ALL_COMMENTS_NOTE_PATH), false);
-    assert.equal(isMarkdownCommentablePath("SideNote2 custom.md", "SideNote2 custom.md"), false);
+    assert.equal(isMarkdownCommentablePath("Aside custom.md", "Aside custom.md"), false);
 
     assert.equal(isSidebarSupportedPath("notes/tmp.md"), true);
     assert.equal(isSidebarSupportedPath("docs/paper.pdf"), false);
     assert.equal(isSidebarSupportedPath(ALL_COMMENTS_NOTE_PATH), true);
-    assert.equal(isSidebarSupportedPath("SideNote2 custom.md", "SideNote2 custom.md"), true);
+    assert.equal(isSidebarSupportedPath("Aside custom.md", "Aside custom.md"), true);
     assert.equal(isSidebarSupportedPath("docs/report.docx"), false);
 });
 

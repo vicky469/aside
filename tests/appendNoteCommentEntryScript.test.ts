@@ -18,7 +18,7 @@ function hashText(text: string): string {
 function getSidecarPath(vaultRoot: string, noteRelativePath: string): string {
     const hash = hashText(noteRelativePath);
     const shard = hash.slice(0, 2);
-    return path.join(vaultRoot, ".obsidian", "plugins", "side-note2", "sidenotes", "by-note", shard, `${hash}.json`);
+    return path.join(vaultRoot, ".obsidian", "plugins", "aside", "sidenotes", "by-note", shard, `${hash}.json`);
 }
 
 async function readSidecar(vaultRoot: string, noteRelativePath: string): Promise<{ version: number; notePath: string; threads: Array<{ id: string; entries: Array<{ id: string; body: string; timestamp: number }> }> } | null> {
@@ -36,7 +36,7 @@ async function readSidecar(vaultRoot: string, noteRelativePath: string): Promise
 }
 
 async function createVaultDir(tempDir: string): Promise<void> {
-    await mkdir(path.join(tempDir, ".obsidian", "plugins", "side-note2"), { recursive: true });
+    await mkdir(path.join(tempDir, ".obsidian", "plugins", "aside"), { recursive: true });
 }
 
 async function writeObsidianVaultConfig(homeDir: string, vaultRoot: string): Promise<void> {
@@ -52,7 +52,7 @@ async function writeObsidianVaultConfig(homeDir: string, vaultRoot: string): Pro
 }
 
 function buildCommentLocationUri(vaultName: string, filePath: string, commentId: string): string {
-    return `obsidian://side-note2-comment?vault=${encodeURIComponent(vaultName)}&file=${encodeURIComponent(filePath)}&commentId=${encodeURIComponent(commentId)}`;
+    return `obsidian://aside-comment?vault=${encodeURIComponent(vaultName)}&file=${encodeURIComponent(filePath)}&commentId=${encodeURIComponent(commentId)}`;
 }
 
 function createComment(overrides: Partial<Comment> = {}): Comment {
@@ -79,7 +79,7 @@ function buildLegacyNote(overrides: Partial<Comment> = {}): string {
         "",
         "Body text.",
         "",
-        "<!-- SideNote2 comments",
+        "<!-- Aside comments",
         "[",
         "  {",
         `    "id": ${JSON.stringify(comment.id)},`,
@@ -99,7 +99,7 @@ function buildLegacyNote(overrides: Partial<Comment> = {}): string {
 }
 
 test("append-note-comment-entry script appends a new entry to the targeted thread", async () => {
-    const tempDir = await mkdtemp(path.join(tmpdir(), "sidenote2-comment-append-script-"));
+    const tempDir = await mkdtemp(path.join(tmpdir(), "aside-comment-append-script-"));
     const notePath = path.join(tempDir, "note.md");
     const commentPath = path.join(tempDir, "reply.md");
     const scriptPath = path.resolve(process.cwd(), "scripts/append-note-comment-entry.mjs");
@@ -135,7 +135,7 @@ test("append-note-comment-entry script appends a new entry to the targeted threa
 });
 
 test("append-note-comment-entry script can target a thread by obsidian side-note URI", async () => {
-    const tempDir = await mkdtemp(path.join(tmpdir(), "sidenote2-comment-uri-append-script-"));
+    const tempDir = await mkdtemp(path.join(tmpdir(), "aside-comment-uri-append-script-"));
     const homeDir = path.join(tempDir, "home");
     const vaultRoot = path.join(tempDir, "Public Vault");
     const notePath = path.join(vaultRoot, "Folder", "Note.md");
@@ -175,7 +175,7 @@ test("append-note-comment-entry script can target a thread by obsidian side-note
 });
 
 test("append-note-comment-entry script rejects unsupported legacy flat payloads", async () => {
-    const tempDir = await mkdtemp(path.join(tmpdir(), "sidenote2-comment-append-legacy-"));
+    const tempDir = await mkdtemp(path.join(tmpdir(), "aside-comment-append-legacy-"));
     const notePath = path.join(tempDir, "note.md");
     const scriptPath = path.resolve(process.cwd(), "scripts/append-note-comment-entry.mjs");
 

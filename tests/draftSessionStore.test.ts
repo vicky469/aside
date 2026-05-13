@@ -25,11 +25,11 @@ test("draft session store tracks draft state by source file and host view", () =
     const store = new DraftSessionStore();
     const draft = createDraft();
 
-    store.setDraftComment(draft, "SideNote2 index.md");
+    store.setDraftComment(draft, "Aside index.md");
 
     assert.deepEqual(store.getDraftComment(), draft);
     assert.deepEqual(store.getDraftForFile(draft.filePath), draft);
-    assert.deepEqual(store.getDraftForView("SideNote2 index.md"), draft);
+    assert.deepEqual(store.getDraftForView("Aside index.md"), draft);
     assert.equal(store.getDraftForView(draft.filePath), null);
 });
 
@@ -59,11 +59,11 @@ test("draft session store tracks saving state and can clear a matching draft", (
 test("draft session store can move the draft host path without changing the draft file", () => {
     const store = new DraftSessionStore();
     const draft = createDraft({ filePath: "Folder/Note.md" });
-    store.setDraftComment(draft, "SideNote2 comments.md");
+    store.setDraftComment(draft, "Aside comments.md");
 
-    store.setDraftHostFilePath("SideNote2 index.md");
+    store.setDraftHostFilePath("Aside index.md");
 
     assert.equal(store.getDraftComment()?.filePath, "Folder/Note.md");
-    assert.deepEqual(store.getDraftForView("SideNote2 index.md"), draft);
-    assert.equal(store.getDraftForView("SideNote2 comments.md"), null);
+    assert.deepEqual(store.getDraftForView("Aside index.md"), draft);
+    assert.equal(store.getDraftForView("Aside comments.md"), null);
 });

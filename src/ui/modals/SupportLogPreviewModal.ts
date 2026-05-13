@@ -10,7 +10,7 @@ interface SupportLogPreviewModalOptions {
 
 export default class SupportLogPreviewModal extends Modal {
     private canLocateLogFile = false;
-    private readonly modalClassName = "sidenote2-support-log-modal";
+    private readonly modalClassName = "aside-support-log-modal";
 
     constructor(app: App, private readonly options: SupportLogPreviewModalOptions) {
         super(app);
@@ -23,17 +23,17 @@ export default class SupportLogPreviewModal extends Modal {
         this.setTitle(this.options.fileName);
 
         contentEl.empty();
-        contentEl.addClass("sidenote2-support-log-preview-modal");
+        contentEl.addClass("aside-support-log-preview-modal");
         contentEl.createEl("p", {
-            cls: "sidenote2-support-preview-note",
+            cls: "aside-support-preview-note",
             text: `Preview shows the attached raw log snapshot. The report includes the last ${this.options.attachedWindowMinutes ?? 30} minutes of local logs.`,
         });
 
         if (this.canLocateLogFile && this.options.locateLogFile) {
-            const actions = contentEl.createDiv("sidenote2-support-log-preview-actions");
+            const actions = contentEl.createDiv("aside-support-log-preview-actions");
             const openFileButton = actions.createEl("button", {
                 text: "Locate log",
-                cls: "sidenote2-modal-cancel-btn",
+                cls: "aside-modal-cancel-btn",
             });
             openFileButton.setAttribute("type", "button");
             openFileButton.onclick = () => {
@@ -44,13 +44,13 @@ export default class SupportLogPreviewModal extends Modal {
         const rawPreview = truncateLogPreview(this.options.logContent);
         if (rawPreview.truncated) {
             contentEl.createEl("p", {
-                cls: "sidenote2-support-preview-note",
+                cls: "aside-support-preview-note",
                 text: "Preview truncated for readability.",
             });
         }
 
         const rawPreviewEl = contentEl.createEl("textarea", {
-            cls: "sidenote2-support-log-preview sidenote2-support-log-preview-raw",
+            cls: "aside-support-log-preview aside-support-log-preview-raw",
             attr: {
                 readonly: "true",
                 spellcheck: "false",

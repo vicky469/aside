@@ -27,9 +27,9 @@ import {
     getRemoteRuntimeOptionStatusPresentation,
     type RuntimeOptionStatusPresentation,
 } from "./codexRuntimeStatus";
-import type SideNote2 from "../../main";
+import type Aside from "../../main";
 
-export interface SideNote2Settings {
+export interface AsideSettings {
     indexNotePath: string;
     indexHeaderImageUrl: string;
     indexHeaderImageCaption: string;
@@ -37,7 +37,7 @@ export interface SideNote2Settings {
     remoteRuntimeBaseUrl: string;
 }
 
-export const DEFAULT_SETTINGS: SideNote2Settings = {
+export const DEFAULT_SETTINGS: AsideSettings = {
     indexNotePath: normalizeAllCommentsNotePath(""),
     indexHeaderImageUrl: normalizeAllCommentsNoteImageUrl(""),
     indexHeaderImageCaption: normalizeAllCommentsNoteImageCaption(null),
@@ -45,11 +45,11 @@ export const DEFAULT_SETTINGS: SideNote2Settings = {
     remoteRuntimeBaseUrl: normalizeRemoteRuntimeBaseUrl(""),
 };
 
-export default class SideNote2Setting extends PluginSettingTab {
-    plugin: SideNote2;
+export default class AsideSetting extends PluginSettingTab {
+    plugin: Aside;
     private codexStatusRefreshToken = 0;
 
-    constructor(app: App, plugin: SideNote2) {
+    constructor(app: App, plugin: Aside) {
         super(app, plugin);
         this.plugin = plugin;
     }

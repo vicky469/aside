@@ -3,6 +3,6 @@
 import {
     runAppendNoteCommentEntry,
     runScriptMain,
-} from "./lib/sideNote2RepoScripts.mjs";
+} from "./lib/asideRepoScripts.mjs";
 
 await runScriptMain(runAppendNoteCommentEntry);

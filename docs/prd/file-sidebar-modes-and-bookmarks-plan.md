@@ -13,7 +13,7 @@ This plan covers two related product questions:
 
 1. Should individual file sidebars get top tabs like the index sidebar:
    `List`, `Thought Trail`, and `Agent`?
-2. Should SideNote2 support a bookmark-style capture for selected text, rendered more like a saved highlight or idea marker than a full written side note?
+2. Should Aside support a bookmark-style capture for selected text, rendered more like a saved highlight or idea marker than a full written side note?
 
 The goal is to improve discovery and review without making ordinary file sidebars feel heavy, slow, or over-designed.
 
@@ -21,10 +21,10 @@ The goal is to improve discovery and review without making ordinary file sidebar
 
 Current rendering already separates index sidebars from normal file sidebars:
 
-- normal file sidebars load the current file and render the file-local thread list in [src/ui/views/SideNote2View.ts](../../src/ui/views/SideNote2View.ts:340)
-- file-local rendering goes through `renderPageSidebar(...)` in [src/ui/views/SideNote2View.ts](../../src/ui/views/SideNote2View.ts:672)
-- index-only tabs are rendered in `renderIndexModeControl(...)` in [src/ui/views/SideNote2View.ts](../../src/ui/views/SideNote2View.ts:1310)
-- the current Thought Trail view is index-scoped and built from cross-file comment links in [src/ui/views/SideNote2View.ts](../../src/ui/views/SideNote2View.ts:1814) and [src/core/derived/thoughtTrail.ts](../../src/core/derived/thoughtTrail.ts:303)
+- normal file sidebars load the current file and render the file-local thread list in [src/ui/views/AsideView.ts](../../src/ui/views/AsideView.ts:340)
+- file-local rendering goes through `renderPageSidebar(...)` in [src/ui/views/AsideView.ts](../../src/ui/views/AsideView.ts:672)
+- index-only tabs are rendered in `renderIndexModeControl(...)` in [src/ui/views/AsideView.ts](../../src/ui/views/AsideView.ts:1310)
+- the current Thought Trail view is index-scoped and built from cross-file comment links in [src/ui/views/AsideView.ts](../../src/ui/views/AsideView.ts:1814) and [src/core/derived/thoughtTrail.ts](../../src/core/derived/thoughtTrail.ts:303)
 - the current Agent sidebar planner filters threads that have agent runs in [src/ui/views/agentSidebarPlanner.ts](../../src/ui/views/agentSidebarPlanner.ts:15)
 
 Current draft saving also assumes a saved side note has non-empty text:
@@ -191,7 +191,7 @@ That is close to a bookmark, highlight, or idea marker.
 
 ## Current Constraint
 
-Today SideNote2 treats saved content as a normal side note thread with text content. Empty bodies are rejected at save time in [src/comments/commentMutationController.ts](../../src/comments/commentMutationController.ts:81).
+Today Aside treats saved content as a normal side note thread with text content. Empty bodies are rejected at save time in [src/comments/commentMutationController.ts](../../src/comments/commentMutationController.ts:81).
 
 That means a pure icon-only bookmark does not fit cleanly right now.
 
@@ -340,7 +340,7 @@ So even if the product idea is "💡 bookmarks," the toolbar control should rend
 
 ## Recommended Bookmark UX
 
-Bookmarks should still behave like SideNote2 threads:
+Bookmarks should still behave like Aside threads:
 
 - anchored to a text selection or page
 - stored in the same note-backed comment block

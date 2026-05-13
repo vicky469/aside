@@ -35,7 +35,7 @@ function createThread(overrides: Partial<CommentThread> = {}): CommentThread {
 test("hasAvailableThoughtTrail is false without a root scope", () => {
     assert.equal(
         hasAvailableThoughtTrail({
-            allCommentsNotePath: "SideNote2 index.md",
+            allCommentsNotePath: "Aside index.md",
             comments: [createThread()],
             hasRootScope: false,
             resolveWikiLinkPath: () => "docs/connected.md",
@@ -48,7 +48,7 @@ test("hasAvailableThoughtTrail is false without a root scope", () => {
 test("hasAvailableThoughtTrail is false when the scoped comments produce no trail lines", () => {
     assert.equal(
         hasAvailableThoughtTrail({
-            allCommentsNotePath: "SideNote2 index.md",
+            allCommentsNotePath: "Aside index.md",
             comments: [
                 createThread({
                     entries: [
@@ -71,7 +71,7 @@ test("hasAvailableThoughtTrail is false when the scoped comments produce no trai
 test("hasAvailableThoughtTrail is true when scoped comments produce trail lines", () => {
     assert.equal(
         hasAvailableThoughtTrail({
-            allCommentsNotePath: "SideNote2 index.md",
+            allCommentsNotePath: "Aside index.md",
             comments: [createThread()],
             hasRootScope: true,
             resolveWikiLinkPath: () => "docs/connected.md",
@@ -125,7 +125,7 @@ test("mergeCurrentFileThreadsForThoughtTrail uses current file threads without w
     assert.deepEqual(merged.map((thread) => thread.id), ["other-thread", "current-thread"]);
     assert.equal(
         hasAvailableThoughtTrail({
-            allCommentsNotePath: "SideNote2 index.md",
+            allCommentsNotePath: "Aside index.md",
             comments: merged,
             hasRootScope: true,
             resolveWikiLinkPath: (linkPath) => linkPath === "connected" ? "docs/connected.md" : null,

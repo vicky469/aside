@@ -29,7 +29,7 @@ test("defer managed comment persistence while the markdown editor is focused", (
         shouldDeferManagedCommentPersist({
             isEditorFocused: true,
             fileContent: "Body\n",
-            rewrittenContent: "Body\n\n<!-- SideNote2 comments\n[]\n-->\n",
+            rewrittenContent: "Body\n\n<!-- Aside comments\n[]\n-->\n",
         }),
         true,
     );
@@ -40,7 +40,7 @@ test("allow managed comment persistence immediately when the editor is not focus
         shouldDeferManagedCommentPersist({
             isEditorFocused: false,
             fileContent: "Body\n",
-            rewrittenContent: "Body\n\n<!-- SideNote2 comments\n[]\n-->\n",
+            rewrittenContent: "Body\n\n<!-- Aside comments\n[]\n-->\n",
         }),
         false,
     );

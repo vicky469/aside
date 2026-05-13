@@ -3,8 +3,8 @@ export interface SidebarSearchHighlightRange {
     end: number;
 }
 
-const SIDEBAR_SEARCH_HIGHLIGHT_NAME_PREFIX = "sidenote2-search-match-";
-const SIDEBAR_SEARCH_HIGHLIGHT_STYLE_ID_PREFIX = "sidenote2-search-highlight-style-";
+const SIDEBAR_SEARCH_HIGHLIGHT_NAME_PREFIX = "aside-search-match-";
+const SIDEBAR_SEARCH_HIGHLIGHT_STYLE_ID_PREFIX = "aside-search-highlight-style-";
 
 let nextSidebarSearchHighlightId = 1;
 const sidebarSearchHighlightNameByContainer = new WeakMap<HTMLElement, string>();
@@ -225,7 +225,7 @@ function highlightSidebarSearchMatchesWithMarks(
             }
 
             const matchEl = ownerDocument.createElement("mark");
-            matchEl.className = "sidenote2-search-match";
+            matchEl.className = "aside-search-match";
             matchEl.textContent = textContent.slice(range.start, range.end);
             fragment.append(matchEl);
             cursor = range.end;
@@ -276,7 +276,7 @@ export function clearSidebarSearchHighlights(container: HTMLElement): void {
         registry.delete(getSidebarSearchHighlightName(container));
     }
 
-    const marks = Array.from(container.querySelectorAll("mark.sidenote2-search-match"));
+    const marks = Array.from(container.querySelectorAll("mark.aside-search-match"));
     if (marks.length === 0) {
         return;
     }

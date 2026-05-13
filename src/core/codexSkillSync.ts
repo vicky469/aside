@@ -59,6 +59,7 @@ export async function syncInstalledCodexSkill(options: {
     modules: CodexSkillSyncModules;
     env?: ExecEnv;
     skillName: string;
+    legacySkillNames?: string[];
     skillContent: string;
     pluginVersion: string;
     previouslySyncedPluginVersion?: string | null;
@@ -67,16 +68,26 @@ export async function syncInstalledCodexSkill(options: {
     const skillsRoot = getCodexSkillsRoot(options.modules, env);
     const skillDirPath = options.modules.path.join(skillsRoot, options.skillName);
     const skillFilePath = options.modules.path.join(skillDirPath, "SKILL.md");
+    const isSkillInstalled = await pathExists(options.modules, skillDirPath);
+    let shouldCreateFromLegacy = false;
 
-    if (!(await pathExists(options.modules, skillDirPath))) {
-        return {
-            kind: "not-installed",
-            skillDirPath,
-            skillFilePath,
-        };
+    if (!isSkillInstalled) {
+        const hasLegacySkill = await Promise.all(
+            (options.legacySkillNames ?? []).map((legacySkillName) =>
+                pathExists(options.modules, options.modules.path.join(skillsRoot, legacySkillName))
+            ),
+        );
+        if (!hasLegacySkill.some(Boolean)) {
+            return {
+                kind: "not-installed",
+                skillDirPath,
+                skillFilePath,
+            };
+        }
+        shouldCreateFromLegacy = true;
     }
 
-    if (options.previouslySyncedPluginVersion === options.pluginVersion) {
+    if (!shouldCreateFromLegacy && options.previouslySyncedPluginVersion === options.pluginVersion) {
         return {
             kind: "already-synced",
             skillDirPath,

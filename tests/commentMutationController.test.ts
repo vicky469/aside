@@ -115,7 +115,7 @@ function createHost(options: {
     const knownCommentsById = new Map((options.knownComments ?? options.loadedComments ?? []).map((comment) => [comment.id, comment]));
 
     const host: CommentMutationHost = {
-        getAllCommentsNotePath: () => "SideNote2 index.md",
+        getAllCommentsNotePath: () => "Aside index.md",
         getSidebarTargetFilePath: () => options.sidebarTargetFilePath ?? null,
         getDraftComment: () => draftComment,
         getSavingDraftCommentId: () => savingDraftCommentId,
@@ -235,7 +235,7 @@ test("comment mutation controller starts an edit draft from an already loaded lo
     const host = createHost({
         knownComments: [comment],
         loadedComments: [comment],
-        sidebarTargetFilePath: "SideNote2 index.md",
+        sidebarTargetFilePath: "Aside index.md",
     });
 
     const started = await host.controller.startEditDraft(comment.id);
@@ -246,7 +246,7 @@ test("comment mutation controller starts an edit draft from an already loaded lo
     assert.equal(host.setDraftCalls.length, 1);
     assert.equal(host.setDraftCalls[0].skipCommentViewRefresh, true);
     assert.equal(host.setDraftCalls[0].refreshEditorDecorations, false);
-    assert.equal(host.getDraftHostFilePath(), "SideNote2 index.md");
+    assert.equal(host.getDraftHostFilePath(), "Aside index.md");
     assert.deepEqual(host.getDraftComment(), {
         ...comment,
         entryCount: 1,
@@ -923,7 +923,7 @@ test("comment mutation controller preserves visible whitespace around a hidden b
             [draft.filePath]: [
                 "We can start prototyping stuff right now. But I want to find out reason for having both ZohoBooks and QuickBooks before digging deeper.",
                 "",
-                "<!-- SideNote2 comments",
+                "<!-- Aside comments",
                 "[]",
                 "-->",
                 "Trailing text",
@@ -1417,7 +1417,7 @@ test("comment mutation controller re-anchors an orphaned thread to the current s
         knownComments: [comment],
         loadedComments: [comment],
         currentNoteContentByPath: {
-            [comment.filePath]: "# Title\nBefore\n<!-- SideNote2 comments\n[]\n-->\nAfter\n",
+            [comment.filePath]: "# Title\nBefore\n<!-- Aside comments\n[]\n-->\nAfter\n",
         },
         currentSelectionByPath: {
             [comment.filePath]: {
@@ -1457,16 +1457,16 @@ test("comment mutation controller rejects re-anchoring inside the managed commen
         knownComments: [comment],
         loadedComments: [comment],
         currentNoteContentByPath: {
-            [comment.filePath]: "# Title\nBefore\n<!-- SideNote2 comments\n[]\n-->\nAfter\n",
+            [comment.filePath]: "# Title\nBefore\n<!-- Aside comments\n[]\n-->\nAfter\n",
         },
         currentSelectionByPath: {
             [comment.filePath]: {
                 file: createFile(comment.filePath),
-                selectedText: "<!-- SideNote2 comments",
+                selectedText: "<!-- Aside comments",
                 startLine: 2,
                 startChar: 0,
                 endLine: 2,
-                endChar: 23,
+                endChar: 19,
             },
         },
     });
@@ -1477,6 +1477,6 @@ test("comment mutation controller rejects re-anchoring inside the managed commen
     assert.deepEqual(host.persistedFiles, []);
     assert.equal(host.manager.getCommentById(comment.id)?.orphaned, true);
     assert.deepEqual(host.notices, [
-        "Select text outside the SideNote2 comments block to re-anchor this side note.",
+        "Select text outside the Aside comments block to re-anchor this side note.",
     ]);
 });

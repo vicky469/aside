@@ -46,7 +46,7 @@ test("parseRemoteRuntimeResponseEnvelope normalizes streamed and terminal payloa
     });
 });
 
-test("startRemoteRuntimeRun posts the SideNote2 prompt contract with bearer auth", async () => {
+test("startRemoteRuntimeRun posts the Aside prompt contract with bearer auth", async () => {
     let lastRequest: {
         method?: string;
         url: string;
@@ -90,7 +90,7 @@ test("startRemoteRuntimeRun posts the SideNote2 prompt contract with bearer auth
         body: undefined,
     };
     assert.equal(capturedRequest.method, "POST");
-    assert.equal(capturedRequest.url, "https://remote.example.com/api/v1/sidenote2/runs");
+    assert.equal(capturedRequest.url, "https://remote.example.com/api/v1/aside/runs");
     assert.deepEqual(capturedRequest.headers, {
         Authorization: "Bearer secret-token",
     });
@@ -132,7 +132,7 @@ test("pollRemoteRuntimeRun appends cursor and wait params when provided", async 
         waitMs: 1500,
     });
 
-    assert.equal(lastRequestUrl, "https://remote.example.com/v1/sidenote2/runs/remote-run-1?after=evt-9&waitMs=1500");
+    assert.equal(lastRequestUrl, "https://remote.example.com/v1/aside/runs/remote-run-1?after=evt-9&waitMs=1500");
 });
 
 test("cancelRemoteRuntimeRun calls the cancel endpoint", async () => {
@@ -155,7 +155,7 @@ test("cancelRemoteRuntimeRun calls the cancel endpoint", async () => {
         runId: "remote-run-1",
     });
 
-    assert.equal(lastRequestUrl, "https://remote.example.com/v1/sidenote2/runs/remote-run-1/cancel");
+    assert.equal(lastRequestUrl, "https://remote.example.com/v1/aside/runs/remote-run-1/cancel");
 });
 
 test("probeRemoteRuntimeBridge calls healthz and normalizes the response", async () => {

@@ -11,7 +11,7 @@ const repoRoot = path.resolve(__dirname, "..");
 const shippedArtifacts = ["main.js", "manifest.json", "styles.css"];
 
 function printUsage() {
-    console.error("Usage: node scripts/install-built-plugin.mjs --vault \"/path/to/vault\" [--plugin-id side-note2]");
+    console.error("Usage: node scripts/install-built-plugin.mjs --vault \"/path/to/vault\" [--plugin-id aside]");
 }
 
 function parseArgs(argv) {

@@ -17,7 +17,7 @@ interface SupportLogInspectorModalOptions {
 
 export default class SupportLogInspectorModal extends Modal {
     private readonly filterWindowOptions = [5, 10, 20, 30] as const;
-    private readonly modalClassName = "sidenote2-support-log-modal";
+    private readonly modalClassName = "aside-support-log-modal";
     private selectedWindowMinutes: number = 5;
     private selectedKind: "all" | SupportLogKind = "all";
     private customLogContent: string | null = null;
@@ -60,10 +60,10 @@ export default class SupportLogInspectorModal extends Modal {
         const { contentEl } = this;
         this.modalEl.addClass(this.modalClassName);
         contentEl.empty();
-        contentEl.addClass("sidenote2-support-log-preview-modal");
+        contentEl.addClass("aside-support-log-preview-modal");
         this.renderInspectorInput(contentEl);
         this.renderActions(contentEl);
-        this.resultsEl = contentEl.createDiv("sidenote2-support-log-results");
+        this.resultsEl = contentEl.createDiv("aside-support-log-results");
         this.buildResultsChrome(this.resultsEl);
         this.renderResults();
     }
@@ -149,8 +149,8 @@ export default class SupportLogInspectorModal extends Modal {
     }
 
     private renderInspectorInput(contentEl: HTMLElement): void {
-        const devPanelEl = contentEl.createDiv("sidenote2-support-log-dev-panel");
-        const devPanelHeaderEl = devPanelEl.createDiv("sidenote2-support-log-dev-panel-header");
+        const devPanelEl = contentEl.createDiv("aside-support-log-dev-panel");
+        const devPanelHeaderEl = devPanelEl.createDiv("aside-support-log-dev-panel-header");
         devPanelHeaderEl.createEl("strong", {
             text: "Inspector input",
         });
@@ -158,9 +158,9 @@ export default class SupportLogInspectorModal extends Modal {
             text: "Paste or drop log data to inspect it locally.",
         });
 
-        const dropzoneEl = devPanelEl.createDiv("sidenote2-support-log-dev-dropzone");
+        const dropzoneEl = devPanelEl.createDiv("aside-support-log-dev-dropzone");
         const inputEl = dropzoneEl.createEl("textarea", {
-            cls: "sidenote2-support-log-dev-input",
+            cls: "aside-support-log-dev-input",
             attr: {
                 placeholder: "Paste or drop log data here.",
                 spellcheck: "false",
@@ -196,13 +196,13 @@ export default class SupportLogInspectorModal extends Modal {
             return;
         }
 
-        const actions = contentEl.createDiv("sidenote2-support-log-preview-actions");
+        const actions = contentEl.createDiv("aside-support-log-preview-actions");
         this.actionsEl = actions;
 
         if (this.canLocateLogFile && this.options.locateLogFile) {
             const locateButton = actions.createEl("button", {
                 text: "Locate log",
-                cls: "sidenote2-modal-cancel-btn",
+                cls: "aside-modal-cancel-btn",
             });
             locateButton.setAttribute("type", "button");
             locateButton.onclick = () => {
@@ -213,7 +213,7 @@ export default class SupportLogInspectorModal extends Modal {
         if (this.canOpenDataFolder && this.options.openDataFolder) {
             const openFolderButton = actions.createEl("button", {
                 text: "Open data folder",
-                cls: "sidenote2-modal-cancel-btn",
+                cls: "aside-modal-cancel-btn",
             });
             openFolderButton.setAttribute("type", "button");
             openFolderButton.onclick = () => {
@@ -223,35 +223,35 @@ export default class SupportLogInspectorModal extends Modal {
     }
 
     private buildResultsChrome(resultsEl: HTMLElement): void {
-        const summaryCard = resultsEl.createDiv("sidenote2-support-log-summary");
+        const summaryCard = resultsEl.createDiv("aside-support-log-summary");
         this.summaryCardEl = summaryCard;
-        const summaryMeta = summaryCard.createDiv("sidenote2-support-log-summary-meta");
+        const summaryMeta = summaryCard.createDiv("aside-support-log-summary-meta");
         this.summaryHeadingEl = summaryMeta.createEl("strong");
         this.summaryRangeEl = summaryMeta.createEl("span");
 
-        const badges = summaryCard.createDiv("sidenote2-support-log-summary-badges");
-        this.infoBadgeEl = badges.createDiv("sidenote2-support-log-summary-badge is-info");
-        this.warnBadgeEl = badges.createDiv("sidenote2-support-log-summary-badge is-warn");
-        this.errorBadgeEl = badges.createDiv("sidenote2-support-log-summary-badge is-error");
-        this.userBadgeEl = badges.createDiv("sidenote2-support-log-summary-badge is-user");
-        this.systemBadgeEl = badges.createDiv("sidenote2-support-log-summary-badge is-system");
+        const badges = summaryCard.createDiv("aside-support-log-summary-badges");
+        this.infoBadgeEl = badges.createDiv("aside-support-log-summary-badge is-info");
+        this.warnBadgeEl = badges.createDiv("aside-support-log-summary-badge is-warn");
+        this.errorBadgeEl = badges.createDiv("aside-support-log-summary-badge is-error");
+        this.userBadgeEl = badges.createDiv("aside-support-log-summary-badge is-user");
+        this.systemBadgeEl = badges.createDiv("aside-support-log-summary-badge is-system");
 
         this.invalidLinesNoteEl = resultsEl.createEl("p", {
-            cls: "sidenote2-support-preview-note",
+            cls: "aside-support-preview-note",
         });
 
-        const controlsEl = resultsEl.createDiv("sidenote2-support-log-controls");
+        const controlsEl = resultsEl.createDiv("aside-support-log-controls");
         this.controlsEl = controlsEl;
 
-        const windowFilterBar = controlsEl.createDiv("sidenote2-support-log-filter-bar");
+        const windowFilterBar = controlsEl.createDiv("aside-support-log-filter-bar");
         windowFilterBar.createEl("span", {
-            cls: "sidenote2-support-log-filter-label",
+            cls: "aside-support-log-filter-label",
             text: "Window",
         });
         for (const windowMinutes of this.filterWindowOptions) {
             const filterButton = windowFilterBar.createEl("button", {
                 text: `${windowMinutes} min`,
-                cls: "sidenote2-support-log-filter-button",
+                cls: "aside-support-log-filter-button",
             });
             filterButton.setAttribute("type", "button");
             filterButton.onclick = () => {
@@ -264,9 +264,9 @@ export default class SupportLogInspectorModal extends Modal {
             this.windowFilterButtons.set(windowMinutes, filterButton);
         }
 
-        const kindFilterBar = controlsEl.createDiv("sidenote2-support-log-filter-bar");
+        const kindFilterBar = controlsEl.createDiv("aside-support-log-filter-bar");
         kindFilterBar.createEl("span", {
-            cls: "sidenote2-support-log-filter-label",
+            cls: "aside-support-log-filter-label",
             text: "Behavior",
         });
         const kindOptions: Array<{ value: "all" | SupportLogKind; label: string }> = [
@@ -277,7 +277,7 @@ export default class SupportLogInspectorModal extends Modal {
         for (const kindOption of kindOptions) {
             const filterButton = kindFilterBar.createEl("button", {
                 text: kindOption.label,
-                cls: "sidenote2-support-log-filter-button",
+                cls: "aside-support-log-filter-button",
             });
             filterButton.setAttribute("type", "button");
             filterButton.onclick = () => {
@@ -291,11 +291,11 @@ export default class SupportLogInspectorModal extends Modal {
         }
 
         this.rawFallbackNoteEl = resultsEl.createEl("p", {
-            cls: "sidenote2-support-preview-note",
+            cls: "aside-support-preview-note",
             text: "Showing raw text because this content could not be parsed into event rows.",
         });
         this.rawPreviewEl = resultsEl.createEl("textarea", {
-            cls: "sidenote2-support-log-preview sidenote2-support-log-preview-raw",
+            cls: "aside-support-log-preview aside-support-log-preview-raw",
             attr: {
                 readonly: "true",
                 spellcheck: "false",
@@ -303,11 +303,11 @@ export default class SupportLogInspectorModal extends Modal {
             },
         });
 
-        this.emptyStateEl = resultsEl.createDiv("sidenote2-support-empty-log-state");
+        this.emptyStateEl = resultsEl.createDiv("aside-support-empty-log-state");
 
-        this.tableWrapEl = resultsEl.createDiv("sidenote2-support-log-table-wrap");
+        this.tableWrapEl = resultsEl.createDiv("aside-support-log-table-wrap");
         const previewTableEl = this.tableWrapEl.createEl("table", {
-            cls: "sidenote2-support-log-table",
+            cls: "aside-support-log-table",
         });
         const tableHeadEl = previewTableEl.createTHead();
         const headerRowEl = tableHeadEl.insertRow();
@@ -408,22 +408,22 @@ export default class SupportLogInspectorModal extends Modal {
                 spanEl.textContent = text;
             };
 
-            appendCell("sidenote2-support-log-row-time", row.displayTime);
-            appendCell(`sidenote2-support-log-row-level is-${row.level}`, row.level.toUpperCase());
-            appendCell(`sidenote2-support-log-row-kind is-${row.kind}`, row.kind === "user" ? "USER" : "SYSTEM");
-            appendCell("sidenote2-support-log-row-area", row.area);
-            appendCell("sidenote2-support-log-row-event", row.event);
+            appendCell("aside-support-log-row-time", row.displayTime);
+            appendCell(`aside-support-log-row-level is-${row.level}`, row.level.toUpperCase());
+            appendCell(`aside-support-log-row-kind is-${row.kind}`, row.kind === "user" ? "USER" : "SYSTEM");
+            appendCell("aside-support-log-row-area", row.area);
+            appendCell("aside-support-log-row-event", row.event);
 
             const detailsCellEl = rowEl.appendChild(document.createElement("td"));
-            detailsCellEl.className = "sidenote2-support-log-row-details";
+            detailsCellEl.className = "aside-support-log-row-details";
             if (row.payloadTokens.length === 0) {
                 const emptyEl = detailsCellEl.appendChild(document.createElement("span"));
-                emptyEl.className = "sidenote2-support-log-row-token is-empty";
+                emptyEl.className = "aside-support-log-row-token is-empty";
                 emptyEl.textContent = "—";
             } else {
                 for (const token of row.payloadTokens) {
                     const tokenEl = detailsCellEl.appendChild(document.createElement("span"));
-                    tokenEl.className = "sidenote2-support-log-row-token";
+                    tokenEl.className = "aside-support-log-row-token";
                     tokenEl.textContent = token;
                 }
             }

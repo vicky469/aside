@@ -40,22 +40,22 @@ export function renderStyledDraftCommentFragment(document: Document, value: stri
     while (cursor < value.length) {
         const boldStart = value.indexOf("**", cursor);
         if (boldStart === -1) {
-            appendMentionNodes(document, fragment, value.slice(cursor), "sidenote2-editor-token-mention");
+            appendMentionNodes(document, fragment, value.slice(cursor), "aside-editor-token-mention");
             break;
         }
 
         const boldEnd = value.indexOf("**", boldStart + 2);
         if (boldEnd === -1) {
-            appendMentionNodes(document, fragment, value.slice(cursor), "sidenote2-editor-token-mention");
+            appendMentionNodes(document, fragment, value.slice(cursor), "aside-editor-token-mention");
             break;
         }
 
-        appendMentionNodes(document, fragment, value.slice(cursor, boldStart), "sidenote2-editor-token-mention");
+        appendMentionNodes(document, fragment, value.slice(cursor, boldStart), "aside-editor-token-mention");
         fragment.append(document.createTextNode(value.slice(boldStart, boldStart + 2)));
 
         const boldEl = document.createElement("span");
-        boldEl.className = "sidenote2-editor-token-bold";
-        appendMentionNodes(document, boldEl, value.slice(boldStart + 2, boldEnd), "sidenote2-editor-token-mention");
+        boldEl.className = "aside-editor-token-bold";
+        appendMentionNodes(document, boldEl, value.slice(boldStart + 2, boldEnd), "aside-editor-token-mention");
         fragment.appendChild(boldEl);
 
         fragment.append(document.createTextNode(value.slice(boldEnd, boldEnd + 2)));
@@ -83,7 +83,7 @@ function renderMentionHtml(value: string): string {
         const [fullMatch, prefix, mention] = match;
         html += escapeHtml(value.slice(lastIndex, match.index));
         html += escapeHtml(prefix);
-        html += `<span class="sidenote2-editor-token-mention">${escapeHtml(mention)}</span>`;
+        html += `<span class="aside-editor-token-mention">${escapeHtml(mention)}</span>`;
         lastIndex = match.index + fullMatch.length;
     }
 
@@ -114,7 +114,7 @@ export function renderStyledDraftCommentHtml(value: string): string {
 
         html += renderMentionHtml(value.slice(cursor, boldStart));
         html += escapeHtml(value.slice(boldStart, boldStart + 2));
-        html += `<span class="sidenote2-editor-token-bold">${renderMentionHtml(value.slice(boldStart + 2, boldEnd))}</span>`;
+        html += `<span class="aside-editor-token-bold">${renderMentionHtml(value.slice(boldStart + 2, boldEnd))}</span>`;
         html += escapeHtml(value.slice(boldEnd, boldEnd + 2));
         cursor = boldEnd + 2;
     }
@@ -144,7 +144,7 @@ function createMentionFragment(
         }
 
         const mentionEl = document.createElement("span");
-        mentionEl.className = "sidenote2-comment-mention";
+        mentionEl.className = "aside-comment-mention";
         mentionEl.textContent = mention;
         fragment.append(mentionEl);
 
@@ -176,7 +176,7 @@ export function decorateRenderedCommentMentions(container: HTMLElement): void {
                 }
 
                 const parent = node.parentElement;
-                if (!parent || parent.closest("a, code, pre, .sidenote2-comment-mention")) {
+                if (!parent || parent.closest("a, code, pre, .aside-comment-mention")) {
                     return NodeFilter.FILTER_REJECT;
                 }
 

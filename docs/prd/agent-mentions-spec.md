@@ -9,7 +9,7 @@ Draft implementation spec based on:
 
 ## Objective
 
-Implement the current shipped phase of agent delegation for explicit `@codex` mentions inside SideNote2-managed threads, while keeping the internal target model extensible for additional agents later.
+Implement the current shipped phase of agent delegation for explicit `@codex` mentions inside Aside-managed threads, while keeping the internal target model extensible for additional agents later.
 
 This spec turns the plan plus the answered sidebar questions into concrete implementation requirements for:
 
@@ -27,9 +27,9 @@ This spec turns the plan plus the answered sidebar questions into concrete imple
 This spec adopts a simplified shipped product model:
 
 - built-in `@codex` is the primary user-facing agent workflow
-- the end user should not need to know about the `sidenote2` skill for built-in `@codex`
-- the end user should not need to install the `sidenote2` CLI for built-in `@codex`
-- SideNote2-specific protocol rules are encapsulated inside the plugin for the built-in flow
+- the end user should not need to know about the `aside` skill for built-in `@codex`
+- the end user should not need to install the `aside` CLI for built-in `@codex`
+- Aside-specific protocol rules are encapsulated inside the plugin for the built-in flow
 - external share-link handoff remains available only as an advanced interoperability path
 
 The intended everyday experience is:
@@ -50,8 +50,8 @@ These decisions are closed for phase 1:
 - agent execution is owned by the desktop plugin/runtime, not by mobile clients
 - the current shipped build supports `@codex` only
 - built-in `@codex` is the primary user-facing workflow
-- built-in `@codex` must not require SideNote2-specific skill installation or SideNote2 CLI installation
-- SideNote2-specific agent protocol rules for built-in `@codex` live inside the plugin
+- built-in `@codex` must not require Aside-specific skill installation or Aside CLI installation
+- Aside-specific agent protocol rules for built-in `@codex` live inside the plugin
 - external share-link handoff remains supported as an advanced path, not as the main onboarding path
 - unsupported explicit targets such as `@claude` must not dispatch and should surface a concise notice instead
 - the runtime working directory is the nearest git repo containing the note, with fallback to the note folder and then the vault root
@@ -91,16 +91,16 @@ Out of scope:
 - incremental note writes for partial streamed output
 - source-note agent tabs outside the index sidebar
 - direct note writes by the external runtime
-- an OpenClaw-style mobile node, relay, or off-device execution layer for SideNote2 phase 1
-- requiring the user to install the `sidenote2` skill for built-in `@codex`
-- requiring the user to install the `sidenote2` CLI for built-in `@codex`
+- an OpenClaw-style mobile node, relay, or off-device execution layer for Aside phase 1
+- requiring the user to install the `aside` skill for built-in `@codex`
+- requiring the user to install the `aside` CLI for built-in `@codex`
 - presenting external share-link handoff as the primary agent onboarding path
 
 ## Product Rules
 
 ### Rule 0: Built-In `@codex` Is The Default Product Story
 
-All primary product copy, onboarding, and UI should treat built-in `@codex` as the normal way to use agent replies in SideNote2.
+All primary product copy, onboarding, and UI should treat built-in `@codex` as the normal way to use agent replies in Aside.
 
 The main user story is:
 
@@ -122,7 +122,7 @@ The existing `preferredAgentTarget` setting must not override explicit mention t
 
 ### Rule 2: Auto-Dispatch Happens Only After Canonical Save
 
-SideNote2 persists the user entry first.
+Aside persists the user entry first.
 Only after the note write succeeds may agent dispatch begin.
 
 ### Rule 3: Only New User Saves Auto-Dispatch
@@ -146,7 +146,7 @@ One saved entry may create:
 - zero runs if no valid directive exists
 - one run if exactly one valid target exists
 
-If one saved entry contains conflicting explicit targets, SideNote2 must not auto-dispatch.
+If one saved entry contains conflicting explicit targets, Aside must not auto-dispatch.
 
 ### Rule 6: Runtime Working Directory Follows The Note's Local Repo Context
 
@@ -165,7 +165,7 @@ Run status, timestamps, errors, and output linkage live in plugin data only.
 
 ### Rule 7a: Streaming Is Transient Until Completion
 
-If the runtime exposes partial text, SideNote2 may render that text live in the sidebar while the run is `running`.
+If the runtime exposes partial text, Aside may render that text live in the sidebar while the run is `running`.
 
 That live text must:
 
@@ -173,7 +173,7 @@ That live text must:
 - never become the canonical thread source of truth during generation
 - be replaced by one final persisted child entry only after the run succeeds
 
-If the run fails or is cancelled, SideNote2 must not persist the partial text as a normal thread entry in phase 1.
+If the run fails or is cancelled, Aside must not persist the partial text as a normal thread entry in phase 1.
 
 ### Rule 8: The `Agent` Tab Reuses List Controls
 
@@ -183,9 +183,9 @@ The index sidebar `Agent` tab must reuse the same controls as `List`:
 - resolved visibility
 - nested-comment visibility
 
-### Rule 9: Built-In `@codex` Encapsulates SideNote2 Knowledge
+### Rule 9: Built-In `@codex` Encapsulates Aside Knowledge
 
-For built-in `@codex`, the plugin is responsible for telling Codex how SideNote2 works.
+For built-in `@codex`, the plugin is responsible for telling Codex how Aside works.
 
 That includes:
 
@@ -193,13 +193,13 @@ That includes:
 - thread and entry semantics
 - reply formatting constraints
 - process-narration suppression
-- write-back ownership by SideNote2
+- write-back ownership by Aside
 
-The end user must not need to install a separate SideNote2 skill just to make built-in `@codex` work.
+The end user must not need to install a separate Aside skill just to make built-in `@codex` work.
 
 ### Rule 10: Diagnostics Are Read-Only
 
-If SideNote2 exposes Codex runtime checks in settings, they are diagnostics only.
+If Aside exposes Codex runtime checks in settings, they are diagnostics only.
 
 They must not turn the built-in flow into a setup wizard.
 
@@ -264,7 +264,7 @@ Phase 1 follows the same broad control-plane idea OpenClaw uses for mobile:
 - one host-side runtime owns real agent execution
 - thinner clients are surfaces around that runtime, not independent runtimes
 
-In SideNote2 terms, the Obsidian desktop plugin process is the execution owner.
+In Aside terms, the Obsidian desktop plugin process is the execution owner.
 It is responsible for:
 
 - parsing explicit directives after canonical save
@@ -272,7 +272,7 @@ It is responsible for:
 - invoking the external agent runtime
 - appending the agent reply back into the canonical note
 
-Phase 1 does not introduce a separate SideNote2 mobile runtime, background relay, or node layer.
+Phase 1 does not introduce a separate Aside mobile runtime, background relay, or node layer.
 
 ## Working Directory
 
@@ -286,7 +286,7 @@ This keeps agent work scoped to the repo the note is actually about instead of f
 
 ## Unsupported Environments
 
-If no filesystem-backed working directory can be resolved, SideNote2 must:
+If no filesystem-backed working directory can be resolved, Aside must:
 
 - keep the saved user entry
 - create a failed run record
@@ -312,15 +312,15 @@ The adapter should launch through a login-shell environment so PATH and exported
 
 For the shipped built-in path:
 
-- SideNote2 owns the SideNote2-specific protocol instructions internally
-- the user does not install `sidenote2` CLI or `sidenote2` skill to make built-in `@codex` work
+- Aside owns the Aside-specific protocol instructions internally
+- the user does not install `aside` CLI or `aside` skill to make built-in `@codex` work
 - the only runtime prerequisite is a working local Codex installation and sign-in
 
 The existing `preferredAgentTarget` setting remains non-authoritative for explicit mentions and should not be positioned as required setup for built-in `@codex`.
 
 ## Built-In Runtime Diagnostics
 
-SideNote2 may expose a small read-only Codex health check in settings or another non-blocking diagnostics surface.
+Aside may expose a small read-only Codex health check in settings or another non-blocking diagnostics surface.
 
 Purpose:
 
@@ -339,7 +339,7 @@ It is only a quick health indicator.
 
 ## Runtime Streaming
 
-When supported by the local runtime, the adapter should stream partial assistant text into SideNote2 during execution.
+When supported by the local runtime, the adapter should stream partial assistant text into Aside during execution.
 
 Recommended phase-1 runtime behavior:
 
@@ -369,20 +369,20 @@ Streaming UI rules:
 
 ## Shared Protocol Direction
 
-SideNote2 should maintain one canonical internal protocol for agent behavior.
+Aside should maintain one canonical internal protocol for agent behavior.
 
 That protocol should define:
 
-- what a SideNote2 thread is
+- what a Aside thread is
 - what a thread entry is
 - that the markdown note is canonical
-- that `SideNote2 index.md` is derived only
+- that `Aside index.md` is derived only
 - how built-in agent replies should be phrased and constrained
-- that SideNote2, not the runtime, owns the final note write
+- that Aside, not the runtime, owns the final note write
 
 The built-in `@codex` runtime path should consume this protocol directly from plugin code.
 
-The external `skills/sidenote2/SKILL.md` may continue to exist, but it should be treated as a public packaging of the same protocol for advanced external handoff cases, not as a required dependency for normal built-in use.
+The external `skills/aside/SKILL.md` may continue to exist, but it should be treated as a public packaging of the same protocol for advanced external handoff cases, not as a required dependency for normal built-in use.
 
 ## Data Model
 
@@ -523,7 +523,7 @@ Recommended requirement:
 - add a programmatic append helper in `CommentMutationController`
 - that helper appends one child entry and persists through the existing note-write path
 
-`CommentAgentController` should use that helper so note writes continue to be owned by SideNote2.
+`CommentAgentController` should use that helper so note writes continue to be owned by Aside.
 
 ## Sidebar Spec
 
@@ -545,7 +545,7 @@ Persist `agent` in `CustomViewState` the same way current index modes are persis
 
 Add `Agent` as the third top-level tab in:
 
-- `src/ui/views/SideNote2View.ts`
+- `src/ui/views/AsideView.ts`
 
 Tab order:
 
@@ -663,7 +663,7 @@ Owns:
 - never auto-dispatching after `edit`
 - exposing a programmatic append helper for agent replies
 
-### `src/ui/views/SideNote2View.ts`
+### `src/ui/views/AsideView.ts`
 
 Owns:
 
@@ -719,7 +719,7 @@ Add or extend tests for:
 
 - directive parsing and email avoidance
 - conflicting-target detection
-- built-in `@codex` flow not depending on SideNote2 skill-install state
+- built-in `@codex` flow not depending on Aside skill-install state
 - run-store normalization
 - post-persist trigger behavior in `CommentMutationController`
 - edit-save no-dispatch behavior
@@ -735,5 +735,5 @@ Add or extend tests for:
 
 - The current `preferredAgentTarget` setting already exists in code. This spec does not require it to drive explicit mention dispatch.
 - If a diagnostics surface is added, it should be a small read-only status row. It is not a required wizard and not a new agent configuration flow.
-- This desktop-owned execution model is intentional. Unlike OpenClaw, SideNote2 phase 1 does not add a second mobile/client transport layer around the runtime.
+- This desktop-owned execution model is intentional. Unlike OpenClaw, Aside phase 1 does not add a second mobile/client transport layer around the runtime.
 - The current plan `Open Questions` section can remain as historical context, but implementation should follow the closed decisions in this spec.

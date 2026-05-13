@@ -2,7 +2,7 @@
 
 ## Goal
 
-When the sidebar is showing `SideNote2 index.md`:
+When the sidebar is showing `Aside index.md`:
 
 - clicking a sidebar list card should highlight the matching row in `index.md`
 - the sidebar card and the index row should stay paired
@@ -44,7 +44,7 @@ This is already the correct reference behavior.
 
 Sidebar card click while sidebar is showing `index.md`:
 
-- `SideNote2View.renderPersistedComment(...)`
+- `AsideView.renderPersistedComment(...)`
 - `activateComment: (persistedComment) => this.interactionController.openCommentInEditor(persistedComment)`
 
 This is temporary. It uses source-note redirect instead of reverse index pairing.
@@ -78,7 +78,7 @@ Let:
 If `revealed.filePath = INDEX_PATH`, then at most one sidebar card is active for `revealed.commentId`.
 
 `INV2`
-If `revealed.filePath = INDEX_PATH` and `revealed.commentId` is currently rendered in preview, exactly one rendered row has `sidenote2-index-active-row`.
+If `revealed.filePath = INDEX_PATH` and `revealed.commentId` is currently rendered in preview, exactly one rendered row has `aside-index-active-row`.
 
 `INV3`
 Clicking the sidebar card body in index mode must not navigate to the source note.
@@ -134,7 +134,7 @@ Responsibility:
 
 ### Blue Line: sidebar ownership
 
-Owned by `sidebarInteractionController` and `SideNote2View`.
+Owned by `sidebarInteractionController` and `AsideView`.
 
 Responsibility:
 
@@ -164,7 +164,7 @@ This is the safest architecture because the system already trusts this path.
 
 ### Product behavior
 
-When sidebar current file is `SideNote2 index.md`:
+When sidebar current file is `Aside index.md`:
 
 - card body click:
   - activate matching sidebar card
@@ -179,7 +179,7 @@ When sidebar current file is `SideNote2 index.md`:
 ### Implementation shape
 
 1. Keep `main.activateIndexComment(commentId, indexFilePath)` as the single pairing entrypoint.
-2. In `SideNote2View.renderPersistedComment(...)`, when `isIndexView === true`, route `activateComment` to `plugin.activateIndexComment(comment.id, currentFilePath)`.
+2. In `AsideView.renderPersistedComment(...)`, when `isIndexView === true`, route `activateComment` to `plugin.activateIndexComment(comment.id, currentFilePath)`.
 3. Keep `openCommentInEditor(...)` only on the redirect icon.
 4. Reuse `commentHighlightController.syncIndexPreviewSelection(...)`.
 5. Reuse `commentNavigationController.syncSidebarSelection(...)`.
@@ -224,7 +224,7 @@ But this is optimization, not the first fix.
 Can be computed once during preview render:
 
 - normalize clickable index refs
-- parse comment targets from `data-sidenote2-comment-url`
+- parse comment targets from `data-aside-comment-url`
 - optionally register `commentId -> rowEl`
 
 ### What to do on click
@@ -281,7 +281,7 @@ This is a strict behavior split.
 
 ### Manual acceptance
 
-1. Open `SideNote2 index.md`.
+1. Open `Aside index.md`.
 2. Click an index ref:
    - row highlights
    - matching sidebar card highlights

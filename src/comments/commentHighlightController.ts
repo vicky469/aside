@@ -14,6 +14,7 @@ import {
     parseIndexFileOpenUrl,
     INDEX_FILE_FILTER_PROTOCOL,
 } from "../core/derived/allCommentsNote";
+import { isIndexFileFilterPathSelected } from "../ui/views/indexFileFilter";
 import { buildEditorHighlightRanges } from "../core/derived/editorHighlightRanges";
 import { matchesResolvedCommentVisibility } from "../core/rules/resolvedCommentVisibility";
 import { chooseCommentStateForOpenEditor } from "../core/rules/commentSyncPolicy";
@@ -118,6 +119,7 @@ export interface CommentHighlightHost {
     shouldShowResolvedComments(): boolean;
     getDraftForFile(filePath: string): DraftComment | null;
     getRevealedCommentId(filePath: string): string | null;
+    getIndexFileScopeRootPath(indexFilePath: string): string | null;
     activateViewAndHighlightComment(commentId: string): Promise<void>;
     activateIndexComment(commentId: string, indexFilePath: string, sourceFilePath?: string): Promise<void>;
     activateIndexFileScope(indexFilePath: string, sourceFilePath: string): Promise<void>;
@@ -133,8 +135,8 @@ interface PreviewManagedSectionStartLineCacheEntry {
 export class CommentHighlightController {
     constructor(private readonly host: CommentHighlightHost) {}
 
-    private readonly indexPreviewLinkSelector = "a.sidenote2-index-comment-link[data-sidenote2-comment-url]";
-    private readonly indexPreviewFileHeadingSelector = ".sidenote2-index-heading-label[title], a[data-sidenote2-file-path], a[href^=\"obsidian://open\"], a[href^=\"obsidian://side-note2-index-file\"]";
+    private readonly indexPreviewLinkSelector = "a.aside-index-comment-link[data-aside-comment-url]";
+    private readonly indexPreviewFileHeadingSelector = ".aside-index-heading-label[title], a[data-aside-file-path], a[href^=\"obsidian://open\"], a[href^=\"obsidian://aside-index-file\"]";
     private readonly previewManagedSectionStartLineCache =
         new Map<string, PreviewManagedSectionStartLineCacheEntry>();
 
@@ -279,7 +281,7 @@ export class CommentHighlightController {
                 return;
             }
 
-            const target = parseCommentLocationUrl(link.dataset.sidenote2CommentUrl ?? "");
+            const target = parseCommentLocationUrl(link.dataset.asideCommentUrl ?? "");
             if (!target || target.commentId !== commentId) {
                 return;
             }
@@ -305,7 +307,7 @@ export class CommentHighlightController {
                 return;
             }
 
-            const target = parseCommentLocationUrl(link.dataset.sidenote2CommentUrl ?? "");
+            const target = parseCommentLocationUrl(link.dataset.asideCommentUrl ?? "");
             if (!target) {
                 return;
             }
@@ -482,7 +484,7 @@ export class CommentHighlightController {
     }
 
     private getIndexPreviewFilePathFromElement(element: HTMLElement): string | null {
-        const dataPath = element.dataset.sidenote2FilePath?.trim();
+        const dataPath = element.dataset.asideFilePath?.trim();
         if (dataPath) {
             return dataPath;
         }
@@ -505,16 +507,16 @@ export class CommentHighlightController {
                 return;
             }
 
-            const nextUrl = link.dataset.sidenote2CommentUrl?.trim()
+            const nextUrl = link.dataset.asideCommentUrl?.trim()
                 || link.getAttribute("href")?.trim()
                 || "";
             if (!nextUrl.startsWith(`obsidian://${COMMENT_LOCATION_PROTOCOL}`)) {
                 return;
             }
 
-            link.dataset.sidenote2CommentUrl = nextUrl;
+            link.dataset.asideCommentUrl = nextUrl;
             link.classList.remove("external-link");
-            link.classList.add("sidenote2-index-comment-link");
+            link.classList.add("aside-index-comment-link");
             link.removeAttribute("href");
             link.removeAttribute("target");
             link.removeAttribute("rel");
@@ -523,21 +525,21 @@ export class CommentHighlightController {
             link.removeAttribute("tabindex");
         });
 
-        element.querySelectorAll(`a[href^="obsidian://open"], a[href^="obsidian://${INDEX_FILE_FILTER_PROTOCOL}"], a[data-sidenote2-file-path]`).forEach((link) => {
+        element.querySelectorAll(`a[href^="obsidian://open"], a[href^="obsidian://${INDEX_FILE_FILTER_PROTOCOL}"], a[data-aside-file-path]`).forEach((link) => {
             if (!(link instanceof HTMLAnchorElement)) {
                 return;
             }
 
-            const filePath = link.dataset.sidenote2FilePath?.trim()
+            const filePath = link.dataset.asideFilePath?.trim()
                 || parseIndexFileOpenUrl(link.getAttribute("href")?.trim() ?? "")
                 || "";
             if (!filePath) {
                 return;
             }
 
-            link.dataset.sidenote2FilePath = filePath;
+            link.dataset.asideFilePath = filePath;
             link.classList.remove("external-link");
-            link.classList.add("sidenote2-index-file-filter-link", "sidenote2-index-heading-label");
+            link.classList.add("aside-index-file-filter-link", "aside-index-heading-label");
             link.setAttribute("title", filePath);
             link.setAttribute("href", "#");
             link.removeAttribute("target");
@@ -550,31 +552,48 @@ export class CommentHighlightController {
 
     private syncIndexPreviewLinkStates(element: HTMLElement, sourcePath: string): void {
         const activeCommentId = this.host.getRevealedCommentId(sourcePath);
+        const selectedIndexFileScopeRootPath = this.host.getIndexFileScopeRootPath(sourcePath);
 
         element.querySelectorAll(this.indexPreviewLinkSelector).forEach((link) => {
             if (!(link instanceof HTMLAnchorElement)) {
                 return;
             }
 
-            const target = parseCommentLocationUrl(link.dataset.sidenote2CommentUrl ?? "");
+            const target = parseCommentLocationUrl(link.dataset.asideCommentUrl ?? "");
             const isActive = !!target && target.commentId === activeCommentId;
             const rowEl = link.closest("p, li");
 
-            link.classList.remove("sidenote2-highlight", "sidenote2-highlight-preview", "sidenote2-highlight-active");
+            link.classList.remove("aside-highlight", "aside-highlight-preview", "aside-highlight-active");
 
             if (rowEl instanceof HTMLElement) {
-                rowEl.classList.toggle("sidenote2-index-active-row", isActive);
+                rowEl.classList.toggle("aside-index-active-row", isActive);
+            }
+        });
+
+        element.querySelectorAll(this.indexPreviewFileHeadingSelector).forEach((link) => {
+            if (!(link instanceof HTMLElement)) {
+                return;
+            }
+
+            const filePath = this.getIndexPreviewFilePathFromElement(link);
+            const isSelected = !!filePath
+                && isIndexFileFilterPathSelected(filePath, selectedIndexFileScopeRootPath);
+            const rowEl = link.closest("p, li");
+
+            link.classList.toggle("aside-index-selected-file", isSelected);
+            if (rowEl instanceof HTMLElement) {
+                rowEl.classList.toggle("aside-index-selected-file-row", isSelected);
             }
         });
     }
 
     private bindIndexPreviewLinkClicks(element: HTMLElement, sourcePath: string): void {
         const bindActivator = (targetEl: HTMLElement, activate: () => void) => {
-            if (targetEl.dataset.sidenote2IndexBound === "true") {
+            if (targetEl.dataset.asideIndexBound === "true") {
                 return;
             }
 
-            targetEl.dataset.sidenote2IndexBound = "true";
+            targetEl.dataset.asideIndexBound = "true";
             targetEl.addEventListener("mousedown", (event: MouseEvent) => {
                 if (!this.isPlainPrimaryClick(event)) {
                     return;
@@ -605,12 +624,12 @@ export class CommentHighlightController {
         };
 
         element.querySelectorAll(this.indexPreviewLinkSelector).forEach((link) => {
-            if (!(link instanceof HTMLAnchorElement) || link.dataset.sidenote2IndexBound === "true") {
+            if (!(link instanceof HTMLAnchorElement) || link.dataset.asideIndexBound === "true") {
                 return;
             }
 
             const activateLink = () => {
-                const target = parseCommentLocationUrl(link.dataset.sidenote2CommentUrl ?? "");
+                const target = parseCommentLocationUrl(link.dataset.asideCommentUrl ?? "");
                 if (!target) {
                     return;
                 }
@@ -636,7 +655,7 @@ export class CommentHighlightController {
         });
 
         element.querySelectorAll(this.indexPreviewFileHeadingSelector).forEach((link) => {
-            if (!(link instanceof HTMLElement) || link.dataset.sidenote2IndexBound === "true") {
+            if (!(link instanceof HTMLElement) || link.dataset.asideIndexBound === "true") {
                 return;
             }
 
@@ -646,7 +665,15 @@ export class CommentHighlightController {
             }
 
             const activateFile = () => {
-                void this.host.activateIndexFileScope(sourcePath, filePath);
+                void (async () => {
+                    await this.host.activateIndexFileScope(sourcePath, filePath);
+                    const previewRoot = element.closest(".markdown-preview-view, .markdown-rendered");
+                    if (previewRoot instanceof HTMLElement) {
+                        this.syncIndexPreviewLinkStates(previewRoot, sourcePath);
+                    } else {
+                        this.syncIndexPreviewLinkStates(element, sourcePath);
+                    }
+                })();
             };
 
             bindActivator(link, activateFile);
@@ -671,6 +698,18 @@ export class CommentHighlightController {
         this.syncIndexPreviewLinkStates(previewRoot, indexFilePath);
 
         return !!this.findRenderedIndexCommentRow(previewRoot, commentId);
+    }
+
+    public syncIndexPreviewFileScope(indexFilePath: string): boolean {
+        const context = this.getIndexPreviewContext(indexFilePath);
+        if (!context) {
+            return false;
+        }
+
+        const { previewRoot } = context;
+        this.prepareIndexPreviewLinks(previewRoot);
+        this.syncIndexPreviewLinkStates(previewRoot, indexFilePath);
+        return true;
     }
 
     public async revealIndexPreviewSelection(
@@ -927,12 +966,12 @@ export class CommentHighlightController {
                     );
 
                     ranges.forEach((range) => {
-                        const classes = ["sidenote2-highlight"];
+                        const classes = ["aside-highlight"];
                         if (range.resolved) {
-                            classes.push("sidenote2-highlight-resolved");
+                            classes.push("aside-highlight-resolved");
                         }
                         if (range.active) {
-                            classes.push("sidenote2-highlight-active");
+                            classes.push("aside-highlight-active");
                         }
 
                         decorations.push(
@@ -1244,12 +1283,12 @@ export class CommentHighlightController {
                 range.setEnd(endPos.node, endPos.offsetInNode);
 
                 const span = document.createElement("span");
-                span.classList.add("sidenote2-highlight", "sidenote2-highlight-preview");
+                span.classList.add("aside-highlight", "aside-highlight-preview");
                 if (wrap.comment.resolved) {
-                    span.classList.add("sidenote2-highlight-resolved");
+                    span.classList.add("aside-highlight-resolved");
                 }
                 if (wrap.comment.id === activeCommentId) {
-                    span.classList.add("sidenote2-highlight-active");
+                    span.classList.add("aside-highlight-active");
                 }
                 span.dataset.commentId = wrap.comment.id;
                 span.addEventListener("click", (event: MouseEvent) => {

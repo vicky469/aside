@@ -10,11 +10,11 @@ import {
 
 function logStartup(config) {
     const baseUrl = config.publicBaseUrl ?? getBridgeDefaultBaseUrl(config);
-    console.log(`[sidenote2-dgx-bridge] Listening on ${config.bindHost}:${config.port}`);
-    console.log(`[sidenote2-dgx-bridge] Transport: ${getBridgeTransportProtocol(config).toUpperCase()}`);
-    console.log(`[sidenote2-dgx-bridge] Public base URL: ${baseUrl}`);
-    console.log(`[sidenote2-dgx-bridge] Workspace root: ${config.workspaceRoot}`);
-    console.log(`[sidenote2-dgx-bridge] Codex binary: ${config.codexBin}`);
+    console.log(`[aside-dgx-bridge] Listening on ${config.bindHost}:${config.port}`);
+    console.log(`[aside-dgx-bridge] Transport: ${getBridgeTransportProtocol(config).toUpperCase()}`);
+    console.log(`[aside-dgx-bridge] Public base URL: ${baseUrl}`);
+    console.log(`[aside-dgx-bridge] Workspace root: ${config.workspaceRoot}`);
+    console.log(`[aside-dgx-bridge] Codex binary: ${config.codexBin}`);
 }
 
 async function main() {
@@ -30,12 +30,12 @@ async function main() {
 
     const bridge = createDgxRuntimeBridge({ config });
     const shutdown = async (signal) => {
-        console.log(`[sidenote2-dgx-bridge] Received ${signal}. Shutting down.`);
+        console.log(`[aside-dgx-bridge] Received ${signal}. Shutting down.`);
         try {
             await bridge.close();
             process.exit(0);
         } catch (error) {
-            console.error("[sidenote2-dgx-bridge] Shutdown failed:", error);
+            console.error("[aside-dgx-bridge] Shutdown failed:", error);
             process.exit(1);
         }
     };
@@ -59,6 +59,6 @@ async function main() {
 }
 
 main().catch((error) => {
-    console.error("[sidenote2-dgx-bridge] Startup failed:", error);
+    console.error("[aside-dgx-bridge] Startup failed:", error);
     process.exit(1);
 });

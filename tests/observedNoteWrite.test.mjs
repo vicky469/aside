@@ -3,10 +3,10 @@ import { mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { createContentFingerprint, writeObservedNoteSafely } from "../scripts/lib/sideNote2RepoScripts.mjs";
+import { createContentFingerprint, writeObservedNoteSafely } from "../scripts/lib/asideRepoScripts.mjs";
 
 test("writeObservedNoteSafely atomically replaces an unchanged note", async () => {
-    const tempDir = await mkdtemp(path.join(tmpdir(), "sidenote2-safe-write-"));
+    const tempDir = await mkdtemp(path.join(tmpdir(), "aside-safe-write-"));
     const notePath = path.join(tempDir, "note.md");
     const original = "# Title\n\nOriginal body.\n";
     const nextContent = "# Title\n\nMigrated body.\n";
@@ -23,12 +23,12 @@ test("writeObservedNoteSafely atomically replaces an unchanged note", async () =
     assert.deepEqual(result, { kind: "written" });
     assert.equal(await readFile(notePath, "utf8"), nextContent);
 
-    const tempFiles = (await readdir(tempDir)).filter((entry) => entry.includes(".sidenote2-") && entry.endsWith(".tmp"));
+    const tempFiles = (await readdir(tempDir)).filter((entry) => entry.includes(".aside-") && entry.endsWith(".tmp"));
     assert.deepEqual(tempFiles, []);
 });
 
 test("writeObservedNoteSafely skips a note that changed after it was read", async () => {
-    const tempDir = await mkdtemp(path.join(tmpdir(), "sidenote2-safe-skip-"));
+    const tempDir = await mkdtemp(path.join(tmpdir(), "aside-safe-skip-"));
     const notePath = path.join(tempDir, "note.md");
     const original = "# Title\n\nOriginal body.\n";
     const concurrentContent = "# Title\n\nRemote sync body.\n";

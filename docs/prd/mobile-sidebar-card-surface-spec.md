@@ -8,7 +8,7 @@ Draft implementation spec based on:
 
 ## Objective
 
-Make SideNote2 sidebar cards read as one consistent Obsidian-style card on desktop and mobile.
+Make Aside sidebar cards read as one consistent Obsidian-style card on desktop and mobile.
 
 The fix should simplify the CSS model instead of adding more mobile-only patches. Desktop and mobile should share the same card surface contract wherever possible.
 
@@ -57,7 +57,7 @@ Card descendants should not paint their own full-width backgrounds unless there 
 Primary owner:
 
 ```css
-.sidenote2-comment-item
+.aside-comment-item
 ```
 
 ### Decision 2: Card Descendants Are Surface-Neutral
@@ -69,14 +69,14 @@ They should not create lighter bands, white panels, or nested card surfaces.
 Recommended CSS direction:
 
 ```css
-.sidenote2-comment-item :where(
-  .sidenote2-comment-content,
+.aside-comment-item :where(
+  .aside-comment-content,
   .markdown-rendered,
-  .sidenote2-comment-header,
-  .sidenote2-comment-actions,
-  .sidenote2-thread-footer,
-  .sidenote2-thread-footer-actions,
-  .sidenote2-inline-editor
+  .aside-comment-header,
+  .aside-comment-actions,
+  .aside-thread-footer,
+  .aside-thread-footer-actions,
+  .aside-inline-editor
 ) {
   background: transparent;
   box-shadow: none;
@@ -96,7 +96,7 @@ Preferred model:
 - replies may use indentation, spacing, or a subtle left border
 - replies do not paint a separate card background
 
-If a reply currently receives `.sidenote2-comment-item`, either remove that card-shell class from replies or override reply styling in one intentional place.
+If a reply currently receives `.aside-comment-item`, either remove that card-shell class from replies or override reply styling in one intentional place.
 
 ### Decision 4: Markdown Renders Text, Not The Card
 
@@ -111,7 +111,7 @@ Obsidian/theme CSS should own:
 - callouts
 - typography
 
-SideNote2 should own:
+Aside should own:
 
 - the card shell
 - card spacing
@@ -157,8 +157,8 @@ It should stay opaque enough for readability while comments scroll underneath it
 
 | Element | Surface owner |
 | --- | --- |
-| Top-level side-note card | `.sidenote2-comment-item` |
-| Active card border | `.sidenote2-comment-item` state |
+| Top-level side-note card | `.aside-comment-item` |
+| Active card border | `.aside-comment-item` state |
 | Markdown content | transparent; text styling from Obsidian |
 | Header actions | transparent row; button-only hover/focus |
 | Footer actions | transparent row; button-only hover/focus |
@@ -172,12 +172,12 @@ It should stay opaque enough for readability while comments scroll underneath it
 
 1. Audit current selectors touching:
 
-   - `.sidenote2-comment-item`
-   - `.sidenote2-thread-entry-item`
-   - `.sidenote2-comment-content`
+   - `.aside-comment-item`
+   - `.aside-thread-entry-item`
+   - `.aside-comment-content`
    - `.markdown-rendered`
-   - `.sidenote2-thread-footer`
-   - `.sidenote2-inline-editor`
+   - `.aside-thread-footer`
+   - `.aside-inline-editor`
    - `.is-non-desktop`
 
 2. Define the card shell once.

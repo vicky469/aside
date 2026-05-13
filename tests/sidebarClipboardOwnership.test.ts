@@ -34,7 +34,7 @@ test("old sidebar interaction can leak the managed JSON block through editor cop
     const editorSelection = [
         "Copied from sidebar",
         "",
-        "<!-- SideNote2 comments",
+        "<!-- Aside comments",
         "[{\"id\":\"comment-1\",\"comment\":\"Copied from sidebar\"}]",
         "-->",
     ].join("\n");
@@ -51,7 +51,7 @@ test("fixed sidebar interaction claims copy ownership before copy runs", () => {
     const editorSelection = [
         "Copied from sidebar",
         "",
-        "<!-- SideNote2 comments",
+        "<!-- Aside comments",
         "[{\"id\":\"comment-1\",\"comment\":\"Copied from sidebar\"}]",
         "-->",
     ].join("\n");

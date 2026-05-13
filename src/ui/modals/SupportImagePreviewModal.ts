@@ -10,12 +10,12 @@ export default class SupportImagePreviewModal extends Modal {
     onOpen(): void {
         const { contentEl } = this;
         contentEl.empty();
-        contentEl.addClass("sidenote2-support-image-preview-modal");
+        contentEl.addClass("aside-support-image-preview-modal");
         this.setTitle(this.file.name);
 
         this.previewUrl = URL.createObjectURL(this.file);
         contentEl.createEl("img", {
-            cls: "sidenote2-support-image-preview",
+            cls: "aside-support-image-preview",
             attr: {
                 src: this.previewUrl,
                 alt: this.file.name,

@@ -57,7 +57,7 @@ The implementation should reuse:
 - `buildIndexFileFilterGraph(...)` in [src/core/derived/indexFileFilterGraph.ts](../../src/core/derived/indexFileFilterGraph.ts)
 - `deriveIndexSidebarScopedFilePaths(...)` in [src/ui/views/indexFileFilter.ts](../../src/ui/views/indexFileFilter.ts)
 - `buildThoughtTrailLines(...)` in [src/core/derived/thoughtTrail.ts](../../src/core/derived/thoughtTrail.ts)
-- `renderThoughtTrailMermaid(...)` and `bindThoughtTrailNodeLinks(...)` in [src/ui/views/SideNote2View.ts](../../src/ui/views/SideNote2View.ts)
+- `renderThoughtTrailMermaid(...)` and `bindThoughtTrailNodeLinks(...)` in [src/ui/views/AsideView.ts](../../src/ui/views/AsideView.ts)
 
 The goal is shared behavior, not a second graph implementation.
 
@@ -240,7 +240,7 @@ Normalization rules:
 
 ### Shared Tab Control
 
-Refactor `renderIndexModeControl(...)` in [src/ui/views/SideNote2View.ts](../../src/ui/views/SideNote2View.ts) into a shared helper that can render:
+Refactor `renderIndexModeControl(...)` in [src/ui/views/AsideView.ts](../../src/ui/views/AsideView.ts) into a shared helper that can render:
 
 - index mode tabs
 - note mode tabs

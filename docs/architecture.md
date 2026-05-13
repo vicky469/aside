@@ -1,4 +1,4 @@
-# SideNote2 Architecture
+# Aside Architecture
 
 This note is meant to make the codebase easier to read visually.
 
@@ -69,7 +69,7 @@ This is a separate canvas so you can zoom the flow without crowding the main arc
 Read this when debugging a specific comment. The route map shows flow; this one shows allowed status changes.
 
 - `draft` is UI-only and not yet persisted.
-- `saved` means persisted in SideNote2 storage, which is synced plugin data plus the local sidecar cache.
+- `saved` means persisted in Aside storage, which is synced plugin data plus the local sidecar cache.
 - `resolved` is still stored, but normally hidden in the sidebar.
 - `orphaned` means the stored comment still exists, but its anchor could not currently be matched back to the file text.
 
@@ -93,21 +93,21 @@ Use this shortcut table:
 
 | Symptom | First files to inspect |
 | --- | --- |
-| Draft does not save or disappears | `src/ui/views/SideNote2View.ts`, `src/ui/views/sidebarDraftEditor.ts`, `src/domain/drafts.ts` |
+| Draft does not save or disappears | `src/ui/views/AsideView.ts`, `src/ui/views/sidebarDraftEditor.ts`, `src/domain/drafts.ts` |
 | Comment saved but not persisted to canonical storage | `src/comments/commentPersistenceController.ts`, `src/core/storage/canonicalCommentStorage.ts`, `src/core/storage/sidecarCommentStorage.ts`, `src/core/storage/sideNoteSyncEvents.ts` |
 | Comment exists but highlight is wrong | `src/core/anchors/anchorResolver.ts`, `src/core/derived/editorHighlightRanges.ts`, `src/commentManager.ts` |
-| Sidebar or index sidebar shows wrong grouping or visibility | `src/ui/views/sidebarCommentSections.ts`, `src/ui/views/SideNote2View.ts`, `src/commentManager.ts` |
-| Sidebar card click, link, or action buttons behave incorrectly | `src/ui/views/sidebarPersistedComment.ts`, `src/ui/views/SideNote2View.ts`, `src/ui/views/commentPointerAction.ts` |
+| Sidebar or index sidebar shows wrong grouping or visibility | `src/ui/views/sidebarCommentSections.ts`, `src/ui/views/AsideView.ts`, `src/commentManager.ts` |
+| Sidebar card click, link, or action buttons behave incorrectly | `src/ui/views/sidebarPersistedComment.ts`, `src/ui/views/AsideView.ts`, `src/ui/views/commentPointerAction.ts` |
 | Sidebar focus, copy, selection, or draft-dismiss behavior is wrong | `src/ui/views/sidebarInteractionController.ts`, `src/ui/views/sidebarClipboardSelection.ts`, `src/ui/views/editDismissal.ts` |
 | Index note is stale or wrong | `src/index/AggregateCommentIndex.ts`, `src/core/derived/allCommentsNote.ts`, `src/comments/commentPersistenceController.ts`, `src/cache/ParsedNoteCache.ts` |
-| Index list, thought trail, or file filter behaves incorrectly | `src/ui/views/SideNote2View.ts`, `src/core/derived/thoughtTrail.ts`, `src/core/derived/indexFileFilterGraph.ts`, `src/ui/modals/SideNoteFileFilterModal.ts` |
-| Index click highlights the wrong sidebar card or opens the wrong target | `src/app/pluginRegistrationController.ts`, `src/comments/commentHighlightController.ts`, `src/comments/commentNavigationController.ts`, `src/ui/views/SideNote2View.ts` |
+| Index list, thought trail, or file filter behaves incorrectly | `src/ui/views/AsideView.ts`, `src/core/derived/thoughtTrail.ts`, `src/core/derived/indexFileFilterGraph.ts`, `src/ui/modals/SideNoteFileFilterModal.ts` |
+| Index click highlights the wrong sidebar card or opens the wrong target | `src/app/pluginRegistrationController.ts`, `src/comments/commentHighlightController.ts`, `src/comments/commentNavigationController.ts`, `src/ui/views/AsideView.ts` |
 | Wiki links or tags inside comments behave incorrectly | `src/ui/editor/commentEditorLinks.ts`, `src/ui/editor/commentEditorTags.ts`, `src/core/text/commentMentions.ts` |
 | Local log inspector, JSONL parsing, or timestamp display is wrong | `src/main.ts`, `src/logs/logService.ts`, `src/logs/logSanitizer.ts`, `src/ui/modals/SupportLogInspectorModal.ts`, `src/ui/views/supportReportPlanner.ts`, `src/core/time/dateTime.ts` |
 
 ## 7. Mental Model
 
-SideNote2 is easiest to understand if you keep one rule in mind:
+Aside is easiest to understand if you keep one rule in mind:
 
 - Synced plugin data is the durable sync surface for side notes, and sidecar JSON files are the local hot cache. Legacy hidden note blocks are migration input only.
 - The sidebar is a working view over that data plus any current draft.

@@ -106,7 +106,7 @@ test("buildAgentPromptContext uses section scope for page threads and strips hid
             "",
             "Gamma detail",
             "",
-            "<!-- SideNote2 comments",
+            "<!-- Aside comments",
             "[]",
             "-->",
         ].join("\n"),
@@ -125,7 +125,7 @@ test("buildAgentPromptContext uses section scope for page threads and strips hid
     assert.match(context.promptText, /Section:\n<<<\n## Focus\n\nAlpha detail\nBeta detail\n>>>/);
     assert.match(context.promptText, /Headings: # Project \| ## Focus \| ## Later/);
     assert.doesNotMatch(context.promptText, /Gamma detail/);
-    assert.doesNotMatch(context.promptText, /SideNote2 comments/);
+    assert.doesNotMatch(context.promptText, /Aside comments/);
     assert.equal(context.byteLength, Buffer.byteLength(context.promptText, "utf8"));
 });
 

@@ -1,12 +1,12 @@
 
 <p align="center">
-  <img src="./assets/logo-readme.svg" alt="SideNote2 logo" width="72">
+  <img src="./assets/logo-readme.svg" alt="Aside logo" width="72">
 </p>
 <p align="center">
-SideNote2
+Aside
 </p>
 <p align="center">
-  <a href="https://github.com/vicky469/SideNote2/releases/tag/2.0.64">
+  <a href="https://github.com/vicky469/aside/releases/tag/2.0.64">
     <img src="https://img.shields.io/badge/beta-2.0.64-f97316?style=flat-square" alt="Current beta">
   </a>
   <a href="https://buymeacoffee.com/vickyli">
@@ -31,15 +31,15 @@ SideNote2
   <tr>
     <td align="center" valign="top" width="50%">
       <strong>Side note index</strong><br>
-      <img src="./assets/demo.gif" alt="SideNote2 demo preview in Obsidian dark theme" width="100%">
+      <img src="./assets/demo.gif" alt="Aside demo preview in Obsidian dark theme" width="100%">
     </td>
     <td align="center" valign="top" width="50%">
       <strong>Agent reply</strong><br>
-      <img src="./assets/demo2.gif" alt="SideNote2 demo preview in Obsidian light theme" width="100%">
+      <img src="./assets/demo2.gif" alt="Aside demo preview in Obsidian light theme" width="100%">
     </td>
   </tr>
 </table>
-SideNote2 is an [Obsidian](https://obsidian.md) plugin for side comments that stay attached to the note. Inspired by [mofukuru/SideNote](https://github.com/mofukuru/SideNote).
+Aside is an [Obsidian](https://obsidian.md) plugin for side comments that stay attached to the note. Inspired by [mofukuru/SideNote](https://github.com/mofukuru/SideNote).
 
 It is built for a minimal workflow: both humans and agents can work in the sidebar or the main markdown file.
 
@@ -52,7 +52,7 @@ For development, setup, testing, and release workflow, see [README-dev.md](./REA
 - Type `#` in a side note to search existing tags or add a new one.
 - Browse, filter, and batch-apply local side-note tags from the active note sidebar.
 - Keeps resolved comments archived instead of removing them.
-- Generates `SideNote2 index.md` as a vault-wide comment index.
+- Generates `Aside index.md` as a vault-wide comment index.
 - Lets the index sidebar switch between the comment list and a thought-trail graph built from side-note wiki links. The graph follows those links across connected markdown files, so it can show multi-step trails instead of only direct one-hop links.
 - Built-in `@codex` side notes on desktop Obsidian. Type `@codex` in a thread, watch the reply stream in the sidebar, and keep the final answer in the same thread.
 
@@ -60,17 +60,17 @@ For development, setup, testing, and release workflow, see [README-dev.md](./REA
 
 1. Install BRAT
    settings -> install community plugins -> BRAT
-2. Install the SideNote2 beta
+2. Install the Aside beta
    Open BRAT, enable Auto update if you want, then add the plugin as shown below.
    <p align="center">
-     <img src="./assets/image.png" alt="Install SideNote2 with BRAT" width="420">
+     <img src="./assets/image.png" alt="Install Aside with BRAT" width="420">
    </p>
 3. Use desktop Obsidian with a filesystem-backed vault.
 4. Install and sign in to Codex on the same machine.
    Quick check: open Terminal in your vault or project folder and run `codex`.
-5. Optional: install the SideNote2 Codex skill if you also use external Codex handoff workflows.
+5. Optional: install the Aside Codex skill if you also use external Codex handoff workflows.
 ```
-$skill-installer install https://github.com/vicky469/SideNote2/tree/main/skills/sidenote2
+$skill-installer install https://github.com/vicky469/aside/tree/main/skills/aside
 ```
 
 Restart Codex after installing the skill.
@@ -83,12 +83,12 @@ Restart Codex after installing the skill.
 3. Write your comment in the sidebar.
    Type `@codex` if you want Codex to take the task.
 4. Save the note.
-5. SideNote2 runs Codex locally and appends the reply back into the same thread.
+5. Aside runs Codex locally and appends the reply back into the same thread.
 
 ## Glossary
 
 - **`thread`**  
-  One SideNote2 discussion attached to one target. A thread can have one first entry and later replies.
+  One Aside discussion attached to one target. A thread can have one first entry and later replies.
 
 - **`entry`**  
   One message inside a thread. The first saved entry creates the thread. Later child entries are replies in the same thread.
@@ -105,7 +105,7 @@ Restart Codex after installing the skill.
 - **`resolved note`**  
   A thread that has been archived instead of deleted.
 
-- **`SideNote2 index.md`**  
+- **`Aside index.md`**
   The generated vault-wide index note. It is derived output, not the source of truth.
 
 - **`thought trail`**  
@@ -131,20 +131,20 @@ Restart Codex after installing the skill.
 
 ## Command
 
-- `SideNote2: Add comment to selection`
+- `Aside: Add comment to selection`
 
 ## Storage
 
-Side notes sync through SideNote2 plugin data when Obsidian Sync is syncing plugin data. The local sidecar files under `.obsidian/plugins/side-note2/sidenotes/by-note/<hash-prefix>/<full-hash>.json` are a hot cache that can be rebuilt from synced plugin data.
+Side notes sync through Aside plugin data when Obsidian Sync is syncing plugin data. The local sidecar files under `.obsidian/plugins/aside/sidenotes/by-note/<hash-prefix>/<full-hash>.json` are a hot cache that can be rebuilt from synced plugin data.
 
-On startup after storage migration releases, SideNote2 automatically migrates legacy hidden `<!-- SideNote2 comments -->` blocks into canonical plugin data and sidecar cache files, then strips the managed block from the source note.
+On startup after storage migration releases, Aside automatically migrates legacy hidden `<!-- Aside comments -->` blocks into canonical plugin data and sidecar cache files, then strips the managed block from the source note.
 
-`SideNote2 index.md` is still just a generated index, not separate storage.
+`Aside index.md` is still just a generated index, not separate storage.
 
 ## Index Surfaces
 
-- `SideNote2 index.md` stays a derived vault-wide aggregate note.
-- The index sidebar `Files` filter only scopes the sidebar view. Selecting one file there does not rewrite `SideNote2 index.md` down to that single file section.
+- `Aside index.md` stays a derived vault-wide aggregate note.
+- The index sidebar `Files` filter only scopes the sidebar view. Selecting one file there does not rewrite `Aside index.md` down to that single file section.
 - In the index sidebar list view, the nested-comments toggle is hidden when the filter scope resolves to exactly one file.
 - The generated index note only shows a visibility banner in resolved-only mode.
 
@@ -152,7 +152,7 @@ On startup after storage migration releases, SideNote2 automatically migrates le
 
 Open a GitHub issue using the bug report template:
 
-https://github.com/vicky469/SideNote2/issues/new?template=bug_report.yml
+https://github.com/vicky469/aside/issues/new?template=bug_report.yml
 
 For suspected vulnerabilities or other sensitive security issues, do not file a public issue. Email dev@databun.xyz instead.
 
@@ -162,11 +162,11 @@ MIT
 
 <p align="center">
   <a href="https://buymeacoffee.com/vickyli">
-    <img src="./assets/logo-readme.svg" alt="SideNote2 logo" width="84">
+    <img src="./assets/logo-readme.svg" alt="Aside logo" width="84">
   </a>
 </p>
 <p align="center">
-  <strong>Keep SideNote2 brewing.</strong>
+  <strong>Keep Aside brewing.</strong>
 </p>
 <p align="center">
   <a href="https://buymeacoffee.com/vickyli">

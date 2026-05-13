@@ -169,12 +169,12 @@ test("comment session controller can skip markdown preview rerender for a reveal
     const harness = createHarness();
 
     assert.equal(
-        harness.controller.setRevealedCommentState("SideNote2 index.md", "comment-7", {
+        harness.controller.setRevealedCommentState("Aside index.md", "comment-7", {
             refreshMarkdownPreviews: false,
         }),
         true,
     );
-    assert.equal(harness.controller.getRevealedCommentId("SideNote2 index.md"), "comment-7");
+    assert.equal(harness.controller.getRevealedCommentId("Aside index.md"), "comment-7");
     assert.equal(harness.getRefreshEditorDecorationsCount(), 1);
     assert.equal(harness.getRefreshMarkdownPreviewsCount(), 0);
 });
@@ -193,10 +193,10 @@ test("comment session controller manages draft state and refresh side effects", 
     const harness = createHarness();
     const draft = createDraft();
 
-    await harness.controller.setDraftComment(draft, "SideNote2 index.md");
+    await harness.controller.setDraftComment(draft, "Aside index.md");
     assert.deepEqual(harness.controller.getDraftForFile(draft.filePath), draft);
-    assert.deepEqual(harness.controller.getDraftForView("SideNote2 index.md"), draft);
-    assert.equal(harness.controller.getDraftHostFilePath(), "SideNote2 index.md");
+    assert.deepEqual(harness.controller.getDraftForView("Aside index.md"), draft);
+    assert.equal(harness.controller.getDraftHostFilePath(), "Aside index.md");
     assert.equal(harness.getRefreshCommentViewsCount(), 1);
     assert.equal(harness.getRefreshEditorDecorationsCount(), 1);
 

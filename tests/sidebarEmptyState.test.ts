@@ -31,15 +31,15 @@ class FakeElement {
 
 test("no-sidebar-file empty state clears stale note sidebar content and stays singular", () => {
     const root = new FakeElement("div");
-    const staleSidebar = root.createDiv("sidenote2-comments-container is-note-sidebar");
-    staleSidebar.createDiv("sidenote2-comments-list");
-    root.createDiv("sidenote2-empty-state");
+    const staleSidebar = root.createDiv("aside-comments-container is-note-sidebar");
+    staleSidebar.createDiv("aside-comments-list");
+    root.createDiv("aside-empty-state");
 
     renderNoSidebarFileEmptyState(root);
     renderNoSidebarFileEmptyState(root);
 
     assert.equal(root.children.length, 1);
-    assert.equal(root.children[0].className, "sidenote2-empty-state");
+    assert.equal(root.children[0].className, "aside-empty-state");
     assert.deepEqual(root.children[0].children.map((child) => child.text), [
         "No markdown file selected.",
         "Open a markdown file to see its side notes.",

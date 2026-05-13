@@ -2,7 +2,7 @@
 
 ## Objective
 
-When the sidebar is showing `SideNote2 index.md`, clicking a persisted sidebar list card must highlight the matching row in `index.md` using the same pairing state as clicking a ref inside `index.md`.
+When the sidebar is showing `Aside index.md`, clicking a persisted sidebar list card must highlight the matching row in `index.md` using the same pairing state as clicking a ref inside `index.md`.
 
 This spec is for highlight synchronization only.
 
@@ -18,7 +18,7 @@ The redirect icon remains the only source-note navigation action.
 
 ### Rule 1
 
-If the sidebar current file is `SideNote2 index.md`, card-body click must:
+If the sidebar current file is `Aside index.md`, card-body click must:
 
 - mark that sidebar card active
 - mark the matching rendered row in `index.md` active
@@ -26,7 +26,7 @@ If the sidebar current file is `SideNote2 index.md`, card-body click must:
 
 ### Rule 2
 
-If the sidebar current file is not `SideNote2 index.md`, card-body click keeps the current source-note redirect behavior.
+If the sidebar current file is not `Aside index.md`, card-body click keeps the current source-note redirect behavior.
 
 ### Rule 3
 
@@ -34,7 +34,7 @@ In index mode, the redirect icon continues to open the source note.
 
 ### Rule 4
 
-If a sidebar card becomes active programmatically while the sidebar current file is `SideNote2 index.md`, the matching rendered row in `index.md` must also become active.
+If a sidebar card becomes active programmatically while the sidebar current file is `Aside index.md`, the matching rendered row in `index.md` must also become active.
 
 ### Rule 5
 
@@ -87,7 +87,7 @@ It must not:
 
 ### Requirement 2: index-mode card-body routing
 
-In `SideNote2View.renderPersistedComment(...)`:
+In `AsideView.renderPersistedComment(...)`:
 
 - when current sidebar file is `index.md`, card-body click must:
   - mark that card active in the sidebar
@@ -121,14 +121,14 @@ Do not implement in this phase:
 
 ### AC1
 
-Open `SideNote2 index.md`, click a ref in the note:
+Open `Aside index.md`, click a ref in the note:
 
 - matching sidebar card is active
 - matching row in `index.md` is active
 
 ### AC2
 
-With `SideNote2 index.md` still active in the sidebar, click a sidebar card body:
+With `Aside index.md` still active in the sidebar, click a sidebar card body:
 
 - matching sidebar card is active
 - matching row in `index.md` is active

@@ -102,12 +102,12 @@ function createThread(filePath: string): CommentThread {
 
 function getSidecarStoragePath(filePath: string): string {
     const noteHash = `hash-${filePath.replace(/\//g, "_")}`;
-    return `.obsidian/plugins/side-note2/sidenotes/by-note/${noteHash.slice(0, 2)}/${noteHash}.json`;
+    return `.obsidian/plugins/aside/sidenotes/by-note/${noteHash.slice(0, 2)}/${noteHash}.json`;
 }
 
 function getSourceSidecarStoragePath(sourceId: string): string {
     const sourceHash = `hash-${sourceId.replace(/\//g, "_")}`;
-    return `.obsidian/plugins/side-note2/sidenotes/by-source/${sourceHash.slice(0, 2)}/${sourceHash}.json`;
+    return `.obsidian/plugins/aside/sidenotes/by-source/${sourceHash.slice(0, 2)}/${sourceHash}.json`;
 }
 
 function serializeSidecarThreads(filePath: string, threads: CommentThread[]): string {
@@ -151,7 +151,7 @@ test("comment persistence controller syncs external managed-block updates into a
                 },
             },
         } as never,
-        getAllCommentsNotePath: () => "SideNote2 index.md",
+        getAllCommentsNotePath: () => "Aside index.md",
         getIndexHeaderImageUrl: () => "",
         getIndexHeaderImageCaption: () => "",
         shouldShowResolvedComments: () => false,
@@ -160,7 +160,7 @@ test("comment persistence controller syncs external managed-block updates into a
         getCurrentNoteContent: async () => currentContent,
         getStoredNoteContent: async () => storedContent,
         getParsedNoteComments: (filePath, noteContent) => parseNoteComments(noteContent, filePath),
-        getPluginDataDirPath: () => ".obsidian/plugins/side-note2",
+        getPluginDataDirPath: () => ".obsidian/plugins/aside",
         getSideNoteSyncDeviceId: () => "device-a",
         readPersistedPluginData: () => persistedData,
         writePersistedPluginData: async (data) => {
@@ -239,7 +239,7 @@ test("comment persistence controller migrates inline note storage into a sidecar
                 },
             },
         } as never,
-        getAllCommentsNotePath: () => "SideNote2 index.md",
+        getAllCommentsNotePath: () => "Aside index.md",
         getIndexHeaderImageUrl: () => "",
         getIndexHeaderImageCaption: () => "",
         shouldShowResolvedComments: () => false,
@@ -248,7 +248,7 @@ test("comment persistence controller migrates inline note storage into a sidecar
         getCurrentNoteContent: async () => legacyContent,
         getStoredNoteContent: async () => legacyContent,
         getParsedNoteComments: (filePath, noteContent) => parseNoteComments(noteContent, filePath),
-        getPluginDataDirPath: () => ".obsidian/plugins/side-note2",
+        getPluginDataDirPath: () => ".obsidian/plugins/aside",
         getSideNoteSyncDeviceId: () => "device-a",
         readPersistedPluginData: () => persistedData,
         writePersistedPluginData: async (data) => {
@@ -330,7 +330,7 @@ test("comment persistence controller replays synced plugin-data events into the 
                 process: async () => "",
             },
         } as never,
-        getAllCommentsNotePath: () => "SideNote2 index.md",
+        getAllCommentsNotePath: () => "Aside index.md",
         getIndexHeaderImageUrl: () => "",
         getIndexHeaderImageCaption: () => "",
         shouldShowResolvedComments: () => false,
@@ -339,7 +339,7 @@ test("comment persistence controller replays synced plugin-data events into the 
         getCurrentNoteContent: async () => noteBody,
         getStoredNoteContent: async () => noteBody,
         getParsedNoteComments: (filePath, noteContent) => parseNoteComments(noteContent, filePath),
-        getPluginDataDirPath: () => ".obsidian/plugins/side-note2",
+        getPluginDataDirPath: () => ".obsidian/plugins/aside",
         getSideNoteSyncDeviceId: () => "device-a",
         readPersistedPluginData: () => persistedData,
         writePersistedPluginData: async (data) => {
@@ -441,7 +441,7 @@ test("comment persistence controller hydrates compacted snapshots over a stale s
                 process: async () => "",
             },
         } as never,
-        getAllCommentsNotePath: () => "SideNote2 index.md",
+        getAllCommentsNotePath: () => "Aside index.md",
         getIndexHeaderImageUrl: () => "",
         getIndexHeaderImageCaption: () => "",
         shouldShowResolvedComments: () => false,
@@ -450,7 +450,7 @@ test("comment persistence controller hydrates compacted snapshots over a stale s
         getCurrentNoteContent: async () => noteBody,
         getStoredNoteContent: async () => noteBody,
         getParsedNoteComments: (filePath, noteContent) => parseNoteComments(noteContent, filePath),
-        getPluginDataDirPath: () => ".obsidian/plugins/side-note2",
+        getPluginDataDirPath: () => ".obsidian/plugins/aside",
         getSideNoteSyncDeviceId: () => "device-a",
         readPersistedPluginData: () => persistedData,
         writePersistedPluginData: async (data) => {
@@ -566,7 +566,7 @@ test("comment persistence controller refreshes synced plugin data before sidebar
                 process: async () => "",
             },
         } as never,
-        getAllCommentsNotePath: () => "SideNote2 index.md",
+        getAllCommentsNotePath: () => "Aside index.md",
         getIndexHeaderImageUrl: () => "",
         getIndexHeaderImageCaption: () => "",
         shouldShowResolvedComments: () => false,
@@ -575,7 +575,7 @@ test("comment persistence controller refreshes synced plugin data before sidebar
         getCurrentNoteContent: async () => noteBody,
         getStoredNoteContent: async () => noteBody,
         getParsedNoteComments: (filePath, noteContent) => parseNoteComments(noteContent, filePath),
-        getPluginDataDirPath: () => ".obsidian/plugins/side-note2",
+        getPluginDataDirPath: () => ".obsidian/plugins/aside",
         getSideNoteSyncDeviceId: () => "device-a",
         readPersistedPluginData: () => cachedPersistedData,
         loadPersistedPluginData: async () => latestPersistedData,
@@ -691,7 +691,7 @@ test("comment persistence controller does not recover renamed source notes when 
                 process: async () => "",
             },
         } as never,
-        getAllCommentsNotePath: () => "SideNote2 index.md",
+        getAllCommentsNotePath: () => "Aside index.md",
         getIndexHeaderImageUrl: () => "",
         getIndexHeaderImageCaption: () => "",
         shouldShowResolvedComments: () => false,
@@ -705,7 +705,7 @@ test("comment persistence controller does not recover renamed source notes when 
         getCurrentNoteContent: async () => noteBody,
         getStoredNoteContent: async () => noteBody,
         getParsedNoteComments: (filePath, noteContent) => parseNoteComments(noteContent, filePath),
-        getPluginDataDirPath: () => ".obsidian/plugins/side-note2",
+        getPluginDataDirPath: () => ".obsidian/plugins/aside",
         getSideNoteSyncDeviceId: () => "device-a",
         readPersistedPluginData: () => persistedData,
         writePersistedPluginData: async (data) => {
@@ -834,7 +834,7 @@ test("comment persistence controller recovers renamed source notes from synced s
                 process: async () => "",
             },
         } as never,
-        getAllCommentsNotePath: () => "SideNote2 index.md",
+        getAllCommentsNotePath: () => "Aside index.md",
         getIndexHeaderImageUrl: () => "",
         getIndexHeaderImageCaption: () => "",
         shouldShowResolvedComments: () => false,
@@ -843,7 +843,7 @@ test("comment persistence controller recovers renamed source notes from synced s
         getCurrentNoteContent: async () => noteBody,
         getStoredNoteContent: async () => noteBody,
         getParsedNoteComments: (filePath, noteContent) => parseNoteComments(noteContent, filePath),
-        getPluginDataDirPath: () => ".obsidian/plugins/side-note2",
+        getPluginDataDirPath: () => ".obsidian/plugins/aside",
         getSideNoteSyncDeviceId: () => "device-a",
         readPersistedPluginData: () => persistedData,
         writePersistedPluginData: async (data) => {
@@ -926,7 +926,7 @@ test("comment persistence controller recovers renamed source notes from a legacy
         "",
     ].join("\n");
     const adapter = new FakeAdapter();
-    adapter.directories.add(".obsidian/plugins/side-note2/cache");
+    adapter.directories.add(".obsidian/plugins/aside/cache");
     const cachedThreads: CommentThread[] = [
         {
             ...createThread(previousPath),
@@ -954,7 +954,7 @@ test("comment persistence controller recovers renamed source notes from a legacy
         },
     ];
     adapter.files.set(
-        ".obsidian/plugins/side-note2/cache/hash-old-goal.json",
+        ".obsidian/plugins/aside/cache/hash-old-goal.json",
         serializeSidecarThreads(previousPath, cachedThreads),
     );
     const commentManager = new CommentManager([]);
@@ -969,7 +969,7 @@ test("comment persistence controller recovers renamed source notes from a legacy
                 process: async () => "",
             },
         } as never,
-        getAllCommentsNotePath: () => "SideNote2 index.md",
+        getAllCommentsNotePath: () => "Aside index.md",
         getIndexHeaderImageUrl: () => "",
         getIndexHeaderImageCaption: () => "",
         shouldShowResolvedComments: () => false,
@@ -978,7 +978,7 @@ test("comment persistence controller recovers renamed source notes from a legacy
         getCurrentNoteContent: async () => noteBody,
         getStoredNoteContent: async () => noteBody,
         getParsedNoteComments: (filePath, noteContent) => parseNoteComments(noteContent, filePath),
-        getPluginDataDirPath: () => ".obsidian/plugins/side-note2",
+        getPluginDataDirPath: () => ".obsidian/plugins/aside",
         getSideNoteSyncDeviceId: () => "device-a",
         readPersistedPluginData: () => persistedData,
         writePersistedPluginData: async (data) => {
@@ -1069,9 +1069,9 @@ test("comment persistence controller ignores generic chapter headings during ren
         "Different content from the previous source.",
     ].join("\n");
     const adapter = new FakeAdapter();
-    adapter.directories.add(".obsidian/plugins/side-note2/cache");
+    adapter.directories.add(".obsidian/plugins/aside/cache");
     adapter.files.set(
-        ".obsidian/plugins/side-note2/cache/hash-old-goal.json",
+        ".obsidian/plugins/aside/cache/hash-old-goal.json",
         serializeSidecarThreads(previousPath, [{
             ...createThread(previousPath),
             id: "thread-1",
@@ -1102,7 +1102,7 @@ test("comment persistence controller ignores generic chapter headings during ren
                 process: async () => "",
             },
         } as never,
-        getAllCommentsNotePath: () => "SideNote2 index.md",
+        getAllCommentsNotePath: () => "Aside index.md",
         getIndexHeaderImageUrl: () => "",
         getIndexHeaderImageCaption: () => "",
         shouldShowResolvedComments: () => false,
@@ -1111,7 +1111,7 @@ test("comment persistence controller ignores generic chapter headings during ren
         getCurrentNoteContent: async () => noteBody,
         getStoredNoteContent: async () => noteBody,
         getParsedNoteComments: (filePath, noteContent) => parseNoteComments(noteContent, filePath),
-        getPluginDataDirPath: () => ".obsidian/plugins/side-note2",
+        getPluginDataDirPath: () => ".obsidian/plugins/aside",
         getSideNoteSyncDeviceId: () => "device-a",
         readPersistedPluginData: () => persistedData,
         writePersistedPluginData: async (data) => {
@@ -1189,7 +1189,7 @@ test("comment persistence controller hydrates compacted snapshots into a missing
                 process: async () => "",
             },
         } as never,
-        getAllCommentsNotePath: () => "SideNote2 index.md",
+        getAllCommentsNotePath: () => "Aside index.md",
         getIndexHeaderImageUrl: () => "",
         getIndexHeaderImageCaption: () => "",
         shouldShowResolvedComments: () => false,
@@ -1198,7 +1198,7 @@ test("comment persistence controller hydrates compacted snapshots into a missing
         getCurrentNoteContent: async () => noteBody,
         getStoredNoteContent: async () => noteBody,
         getParsedNoteComments: (filePath, noteContent) => parseNoteComments(noteContent, filePath),
-        getPluginDataDirPath: () => ".obsidian/plugins/side-note2",
+        getPluginDataDirPath: () => ".obsidian/plugins/aside",
         getSideNoteSyncDeviceId: () => "device-a",
         readPersistedPluginData: () => persistedData,
         writePersistedPluginData: async (data) => {
@@ -1288,7 +1288,7 @@ test("comment persistence controller skips incompatible compacted snapshots for 
                 process: async () => "",
             },
         } as never,
-        getAllCommentsNotePath: () => "SideNote2 index.md",
+        getAllCommentsNotePath: () => "Aside index.md",
         getIndexHeaderImageUrl: () => "",
         getIndexHeaderImageCaption: () => "",
         shouldShowResolvedComments: () => false,
@@ -1297,7 +1297,7 @@ test("comment persistence controller skips incompatible compacted snapshots for 
         getCurrentNoteContent: async () => noteBody,
         getStoredNoteContent: async () => noteBody,
         getParsedNoteComments: (filePath, noteContent) => parseNoteComments(noteContent, filePath),
-        getPluginDataDirPath: () => ".obsidian/plugins/side-note2",
+        getPluginDataDirPath: () => ".obsidian/plugins/aside",
         getSideNoteSyncDeviceId: () => "device-a",
         readPersistedPluginData: () => persistedData,
         writePersistedPluginData: async (data) => {

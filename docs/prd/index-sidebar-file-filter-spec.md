@@ -445,7 +445,7 @@ Implement next:
 
 - `indexFileFilterRootPath` in view state
 - migration from old `indexFileFilterPaths`
-- derived closure read path in `SideNote2View`
+- derived closure read path in `AsideView`
 
 Why second:
 

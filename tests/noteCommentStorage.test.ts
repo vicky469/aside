@@ -69,7 +69,7 @@ test("serializeNoteComments stores comments inside a managed appendix", () => {
         }),
     ]);
 
-    assert.match(serialized, /^# Title\n\nAlpha body\.\n\n<!-- SideNote2 comments\n\[/);
+    assert.match(serialized, /^# Title\n\nAlpha body\.\n\n<!-- Aside comments\n\[/);
     assert.match(serialized, /\n-->\n$/);
     assert.doesNotMatch(serialized, /## Comments/);
     assert.doesNotMatch(serialized, /```json/);
@@ -87,13 +87,24 @@ test("serializeNoteComments stores comments inside a managed appendix", () => {
     assert.equal(parsed.comments[1].comment, "Second comment");
 });
 
+test("parseNoteComments still reads legacy SideNote2 managed blocks", () => {
+    const serialized = serializeNoteComments("Body", [createComment()]);
+    const legacySerialized = serialized.replace("<!-- Aside comments", "<!-- SideNote2 comments");
+
+    const parsed = parseNoteComments(legacySerialized, "note.md");
+
+    assert.equal(parsed.mainContent, "Body");
+    assert.equal(parsed.comments.length, 1);
+    assert.equal(parsed.comments[0].comment, "This is a side note.");
+});
+
 test("serializeNoteComments keeps an empty note editable by leaving a blank line before the managed appendix", () => {
     const serialized = serializeNoteComments("", [createComment({
         anchorKind: "page",
         selectedText: "Note",
     })]);
 
-    assert.match(serialized, /^\n<!-- SideNote2 comments\n\[/);
+    assert.match(serialized, /^\n<!-- Aside comments\n\[/);
 
     const parsed = parseNoteComments(serialized, "note.md");
     assert.equal(parsed.mainContent, "");
@@ -138,7 +149,7 @@ test("serializeNoteComments replaces an existing managed appendix instead of dup
         }),
     ]);
 
-    assert.equal((secondPass.match(/<!-- SideNote2 comments/g) || []).length, 1);
+    assert.equal((secondPass.match(/<!-- Aside comments/g) || []).length, 1);
     assert.match(secondPass, /"resolved": true/);
     assert.match(secondPass, /"body": "Updated body"/);
 
@@ -368,7 +379,7 @@ test("getManagedSectionKind distinguishes threaded, unsupported, and missing man
         "",
         "Visible body.",
         "",
-        "<!-- SideNote2 comments",
+        "<!-- Aside comments",
         "[",
         "  {",
         '    "id": "legacy-comment-1",',
@@ -391,7 +402,7 @@ test("getManagedSectionKind distinguishes threaded, unsupported, and missing man
     const unsupported = [
         "Body",
         "",
-        "<!-- SideNote2 comments",
+        "<!-- Aside comments",
         "[",
         '  { "id": "bad", "comment": 1 }',
         "]",
@@ -403,13 +414,13 @@ test("getManagedSectionKind distinguishes threaded, unsupported, and missing man
     assert.equal(getManagedSectionKind("Body\n"), "none");
 });
 
-test("parseNoteComments recognizes legacy object-shaped SideNote2 blocks as managed storage", () => {
+test("parseNoteComments recognizes legacy object-shaped Aside blocks as managed storage", () => {
     const legacyEnvelope = [
         "# Title",
         "",
         "Visible body.",
         "",
-        "<!-- SideNote2 comments",
+        "<!-- Aside comments",
         JSON.stringify({
             schemaVersion: 1,
             noteHash: "hash-note",
@@ -432,7 +443,7 @@ test("parseNoteComments recognizes legacy object-shaped SideNote2 blocks as mana
     assert.equal(serializeNoteCommentThreads(legacyEnvelope, []), "# Title\n\nVisible body.\n");
 });
 
-test("getManagedSectionKind rejects notes with two valid SideNote2 managed blocks", () => {
+test("getManagedSectionKind rejects notes with two valid Aside managed blocks", () => {
     const first = serializeNoteComments("Body\n", [createComment()]);
     const second = serializeNoteComments("Body\n", [createComment({
         id: "comment-2",
@@ -440,13 +451,13 @@ test("getManagedSectionKind rejects notes with two valid SideNote2 managed block
         selectedTextHash: "hash-2",
         timestamp: 1710000001000,
     })]);
-    const duplicateBlocks = `${first.trimEnd()}\n\n${second.slice(second.indexOf("<!-- SideNote2 comments"))}`;
+    const duplicateBlocks = `${first.trimEnd()}\n\n${second.slice(second.indexOf("<!-- Aside comments"))}`;
 
-    assert.equal((duplicateBlocks.match(/<!-- SideNote2 comments/g) || []).length, 2);
+    assert.equal((duplicateBlocks.match(/<!-- Aside comments/g) || []).length, 2);
     assert.equal(getManagedSectionKind(duplicateBlocks), "unsupported");
 });
 
-test("duplicate SideNote2 managed blocks are not partially parsed or hidden", () => {
+test("duplicate Aside managed blocks are not partially parsed or hidden", () => {
     const first = serializeNoteComments("Body\n", [createComment()]);
     const second = serializeNoteComments("Body\n", [createComment({
         id: "comment-2",
@@ -454,7 +465,7 @@ test("duplicate SideNote2 managed blocks are not partially parsed or hidden", ()
         selectedTextHash: "hash-2",
         timestamp: 1710000001000,
     })]);
-    const duplicateBlocks = `${first.trimEnd()}\n\n${second.slice(second.indexOf("<!-- SideNote2 comments"))}`;
+    const duplicateBlocks = `${first.trimEnd()}\n\n${second.slice(second.indexOf("<!-- Aside comments"))}`;
     const parsed = parseNoteComments(duplicateBlocks, "note.md");
 
     assert.equal(parsed.comments.length, 0);
@@ -464,12 +475,12 @@ test("duplicate SideNote2 managed blocks are not partially parsed or hidden", ()
     assert.equal(getVisibleNoteContent(duplicateBlocks), duplicateBlocks);
 });
 
-test("parseNoteComments ignores SideNote2 comment markers inside fenced code blocks", () => {
+test("parseNoteComments ignores Aside comment markers inside fenced code blocks", () => {
     const note = [
         "# Title",
         "",
         "```md",
-        "<!-- SideNote2 comments",
+        "<!-- Aside comments",
         "[",
         '  { "id": "legacy-comment-1", "comment": "Example only" }',
         "]",
@@ -486,14 +497,14 @@ test("parseNoteComments ignores SideNote2 comment markers inside fenced code blo
     assert.equal(getManagedSectionKind(note), "none");
 });
 
-test("getManagedSectionKind ignores inline prose examples before a fenced SideNote2 block sample", () => {
+test("getManagedSectionKind ignores inline prose examples before a fenced Aside block sample", () => {
     const note = [
         "# Title",
         "",
-        "Each note stores comments in a trailing hidden `<!-- SideNote2 comments -->` block:",
+        "Each note stores comments in a trailing hidden `<!-- Aside comments -->` block:",
         "",
         "```md",
-        "<!-- SideNote2 comments",
+        "<!-- Aside comments",
         "[",
         '  { "id": "legacy-comment-1", "comment": "Example only" }',
         "]",
@@ -516,7 +527,7 @@ test("parseNoteComments still reads the real trailing managed block after a fenc
         "# Title",
         "",
         "```md",
-        "<!-- SideNote2 comments",
+        "<!-- Aside comments",
         "[",
         '  { "id": "legacy-comment-1", "comment": "Example only" }',
         "]",
@@ -539,7 +550,7 @@ test("serializeNoteCommentThreads refuses to write threaded data into an unsuppo
         "",
         "Visible body.",
         "",
-        "<!-- SideNote2 comments",
+        "<!-- Aside comments",
         "[",
         "  {",
         '    "id": "legacy-comment-1",',
@@ -573,10 +584,10 @@ test("serializeNoteCommentThreads refuses to write threaded data into an unsuppo
         }],
         createdAt: 1710000001000,
         updatedAt: 1710000001000,
-    }]), /unsupported SideNote2 comments block/);
+    }]), /unsupported Aside or legacy SideNote2 comments block/);
 });
 
-test("serializeNoteCommentThreads refuses to write when a note contains two SideNote2 managed blocks", () => {
+test("serializeNoteCommentThreads refuses to write when a note contains two Aside managed blocks", () => {
     const first = serializeNoteComments("# Title\n\nVisible body.\n", [createComment()]);
     const second = serializeNoteComments("# Title\n\nVisible body.\n", [createComment({
         id: "comment-2",
@@ -584,7 +595,7 @@ test("serializeNoteCommentThreads refuses to write when a note contains two Side
         selectedTextHash: "hash-2",
         timestamp: 1710000001000,
     })]);
-    const duplicateBlocks = `${first.trimEnd()}\n\n${second.slice(second.indexOf("<!-- SideNote2 comments"))}\n`;
+    const duplicateBlocks = `${first.trimEnd()}\n\n${second.slice(second.indexOf("<!-- Aside comments"))}\n`;
 
     assert.throws(() => serializeNoteCommentThreads(duplicateBlocks, [{
         id: "thread-1",
@@ -602,7 +613,7 @@ test("serializeNoteCommentThreads refuses to write when a note contains two Side
         }],
         createdAt: 1710000001000,
         updatedAt: 1710000001000,
-    }]), /multiple SideNote2 comments blocks/);
+    }]), /multiple Aside or legacy SideNote2 comments blocks/);
 });
 
 test("getManagedSectionEdit patches only the managed comments block", () => {
@@ -611,7 +622,7 @@ test("getManagedSectionEdit patches only the managed comments block", () => {
         "",
         "Alpha beta gamma.",
         "",
-        "<!-- SideNote2 comments",
+        "<!-- Aside comments",
         "[]",
         "-->",
         "",
@@ -651,7 +662,7 @@ test("getManagedSectionEdit keeps a blank leading line when adding comments to a
 
     assert.equal(edit.fromOffset, 0);
     assert.equal(edit.toOffset, 0);
-    assert.match(edit.replacement, /^\n<!-- SideNote2 comments\n\[/);
+    assert.match(edit.replacement, /^\n<!-- Aside comments\n\[/);
 });
 
 test("getManagedSectionRange returns the trailing hidden block offsets", () => {
@@ -659,7 +670,7 @@ test("getManagedSectionRange returns the trailing hidden block offsets", () => {
     const range = getManagedSectionRange(withComments);
 
     assert.ok(range);
-    assert.equal(withComments.slice(range.fromOffset, range.toOffset).trimStart().startsWith("<!-- SideNote2 comments"), true);
+    assert.equal(withComments.slice(range.fromOffset, range.toOffset).trimStart().startsWith("<!-- Aside comments"), true);
 });
 
 test("getManagedSectionStartLine returns the opener line index", () => {
@@ -681,7 +692,7 @@ test("getManagedSectionRange returns null when no managed block exists", () => {
 
 test("parseNoteComments still recognizes a managed block after visible text is typed before it", () => {
     const inlineManagedBlock = [
-        "a<!-- SideNote2 comments",
+        "a<!-- Aside comments",
         "[",
         "  {",
         '    "id": "comment-1",',
@@ -716,7 +727,7 @@ test("parseNoteComments still recognizes a managed block after visible text is t
 
 test("getManagedSectionRange still finds a managed block after visible text is typed before it", () => {
     const inlineManagedBlock = [
-        "a<!-- SideNote2 comments",
+        "a<!-- Aside comments",
         "[]",
         "-->",
         "",
@@ -725,14 +736,14 @@ test("getManagedSectionRange still finds a managed block after visible text is t
     const range = getManagedSectionRange(inlineManagedBlock);
     assert.ok(range);
     assert.equal(inlineManagedBlock.slice(0, range.fromOffset), "a");
-    assert.equal(inlineManagedBlock.slice(range.fromOffset, range.toOffset).startsWith("<!-- SideNote2 comments"), true);
+    assert.equal(inlineManagedBlock.slice(range.fromOffset, range.toOffset).startsWith("<!-- Aside comments"), true);
 });
 
 test("parseNoteComments still recognizes a managed block after visible text is typed after it", () => {
     const trailingVisibleContent = [
         "# Title",
         "",
-        "<!-- SideNote2 comments",
+        "<!-- Aside comments",
         "[",
         "  {",
         '    "id": "comment-1",',
@@ -770,7 +781,7 @@ test("getManagedSectionEdit moves visible trailing text back before the managed 
     const original = [
         "# Title",
         "",
-        "<!-- SideNote2 comments",
+        "<!-- Aside comments",
         "[]",
         "-->",
         "Trailing text",
@@ -789,7 +800,7 @@ test("getManagedSectionEdit moves visible trailing text back before the managed 
     const patched = original.slice(0, edit.fromOffset) + edit.replacement + original.slice(edit.toOffset);
 
     assert.equal(patched, serializeNoteComments(original, [replacement]));
-    assert.match(patched, /^# Title\nTrailing text\n\n<!-- SideNote2 comments/m);
+    assert.match(patched, /^# Title\nTrailing text\n\n<!-- Aside comments/m);
     assert.doesNotMatch(patched, /-->\nTrailing text/);
 });
 
@@ -797,7 +808,7 @@ test("getVisibleNoteContent preserves visible whitespace around the hidden block
     const content = [
         "Body line",
         "",
-        "<!-- SideNote2 comments",
+        "<!-- Aside comments",
         "[]",
         "-->",
         "Trailing text",
@@ -811,7 +822,7 @@ test("parseNoteComments ignores non-JSON comment sections", () => {
     const invalidNote = [
         "Body",
         "",
-        "<!-- SideNote2 comments",
+        "<!-- Aside comments",
         "This is not JSON.",
         "-->",
         "",

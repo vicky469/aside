@@ -9,10 +9,10 @@ import { promisify } from "node:util";
 const execFile = promisify(execFileCallback);
 
 test("install-bundled-skill script copies all bundled repo skills into the target Codex skills directory by default", async () => {
-    const tempDir = await mkdtemp(path.join(tmpdir(), "sidenote2-skill-install-"));
+    const tempDir = await mkdtemp(path.join(tmpdir(), "aside-skill-install-"));
     const skillsRoot = path.join(tempDir, "skills");
     const scriptPath = path.resolve(process.cwd(), "scripts/install-bundled-skill.mjs");
-    const sourceSidenoteSkillDir = path.resolve(process.cwd(), "skills/sidenote2");
+    const sourceSidenoteSkillDir = path.resolve(process.cwd(), "skills/aside");
     const sourceCanvasSkillDir = path.resolve(process.cwd(), "skills/canvas-design");
 
     const { stdout } = await execFile("node", [
@@ -23,11 +23,11 @@ test("install-bundled-skill script copies all bundled repo skills into the targe
         cwd: process.cwd(),
     });
 
-    assert.match(stdout, /Installed skill sidenote2/);
+    assert.match(stdout, /Installed skill aside/);
     assert.match(stdout, /Installed skill canvas-design/);
     assert.match(stdout, /Restart Codex to pick up new skills/);
 
-    const installedSidenoteSkillDir = path.join(skillsRoot, "sidenote2");
+    const installedSidenoteSkillDir = path.join(skillsRoot, "aside");
     const installedSidenoteSkill = await readFile(path.join(installedSidenoteSkillDir, "SKILL.md"), "utf8");
     const sourceSidenoteSkill = await readFile(path.join(sourceSidenoteSkillDir, "SKILL.md"), "utf8");
     assert.equal(installedSidenoteSkill, sourceSidenoteSkill);
@@ -43,11 +43,11 @@ test("install-bundled-skill script copies all bundled repo skills into the targe
 });
 
 test("install-bundled-skill script replaces an existing installed skill directory", async () => {
-    const tempDir = await mkdtemp(path.join(tmpdir(), "sidenote2-skill-install-overwrite-"));
+    const tempDir = await mkdtemp(path.join(tmpdir(), "aside-skill-install-overwrite-"));
     const skillsRoot = path.join(tempDir, "skills");
-    const installedSkillDir = path.join(skillsRoot, "sidenote2");
+    const installedSkillDir = path.join(skillsRoot, "aside");
     const scriptPath = path.resolve(process.cwd(), "scripts/install-bundled-skill.mjs");
-    const sourceSkillPath = path.resolve(process.cwd(), "skills/sidenote2/SKILL.md");
+    const sourceSkillPath = path.resolve(process.cwd(), "skills/aside/SKILL.md");
 
     await mkdir(installedSkillDir, { recursive: true });
     await writeFile(path.join(installedSkillDir, "SKILL.md"), "stale", "utf8");
@@ -55,7 +55,7 @@ test("install-bundled-skill script replaces an existing installed skill director
     await execFile("node", [
         scriptPath,
         "--name",
-        "sidenote2",
+        "aside",
         "--dest",
         skillsRoot,
     ], {
@@ -68,24 +68,24 @@ test("install-bundled-skill script replaces an existing installed skill director
 });
 
 test("install-bundled-skill script can install a named bundled skill", async () => {
-    const tempDir = await mkdtemp(path.join(tmpdir(), "sidenote2-skill-install-named-"));
+    const tempDir = await mkdtemp(path.join(tmpdir(), "aside-skill-install-named-"));
     const skillsRoot = path.join(tempDir, "skills");
     const scriptPath = path.resolve(process.cwd(), "scripts/install-bundled-skill.mjs");
 
     const { stdout } = await execFile("node", [
         scriptPath,
         "--name",
-        "sidenote2",
+        "aside",
         "--dest",
         skillsRoot,
     ], {
         cwd: process.cwd(),
     });
 
-    assert.match(stdout, /Installed skill sidenote2/);
+    assert.match(stdout, /Installed skill aside/);
 
-    const installedSidenoteSkill = await readFile(path.join(skillsRoot, "sidenote2", "SKILL.md"), "utf8");
-    const sourceSidenoteSkill = await readFile(path.resolve(process.cwd(), "skills/sidenote2/SKILL.md"), "utf8");
+    const installedSidenoteSkill = await readFile(path.join(skillsRoot, "aside", "SKILL.md"), "utf8");
+    const sourceSidenoteSkill = await readFile(path.resolve(process.cwd(), "skills/aside/SKILL.md"), "utf8");
     assert.equal(installedSidenoteSkill, sourceSidenoteSkill);
 
     await assert.rejects(access(path.join(skillsRoot, "canvas-design", "SKILL.md")));

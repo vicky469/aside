@@ -6,7 +6,7 @@ test("remapSelectionOffsetAfterManagedSectionEdit keeps the caret before a manag
     const edit = {
         fromOffset: 0,
         toOffset: 0,
-        replacement: "\n<!-- SideNote2 comments\n[]\n-->\n",
+        replacement: "\n<!-- Aside comments\n[]\n-->\n",
     };
 
     assert.equal(remapSelectionOffsetAfterManagedSectionEdit(0, edit), 0);
@@ -26,7 +26,7 @@ test("remapSelectionOffsetAfterManagedSectionEdit clamps offsets inside the edit
     const edit = {
         fromOffset: 10,
         toOffset: 20,
-        replacement: "\n<!-- SideNote2 comments\n[]\n-->\n",
+        replacement: "\n<!-- Aside comments\n[]\n-->\n",
     };
 
     assert.equal(remapSelectionOffsetAfterManagedSectionEdit(15, edit), 10);
@@ -36,7 +36,7 @@ test("remapSelectionOffsetAfterManagedSectionEdit can keep the caret before a hi
     const edit = {
         fromOffset: 10,
         toOffset: 20,
-        replacement: "\n<!-- SideNote2 comments\n[]\n-->\n",
+        replacement: "\n<!-- Aside comments\n[]\n-->\n",
     };
 
     assert.equal(remapSelectionOffsetAfterManagedSectionEdit(25, edit, {

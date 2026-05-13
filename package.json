@@ -1,5 +1,5 @@
 {
-	"name": "side-note2",
+	"name": "aside",
 	"version": "2.0.64",
 	"description": "Side comments for both humans and agents.",
 	"main": "main.js",

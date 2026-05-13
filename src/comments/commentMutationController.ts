@@ -799,7 +799,7 @@ export class CommentMutationController {
 
         const managedRange = getManagedSectionRange(normalizedNoteContent);
         if (managedRange && rawStartOffset < managedRange.toOffset && rawEndOffset > managedRange.fromOffset) {
-            this.host.showNotice("Select text outside the SideNote2 comments block to re-anchor this side note.");
+            this.host.showNotice("Select text outside the Aside comments block to re-anchor this side note.");
             return null;
         }
 

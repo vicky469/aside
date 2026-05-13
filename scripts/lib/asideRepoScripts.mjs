@@ -42,7 +42,7 @@ function printAppendNoteCommentEntryUsage(stream = process.stderr) {
     stream.write(
         [
             "Usage:",
-            "  node scripts/append-note-comment-entry.mjs (--file <note.md> --id <comment-id> | --uri <obsidian://side-note2-comment?...>) (--comment <text> | --comment-file <path> | --stdin) [--settle-ms <milliseconds>]",
+            "  node scripts/append-note-comment-entry.mjs (--file <note.md> --id <comment-id> | --uri <obsidian://aside-comment?...>) (--comment <text> | --comment-file <path> | --stdin) [--settle-ms <milliseconds>]",
         ].join("\n") + "\n",
     );
 }
@@ -51,7 +51,7 @@ function printUpdateNoteCommentUsage(stream = process.stderr) {
     stream.write(
         [
             "Usage:",
-            "  node scripts/update-note-comment.mjs (--file <note.md> --id <comment-id> | --uri <obsidian://side-note2-comment?...>) (--comment <text> | --comment-file <path> | --stdin) [--settle-ms <milliseconds>]",
+            "  node scripts/update-note-comment.mjs (--file <note.md> --id <comment-id> | --uri <obsidian://aside-comment?...>) (--comment <text> | --comment-file <path> | --stdin) [--settle-ms <milliseconds>]",
         ].join("\n") + "\n",
     );
 }
@@ -60,7 +60,7 @@ function printResolveNoteCommentUsage(stream = process.stderr) {
     stream.write(
         [
             "Usage:",
-            "  node scripts/resolve-note-comment.mjs (--file <note.md> --id <comment-id> | --uri <obsidian://side-note2-comment?...>) [--settle-ms <milliseconds>]",
+            "  node scripts/resolve-note-comment.mjs (--file <note.md> --id <comment-id> | --uri <obsidian://aside-comment?...>) [--settle-ms <milliseconds>]",
         ].join("\n") + "\n",
     );
 }
@@ -511,7 +511,7 @@ export function createContentFingerprint(content) {
 async function writeFileAtomically(targetPath, content) {
     const tempPath = path.join(
         path.dirname(targetPath),
-        `.${path.basename(targetPath)}.sidenote2-${process.pid}-${randomUUID()}.tmp`,
+        `.${path.basename(targetPath)}.aside-${process.pid}-${randomUUID()}.tmp`,
     );
     await writeFile(tempPath, content, "utf8");
     try {
@@ -585,25 +585,47 @@ export function getSidecarPath(vaultRoot, noteRelativePath) {
     const normalized = normalizeStoragePath(noteRelativePath);
     const noteHash = hashText(normalized);
     const shard = noteHash.slice(0, 2) || "00";
+    return path.join(vaultRoot, ".obsidian", "plugins", "aside", "sidenotes", "by-note", shard, `${noteHash}.json`);
+}
+
+function getLegacySidecarPath(vaultRoot, noteRelativePath) {
+    const normalized = normalizeStoragePath(noteRelativePath);
+    const noteHash = hashText(normalized);
+    const shard = noteHash.slice(0, 2) || "00";
     return path.join(vaultRoot, ".obsidian", "plugins", "side-note2", "sidenotes", "by-note", shard, `${noteHash}.json`);
 }
 
 export function getSourceSidecarPath(vaultRoot, sourceId) {
     const sourceHash = hashText(sourceId);
     const shard = sourceHash.slice(0, 2) || "00";
+    return path.join(vaultRoot, ".obsidian", "plugins", "aside", "sidenotes", "by-source", shard, `${sourceHash}.json`);
+}
+
+function getLegacySourceSidecarPath(vaultRoot, sourceId) {
+    const sourceHash = hashText(sourceId);
+    const shard = sourceHash.slice(0, 2) || "00";
     return path.join(vaultRoot, ".obsidian", "plugins", "side-note2", "sidenotes", "by-source", shard, `${sourceHash}.json`);
 }
 
 async function readSourceIdForPath(vaultRoot, noteRelativePath) {
-    const dataPath = path.join(vaultRoot, ".obsidian", "plugins", "side-note2", "data.json");
+    const dataPaths = [
+        path.join(vaultRoot, ".obsidian", "plugins", "aside", "data.json"),
+        path.join(vaultRoot, ".obsidian", "plugins", "side-note2", "data.json"),
+    ];
     let parsed;
-    try {
-        parsed = JSON.parse(await readFile(dataPath, "utf8"));
-    } catch (error) {
-        if (error && error.code === "ENOENT") {
-            return null;
+    for (const dataPath of dataPaths) {
+        try {
+            parsed = JSON.parse(await readFile(dataPath, "utf8"));
+            break;
+        } catch (error) {
+            if (error && error.code === "ENOENT") {
+                continue;
+            }
+            throw error;
         }
-        throw error;
+    }
+    if (!parsed) {
+        return null;
     }
 
     const state = parsed?.sourceIdentityState;
@@ -662,36 +684,43 @@ export function getVaultRelativePath(vaultRoot, absolutePath) {
 }
 
 export async function readSidecar(vaultRoot, noteRelativePath) {
-    const sidecarPath = getSidecarPath(vaultRoot, noteRelativePath);
-    try {
-        const raw = await readFile(sidecarPath, "utf8");
-        const parsed = JSON.parse(raw);
-        if (!parsed || typeof parsed !== "object" || parsed.version !== 1 || !Array.isArray(parsed.threads)) {
-            return null;
+    const sidecarPaths = [
+        getSidecarPath(vaultRoot, noteRelativePath),
+        getLegacySidecarPath(vaultRoot, noteRelativePath),
+    ];
+    for (const sidecarPath of sidecarPaths) {
+        try {
+            const raw = await readFile(sidecarPath, "utf8");
+            const parsed = JSON.parse(raw);
+            if (!parsed || typeof parsed !== "object" || parsed.version !== 1 || !Array.isArray(parsed.threads)) {
+                return null;
+            }
+            return parsed.threads.map((thread) => ({
+                ...thread,
+                filePath: noteRelativePath,
+                entries: Array.isArray(thread.entries) ? thread.entries.map((entry) => ({ ...entry })) : [],
+            }));
+        } catch (error) {
+            if (error && error.code === "ENOENT") {
+                continue;
+            }
+            throw error;
         }
-        return parsed.threads.map((thread) => ({
-            ...thread,
-            filePath: noteRelativePath,
-            entries: Array.isArray(thread.entries) ? thread.entries.map((entry) => ({ ...entry })) : [],
-        }));
-    } catch (error) {
-        if (error && error.code === "ENOENT") {
-            return null;
-        }
-        throw error;
     }
+    return null;
 }
 
 export async function writeSidecar(vaultRoot, noteRelativePath, threads) {
     const sidecarPath = getSidecarPath(vaultRoot, noteRelativePath);
+    const legacySidecarPath = getLegacySidecarPath(vaultRoot, noteRelativePath);
     const sourceId = await readSourceIdForPath(vaultRoot, noteRelativePath);
     const sourceSidecarPath = sourceId ? getSourceSidecarPath(vaultRoot, sourceId) : null;
+    const legacySourceSidecarPath = sourceId ? getLegacySourceSidecarPath(vaultRoot, sourceId) : null;
     if (threads.length === 0) {
-        if (await pathExists(sidecarPath)) {
-            await rm(sidecarPath, { force: true });
-        }
-        if (sourceSidecarPath && await pathExists(sourceSidecarPath)) {
-            await rm(sourceSidecarPath, { force: true });
+        for (const targetPath of [sidecarPath, legacySidecarPath, sourceSidecarPath, legacySourceSidecarPath].filter(Boolean)) {
+            if (await pathExists(targetPath)) {
+                await rm(targetPath, { force: true });
+            }
         }
         return;
     }
@@ -709,6 +738,11 @@ export async function writeSidecar(vaultRoot, noteRelativePath, threads) {
             ...payload,
             sourceId,
         });
+    }
+    for (const stalePath of [legacySidecarPath, legacySourceSidecarPath].filter(Boolean)) {
+        if (await pathExists(stalePath)) {
+            await rm(stalePath, { force: true });
+        }
     }
 }
 
@@ -790,12 +824,16 @@ export async function stripLegacyBlockIfNeeded(vaultRoot, notePath, noteRelative
     return writeObservedNoteSafely(notePath, createContentFingerprint(noteContent), stripped, { settleMs });
 }
 
-const COMMENT_LOCATION_PROTOCOL = "side-note2-comment";
+const COMMENT_LOCATION_PROTOCOL = "aside-comment";
+const LEGACY_COMMENT_LOCATION_PROTOCOL = "side-note2-comment";
 
 function parseCommentProtocolUri(uri) {
     try {
         const parsed = new URL(uri);
-        if (parsed.protocol !== "obsidian:" || parsed.hostname !== COMMENT_LOCATION_PROTOCOL) {
+        if (
+            parsed.protocol !== "obsidian:"
+            || (parsed.hostname !== COMMENT_LOCATION_PROTOCOL && parsed.hostname !== LEGACY_COMMENT_LOCATION_PROTOCOL)
+        ) {
             return null;
         }
 
@@ -885,7 +923,7 @@ async function resolveCommentWriteTarget(options) {
     if (options.uri) {
         const uriTarget = parseCommentProtocolUri(options.uri);
         if (!uriTarget) {
-            throw new Error("Expected --uri to be an obsidian://side-note2-comment link with vault, file, and commentId.");
+            throw new Error("Expected --uri to be an obsidian://aside-comment link with vault, file, and commentId.");
         }
 
         const vaultRoot = await resolveVaultRootByName(uriTarget.vaultName);
@@ -966,10 +1004,10 @@ function getManagedSectionErrorMessage(storageModule, noteContent, notePath) {
         : null;
 
     if (problem === "multiple") {
-        return `Found multiple SideNote2 comments blocks in ${notePath}. Collapse them to exactly one managed block before writing.\n`;
+        return `Found multiple Aside or legacy SideNote2 comments blocks in ${notePath}. Collapse them to exactly one managed block before writing.\n`;
     }
 
-    return `Found a SideNote2 comments block in ${notePath}, but it is not a supported threaded entries[] payload.\n`;
+    return `Found an Aside or legacy SideNote2 comments block in ${notePath}, but it is not a supported threaded entries[] payload.\n`;
 }
 
 export async function runCreateNoteCommentThread(argv, io = { stdout: process.stdout, stderr: process.stderr }) {

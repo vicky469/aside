@@ -24,7 +24,7 @@ The DGX host must not require:
 - direct access to the Obsidian API
 
 The vault remains on the client device.
-All vault reads and writes happen on the client through SideNote2 using
+All vault reads and writes happen on the client through Aside using
 Obsidian APIs.
 
 ## Objective
@@ -32,7 +32,7 @@ Obsidian APIs.
 Define a DGX-backed remote runtime path so that:
 
 1. a user on Obsidian mobile can type `@codex`
-2. SideNote2 routes the run to a DGX-hosted bridge
+2. Aside routes the run to a DGX-hosted bridge
 3. DGX provides remote compute and agent reasoning
 4. DGX can request note reads and note writes through a plugin-mediated tool protocol
 5. the plugin executes approved vault operations locally through Obsidian APIs
@@ -50,17 +50,17 @@ Not:
 
 - DGX mounts the vault
 - DGX edits markdown files directly
-- DGX depends on `SIDENOTE2_DGX_VAULT_ROOT`
+- DGX depends on `ASIDE_DGX_VAULT_ROOT`
 
 ## Architecture
 
 ### Roles
 
-- `SideNote2 mobile plugin`
+- `Aside mobile plugin`
   - canonical vault owner
   - builds initial prompt context
   - executes vault reads and writes through Obsidian APIs
-  - applies SideNote2 thread mutations through existing safe helpers
+  - applies Aside thread mutations through existing safe helpers
 - `DGX bridge`
   - authenticates runs
   - hosts remote Codex execution
@@ -93,7 +93,7 @@ POSTs the result back to the bridge so the remote run can continue.
 
 ## Run Lifecycle
 
-1. User saves a SideNote2 entry in the active note.
+1. User saves a Aside entry in the active note.
 2. Plugin builds initial prompt context from the active note and thread.
 3. Plugin starts a remote run with:
    - prompt text
@@ -106,7 +106,7 @@ POSTs the result back to the bridge so the remote run can continue.
 6. Plugin executes that tool locally through Obsidian APIs.
 7. Plugin sends the tool result to the bridge.
 8. DGX continues until it returns final reply text.
-9. Plugin writes the final reply back into the SideNote2 thread locally.
+9. Plugin writes the final reply back into the Aside thread locally.
 
 ## Client Tool Contract
 
@@ -129,11 +129,11 @@ Initial recommended tool surface:
 - `obsidian.create_note`
   - input: target path and initial content
   - creates a note in the vault locally
-- `sidenote2.append_thread_reply`
+- `aside.append_thread_reply`
   - appends a reply entry using existing thread helpers
-- `sidenote2.update_thread_entry`
+- `aside.update_thread_entry`
   - updates an existing comment entry safely
-- `sidenote2.resolve_thread`
+- `aside.resolve_thread`
   - resolves the active thread safely
 
 ## Rules For Writes
@@ -150,12 +150,12 @@ The DGX may request:
 
 The plugin performs the actual write locally.
 
-### SideNote2 thread writes
+### Aside thread writes
 
 Must keep using safe helpers.
 
 The DGX must not request free-form edits to the serialized
-`<!-- SideNote2 comments -->` block.
+`<!-- Aside comments -->` block.
 
 ## Request and Event Shapes
 
@@ -210,7 +210,7 @@ interface RemoteToolResultSubmission {
 
 - If mobile is backgrounded and cannot execute tool calls, the run may pause.
 - If a tool call fails, the bridge should surface a user-safe failure message.
-- Final thread replies should still feel like normal SideNote2 agent replies.
+- Final thread replies should still feel like normal Aside agent replies.
 - Settings remain the same core pair:
   - remote bridge base URL
   - remote bridge token
@@ -220,7 +220,7 @@ interface RemoteToolResultSubmission {
 Not part of this spec:
 
 - DGX-side synced vault copies
-- `SIDENOTE2_DGX_VAULT_ROOT`
+- `ASIDE_DGX_VAULT_ROOT`
 - direct DGX filesystem edits to the vault
 - exposing arbitrary Obsidian APIs remotely
 - general-purpose remote shell access to the phone
@@ -242,13 +242,13 @@ Not part of this spec:
 
 ### Phase 3
 
-- add safe SideNote2 thread mutation tools
+- add safe Aside thread mutation tools
 - improve resumability and cancellation around in-flight tool calls
 
 ## Immediate Engineering Direction
 
 1. Keep the existing bridge foundation commit.
-2. Do not reintroduce `SIDENOTE2_DGX_VAULT_ROOT`.
+2. Do not reintroduce `ASIDE_DGX_VAULT_ROOT`.
 3. Treat the reverted vault-backed implementation as rejected.
 4. Extend the run protocol for bridge-to-plugin tool calls.
 5. Start with read tools before note-write tools.

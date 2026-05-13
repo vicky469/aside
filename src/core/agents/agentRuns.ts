@@ -1,5 +1,5 @@
 import type { CommentThread } from "../../commentManager";
-import type { SideNote2AgentTarget } from "../config/agentTargets";
+import type { AsideAgentTarget } from "../config/agentTargets";
 import type { AgentRuntimeModePreference } from "./agentRuntimePreferences";
 
 export type AgentRunRuntime = "openclaw-acp" | "direct-cli";
@@ -8,7 +8,7 @@ export type AgentRunStatus = "queued" | "running" | "succeeded" | "failed" | "ca
 export interface AgentRunStreamState {
     runId: string;
     threadId: string;
-    requestedAgent: SideNote2AgentTarget;
+    requestedAgent: AsideAgentTarget;
     runtime: AgentRunRuntime;
     status: AgentRunStatus;
     statusText?: string;
@@ -25,7 +25,7 @@ export interface AgentRunRecord {
     threadId: string;
     triggerEntryId: string;
     filePath: string;
-    requestedAgent: SideNote2AgentTarget;
+    requestedAgent: AsideAgentTarget;
     runtime: AgentRunRuntime;
     status: AgentRunStatus;
     promptText: string;

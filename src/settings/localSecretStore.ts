@@ -1,6 +1,6 @@
 import {
     normalizeRemoteRuntimeBearerToken,
-    type SideNote2LocalSecrets,
+    type AsideLocalSecrets,
 } from "../core/agents/agentRuntimePreferences";
 
 interface StorageLike {
@@ -13,7 +13,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
     return !!value && typeof value === "object" && !Array.isArray(value);
 }
 
-function normalizeLocalSecrets(value: unknown): SideNote2LocalSecrets {
+function normalizeLocalSecrets(value: unknown): AsideLocalSecrets {
     if (!isRecord(value)) {
         return {};
     }
@@ -24,38 +24,51 @@ function normalizeLocalSecrets(value: unknown): SideNote2LocalSecrets {
         : {};
 }
 
-export function buildLocalSecretStorageKey(pluginId: string, vaultName: string | null | undefined): string {
-    const normalizedPluginId = pluginId.trim() || "side-note2";
+export function buildLocalSecretStorageKey(
+    pluginId: string,
+    vaultName: string | null | undefined,
+    options: { namespace?: string } = {},
+): string {
+    const namespace = options.namespace?.trim() || "aside";
+    const normalizedPluginId = pluginId.trim() || "aside";
     const normalizedVaultName = typeof vaultName === "string" && vaultName.trim()
         ? vaultName.trim()
         : "unknown-vault";
-    return `sidenote2.local-secrets.v1.${normalizedPluginId}.${normalizedVaultName}`;
+    return `${namespace}.local-secrets.v1.${normalizedPluginId}.${normalizedVaultName}`;
 }
 
 export class LocalSecretStore {
     constructor(
         private readonly storageKey: string,
+        private readonly legacyStorageKeys: string[],
         private readonly storage: StorageLike | null,
     ) {}
 
-    public readSecrets(): SideNote2LocalSecrets {
+    public readSecrets(): AsideLocalSecrets {
         if (!this.storage) {
             return {};
         }
 
-        const rawValue = this.storage.getItem(this.storageKey);
+        const rawValue = this.storage.getItem(this.storageKey)
+            ?? this.legacyStorageKeys
+                .map((key) => this.storage?.getItem(key) ?? null)
+                .find((value): value is string => value !== null);
         if (!rawValue) {
             return {};
         }
 
         try {
-            return normalizeLocalSecrets(JSON.parse(rawValue));
+            const secrets = normalizeLocalSecrets(JSON.parse(rawValue));
+            if (secrets.remoteRuntimeBearerToken && !this.storage.getItem(this.storageKey)) {
+                this.storage.setItem(this.storageKey, JSON.stringify(secrets));
+            }
+            return secrets;
         } catch {
             return {};
         }
     }
 
-    public writeSecrets(nextSecrets: SideNote2LocalSecrets): void {
+    public writeSecrets(nextSecrets: AsideLocalSecrets): void {
         if (!this.storage) {
             return;
         }

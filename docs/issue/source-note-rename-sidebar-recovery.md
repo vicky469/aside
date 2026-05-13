@@ -2,7 +2,7 @@
 
 ## User-facing Problem
 
-SideNote2 sidebars can appear lost after a source markdown file is renamed, especially when the rename happens outside the exact local Obsidian runtime that owns the current sidecar cache.
+Aside sidebars can appear lost after a source markdown file is renamed, especially when the rename happens outside the exact local Obsidian runtime that owns the current sidecar cache.
 
 Observed examples:
 
@@ -24,7 +24,7 @@ A later false recovery attached the 111 `The Goal` threads to unrelated books in
 - `books/The Effective Executive.md`
 - `books/Shipping greatness.md`
 - `books/Modeling in Event-B.md`
-- `SideNote2 index.md`
+- `Aside index.md`
 
 The false match happened because generic anchors such as `## Chapter 1` and `## Chapter 2` appeared in multiple books and were counted as proof that the files were the same source.
 
@@ -35,7 +35,7 @@ The current sync/cache identity is still path-first.
 Sidecar storage is keyed by the hash of the markdown path:
 
 ```text
-.obsidian/plugins/side-note2/sidenotes/by-note/<shard>/<pathHash>.json
+.obsidian/plugins/aside/sidenotes/by-note/<shard>/<pathHash>.json
 ```
 
 Synced snapshots are also keyed by note path hash:
@@ -83,9 +83,9 @@ The plugin now polls focused/sidebar-visible files more frequently and replays s
 
 Files involved:
 
-- [main.ts](/Users/wenqingli/Obsidian/dev/SideNote2/src/main.ts)
-- [workspaceViewController.ts](/Users/wenqingli/Obsidian/dev/SideNote2/src/app/workspaceViewController.ts)
-- [commentPersistenceController.ts](/Users/wenqingli/Obsidian/dev/SideNote2/src/comments/commentPersistenceController.ts)
+- [main.ts](/Users/wenqingli/Obsidian/dev/Aside/src/main.ts)
+- [workspaceViewController.ts](/Users/wenqingli/Obsidian/dev/Aside/src/app/workspaceViewController.ts)
+- [commentPersistenceController.ts](/Users/wenqingli/Obsidian/dev/Aside/src/comments/commentPersistenceController.ts)
 
 This improves perceived mobile-to-desktop latency because the open note does not wait for a broad full replay.
 
@@ -97,8 +97,8 @@ This reduces stale desktop cache behavior when mobile has already written newer 
 
 Files involved:
 
-- [sideNoteSyncEventStore.ts](/Users/wenqingli/Obsidian/dev/SideNote2/src/sync/sideNoteSyncEventStore.ts)
-- [commentPersistenceController.ts](/Users/wenqingli/Obsidian/dev/SideNote2/src/comments/commentPersistenceController.ts)
+- [sideNoteSyncEventStore.ts](/Users/wenqingli/Obsidian/dev/Aside/src/sync/sideNoteSyncEventStore.ts)
+- [commentPersistenceController.ts](/Users/wenqingli/Obsidian/dev/Aside/src/comments/commentPersistenceController.ts)
 
 ### No-op Watermark Writes
 
@@ -108,7 +108,7 @@ This avoids unnecessary `data.json` churn during frequent focused polling.
 
 File involved:
 
-- [sideNoteSyncEventStore.ts](/Users/wenqingli/Obsidian/dev/SideNote2/src/sync/sideNoteSyncEventStore.ts)
+- [sideNoteSyncEventStore.ts](/Users/wenqingli/Obsidian/dev/Aside/src/sync/sideNoteSyncEventStore.ts)
 
 ### Rename Event Handling For Normal Obsidian Renames
 
@@ -116,17 +116,17 @@ The plugin already listens to Obsidian vault rename events and moves sidecar sto
 
 Files involved:
 
-- [main.ts](/Users/wenqingli/Obsidian/dev/SideNote2/src/main.ts)
-- [pluginLifecycleController.ts](/Users/wenqingli/Obsidian/dev/SideNote2/src/app/pluginLifecycleController.ts)
-- [commentPersistenceController.ts](/Users/wenqingli/Obsidian/dev/SideNote2/src/comments/commentPersistenceController.ts)
-- [sidecarCommentStorage.ts](/Users/wenqingli/Obsidian/dev/SideNote2/src/core/storage/sidecarCommentStorage.ts)
+- [main.ts](/Users/wenqingli/Obsidian/dev/Aside/src/main.ts)
+- [pluginLifecycleController.ts](/Users/wenqingli/Obsidian/dev/Aside/src/app/pluginLifecycleController.ts)
+- [commentPersistenceController.ts](/Users/wenqingli/Obsidian/dev/Aside/src/comments/commentPersistenceController.ts)
+- [sidecarCommentStorage.ts](/Users/wenqingli/Obsidian/dev/Aside/src/core/storage/sidecarCommentStorage.ts)
 
 This covers the clean case:
 
-1. SideNote2 is active.
+1. Aside is active.
 2. Obsidian emits a rename event.
 3. The old sidecar exists locally.
-4. SideNote2 moves it immediately and writes a `renameNote` sync event.
+4. Aside moves it immediately and writes a `renameNote` sync event.
 
 ### Safer Legacy Rename Recovery
 
@@ -136,11 +136,11 @@ This prevents the bad case where `books/The Goal.md` steals comments from `Notes
 
 File involved:
 
-- [commentPersistenceController.ts](/Users/wenqingli/Obsidian/dev/SideNote2/src/comments/commentPersistenceController.ts)
+- [commentPersistenceController.ts](/Users/wenqingli/Obsidian/dev/Aside/src/comments/commentPersistenceController.ts)
 
 Regression coverage:
 
-- [commentPersistenceExternalSync.test.ts](/Users/wenqingli/Obsidian/dev/SideNote2/tests/commentPersistenceExternalSync.test.ts)
+- [commentPersistenceExternalSync.test.ts](/Users/wenqingli/Obsidian/dev/Aside/tests/commentPersistenceExternalSync.test.ts)
 
 The tests now cover both:
 
@@ -166,17 +166,17 @@ Implemented pieces:
 
 Files involved:
 
-- [sourceIdentityStore.ts](/Users/wenqingli/Obsidian/dev/SideNote2/src/sync/sourceIdentityStore.ts)
-- [sidecarCommentStorage.ts](/Users/wenqingli/Obsidian/dev/SideNote2/src/core/storage/sidecarCommentStorage.ts)
-- [commentPersistenceController.ts](/Users/wenqingli/Obsidian/dev/SideNote2/src/comments/commentPersistenceController.ts)
-- [sideNoteSyncEvents.ts](/Users/wenqingli/Obsidian/dev/SideNote2/src/core/storage/sideNoteSyncEvents.ts)
-- [main.ts](/Users/wenqingli/Obsidian/dev/SideNote2/src/main.ts)
+- [sourceIdentityStore.ts](/Users/wenqingli/Obsidian/dev/Aside/src/sync/sourceIdentityStore.ts)
+- [sidecarCommentStorage.ts](/Users/wenqingli/Obsidian/dev/Aside/src/core/storage/sidecarCommentStorage.ts)
+- [commentPersistenceController.ts](/Users/wenqingli/Obsidian/dev/Aside/src/comments/commentPersistenceController.ts)
+- [sideNoteSyncEvents.ts](/Users/wenqingli/Obsidian/dev/Aside/src/core/storage/sideNoteSyncEvents.ts)
+- [main.ts](/Users/wenqingli/Obsidian/dev/Aside/src/main.ts)
 
 Regression coverage:
 
-- [sourceIdentityStore.test.ts](/Users/wenqingli/Obsidian/dev/SideNote2/tests/sourceIdentityStore.test.ts)
-- [sidecarCommentStorage.test.ts](/Users/wenqingli/Obsidian/dev/SideNote2/tests/sidecarCommentStorage.test.ts)
-- [commentPersistenceExternalSync.test.ts](/Users/wenqingli/Obsidian/dev/SideNote2/tests/commentPersistenceExternalSync.test.ts)
+- [sourceIdentityStore.test.ts](/Users/wenqingli/Obsidian/dev/Aside/tests/sourceIdentityStore.test.ts)
+- [sidecarCommentStorage.test.ts](/Users/wenqingli/Obsidian/dev/Aside/tests/sidecarCommentStorage.test.ts)
+- [commentPersistenceExternalSync.test.ts](/Users/wenqingli/Obsidian/dev/Aside/tests/commentPersistenceExternalSync.test.ts)
 
 Remaining hardening:
 
@@ -247,7 +247,7 @@ Lookup order:
 3. Fall back to the old path-hash sidecar for compatibility.
 4. If still missing, run bounded legacy recovery.
 
-The normal source-ID sidecar path is O(1). Legacy snapshot/cache scanning only runs when the current note has no source sidecar, no path sidecar, and no inline SideNote2 threads.
+The normal source-ID sidecar path is O(1). Legacy snapshot/cache scanning only runs when the current note has no source sidecar, no path sidecar, and no inline Aside threads.
 
 Old aliases are used for explicit rename handling and recovery decisions, not as a normal sidebar lookup path for an existing markdown file.
 
@@ -297,7 +297,7 @@ A content fingerprint should be resilient to filename changes but specific enoug
 Candidate approach:
 
 - normalize the first several KB of markdown body
-- strip the SideNote2 managed block
+- strip the Aside managed block
 - include heading structure and stable text shingles
 - ignore path and minor whitespace differences
 

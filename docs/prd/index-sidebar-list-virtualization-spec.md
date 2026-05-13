@@ -16,7 +16,7 @@ Main conclusion:
 Current default index list behavior is still a sample:
 
 1. `List` mode shows only the first `100` cards
-2. clicking a ref in `SideNote2 index.md` may target a comment outside that first `100`
+2. clicking a ref in `Aside index.md` may target a comment outside that first `100`
 3. if the sidebar stays in sample mode, the correct card may not be visible
 
 That feels broken.
@@ -34,7 +34,7 @@ Keep two states only:
 This applies no matter how the root file was selected:
 
 - manual `Files` filter
-- clicking a ref inside `SideNote2 index.md`
+- clicking a ref inside `Aside index.md`
 
 ## Why This Is Simpler
 
@@ -73,7 +73,7 @@ When the user chooses a file in the modal:
 - set that file as the root
 - show the full connected component
 
-When the user clicks a ref in `SideNote2 index.md`:
+When the user clicks a ref in `Aside index.md`:
 
 - set that ref’s source file as the root
 - show the full connected component
@@ -117,7 +117,7 @@ applyListLimit = false
 
 ## Implementation Notes
 
-### SideNote2View
+### AsideView
 
 - keep `selectedIndexFileFilterRootPath`
 - derive filtered file paths from the graph and root path only

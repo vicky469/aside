@@ -27,9 +27,9 @@ const INDEX_NATIVE_COLLAPSE_CONTROL_SELECTOR = [
     ".collapse-icon",
     ".cm-fold-indicator",
 ].join(", ");
-const INDEX_COMMENT_LINK_SELECTOR = "a.sidenote2-index-comment-link[data-sidenote2-comment-url]";
-const INDEX_FILE_HEADING_SELECTOR = ".sidenote2-index-heading-label[title], a[data-sidenote2-file-path]";
-const INDEX_FILE_LINK_SELECTOR = "a[href^=\"obsidian://open\"], a[href^=\"obsidian://side-note2-index-file\"]";
+const INDEX_COMMENT_LINK_SELECTOR = "a.aside-index-comment-link[data-aside-comment-url]";
+const INDEX_FILE_HEADING_SELECTOR = ".aside-index-heading-label[title], a[data-aside-file-path]";
+const INDEX_FILE_LINK_SELECTOR = "a[href^=\"obsidian://open\"], a[href^=\"obsidian://aside-index-file\"]";
 
 export function isIndexNativeCollapseControlTarget(target: ClosestLookupTarget | null): boolean {
     return !!target?.closest(INDEX_NATIVE_COLLAPSE_CONTROL_SELECTOR);
@@ -47,7 +47,7 @@ export function findClickedIndexLivePreviewTarget(
     }
 
     const commentLink = target.closest(INDEX_COMMENT_LINK_SELECTOR);
-    const commentUrl = commentLink?.dataset?.sidenote2CommentUrl ?? "";
+    const commentUrl = commentLink?.dataset?.asideCommentUrl ?? "";
     const commentTarget = commentUrl ? parseCommentLocationUrl(commentUrl) : null;
     if (commentTarget) {
         return {
@@ -57,7 +57,7 @@ export function findClickedIndexLivePreviewTarget(
     }
 
     const fileHeading = target.closest(INDEX_FILE_HEADING_SELECTOR);
-    const filePath = fileHeading?.dataset?.sidenote2FilePath?.trim()
+    const filePath = fileHeading?.dataset?.asideFilePath?.trim()
         || fileHeading?.getAttribute("title")?.trim()
         || "";
     if (filePath) {

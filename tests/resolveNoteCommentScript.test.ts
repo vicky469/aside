@@ -18,7 +18,7 @@ function hashText(text: string): string {
 function getSidecarPath(vaultRoot: string, noteRelativePath: string): string {
     const hash = hashText(noteRelativePath);
     const shard = hash.slice(0, 2);
-    return path.join(vaultRoot, ".obsidian", "plugins", "side-note2", "sidenotes", "by-note", shard, `${hash}.json`);
+    return path.join(vaultRoot, ".obsidian", "plugins", "aside", "sidenotes", "by-note", shard, `${hash}.json`);
 }
 
 async function readSidecar(vaultRoot: string, noteRelativePath: string): Promise<{ version: number; notePath: string; threads: Array<{ id: string; resolved: boolean; entries: Array<{ id: string; body: string; timestamp: number }> }> } | null> {
@@ -36,7 +36,7 @@ async function readSidecar(vaultRoot: string, noteRelativePath: string): Promise
 }
 
 async function createVaultDir(tempDir: string): Promise<void> {
-    await mkdir(path.join(tempDir, ".obsidian", "plugins", "side-note2"), { recursive: true });
+    await mkdir(path.join(tempDir, ".obsidian", "plugins", "aside"), { recursive: true });
 }
 
 async function writeObsidianVaultConfig(homeDir: string, vaultRoot: string): Promise<void> {
@@ -52,7 +52,7 @@ async function writeObsidianVaultConfig(homeDir: string, vaultRoot: string): Pro
 }
 
 function buildCommentLocationUri(vaultName: string, filePath: string, commentId: string): string {
-    return `obsidian://side-note2-comment?vault=${encodeURIComponent(vaultName)}&file=${encodeURIComponent(filePath)}&commentId=${encodeURIComponent(commentId)}`;
+    return `obsidian://aside-comment?vault=${encodeURIComponent(vaultName)}&file=${encodeURIComponent(filePath)}&commentId=${encodeURIComponent(commentId)}`;
 }
 
 function createComment(overrides: Partial<Comment> = {}): Comment {
@@ -73,7 +73,7 @@ function createComment(overrides: Partial<Comment> = {}): Comment {
 }
 
 test("resolve-note-comment script marks the targeted thread resolved", async () => {
-    const tempDir = await mkdtemp(path.join(tmpdir(), "sidenote2-comment-resolve-script-"));
+    const tempDir = await mkdtemp(path.join(tmpdir(), "aside-comment-resolve-script-"));
     const notePath = path.join(tempDir, "note.md");
     const scriptPath = path.resolve(process.cwd(), "scripts/resolve-note-comment.mjs");
     const original = serializeNoteComments("# Title\n\nBody text.\n", [createComment()]);
@@ -102,7 +102,7 @@ test("resolve-note-comment script marks the targeted thread resolved", async () 
 });
 
 test("resolve-note-comment script can target a stored comment by obsidian side-note URI", async () => {
-    const tempDir = await mkdtemp(path.join(tmpdir(), "sidenote2-comment-resolve-uri-script-"));
+    const tempDir = await mkdtemp(path.join(tmpdir(), "aside-comment-resolve-uri-script-"));
     const homeDir = path.join(tempDir, "home");
     const vaultRoot = path.join(tempDir, "Public Vault");
     const notePath = path.join(vaultRoot, "Folder", "Note.md");

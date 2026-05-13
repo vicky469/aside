@@ -220,10 +220,10 @@ test("extractCodexProgressTextDeltaFromJsonEvent preserves chunk spacing for buf
         extractCodexProgressTextDeltaFromJsonEvent({
             method: "item/reasoning/summaryTextDelta",
             params: {
-                delta: " using the sidenote2 skill",
+                delta: " using the aside skill",
             },
         }),
-        " using the sidenote2 skill",
+        " using the aside skill",
     );
     assert.equal(
         extractCodexProgressTextDeltaFromJsonEvent({
@@ -257,8 +257,8 @@ test("createWorkspaceWriteSandboxPolicy includes extra writable roots without du
 
 test("sanitizeAgentReplyText strips leading process narration and keeps the user-facing answer", () => {
     const value = [
-        "I'm using the `sidenote2` skill to locate the active thread in this workspace and pull enough nearby note context to draft the reply text that should be appended.",
-        "I've loaded the SideNote2 workflow.",
+        "I'm using the `aside` skill to locate the active thread in this workspace and pull enough nearby note context to draft the reply text that should be appended.",
+        "I've loaded the Aside workflow.",
         "I found the exact thread in `test3.md`.",
         "Start with repeated curiosity, not pressure.",
     ].join(" ");
@@ -277,7 +277,7 @@ test("sanitizeAgentReplyText leaves normal first-person answer text alone", () =
 });
 
 test("sanitizeAgentReplyText strips concatenated narration sentences without spaces", () => {
-    const value = "I’m using the `sidenote2` skill to locate the active thread in this workspace and pull enough nearby note context to draft the reply text that should be appended.I’ve loaded the SideNote2 workflow.I found the exact thread in `test3.md`.Start with repeated curiosity, not pressure.";
+    const value = "I’m using the `aside` skill to locate the active thread in this workspace and pull enough nearby note context to draft the reply text that should be appended.I’ve loaded the Aside workflow.I found the exact thread in `test3.md`.Start with repeated curiosity, not pressure.";
 
     assert.equal(
         sanitizeAgentReplyText(value),

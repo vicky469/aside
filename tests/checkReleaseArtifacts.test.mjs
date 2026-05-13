@@ -7,7 +7,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { inspectReleaseArtifacts } from "../scripts/check-release-artifacts.mjs";
 
 function withTempDir(callback) {
-    const tempDir = mkdtempSync(path.join(os.tmpdir(), "sidenote2-release-artifacts-"));
+    const tempDir = mkdtempSync(path.join(os.tmpdir(), "aside-release-artifacts-"));
     try {
         return callback(tempDir);
     } finally {
@@ -18,7 +18,7 @@ function withTempDir(callback) {
 function writeReleaseFiles(tempDir, overrides = {}) {
     const files = {
         "main.js": "console.log('ok');",
-        "manifest.json": "{\"id\":\"side-note2\",\"version\":\"2.0.12\"}",
+        "manifest.json": "{\"id\":\"aside\",\"version\":\"2.0.12\"}",
         "styles.css": ".root { color: red; }",
         ...overrides,
     };

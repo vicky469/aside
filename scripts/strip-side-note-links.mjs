@@ -12,7 +12,7 @@ import {
     stripLegacyBlockIfNeeded,
     writeSidecar,
     writeObservedNoteSafely,
-} from "./lib/sideNote2RepoScripts.mjs";
+} from "./lib/asideRepoScripts.mjs";
 
 function printUsage(stream = process.stderr) {
     stream.write(

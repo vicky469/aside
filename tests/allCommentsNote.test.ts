@@ -52,7 +52,7 @@ function escapeHtmlText(value: string): string {
 function expectedFileRow(filePath: string): string {
     const fileName = filePath.split("/").pop() ?? filePath;
     const escapedPath = escapeHtmlText(filePath);
-    return `- <a href="#" class="sidenote2-index-file-filter-link sidenote2-index-heading-label" title="${escapedPath}" data-sidenote2-file-path="${escapedPath}">${escapeHtmlText(fileName)}</a>`;
+    return `- <a href="#" class="aside-index-file-filter-link aside-index-heading-label" title="${escapedPath}" data-aside-file-path="${escapedPath}">${escapeHtmlText(fileName)}</a>`;
 }
 
 function countOccurrences(value: string, needle: string): number {
@@ -67,13 +67,13 @@ test("buildCommentLocationUrl encodes vault, file, and comment id", () => {
 
     assert.equal(
         url,
-        "obsidian://side-note2-comment?vault=dev%20vault&file=Folder%2FMy%20Note.md&commentId=comment%201"
+        "obsidian://aside-comment?vault=dev%20vault&file=Folder%2FMy%20Note.md&commentId=comment%201"
     );
 });
 
 test("parseCommentLocationUrl extracts file path and comment id", () => {
     assert.deepEqual(
-        parseCommentLocationUrl("obsidian://side-note2-comment?vault=dev&file=Folder%2FMy%20Note.md&commentId=comment%201"),
+        parseCommentLocationUrl("obsidian://aside-comment?vault=dev&file=Folder%2FMy%20Note.md&commentId=comment%201"),
         {
             filePath: "Folder/My Note.md",
             commentId: "comment 1",
@@ -84,7 +84,7 @@ test("parseCommentLocationUrl extracts file path and comment id", () => {
 
 test("findCommentLocationTargetInMarkdownLine finds the side note target in a generated markdown list row", () => {
     assert.deepEqual(
-        findCommentLocationTargetInMarkdownLine('<span class="sidenote2-index-kind-dot sidenote2-index-kind-page"></span> [hello](obsidian://side-note2-comment?vault=dev&file=Folder%2FNote.md&commentId=comment-1&kind=page)  #hi'),
+        findCommentLocationTargetInMarkdownLine('<span class="aside-index-kind-dot aside-index-kind-page"></span> [hello](obsidian://aside-comment?vault=dev&file=Folder%2FNote.md&commentId=comment-1&kind=page)  #hi'),
         {
             filePath: "Folder/Note.md",
             commentId: "comment-1",
@@ -95,15 +95,15 @@ test("findCommentLocationTargetInMarkdownLine finds the side note target in a ge
 
 test("findFileHeadingPathInMarkdownLine extracts the source file path from an index heading row", () => {
     assert.equal(
-        findFileHeadingPathInMarkdownLine('##### <span class="sidenote2-index-heading-label" title="Folder/Note.md">Note.md</span>'),
+        findFileHeadingPathInMarkdownLine('##### <span class="aside-index-heading-label" title="Folder/Note.md">Note.md</span>'),
         "Folder/Note.md",
     );
     assert.equal(
-        findFileHeadingPathInMarkdownLine('##### <strong class="sidenote2-index-heading-label" title="Folder/Legacy.md">Legacy.md</strong>'),
+        findFileHeadingPathInMarkdownLine('##### <strong class="aside-index-heading-label" title="Folder/Legacy.md">Legacy.md</strong>'),
         "Folder/Legacy.md",
     );
     assert.equal(
-        findFileHeadingPathInMarkdownLine('- <a class="sidenote2-index-heading-label" title="Folder/Linked.md" href="obsidian://open?vault=dev&amp;file=Folder%2FLinked.md">Linked.md</a>'),
+        findFileHeadingPathInMarkdownLine('- <a class="aside-index-heading-label" title="Folder/Linked.md" href="obsidian://open?vault=dev&amp;file=Folder%2FLinked.md">Linked.md</a>'),
         "Folder/Linked.md",
     );
     assert.equal(
@@ -118,12 +118,12 @@ test("parseIndexFileOpenUrl extracts file paths from generated file links", () =
         parseIndexFileOpenUrl("obsidian://open?vault=dev&file=Folder%2FLinked.md"),
         "Folder/Linked.md",
     );
-    assert.equal(parseIndexFileOpenUrl("obsidian://side-note2-comment?vault=dev&file=Folder%2FLinked.md"), null);
+    assert.equal(parseIndexFileOpenUrl("obsidian://aside-comment?vault=dev&file=Folder%2FLinked.md"), null);
 });
 
 test("findIndexMarkdownLineTarget resolves both comment rows and file heading rows", () => {
     assert.deepEqual(
-        findIndexMarkdownLineTarget('<span class="sidenote2-index-kind-dot sidenote2-index-kind-page"></span> [hello](obsidian://side-note2-comment?vault=dev&file=Folder%2FNote.md&commentId=comment-1&kind=page)  #hi'),
+        findIndexMarkdownLineTarget('<span class="aside-index-kind-dot aside-index-kind-page"></span> [hello](obsidian://aside-comment?vault=dev&file=Folder%2FNote.md&commentId=comment-1&kind=page)  #hi'),
         {
             kind: "comment",
             filePath: "Folder/Note.md",
@@ -131,7 +131,7 @@ test("findIndexMarkdownLineTarget resolves both comment rows and file heading ro
         },
     );
     assert.deepEqual(
-        findIndexMarkdownLineTarget('##### <span class="sidenote2-index-heading-label" title="Folder/Note.md">Note.md</span>'),
+        findIndexMarkdownLineTarget('##### <span class="aside-index-heading-label" title="Folder/Note.md">Note.md</span>'),
         {
             kind: "file",
             filePath: "Folder/Note.md",
@@ -152,8 +152,8 @@ test("findCommentLocationLineNumber returns null for the simplified generated in
 
 test("buildCommentLocationLineNumberMap still indexes legacy comment rows", () => {
     const content = [
-        '<span class="sidenote2-index-kind-dot sidenote2-index-kind-anchored"></span> [alpha](obsidian://side-note2-comment?vault=dev&file=Folder%2FNote.md&commentId=comment-1&kind=anchored)',
-        '<span class="sidenote2-index-kind-dot sidenote2-index-kind-anchored"></span> [beta](obsidian://side-note2-comment?vault=dev&file=Folder%2FOther.md&commentId=comment-2&kind=anchored)',
+        '<span class="aside-index-kind-dot aside-index-kind-anchored"></span> [alpha](obsidian://aside-comment?vault=dev&file=Folder%2FNote.md&commentId=comment-1&kind=anchored)',
+        '<span class="aside-index-kind-dot aside-index-kind-anchored"></span> [beta](obsidian://aside-comment?vault=dev&file=Folder%2FOther.md&commentId=comment-2&kind=anchored)',
     ].join("\n");
 
     const lineNumbersByCommentId = buildCommentLocationLineNumberMap(content);
@@ -187,7 +187,7 @@ test("buildIndexNoteNavigationMap tracks simplified file link rows", () => {
 test("buildIndexCommentBlockId normalizes comment ids into stable block ids", () => {
     assert.equal(
         buildIndexCommentBlockId("Comment 01/alpha"),
-        "sidenote2-index-comment-comment-01-alpha",
+        "aside-index-comment-comment-01-alpha",
     );
 });
 
@@ -212,7 +212,7 @@ test("buildAllCommentsNoteContent lists unique files grouped by folder", () => {
     assert.equal(countOccurrences(content, expectedFileRow("Projects/Alpha/Note B.md")), 1);
     assert.equal(content.includes(`Projects/Alpha\n${expectedFileRow("Projects/Alpha/Note A.md")}\n${expectedFileRow("Projects/Alpha/Note B.md")}`), true);
     assert.doesNotMatch(content, /commentId=/);
-    assert.doesNotMatch(content, /sidenote2-index-kind-dot/);
+    assert.doesNotMatch(content, /aside-index-kind-dot/);
 });
 
 test("buildAllCommentsNoteContent keeps resolved visibility filtering", () => {
@@ -230,7 +230,7 @@ test("buildAllCommentsNoteContent keeps resolved visibility filtering", () => {
     });
 
     assert.equal(content.includes(expectedFileRow("B.md")), true);
-    assert.equal(content.includes('data-sidenote2-file-path="A.md"'), false);
+    assert.equal(content.includes('data-aside-file-path="A.md"'), false);
 });
 
 test("buildAllCommentsNoteContent renders only the header when there are no comments", () => {
@@ -238,7 +238,7 @@ test("buildAllCommentsNoteContent renders only the header when there are no comm
 
     assert.equal(
         content,
-        `![${ALL_COMMENTS_NOTE_IMAGE_ALT}](${ALL_COMMENTS_NOTE_IMAGE_URL})\n<div class="sidenote2-index-header-caption" style="display: block; color: #8a8a8a; font-size: 12px; line-height: 1.2; text-align: center;">${ALL_COMMENTS_NOTE_IMAGE_CAPTION}</div>\n`,
+        `![${ALL_COMMENTS_NOTE_IMAGE_ALT}](${ALL_COMMENTS_NOTE_IMAGE_URL})\n<div class="aside-index-header-caption" style="display: block; color: #8a8a8a; font-size: 12px; line-height: 1.2; text-align: center;">${ALL_COMMENTS_NOTE_IMAGE_CAPTION}</div>\n`,
     );
 });
 
@@ -255,7 +255,7 @@ test("buildAllCommentsNoteContent ignores comments attached to the generated agg
         }),
     ]);
 
-    assert.doesNotMatch(content, /SideNote2 index\.md/);
+    assert.doesNotMatch(content, /Aside index\.md/);
     assert.equal(content.includes(expectedFileRow("Z.md")), true);
 });
 

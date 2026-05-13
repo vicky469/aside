@@ -185,14 +185,14 @@ test("toggleMarkdownBold wraps multiline list selections per content line", () =
 test("renderStyledDraftCommentHtml keeps bold markers and highlights mentions", () => {
     assert.equal(
         renderStyledDraftCommentHtml("Hi **@blue** and @green"),
-        "Hi **<span class=\"sidenote2-editor-token-bold\"><span class=\"sidenote2-editor-token-mention\">@blue</span></span>** and <span class=\"sidenote2-editor-token-mention\">@green</span>",
+        "Hi **<span class=\"aside-editor-token-bold\"><span class=\"aside-editor-token-mention\">@blue</span></span>** and <span class=\"aside-editor-token-mention\">@green</span>",
     );
 });
 
 test("renderStyledDraftCommentHtml does not treat emails as mentions", () => {
     assert.equal(
         renderStyledDraftCommentHtml("ping foo@example.com and @teammate"),
-        "ping foo@example.com and <span class=\"sidenote2-editor-token-mention\">@teammate</span>",
+        "ping foo@example.com and <span class=\"aside-editor-token-mention\">@teammate</span>",
     );
 });
 
@@ -201,7 +201,7 @@ test("renderStyledDraftCommentHtml keeps html-like input inert", () => {
 
     assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
     assert.match(html, /&lt;img src=x onerror=alert\(1\)&gt;/);
-    assert.match(html, /<span class=\"sidenote2-editor-token-mention\">@safe<\/span>/);
+    assert.match(html, /<span class=\"aside-editor-token-mention\">@safe<\/span>/);
     assert.ok(!html.includes("<script>"));
     assert.ok(!html.includes("<img "));
 });

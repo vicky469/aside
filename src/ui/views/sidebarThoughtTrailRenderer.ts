@@ -75,9 +75,9 @@ export async function renderSidebarThoughtTrail(
     options: SidebarThoughtTrailOptions,
     context: SidebarThoughtTrailRenderContext,
 ): Promise<void> {
-    const thoughtTrailEl = container.createDiv("sidenote2-thought-trail");
+    const thoughtTrailEl = container.createDiv("aside-thought-trail");
     if (!options.hasRootScope || !options.rootFilePath) {
-        const emptyStateEl = thoughtTrailEl.createDiv("sidenote2-empty-state sidenote2-section-empty-state");
+        const emptyStateEl = thoughtTrailEl.createDiv("aside-empty-state aside-section-empty-state");
         if (options.surface === "note") {
             emptyStateEl.createEl("p", { text: "No thought trail is available for this file yet." });
             emptyStateEl.createEl("p", { text: "Add side notes in this note to create a rooted trail." });
@@ -121,20 +121,20 @@ async function renderThoughtTrailSection(
     },
     context: SidebarThoughtTrailRenderContext,
 ): Promise<void> {
-    const sectionEl = container.createDiv("sidenote2-thought-trail-section");
+    const sectionEl = container.createDiv("aside-thought-trail-section");
     sectionEl.createEl("h4", {
-        cls: "sidenote2-thought-trail-section-title",
+        cls: "aside-thought-trail-section-title",
         text: options.title,
     });
     if (!options.thoughtTrailLines.length) {
-        const emptyStateEl = sectionEl.createDiv("sidenote2-empty-state sidenote2-section-empty-state");
+        const emptyStateEl = sectionEl.createDiv("aside-empty-state aside-section-empty-state");
         options.emptyStateText.forEach((text) => {
             emptyStateEl.createEl("p", { text });
         });
         return;
     }
 
-    const graphEl = sectionEl.createDiv("sidenote2-thought-trail-section-graph");
+    const graphEl = sectionEl.createDiv("aside-thought-trail-section-graph");
     await renderThoughtTrailMermaid(graphEl, options.thoughtTrailLines, options.sourcePath, context);
     bindThoughtTrailNodeLinks(graphEl, options.thoughtTrailLines, context);
 }
@@ -156,7 +156,7 @@ async function renderThoughtTrailMermaid(
 
         const fallbackMermaidEl = container.querySelector(".mermaid");
         if (fallbackMermaidEl instanceof HTMLElement) {
-            fallbackMermaidEl.setAttribute("data-sidenote2-thought-trail-renderer", "markdown");
+            fallbackMermaidEl.setAttribute("data-aside-thought-trail-renderer", "markdown");
         }
     };
 
@@ -177,7 +177,7 @@ async function renderThoughtTrailMermaid(
             ...getThoughtTrailMermaidRenderConfig(),
         });
 
-        const renderId = `sidenote2-thought-trail-${context.renderVersion}-${Date.now()}`;
+        const renderId = `aside-thought-trail-${context.renderVersion}-${Date.now()}`;
         const renderResult = await mermaidRuntime.render(
             renderId,
             extractDirectRenderMermaidSource(thoughtTrailLines),
@@ -189,7 +189,7 @@ async function renderThoughtTrailMermaid(
         }
 
         const mermaidEl = container.createDiv("mermaid");
-        mermaidEl.setAttribute("data-sidenote2-thought-trail-renderer", "direct");
+        mermaidEl.setAttribute("data-aside-thought-trail-renderer", "direct");
         const renderedSvg = parseTrustedMermaidSvg(svg);
         if (!renderedSvg) {
             mermaidEl.remove();
@@ -242,7 +242,7 @@ function bindThoughtTrailNodeLinks(
             return;
         }
 
-        element.setAttribute("data-sidenote2-thought-trail-node-link", "true");
+        element.setAttribute("data-aside-thought-trail-node-link", "true");
     });
 
     mermaidEl.addEventListener("click", (event: Event) => {

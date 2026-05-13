@@ -11,11 +11,11 @@ import {
 } from "./logSanitizer";
 import { toUtcIsoString } from "../core/time/dateTime";
 
-export type SideNote2LogLevel = "info" | "warn" | "error";
+export type AsideLogLevel = "info" | "warn" | "error";
 
-export interface SideNote2LogEntry {
+export interface AsideLogEntry {
     at: string;
-    level: SideNote2LogLevel;
+    level: AsideLogLevel;
     area: string;
     event: string;
     pluginVersion: string;
@@ -23,7 +23,7 @@ export interface SideNote2LogEntry {
     payload?: Record<string, unknown>;
 }
 
-export interface SideNote2LogAttachment {
+export interface AsideLogAttachment {
     fileName: string;
     relativePath: string;
     sizeBytes: number;
@@ -35,7 +35,7 @@ export interface SideNote2LogAttachment {
 
 export const SUPPORT_LOG_ATTACHMENT_WINDOW_MINUTES = 30;
 
-export interface SideNote2LogServiceOptions {
+export interface AsideLogServiceOptions {
     adapter: DataAdapter;
     pluginVersion: string;
     pluginDirPath: string;
@@ -98,16 +98,16 @@ async function ensureDirectory(adapter: DataAdapter, targetPath: string): Promis
     }
 }
 
-export class SideNote2LogService {
+export class AsideLogService {
     private readonly now: () => Date;
     private readonly sessionId: string;
     private readonly logsDirPath: string;
     private readonly sanitizerContext: LogSanitizerContext;
-    private readonly recentBuffer: SideNote2LogEntry[] = [];
+    private readonly recentBuffer: AsideLogEntry[] = [];
     private writeQueue: Promise<void> = Promise.resolve();
     private warnedAboutWriteFailure = false;
 
-    constructor(private readonly options: SideNote2LogServiceOptions) {
+    constructor(private readonly options: AsideLogServiceOptions) {
         this.now = options.now ?? (() => new Date());
         this.sessionId = options.sessionId ?? createSessionId();
         this.logsDirPath = normalizeLogPath(`${options.pluginDirPath}/logs`);
@@ -134,12 +134,12 @@ export class SideNote2LogService {
     }
 
     public async log(
-        level: SideNote2LogLevel,
+        level: AsideLogLevel,
         area: string,
         event: string,
         payload?: Record<string, unknown>,
     ): Promise<void> {
-        const entry: SideNote2LogEntry = {
+        const entry: AsideLogEntry = {
             at: toUtcIsoString(this.now()),
             level,
             area,
@@ -158,7 +158,7 @@ export class SideNote2LogService {
         }
 
         if (level === "error") {
-            console.error("[SideNote2]", event, entry.payload ?? {});
+            console.error("[Aside]", event, entry.payload ?? {});
         }
 
         await this.enqueue(async () => {
@@ -182,7 +182,7 @@ export class SideNote2LogService {
 
     public async getCurrentLogAttachment(options: {
         recentMinutes?: number;
-    } = {}): Promise<SideNote2LogAttachment | null> {
+    } = {}): Promise<AsideLogAttachment | null> {
         await this.flush();
         const filePath = this.getCurrentLogFilePath();
         if (!(await this.options.adapter.exists(filePath))) {
@@ -207,7 +207,7 @@ export class SideNote2LogService {
             .catch((error) => {
                 if (!this.warnedAboutWriteFailure) {
                     this.warnedAboutWriteFailure = true;
-                    console.error("[SideNote2] Failed to write persistent logs.", sanitizeErrorForLog(error, this.sanitizerContext));
+                    console.error("[Aside] Failed to write persistent logs.", sanitizeErrorForLog(error, this.sanitizerContext));
                 }
             });
         await this.writeQueue;
@@ -232,7 +232,7 @@ export class SideNote2LogService {
         content: string,
         stat: Stat | null,
         windowMinutes: number | null,
-    ): SideNote2LogAttachment {
+    ): AsideLogAttachment {
         return {
             fileName: filePath.split("/").pop() ?? filePath,
             relativePath: filePath,

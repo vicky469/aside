@@ -27,14 +27,14 @@ Relevant current code:
 - [src/ui/views/sidebarDraftComment.ts](../../src/ui/views/sidebarDraftComment.ts)
 - [src/ui/views/sidebarDraftEditor.ts](../../src/ui/views/sidebarDraftEditor.ts)
 - [src/ui/views/sidebarPersistedComment.ts](../../src/ui/views/sidebarPersistedComment.ts)
-- [src/ui/views/SideNote2View.ts](../../src/ui/views/SideNote2View.ts)
+- [src/ui/views/AsideView.ts](../../src/ui/views/AsideView.ts)
 - [src/index/SideNoteReferenceSearchIndex.ts](../../src/index/SideNoteReferenceSearchIndex.ts)
 - [src/core/derived/sideNoteReferenceIndex.ts](../../src/core/derived/sideNoteReferenceIndex.ts)
 - [src/core/derived/thoughtTrail.ts](../../src/core/derived/thoughtTrail.ts)
 
 ## Summary
 
-SideNote2 should support local side-note chaining inside the same markdown file, not only cross-file linking.
+Aside should support local side-note chaining inside the same markdown file, not only cross-file linking.
 
 This PRD now tracks the remaining work after the first action-surface cleanup already landed in code.
 
@@ -97,9 +97,9 @@ The current product model is stronger for cross-file linking than for local chai
 
 The current authoring flow is now split into two layers:
 
-- persisted-card entry point in `openCommentSideNoteReferenceSuggest(...)` in [SideNote2View.ts](../../src/ui/views/SideNote2View.ts)
+- persisted-card entry point in `openCommentSideNoteReferenceSuggest(...)` in [AsideView.ts](../../src/ui/views/AsideView.ts)
 - shared insertion logic in `appendMentionedReference(...)` in [sidebarDraftEditor.ts](../../src/ui/views/sidebarDraftEditor.ts)
-- picker opening in `openSideNoteReferenceSuggestModal(...)` in [SideNote2View.ts](../../src/ui/views/SideNote2View.ts)
+- picker opening in `openSideNoteReferenceSuggestModal(...)` in [AsideView.ts](../../src/ui/views/AsideView.ts)
 
 But the picker currently filters out same-file results in [SideNoteReferenceSearchIndex.ts](../../src/index/SideNoteReferenceSearchIndex.ts).
 
@@ -125,7 +125,7 @@ That is implemented through:
 
 - derived references in [sideNoteReferenceIndex.ts](../../src/core/derived/sideNoteReferenceIndex.ts)
 - file-level graph lines in [thoughtTrail.ts](../../src/core/derived/thoughtTrail.ts)
-- rendering in `renderThoughtTrail(...)` in [SideNote2View.ts](../../src/ui/views/SideNote2View.ts)
+- rendering in `renderThoughtTrail(...)` in [AsideView.ts](../../src/ui/views/AsideView.ts)
 
 ## Product Decisions
 
@@ -333,7 +333,7 @@ Same-file references should remain excluded from the file graph, because they ar
 
 ### Rendering
 
-`renderThoughtTrail(...)` in [SideNote2View.ts](../../src/ui/views/SideNote2View.ts) should become a stacked section renderer rather than a single-graph renderer.
+`renderThoughtTrail(...)` in [AsideView.ts](../../src/ui/views/AsideView.ts) should become a stacked section renderer rather than a single-graph renderer.
 
 Recommended refactor:
 

@@ -52,19 +52,19 @@ class FakeSidebarElement extends FakeNode {
     }
 
     public closest(selector: string): FakeSidebarElement | null {
-        if (selector === ".sidenote2-comment-item") {
+        if (selector === ".aside-comment-item") {
             return this.options.isCommentItem ? this : null;
         }
 
-        if (selector === ".sidenote2-comments-list-actions, .sidenote2-sidebar-toolbar, .sidenote2-active-file-filters") {
+        if (selector === ".aside-comments-list-actions, .aside-sidebar-toolbar, .aside-active-file-filters") {
             return this.options.isSectionChrome ? this : null;
         }
 
-        if (selector === ".sidenote2-sidebar-toolbar") {
+        if (selector === ".aside-sidebar-toolbar") {
             return this.options.isToolbar ? this : null;
         }
 
-        if (selector === ".sidenote2-sidebar-toolbar.is-deleted-toolbar-mode") {
+        if (selector === ".aside-sidebar-toolbar.is-deleted-toolbar-mode") {
             return this.options.isToolbar && this.options.isDeletedToolbarMode ? this : null;
         }
 
@@ -222,7 +222,7 @@ test("sidebar interaction controller routes local side note protocol links throu
     const harness = createHarness();
 
     await harness.controller.openSidebarInternalLink(
-        "obsidian://side-note2-comment?vault=dev&file=docs%2Ftarget.md&commentId=comment-9",
+        "obsidian://aside-comment?vault=dev&file=docs%2Ftarget.md&commentId=comment-9",
         "docs/source.md",
         {} as HTMLElement,
     );

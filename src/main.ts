@@ -23,6 +23,7 @@ import type { SetSidebarViewStateOptions } from "./comments/commentSessionContro
 import { getResolvedVisibilityForCommentSelection } from "./comments/commentSelectionVisibility";
 import { CommentSessionController } from "./comments/commentSessionController";
 import { IndexNoteSettingsController } from "./settings/indexNoteSettingsController";
+import type { PersistedPluginData } from "./settings/indexNoteSettingsPlanner";
 import { PluginEventRouter } from "./app/pluginEventRouter";
 import { PluginLifecycleController } from "./app/pluginLifecycleController";
 import { PluginRegistrationController } from "./app/pluginRegistrationController";
@@ -66,28 +67,30 @@ import { syncInstalledCodexSkill, type CodexSkillSyncModules } from "./core/code
 import { AggregateCommentIndex } from "./index/AggregateCommentIndex";
 import { ParsedNoteCache } from "./cache/ParsedNoteCache";
 import { parseNoteComments, ParsedNoteComments } from "./core/storage/noteCommentStorage";
-import SideNote2Setting, {
+import AsideSetting, {
     DEFAULT_SETTINGS,
-    type SideNote2Settings,
-} from "./ui/settings/SideNote2Setting";
+    type AsideSettings,
+} from "./ui/settings/AsideSetting";
 import {
-    SIDE_NOTE2_ICON_ID,
-    SIDE_NOTE2_ICON_SVG,
-    SIDE_NOTE2_REGENERATE_ICON_ID,
-    SIDE_NOTE2_REGENERATE_ICON_SVG,
-} from "./ui/sideNote2Icon";
+    ASIDE_ICON_ID,
+    ASIDE_ICON_SVG,
+    ASIDE_REGENERATE_ICON_ID,
+    ASIDE_REGENERATE_ICON_SVG,
+} from "./ui/asideIcon";
 import SupportLogInspectorModal from "./ui/modals/SupportLogInspectorModal";
-import SideNote2View from "./ui/views/SideNote2View";
+import AsideView from "./ui/views/AsideView";
 import {
-    SideNote2LogService,
-    type SideNote2LogLevel,
+    AsideLogService,
+    type AsideLogLevel,
 } from "./logs/logService";
-import bundledSidenoteSkillContent from "../skills/sidenote2/SKILL.md";
+import bundledAsideSkillContent from "../skills/aside/SKILL.md";
 
+const LEGACY_PLUGIN_ID = "side-note2";
 const SIDECAR_STORAGE_MIGRATION_VERSION = 2;
 const SIDE_NOTE_SYNC_EVENT_MIGRATION_VERSION = 2;
 const SOURCE_IDENTITY_MIGRATION_VERSION = 1;
-const SIDE_NOTE_SYNC_DEVICE_ID_STORAGE_PREFIX = "sidenote2.sync-device-id.v1";
+const SIDE_NOTE_SYNC_DEVICE_ID_STORAGE_PREFIX = "aside.sync-device-id.v1";
+const LEGACY_SIDE_NOTE_SYNC_DEVICE_ID_STORAGE_PREFIX = "sidenote2.sync-device-id.v1";
 
 // Helper function to generate SHA256 hash using Web Crypto API (works on mobile)
 async function generateHash(text: string): Promise<string> {
@@ -128,6 +131,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
     return !!value && typeof value === "object" && !Array.isArray(value);
 }
 
+function isPersistedPluginData(value: unknown): value is PersistedPluginData {
+    return isRecord(value);
+}
+
 type RemoteRuntimeFetchFallback = NonNullable<Parameters<typeof createRemoteRuntimeRequester>[0]["fetcher"]>;
 
 function getFetchFallback(): RemoteRuntimeFetchFallback | undefined {
@@ -163,10 +170,10 @@ function getProcessEnv(): Record<string, string | undefined> {
 }
 
 // Main plugin class
-export default class SideNote2 extends Plugin {
+export default class Aside extends Plugin {
     commentManager!: CommentManager;
-    settings: SideNote2Settings = DEFAULT_SETTINGS;
-    private logService: SideNote2LogService | null = null;
+    settings: AsideSettings = DEFAULT_SETTINGS;
+    private logService: AsideLogService | null = null;
     private supportLogLocationAvailable: boolean | null = null;
     private runtime: "local" | "release" = "release";
     private readonly remoteRuntimeRequester = createRemoteRuntimeRequester({
@@ -175,6 +182,9 @@ export default class SideNote2 extends Plugin {
     });
     private readonly localSecretStore = new LocalSecretStore(
         buildLocalSecretStorageKey(this.manifest.id, this.app.vault.getName()),
+        [buildLocalSecretStorageKey(LEGACY_PLUGIN_ID, this.app.vault.getName(), {
+            namespace: "sidenote2",
+        })],
         getSafeLocalStorage(),
     );
     private readonly workspaceViewController: WorkspaceViewController = new WorkspaceViewController({
@@ -221,6 +231,7 @@ export default class SideNote2 extends Plugin {
         shouldShowResolvedComments: () => this.commentSessionController.shouldShowResolvedComments(),
         getDraftForFile: (filePath) => this.commentSessionController.getDraftForFile(filePath),
         getRevealedCommentId: (filePath) => this.commentSessionController.getRevealedCommentId(filePath),
+        getIndexFileScopeRootPath: (indexFilePath) => this.getIndexFileScopeRootPath(indexFilePath),
         activateViewAndHighlightComment: (commentId) => this.activateViewAndHighlightComment(commentId),
         activateIndexComment: (commentId, indexFilePath, sourceFilePath) =>
             this.activateIndexComment(commentId, indexFilePath, sourceFilePath),
@@ -296,9 +307,10 @@ export default class SideNote2 extends Plugin {
         getStoredNoteContent: (file) => this.workspaceViewController.getStoredNoteContent(file),
         getParsedNoteComments: (filePath, noteContent) => this.getParsedNoteComments(filePath, noteContent),
         getPluginDataDirPath: () => this.getPluginDataDirPath(),
+        getLegacyPluginDataDirPaths: () => this.getLegacyPluginDataDirPaths(),
         getSideNoteSyncDeviceId: () => this.getSideNoteSyncDeviceId(),
         readPersistedPluginData: () => this.indexNoteSettingsController.readPersistedPluginData(),
-        loadPersistedPluginData: () => this.loadData(),
+        loadPersistedPluginData: () => this.loadDataWithLegacyFallback(),
         writePersistedPluginData: (data) => this.indexNoteSettingsController.writePersistedPluginData(data),
         isAllCommentsNotePath: (filePath) => this.isAllCommentsNotePath(filePath),
         isCommentableFile: (file): file is TFile => this.isCommentableFile(file),
@@ -334,7 +346,7 @@ export default class SideNote2 extends Plugin {
         getSidebarTargetFile: () => this.getSidebarTargetFile(),
         updateSidebarViews: (file) => this.updateSidebarViews(file),
         refreshAggregateNoteNow: () => this.refreshAggregateNoteNow(),
-        loadData: () => this.loadData(),
+        loadData: () => this.loadDataWithLegacyFallback(),
         saveData: (data) => this.saveData(data),
         showNotice: (message) => {
             this.showNotice(message, "index", "index.notice");
@@ -421,9 +433,9 @@ export default class SideNote2 extends Plugin {
     });
     private readonly pluginRegistrationController = new PluginRegistrationController({
         manifestId: this.manifest.id,
-        iconId: SIDE_NOTE2_ICON_ID,
+        iconId: ASIDE_ICON_ID,
         registerView: (viewType, creator) => {
-            this.registerView(viewType, (leaf) => creator(leaf) as SideNote2View);
+            this.registerView(viewType, (leaf) => creator(leaf) as AsideView);
         },
         registerObsidianProtocolHandler: (action, handler) => {
             this.registerObsidianProtocolHandler(action, handler);
@@ -440,7 +452,7 @@ export default class SideNote2 extends Plugin {
         addRibbonIcon: (icon, title, callback) => {
             this.addRibbonIcon(icon, title, callback);
         },
-        createSidebarView: (leaf) => new SideNote2View(leaf as WorkspaceLeaf, this),
+        createSidebarView: (leaf) => new AsideView(leaf as WorkspaceLeaf, this),
         startDraftFromEditorSelection: (editor, file) =>
             this.commentEntryController.startDraftFromEditorSelection(editor as unknown as Editor, file),
         highlightCommentById: (filePath, commentId) => this.highlightCommentById(filePath, commentId),
@@ -506,7 +518,7 @@ export default class SideNote2 extends Plugin {
 
     async onload() {
         this.runtime = await this.detectRuntimeMode();
-        this.logService = new SideNote2LogService({
+        this.logService = new AsideLogService({
             adapter: this.app.vault.adapter,
             pluginVersion: this.manifest.version,
             pluginDirPath: this.manifest.dir ?? normalizePath(`${this.app.vault.configDir}/plugins/${this.manifest.id}`),
@@ -520,8 +532,8 @@ export default class SideNote2 extends Plugin {
             runtime: this.runtime,
             pluginVersion: this.manifest.version,
         });
-        addIcon(SIDE_NOTE2_ICON_ID, SIDE_NOTE2_ICON_SVG);
-        addIcon(SIDE_NOTE2_REGENERATE_ICON_ID, SIDE_NOTE2_REGENERATE_ICON_SVG);
+        addIcon(ASIDE_ICON_ID, ASIDE_ICON_SVG);
+        addIcon(ASIDE_REGENERATE_ICON_ID, ASIDE_REGENERATE_ICON_SVG);
 
         this.commentManager = new CommentManager([]);
         await this.loadSettings();
@@ -548,9 +560,9 @@ export default class SideNote2 extends Plugin {
         const activeFile = this.app.workspace.getActiveFile();
         this.workspaceContextController.initializeActiveFiles(activeFile);
         await this.pluginEventRouter.register();
-        this.addSettingTab(new SideNote2Setting(this.app, this));
+        this.addSettingTab(new AsideSetting(this.app, this));
         void this.workspaceViewController.loadVisibleFiles().catch((error) => {
-            this.warn("Failed to preload visible SideNote2 comments during startup.", error, "startup", "startup.visible-files.preload.warn");
+            this.warn("Failed to preload visible Aside comments during startup.", error, "startup", "startup.visible-files.preload.warn");
         });
     }
 
@@ -753,7 +765,7 @@ export default class SideNote2 extends Plugin {
     }
 
     public async logEvent(
-        level: SideNote2LogLevel,
+        level: AsideLogLevel,
         area: string,
         event: string,
         payload?: Record<string, unknown>,
@@ -779,6 +791,45 @@ export default class SideNote2 extends Plugin {
         return this.manifest.dir ?? normalizePath(`${this.app.vault.configDir}/plugins/${this.manifest.id}`);
     }
 
+    private getLegacyPluginDataDirPaths(): string[] {
+        const legacyDirPath = normalizePath(`${this.app.vault.configDir}/plugins/${LEGACY_PLUGIN_ID}`);
+        const currentDirPath = this.getPluginDataDirPath();
+        return legacyDirPath === currentDirPath ? [] : [legacyDirPath];
+    }
+
+    private async loadDataWithLegacyFallback(): Promise<PersistedPluginData | null> {
+        const currentData: unknown = await this.loadData();
+        if (isPersistedPluginData(currentData)) {
+            return currentData;
+        }
+
+        for (const legacyDirPath of this.getLegacyPluginDataDirPaths()) {
+            const legacyDataPath = normalizePath(`${legacyDirPath}/data.json`);
+            try {
+                if (!(await this.app.vault.adapter.exists(legacyDataPath))) {
+                    continue;
+                }
+
+                const legacyData: unknown = JSON.parse(await this.app.vault.adapter.read(legacyDataPath));
+                if (!isPersistedPluginData(legacyData)) {
+                    continue;
+                }
+
+                await this.saveData(legacyData);
+                return legacyData;
+            } catch (error) {
+                this.warn(
+                    "Failed to migrate legacy SideNote2 plugin data into Aside.",
+                    error,
+                    "persistence",
+                    "storage.plugin-data.legacy-migrate.warn",
+                );
+            }
+        }
+
+        return null;
+    }
+
     private getSideNoteSyncDeviceId(): string {
         if (this.sideNoteSyncDeviceId) {
             return this.sideNoteSyncDeviceId;
@@ -790,6 +841,14 @@ export default class SideNote2 extends Plugin {
         if (storedDeviceId && storedDeviceId.trim()) {
             this.sideNoteSyncDeviceId = storedDeviceId;
             return storedDeviceId;
+        }
+
+        const legacyStorageKey = `${LEGACY_SIDE_NOTE_SYNC_DEVICE_ID_STORAGE_PREFIX}.${LEGACY_PLUGIN_ID}.${this.app.vault.getName()}`;
+        const legacyStoredDeviceId = storage?.getItem(legacyStorageKey);
+        if (legacyStoredDeviceId && legacyStoredDeviceId.trim()) {
+            storage?.setItem(storageKey, legacyStoredDeviceId);
+            this.sideNoteSyncDeviceId = legacyStoredDeviceId;
+            return legacyStoredDeviceId;
         }
 
         const nextDeviceId = generateCommentId();
@@ -833,7 +892,7 @@ export default class SideNote2 extends Plugin {
             });
         } catch (error) {
             this.warn(
-                "Failed to migrate legacy SideNote2 note storage into sidecar files.",
+                "Failed to migrate legacy Aside note storage into sidecar files.",
                 error,
                 "persistence",
                 "storage.note.migrate.startup.warn",
@@ -887,7 +946,7 @@ export default class SideNote2 extends Plugin {
             });
         } catch (error) {
             this.warn(
-                "Failed to migrate SideNote2 sidecar data into synced plugin data.",
+                "Failed to migrate Aside sidecar data into synced plugin data.",
                 error,
                 "persistence",
                 "sync.plugin-data.migrate.startup.warn",
@@ -941,7 +1000,7 @@ export default class SideNote2 extends Plugin {
             });
         } catch (error) {
             this.warn(
-                "Failed to migrate SideNote2 source identities.",
+                "Failed to migrate Aside source identities.",
                 error,
                 "persistence",
                 "source-identity.migrate.startup.warn",
@@ -999,8 +1058,9 @@ export default class SideNote2 extends Plugin {
             const result = await syncInstalledCodexSkill({
                 modules,
                 env: getProcessEnv(),
-                skillName: "sidenote2",
-                skillContent: bundledSidenoteSkillContent,
+                skillName: "aside",
+                legacySkillNames: ["sidenote2"],
+                skillContent: bundledAsideSkillContent,
                 pluginVersion: this.manifest.version,
                 previouslySyncedPluginVersion: this.getSyncedBundledSidenoteSkillPluginVersion(),
             });
@@ -1039,7 +1099,7 @@ export default class SideNote2 extends Plugin {
             });
         } catch (error) {
             this.warn(
-                "Failed to refresh the installed SideNote2 Codex skill.",
+                "Failed to refresh the installed Aside Codex skill.",
                 error,
                 "startup",
                 "startup.codex-skill.warn",
@@ -1122,7 +1182,7 @@ export default class SideNote2 extends Plugin {
     }
 
     /**
-     * Activate the SideNote2 view, highlight a specific comment, and focus the draft
+     * Activate the Aside view, highlight a specific comment, and focus the draft
      */
     async activateViewAndHighlightComment(commentId: string) {
         await this.ensureCommentSelectionVisible(commentId);
@@ -1158,6 +1218,24 @@ export default class SideNote2 extends Plugin {
         await this.commentNavigationController.syncIndexFileFilter(indexFile, sourceFile.path);
     }
 
+    private getIndexFileScopeRootPath(indexFilePath: string): string | null {
+        let selectedRootPath: string | null = null;
+        for (const leaf of this.app.workspace.getLeavesOfType("aside-view")) {
+            if (!(leaf.view instanceof AsideView)) {
+                continue;
+            }
+
+            if (leaf.view.getCurrentFile()?.path !== indexFilePath) {
+                continue;
+            }
+
+            selectedRootPath = leaf.view.getIndexFileFilterRootPath();
+            break;
+        }
+
+        return selectedRootPath;
+    }
+
     public async revealIndexCommentFromSidebar(commentId: string, indexFilePath: string) {
         await this.ensureCommentSelectionVisible(commentId);
         this.commentSessionController.setRevealedCommentState(
@@ -1176,6 +1254,10 @@ export default class SideNote2 extends Plugin {
             { refreshMarkdownPreviews: false },
         );
         this.commentHighlightController.syncIndexPreviewSelection(indexFilePath, commentId);
+    }
+
+    public syncIndexPreviewFileScope(indexFilePath: string): void {
+        this.commentHighlightController.syncIndexPreviewFileScope(indexFilePath);
     }
 
     public getPinnedMarkdownFile(): TFile | null {
@@ -1541,7 +1623,7 @@ export default class SideNote2 extends Plugin {
     }
 
     /**
-     * Activate the SideNote2 view - open it in the right sidebar if not already open
+     * Activate the Aside view - open it in the right sidebar if not already open
      * @param skipViewUpdate If true, skips updating the view's active file (use when view was just refreshed)
      */
     async activateView(skipViewUpdate = false) {
@@ -1771,7 +1853,7 @@ export default class SideNote2 extends Plugin {
             return true;
         } catch (error) {
             this.supportLogLocationAvailable = false;
-            console.error("[SideNote2] Failed to reveal support log file location.", error);
+            console.error("[Aside] Failed to reveal support log file location.", error);
             await this.logEvent("warn", "support", "support.log.file.location.open.error", {
                 filePath: relativePath,
                 error,
@@ -1822,7 +1904,7 @@ export default class SideNote2 extends Plugin {
             });
             return true;
         } catch (error) {
-            console.error("[SideNote2] Failed to reveal sidecar data folder.", error);
+            console.error("[Aside] Failed to reveal sidecar data folder.", error);
             await this.logEvent("warn", "support", "support.sidecar.folder.open.error", {
                 error,
             });

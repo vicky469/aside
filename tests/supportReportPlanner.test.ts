@@ -94,7 +94,7 @@ test("support planner builds a human-readable log preview in descending time ord
             level: "warn",
             area: "persistence",
             event: "storage.note.parse.unsupported",
-            payload: { filePath: "SideNote2/README-dev.md" },
+            payload: { filePath: "Aside/README-dev.md" },
         }),
     ].join("\n");
 

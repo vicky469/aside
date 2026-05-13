@@ -1,7 +1,7 @@
 import type { CachedMetadata } from "obsidian";
 import type { DerivedCommentLinks } from "../text/commentMentions";
 
-const derivedMetadataCacheMarker = Symbol("sideNote2DerivedMetadata");
+const derivedMetadataCacheMarker = Symbol("asideDerivedMetadata");
 
 type DerivedMetadataCache = CachedMetadata & {
     [derivedMetadataCacheMarker]?: true;

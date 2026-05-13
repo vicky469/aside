@@ -10,21 +10,21 @@ Implementation spec:
 
 ## Summary
 
-SideNote2 should support semantic agent mentions inside side notes.
+Aside should support semantic agent mentions inside side notes.
 
 Current implementation scope:
 
 - support `@codex` in the shipped build
 - keep the target abstraction open so additional agents can be added later without rewriting the feature shape
 
-When a user writes an explicit agent target such as `@codex` in a side note, SideNote2 should treat that as an instruction to hand the thread to an external coding assistant runtime.
+When a user writes an explicit agent target such as `@codex` in a side note, Aside should treat that as an instruction to hand the thread to an external coding assistant runtime.
 
 The important architecture decision is:
 
-- do **not** put the queue between source notes and `SideNote2 index.md`
+- do **not** put the queue between source notes and `Aside index.md`
 - keep the note as canonical storage
-- keep `SideNote2 index.md` as derived output
-- place the queue between successful SideNote2 comment persistence and external agent execution
+- keep `Aside index.md` as derived output
+- place the queue between successful Aside comment persistence and external agent execution
 
 This feature should borrow the runtime model from OpenClaw:
 
@@ -32,19 +32,19 @@ This feature should borrow the runtime model from OpenClaw:
 - detached work is tracked as background tasks
 - multi-step Task Flow is only needed if one request becomes a true pipeline
 
-For SideNote2 phase 1, one explicit agent-target trigger should map to one queued task.
+For Aside phase 1, one explicit agent-target trigger should map to one queued task.
 
 ## Problem
 
-Today, SideNote2 supports agent workflows only through an external handoff:
+Today, Aside supports agent workflows only through an external handoff:
 
 - copy a side-note URI
 - paste it into Codex, Claude Code, or another assistant
-- rely on external instructions and the `sidenote2` CLI to write back safely
+- rely on external instructions and the `aside` CLI to write back safely
 
 That works, but it creates product friction:
 
-1. The workflow starts outside SideNote2.
+1. The workflow starts outside Aside.
    The user has to leave the note and manually hand off context.
 
 2. `@mentions` are only visual today.
@@ -54,17 +54,17 @@ That works, but it creates product friction:
    There is no first-class model for queued, running, succeeded, failed, or blocked agent actions.
 
 4. The existing index is the wrong place to own agent runtime state.
-   `SideNote2 index.md` is derived output and should not become a queue ledger or source of truth.
+   `Aside index.md` is derived output and should not become a queue ledger or source of truth.
 
 ## Product Goal
 
-Make explicit agent targets feel native to SideNote2:
+Make explicit agent targets feel native to Aside:
 
 - user writes a side note in the normal sidebar flow
 - user includes an explicit agent target such as `@codex` or `@claude`
-- SideNote2 persists the side note to canonical note storage first
-- SideNote2 queues and dispatches the request to the selected runtime
-- the runtime result comes back into the same SideNote2 thread
+- Aside persists the side note to canonical note storage first
+- Aside queues and dispatches the request to the selected runtime
+- the runtime result comes back into the same Aside thread
 - the existing note and index refresh path continues to work normally
 
 The core product goal is not just mention highlighting. It is first-class in-note agent delegation.
@@ -73,23 +73,23 @@ The core product goal is not just mention highlighting. It is first-class in-not
 
 Not in phase 1:
 
-- turning `SideNote2 index.md` into a queue database
+- turning `Aside index.md` into a queue database
 - replacing the existing share-link workflow
 - full multi-step orchestration or branching flow graphs
 - multiple concurrent agent replies inside one thread without policy
 - collaborative multi-user assignment semantics
 - cross-vault distributed execution
-- background execution for arbitrary non-side-note markdown mentions outside SideNote2-managed threads
+- background execution for arbitrary non-side-note markdown mentions outside Aside-managed threads
 
 ## Current System Learning
 
-### SideNote2 storage model
+### Aside storage model
 
-SideNote2 is note-canonical today.
+Aside is note-canonical today.
 
-- Each markdown note stores comments in one trailing `<!-- SideNote2 comments -->` block.
+- Each markdown note stores comments in one trailing `<!-- Aside comments -->` block.
 - The stored format is already threaded.
-- `SideNote2 index.md` is derived output only.
+- `Aside index.md` is derived output only.
 
 This means any agent feature must preserve:
 
@@ -97,7 +97,7 @@ This means any agent feature must preserve:
 - normal thread append/edit/resolve behavior
 - normal aggregate index rebuild behavior
 
-### Current SideNote2 save path
+### Current Aside save path
 
 The current save path is already a good interception point:
 
@@ -126,12 +126,12 @@ By contrast, `[[wikilinks]]` already have semantic meaning:
 
 So `@codex` and `@claude` require new semantic parsing, not a CSS-only extension.
 
-### Existing SideNote2 share flow
+### Existing Aside share flow
 
 The product already has a safe external handoff path:
 
 - user clicks Share side note
-- SideNote2 copies an `obsidian://side-note2-comment?...` link
+- Aside copies an `obsidian://aside-comment?...` link
 
 This should remain as:
 
@@ -150,7 +150,7 @@ OpenClaw distinguishes between:
 
 That distinction matches this feature well.
 
-Codex and Claude Code should be modeled as external runtimes, not as internal SideNote2 logic.
+Codex and Claude Code should be modeled as external runtimes, not as internal Aside logic.
 
 ### Background tasks
 
@@ -164,13 +164,13 @@ OpenClaw tracks detached work as background tasks with simple states:
 - cancelled
 - lost
 
-That is the right level for SideNote2 phase 1.
+That is the right level for Aside phase 1.
 
 ### Task Flow scope
 
 OpenClaw uses Task Flow only when work spans multiple sequential or branching steps with durable orchestration.
 
-That means SideNote2 should **not** start with a full Task Flow equivalent unless the feature truly becomes:
+That means Aside should **not** start with a full Task Flow equivalent unless the feature truly becomes:
 
 - classify request
 - pick runtime
@@ -185,7 +185,7 @@ For a simple explicit-target handoff, one queued task is enough.
 
 The queue belongs between:
 
-- successful SideNote2 thread persistence
+- successful Aside thread persistence
 - external agent runtime execution
 
 The queue does **not** belong between:
@@ -199,7 +199,7 @@ So the write path should be:
 save draft -> persist canonical note -> enqueue agent task -> run agent -> append reply entry -> normal refresh
 ```
 
-This keeps the existing SideNote2 mental model intact:
+This keeps the existing Aside mental model intact:
 
 - note is canonical
 - sidebar is working view
@@ -215,11 +215,11 @@ Inside a draft or appended entry:
 - `@codex` means route to Codex
 - `@claude` means route to Claude Code
 
-Phase 1 should support explicit textual invocation inside SideNote2-managed comments only.
+Phase 1 should support explicit textual invocation inside Aside-managed comments only.
 
 ### Agent sidebar surface
 
-In the index sidebar, SideNote2 should add a third top-level tab:
+In the index sidebar, Aside should add a third top-level tab:
 
 - `List`
 - `Thought Trail`
@@ -334,15 +334,15 @@ Agent runtime state must not become the source of truth for the thread.
 
 ### Rule 2
 
-`SideNote2 index.md` remains derived.
+`Aside index.md` remains derived.
 
 It may reflect agent-produced replies after normal refresh, but it must not store or own the task queue.
 
 ### Rule 3
 
-SideNote2 owns note writes.
+Aside owns note writes.
 
-The external runtime may work on repo files or produce text, but SideNote2 should be the layer that appends the reply back into the thread.
+The external runtime may work on repo files or produce text, but Aside should be the layer that appends the reply back into the thread.
 
 ### Rule 4
 
@@ -384,7 +384,7 @@ It should behave like a scoped list mode, not like an unrelated special panel.
 
 ### New subsystem shape
 
-Add a small SideNote2 agent subsystem:
+Add a small Aside agent subsystem:
 
 - `AgentDirectiveParser`
 - `AgentRunStore`
@@ -443,7 +443,7 @@ Primary backend:
 Reason:
 
 - it removes the extra dependency on an ACP bridge for the first shipping version
-- it keeps SideNote2 aligned with the Codex and Claude CLIs users already run locally
+- it keeps Aside aligned with the Codex and Claude CLIs users already run locally
 - it still leaves room for a later ACP adapter if the runtime model expands
 
 ### Runtime selection
@@ -464,12 +464,12 @@ It provides a simple explicit picker for future agent actions and fallback routi
 
 ### Permission boundary
 
-Because external runtimes should not write directly into SideNote2-managed note storage, SideNote2 should avoid delegating the final note write to the harness.
+Because external runtimes should not write directly into Aside-managed note storage, Aside should avoid delegating the final note write to the harness.
 
 Instead:
 
 - runtime returns text or structured output
-- SideNote2 appends the reply entry itself
+- Aside appends the reply entry itself
 
 ## Data Model Direction
 
@@ -508,7 +508,7 @@ It should not become a second source of truth.
 
 1. Add a plan-backed semantic model for `@codex` and `@claude`.
 2. Add durable run storage in plugin data.
-3. Add post-persist dispatch hook after successful SideNote2 note writes.
+3. Add post-persist dispatch hook after successful Aside note writes.
 4. Add derived agent-thread selection logic for a dedicated `Agent` tab.
 5. Add a no-op or stub runtime adapter for local development.
 6. Add the first real direct CLI adapter for Codex and Claude.
@@ -521,7 +521,7 @@ It should not become a second source of truth.
 
 If a user saves a side note without an agent directive:
 
-- SideNote2 behaves exactly as it does today.
+- Aside behaves exactly as it does today.
 
 ### AC2
 
@@ -551,7 +551,7 @@ The `Agent` tab respects the same list-style controls as `List`:
 
 If the runtime succeeds:
 
-- SideNote2 appends one new child entry to the same thread
+- Aside appends one new child entry to the same thread
 - the index refresh path picks it up through normal derived behavior
 
 ### AC7
@@ -564,7 +564,7 @@ If the runtime fails:
 
 ### AC8
 
-`SideNote2 index.md` stays derived and is never used as queue storage.
+`Aside index.md` stays derived and is never used as queue storage.
 
 ## Open Questions
 
@@ -578,10 +578,10 @@ If the runtime fails:
    - frontmatter mapping
    - folder-based mapping
 
- 4. Should SideNote2 append raw agent text only, or store a small structured execution summary too?
+ 4. Should Aside append raw agent text only, or store a small structured execution summary too?
     
 5. Do we want a dedicated sidebar section for active agent runs in phase 1, or only inline thread status?
   
 ## Success Metric
 
-A user can stay inside SideNote2, write a thread entry with `@codex` or `@claude`, and receive the agent reply back into the same thread without using the manual share-link workflow.
+A user can stay inside Aside, write a thread entry with `@codex` or `@claude`, and receive the agent reply back into the same thread without using the manual share-link workflow.

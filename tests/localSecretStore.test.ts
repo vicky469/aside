@@ -20,14 +20,18 @@ class MemoryStorage {
 
 test("buildLocalSecretStorageKey scopes device-local secrets by plugin and vault", () => {
     assert.equal(
-        buildLocalSecretStorageKey("side-note2", "My Vault"),
+        buildLocalSecretStorageKey("aside", "My Vault"),
+        "aside.local-secrets.v1.aside.My Vault",
+    );
+    assert.equal(
+        buildLocalSecretStorageKey("side-note2", "My Vault", { namespace: "sidenote2" }),
         "sidenote2.local-secrets.v1.side-note2.My Vault",
     );
 });
 
 test("LocalSecretStore writes and reads the remote runtime bearer token", () => {
     const storage = new MemoryStorage();
-    const store = new LocalSecretStore("key", storage);
+    const store = new LocalSecretStore("key", [], storage);
 
     store.writeSecrets({
         remoteRuntimeBearerToken: "  secret-token  ",
@@ -40,7 +44,7 @@ test("LocalSecretStore writes and reads the remote runtime bearer token", () => 
 
 test("LocalSecretStore removes empty tokens instead of keeping blank payloads", () => {
     const storage = new MemoryStorage();
-    const store = new LocalSecretStore("key", storage);
+    const store = new LocalSecretStore("key", [], storage);
 
     store.writeSecrets({
         remoteRuntimeBearerToken: "secret-token",
@@ -50,4 +54,15 @@ test("LocalSecretStore removes empty tokens instead of keeping blank payloads", 
     });
 
     assert.deepEqual(store.readSecrets(), {});
+});
+
+test("LocalSecretStore migrates a legacy SideNote2 token into the Aside key", () => {
+    const storage = new MemoryStorage();
+    storage.setItem("legacy-key", JSON.stringify({ remoteRuntimeBearerToken: "legacy-token" }));
+    const store = new LocalSecretStore("key", ["legacy-key"], storage);
+
+    assert.deepEqual(store.readSecrets(), {
+        remoteRuntimeBearerToken: "legacy-token",
+    });
+    assert.equal(storage.getItem("key"), JSON.stringify({ remoteRuntimeBearerToken: "legacy-token" }));
 });

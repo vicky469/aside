@@ -20,9 +20,9 @@ The practical question is:
 
 Current recommended deployment for this environment:
 
-1. SideNote2 DGX bridge listens locally on `127.0.0.1:4215` over HTTP.
+1. Aside DGX bridge listens locally on `127.0.0.1:4215` over HTTP.
 2. Cloudflare Tunnel publishes `https://bridge.vickyli.xyz`.
-3. SideNote2 clients connect to the public HTTPS hostname.
+3. Aside clients connect to the public HTTPS hostname.
 4. Cloudflare forwards traffic to the local bridge origin.
 
 Important origin detail:
@@ -48,7 +48,7 @@ Other users only need:
 2. `Remote bridge token`
    the shared bearer token configured on the bridge host
 
-If DNS is propagated and the tunnel is healthy, any SideNote2 client with those two settings should be able to reach the bridge from outside the local network.
+If DNS is propagated and the tunnel is healthy, any Aside client with those two settings should be able to reach the bridge from outside the local network.
 
 ## Current Auth Model
 
@@ -57,7 +57,7 @@ Current bridge auth is token-only.
 Requests are accepted when:
 
 - the client sends `Authorization: Bearer <token>`
-- the token matches `SIDENOTE2_DGX_BRIDGE_BEARER_TOKEN`
+- the token matches `ASIDE_DGX_BRIDGE_BEARER_TOKEN`
 
 There is currently no additional per-user identity layer.
 

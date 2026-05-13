@@ -88,7 +88,7 @@ export function resolveWorkspaceFileTargets<T>(
 }
 
 export function shouldIgnoreWorkspaceLeafChange(viewType: string | null): boolean {
-    return viewType === "sidenote2-view";
+    return viewType === "aside-view";
 }
 
 export function shouldIgnoreWorkspaceFileOpen<T>(

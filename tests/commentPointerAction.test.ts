@@ -92,7 +92,7 @@ test("isSidebarCommentOpenBlockingTarget treats links as card-open blockers", ()
 });
 
 test("isSidebarCommentOpenBlockingTarget treats inline editors as card-open blockers", () => {
-    const target = createClosestTarget((selector) => selector.includes(".sidenote2-inline-editor"));
+    const target = createClosestTarget((selector) => selector.includes(".aside-inline-editor"));
 
     assert.equal(isSidebarCommentOpenBlockingTarget(target), true);
 });

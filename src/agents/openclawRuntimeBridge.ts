@@ -234,7 +234,7 @@ function summarizeRequesterError(error: unknown, options: RemoteRuntimeBridgeReq
 
     if (protocol === "http:") {
         return new Error(
-            `Remote bridge request failed before the server responded. ${message} If browser access works but SideNote2 still fails on mobile, try HTTPS or check the app's local-network permission.`,
+            `Remote bridge request failed before the server responded. ${message} If browser access works but Aside still fails on mobile, try HTTPS or check the app's local-network permission.`,
         );
     }
 
@@ -250,7 +250,7 @@ export async function startRemoteRuntimeRun(
     },
 ): Promise<RemoteRuntimeResponseEnvelope> {
     try {
-        const response = await requester(buildRequest(options, "v1/sidenote2/runs", "POST", {
+        const response = await requester(buildRequest(options, "v1/aside/runs", "POST", {
             agent: options.agent,
             promptText: options.promptText,
             metadata: options.metadata,
@@ -279,7 +279,7 @@ export async function pollRemoteRuntimeRun(
     try {
         const response = await requester(buildRequest(
             options,
-            `v1/sidenote2/runs/${encodeURIComponent(options.runId)}`,
+            `v1/aside/runs/${encodeURIComponent(options.runId)}`,
             "GET",
             null,
             query,
@@ -299,7 +299,7 @@ export async function cancelRemoteRuntimeRun(
     try {
         const response = await requester(buildRequest(
             options,
-            `v1/sidenote2/runs/${encodeURIComponent(options.runId)}/cancel`,
+            `v1/aside/runs/${encodeURIComponent(options.runId)}/cancel`,
             "POST",
             {},
         ));

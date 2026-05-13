@@ -82,7 +82,7 @@ Before finishing, verify:
 
 ## Repo-Specific Guidance
 
-When working in this SideNote2 repo, prefer the existing docs canvases as style references:
+When working in this Aside repo, prefer the existing docs canvases as style references:
 
 - `docs/architecture.canvas`
 - `docs/feature-map.canvas`

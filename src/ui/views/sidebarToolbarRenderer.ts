@@ -59,7 +59,7 @@ export function renderToolbarChip(
 ): void {
     const isTagFilterChip = options.chipClass?.includes("is-tag-filter-chip") ?? false;
     const button = container.createEl("button", {
-        cls: `sidenote2-filter-chip${options.active ? " is-active" : ""}${options.chipClass ? ` ${options.chipClass}` : ""}`,
+        cls: `aside-filter-chip${options.active ? " is-active" : ""}${options.chipClass ? ` ${options.chipClass}` : ""}`,
     });
     button.setAttribute("type", "button");
     button.setAttribute("aria-pressed", (options.pressed ?? options.active) ? "true" : "false");
@@ -70,13 +70,13 @@ export function renderToolbarChip(
 
     if (options.showIndicator) {
         button.createSpan({
-            cls: "sidenote2-filter-chip-indicator",
+            cls: "aside-filter-chip-indicator",
         });
     }
 
     if (options.icon) {
         const iconEl = button.createSpan({
-            cls: "sidenote2-filter-chip-icon",
+            cls: "aside-filter-chip-icon",
         });
         setIcon(iconEl, options.icon);
     }
@@ -84,14 +84,14 @@ export function renderToolbarChip(
     if (!options.hideLabel) {
         button.createSpan({
             text: options.label,
-            cls: `sidenote2-filter-chip-label${isTagFilterChip ? " is-visible" : ""}`,
+            cls: `aside-filter-chip-label${isTagFilterChip ? " is-visible" : ""}`,
         });
     }
 
     if (options.count !== undefined) {
         button.createSpan({
             text: options.count,
-            cls: "sidenote2-filter-chip-count",
+            cls: "aside-filter-chip-count",
         });
     }
 
@@ -110,7 +110,7 @@ export function renderToolbarIconButton(
 ): void {
     const showActiveVisual = options.activeVisual ?? options.active ?? false;
     const button = container.createEl("button", {
-        cls: `clickable-icon sidenote2-comment-section-add-button sidenote2-toolbar-icon-button${showActiveVisual ? " is-active" : ""}`,
+        cls: `clickable-icon aside-comment-section-add-button aside-toolbar-icon-button${showActiveVisual ? " is-active" : ""}`,
     });
     button.setAttribute("type", "button");
     button.setAttribute("aria-pressed", options.active ? "true" : "false");
@@ -131,14 +131,14 @@ export function renderSidebarSearchInput(
     container: HTMLElement,
     options: SidebarSearchInputOptions,
 ): void {
-    const searchGroup = container.createDiv("sidenote2-sidebar-toolbar-group is-search-group");
-    const fieldEl = searchGroup.createDiv("sidenote2-note-search-field");
+    const searchGroup = container.createDiv("aside-sidebar-toolbar-group is-search-group");
+    const fieldEl = searchGroup.createDiv("aside-note-search-field");
     const iconEl = fieldEl.createSpan({
-        cls: "sidenote2-note-search-icon",
+        cls: "aside-note-search-icon",
     });
     setIcon(iconEl, "search");
     const inputEl = fieldEl.createEl("input", {
-        cls: "sidenote2-note-search-input",
+        cls: "aside-note-search-input",
     });
     inputEl.type = "search";
     inputEl.value = options.value;
@@ -172,8 +172,8 @@ export function renderSidebarModeControl(
     options: SidebarModeControlOptions,
     guard: ToolbarActionGuard,
 ): void {
-    const modeGroup = container.createDiv("sidenote2-sidebar-toolbar-group is-mode-group");
-    const tabList = modeGroup.createDiv(`sidenote2-tablist is-${options.mode}`);
+    const modeGroup = container.createDiv("aside-sidebar-toolbar-group is-mode-group");
+    const tabList = modeGroup.createDiv(`aside-tablist is-${options.mode}`);
     tabList.setAttribute("role", "tablist");
     renderTabButton(tabList, {
         label: "List",
@@ -207,17 +207,17 @@ export function renderActiveFileFilters(
     options: ActiveFileFiltersOptions,
     guard: ToolbarActionGuard,
 ): void {
-    const filterBar = container.createDiv("sidenote2-active-file-filters");
-    const rootChip = filterBar.createDiv("sidenote2-active-file-filter");
+    const filterBar = container.createDiv("aside-active-file-filters");
+    const rootChip = filterBar.createDiv("aside-active-file-filter");
     rootChip.addClass("is-root");
 
     rootChip.createSpan({
         text: getIndexFileFilterLabel(options.rootFilePath, options.filteredIndexFilePaths),
-        cls: "sidenote2-active-file-filter-label",
+        cls: "aside-active-file-filter-label",
     });
 
     const clearButton = rootChip.createEl("button", {
-        cls: "sidenote2-active-file-filter-clear clickable-icon",
+        cls: "aside-active-file-filter-clear clickable-icon",
     });
     clearButton.setAttribute("type", "button");
     clearButton.setAttribute("aria-label", `Clear file filter for ${options.rootFilePath}`);
@@ -232,7 +232,7 @@ export function renderActiveFileFilters(
     };
 
     const linkedFileCount = Math.max(0, options.filteredIndexFilePaths.length - 1);
-    const summaryEl = filterBar.createDiv("sidenote2-active-file-filter-summary");
+    const summaryEl = filterBar.createDiv("aside-active-file-filter-summary");
     summaryEl.setText(
         linkedFileCount > 0
             ? `+${linkedFileCount} linked file${linkedFileCount === 1 ? "" : "s"}`
@@ -251,7 +251,7 @@ function renderTabButton(
     guard: ToolbarActionGuard,
 ): void {
     const button = container.createEl("button", {
-        cls: `sidenote2-tab-button${options.active ? " sidenote2-tab-button--active" : ""}`,
+        cls: `aside-tab-button${options.active ? " aside-tab-button--active" : ""}`,
         text: options.label,
     });
     button.setAttribute("type", "button");

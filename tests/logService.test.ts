@@ -1,7 +1,7 @@
 import * as assert from "node:assert/strict";
 import test from "node:test";
 import type { DataAdapter, Stat } from "obsidian";
-import { SideNote2LogService } from "../src/logs/logService";
+import { AsideLogService } from "../src/logs/logService";
 
 class FakeAdapter implements Pick<DataAdapter, "exists" | "mkdir" | "list" | "write" | "append" | "read" | "stat" | "remove"> {
     public readonly directories = new Set<string>();
@@ -60,19 +60,19 @@ class FakeAdapter implements Pick<DataAdapter, "exists" | "mkdir" | "list" | "wr
     }
 }
 
-test("SideNote2LogService prunes expired daily files and appends deterministic jsonl entries", async () => {
+test("AsideLogService prunes expired daily files and appends deterministic jsonl entries", async () => {
     const adapter = new FakeAdapter();
     adapter.directories.add(".obsidian");
     adapter.directories.add(".obsidian/plugins");
-    adapter.directories.add(".obsidian/plugins/side-note2");
-    adapter.directories.add(".obsidian/plugins/side-note2/logs");
-    adapter.files.set(".obsidian/plugins/side-note2/logs/2026-04-09.jsonl", "{\"old\":true}\n");
+    adapter.directories.add(".obsidian/plugins/aside");
+    adapter.directories.add(".obsidian/plugins/aside/logs");
+    adapter.files.set(".obsidian/plugins/aside/logs/2026-04-09.jsonl", "{\"old\":true}\n");
 
-    const service = new SideNote2LogService({
+    const service = new AsideLogService({
         adapter: adapter as unknown as DataAdapter,
         pluginVersion: "2.0.10",
-        pluginDirPath: ".obsidian/plugins/side-note2",
-        pluginDirRelativePath: ".obsidian/plugins/side-note2",
+        pluginDirPath: ".obsidian/plugins/aside",
+        pluginDirRelativePath: ".obsidian/plugins/aside",
         vaultRootPath: "/Users/tester/Vault",
         now: () => new Date("2026-04-13T13:30:00.000Z"),
         sessionId: "session-1",
@@ -87,9 +87,9 @@ test("SideNote2LogService prunes expired daily files and appends deterministic j
         filePath: "/Users/tester/Vault/Folder/Note.md",
     });
 
-    const logPath = ".obsidian/plugins/side-note2/logs/2026-04-13.jsonl";
+    const logPath = ".obsidian/plugins/aside/logs/2026-04-13.jsonl";
     const content = adapter.files.get(logPath);
-    assert.equal(adapter.files.has(".obsidian/plugins/side-note2/logs/2026-04-09.jsonl"), false);
+    assert.equal(adapter.files.has(".obsidian/plugins/aside/logs/2026-04-09.jsonl"), false);
     assert.ok(content);
 
     const lines = content!.trim().split("\n").map((line) => JSON.parse(line) as { event: string; payload?: Record<string, unknown> });
@@ -105,18 +105,18 @@ test("SideNote2LogService prunes expired daily files and appends deterministic j
     });
 });
 
-test("SideNote2LogService swallows write failures so user flows do not throw", async () => {
+test("AsideLogService swallows write failures so user flows do not throw", async () => {
     const adapter = new FakeAdapter();
     adapter.directories.add(".obsidian");
     adapter.directories.add(".obsidian/plugins");
-    adapter.directories.add(".obsidian/plugins/side-note2");
+    adapter.directories.add(".obsidian/plugins/aside");
     adapter.failWrites = true;
 
-    const service = new SideNote2LogService({
+    const service = new AsideLogService({
         adapter: adapter as unknown as DataAdapter,
         pluginVersion: "2.0.10",
-        pluginDirPath: ".obsidian/plugins/side-note2",
-        pluginDirRelativePath: ".obsidian/plugins/side-note2",
+        pluginDirPath: ".obsidian/plugins/aside",
+        pluginDirRelativePath: ".obsidian/plugins/aside",
         now: () => new Date("2026-04-13T13:30:00.000Z"),
         sessionId: "session-2",
     });
@@ -129,19 +129,19 @@ test("SideNote2LogService swallows write failures so user flows do not throw", a
     });
 });
 
-test("SideNote2LogService returns only the requested recent attachment window", async () => {
+test("AsideLogService returns only the requested recent attachment window", async () => {
     const adapter = new FakeAdapter();
     adapter.directories.add(".obsidian");
     adapter.directories.add(".obsidian/plugins");
-    adapter.directories.add(".obsidian/plugins/side-note2");
-    adapter.directories.add(".obsidian/plugins/side-note2/logs");
+    adapter.directories.add(".obsidian/plugins/aside");
+    adapter.directories.add(".obsidian/plugins/aside/logs");
 
     let now = new Date("2026-04-13T13:00:00.000Z");
-    const service = new SideNote2LogService({
+    const service = new AsideLogService({
         adapter: adapter as unknown as DataAdapter,
         pluginVersion: "2.0.10",
-        pluginDirPath: ".obsidian/plugins/side-note2",
-        pluginDirRelativePath: ".obsidian/plugins/side-note2",
+        pluginDirPath: ".obsidian/plugins/aside",
+        pluginDirRelativePath: ".obsidian/plugins/aside",
         now: () => now,
         sessionId: "session-3",
     });

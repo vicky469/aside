@@ -8,7 +8,9 @@ import {
     filterCommentsByFilePaths,
     getIndexFileFilterLabel,
     getIndexFileFilterSuggestions,
+    isIndexFileFilterPathSelected,
     normalizeIndexFileFilterPaths,
+    resolveAutoIndexFileFilterRootPath,
     shouldLimitIndexSidebarList,
 } from "../src/ui/views/indexFileFilter";
 
@@ -35,6 +37,47 @@ test("normalizeIndexFileFilterPaths deduplicates, trims, and sorts file paths", 
         normalizeIndexFileFilterPaths([" docs/b.md ", "docs/a.md", "docs/b.md", ""]),
         ["docs/a.md", "docs/b.md"],
     );
+});
+
+test("resolveAutoIndexFileFilterRootPath preserves explicit roots and otherwise selects the first index file", () => {
+    assert.equal(
+        resolveAutoIndexFileFilterRootPath({
+            currentRootPath: " docs/current.md ",
+            firstIndexFilePath: "docs/first.md",
+            autoSelectSuppressed: false,
+        }),
+        "docs/current.md",
+    );
+    assert.equal(
+        resolveAutoIndexFileFilterRootPath({
+            currentRootPath: null,
+            firstIndexFilePath: " docs/first.md ",
+            autoSelectSuppressed: false,
+        }),
+        "docs/first.md",
+    );
+    assert.equal(
+        resolveAutoIndexFileFilterRootPath({
+            currentRootPath: null,
+            firstIndexFilePath: "docs/first.md",
+            autoSelectSuppressed: true,
+        }),
+        null,
+    );
+    assert.equal(
+        resolveAutoIndexFileFilterRootPath({
+            currentRootPath: null,
+            firstIndexFilePath: "",
+            autoSelectSuppressed: false,
+        }),
+        null,
+    );
+});
+
+test("isIndexFileFilterPathSelected matches normalized selected file paths", () => {
+    assert.equal(isIndexFileFilterPathSelected("docs/a.md", " docs/a.md "), true);
+    assert.equal(isIndexFileFilterPathSelected("docs/a.md", "docs/b.md"), false);
+    assert.equal(isIndexFileFilterPathSelected("docs/a.md", null), false);
 });
 
 test("buildIndexFileFilterOptions counts comments per file and sorts by file name", () => {

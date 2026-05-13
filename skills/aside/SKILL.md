@@ -1,11 +1,11 @@
 ---
-name: sidenote2
-description: Use when a user is working with SideNote2 comments in real Obsidian notes, especially if they want to create, reply to, update, resolve, or inspect a stored side note thread.
+name: aside
+description: Use when a user is working with Aside comments in real Obsidian notes, especially if they want to create, reply to, update, resolve, or inspect a stored side note thread.
 ---
 
-# SideNote2
+# Aside
 
-Use this as the user-facing SideNote2 skill.
+Use this as the user-facing Aside skill.
 
 This skill exists so an agent can recognize normal user phrasing without requiring the user to know internal repo skill names.
 
@@ -13,7 +13,8 @@ This skill exists so an agent can recognize normal user phrasing without requiri
 
 Use this skill when the user:
 
-- pastes an `obsidian://side-note2-comment?...` URI
+- pastes an `obsidian://aside-comment?...` URI
+- pastes a legacy `obsidian://side-note2-comment?...` URI
 - says `create a page note`
 - says `put each point into one comment`
 - says `create an anchored note`
@@ -24,14 +25,15 @@ Use this skill when the user:
 - says `update this side note`
 - says `resolve this side note`
 - says `edit this stored comment`
-- gives a `commentId` and wants to act on a SideNote2 thread
+- gives a `commentId` and wants to act on a Aside thread
 
 ## Source Of Truth
 
 - The markdown note itself is canonical.
-- SideNote2 stores comments in exactly one trailing `<!-- SideNote2 comments -->` block in that note.
-- `SideNote2 index.md` is derived output. Use it to discover a note path, not as canonical storage.
-- In this skill, a `page note` or `anchored note` normally means a simple SideNote2 note/thread inside the current markdown note.
+- Aside stores comments in exactly one trailing `<!-- Aside comments -->` block in that note.
+- Aside can still read and migrate legacy trailing `<!-- SideNote2 comments -->` blocks.
+- `Aside index.md` is derived output. Use it to discover a note path, not as canonical storage.
+- In this skill, a `page note` or `anchored note` normally means a simple Aside note/thread inside the current markdown note.
 - Only create a separate wiki page when the user explicitly asks for one, or when the best useful reply would exceed the 250-word side-note limit.
 
 ## Mode Selection
@@ -39,28 +41,28 @@ Use this skill when the user:
 First decide whether the current turn is:
 
 - chat-only
-- a SideNote2 write back into the note/thread
+- a Aside write back into the note/thread
 
 Use these defaults:
 
-- If the request came from an in-note SideNote2 `@codex` reply path, default to write mode.
+- If the request came from an in-note Aside `@codex` reply path, default to write mode.
 - If the request came from terminal usage or normal chat, default to chat-only mode.
 
 Important:
 
-- A pasted `obsidian://side-note2-comment?...` URI, note path, selected text, or `commentId` is thread context, not automatic permission to write.
-- In terminal usage or normal chat, only write when the user explicitly asks to create, reply, append, update, resolve, or otherwise modify stored SideNote2 comments.
+- A pasted `obsidian://aside-comment?...` URI, note path, selected text, or `commentId` is thread context, not automatic permission to write.
+- In terminal usage or normal chat, only write when the user explicitly asks to create, reply, append, update, resolve, or otherwise modify stored Aside comments.
 - If the user explicitly says this is chat, asks for explanation only, or asks what a passage/comment means, answer in chat and do not mutate the note.
 - If the user explicitly asks to modify or append somewhere directly, treat that as a normal chat instruction to perform the write.
 - When unsure, default to chat-only and avoid mutating the note.
 
 ## Working Rules
 
-1. If the user provided an `obsidian://side-note2-comment?...` URI:
+1. If the user provided an `obsidian://aside-comment?...` URI or legacy `obsidian://side-note2-comment?...` URI:
    - treat it as the exact thread target
    - do not treat the URI alone as permission to write
    - prefer the URI-based write target instead of re-discovering the note manually when you are actually writing
-2. If no URI is provided, locate the real markdown note and read the trailing SideNote2 managed block.
+2. If no URI is provided, locate the real markdown note and read the trailing Aside managed block.
 3. Distinguish:
    - `create`, `new thread`, `new page note`, `new anchored note`
      create a new thread instead of appending to an existing one
@@ -70,10 +72,10 @@ Important:
      replace the targeted stored comment body
    - `resolve`, `mark resolved`, `archive this side note`
      mark the targeted thread resolved
-4. Prefer the repo-local SideNote2 write entrypoints or shared helpers over hand-editing JSON.
-   Built-in SideNote2 behavior must not require any separate SideNote2 command install.
+4. Prefer the repo-local Aside write entrypoints or shared helpers over hand-editing JSON.
+   Built-in Aside behavior must not require any separate Aside command install.
 5. Preserve all existing thread entries unless the user explicitly asked to replace one.
-6. Keep each SideNote2 comment body at or under 250 words.
+6. Keep each Aside comment body at or under 250 words.
 7. Keep the formatting compact:
    - plain paragraphs or one simple list
    - no headings
@@ -87,7 +89,7 @@ Important:
 
 ## Preferred Write Entry Points
 
-When working inside the SideNote2 repo, use the repo-local Node entrypoints.
+When working inside the Aside repo, use the repo-local Node entrypoints.
 Treat them as internal implementation detail, not as a user setup requirement.
 
 Create a page note:
@@ -113,7 +115,7 @@ node scripts/create-note-comment-thread.mjs --file /abs/path/note.md --selected-
 Append:
 
 ```bash
-node scripts/append-note-comment-entry.mjs --uri "obsidian://side-note2-comment?..." --comment-file /abs/path/reply.md
+node scripts/append-note-comment-entry.mjs --uri "obsidian://aside-comment?..." --comment-file /abs/path/reply.md
 ```
 
 Or with an explicit file and comment id:
@@ -125,7 +127,7 @@ node scripts/append-note-comment-entry.mjs --file /abs/path/note.md --id "<comme
 Update:
 
 ```bash
-node scripts/update-note-comment.mjs --uri "obsidian://side-note2-comment?..." --comment-file /abs/path/comment.md
+node scripts/update-note-comment.mjs --uri "obsidian://aside-comment?..." --comment-file /abs/path/comment.md
 ```
 
 Or with an explicit file and comment id:
@@ -137,7 +139,7 @@ node scripts/update-note-comment.mjs --file /abs/path/note.md --id "<comment-id>
 Resolve:
 
 ```bash
-node scripts/resolve-note-comment.mjs --uri "obsidian://side-note2-comment?..."
+node scripts/resolve-note-comment.mjs --uri "obsidian://aside-comment?..."
 ```
 
 Or with an explicit file and comment id:
@@ -159,7 +161,7 @@ node scripts/resolve-note-comment.mjs --file /abs/path/note.md --id "<comment-id
 - Do not append to an existing thread when the user clearly asked to create a new page note or anchored note.
 - Do not overwrite a thread when the user asked to reply.
 - Do not interpret `create a note` as `create a new markdown page` unless the user explicitly asks for a separate wiki page.
-- Do not create, preserve, or normalize a second `<!-- SideNote2 comments -->` block in the same markdown file.
-- If a note already has more than one `<!-- SideNote2 comments -->` block, stop and repair or escalate instead of writing.
+- Do not create, preserve, or normalize a second `<!-- Aside comments -->` or legacy `<!-- SideNote2 comments -->` block in the same markdown file.
+- If a note already has more than one Aside or legacy SideNote2 managed block, stop and repair or escalate instead of writing.
 - Do not hand-migrate legacy flat `comment` payloads during normal agent work.
 - If the repo-local write entrypoint refuses a note because it changed after read, treat it as a retry case instead of editing the JSON manually.

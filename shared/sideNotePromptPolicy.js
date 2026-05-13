@@ -26,11 +26,11 @@ function buildSideNotePrompt(options) {
         : "";
 
     const promptLines = [
-        "You are responding to a SideNote2 thread in Obsidian.",
+        "You are responding to a Aside thread in Obsidian.",
         "Answer the user's request directly.",
         "Only inspect or modify workspace files when the request actually needs that context.",
         "If the request asks for file changes, make them directly in the workspace before replying.",
-        "Return only the reply text that should be appended back into the SideNote2 thread.",
+        "Return only the reply text that should be appended back into the Aside thread.",
         "Keep the side-note reply compact and easy to scan.",
         "Use plain paragraphs or one simple list; avoid headings, long multi-section layouts, and excess blank lines.",
         "Keep the reply at or under 250 words.",

@@ -14,7 +14,7 @@ export function findClickedHighlightCommentId(target: unknown): string | null {
         return null;
     }
 
-    const highlightEl = closestTarget.closest(".sidenote2-highlight");
+    const highlightEl = closestTarget.closest(".aside-highlight");
     if (!highlightEl || typeof highlightEl.getAttribute !== "function") {
         return null;
     }

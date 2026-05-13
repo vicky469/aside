@@ -12,10 +12,10 @@ Draft implementation spec based on:
 
 Implement the first cross-platform `@codex` runtime layer so that:
 
-1. SideNote2 can resolve between local desktop and remote runtime before dispatch.
+1. Aside can resolve between local desktop and remote runtime before dispatch.
 2. Desktop keeps the current local path.
 3. Desktop and mobile can use a configured remote path for Codex execution against a bridge-managed workspace.
-4. Compute ownership is always explicit and SideNote2 never uses author-paid compute.
+4. Compute ownership is always explicit and Aside never uses author-paid compute.
 
 ## Final Decisions
 
@@ -26,9 +26,9 @@ Implement the first cross-platform `@codex` runtime layer so that:
 - `Auto` prefers configured remote when available, otherwise uses local, otherwise blocks.
 - `Local` never falls through to remote.
 - `Remote` never falls through to local.
-- Remote runtime v1 means an HTTPS bridge endpoint plus bearer token. SideNote2 does not accept raw provider API keys in plugin settings and does not host compute.
+- Remote runtime v1 means an HTTPS bridge endpoint plus bearer token. Aside does not accept raw provider API keys in plugin settings and does not host compute.
 - Remote v1 is a bridge-managed Codex runtime. It may stream text, support cancel, inspect or modify the configured bridge workspace, and return reply text back into the thread.
-- SideNote2 continues to own note writes. Both local and remote runtimes return reply text only to the plugin, even when they edit workspace files.
+- Aside continues to own note writes. Both local and remote runtimes return reply text only to the plugin, even when they edit workspace files.
 - Product copy must say `Using your local Codex setup` or `Using remote runtime` before and during a run.
 
 ## Scope
@@ -46,7 +46,7 @@ In scope:
 
 Out of scope:
 
-- SideNote2-hosted runtime
+- Aside-hosted runtime
 - raw provider API key entry
 - OAuth/account linking
 - arbitrary access outside the configured bridge workspace
@@ -58,7 +58,7 @@ Out of scope:
 
 ### Rule 1: Resolved Runtime Is Chosen Before Enqueue
 
-When a user saves a triggering `@codex` entry, SideNote2 resolves one concrete runtime before the run record is created.
+When a user saves a triggering `@codex` entry, Aside resolves one concrete runtime before the run record is created.
 The run record stores the resolved runtime, not just the preference.
 
 ### Rule 2: Ownership Must Stay User-Owned
@@ -68,7 +68,7 @@ Only two ownership states are valid in phase 1:
 - user-local
 - user-remote
 
-No author-owned or SideNote2-hosted compute may appear anywhere in settings, fallback logic, or status copy.
+No author-owned or Aside-hosted compute may appear anywhere in settings, fallback logic, or status copy.
 
 ### Rule 3: Auto Is The Only Allowed Fallback Mode
 
@@ -77,13 +77,13 @@ If the user explicitly picks `Local desktop` or `Remote runtime`, unavailable mo
 
 ### Rule 4: Remote Capability Is Reply-Only
 
-The remote backend receives the same SideNote2 reply-generation instructions as the local backend, but phase 1 remote runs are limited to returning thread reply text.
+The remote backend receives the same Aside reply-generation instructions as the local backend, but phase 1 remote runs are limited to returning thread reply text.
 They must not claim to have modified local workspace files.
 
-### Rule 5: SideNote2 Owns Canonical Writes
+### Rule 5: Aside Owns Canonical Writes
 
 The note remains the source of truth.
-The runtime returns reply text and SideNote2 appends or edits the thread entry itself.
+The runtime returns reply text and Aside appends or edits the thread entry itself.
 Remote services never write vault files directly.
 
 ### Rule 6: Secrets Are Device-Local
@@ -94,7 +94,7 @@ The syncable base URL may live in plugin data, but the token must not.
 
 ### Rule 7: Remote Runs Are Recoverable
 
-If Obsidian reloads while a remote run is queued or running, SideNote2 should reconnect using the stored remote execution id and continue polling until terminal state.
+If Obsidian reloads while a remote run is queued or running, Aside should reconnect using the stored remote execution id and continue polling until terminal state.
 
 ## User-Facing Model
 
@@ -222,14 +222,14 @@ Phase 1 remote runtime is a simple bridge contract, not provider-specific API wi
 
 ### Start Run
 
-`POST /v1/sidenote2/runs`
+`POST /v1/aside/runs`
 
 Request body:
 
 ```json
 {
   "agent": "codex",
-  "promptText": "final SideNote2 prompt text",
+  "promptText": "final Aside prompt text",
   "metadata": {
     "notePath": "docs/prd/agent-cross-platform-runtime-plan.md",
     "contextScope": "anchor",
@@ -250,7 +250,7 @@ Response:
 
 ### Poll Events
 
-`GET /v1/sidenote2/runs/{runId}?after=<cursor>`
+`GET /v1/aside/runs/{runId}?after=<cursor>`
 
 Response:
 
@@ -273,7 +273,7 @@ Terminal responses may include:
 
 ### Cancel
 
-`POST /v1/sidenote2/runs/{runId}/cancel`
+`POST /v1/aside/runs/{runId}/cancel`
 
 Success may return `202 Accepted` or a terminal state payload.
 
@@ -294,7 +294,7 @@ Optional later event kinds:
 
 ### Prompt Parity
 
-SideNote2 builds the final prompt locally.
+Aside builds the final prompt locally.
 The remote bridge should receive the same final prompt text the local runtime would use, so reply behavior stays consistent across runtimes.
 
 ## Data Model Changes
@@ -302,7 +302,7 @@ The remote bridge should receive the same final prompt text the local runtime wo
 Extend settings with:
 
 ```ts
-interface SideNote2Settings {
+interface AsideSettings {
   indexNotePath: string;
   indexHeaderImageUrl: string;
   indexHeaderImageCaption: string;
@@ -310,7 +310,7 @@ interface SideNote2Settings {
   remoteRuntimeBaseUrl?: string;
 }
 
-interface SideNote2LocalSecrets {
+interface AsideLocalSecrets {
   remoteRuntimeBearerToken?: string;
 }
 ```
@@ -440,4 +440,4 @@ This spec is successful when:
 - explicit `Local desktop` and `Remote runtime` modes never silently reroute
 - the user can tell which runtime owns the run before and during execution
 - remote runs can stream partial text, cancel, and recover after app restart
-- SideNote2 never uses author-paid compute in this rollout
+- Aside never uses author-paid compute in this rollout

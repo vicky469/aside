@@ -36,21 +36,21 @@ test("normalizeCommentMarkdownForRender shortens legacy bare urls for rendering"
 test("normalizeCommentMarkdownForRender converts raw side note urls into clickable markdown links", () => {
     assert.equal(
         normalizeCommentMarkdownForRender(
-            "See obsidian://side-note2-comment?vault=Dev&file=docs%2Falpha.md&commentId=comment-1 next.",
+            "See obsidian://aside-comment?vault=Dev&file=docs%2Falpha.md&commentId=comment-1 next.",
         ),
-        "See [obsidian://side-note2-comment?vault=Dev&file=docs%2Falpha.md&commentId=comment-1](obsidian://side-note2-comment?vault=Dev&file=docs%2Falpha.md&commentId=comment-1) next.",
+        "See [obsidian://aside-comment?vault=Dev&file=docs%2Falpha.md&commentId=comment-1](obsidian://aside-comment?vault=Dev&file=docs%2Falpha.md&commentId=comment-1) next.",
     );
 });
 
 test("normalizeCommentMarkdownForRenderWithOptions uses custom side note link labels", () => {
     assert.equal(
         normalizeCommentMarkdownForRenderWithOptions(
-            "See obsidian://side-note2-comment?vault=Dev&file=docs%2Falpha.md&commentId=comment-1 next.",
+            "See obsidian://aside-comment?vault=Dev&file=docs%2Falpha.md&commentId=comment-1 next.",
             {
                 resolveSideNoteReferenceLabel: () => "alpha: selected text",
             },
         ),
-        "See [alpha: selected text](obsidian://side-note2-comment?vault=Dev&file=docs%2Falpha.md&commentId=comment-1) next.",
+        "See [alpha: selected text](obsidian://aside-comment?vault=Dev&file=docs%2Falpha.md&commentId=comment-1) next.",
     );
 });
 

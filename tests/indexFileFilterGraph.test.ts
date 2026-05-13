@@ -127,11 +127,11 @@ test("buildIndexFileFilterGraph ignores targets without side notes, self-links, 
             comment: "",
         }),
     ], {
-        allCommentsNotePath: "SideNote2 index.md",
+        allCommentsNotePath: "Aside index.md",
         resolveWikiLinkPath: createResolver({
             A: "docs/a.md",
             B: "docs/b.md",
-            Index: "SideNote2 index.md",
+            Index: "Aside index.md",
             Missing: "docs/missing.md",
         }),
     });

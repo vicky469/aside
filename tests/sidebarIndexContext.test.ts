@@ -168,7 +168,7 @@ class MockPlugin {
     }
 }
 
-test("old sidebar target falls back to the last normal note for SideNote2 index", () => {
+test("old sidebar target falls back to the last normal note for Aside index", () => {
     const plugin = new MockPlugin();
     const target = plugin.getSidebarTargetFileOld({
         path: ALL_COMMENTS_NOTE_PATH,
@@ -178,7 +178,7 @@ test("old sidebar target falls back to the last normal note for SideNote2 index"
     assert.deepEqual(target, { path: "last-note.md", extension: "md" });
 });
 
-test("fixed sidebar target uses SideNote2 index when it is the active note", () => {
+test("fixed sidebar target uses Aside index when it is the active note", () => {
     const plugin = new MockPlugin();
     const target = plugin.getSidebarTargetFileFixed({
         path: ALL_COMMENTS_NOTE_PATH,
@@ -209,7 +209,7 @@ test("pinned commentable file falls back from an unsupported active file to the 
     assert.deepEqual(target, { path: "doc.md", extension: "md" });
 });
 
-test("fixed file-open keeps the last normal note while still targeting SideNote2 index", () => {
+test("fixed file-open keeps the last normal note while still targeting Aside index", () => {
     const plugin = new MockPlugin();
     const openedFile = plugin.handleFileOpenFixed({
         path: ALL_COMMENTS_NOTE_PATH,
@@ -257,7 +257,7 @@ test("workspace target input prefers the real active file when the event file is
     assert.deepEqual(resolved, { path: "docs/file.pdf", extension: "pdf" });
 });
 
-test("draft can stay tied to the source file while rendering in SideNote2 index", () => {
+test("draft can stay tied to the source file while rendering in Aside index", () => {
     const plugin = new MockPlugin();
     plugin.draftComment = { id: "comment-1", filePath: "Folder/Note.md" };
     plugin.draftHostFilePath = ALL_COMMENTS_NOTE_PATH;

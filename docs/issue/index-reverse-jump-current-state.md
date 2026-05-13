@@ -7,8 +7,8 @@ For a sidebar card in index mode, we already know:
 - `commentId`
 - source `filePath`
 - source file basename
-- folder path chunk in `SideNote2 index.md`
-- exact generated index row identity via `^sidenote2-index-comment-<commentId>`
+- folder path chunk in `Aside index.md`
+- exact generated index row identity via `^aside-index-comment-<commentId>`
 
 So this is **not** a graph-search problem and it does **not** need multi-hopping across unrelated targets.
 
@@ -17,12 +17,12 @@ So this is **not** a graph-search problem and it does **not** need multi-hopping
 The generated index is now grouped like:
 
 ```md
-### SideNote2/docs/thoughts
+### Aside/docs/thoughts
 
   **refactored.md**
 
-- [comment ref](obsidian://side-note2-comment?...commentId=...)
-- [comment ref](obsidian://side-note2-comment?...commentId=...)
+- [comment ref](obsidian://aside-comment?...commentId=...)
+- [comment ref](obsidian://aside-comment?...commentId=...)
 ```
 
 That means we have a natural chunk boundary:
@@ -45,9 +45,9 @@ Current sidebar-card click in index mode:
 
 Files involved:
 
-- [SideNote2View.ts](/Users/wenqingli/Obsidian/dev/SideNote2/src/ui/views/SideNote2View.ts)
-- [commentHighlightController.ts](/Users/wenqingli/Obsidian/dev/SideNote2/src/comments/commentHighlightController.ts)
-- [allCommentsNote.ts](/Users/wenqingli/Obsidian/dev/SideNote2/src/core/derived/allCommentsNote.ts)
+- [AsideView.ts](/Users/wenqingli/Obsidian/dev/Aside/src/ui/views/AsideView.ts)
+- [commentHighlightController.ts](/Users/wenqingli/Obsidian/dev/Aside/src/comments/commentHighlightController.ts)
+- [allCommentsNote.ts](/Users/wenqingli/Obsidian/dev/Aside/src/core/derived/allCommentsNote.ts)
 
 There is no native `#^block` jump in the visible path anymore.
 
@@ -80,7 +80,7 @@ The hard parts were:
 Useful fact we now rely on:
 
 - the generated file heading already contains the exact full `filePath` in
-  `<strong class="sidenote2-index-heading-label" title="...">`
+  `<strong class="aside-index-heading-label" title="...">`
 
 That gives us a precise pre-target for:
 

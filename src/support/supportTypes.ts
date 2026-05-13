@@ -1,4 +1,4 @@
-import type { SideNote2LogAttachment } from "../logs/logService";
+import type { AsideLogAttachment } from "../logs/logService";
 
 export interface SupportScreenshotAttachment {
     fileName: string;
@@ -28,4 +28,4 @@ export interface SupportReportContext {
     threadCount: number;
 }
 
-export type AttachedLogFile = SideNote2LogAttachment;
+export type AttachedLogFile = AsideLogAttachment;

@@ -2,20 +2,27 @@ import type { Comment } from "../../commentManager";
 import { filterCommentsByResolvedVisibility } from "../rules/resolvedCommentVisibility";
 import {
     buildSideNoteReferenceUrl,
+    LEGACY_SIDE_NOTE_REFERENCE_PROTOCOL,
     parseSideNoteReferenceUrl,
     SIDE_NOTE_REFERENCE_PROTOCOL,
 } from "../text/commentReferences";
 
-export const ALL_COMMENTS_NOTE_PATH = "SideNote2 index.md";
+export const ALL_COMMENTS_NOTE_PATH = "Aside index.md";
 export const LEGACY_ALL_COMMENTS_NOTE_PATH = "SideNote2 comments.md";
+export const LEGACY_ALL_COMMENTS_NOTE_PATHS = [
+    "SideNote2 index.md",
+    LEGACY_ALL_COMMENTS_NOTE_PATH,
+    "Aside comments.md",
+] as const;
 export const COMMENT_LOCATION_PROTOCOL = SIDE_NOTE_REFERENCE_PROTOCOL;
 export const ALL_COMMENTS_NOTE_IMAGE_URL = "https://ichef.bbci.co.uk/images/ic/1920xn/p02vhq1v.jpg.webp";
 export const ALL_COMMENTS_NOTE_IMAGE_CAPTION = "Relativity (Credit: 2015 The M.C. Escher Company - Baarn, The Netherlands)";
-export const ALL_COMMENTS_NOTE_IMAGE_ALT = "SideNote2 index header image";
+export const ALL_COMMENTS_NOTE_IMAGE_ALT = "Aside index header image";
 export const ALL_COMMENTS_NOTE_IMAGE_CAPTION_STYLE = "display: block; color: #8a8a8a; font-size: 12px; line-height: 1.2; text-align: center;";
-export const INDEX_FILE_FILTER_PROTOCOL = "side-note2-index-file";
-export const INDEX_FILE_FILTER_LINK_CLASS = "sidenote2-index-file-filter-link";
-export const INDEX_FILE_FILTER_DATA_ATTRIBUTE = "data-sidenote2-file-path";
+export const INDEX_FILE_FILTER_PROTOCOL = "aside-index-file";
+export const LEGACY_INDEX_FILE_FILTER_PROTOCOL = "side-note2-index-file";
+export const INDEX_FILE_FILTER_LINK_CLASS = "aside-index-file-filter-link";
+export const INDEX_FILE_FILTER_DATA_ATTRIBUTE = "data-aside-file-path";
 
 export interface CommentLocationTarget {
     filePath: string;
@@ -130,7 +137,11 @@ export function parseIndexFileOpenUrl(url: string): string | null {
 
     if (
         parsedUrl.protocol !== "obsidian:"
-        || (parsedUrl.hostname !== "open" && parsedUrl.hostname !== INDEX_FILE_FILTER_PROTOCOL)
+        || (
+            parsedUrl.hostname !== "open"
+            && parsedUrl.hostname !== INDEX_FILE_FILTER_PROTOCOL
+            && parsedUrl.hostname !== LEGACY_INDEX_FILE_FILTER_PROTOCOL
+        )
     ) {
         return null;
     }
@@ -143,7 +154,7 @@ function formatFileLink(filePath: string): string {
     const normalizedPath = normalizeNotePath(filePath);
     const pathSegments = normalizedPath.split("/").filter(Boolean);
     const fileName = pathSegments.pop() ?? normalizedPath;
-    return `<a href="#" class="${INDEX_FILE_FILTER_LINK_CLASS} sidenote2-index-heading-label" title="${escapeHtmlText(normalizedPath)}" ${INDEX_FILE_FILTER_DATA_ATTRIBUTE}="${escapeHtmlText(normalizedPath)}">${escapeHtmlText(fileName)}</a>`;
+    return `<a href="#" class="${INDEX_FILE_FILTER_LINK_CLASS} aside-index-heading-label" title="${escapeHtmlText(normalizedPath)}" ${INDEX_FILE_FILTER_DATA_ATTRIBUTE}="${escapeHtmlText(normalizedPath)}">${escapeHtmlText(fileName)}</a>`;
 }
 
 function getFolderPath(filePath: string): string {
@@ -154,7 +165,8 @@ function getFolderPath(filePath: string): string {
 }
 
 export function isAllCommentsNotePath(filePath: string, currentPath: string = ALL_COMMENTS_NOTE_PATH): boolean {
-    return filePath === normalizeAllCommentsNotePath(currentPath) || filePath === LEGACY_ALL_COMMENTS_NOTE_PATH;
+    return filePath === normalizeAllCommentsNotePath(currentPath)
+        || LEGACY_ALL_COMMENTS_NOTE_PATHS.includes(filePath as typeof LEGACY_ALL_COMMENTS_NOTE_PATHS[number]);
 }
 
 export function buildCommentLocationUrl(vaultName: string, comment: Pick<Comment, "filePath" | "id">): string {
@@ -171,7 +183,7 @@ export function buildIndexCommentBlockId(commentId: string): string {
         .replace(/[^a-z0-9_-]+/g, "-")
         .replace(/^-+|-+$/g, "");
 
-    return `sidenote2-index-comment-${normalizedId || "unknown"}`;
+    return `aside-index-comment-${normalizedId || "unknown"}`;
 }
 
 export function parseCommentLocationUrl(url: string): CommentLocationTarget | null {
@@ -187,7 +199,10 @@ export function parseCommentLocationUrl(url: string): CommentLocationTarget | nu
 }
 
 export function findCommentLocationTargetInMarkdownLine(line: string): CommentLocationTarget | null {
-    const markdownLinkPattern = /\[[^\]]*]\((obsidian:\/\/side-note2-comment\?[^)\s]+)\)/g;
+    const markdownLinkPattern = new RegExp(
+        String.raw`\[[^\]]*]\((obsidian:\/\/(?:${SIDE_NOTE_REFERENCE_PROTOCOL}|${LEGACY_SIDE_NOTE_REFERENCE_PROTOCOL})\?[^)\s]+)\)`,
+        "g",
+    );
     for (const match of line.matchAll(markdownLinkPattern)) {
         const url = match[1];
         if (!url) {
@@ -224,18 +239,18 @@ export function findCommentLocationLineNumber(noteContent: string, commentId: st
 }
 
 export function findFileHeadingPathInMarkdownLine(line: string): string | null {
-    const elementMatch = line.match(/<(?:span|strong|a)\b[^>]*class="[^"]*\bsidenote2-index-heading-label\b[^"]*"[^>]*>/);
+    const elementMatch = line.match(/<(?:span|strong|a)\b[^>]*class="[^"]*\b(?:aside|sidenote2)-index-heading-label\b[^"]*"[^>]*>/);
     const titleMatch = elementMatch?.[0]?.match(/\btitle="([^"]+)"/);
     if (titleMatch?.[1]) {
         return unescapeHtmlText(titleMatch[1]);
     }
 
-    const htmlFileLinkMatch = line.match(/\bdata-sidenote2-file-path="([^"]+)"/);
+    const htmlFileLinkMatch = line.match(/\bdata-(?:aside|sidenote2)-file-path="([^"]+)"/);
     if (htmlFileLinkMatch?.[1]) {
         return unescapeHtmlText(htmlFileLinkMatch[1]);
     }
 
-    const markdownLinkPattern = /\[[^\]]*]\((obsidian:\/\/(?:open|side-note2-index-file)\?[^)\s]+)\)/g;
+    const markdownLinkPattern = /\[[^\]]*]\((obsidian:\/\/(?:open|aside-index-file|side-note2-index-file)\?[^)\s]+)\)/g;
     for (const match of line.matchAll(markdownLinkPattern)) {
         const url = match[1];
         if (!url) {
@@ -351,7 +366,7 @@ export function buildAllCommentsNoteContent(
         `![${ALL_COMMENTS_NOTE_IMAGE_ALT}](${headerImageUrl})`,
     ];
     if (headerImageCaption) {
-        lines.push(`<div class="sidenote2-index-header-caption" style="${ALL_COMMENTS_NOTE_IMAGE_CAPTION_STYLE}">${escapeHtmlText(headerImageCaption)}</div>`);
+        lines.push(`<div class="aside-index-header-caption" style="${ALL_COMMENTS_NOTE_IMAGE_CAPTION_STYLE}">${escapeHtmlText(headerImageCaption)}</div>`);
     }
     lines.push("");
     const visibleComments = filterCommentsByResolvedVisibility(

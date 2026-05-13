@@ -15,12 +15,12 @@ if you want to view the source, please visit the github repository of this plugi
 `;
 
 const prod = (process.argv[2] === "production");
-const pluginId = "side-note2";
+const pluginId = "aside";
 const rootBundlePath = "main.js";
-const devBundlePath = ".sidenote2-dev/main.js";
-const hotReloadEnabled = !prod && process.env.SIDENOTE2_HOT_RELOAD !== "0";
-const hotReloadVault = process.env.SIDENOTE2_HOT_RELOAD_VAULT ?? process.env.OBSIDIAN_VAULT ?? "dev";
-const hotReloadCdpPort = process.env.SIDENOTE2_HOT_RELOAD_CDP_PORT ?? process.env.OBSIDIAN_REMOTE_DEBUGGING_PORT ?? "9222";
+const devBundlePath = ".aside-dev/main.js";
+const hotReloadEnabled = !prod && (process.env.ASIDE_HOT_RELOAD ?? process.env.SIDENOTE2_HOT_RELOAD) !== "0";
+const hotReloadVault = process.env.ASIDE_HOT_RELOAD_VAULT ?? process.env.SIDENOTE2_HOT_RELOAD_VAULT ?? process.env.OBSIDIAN_VAULT ?? "dev";
+const hotReloadCdpPort = process.env.ASIDE_HOT_RELOAD_CDP_PORT ?? process.env.SIDENOTE2_HOT_RELOAD_CDP_PORT ?? process.env.OBSIDIAN_REMOTE_DEBUGGING_PORT ?? "9222";
 const execFileAsync = promisify(execFile);
 
 let hotReloadInFlight = false;
@@ -105,7 +105,7 @@ async function reloadPluginViaCdp() {
 							}
 							await app.plugins.enablePlugin(pluginId);
 						} catch (error) {
-							console.error("[side-note2 hot-reload]", error);
+							console.error("[aside hot-reload]", error);
 						}
 					}, 0);
 					return true;

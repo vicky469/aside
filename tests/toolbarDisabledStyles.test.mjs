@@ -6,7 +6,7 @@ const css = readFileSync(new URL("../styles.css", import.meta.url), "utf8");
 
 test("disabled toolbar icon buttons are visibly unavailable and non-interactive", () => {
     const disabledRule = css.match(
-        /button\.sidenote2-toolbar-icon-button:disabled,[\s\S]*?button\.sidenote2-toolbar-icon-button\[aria-disabled="true"\]\s*\{(?<body>[\s\S]*?)\}/,
+        /button\.aside-toolbar-icon-button:disabled,[\s\S]*?button\.aside-toolbar-icon-button\[aria-disabled="true"\]\s*\{(?<body>[\s\S]*?)\}/,
     );
 
     assert.ok(disabledRule?.groups?.body, "missing disabled toolbar icon button rule");
@@ -18,7 +18,7 @@ test("disabled toolbar icon buttons are visibly unavailable and non-interactive"
 
 test("active sidebar tabs use theme text color instead of hardcoded black", () => {
     const activeRule = css.match(
-        /button\.sidenote2-tab-button\.sidenote2-tab-button--active\s*\{(?<body>[\s\S]*?)\}/,
+        /button\.aside-tab-button\.aside-tab-button--active\s*\{(?<body>[\s\S]*?)\}/,
     );
 
     assert.ok(activeRule?.groups?.body, "missing active sidebar tab rule");
@@ -29,7 +29,7 @@ test("active sidebar tabs use theme text color instead of hardcoded black", () =
 
 test("disabled sidebar tabs use a faded unavailable state", () => {
     const disabledTabRule = css.match(
-        /button\.sidenote2-tab-button:disabled,[\s\S]*?button\.sidenote2-tab-button\[aria-disabled="true"\]\s*\{(?<body>[\s\S]*?)\}/,
+        /button\.aside-tab-button:disabled,[\s\S]*?button\.aside-tab-button\[aria-disabled="true"\]\s*\{(?<body>[\s\S]*?)\}/,
     );
 
     assert.ok(disabledTabRule?.groups?.body, "missing disabled sidebar tab rule");
@@ -40,10 +40,20 @@ test("disabled sidebar tabs use a faded unavailable state", () => {
 
 test("index note file names are larger than metadata text", () => {
     const indexListRule = css.match(
-        /\.sidenote2-index-note-view \.markdown-preview-view li,[\s\S]*?\.sidenote2-index-note-view \.cm-line\.HyperMD-list-line \.cm-hmd-internal-link\s*\{(?<body>[\s\S]*?)\}/,
+        /\.aside-index-note-view \.markdown-preview-view li,[\s\S]*?\.aside-index-note-view \.cm-line\.HyperMD-list-line \.cm-hmd-internal-link\s*\{(?<body>[\s\S]*?)\}/,
     );
 
     assert.ok(indexListRule?.groups?.body, "missing index note list font rule");
     assert.match(indexListRule.groups.body, /font-size:\s*14px\s*!important;/);
     assert.doesNotMatch(indexListRule.groups.body, /font-size:\s*12px\s*!important;/);
+});
+
+test("selected index file rows use the accent purple background", () => {
+    const selectedRowRule = css.match(
+        /\.aside-index-selected-file-row,[\s\S]*?\.aside-index-note-view li\.aside-index-selected-file-row\s*\{(?<body>[\s\S]*?)\}/,
+    );
+
+    assert.ok(selectedRowRule?.groups?.body, "missing selected index file row rule");
+    assert.match(selectedRowRule.groups.body, /background:\s*hsla\(var\(--interactive-accent-hsl\),\s*0\.(?:1[4-9]|2[0-9])\)/);
+    assert.match(selectedRowRule.groups.body, /box-shadow:\s*inset 3px 0 0 var\(--interactive-accent\)/);
 });

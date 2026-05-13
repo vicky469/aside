@@ -10,9 +10,9 @@ type MockFile = {
 test("normalizeSidebarViewFile keeps markdown and index files but drops unsupported files", () => {
     const markdownFile: MockFile = { path: "Folder/Note.md", extension: "md" };
     const pdfFile: MockFile = { path: "Folder/Scan.pdf", extension: "pdf" };
-    const indexFile: MockFile = { path: "SideNote2 index.md", extension: "md" };
+    const indexFile: MockFile = { path: "Aside index.md", extension: "md" };
     const isSidebarSupportedFile = (file: MockFile | null): file is MockFile =>
-        !!file && (file.extension === "md" || file.path === "SideNote2 index.md");
+        !!file && (file.extension === "md" || file.path === "Aside index.md");
 
     assert.equal(normalizeSidebarViewFile(markdownFile, isSidebarSupportedFile), markdownFile);
     assert.equal(normalizeSidebarViewFile(indexFile, isSidebarSupportedFile), indexFile);

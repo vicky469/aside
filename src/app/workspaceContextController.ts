@@ -95,7 +95,7 @@ export class WorkspaceContextController {
             }
 
             leaf.view.containerEl.classList.toggle(
-                "sidenote2-index-note-view",
+                "aside-index-note-view",
                 this.host.isAllCommentsNotePath(leaf.view.file?.path ?? ""),
             );
         });

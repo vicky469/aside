@@ -30,7 +30,7 @@ Allow a side note to reference another side note in a way that:
 - supports true many-to-many relationships across side notes
 - fits the current per-note storage model
 - does not require dual-writing relationship state into two notes
-- does not require treating `SideNote2 index.md` as canonical data storage
+- does not require treating `Aside index.md` as canonical data storage
 - feels like a natural inline mention in the sidebar UI
 - can drive richer navigation and graph behavior later
 
@@ -39,7 +39,7 @@ Allow a side note to reference another side note in a way that:
 The current architecture already gives us three strong primitives:
 
 1. Canonical side-note storage is per source markdown file in the trailing managed block.
-2. Every side note already has a stable deep link via `obsidian://side-note2-comment?...&file=...&commentId=...`.
+2. Every side note already has a stable deep link via `obsidian://aside-comment?...&file=...&commentId=...`.
 3. The plugin already maintains an aggregate in-memory comment index that can resolve a comment by `commentId` across loaded vault state.
 
 The current architecture also imposes two important constraints:
@@ -51,7 +51,7 @@ This spec should align with those constraints instead of creating a second relat
 
 Important implication:
 
-- `SideNote2 index.md` is a derived note view, not the write model and not the search database
+- `Aside index.md` is a derived note view, not the write model and not the search database
 
 ## Decision Summary
 
@@ -60,7 +60,7 @@ Important implication:
 The canonical persisted form should be an ordinary markdown link inside the source entry body:
 
 ```md
-[label](obsidian://side-note2-comment?vault=<vault>&file=<file>&commentId=<commentId>)
+[label](obsidian://aside-comment?vault=<vault>&file=<file>&commentId=<commentId>)
 ```
 
 This keeps the source of truth inside the existing `body` / `comment` text, consistent with how wiki links and tags already work.
@@ -101,7 +101,7 @@ V1 should add:
 
 ### Decision 5: The Rendered UI Should Feel Like A Mention Chip, Not A Raw External URL
 
-The stored markdown stays standard, but the sidebar rendering should visually decorate side-note links as SideNote2-native references.
+The stored markdown stays standard, but the sidebar rendering should visually decorate side-note links as Aside-native references.
 
 ### Decision 6: Cross-File Side-Note References Should Count As File Graph Edges
 
@@ -126,7 +126,7 @@ Cross-note search should be powered by:
 - `AggregateCommentIndex` as the structured source
 - a derived search index layered on top of it
 
-It must not depend on reparsing `SideNote2 index.md`.
+It must not depend on reparsing `Aside index.md`.
 
 ### Decision 9: Thought Trail Should Consume The Shared Reference Index
 
@@ -154,7 +154,7 @@ Out of scope:
 - comment-to-comment drag-and-drop linking
 - a new standalone comment graph view
 - syncing link labels across existing references after target edits
-- public markdown syntax outside SideNote2-rendered surfaces
+- public markdown syntax outside Aside-rendered surfaces
 
 ## Product Rules
 
@@ -162,7 +162,7 @@ Out of scope:
 
 Do not add a global relationship file.
 Do not add target-owned backlink storage.
-Do not treat `SideNote2 index.md` as canonical storage.
+Do not treat `Aside index.md` as canonical storage.
 
 The source markdown note remains canonical for its own threads and their entry bodies.
 
@@ -177,7 +177,7 @@ If the `file=` parameter in a stored link is stale but the `commentId` still exi
 
 ### Rule 4: Cross-Vault Links Are Not Local Side-Note References
 
-If a pasted `side-note2-comment` URL explicitly names a different vault, treat it as an external link for local graph and backlink purposes.
+If a pasted `aside-comment` URL explicitly names a different vault, treat it as an external link for local graph and backlink purposes.
 
 It may still render as a clickable markdown link, but it must not enter the local derived reference graph.
 
@@ -189,13 +189,13 @@ For V1, the picker should also avoid presenting child-entry targets from the sam
 
 ### Rule 6: Existing Share Links Become A First-Class Authoring Path
 
-The current share action already copies a `side-note2-comment` URL.
+The current share action already copies a `aside-comment` URL.
 
 V1 must support this workflow naturally:
 
 1. copy side-note link from one card
 2. paste into another draft
-3. SideNote2 converts the raw URL into a readable inline reference
+3. Aside converts the raw URL into a readable inline reference
 
 ### Rule 7: Display Labels Are Presentation, Not Identity
 
@@ -224,13 +224,13 @@ Global side-note search should be built from the already indexed side-note corpu
 
 It must not:
 
-- parse `SideNote2 index.md` as its source
+- parse `Aside index.md` as its source
 - require a second canonical side-note store
 - trigger a vault-wide full rescan on every picker open
 
 ### Rule 11: `index.md` Remains A Derived Surface Only
 
-`SideNote2 index.md` may show:
+`Aside index.md` may show:
 
 - summaries
 - links
@@ -249,14 +249,14 @@ It must not become:
 The canonical stored form is inline markdown in the entry body:
 
 ```md
-[Pricing concern](obsidian://side-note2-comment?vault=MyVault&file=notes%2Froadmap.md&commentId=thread-42)
+[Pricing concern](obsidian://aside-comment?vault=MyVault&file=notes%2Froadmap.md&commentId=thread-42)
 ```
 
 ### Canonical Requirements
 
 1. `commentId` is required.
 2. `file` should be written for compatibility and direct opening.
-3. `vault` should be written by SideNote2 when it inserts the link.
+3. `vault` should be written by Aside when it inserts the link.
 4. Runtime resolution must not depend on optional params such as `kind`.
 
 ### Link Target Model
@@ -302,7 +302,7 @@ The feature should use a layered indexed model:
 1. canonical per-note storage in source markdown managed blocks
 2. `AggregateCommentIndex` as the structured in-memory corpus of all known side notes
 3. derived reference and search indexes built from that corpus
-4. `SideNote2 index.md` as a readable projection over the same data
+4. `Aside index.md` as a readable projection over the same data
 
 This avoids both extremes:
 
@@ -356,7 +356,7 @@ interface SideNoteReferenceIndex {
 
 ### Build Rules
 
-1. Parse every visible stored entry body for local `side-note2-comment` links.
+1. Parse every visible stored entry body for local `aside-comment` links.
 2. Resolve target comments by `commentId` through the aggregate index first.
 3. Use `filePathHint` only when the target is not already known.
 4. Ignore malformed links.
@@ -398,7 +398,7 @@ interface SideNoteReferenceSearchIndex {
 
 ### Search Source
 
-V1 search should read from `AggregateCommentIndex`, not from `SideNote2 index.md`.
+V1 search should read from `AggregateCommentIndex`, not from `Aside index.md`.
 
 Recommended candidate set in V1:
 
@@ -422,7 +422,7 @@ Opening the reference picker should query an already-built in-memory index.
 
 It should not:
 
-- rebuild by reparsing `SideNote2 index.md`
+- rebuild by reparsing `Aside index.md`
 - scan every source markdown note synchronously on modal open
 
 ### Search Ranking
@@ -529,12 +529,12 @@ Recommended default label generation:
 Example:
 
 ```md
-[Roadmap · shipping timeline concern](obsidian://side-note2-comment?...&commentId=thread-42)
+[Roadmap · shipping timeline concern](obsidian://aside-comment?...&commentId=thread-42)
 ```
 
 ### Paste Normalization
 
-If a user pastes a raw `obsidian://side-note2-comment?...` URL into a draft:
+If a user pastes a raw `obsidian://aside-comment?...` URL into a draft:
 
 1. detect it at paste or input-normalization time
 2. resolve the target if local
@@ -550,7 +550,7 @@ This makes the existing `Share side note` action immediately useful for connecti
 
 ### Inline Rendering
 
-In rendered sidebar markdown, side-note references should be decorated as SideNote2-native chips or pills.
+In rendered sidebar markdown, side-note references should be decorated as Aside-native chips or pills.
 
 Recommended presentation:
 
@@ -680,7 +680,7 @@ Recommended file:
 
 Owns:
 
-- parsing markdown links that target `side-note2-comment`
+- parsing markdown links that target `aside-comment`
 - validating local-vault compatibility
 - extracting structured reference targets
 
@@ -776,7 +776,7 @@ Add tests for:
 10. backlink derivation for local references
 11. graph connectivity updates when cross-file side-note references exist without wiki links
 12. no file-graph edge created for same-file references
-13. search results come from indexed side-note data rather than reparsing `SideNote2 index.md`
+13. search results come from indexed side-note data rather than reparsing `Aside index.md`
 14. many-to-many linking works across multiple sources and targets without uniqueness conflicts
 
 ## Rollout Notes

@@ -5,15 +5,17 @@ import {
     type AgentRuntimeModePreference,
 } from "../core/agents/agentRuntimePreferences";
 import {
+    ALL_COMMENTS_NOTE_PATH,
     LEGACY_ALL_COMMENTS_NOTE_PATH,
+    LEGACY_ALL_COMMENTS_NOTE_PATHS,
     isAllCommentsNotePath,
     normalizeAllCommentsNoteImageCaption,
     normalizeAllCommentsNoteImageUrl,
     normalizeAllCommentsNotePath,
 } from "../core/derived/allCommentsNote";
 import {
-    type SideNote2Settings,
-} from "../ui/settings/SideNote2Setting";
+    type AsideSettings,
+} from "../ui/settings/AsideSetting";
 import {
     getIndexNoteParentPath,
     resolveIndexNotePathChange,
@@ -24,8 +26,8 @@ import {
 
 export interface IndexNoteSettingsHost {
     app: Plugin["app"];
-    getSettings(): SideNote2Settings;
-    setSettings(settings: SideNote2Settings): void;
+    getSettings(): AsideSettings;
+    setSettings(settings: AsideSettings): void;
     getFileByPath(filePath: string): TFile | null;
     getMarkdownFileByPath(filePath: string): TFile | null;
     getActiveSidebarFile(): TFile | null;
@@ -54,6 +56,8 @@ export class IndexNoteSettingsController {
         if (resolved.shouldRewriteLegacySettings) {
             await this.saveSettings();
         }
+
+        await this.migrateLegacyGeneratedIndexNoteIfNeeded();
     }
 
     public async saveSettings(): Promise<void> {
@@ -92,6 +96,9 @@ export class IndexNoteSettingsController {
         const previousPath = this.getAllCommentsNotePath();
         const parentPath = getIndexNoteParentPath(normalizeAllCommentsNotePath(nextPathInput));
         const currentIndexFile = this.host.getMarkdownFileByPath(previousPath)
+            ?? LEGACY_ALL_COMMENTS_NOTE_PATHS
+                .map((path) => this.host.getMarkdownFileByPath(path))
+                .find((file): file is TFile => !!file)
             ?? this.host.getMarkdownFileByPath(LEGACY_ALL_COMMENTS_NOTE_PATH);
         const conflictingFile = this.host.getFileByPath(normalizeAllCommentsNotePath(nextPathInput));
 
@@ -136,6 +143,90 @@ export class IndexNoteSettingsController {
 
         await this.host.refreshAggregateNoteNow();
         await this.host.updateSidebarViews(this.host.getSidebarTargetFile());
+    }
+
+    private async migrateLegacyGeneratedIndexNoteIfNeeded(): Promise<void> {
+        const currentPath = this.getAllCommentsNotePath();
+        if (currentPath !== ALL_COMMENTS_NOTE_PATH) {
+            return;
+        }
+
+        if (this.host.getMarkdownFileByPath(currentPath) || await this.adapterPathExists(currentPath)) {
+            await this.removeStaleLegacyGeneratedIndexNotes();
+            return;
+        }
+
+        const legacyFile = LEGACY_ALL_COMMENTS_NOTE_PATHS
+            .map((path) => this.host.getMarkdownFileByPath(path))
+            .find((file): file is TFile => !!file)
+            ?? this.host.getMarkdownFileByPath(LEGACY_ALL_COMMENTS_NOTE_PATH);
+
+        if (!legacyFile || legacyFile.path === currentPath) {
+            const legacyPath = await this.findAdapterOnlyLegacyGeneratedIndexNotePath();
+            if (!legacyPath || legacyPath === currentPath) {
+                return;
+            }
+
+            await this.host.app.vault.adapter.rename(legacyPath, currentPath);
+            return;
+        }
+
+        await this.host.app.fileManager.renameFile(legacyFile, currentPath);
+    }
+
+    private async findAdapterOnlyLegacyGeneratedIndexNotePath(): Promise<string | null> {
+        for (const legacyPath of LEGACY_ALL_COMMENTS_NOTE_PATHS) {
+            if (await this.adapterPathExists(legacyPath)) {
+                return legacyPath;
+            }
+        }
+
+        return await this.adapterPathExists(LEGACY_ALL_COMMENTS_NOTE_PATH)
+            ? LEGACY_ALL_COMMENTS_NOTE_PATH
+            : null;
+    }
+
+    private async adapterPathExists(filePath: string): Promise<boolean> {
+        try {
+            return await this.host.app.vault.adapter.exists(filePath);
+        } catch {
+            return false;
+        }
+    }
+
+    private async removeStaleLegacyGeneratedIndexNotes(): Promise<void> {
+        for (const legacyPath of LEGACY_ALL_COMMENTS_NOTE_PATHS) {
+            if (!await this.isLegacyGeneratedIndexNote(legacyPath)) {
+                continue;
+            }
+
+            const legacyFile = this.host.getMarkdownFileByPath(legacyPath);
+            if (legacyFile) {
+                await this.host.app.fileManager.trashFile(legacyFile);
+                continue;
+            }
+
+            await this.host.app.vault.adapter.remove(legacyPath);
+        }
+    }
+
+    private async isLegacyGeneratedIndexNote(filePath: string): Promise<boolean> {
+        if (!this.host.getMarkdownFileByPath(filePath) && !await this.adapterPathExists(filePath)) {
+            return false;
+        }
+
+        try {
+            return this.isLegacyGeneratedIndexNoteContent(await this.host.app.vault.adapter.read(filePath));
+        } catch {
+            return false;
+        }
+    }
+
+    private isLegacyGeneratedIndexNoteContent(content: string): boolean {
+        return content.trimStart().startsWith("![SideNote2 index header image]")
+            || content.includes("sidenote2-index-header-caption")
+            || content.includes("sidenote2-index-file-filter-link")
+            || content.includes("data-sidenote2-file-path");
     }
 
     public async setIndexHeaderImageUrl(nextUrlInput: string): Promise<void> {

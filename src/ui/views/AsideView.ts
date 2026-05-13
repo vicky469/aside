@@ -20,14 +20,14 @@ import {
     type IndexFileFilterGraph,
 } from "../../core/derived/indexFileFilterGraph";
 import type { DraftComment } from "../../domain/drafts";
-import type SideNote2 from "../../main";
+import type Aside from "../../main";
 import type { AgentStreamUpdate } from "../../agents/commentAgentController";
 import SideNoteFileFilterModal from "../modals/SideNoteFileFilterModal";
 import SideNoteLinkSuggestModal from "../modals/SideNoteLinkSuggestModal";
 import SideNoteOpenFileSuggestModal from "../modals/SideNoteOpenFileSuggestModal";
 import SideNoteTagSuggestModal from "../modals/SideNoteTagSuggestModal";
 import { extractTagsFromText, normalizeTagText } from "../../core/text/commentTags";
-import { SIDE_NOTE2_ICON_ID } from "../sideNote2Icon";
+import { ASIDE_ICON_ID } from "../asideIcon";
 import { copyTextToClipboard } from "../copyTextToClipboard";
 import { SidebarDraftEditorController } from "./sidebarDraftEditor";
 import {
@@ -37,6 +37,7 @@ import {
 import {
     buildIndexFileFilterOptionsFromCounts,
     deriveIndexSidebarScopedFilePaths,
+    resolveAutoIndexFileFilterRootPath,
     shouldLimitIndexSidebarList,
     type IndexFileFilterOption,
 } from "./indexFileFilter";
@@ -275,10 +276,10 @@ async function ensureEditableMarkdownLeafForInsert(leaf: WorkspaceLeaf): Promise
     return leaf.view instanceof MarkdownView ? leaf.view : null;
 }
 
-export default class SideNote2View extends ItemView {
+export default class AsideView extends ItemView {
     private static readonly NOTE_SIDEBAR_SEARCH_DEBOUNCE_MS = 120;
     private file: TFile | null = null;
-    private plugin: SideNote2;
+    private plugin: Aside;
     private renderVersion = 0;
     private readonly draftEditorController: SidebarDraftEditorController;
     private readonly interactionController: SidebarInteractionController;
@@ -307,6 +308,7 @@ export default class SideNote2View extends ItemView {
     private showPinnedSidebarThreadsOnly = false;
     private pinnedSidebarStateByFilePath: Record<string, PinnedSidebarFileState> = {};
     private selectedIndexFileFilterRootPath: string | null = null;
+    private indexFileFilterAutoSelectSuppressed = false;
     private indexFileFilterGraph: IndexFileFilterGraph | null = null;
     private reorderDragState: SidebarReorderDragState | null = null;
     private reorderDragSourceEl: HTMLElement | null = null;
@@ -324,7 +326,7 @@ export default class SideNote2View extends ItemView {
     }
 
     private syncViewContainerClasses(): void {
-        this.containerEl.addClass("sidenote2-view-container");
+        this.containerEl.addClass("aside-view-container");
         this.containerEl.classList.toggle("is-non-desktop", this.isNonDesktopClient());
     }
 
@@ -599,7 +601,7 @@ export default class SideNote2View extends ItemView {
         }
 
         const inputEl = shell.toolbarSlotEl.querySelector<HTMLInputElement>(
-            ".sidenote2-note-search-input.sidenote2-note-tag-batch-search-input",
+            ".aside-note-search-input.aside-note-tag-batch-search-input",
         );
         if (inputEl) {
             inputEl.value = "";
@@ -633,7 +635,7 @@ export default class SideNote2View extends ItemView {
         }
 
         const searchInput = shell.toolbarSlotEl.querySelector(
-            ".sidenote2-note-search-input.sidenote2-note-tag-batch-search-input",
+            ".aside-note-search-input.aside-note-tag-batch-search-input",
         );
         if (!(searchInput instanceof HTMLInputElement)) {
             return;
@@ -882,7 +884,7 @@ export default class SideNote2View extends ItemView {
     private scheduleNoteSidebarBatchTagSearchQuery(query: string): void {
         const activeElement = document.activeElement;
         const isBatchSearchInputFocused = activeElement instanceof HTMLInputElement
-            && activeElement.matches(".sidenote2-note-search-input.sidenote2-note-tag-batch-search-input");
+            && activeElement.matches(".aside-note-search-input.aside-note-tag-batch-search-input");
         const activeSelectionStart = isBatchSearchInputFocused ? activeElement.selectionStart : null;
         const activeSelectionEnd = isBatchSearchInputFocused ? activeElement.selectionEnd : null;
         const normalizedQuery = this.normalizeTagSearchQuery(query);
@@ -921,7 +923,7 @@ export default class SideNote2View extends ItemView {
 
                 this.restoreNoteSidebarTagBatchSearchFocus(activeSelectionStart, activeSelectionEnd);
             })();
-        }, SideNote2View.NOTE_SIDEBAR_SEARCH_DEBOUNCE_MS);
+        }, AsideView.NOTE_SIDEBAR_SEARCH_DEBOUNCE_MS);
     }
 
     private refreshNoteSidebarTagBatchPanel(): void {
@@ -930,7 +932,7 @@ export default class SideNote2View extends ItemView {
             return;
         }
 
-        const toolbarEl = shell.toolbarSlotEl.querySelector<HTMLElement>(".sidenote2-sidebar-toolbar");
+        const toolbarEl = shell.toolbarSlotEl.querySelector<HTMLElement>(".aside-sidebar-toolbar");
         if (!toolbarEl) {
             return;
         }
@@ -964,7 +966,7 @@ export default class SideNote2View extends ItemView {
         this.noteSidebarSearchDebounceTimer = window.setTimeout(() => {
             this.noteSidebarSearchDebounceTimer = null;
             void this.applyNoteSidebarSearchQuery(query, requestVersion, options);
-        }, SideNote2View.NOTE_SIDEBAR_SEARCH_DEBOUNCE_MS);
+        }, AsideView.NOTE_SIDEBAR_SEARCH_DEBOUNCE_MS);
     }
 
     private async applyNoteSidebarSearchQuery(
@@ -982,7 +984,7 @@ export default class SideNote2View extends ItemView {
         this.noteSidebarSearchInputValue = query;
         const activeElement = document.activeElement;
         const shouldRestoreFocus = activeElement instanceof HTMLInputElement
-            && activeElement.matches(".sidenote2-note-search-input")
+            && activeElement.matches(".aside-note-search-input")
             && this.containerEl.contains(activeElement);
         if (query.trim() && this.noteSidebarMode === "thought-trail") {
             this.noteSidebarMode = "list";
@@ -1010,7 +1012,7 @@ export default class SideNote2View extends ItemView {
             return;
         }
 
-        const inputEl = this.containerEl.querySelector(".sidenote2-note-search-input");
+        const inputEl = this.containerEl.querySelector(".aside-note-search-input");
         if (!(inputEl instanceof HTMLInputElement)) {
             return;
         }
@@ -1022,7 +1024,7 @@ export default class SideNote2View extends ItemView {
         inputEl.setSelectionRange(selectionStart, selectionEnd);
     }
 
-    constructor(leaf: WorkspaceLeaf, plugin: SideNote2, file: TFile | null = null) {
+    constructor(leaf: WorkspaceLeaf, plugin: Aside, file: TFile | null = null) {
         super(leaf);
         this.plugin = plugin;
         this.file = file;
@@ -1067,7 +1069,7 @@ export default class SideNote2View extends ItemView {
     }
 
     getViewType() {
-        return "sidenote2-view";
+        return "aside-view";
     }
 
     getDisplayText() {
@@ -1075,7 +1077,7 @@ export default class SideNote2View extends ItemView {
     }
 
     getIcon() {
-        return SIDE_NOTE2_ICON_ID;
+        return ASIDE_ICON_ID;
     }
 
     async onOpen() {
@@ -1258,10 +1260,27 @@ export default class SideNote2View extends ItemView {
         this.resetStreamedReplyControllers();
         if (file) {
             const showDeleted = this.plugin.shouldShowDeletedComments();
+            const indexFileFilterState = isAllCommentsView
+                ? await this.buildIndexFileFilterStateFromIndexNote(file)
+                : {
+                    options: [] as IndexFileFilterOption[],
+                    firstFilePath: null,
+                };
+            if (renderVersion !== this.renderVersion || this.file?.path !== file.path) {
+                return;
+            }
             let selectedIndexFileFilterRootPath = isAllCommentsView
-                ? this.selectedIndexFileFilterRootPath
+                ? resolveAutoIndexFileFilterRootPath({
+                    currentRootPath: this.selectedIndexFileFilterRootPath,
+                    firstIndexFilePath: indexFileFilterState.firstFilePath,
+                    autoSelectSuppressed: this.indexFileFilterAutoSelectSuppressed,
+                })
                 : null;
             let selectedIndexSourceFile: TFile | null = null;
+            if (isAllCommentsView && selectedIndexFileFilterRootPath !== this.selectedIndexFileFilterRootPath) {
+                this.selectedIndexFileFilterRootPath = selectedIndexFileFilterRootPath;
+                this.plugin.syncIndexPreviewFileScope(file.path);
+            }
 
             if (isAllCommentsView && selectedIndexFileFilterRootPath) {
                 const sourceFile = this.app.vault.getAbstractFileByPath(selectedIndexFileFilterRootPath);
@@ -1271,8 +1290,26 @@ export default class SideNote2View extends ItemView {
                         await this.plugin.loadCommentsForFile(sourceFile);
                     }
                 } else {
-                    this.selectedIndexFileFilterRootPath = null;
-                    selectedIndexFileFilterRootPath = null;
+                    selectedIndexFileFilterRootPath = resolveAutoIndexFileFilterRootPath({
+                        currentRootPath: null,
+                        firstIndexFilePath: indexFileFilterState.firstFilePath,
+                        autoSelectSuppressed: this.indexFileFilterAutoSelectSuppressed,
+                    });
+                    this.selectedIndexFileFilterRootPath = selectedIndexFileFilterRootPath;
+                    this.plugin.syncIndexPreviewFileScope(file.path);
+                    if (selectedIndexFileFilterRootPath) {
+                        const fallbackSourceFile = this.app.vault.getAbstractFileByPath(selectedIndexFileFilterRootPath);
+                        if (fallbackSourceFile instanceof TFile) {
+                            selectedIndexSourceFile = fallbackSourceFile;
+                            if (!options.skipDataRefresh) {
+                                await this.plugin.loadCommentsForFile(fallbackSourceFile);
+                            }
+                        } else {
+                            this.selectedIndexFileFilterRootPath = null;
+                            selectedIndexFileFilterRootPath = null;
+                            this.plugin.syncIndexPreviewFileScope(file.path);
+                        }
+                    }
                 }
             }
 
@@ -1338,13 +1375,8 @@ export default class SideNote2View extends ItemView {
                     ? [selectedIndexFileFilterRootPath]
                     : []
                 : [];
-			const indexFileFilterOptions = isAllCommentsView
-				? await this.buildIndexFileFilterOptionsFromIndexNote(file)
-				: [];
-			if (renderVersion !== this.renderVersion || this.file?.path !== file.path) {
-				return;
-			}
-			this.syncPinnedSidebarThreadIds(persistedThreads);
+            const indexFileFilterOptions = indexFileFilterState.options;
+            this.syncPinnedSidebarThreadIds(persistedThreads);
             const pinnedSidebarThreadIds = isAllCommentsView ? EMPTY_PINNED_SIDEBAR_THREAD_IDS : this.pinnedSidebarThreadIds;
             const showPinnedThreadsOnly = !isAllCommentsView && this.showPinnedSidebarThreadsOnly;
             const {
@@ -1476,7 +1508,7 @@ export default class SideNote2View extends ItemView {
                     hiddenCount: 0,
                 };
             const renderedItems = limitedComments.visibleItems;
-            const commentsContainer = this.containerEl.createDiv("sidenote2-comments-container");
+            const commentsContainer = this.containerEl.createDiv("aside-comments-container");
             const supportThreadCount = isAllCommentsView
                 ? persistedThreads.length
                 : this.plugin.getThreadsForFile(file.path).length;
@@ -1569,7 +1601,7 @@ export default class SideNote2View extends ItemView {
             this.syncVisibleStreamedReplyControllers();
 
             if (limitedComments.hiddenCount > 0) {
-                const limitNotice = commentsContainer.createDiv("sidenote2-list-limit-notice");
+                const limitNotice = commentsContainer.createDiv("aside-list-limit-notice");
                         limitNotice.createEl("p", {
                             text: `${INDEX_SIDEBAR_LIST_LIMIT} shown, ${limitedComments.hiddenCount} hidden.`,
                         });
@@ -1589,11 +1621,11 @@ export default class SideNote2View extends ItemView {
                         searchQuery: this.indexSidebarSearchQuery,
                     });
                 } else if (showResolved && totalScopedCount > 0) {
-                    const emptyStateEl = commentsBody.createDiv("sidenote2-empty-state sidenote2-section-empty-state");
+                    const emptyStateEl = commentsBody.createDiv("aside-empty-state aside-section-empty-state");
                     emptyStateEl.createEl("p", { text: "No resolved comments for this file." });
                     emptyStateEl.createEl("p", { text: "Turn off resolved to return to active comments." });
                 } else if (hasResolvedComments && !showResolved) {
-                    const emptyStateEl = commentsBody.createDiv("sidenote2-empty-state sidenote2-section-empty-state");
+                    const emptyStateEl = commentsBody.createDiv("aside-empty-state aside-section-empty-state");
                     emptyStateEl.createEl("p", { text: "No active comments for this file." });
                     emptyStateEl.createEl("p", { text: "Turn on resolved to review archived comments only." });
                 }
@@ -1947,11 +1979,11 @@ export default class SideNote2View extends ItemView {
         this.containerEl.empty();
         this.syncViewContainerClasses();
 
-        const commentsContainerEl = this.containerEl.createDiv("sidenote2-comments-container is-note-sidebar");
-        const toolbarSlotEl = commentsContainerEl.createDiv("sidenote2-note-sidebar-toolbar-slot");
+        const commentsContainerEl = this.containerEl.createDiv("aside-comments-container is-note-sidebar");
+        const toolbarSlotEl = commentsContainerEl.createDiv("aside-note-sidebar-toolbar-slot");
         const commentsBodyEl = this.renderCommentsList(commentsContainerEl);
         this.setupPageThreadReorderInteractions(commentsBodyEl, filePath);
-        const supportSlotEl = this.containerEl.createDiv("sidenote2-support-button-slot");
+        const supportSlotEl = this.containerEl.createDiv("aside-support-button-slot");
 
         this.noteSidebarShell = {
             filePath,
@@ -2039,9 +2071,9 @@ export default class SideNote2View extends ItemView {
                         return nextNode;
                     }
 
-                    const wrapper = stagingEl.createDiv("sidenote2-comment-thread-select-wrapper");
+                    const wrapper = stagingEl.createDiv("aside-comment-thread-select-wrapper");
                     const checkRow = wrapper.createEl("label", {
-                        cls: "sidenote2-comment-thread-select-row",
+                        cls: "aside-comment-thread-select-row",
                     });
                     const checkbox = checkRow.createEl("input", {
                         type: "checkbox",
@@ -2357,13 +2389,13 @@ export default class SideNote2View extends ItemView {
                 continue;
             }
 
-            const key = child.dataset.sidenote2RenderKey;
+            const key = child.dataset.asideRenderKey;
             if (key) {
                 existingByKey.set(key, child);
                 continue;
             }
 
-            if (child.classList.contains("sidenote2-empty-state")) {
+            if (child.classList.contains("aside-empty-state")) {
                 child.remove();
             }
         }
@@ -2372,7 +2404,7 @@ export default class SideNote2View extends ItemView {
         for (const descriptor of descriptors) {
             const existing = existingByKey.get(descriptor.key) ?? null;
             existingByKey.delete(descriptor.key);
-            if (existing && existing.dataset.sidenote2RenderSignature === descriptor.signature) {
+            if (existing && existing.dataset.asideRenderSignature === descriptor.signature) {
                 desiredNodes.push(existing);
                 continue;
             }
@@ -2382,8 +2414,8 @@ export default class SideNote2View extends ItemView {
             }
 
             const nextNode = await descriptor.render();
-            nextNode.dataset.sidenote2RenderKey = descriptor.key;
-            nextNode.dataset.sidenote2RenderSignature = descriptor.signature;
+            nextNode.dataset.asideRenderKey = descriptor.key;
+            nextNode.dataset.asideRenderSignature = descriptor.signature;
             desiredNodes.push(nextNode);
         }
 
@@ -2427,7 +2459,7 @@ export default class SideNote2View extends ItemView {
         },
     ): void {
         for (const child of Array.from(commentsBody.children)) {
-            if (child instanceof HTMLDivElement && child.classList.contains("sidenote2-empty-state")) {
+            if (child instanceof HTMLDivElement && child.classList.contains("aside-empty-state")) {
                 child.remove();
             }
         }
@@ -2460,7 +2492,7 @@ export default class SideNote2View extends ItemView {
             : null;
 
         if (options.noteSidebarMode === "tags" && !options.hasAnyTags) {
-            const emptyStateEl = commentsBody.createDiv("sidenote2-empty-state sidenote2-section-empty-state");
+            const emptyStateEl = commentsBody.createDiv("aside-empty-state aside-section-empty-state");
             emptyStateEl.createEl("p", {
                 text: hasSearchQuery
                     ? `No tags match "${trimmedSearchQuery}" in this file.`
@@ -2475,7 +2507,7 @@ export default class SideNote2View extends ItemView {
         }
 
         if (options.noteSidebarMode === "tags" && options.visibleTagFilterKey && selectedTagLabel) {
-            const emptyStateEl = commentsBody.createDiv("sidenote2-empty-state sidenote2-section-empty-state");
+            const emptyStateEl = commentsBody.createDiv("aside-empty-state aside-section-empty-state");
             const tagSubjectLabel = options.showResolved
                 ? `resolved ${searchSubjectLabel}`
                 : searchSubjectLabel;
@@ -2496,7 +2528,7 @@ export default class SideNote2View extends ItemView {
         }
 
         if (options.showResolved && options.totalScopedCount > 0) {
-            const emptyStateEl = commentsBody.createDiv("sidenote2-empty-state sidenote2-section-empty-state");
+            const emptyStateEl = commentsBody.createDiv("aside-empty-state aside-section-empty-state");
             emptyStateEl.createEl("p", {
                 text: hasSearchQuery
                     ? `No resolved ${searchSubjectLabel} match "${trimmedSearchQuery}" in this file.`
@@ -2519,7 +2551,7 @@ export default class SideNote2View extends ItemView {
         }
 
         if (!options.showResolved && options.hasResolvedComments) {
-            const emptyStateEl = commentsBody.createDiv("sidenote2-empty-state sidenote2-section-empty-state");
+            const emptyStateEl = commentsBody.createDiv("aside-empty-state aside-section-empty-state");
             emptyStateEl.createEl("p", {
                 text: hasSearchQuery
                     ? `No active ${searchSubjectLabel} match "${trimmedSearchQuery}" in this file.`
@@ -2541,7 +2573,7 @@ export default class SideNote2View extends ItemView {
             return;
         }
 
-        const emptyStateEl = commentsBody.createDiv("sidenote2-empty-state");
+        const emptyStateEl = commentsBody.createDiv("aside-empty-state");
         emptyStateEl.createEl("p", {
             text: hasSearchQuery
                 ? `No ${searchSubjectLabel} match "${trimmedSearchQuery}" in this file.`
@@ -2574,7 +2606,7 @@ export default class SideNote2View extends ItemView {
         },
     ): void {
         for (const child of Array.from(commentsBody.children)) {
-            if (child instanceof HTMLDivElement && child.classList.contains("sidenote2-empty-state")) {
+            if (child instanceof HTMLDivElement && child.classList.contains("aside-empty-state")) {
                 child.remove();
             }
         }
@@ -2608,7 +2640,7 @@ export default class SideNote2View extends ItemView {
         ) {
             return;
         }
-        const emptyStateEl = commentsBody.createDiv("sidenote2-empty-state sidenote2-section-empty-state");
+        const emptyStateEl = commentsBody.createDiv("aside-empty-state aside-section-empty-state");
 
         if (showResolvedEmptyState) {
             emptyStateEl.createEl("p", {
@@ -2693,7 +2725,7 @@ export default class SideNote2View extends ItemView {
             return;
         }
 
-        const threadEl = this.containerEl.querySelector(`.sidenote2-thread-stack[data-thread-id="${update.threadId}"]`);
+        const threadEl = this.containerEl.querySelector(`.aside-thread-stack[data-thread-id="${update.threadId}"]`);
         if (!(threadEl instanceof HTMLDivElement)) {
             return;
         }
@@ -2703,7 +2735,7 @@ export default class SideNote2View extends ItemView {
 
     private syncVisibleStreamedReplyControllers(): void {
         const visibleThreadIds = new Set<string>();
-        const threadEls = Array.from(this.containerEl.querySelectorAll(".sidenote2-thread-stack[data-thread-id]"));
+        const threadEls = Array.from(this.containerEl.querySelectorAll(".aside-thread-stack[data-thread-id]"));
         for (const threadEl of threadEls) {
             if (!(threadEl instanceof HTMLDivElement)) {
                 continue;
@@ -2868,7 +2900,7 @@ export default class SideNote2View extends ItemView {
             return;
         }
 
-        const toolbarEl = container.createDiv("sidenote2-sidebar-toolbar");
+        const toolbarEl = container.createDiv("aside-sidebar-toolbar");
         toolbarEl.classList.toggle("is-index-toolbar", options.isAllCommentsView);
         toolbarEl.classList.toggle("is-note-toolbar", !options.isAllCommentsView);
         toolbarEl.classList.toggle("is-deleted-toolbar-mode", isDeletedToolbarMode);
@@ -2877,16 +2909,16 @@ export default class SideNote2View extends ItemView {
         let noteFilterGroup: HTMLDivElement | null = null;
         let noteActionGroup: HTMLDivElement | null = null;
         if (options.isAllCommentsView) {
-            const modeRow = toolbarEl.createDiv("sidenote2-sidebar-toolbar-row");
+            const modeRow = toolbarEl.createDiv("aside-sidebar-toolbar-row");
             modeRow.addClass("is-note-primary-row");
             this.renderIndexModeControl(modeRow, {
                 isTagsEnabled: options.isTagsEnabled,
                 isThoughtTrailEnabled: options.isThoughtTrailEnabled,
             });
 
-            indexChipRow = toolbarEl.createDiv("sidenote2-sidebar-toolbar-row");
+            indexChipRow = toolbarEl.createDiv("aside-sidebar-toolbar-row");
             indexChipRow.addClass("is-index-secondary-row");
-            indexActionGroup = indexChipRow.createDiv("sidenote2-sidebar-toolbar-group");
+            indexActionGroup = indexChipRow.createDiv("aside-sidebar-toolbar-group");
             this.renderToolbarIconButton(indexActionGroup, {
                 icon: "list-filter",
                 active: !!options.selectedIndexFileFilterRootPath,
@@ -2899,18 +2931,18 @@ export default class SideNote2View extends ItemView {
                 },
             });
         } else {
-            const modeRow = toolbarEl.createDiv("sidenote2-sidebar-toolbar-row");
+            const modeRow = toolbarEl.createDiv("aside-sidebar-toolbar-row");
             modeRow.addClass("is-note-primary-row");
             this.renderNoteModeControl(modeRow, options.isThoughtTrailEnabled);
 
             if (shouldShowNoteSearchInput || showListOrTagToolbarChips || shouldShowAddPageCommentAction || options.noteSidebarMode === "tags") {
-                const actionsRow = toolbarEl.createDiv("sidenote2-sidebar-toolbar-row");
+                const actionsRow = toolbarEl.createDiv("aside-sidebar-toolbar-row");
                 if (shouldShowNoteSearchInput) {
                     actionsRow.addClass("is-note-search-row");
                 }
                 actionsRow.addClass("is-note-secondary-row");
-                noteFilterGroup = actionsRow.createDiv("sidenote2-sidebar-toolbar-group is-filter-group");
-                noteActionGroup = actionsRow.createDiv("sidenote2-sidebar-toolbar-group is-action-group");
+                noteFilterGroup = actionsRow.createDiv("aside-sidebar-toolbar-group is-filter-group");
+                noteActionGroup = actionsRow.createDiv("aside-sidebar-toolbar-group is-action-group");
             }
         }
 
@@ -2919,7 +2951,7 @@ export default class SideNote2View extends ItemView {
         }
 
         const filterGroup = options.isAllCommentsView
-            ? (indexActionGroup ?? (indexChipRow ?? toolbarEl).createDiv("sidenote2-sidebar-toolbar-group"))
+            ? (indexActionGroup ?? (indexChipRow ?? toolbarEl).createDiv("aside-sidebar-toolbar-group"))
             : noteFilterGroup;
         const actionGroup = noteActionGroup ?? filterGroup;
         if (!filterGroup || !actionGroup) {
@@ -3003,8 +3035,8 @@ export default class SideNote2View extends ItemView {
             return;
         }
 
-        const row = toolbarEl.createDiv(`sidenote2-sidebar-toolbar-row is-${surface}-tag-filter-row`);
-        const tagFilterGroup = row.createDiv("sidenote2-sidebar-toolbar-group is-filter-group");
+        const row = toolbarEl.createDiv(`aside-sidebar-toolbar-row is-${surface}-tag-filter-row`);
+        const tagFilterGroup = row.createDiv("aside-sidebar-toolbar-group is-filter-group");
 
         this.renderToolbarChip(tagFilterGroup, {
             label: "All",
@@ -3062,21 +3094,21 @@ export default class SideNote2View extends ItemView {
 
     private renderNoteSidebarTagBatchFlowPanel(toolbarEl: HTMLElement): void {
 
-        const row = toolbarEl.createDiv("sidenote2-sidebar-toolbar-row is-note-tag-batch-row");
-        const filterGroup = row.createDiv("sidenote2-sidebar-toolbar-group is-filter-group");
-        const inputRow = filterGroup.createDiv("sidenote2-note-tag-batch-input-row");
+        const row = toolbarEl.createDiv("aside-sidebar-toolbar-row is-note-tag-batch-row");
+        const filterGroup = row.createDiv("aside-sidebar-toolbar-group is-filter-group");
+        const inputRow = filterGroup.createDiv("aside-note-tag-batch-input-row");
         const visibleThreadIds = this.getNoteSidebarTagBatchVisibleThreadIds();
         const areAllVisibleThreadsSelected = visibleThreadIds.every((threadId) => this.noteSidebarSelectedTagIds.has(threadId));
         const hasSelectableVisibleThreads = visibleThreadIds.length > 0;
         const selectAllButtonLabel = "Select all";
 
-        const summary = inputRow.createDiv("sidenote2-note-tag-batch-summary");
+        const summary = inputRow.createDiv("aside-note-tag-batch-summary");
         summary.createSpan({
             text: `${this.noteSidebarSelectedTagIds.size} selected`,
         });
         const selectAllButton = inputRow.createEl("button", {
             text: selectAllButtonLabel,
-            cls: `sidenote2-filter-chip sidenote2-note-tag-batch-select-all-button${areAllVisibleThreadsSelected ? " is-active" : ""}`,
+            cls: `aside-filter-chip aside-note-tag-batch-select-all-button${areAllVisibleThreadsSelected ? " is-active" : ""}`,
         });
         selectAllButton.setAttribute("type", "button");
         selectAllButton.disabled = !hasSelectableVisibleThreads;
@@ -3088,13 +3120,13 @@ export default class SideNote2View extends ItemView {
             this.toggleVisibleTagBatchThreadSelection();
         };
 
-        const tagInputRow = inputRow.createDiv("sidenote2-note-search-field is-tag-batch-input");
+        const tagInputRow = inputRow.createDiv("aside-note-search-field is-tag-batch-input");
         const iconEl = tagInputRow.createSpan({
-            cls: "sidenote2-note-search-icon",
+            cls: "aside-note-search-icon",
         });
         setIcon(iconEl, "search");
         const inputEl = tagInputRow.createEl("input", {
-            cls: "sidenote2-note-search-input sidenote2-note-tag-batch-search-input",
+            cls: "aside-note-search-input aside-note-tag-batch-search-input",
         });
         inputEl.type = "search";
         inputEl.value = this.noteSidebarBatchTagFlow.query;
@@ -3149,15 +3181,15 @@ export default class SideNote2View extends ItemView {
         });
 
         if (this.noteSidebarBatchTagFlow.failures.length > 0) {
-            const failureList = filterGroup.createDiv("sidenote2-note-tag-batch-failures");
+            const failureList = filterGroup.createDiv("aside-note-tag-batch-failures");
             failureList.createDiv({
                 text: `${this.noteSidebarBatchTagFlow.failures.length} failure${this.noteSidebarBatchTagFlow.failures.length === 1 ? "" : "s"}`,
-                cls: "sidenote2-note-tag-batch-failure-title",
+                cls: "aside-note-tag-batch-failure-title",
             });
             for (const failure of this.noteSidebarBatchTagFlow.failures.slice(0, 5)) {
                 failureList.createDiv({
                     text: `${failure.threadId}: ${failure.message}`,
-                    cls: "sidenote2-note-tag-batch-failure-item",
+                    cls: "aside-note-tag-batch-failure-item",
                 });
             }
         }
@@ -3186,9 +3218,9 @@ export default class SideNote2View extends ItemView {
         }
 
         const selectors = [
-            ".sidenote2-comment-meta-preview",
-            ".sidenote2-comment-content",
-            ".sidenote2-comment-reference-section-list",
+            ".aside-comment-meta-preview",
+            ".aside-comment-content",
+            ".aside-comment-reference-section-list",
         ];
         highlightSidebarSearchMatches(container, trimmedQuery, {
             allowedSelectors: selectors,
@@ -3318,8 +3350,12 @@ export default class SideNote2View extends ItemView {
         }, this.toolbarActionGuard);
     }
 
-    private async buildIndexFileFilterOptionsFromIndexNote(file: TFile): Promise<IndexFileFilterOption[]> {
+    private async buildIndexFileFilterStateFromIndexNote(file: TFile): Promise<{
+        options: IndexFileFilterOption[];
+        firstFilePath: string | null;
+    }> {
         const commentCounts = new Map<string, number>();
+        let firstFilePath: string | null = null;
         const decodeHtmlAttributeValue = (value: string): string => {
             return value
                 .replace(/&quot;/g, "\"")
@@ -3334,18 +3370,21 @@ export default class SideNote2View extends ItemView {
                 return;
             }
 
+            if (!firstFilePath && this.app.vault.getAbstractFileByPath(normalizedFilePath) instanceof TFile) {
+                firstFilePath = normalizedFilePath;
+            }
             const threadCount = this.plugin.getThreadsForFile(normalizedFilePath).length;
             commentCounts.set(normalizedFilePath, Math.max(1, threadCount));
         };
 
         try {
             const indexContent = await this.app.vault.cachedRead(file);
-            const fileFilterLinkPattern = /\bdata-sidenote2-file-path="([^"]+)"/g;
+            const fileFilterLinkPattern = /\bdata-aside-file-path="([^"]+)"/g;
             for (const match of indexContent.matchAll(fileFilterLinkPattern)) {
                 addFilePath(decodeHtmlAttributeValue(match[1]));
             }
 
-            const linkPattern = /\]\((obsidian:\/\/(?:open|side-note2-index-file)[^)]+)\)/g;
+            const linkPattern = /\]\((obsidian:\/\/(?:open|aside-index-file)[^)]+)\)/g;
             for (const match of indexContent.matchAll(linkPattern)) {
                 addFilePath(parseIndexFileOpenUrl(match[1]));
             }
@@ -3362,7 +3401,10 @@ export default class SideNote2View extends ItemView {
             commentCounts.set(selectedRootPath, Math.max(1, threadCount));
         }
 
-        return buildIndexFileFilterOptionsFromCounts(commentCounts);
+        return {
+            options: buildIndexFileFilterOptionsFromCounts(commentCounts),
+            firstFilePath,
+        };
     }
 
     private openIndexFileFilterModal(indexFileFilterOptions: IndexFileFilterOption[]): void {
@@ -3379,14 +3421,22 @@ export default class SideNote2View extends ItemView {
         }).open();
     }
 
+    public getIndexFileFilterRootPath(): string | null {
+        return this.selectedIndexFileFilterRootPath;
+    }
+
 	public async setIndexFileFilterRootPath(filePath: string | null): Promise<void> {
 		const normalizedRootPath = normalizeIndexFileFilterRootPath(filePath);
+        this.indexFileFilterAutoSelectSuppressed = normalizedRootPath === null;
 		if (this.selectedIndexFileFilterRootPath === normalizedRootPath) {
 			return;
 		}
 
 		const didChangeFilter = this.selectedIndexFileFilterRootPath !== normalizedRootPath;
 		this.selectedIndexFileFilterRootPath = normalizedRootPath;
+        if (this.file) {
+            this.plugin.syncIndexPreviewFileScope(this.file.path);
+        }
         if (didChangeFilter) {
             void this.plugin.logEvent("info", "index", "index.filter.changed", {
                 rootFilePath: normalizedRootPath,
@@ -3427,7 +3477,7 @@ export default class SideNote2View extends ItemView {
     }
 
     private renderCommentsList(container: HTMLElement): HTMLDivElement {
-        return container.createDiv("sidenote2-comments-list");
+        return container.createDiv("aside-comments-list");
     }
 
     private openMoveCommentThreadModal(threadId: string, sourceFilePath: string): void {
@@ -3618,8 +3668,8 @@ export default class SideNote2View extends ItemView {
         commentsContainer: HTMLDivElement,
         thread: CommentThread,
         enablePageThreadReorder: boolean,
-        agentRun: ReturnType<SideNote2["getLatestAgentRunForThread"]>,
-        agentStream: ReturnType<SideNote2["getActiveAgentStreamForThread"]>,
+        agentRun: ReturnType<Aside["getLatestAgentRunForThread"]>,
+        agentStream: ReturnType<Aside["getActiveAgentStreamForThread"]>,
         threadAgentRuns: AgentRunRecord[],
         editDraftComment: DraftComment | null = null,
         appendDraftComment: DraftComment | null = null,
@@ -3809,7 +3859,7 @@ export default class SideNote2View extends ItemView {
 
     private getCommentItemFromEventTarget(target: EventTarget | null): HTMLElement | null {
         return target instanceof Element
-            ? target.closest(".sidenote2-comment-item")
+            ? target.closest(".aside-comment-item")
             : null;
     }
 
@@ -3821,14 +3871,14 @@ export default class SideNote2View extends ItemView {
             return null;
         }
 
-        const handleEl = target.closest("[data-sidenote2-drag-kind]");
+        const handleEl = target.closest("[data-aside-drag-kind]");
         if (!(handleEl instanceof HTMLElement)) {
             return null;
         }
 
-        const dragKind = handleEl.getAttribute("data-sidenote2-drag-kind");
+        const dragKind = handleEl.getAttribute("data-aside-drag-kind");
         if (dragKind === "thread") {
-            const threadId = handleEl.getAttribute("data-sidenote2-thread-id");
+            const threadId = handleEl.getAttribute("data-aside-thread-id");
             if (!threadId) {
                 return null;
             }
@@ -3844,8 +3894,8 @@ export default class SideNote2View extends ItemView {
             return null;
         }
 
-        const sourceThreadId = handleEl.getAttribute("data-sidenote2-thread-id");
-        const entryId = handleEl.getAttribute("data-sidenote2-entry-id");
+        const sourceThreadId = handleEl.getAttribute("data-aside-thread-id");
+        const entryId = handleEl.getAttribute("data-aside-entry-id");
         if (!sourceThreadId || !entryId) {
             return null;
         }
@@ -3872,7 +3922,7 @@ export default class SideNote2View extends ItemView {
             return null;
         }
 
-        const threadStackEl = event.target.closest(".sidenote2-thread-stack[data-sidenote2-page-thread='true']");
+        const threadStackEl = event.target.closest(".aside-thread-stack[data-aside-page-thread='true']");
         if (!(threadStackEl instanceof HTMLElement)) {
             return null;
         }
@@ -3902,7 +3952,7 @@ export default class SideNote2View extends ItemView {
             return null;
         }
 
-        const threadStackEl = event.target.closest(".sidenote2-thread-stack");
+        const threadStackEl = event.target.closest(".aside-thread-stack");
         if (!(threadStackEl instanceof HTMLElement)) {
             return null;
         }

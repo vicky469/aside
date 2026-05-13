@@ -1,5 +1,5 @@
 [Unit]
-Description=SideNote2 DGX Bridge
+Description=Aside DGX Bridge
 After=network-online.target
 Wants=network-online.target
 
@@ -8,8 +8,8 @@ Type=simple
 User=bun
 Environment=HOME=/home/bun
 Environment=SHELL=/usr/bin/zsh
-WorkingDirectory=/home/bun/Documents/dev/SideNote2
-EnvironmentFile=/home/bun/Documents/dev/SideNote2/.env
+WorkingDirectory=/home/bun/Documents/dev/Aside
+EnvironmentFile=/home/bun/Documents/dev/Aside/.env
 ExecStart=/usr/bin/env npm run dgx:bridge
 Restart=on-failure
 RestartSec=2

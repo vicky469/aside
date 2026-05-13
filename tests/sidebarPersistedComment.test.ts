@@ -84,8 +84,8 @@ test("buildPersistedCommentPresentation includes page and active classes for pag
     }), "comment-2");
 
     assert.deepEqual(presentation.classes, [
-        "sidenote2-comment-item",
-        "sidenote2-thread-item",
+        "aside-comment-item",
+        "aside-thread-item",
         "page-note",
         "resolved",
         "active",
@@ -98,8 +98,8 @@ test("buildPersistedCommentPresentation includes orphaned class for orphaned sel
     }), null);
 
     assert.deepEqual(presentation.classes, [
-        "sidenote2-comment-item",
-        "sidenote2-thread-item",
+        "aside-comment-item",
+        "aside-thread-item",
         "orphaned",
     ]);
     assert.deepEqual(presentation.reanchorAction, {
@@ -194,9 +194,9 @@ test("buildPersistedThreadEntryPresentation gives child entries their own indent
     const presentation = buildPersistedThreadEntryPresentation(thread, childEntry, childEntry.id);
 
     assert.deepEqual(presentation.classes, [
-        "sidenote2-comment-item",
-        "sidenote2-thread-item",
-        "sidenote2-thread-entry-item",
+        "aside-comment-item",
+        "aside-thread-item",
+        "aside-thread-entry-item",
         "orphaned",
         "resolved",
         "active",
@@ -616,7 +616,7 @@ test("formatSidebarSideNoteReferenceLabel uses filename and cleaned body preview
         formatSidebarSideNoteReferenceLabel(createComment({
             filePath: "Notes/The Goal.md",
             anchorKind: "page",
-            comment: "Continued from obsidian://side-note2-comment?vault=public&file=books%2Falpha.md&commentId=comment-1 and then a little more context.",
+            comment: "Continued from obsidian://aside-comment?vault=public&file=books%2Falpha.md&commentId=comment-1 and then a little more context.",
         }), "Notes/The Goal.md"),
         "The Goal: Continued from side note and then a little mo...",
     );
@@ -634,7 +634,7 @@ test("getInsertableSidebarCommentMarkdown keeps the full agent reply body withou
                 "| Alpha | Ready |",
                 "",
                 "Mentioned:",
-                "- [linked note](obsidian://side-note2-comment?vault=dev&file=docs%2Flinked.md&commentId=linked-1)",
+                "- [linked note](obsidian://aside-comment?vault=dev&file=docs%2Flinked.md&commentId=linked-1)",
             ].join("\n"),
             [createAgentRun({ outputEntryId: "entry-2" })],
         ),
@@ -648,14 +648,14 @@ test("getInsertableSidebarCommentMarkdown keeps the full agent reply body withou
     );
 });
 
-test("getInsertableSidebarCommentMarkdown strips managed SideNote2 blocks before inserting into a file", () => {
+test("getInsertableSidebarCommentMarkdown strips managed Aside blocks before inserting into a file", () => {
     assert.equal(
         getInsertableSidebarCommentMarkdown(
             "entry-2",
             [
                 "Intro line.",
                 "",
-                "<!-- SideNote2 comments",
+                "<!-- Aside comments",
                 "[]",
                 "-->",
                 "",

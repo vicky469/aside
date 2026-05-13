@@ -121,8 +121,8 @@ interface CommentDraftSession {
 
 Phase 1 should store thread data per source note in one managed file:
 
-- `SideNote2/index.md`
-- `SideNote2/<note>.sidenote.md`
+- `Aside/index.md`
+- `Aside/<note>.sidenote.md`
 
 Each `.sidenote.md` file should keep a minimal markdown shell plus a hidden managed block that contains the canonical thread payload for that source note.
 
@@ -295,7 +295,7 @@ Owns:
 - parent-header actions
 - add-entry button placement
 
-### `src/ui/views/SideNote2View.ts`
+### `src/ui/views/AsideView.ts`
 
 Owns:
 
@@ -308,7 +308,7 @@ Owns:
 
 Owns:
 
-- `SideNote2 index.md` generation for threads
+- `Aside index.md` generation for threads
 - latest-entry preview text
 - thread count summaries
 
@@ -371,7 +371,7 @@ Child entries must not show:
 
 Threads, not entries, are the identity unit for:
 
-- `SideNote2 index.md`
+- `Aside index.md`
 - index sidebar list
 - reverse highlight / reveal pairing
 
@@ -442,4 +442,4 @@ Recommended existing test files to extend:
 4. Sidebar shows one card per thread with ordered child entries.
 5. Resolve / reopen remains thread-level only.
 6. Every saved entry body is at or under 500 words.
-7. `SideNote2 index.md` stays usable and thread-oriented.
+7. `Aside index.md` stays usable and thread-oriented.

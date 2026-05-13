@@ -88,6 +88,19 @@ function assertExistingFile(filePath, label) {
     }
 }
 
+function readEnv(env, name) {
+    const current = env[name];
+    if (typeof current === "string" && current.trim()) {
+        return current.trim();
+    }
+
+    const legacyName = name.replace(/^ASIDE_/, "SIDENOTE2_");
+    const legacy = env[legacyName];
+    return typeof legacy === "string" && legacy.trim()
+        ? legacy.trim()
+        : "";
+}
+
 export function getBridgeTransportProtocol(config) {
     return config.tlsEnabled
         ? "https"
@@ -101,51 +114,41 @@ export function getBridgeDefaultBaseUrl(config) {
 export function createBridgeConfig(options = {}) {
     const env = options.env ?? process.env;
     const rootDir = options.rootDir ?? process.cwd();
-    const workspaceRootInput = typeof env.SIDENOTE2_DGX_WORKSPACE_ROOT === "string" && env.SIDENOTE2_DGX_WORKSPACE_ROOT.trim()
-        ? env.SIDENOTE2_DGX_WORKSPACE_ROOT.trim()
-        : ".dgx-workspace";
-    const bridgeBearerToken = typeof env.SIDENOTE2_DGX_BRIDGE_BEARER_TOKEN === "string"
-        ? env.SIDENOTE2_DGX_BRIDGE_BEARER_TOKEN.trim()
-        : "";
+    const workspaceRootInput = readEnv(env, "ASIDE_DGX_WORKSPACE_ROOT") || ".dgx-workspace";
+    const bridgeBearerToken = readEnv(env, "ASIDE_DGX_BRIDGE_BEARER_TOKEN");
     if (!bridgeBearerToken) {
-        throw new Error("SIDENOTE2_DGX_BRIDGE_BEARER_TOKEN is required.");
+        throw new Error("ASIDE_DGX_BRIDGE_BEARER_TOKEN is required.");
     }
 
-    const tlsKeyPath = resolveOptionalPath(env.SIDENOTE2_DGX_TLS_KEY_FILE, rootDir);
-    const tlsCertPath = resolveOptionalPath(env.SIDENOTE2_DGX_TLS_CERT_FILE, rootDir);
-    const tlsCaPath = resolveOptionalPath(env.SIDENOTE2_DGX_TLS_CA_FILE, rootDir);
+    const tlsKeyPath = resolveOptionalPath(readEnv(env, "ASIDE_DGX_TLS_KEY_FILE"), rootDir);
+    const tlsCertPath = resolveOptionalPath(readEnv(env, "ASIDE_DGX_TLS_CERT_FILE"), rootDir);
+    const tlsCaPath = resolveOptionalPath(readEnv(env, "ASIDE_DGX_TLS_CA_FILE"), rootDir);
     if ((tlsKeyPath && !tlsCertPath) || (!tlsKeyPath && tlsCertPath)) {
-        throw new Error("SIDENOTE2_DGX_TLS_KEY_FILE and SIDENOTE2_DGX_TLS_CERT_FILE must be configured together.");
+        throw new Error("ASIDE_DGX_TLS_KEY_FILE and ASIDE_DGX_TLS_CERT_FILE must be configured together.");
     }
     if (tlsKeyPath) {
-        assertExistingFile(tlsKeyPath, "SIDENOTE2_DGX_TLS_KEY_FILE");
-        assertExistingFile(tlsCertPath, "SIDENOTE2_DGX_TLS_CERT_FILE");
+        assertExistingFile(tlsKeyPath, "ASIDE_DGX_TLS_KEY_FILE");
+        assertExistingFile(tlsCertPath, "ASIDE_DGX_TLS_CERT_FILE");
     }
     if (tlsCaPath) {
-        assertExistingFile(tlsCaPath, "SIDENOTE2_DGX_TLS_CA_FILE");
+        assertExistingFile(tlsCaPath, "ASIDE_DGX_TLS_CA_FILE");
     }
 
     return {
-        bindHost: typeof env.SIDENOTE2_DGX_BIND_HOST === "string" && env.SIDENOTE2_DGX_BIND_HOST.trim()
-            ? env.SIDENOTE2_DGX_BIND_HOST.trim()
-            : "127.0.0.1",
-        port: parseInteger(env.SIDENOTE2_DGX_PORT, 4215),
-        publicBaseUrl: typeof env.SIDENOTE2_DGX_PUBLIC_BASE_URL === "string" && env.SIDENOTE2_DGX_PUBLIC_BASE_URL.trim()
-            ? env.SIDENOTE2_DGX_PUBLIC_BASE_URL.trim()
-            : null,
+        bindHost: readEnv(env, "ASIDE_DGX_BIND_HOST") || "127.0.0.1",
+        port: parseInteger(readEnv(env, "ASIDE_DGX_PORT"), 4215),
+        publicBaseUrl: readEnv(env, "ASIDE_DGX_PUBLIC_BASE_URL") || null,
         tlsEnabled: !!(tlsKeyPath && tlsCertPath),
         tlsKeyPath,
         tlsCertPath,
         tlsCaPath,
         workspaceRoot: path.resolve(rootDir, workspaceRootInput),
         bridgeBearerToken,
-        freeAllowanceEnabled: parseBoolean(env.SIDENOTE2_DGX_FREE_ALLOWANCE_ENABLED, false),
-        freeAllowanceRunsPerDay: parseInteger(env.SIDENOTE2_DGX_FREE_ALLOWANCE_RUNS_PER_DAY, 0),
-        codexBin: typeof env.SIDENOTE2_DGX_CODEX_BIN === "string" && env.SIDENOTE2_DGX_CODEX_BIN.trim()
-            ? env.SIDENOTE2_DGX_CODEX_BIN.trim()
-            : "codex",
-        retentionMs: parseInteger(env.SIDENOTE2_DGX_RUN_RETENTION_MS, 15 * 60 * 1000),
-        requestBodyLimitBytes: parseInteger(env.SIDENOTE2_DGX_REQUEST_BODY_LIMIT_BYTES, 512 * 1024),
+        freeAllowanceEnabled: parseBoolean(readEnv(env, "ASIDE_DGX_FREE_ALLOWANCE_ENABLED"), false),
+        freeAllowanceRunsPerDay: parseInteger(readEnv(env, "ASIDE_DGX_FREE_ALLOWANCE_RUNS_PER_DAY"), 0),
+        codexBin: readEnv(env, "ASIDE_DGX_CODEX_BIN") || "codex",
+        retentionMs: parseInteger(readEnv(env, "ASIDE_DGX_RUN_RETENTION_MS"), 15 * 60 * 1000),
+        requestBodyLimitBytes: parseInteger(readEnv(env, "ASIDE_DGX_REQUEST_BODY_LIMIT_BYTES"), 512 * 1024),
         rootDir,
     };
 }
@@ -170,7 +173,7 @@ function isLikelyProcessNarrationSegment(value) {
         return false;
     }
 
-    return /\b(skill|workflow|workspace|thread|comment block|sidenote2|obsidian|draft|tool|file|search|searching|locat|read|load|append|reply text|context|process|prompt|agent)\b/u
+    return /\b(skill|workflow|workspace|thread|comment block|aside|obsidian|draft|tool|file|search|searching|locat|read|load|append|reply text|context|process|prompt|agent)\b/u
         .test(normalized);
 }
 
@@ -696,7 +699,7 @@ export async function runCodexAppServer(options) {
         };
 
         const sendRequest = (method, params) => {
-            const id = `sidenote2-bridge-${++requestCounter}`;
+            const id = `aside-bridge-${++requestCounter}`;
             return new Promise((resolveRequest, rejectRequest) => {
                 pendingResponses.set(id, {
                     resolve: resolveRequest,
@@ -939,8 +942,8 @@ export async function runCodexAppServer(options) {
             try {
                 await sendRequest("initialize", {
                     clientInfo: {
-                        name: "sidenote2-dgx-bridge",
-                        title: "SideNote2 DGX Bridge",
+                        name: "aside-dgx-bridge",
+                        title: "Aside DGX Bridge",
                         version: options.clientVersion ?? "0.0.0",
                     },
                     capabilities: {
@@ -968,7 +971,7 @@ export async function runCodexAppServer(options) {
 
                 const threadStartResponse = await sendRequest("thread/start", {
                     approvalPolicy: "on-request",
-                    baseInstructions: "You generate end-user reply text for a SideNote2 note thread.",
+                    baseInstructions: "You generate end-user reply text for a Aside note thread.",
                     cwd: options.cwd,
                     developerInstructions: "Return only the final note reply. Answer directly. Never mention skills, searches, notes, files, prompts, tools, AGENTS instructions, context-loading, or your process.",
                     ephemeral: true,
@@ -1018,7 +1021,7 @@ function utcDayKey(nowValue) {
 }
 
 function defaultLog(level, message, payload) {
-    const parts = [`[sidenote2-dgx-bridge]`, level.toUpperCase(), message];
+    const parts = [`[aside-dgx-bridge]`, level.toUpperCase(), message];
     if (payload && Object.keys(payload).length > 0) {
         parts.push(JSON.stringify(payload));
     }
@@ -1330,7 +1333,7 @@ export function createDgxRuntimeBridge(options) {
             return;
         }
 
-        if (method === "POST" && requestUrl.pathname === "/v1/sidenote2/runs") {
+        if (method === "POST" && requestUrl.pathname === "/v1/aside/runs") {
             let payload;
             try {
                 payload = await readJsonBody(request, config.requestBodyLimitBytes);
@@ -1399,11 +1402,11 @@ export function createDgxRuntimeBridge(options) {
             return;
         }
 
-        const runPathMatch = requestUrl.pathname.match(/^\/v1\/sidenote2\/runs\/([^/]+)(?:\/cancel)?$/u);
+        const runPathMatch = requestUrl.pathname.match(/^\/v1\/aside\/runs\/([^/]+)(?:\/cancel)?$/u);
         const runId = runPathMatch?.[1] ? decodeURIComponent(runPathMatch[1]) : null;
         const run = runId ? runs.get(runId) ?? null : null;
 
-        if (method === "GET" && run && requestUrl.pathname === `/v1/sidenote2/runs/${encodeURIComponent(runId)}`) {
+        if (method === "GET" && run && requestUrl.pathname === `/v1/aside/runs/${encodeURIComponent(runId)}`) {
             const afterCursor = requestUrl.searchParams.get("after");
             const requestedWaitMs = Math.max(0, Math.min(
                 parseInteger(requestUrl.searchParams.get("waitMs"), 0),
@@ -1418,7 +1421,7 @@ export function createDgxRuntimeBridge(options) {
             return;
         }
 
-        if (method === "POST" && run && requestUrl.pathname === `/v1/sidenote2/runs/${encodeURIComponent(runId)}/cancel`) {
+        if (method === "POST" && run && requestUrl.pathname === `/v1/aside/runs/${encodeURIComponent(runId)}/cancel`) {
             if (!(run.status === "completed" || run.status === "failed" || run.status === "cancelled")) {
                 run.abortController.abort();
                 finalizeRun(run, "cancelled", { message: "Cancelled." });

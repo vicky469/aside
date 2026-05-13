@@ -6,6 +6,7 @@ import {
     type AllCommentsNoteBuildOptions,
     buildAllCommentsNoteContent,
     LEGACY_ALL_COMMENTS_NOTE_PATH,
+    LEGACY_ALL_COMMENTS_NOTE_PATHS,
 } from "../core/derived/allCommentsNote";
 import {
     syncLoadedCommentsForCurrentNote,
@@ -78,6 +79,7 @@ export interface CommentPersistenceHost {
     getStoredNoteContent(file: TFile): Promise<string>;
     getParsedNoteComments(filePath: string, noteContent: string): ParsedNoteComments;
     getPluginDataDirPath(): string;
+    getLegacyPluginDataDirPaths?(): string[];
     getSideNoteSyncDeviceId(): string;
     readPersistedPluginData(): PersistedPluginData;
     loadPersistedPluginData?(): Promise<PersistedPluginData | null>;
@@ -500,9 +502,9 @@ function createLegacyInlineConflictEntry(entry: CommentThreadEntry): CommentThre
     return {
         id: getLegacyInlineConflictEntryId(entry.id),
         body: [
-            "Legacy inline SideNote2 block recovery.",
+            "Legacy inline Aside block recovery.",
             "",
-            "This version was preserved while cleaning up an old source-markdown SideNote2 block:",
+            "This version was preserved while cleaning up an old source-markdown Aside block:",
             "",
             entry.body,
         ].join("\n"),
@@ -588,6 +590,7 @@ export class CommentPersistenceController {
         this.sidecarStorage = new SidecarCommentStorage({
             adapter: host.app.vault.adapter,
             pluginDirPath: host.getPluginDataDirPath(),
+            legacyPluginDirPaths: host.getLegacyPluginDataDirPaths?.() ?? [],
             hashText: (text) => host.hashText(text),
         });
         this.syncEventStore = new SideNoteSyncEventStore({
@@ -1845,7 +1848,10 @@ export class CommentPersistenceController {
             let existingFile = this.host.getMarkdownFileByPath(allCommentsNotePath);
 
             if (!existingFile) {
-                const legacyFile = this.host.getMarkdownFileByPath(LEGACY_ALL_COMMENTS_NOTE_PATH);
+                const legacyFile = LEGACY_ALL_COMMENTS_NOTE_PATHS
+                    .map((path) => this.host.getMarkdownFileByPath(path))
+                    .find((file): file is TFile => !!file)
+                    ?? this.host.getMarkdownFileByPath(LEGACY_ALL_COMMENTS_NOTE_PATH);
                 if (legacyFile) {
                     await this.host.app.fileManager.renameFile(legacyFile, allCommentsNotePath);
                     existingFile = this.host.getMarkdownFileByPath(allCommentsNotePath);

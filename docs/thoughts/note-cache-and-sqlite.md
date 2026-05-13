@@ -3,7 +3,7 @@
 Status: current thinking, 2026-05-09.
 
 This note captures the current answer to a recurring storage question:
-what kind of cache does SideNote2 have, and when would SQLite be worth
+what kind of cache does Aside have, and when would SQLite be worth
 introducing instead of JSON files?
 
 Related background:
@@ -16,7 +16,7 @@ Related background:
 
 ## Current Cache Layers
 
-SideNote2 does not have one single note cache. It has several layers with
+Aside does not have one single note cache. It has several layers with
 different jobs.
 
 ### In-memory parsed note cache
@@ -33,13 +33,13 @@ not a storage source of truth.
 `SidecarCommentStorage` stores per-note JSON under:
 
 ```text
-.obsidian/plugins/side-note2/sidenotes/by-note/<hash-prefix>/<full-hash>.json
+.obsidian/plugins/aside/sidenotes/by-note/<hash-prefix>/<full-hash>.json
 ```
 
 It also stores source-id keyed sidecars under:
 
 ```text
-.obsidian/plugins/side-note2/sidenotes/by-source/<hash-prefix>/<full-hash>.json
+.obsidian/plugins/aside/sidenotes/by-source/<hash-prefix>/<full-hash>.json
 ```
 
 This is the local hot cache and helper-script write surface. The file unit is
@@ -65,7 +65,7 @@ should stay cheap to invalidate or rebuild.
 
 ## SQLite Decision
 
-Do not move SideNote2's primary side-note storage to SQLite right now.
+Do not move Aside's primary side-note storage to SQLite right now.
 
 JSON sidecars are still the better fit for the current product:
 
@@ -78,7 +78,7 @@ JSON sidecars are still the better fit for the current product:
 
 SQLite would add migration complexity, runtime/platform questions, and sync
 conflict risk. It would also not remove the need for the existing event/snapshot
-sync model unless SideNote2 built a completely different sync layer.
+sync model unless Aside built a completely different sync layer.
 
 ## When SQLite Might Make Sense
 

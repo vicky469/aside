@@ -11,7 +11,7 @@ import { parseNoteComments, serializeNoteComments, serializeNoteCommentThreads }
 import type { Comment } from "../src/commentManager";
 import { CommentManager } from "../src/commentManager";
 
-const FOLDER_NOTE_INDEX_ROW = '- <a href="#" class="sidenote2-index-file-filter-link sidenote2-index-heading-label" title="Folder/Note.md" data-sidenote2-file-path="Folder/Note.md">Note.md</a>';
+const FOLDER_NOTE_INDEX_ROW = '- <a href="#" class="aside-index-file-filter-link aside-index-heading-label" title="Folder/Note.md" data-aside-file-path="Folder/Note.md">Note.md</a>';
 
 function createComment(overrides: Partial<Comment> = {}): Comment {
     return {
@@ -81,7 +81,7 @@ test("note-backed comment lifecycle stays aligned with aggregate output", () => 
     assert.match(note, new RegExp(`"deletedAt": ${deletedAt}`));
     assert.equal(
         buildAllCommentsNoteContent("dev", manager.getCommentsForFile(filePath)),
-        `![${ALL_COMMENTS_NOTE_IMAGE_ALT}](${ALL_COMMENTS_NOTE_IMAGE_URL})\n<div class="sidenote2-index-header-caption" style="display: block; color: #8a8a8a; font-size: 12px; line-height: 1.2; text-align: center;">${ALL_COMMENTS_NOTE_IMAGE_CAPTION}</div>\n`,
+        `![${ALL_COMMENTS_NOTE_IMAGE_ALT}](${ALL_COMMENTS_NOTE_IMAGE_URL})\n<div class="aside-index-header-caption" style="display: block; color: #8a8a8a; font-size: 12px; line-height: 1.2; text-align: center;">${ALL_COMMENTS_NOTE_IMAGE_CAPTION}</div>\n`,
     );
 
     note = note.replace(String(deletedAt), String(deletedAt - SOFT_DELETE_RETENTION_MS - 1));

@@ -91,7 +91,7 @@ export class SidebarInteractionController {
             return;
         }
 
-        if (!activeElement.matches(".sidenote2-inline-textarea") || !this.host.containerEl.contains(activeElement)) {
+        if (!activeElement.matches(".aside-inline-textarea") || !this.host.containerEl.contains(activeElement)) {
             return;
         }
 
@@ -145,10 +145,10 @@ export class SidebarInteractionController {
         this.cancelPendingRevealedCommentSelectionClear();
         const target = event.target as Node | null;
         const clickedComment = target instanceof HTMLElement
-            ? target.closest(".sidenote2-comment-item")
+            ? target.closest(".aside-comment-item")
             : null;
         const clickedSectionChrome = target instanceof HTMLElement
-            ? target.closest(".sidenote2-comments-list-actions, .sidenote2-sidebar-toolbar, .sidenote2-active-file-filters")
+            ? target.closest(".aside-comments-list-actions, .aside-sidebar-toolbar, .aside-active-file-filters")
             : null;
         await this.handleDraftDismissal(target, {
             clickedComment: !!clickedComment,
@@ -315,7 +315,7 @@ export class SidebarInteractionController {
             });
             commentEl = this.host.containerEl.querySelector(`[data-comment-id="${commentId}"], [data-draft-id="${commentId}"]`);
         } else {
-            this.host.containerEl.querySelectorAll(".sidenote2-comment-item.active").forEach((el) => {
+            this.host.containerEl.querySelectorAll(".aside-comment-item.active").forEach((el) => {
                 el.removeClass("active");
             });
             persistedEl.addClass("active");
@@ -347,7 +347,7 @@ export class SidebarInteractionController {
 
     public clearActiveState(): void {
         this.activeCommentId = null;
-        this.host.containerEl.querySelectorAll(".sidenote2-comment-item.active").forEach((el) => {
+        this.host.containerEl.querySelectorAll(".aside-comment-item.active").forEach((el) => {
             el.removeClass("active");
         });
     }
@@ -447,7 +447,7 @@ export class SidebarInteractionController {
 
     public setActiveComment(commentId: string): void {
         this.activeCommentId = commentId;
-        this.host.containerEl.querySelectorAll(".sidenote2-comment-item.active").forEach((el) => {
+        this.host.containerEl.querySelectorAll(".aside-comment-item.active").forEach((el) => {
             if (
                 el.getAttribute("data-comment-id") !== commentId &&
                 el.getAttribute("data-draft-id") !== commentId
@@ -468,7 +468,7 @@ export class SidebarInteractionController {
         }
 
         const element = node instanceof HTMLElement ? node : node.parentElement;
-        const owner = element?.closest(".sidenote2-comment-content");
+        const owner = element?.closest(".aside-comment-content");
         return owner instanceof HTMLElement && this.host.containerEl.contains(owner) ? owner : null;
     }
 

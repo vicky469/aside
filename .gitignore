@@ -31,7 +31,7 @@ data.json
 # Test build output
 .test-dist
 .test-dist*
-.sidenote2-dev
+.aside-dev
 
 # Generated plugin logs
 /logs

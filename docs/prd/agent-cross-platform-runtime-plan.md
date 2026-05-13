@@ -14,7 +14,7 @@ Related docs:
 
 Built-in `@codex` should work on both desktop and mobile Obsidian, but the current implementation is still uneven across runtimes.
 
-Today, SideNote2 has:
+Today, Aside has:
 
 - a mature local Codex CLI path on desktop
 - a remote bridge path that can work on desktop and mobile
@@ -26,7 +26,7 @@ This plan adds a cross-platform runtime model with clear compute ownership:
 
 - desktop users can keep using their own local Codex setup
 - desktop and mobile users can optionally use their own remote runtime or account-backed subscription
-- SideNote2-hosted runtime is deferred for now
+- Aside-hosted runtime is deferred for now
 
 The core product requirement is not only technical compatibility. It is also billing clarity:
 
@@ -45,7 +45,7 @@ Current built-in `@codex` has three hard limits:
    The code now has a remote path, but settings, ownership copy, and access policy still need to be formalized.
 
 3. It has no billing or entitlement layer.
-   If SideNote2 starts proxying requests through a DGX bridge, shared subscription, or operator-funded allowance, the product needs an explicit access and usage policy. Full billing is deferred.
+   If Aside starts proxying requests through a DGX bridge, shared subscription, or operator-funded allowance, the product needs an explicit access and usage policy. Full billing is deferred.
 
 ## Product Goal
 
@@ -93,7 +93,7 @@ That means:
 
 ### 3. Desktop and mobile should share one thread UX
 
-The SideNote2 comment flow should stay the same:
+The Aside comment flow should stay the same:
 
 - user types `@codex`
 - user saves the side note
@@ -123,7 +123,7 @@ Characteristics:
 
 - desktop only
 - uses the user's own local Codex availability
-- no SideNote2-hosted compute cost
+- no Aside-hosted compute cost
 - best fit for workspace-aware coding and local file changes
 
 This should remain the default desktop path when it is available.
@@ -143,11 +143,11 @@ This is the cleanest way to make `@codex` cross-platform while keeping the plugi
 
 ## Product Decision
 
-SideNote2 should support both desktop and mobile through a multi-runtime architecture:
+Aside should support both desktop and mobile through a multi-runtime architecture:
 
 1. Desktop keeps the current local runtime path.
 2. Desktop and mobile gain a remote runtime path.
-3. Hosted SideNote2 runtime is deferred for now.
+3. Hosted Aside runtime is deferred for now.
 
 Recommended default policy:
 
@@ -192,7 +192,7 @@ Before dispatch:
 
 The first remote runtime should focus on:
 
-- reading packed SideNote2 prompt context
+- reading packed Aside prompt context
 - generating streamed replies
 - supporting cancel and retry
 
@@ -252,7 +252,7 @@ Rules:
 - Use one top-level key per device log so Sync's JSON merge has fewer overlapping writes.
 - Store a stable local `deviceId` outside the synced event payload if possible, or initialize it once and never rotate it automatically.
 - Keep event payloads compact and bounded; `data.json` should not become a permanent unbounded database.
-- On `onExternalSettingsChange()`, reload the synced event state, apply unseen events into the local cache, and refresh visible SideNote2 views.
+- On `onExternalSettingsChange()`, reload the synced event state, apply unseen events into the local cache, and refresh visible Aside views.
 - Compact only events covered by all known-device watermarks.
 
 ### Product caveats
@@ -310,7 +310,7 @@ Exit criteria:
 
 This is explicitly deferred.
 
-If SideNote2 later wants a turnkey experience, add a hosted runtime with:
+If Aside later wants a turnkey experience, add a hosted runtime with:
 
 - account sign-in
 - entitlement checks
@@ -345,7 +345,7 @@ This plan is successful when:
 - the plugin clearly tells the user which runtime is being used
 - the first rollout uses only user-owned access
 - local or remote-runtime users are not silently switched onto operator-paid compute
-- the same SideNote2 thread UX works on both desktop and mobile
+- the same Aside thread UX works on both desktop and mobile
 - cross-device event state can sync through plugin data without creating a visible sync folder
 
 ## Open Questions

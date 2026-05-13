@@ -2,7 +2,7 @@ import { cloneCommentThread, cloneCommentThreads, type CommentThread, type Comme
 import { normalizeDeletedAt, purgeExpiredDeletedThreads } from "../rules/deletedCommentVisibility";
 
 export const SIDE_NOTE_SYNC_EVENT_SCHEMA_VERSION = 1;
-export const SIDE_NOTE_SYNC_EVENT_MARKER = "side-note2-event";
+export const SIDE_NOTE_SYNC_EVENT_MARKER = "aside-event";
 
 export type SideNoteSyncOp =
     | "createThread"
@@ -44,7 +44,7 @@ export interface SideNoteSyncReductionResult {
     appliedLogicalClocks: Set<string>;
 }
 
-const EVENT_LINE_PATTERN = /^%% side-note2-event ([A-Za-z0-9_-]+) %%$/;
+const EVENT_LINE_PATTERN = /^%% aside-event ([A-Za-z0-9_-]+) %%$/;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return !!value && typeof value === "object" && !Array.isArray(value);
@@ -199,7 +199,7 @@ function createConflictRecoveryEntry(event: SideNoteSyncEvent, overwrittenEntry:
         body: [
             "Sync conflict recovery.",
             "",
-            "Another device edited this side note at the same time. SideNote2 kept the later edit in place and preserved this overwritten version:",
+            "Another device edited this side note at the same time. Aside kept the later edit in place and preserved this overwritten version:",
             "",
             overwrittenEntry.body,
         ].join("\n"),

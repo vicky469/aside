@@ -23,7 +23,7 @@ export default tseslint.config(
 				"error",
 				{
 					acronyms: ["JSONL", "URL", "HTTP", "HTTPS", "LAN"],
-					brands: ["SideNote2", "Codex", "Obsidian"],
+					brands: ["Aside", "Codex", "Obsidian"],
 				},
 			],
 		},

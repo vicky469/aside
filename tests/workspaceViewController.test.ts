@@ -55,7 +55,7 @@ function createMarkdownView(
 function createSidebarView(renderCalls: number[], file: TFile | null = null) {
     return {
         file,
-        getViewType: () => "sidenote2-view",
+        getViewType: () => "aside-view",
         renderComments: async () => {
             renderCalls.push(renderCalls.length + 1);
         },
@@ -102,7 +102,7 @@ function createHarness(options: {
         app,
         isSidebarSupportedFile: (file): file is TFile =>
             !!file && file.extension === "md",
-        isAllCommentsNotePath: (filePath) => filePath === "SideNote2 index.md",
+        isAllCommentsNotePath: (filePath) => filePath === "Aside index.md",
         ensureIndexedCommentsLoaded: async () => {
             ensureIndexedCommentsLoadedCount += 1;
         },
@@ -175,7 +175,7 @@ test("workspace view controller reads full note data from reading view instead o
     const previewMarkdownView = createMarkdownView(noteFile, {
         mode: "preview",
         value: "",
-        viewData: "# Title\n\nBody\n\n<!-- SideNote2 comments\n[]\n-->",
+        viewData: "# Title\n\nBody\n\n<!-- Aside comments\n[]\n-->",
     });
     const harness = createHarness({
         activeLeaf: { view: previewMarkdownView },
@@ -188,12 +188,12 @@ test("workspace view controller reads full note data from reading view instead o
 
     assert.equal(
         await harness.controller.getCurrentNoteContent(noteFile),
-        "# Title\n\nBody\n\n<!-- SideNote2 comments\n[]\n-->",
+        "# Title\n\nBody\n\n<!-- Aside comments\n[]\n-->",
     );
 });
 
 test("workspace view controller syncs visible files, rerenders surfaces, and clears markdown selections", async () => {
-    const indexFile = createFile("SideNote2 index.md");
+    const indexFile = createFile("Aside index.md");
     const noteFile = createFile("docs/note.md");
     const previewRerenders: boolean[] = [];
     const sidebarRenderCalls: number[] = [];
@@ -240,7 +240,7 @@ test("workspace view controller syncs visible files, rerenders surfaces, and cle
 });
 
 test("workspace view controller refreshes the index note immediately when an aggregate refresh is pending", async () => {
-    const indexFile = createFile("SideNote2 index.md");
+    const indexFile = createFile("Aside index.md");
     const harness = createHarness({
         activeLeaf: { view: { file: indexFile, getViewType: () => "markdown" } },
         leaves: [

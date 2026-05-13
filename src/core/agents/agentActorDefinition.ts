@@ -1,9 +1,9 @@
-export type SideNote2AgentTarget = "codex" | "claude";
+export type AsideAgentTarget = "codex" | "claude";
 
 export type AgentActorRuntimeStrategy = "codex-app-server" | "unsupported";
 
 export interface AgentActorDefinition {
-    id: SideNote2AgentTarget;
+    id: AsideAgentTarget;
     label: string;
     directive: `@${string}`;
     supported: boolean;

@@ -1,19 +1,19 @@
 import { getAgentActorByDirectiveMention } from "../agents/agentActorRegistry";
-import type { SideNote2AgentTarget } from "../config/agentTargets";
+import type { AsideAgentTarget } from "../config/agentTargets";
 
 const COMMENT_MENTION_PATTERN = /(^|[^\w])(@[A-Za-z0-9_/-]+(?:\.[A-Za-z0-9_/-]+)*)/g;
 
 export interface AgentDirectiveResolution {
-    target: SideNote2AgentTarget | null;
+    target: AsideAgentTarget | null;
     hasConflict: boolean;
-    matchedTargets: SideNote2AgentTarget[];
-    unsupportedTargets: SideNote2AgentTarget[];
+    matchedTargets: AsideAgentTarget[];
+    unsupportedTargets: AsideAgentTarget[];
 }
 
 export function parseAgentDirectives(value: string): AgentDirectiveResolution {
-    const matchedTargets: SideNote2AgentTarget[] = [];
-    const unsupportedTargets: SideNote2AgentTarget[] = [];
-    const seenTargets = new Set<SideNote2AgentTarget>();
+    const matchedTargets: AsideAgentTarget[] = [];
+    const unsupportedTargets: AsideAgentTarget[] = [];
+    const seenTargets = new Set<AsideAgentTarget>();
     COMMENT_MENTION_PATTERN.lastIndex = 0;
 
     for (let match = COMMENT_MENTION_PATTERN.exec(value); match; match = COMMENT_MENTION_PATTERN.exec(value)) {

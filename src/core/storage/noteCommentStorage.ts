@@ -6,7 +6,12 @@ import {
     purgeExpiredDeletedThreads,
 } from "../rules/deletedCommentVisibility";
 
-const HIDDEN_SECTION_OPEN = "<!-- SideNote2 comments";
+const HIDDEN_SECTION_OPEN = "<!-- Aside comments";
+const LEGACY_HIDDEN_SECTION_OPEN = "<!-- SideNote2 comments";
+const HIDDEN_SECTION_OPEN_MARKERS = [
+    HIDDEN_SECTION_OPEN,
+    LEGACY_HIDDEN_SECTION_OPEN,
+] as const;
 const HIDDEN_SECTION_CLOSE = "-->";
 
 interface StoredNoteCommentThreadEntry {
@@ -263,7 +268,8 @@ function fromStoredThread(candidate: unknown, filePath: string): CommentThread |
 }
 
 function parseHiddenSectionJson(sectionContent: string): string | null {
-    if (!sectionContent.startsWith(HIDDEN_SECTION_OPEN)) {
+    const openMarker = HIDDEN_SECTION_OPEN_MARKERS.find((marker) => sectionContent.startsWith(marker));
+    if (!openMarker) {
         return null;
     }
 
@@ -272,7 +278,7 @@ function parseHiddenSectionJson(sectionContent: string): string | null {
         return null;
     }
 
-    const bodyWithPrefix = sectionContent.slice(HIDDEN_SECTION_OPEN.length, -closeMarker.length);
+    const bodyWithPrefix = sectionContent.slice(openMarker.length, -closeMarker.length);
     const jsonText = bodyWithPrefix.replace(/^[ \t]*\n?/, "").trim();
     return jsonText.length ? jsonText : null;
 }
@@ -388,7 +394,7 @@ function buildEmptyManagedSectionResult(normalizedContent: string): SplitManaged
 }
 
 function findManagedSectionStarts(normalized: string): number[] {
-    const matches = Array.from(normalized.matchAll(/<!-- SideNote2 comments(?=$|[\s[{])/g));
+    const matches = Array.from(normalized.matchAll(/<!-- (?:Aside|SideNote2) comments(?=$|[\s[{])/g));
     const fencedCodeBlockRanges = buildFencedCodeBlockRanges(normalized);
     const starts: number[] = [];
     for (const match of matches) {
@@ -520,13 +526,13 @@ function getWritableManagedSectionAnalysis(noteContent: string, threadCount: num
 
     if (analysis.problem === "multiple") {
         throw new Error(
-            "Found multiple SideNote2 comments blocks in one markdown note. Collapse them to exactly one managed block before saving comments.",
+            "Found multiple Aside or legacy SideNote2 comments blocks in one markdown note. Collapse them to exactly one managed block before saving comments.",
         );
     }
 
     if (analysis.problem === "invalid") {
         throw new Error(
-            "Found an unsupported SideNote2 comments block. Rewrite the note to the threaded `entries[]` format before saving comments.",
+            "Found an unsupported Aside or legacy SideNote2 comments block. Rewrite the note to the threaded `entries[]` format before saving comments.",
         );
     }
 

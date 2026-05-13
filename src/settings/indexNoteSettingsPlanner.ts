@@ -3,16 +3,18 @@ import {
     normalizeRemoteRuntimeBaseUrl,
 } from "../core/agents/agentRuntimePreferences";
 import {
+    ALL_COMMENTS_NOTE_PATH,
+    LEGACY_ALL_COMMENTS_NOTE_PATHS,
     isAllCommentsNotePath,
     normalizeAllCommentsNoteImageCaption,
     normalizeAllCommentsNoteImageUrl,
     normalizeAllCommentsNotePath,
 } from "../core/derived/allCommentsNote";
 import {
-    type SideNote2Settings,
-} from "../ui/settings/SideNote2Setting";
+    type AsideSettings,
+} from "../ui/settings/AsideSetting";
 
-export type PersistedPluginData = Partial<SideNote2Settings> & {
+export type PersistedPluginData = Partial<AsideSettings> & {
     preferredAgentTarget?: unknown;
     agentRuns?: unknown;
     confirmDelete?: unknown;
@@ -26,7 +28,7 @@ export type PersistedPluginData = Partial<SideNote2Settings> & {
 };
 
 export interface LoadedSettingsResolution {
-    settings: SideNote2Settings;
+    settings: AsideSettings;
     shouldRewriteLegacySettings: boolean;
 }
 
@@ -46,13 +48,22 @@ function hasOwn(target: object, key: string): boolean {
     return Boolean(Object.prototype.hasOwnProperty.call(target, key));
 }
 
+function isLegacyDefaultIndexNotePath(filePath: string): boolean {
+    return LEGACY_ALL_COMMENTS_NOTE_PATHS.includes(filePath as typeof LEGACY_ALL_COMMENTS_NOTE_PATHS[number]);
+}
+
 export function resolveLoadedSettings(
     loaded: PersistedPluginData | null,
-    defaults: SideNote2Settings,
+    defaults: AsideSettings,
 ): LoadedSettingsResolution {
+    const loadedIndexNotePath = normalizeAllCommentsNotePath(loaded?.indexNotePath);
+    const indexNotePath = isLegacyDefaultIndexNotePath(loadedIndexNotePath)
+        ? ALL_COMMENTS_NOTE_PATH
+        : loadedIndexNotePath;
+
     return {
         settings: {
-            indexNotePath: normalizeAllCommentsNotePath(loaded?.indexNotePath),
+            indexNotePath,
             indexHeaderImageUrl: normalizeAllCommentsNoteImageUrl(loaded?.indexHeaderImageUrl),
             indexHeaderImageCaption: hasOwn(loaded ?? {}, "indexHeaderImageCaption")
                 ? normalizeAllCommentsNoteImageCaption(loaded?.indexHeaderImageCaption)
@@ -66,7 +77,8 @@ export function resolveLoadedSettings(
         },
         shouldRewriteLegacySettings: hasOwn(loaded ?? {}, "confirmDelete")
             || hasOwn(loaded ?? {}, "preferredAgentTarget")
-            || hasOwn(loaded ?? {}, "enableDebugMode"),
+            || hasOwn(loaded ?? {}, "enableDebugMode")
+            || indexNotePath !== loadedIndexNotePath,
     };
 }
 

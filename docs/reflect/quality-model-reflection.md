@@ -23,7 +23,7 @@ That makes the plugin feel correct locally, then fail on:
 The fix is not “more ad hoc testing”.
 The fix is a clearer system model and a cleaner event discipline.
 
-This note proposes using a lightweight B-Method / Event-B style process for SideNote2.
+This note proposes using a lightweight B-Method / Event-B style process for Aside.
 
 ## Core idea
 
@@ -46,7 +46,7 @@ This gives us a map at multiple levels, instead of one giant informal understand
 
 Recent bugs were mostly failures of missing or weak invariants:
 
-- `sidenote2-view` disappeared on a fresh machine because we had no invariant saying the plugin must maintain one usable sidebar entry surface.
+- `aside-view` disappeared on a fresh machine because we had no invariant saying the plugin must maintain one usable sidebar entry surface.
 - Ribbon behavior drifted because the action no longer had a stable contract.
 - Index reverse navigation kept regressing because we modeled target identity and rendered presence inconsistently.
 - Index list limit felt broken because the sampled list had no invariant connecting active selection and visibility.
@@ -73,8 +73,8 @@ State:
 Key invariants:
 
 - If the plugin is enabled, the user has a discoverable entry point.
-- If the plugin is enabled, the user can reach `SideNote2 index.md`.
-- If the plugin is enabled, the user can reach a working `sidenote2-view`.
+- If the plugin is enabled, the user can reach `Aside index.md`.
+- If the plugin is enabled, the user can reach a working `aside-view`.
 - Latest shipped GitHub release must correspond to the intended fix.
 
 Key events:
@@ -93,14 +93,14 @@ State:
 
 - active markdown leaf
 - active sidebar leaf
-- existing `sidenote2-view` leaves
+- existing `aside-view` leaves
 - existing index markdown leaves
 - workspace layout ready or not
 
 Key invariants:
 
-- At most one canonical `sidenote2-view` should be managed by the plugin.
-- If no `sidenote2-view` exists and the plugin is enabled, one can be recreated.
+- At most one canonical `aside-view` should be managed by the plugin.
+- If no `aside-view` exists and the plugin is enabled, one can be recreated.
 - Ribbon action must not create unbounded duplicate leaves.
 - Opening index note must target a markdown tab, not the sidebar leaf.
 
@@ -143,7 +143,7 @@ Key events:
 
 ### 4. Derived view model
 
-This covers `SideNote2 index.md`, index sidebar list, and thought trail.
+This covers `Aside index.md`, index sidebar list, and thought trail.
 
 State:
 
@@ -210,7 +210,7 @@ The value is forcing ourselves to separate:
 - transitions
 - proof obligations
 
-For SideNote2, that means:
+For Aside, that means:
 
 - stop mixing workspace state with product expectations
 - stop mixing derived-view bugs with canonical-data bugs
@@ -267,7 +267,7 @@ We should maintain one verification table per subsystem.
 
 Checks:
 
-- `getLeavesOfType("sidenote2-view").length`
+- `getLeavesOfType("aside-view").length`
 - right-sidebar leaf state
 - active file after ribbon click
 - no duplicate index tabs after repeated clicks
@@ -308,7 +308,7 @@ Bad:
 
 Better:
 
-- “restored invariant: enabled plugin always has one usable `sidenote2-view` entry surface”
+- “restored invariant: enabled plugin always has one usable `aside-view` entry surface”
 
 ### 2. Every feature spec should include event/state sections
 

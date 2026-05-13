@@ -15,7 +15,7 @@ import {
     getPrimarySupportedAgentActor,
     resolveUnsupportedAgentNotice,
 } from "../core/agents/agentActorRegistry";
-import type { SideNote2AgentTarget } from "../core/config/agentTargets";
+import type { AsideAgentTarget } from "../core/config/agentTargets";
 import { parseAgentDirectives } from "../core/text/agentDirectives";
 import { AgentRunStore } from "./agentRunStore";
 import {
@@ -73,7 +73,7 @@ export interface CommentAgentHost {
     editComment(commentId: string, newCommentText: string, options?: { skipCommentViewRefresh?: boolean }): Promise<boolean>;
     deleteComment(commentId: string, options?: { skipCommentViewRefresh?: boolean }): Promise<void>;
     runAgentRuntime(invocation: {
-        target: SideNote2AgentTarget;
+        target: AsideAgentTarget;
         prompt: string;
         cwd: string;
         vaultRootPath?: string | null;
@@ -83,7 +83,7 @@ export interface CommentAgentHost {
     }): Promise<AgentRuntimeResponse>;
     resolveAgentRuntimeSelection(): Promise<AgentRuntimeSelection>;
     startRemoteRuntimeRun(options: {
-        agent: SideNote2AgentTarget;
+        agent: AsideAgentTarget;
         promptText: string;
         metadata: Record<string, unknown>;
     }): Promise<RemoteRuntimeResponseEnvelope>;
@@ -96,7 +96,7 @@ export interface CommentAgentHost {
 const PRIMARY_SUPPORTED_AGENT = getPrimarySupportedAgentActor();
 const AGENT_CONFLICT_NOTICE = "Use only one explicit supported agent target per side note.";
 const AGENT_RETRY_NOTICE = `Retry requires a single explicit ${PRIMARY_SUPPORTED_AGENT.directive} target in the triggering entry.`;
-const AGENT_PENDING_SESSION_NOTICE = "The previous SideNote2 agent run did not finish. Retry the thread to run it again.";
+const AGENT_PENDING_SESSION_NOTICE = "The previous Aside agent run did not finish. Retry the thread to run it again.";
 const AGENT_DESKTOP_RUNTIME_NOTICE = "Agent execution requires desktop Obsidian with a filesystem-backed vault.";
 const AGENT_REMOTE_RESUME_FAILED_NOTICE = "The previous remote run could not be resumed.";
 const AGENT_REMOTE_NO_RESPONSE_TIMEOUT_NOTICE = "Cancelled automatically after 3 minutes without a response from the remote runtime.";
@@ -1073,7 +1073,7 @@ export class CommentAgentController {
     private resolveDispatchTarget(
         resolution: ReturnType<typeof parseAgentDirectives>,
         event: SavedUserEntryEvent,
-    ): SideNote2AgentTarget | null {
+    ): AsideAgentTarget | null {
         if (resolution.unsupportedTargets.length > 0) {
             void this.host.log?.("warn", "agents", "agents.directive.unsupported", {
                 threadId: event.threadId,
@@ -1099,7 +1099,7 @@ export class CommentAgentController {
 
     private resolveRetryTarget(
         resolution: ReturnType<typeof parseAgentDirectives>,
-    ): SideNote2AgentTarget | null {
+    ): AsideAgentTarget | null {
         if (resolution.unsupportedTargets.length > 0) {
             this.host.showNotice(resolveUnsupportedAgentNotice(resolution.unsupportedTargets));
             return null;
@@ -1117,7 +1117,7 @@ export class CommentAgentController {
         threadId: string;
         triggerEntryId: string;
         filePath: string;
-        requestedAgent: SideNote2AgentTarget;
+        requestedAgent: AsideAgentTarget;
         runtime: AgentRunRuntime;
         modePreference: AgentRuntimeModePreference;
         promptText: string;

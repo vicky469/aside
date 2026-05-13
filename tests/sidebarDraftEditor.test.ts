@@ -153,10 +153,10 @@ test("pinDraftToTopOnMobile performs a minimal scroll adjustment when the draft 
         }) as unknown as HTMLElement;
         const textarea = {
             closest: (selector: string) => {
-                if (selector === ".sidenote2-comment-draft") {
+                if (selector === ".aside-comment-draft") {
                     return draftEl;
                 }
-                if (selector === ".sidenote2-view-container") {
+                if (selector === ".aside-view-container") {
                     return scrollContainer;
                 }
                 return null;
@@ -197,10 +197,10 @@ test("pinDraftToTopOnMobile skips no-op scroll corrections", () => {
         }) as unknown as HTMLElement;
         const textarea = {
             closest: (selector: string) => {
-                if (selector === ".sidenote2-comment-draft") {
+                if (selector === ".aside-comment-draft") {
                     return draftEl;
                 }
-                if (selector === ".sidenote2-view-container") {
+                if (selector === ".aside-view-container") {
                     return scrollContainer;
                 }
                 return null;

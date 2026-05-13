@@ -27,11 +27,11 @@ Related docs:
 Define a DGX-backed remote runtime path so that:
 
 1. a user on Obsidian mobile can type `@codex`
-2. SideNote2 routes that run to a DGX-hosted bridge
+2. Aside routes that run to a DGX-hosted bridge
 3. the DGX runs the same `codex` CLI family desktop local uses today
 4. the DGX operates against a real synced copy of the user's Obsidian vault
 5. the remote runtime can inspect and edit the active vault markdown file directly
-6. SideNote2 keeps the same thread UX and still records the run reply in the thread
+6. Aside keeps the same thread UX and still records the run reply in the thread
 
 The intended behavior is close to desktop local, not reply-only.
 The important difference is that the filesystem lives on the DGX-hosted synced vault copy instead of on the phone.
@@ -56,7 +56,7 @@ The intended product is:
 ## Final Decisions
 
 - The DGX deployment gets a real vault root:
-  - `SIDENOTE2_DGX_VAULT_ROOT=/path/to/synced-vault`
+  - `ASIDE_DGX_VAULT_ROOT=/path/to/synced-vault`
 - Mobile sends the vault-relative note path plus note revision metadata.
 - The bridge resolves that path under the configured vault root and rejects traversal outside it.
 - The DGX runtime resolves its working directory using the same policy as desktop local:
@@ -65,10 +65,10 @@ The intended product is:
   - else the vault root
 - Remote Codex may inspect and edit files under the configured vault root.
 - The bridge must not allow arbitrary access outside the configured vault root.
-- SideNote2 still owns run UI, polling, token storage, and the persisted thread reply entry.
-- SideNote2 thread mutations are special:
+- Aside still owns run UI, polling, token storage, and the persisted thread reply entry.
+- Aside thread mutations are special:
   - they must use safe thread-aware helpers
-  - they must not raw-edit the `<!-- SideNote2 comments -->` block ad hoc
+  - they must not raw-edit the `<!-- Aside comments -->` block ad hoc
 - This mode is advanced and intentionally more powerful than the earlier reply-only concept.
 
 ## Non-Goals
@@ -88,12 +88,12 @@ Required deployment shape:
 
 ```text
 Obsidian mobile
-  -> SideNote2 remote bridge client
+  -> Aside remote bridge client
   -> HTTPS bridge on DGX
   -> local codex app-server process on DGX
   -> synced writable vault copy on DGX
   -> remote file reads and writes under that vault root
-  -> final reply text back to SideNote2 thread
+  -> final reply text back to Aside thread
 ```
 
 Assumption:
@@ -133,22 +133,22 @@ The DGX owns:
 Add a dedicated DGX vault-root setting:
 
 ```bash
-SIDENOTE2_DGX_VAULT_ROOT=/srv/sidenote2/vault
+ASIDE_DGX_VAULT_ROOT=/srv/aside/vault
 ```
 
 Keep the existing bridge runtime root separate:
 
 ```bash
-SIDENOTE2_DGX_WORKSPACE_ROOT=/srv/sidenote2/bridge-runtime
+ASIDE_DGX_WORKSPACE_ROOT=/srv/aside/bridge-runtime
 ```
 
 Recommended interpretation:
 
-- `SIDENOTE2_DGX_WORKSPACE_ROOT`
+- `ASIDE_DGX_WORKSPACE_ROOT`
   - bridge process files
   - temporary runtime state
   - bridge-side logs or caches
-- `SIDENOTE2_DGX_VAULT_ROOT`
+- `ASIDE_DGX_VAULT_ROOT`
   - the writable synced Obsidian vault copy that Codex may inspect and edit
 
 ## Client To Bridge Metadata
@@ -172,7 +172,7 @@ interface VaultBackedDgxMetadata {
 
 Notes:
 
-- `vaultRelativePath` identifies the active source markdown file relative to `SIDENOTE2_DGX_VAULT_ROOT`
+- `vaultRelativePath` identifies the active source markdown file relative to `ASIDE_DGX_VAULT_ROOT`
 - `noteHash` is computed from the saved note content on the mobile client after the triggering entry is persisted
 - the bridge must treat metadata as targeting input, not as direct filesystem permission
 
@@ -183,7 +183,7 @@ The bridge resolves the note like this:
 1. normalize `vaultRelativePath`
 2. reject absolute paths
 3. reject `..` traversal that escapes the vault root
-4. join the normalized relative path onto `SIDENOTE2_DGX_VAULT_ROOT`
+4. join the normalized relative path onto `ASIDE_DGX_VAULT_ROOT`
 5. verify the final absolute path still sits under the vault root
 
 If any step fails, the bridge returns a user-safe error and does not start Codex.
@@ -194,8 +194,8 @@ Because the DGX is editing a synced vault copy, revision checks are required.
 
 Pre-run rule:
 
-1. SideNote2 saves the triggering entry into the canonical mobile note.
-2. SideNote2 reads the saved note content and computes `noteHash`.
+1. Aside saves the triggering entry into the canonical mobile note.
+2. Aside reads the saved note content and computes `noteHash`.
 3. The bridge reads the corresponding DGX note file and computes the same hash.
 4. If the hashes do not match, the bridge fails the run before Codex starts.
 
@@ -234,7 +234,7 @@ That does not mean:
 
 - arbitrary host access outside the vault root
 - arbitrary edits outside the configured root
-- automatic permission to mutate SideNote2 thread storage ad hoc
+- automatic permission to mutate Aside thread storage ad hoc
 
 ## Note And Thread Write Rules
 
@@ -244,7 +244,7 @@ There are two classes of write:
 
 Allowed:
 
-- direct file edits under `SIDENOTE2_DGX_VAULT_ROOT`
+- direct file edits under `ASIDE_DGX_VAULT_ROOT`
 - including edits to the active markdown note body
 
 Examples:
@@ -254,20 +254,20 @@ Examples:
 - reorganize headings
 - create a sibling note
 
-### 2. SideNote2 thread mutations
+### 2. Aside thread mutations
 
 Special handling required.
 
 Rules:
 
-- do not patch the serialized SideNote2 comments block by free-form text editing
+- do not patch the serialized Aside comments block by free-form text editing
 - use safe thread-aware helpers for create, append, update, resolve, or other comment-thread mutations
 - preserve the markdown note as the canonical source of truth
 
 Practical implication:
 
 - normal note-body editing can use direct file tools
-- SideNote2 thread operations should go through dedicated helpers or bridge-owned wrappers
+- Aside thread operations should go through dedicated helpers or bridge-owned wrappers
 
 ## Bridge Behavior
 
@@ -281,14 +281,14 @@ Start-run behavior:
 6. launch `codex app-server --listen stdio://`
 7. run against the resolved vault-backed working directory
 8. stream progress and output deltas back to the client
-9. return final reply text for SideNote2 thread persistence
+9. return final reply text for Aside thread persistence
 
 The bridge should expose the active note context to Codex via environment or wrapper metadata as needed, for example:
 
 ```text
-SIDENOTE2_ACTIVE_VAULT_ROOT=/srv/sidenote2/vault
-SIDENOTE2_ACTIVE_NOTE_PATH=/srv/sidenote2/vault/Folder/Note.md
-SIDENOTE2_ACTIVE_NOTE_RELATIVE_PATH=Folder/Note.md
+ASIDE_ACTIVE_VAULT_ROOT=/srv/aside/vault
+ASIDE_ACTIVE_NOTE_PATH=/srv/aside/vault/Folder/Note.md
+ASIDE_ACTIVE_NOTE_RELATIVE_PATH=Folder/Note.md
 ```
 
 ## Prompt And Tooling Model
@@ -297,7 +297,7 @@ Prompt construction still starts on the client.
 
 The client should continue sending:
 
-- current SideNote2 prompt text
+- current Aside prompt text
 - thread transcript context
 - nearby note context already assembled by the plugin
 
@@ -312,7 +312,7 @@ This is intentionally closer to desktop local behavior.
 
 ## Remote Reply Contract
 
-Even when the DGX edits vault files directly, it should still return a final reply text string for the SideNote2 thread.
+Even when the DGX edits vault files directly, it should still return a final reply text string for the Aside thread.
 
 Reason:
 
@@ -328,7 +328,7 @@ Recommended reply content:
 
 ## Security Rules
 
-- the bridge must reject any target path outside `SIDENOTE2_DGX_VAULT_ROOT`
+- the bridge must reject any target path outside `ASIDE_DGX_VAULT_ROOT`
 - the Codex sandbox should restrict file writes to the configured vault root and any minimal bridge-runtime directory it truly needs
 - the bridge token remains device-local on the client
 - the bridge must not expose the vault root over unauthenticated public transport
@@ -365,7 +365,7 @@ The bridge must return explicit, user-safe failures for:
 
 ### Thread helper violation
 
-- a requested thread mutation would require raw editing of the serialized SideNote2 comments block without using safe helpers
+- a requested thread mutation would require raw editing of the serialized Aside comments block without using safe helpers
 
 ## Plugin Requirements
 
@@ -384,12 +384,12 @@ It only needs stable note identity and revision metadata.
 
 The DGX bridge should add:
 
-1. configured `SIDENOTE2_DGX_VAULT_ROOT`
+1. configured `ASIDE_DGX_VAULT_ROOT`
 2. secure path resolution under that root
 3. note-hash verification before runtime start
 4. working-directory resolution based on the resolved note path
 5. guardrails for vault-root-only file access
-6. safe helper routing for SideNote2 thread mutations
+6. safe helper routing for Aside thread mutations
 
 ## Acceptance Criteria
 
@@ -399,10 +399,10 @@ This spec is satisfied when:
 2. the DGX resolves that note inside its synced vault copy
 3. Codex can inspect and edit the active note directly on the DGX vault copy
 4. the runtime working directory matches desktop-local resolution semantics
-5. the final reply is still appended into the SideNote2 thread
+5. the final reply is still appended into the Aside thread
 6. a stale or unsynced DGX note copy is detected and blocked before Codex starts
 7. writes cannot escape the configured vault root
-8. SideNote2 thread-specific mutations do not rely on ad hoc raw text patching
+8. Aside thread-specific mutations do not rely on ad hoc raw text patching
 
 ## Recommendation
 

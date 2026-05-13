@@ -9,7 +9,7 @@ import {
     readSidecar,
     stripLegacyBlockIfNeeded,
     writeSidecar,
-} from "./lib/sideNote2RepoScripts.mjs";
+} from "./lib/asideRepoScripts.mjs";
 
 function getRepoRoot(metaUrl) {
     return path.resolve(path.dirname(fileURLToPath(metaUrl)), "..");
@@ -131,7 +131,7 @@ function buildNoteBody({ nodeName, pattern, size, componentKey, nodeIndex, outgo
     return [
         `# ${nodeName}`,
         "",
-        "Synthetic SideNote2 graph fixture.",
+        "Synthetic Aside graph fixture.",
         "",
         `Pattern: ${pattern}`,
         `Component: ${componentKey}`,
@@ -286,7 +286,7 @@ async function main() {
     const repoRoot = getRepoRoot(import.meta.url);
     const options = parseArgs(process.argv.slice(2));
     const vaultRoot = options.vaultRoot ?? path.resolve(repoRoot, "..");
-    const outputRoot = path.join(vaultRoot, "SideNote2 Graph Fixtures", "graph-1000");
+    const outputRoot = path.join(vaultRoot, "Aside Graph Fixtures", "graph-1000");
     const componentDefinitions = buildComponentDefinitions();
     let generatedNoteCount = 0;
     let timestamp = Date.UTC(2026, 0, 1, 0, 0, 0);

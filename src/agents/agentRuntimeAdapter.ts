@@ -1,7 +1,7 @@
 import type { AgentRunRuntime } from "../core/agents/agentRuns";
 import { getAgentActorById } from "../core/agents/agentActorRegistry";
 import * as sideNotePromptPolicy from "../../shared/sideNotePromptPolicy.js";
-import type { SideNote2AgentTarget } from "../core/config/agentTargets";
+import type { AsideAgentTarget } from "../core/config/agentTargets";
 
 interface ExecFileResult {
     stdout: string;
@@ -63,7 +63,7 @@ interface NodeModules {
 }
 
 export interface AgentRuntimeInvocation {
-    target: SideNote2AgentTarget;
+    target: AsideAgentTarget;
     prompt: string;
     cwd: string;
     vaultRootPath?: string | null;
@@ -219,7 +219,7 @@ function isLikelyProcessNarrationSegment(value: string): boolean {
         return false;
     }
 
-    return /\b(skill|workflow|workspace|thread|comment block|sidenote2|obsidian|draft|tool|file|search|searching|locat|read|load|append|reply text|context|process|prompt|agent)\b/u
+    return /\b(skill|workflow|workspace|thread|comment block|aside|obsidian|draft|tool|file|search|searching|locat|read|load|append|reply text|context|process|prompt|agent)\b/u
         .test(normalized);
 }
 
@@ -829,7 +829,7 @@ async function runCodexDirect(
         };
 
         const sendRequest = <T>(method: string, params?: unknown): Promise<T> => {
-            const id = `sidenote2-${++requestCounter}`;
+            const id = `aside-${++requestCounter}`;
             return new Promise<T>((resolveRequest, rejectRequest) => {
                 pendingResponses.set(id, {
                     resolve: resolveRequest as (value: unknown) => void,
@@ -1067,8 +1067,8 @@ async function runCodexDirect(
             try {
                 await sendRequest("initialize", {
                     clientInfo: {
-                        name: "sidenote2",
-                        title: "SideNote2",
+                        name: "aside",
+                        title: "Aside",
                         version: "0.0.0",
                     },
                     capabilities: {
@@ -1096,7 +1096,7 @@ async function runCodexDirect(
 
                 const threadStartResponse = await sendRequest<{ thread?: { id?: string } }>("thread/start", {
                     approvalPolicy: "on-request",
-                    baseInstructions: "You generate end-user reply text for a SideNote2 note thread.",
+                    baseInstructions: "You generate end-user reply text for a Aside note thread.",
                     cwd: invocation.cwd,
                     developerInstructions: "Return only the final note reply. Answer directly. Never mention skills, searches, notes, files, prompts, tools, AGENTS instructions, context-loading, or your process.",
                     ephemeral: true,

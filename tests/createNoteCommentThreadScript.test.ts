@@ -18,13 +18,13 @@ function hashText(text: string): string {
 function getSidecarPath(vaultRoot: string, noteRelativePath: string): string {
     const hash = hashText(noteRelativePath);
     const shard = hash.slice(0, 2);
-    return path.join(vaultRoot, ".obsidian", "plugins", "side-note2", "sidenotes", "by-note", shard, `${hash}.json`);
+    return path.join(vaultRoot, ".obsidian", "plugins", "aside", "sidenotes", "by-note", shard, `${hash}.json`);
 }
 
 function getSourceSidecarPath(vaultRoot: string, sourceId: string): string {
     const hash = hashText(sourceId);
     const shard = hash.slice(0, 2);
-    return path.join(vaultRoot, ".obsidian", "plugins", "side-note2", "sidenotes", "by-source", shard, `${hash}.json`);
+    return path.join(vaultRoot, ".obsidian", "plugins", "aside", "sidenotes", "by-source", shard, `${hash}.json`);
 }
 
 async function readSidecar(vaultRoot: string, noteRelativePath: string): Promise<{ version: number; notePath: string; threads: CommentThread[] } | null> {
@@ -56,7 +56,7 @@ async function readSourceSidecar(vaultRoot: string, sourceId: string): Promise<{
 }
 
 async function createVaultDir(tempDir: string): Promise<void> {
-    await mkdir(path.join(tempDir, ".obsidian", "plugins", "side-note2"), { recursive: true });
+    await mkdir(path.join(tempDir, ".obsidian", "plugins", "aside"), { recursive: true });
 }
 
 function createThread(overrides: Partial<CommentThread> = {}): CommentThread {
@@ -91,7 +91,7 @@ function createThread(overrides: Partial<CommentThread> = {}): CommentThread {
 }
 
 test("create-note-comment-thread script creates a page note thread", async () => {
-    const tempDir = await mkdtemp(path.join(tmpdir(), "sidenote2-comment-create-page-"));
+    const tempDir = await mkdtemp(path.join(tmpdir(), "aside-comment-create-page-"));
     const notePath = path.join(tempDir, "My Note.md");
     const commentPath = path.join(tempDir, "comment.md");
     const scriptPath = path.resolve(process.cwd(), "scripts/create-note-comment-thread.mjs");
@@ -128,7 +128,7 @@ test("create-note-comment-thread script creates a page note thread", async () =>
 });
 
 test("create-note-comment-thread-with-children script creates one page thread with child entries", async () => {
-    const tempDir = await mkdtemp(path.join(tmpdir(), "sidenote2-comment-create-children-"));
+    const tempDir = await mkdtemp(path.join(tmpdir(), "aside-comment-create-children-"));
     const notePath = path.join(tempDir, "Thread Note.md");
     const rootPath = path.join(tempDir, "root.md");
     const childrenDir = path.join(tempDir, "children");
@@ -140,7 +140,7 @@ test("create-note-comment-thread-with-children script creates one page thread wi
     await writeFile(rootPath, "Frame the question\n", "utf8");
     await writeFile(path.join(childrenDir, "01-self.md"), "Self:\n- What keeps my attention?\n", "utf8");
     await writeFile(path.join(childrenDir, "02-motivation.md"), "Motivation:\n- What do I value long term?\n", "utf8");
-    await writeFile(path.join(tempDir, ".obsidian", "plugins", "side-note2", "data.json"), JSON.stringify({
+    await writeFile(path.join(tempDir, ".obsidian", "plugins", "aside", "data.json"), JSON.stringify({
         sourceIdentityState: {
             schemaVersion: 1,
             sources: {
@@ -199,7 +199,7 @@ test("create-note-comment-thread-with-children script creates one page thread wi
 });
 
 test("create-note-comment-thread script creates an anchored thread without flattening existing replies", async () => {
-    const tempDir = await mkdtemp(path.join(tmpdir(), "sidenote2-comment-create-anchor-"));
+    const tempDir = await mkdtemp(path.join(tmpdir(), "aside-comment-create-anchor-"));
     const notePath = path.join(tempDir, "note.md");
     const commentPath = path.join(tempDir, "comment.md");
     const scriptPath = path.resolve(process.cwd(), "scripts/create-note-comment-thread.mjs");
@@ -254,7 +254,7 @@ test("create-note-comment-thread script creates an anchored thread without flatt
 });
 
 test("create-note-comment-thread script rejects unsupported legacy flat payloads", async () => {
-    const tempDir = await mkdtemp(path.join(tmpdir(), "sidenote2-comment-create-legacy-"));
+    const tempDir = await mkdtemp(path.join(tmpdir(), "aside-comment-create-legacy-"));
     const notePath = path.join(tempDir, "note.md");
     const scriptPath = path.resolve(process.cwd(), "scripts/create-note-comment-thread.mjs");
 
@@ -264,7 +264,7 @@ test("create-note-comment-thread script rejects unsupported legacy flat payloads
         "",
         "Body text.",
         "",
-        "<!-- SideNote2 comments",
+        "<!-- Aside comments",
         "[",
         "  {",
         "    \"id\": \"comment-1\",",
@@ -302,8 +302,8 @@ test("create-note-comment-thread script rejects unsupported legacy flat payloads
     assert.match(failure.stderr, /not a supported threaded entries\[\] payload/);
 });
 
-test("create-note-comment-thread script rejects notes with two SideNote2 managed blocks", async () => {
-    const tempDir = await mkdtemp(path.join(tmpdir(), "sidenote2-comment-create-duplicate-"));
+test("create-note-comment-thread script rejects notes with two Aside managed blocks", async () => {
+    const tempDir = await mkdtemp(path.join(tmpdir(), "aside-comment-create-duplicate-"));
     const notePath = path.join(tempDir, "note.md");
     const scriptPath = path.resolve(process.cwd(), "scripts/create-note-comment-thread.mjs");
     const first = serializeNoteCommentThreads("# Title\n\nBody text.\n", [createThread()]);
@@ -323,7 +323,7 @@ test("create-note-comment-thread script rejects notes with two SideNote2 managed
     await createVaultDir(tempDir);
     await writeFile(
         notePath,
-        `${first.trimEnd()}\n\n${second.slice(second.indexOf("<!-- SideNote2 comments"))}\n`,
+        `${first.trimEnd()}\n\n${second.slice(second.indexOf("<!-- Aside comments"))}\n`,
         "utf8",
     );
 
@@ -344,5 +344,5 @@ test("create-note-comment-thread script rejects notes with two SideNote2 managed
     }
 
     assert.ok(failure);
-    assert.match(failure.stderr, /multiple SideNote2 comments blocks/);
+    assert.match(failure.stderr, /multiple Aside or legacy SideNote2 comments blocks/);
 });

@@ -10,8 +10,8 @@ export interface SidebarCommentPointerActionState {
     selectionInsideSidebarCommentContent: boolean;
 }
 
-const SIDEBAR_COMMENT_OPEN_BLOCKING_SELECTOR = "button, a, textarea, input, select, [contenteditable='true'], .sidenote2-inline-editor";
-const SIDEBAR_COMMENT_CONTENT_REFOCUS_BLOCKING_SELECTOR = "textarea, input, select, [contenteditable='true'], .sidenote2-inline-editor";
+const SIDEBAR_COMMENT_OPEN_BLOCKING_SELECTOR = "button, a, textarea, input, select, [contenteditable='true'], .aside-inline-editor";
+const SIDEBAR_COMMENT_CONTENT_REFOCUS_BLOCKING_SELECTOR = "textarea, input, select, [contenteditable='true'], .aside-inline-editor";
 
 export function shouldActivateSidebarComment(
     state: SidebarCommentPointerActionState,

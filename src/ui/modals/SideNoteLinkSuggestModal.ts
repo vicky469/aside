@@ -58,7 +58,7 @@ export default class SideNoteLinkSuggestModal extends SuggestModal<SideNoteLinkS
 
     renderSuggestion(suggestion: SideNoteLinkSuggestion, el: HTMLElement): void {
         const titleEl = el.createDiv();
-        const noteEl = el.createDiv({ cls: "sidenote2-link-suggest-note" });
+        const noteEl = el.createDiv({ cls: "aside-link-suggest-note" });
 
         if (suggestion.type === "create") {
             titleEl.setText(`Create note: ${suggestion.displayName}`);

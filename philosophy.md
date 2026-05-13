@@ -1,12 +1,12 @@
-# SideNote2 Philosophy
+# Aside Philosophy
 
-SideNote2 is a tool for thought built around a small belief: thinking improves when questions, critique, decisions, and follow-up work can stay close to the note that caused them.
+Aside is a tool for thought built around a small belief: thinking improves when questions, critique, decisions, and follow-up work can stay close to the note that caused them.
 
 The plugin should feel like a quiet margin, not a second workspace.
 
 ## Minimalist Design
 
-SideNote2 should do less than a general task manager, less than a chat app, and less than a full writing environment. Its value comes from staying narrow.
+Aside should do less than a general task manager, less than a chat app, and less than a full writing environment. Its value comes from staying narrow.
 
 The core object is simple:
 - a markdown note
@@ -30,7 +30,7 @@ The important thing is locality. The comment should preserve the reason it exist
 
 ## The Markdown Note Is The Center
 
-SideNote2 should not compete with Obsidian. The markdown note remains the user's primary surface.
+Aside should not compete with Obsidian. The markdown note remains the user's primary surface.
 
 The sidebar is supporting structure:
 - it should preserve context
@@ -50,7 +50,7 @@ The agent should not become a separate chat product living beside Obsidian. It s
 - keep the reply compact
 - leave durable output in the same place the work started
 
-The user should not need a separate SideNote2 skill or CLI for the built-in product path. External Codex skills can support advanced handoff workflows, but the plugin itself should carry the product rules needed for normal use.
+The user should not need a separate Aside skill or CLI for the built-in product path. External Codex skills can support advanced handoff workflows, but the plugin itself should carry the product rules needed for normal use.
 
 ## Link Thought To Thought
 
@@ -67,7 +67,7 @@ The thought-trail graph should remain a lightweight view of those connections, n
 
 Not every idea should become a new note. Not every question needs an agent. Not every comment should become a task.
 
-SideNote2 should preserve enough friction that the user still has to decide:
+Aside should preserve enough friction that the user still has to decide:
 - is this worth saving?
 - is this attached to a selection or the whole page?
 - is this resolved?
@@ -76,9 +76,9 @@ SideNote2 should preserve enough friction that the user still has to decide:
 
 Good tools for thought do not remove judgment. They protect it.
 
-## What Belongs In SideNote2
+## What Belongs In Aside
 
-SideNote2 should include features that strengthen the margin workflow:
+Aside should include features that strengthen the margin workflow:
 - page notes and anchored notes
 - threaded replies
 - resolved and deleted review states

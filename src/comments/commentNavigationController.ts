@@ -28,7 +28,7 @@ interface SidebarViewLike {
 function isSidebarViewLike(view: unknown): view is SidebarViewLike {
     return !!view
         && typeof (view as SidebarViewLike).getViewType === "function"
-        && (view as SidebarViewLike).getViewType() === "sidenote2-view"
+        && (view as SidebarViewLike).getViewType() === "aside-view"
         && typeof (view as SidebarViewLike).getCurrentFile === "function"
         && typeof (view as SidebarViewLike).updateActiveFile === "function"
         && typeof (view as SidebarViewLike).highlightComment === "function"
@@ -148,14 +148,14 @@ export class CommentNavigationController {
 
         let leaf: WorkspaceLeaf | null = null;
         let createdLeaf = false;
-        const leaves = workspace.getLeavesOfType("sidenote2-view");
+        const leaves = workspace.getLeavesOfType("aside-view");
 
         if (leaves.length > 0) {
             leaf = leaves[0];
             if (!isSidebarViewLike(leaf.view)) {
                 createdLeaf = true;
                 await leaf.setViewState({
-                    type: "sidenote2-view",
+                    type: "aside-view",
                     state: { filePath: sidebarFile?.path ?? null },
                     active: true,
                 });
@@ -166,7 +166,7 @@ export class CommentNavigationController {
                 leaf = rightLeaf;
                 createdLeaf = true;
                 await leaf.setViewState({
-                    type: "sidenote2-view",
+                    type: "aside-view",
                     state: { filePath: sidebarFile?.path ?? null },
                     active: true,
                 });
@@ -227,7 +227,7 @@ export class CommentNavigationController {
             targetFile: sidebarFile,
         });
 
-        const leaves = this.host.app.workspace.getLeavesOfType("sidenote2-view");
+        const leaves = this.host.app.workspace.getLeavesOfType("aside-view");
         for (const leaf of leaves) {
             if (isSidebarViewLike(leaf.view)) {
                 await this.syncIndexSidebarScope(leaf, sidebarFile, scopeRootFilePath);
@@ -241,7 +241,7 @@ export class CommentNavigationController {
     }
 
     public async updateSidebarViews(file: TFile | null, options: { skipDataRefresh?: boolean } = {}): Promise<void> {
-        const leaves = this.host.app.workspace.getLeavesOfType("sidenote2-view");
+        const leaves = this.host.app.workspace.getLeavesOfType("aside-view");
         for (const leaf of leaves) {
             if (isSidebarViewLike(leaf.view)) {
                 await leaf.view.updateActiveFile(file, options);
@@ -250,7 +250,7 @@ export class CommentNavigationController {
     }
 
     public async syncIndexFileFilter(indexFile: TFile | null, sourceFilePath: string): Promise<void> {
-        const leaves = this.host.app.workspace.getLeavesOfType("sidenote2-view");
+        const leaves = this.host.app.workspace.getLeavesOfType("aside-view");
         for (const leaf of leaves) {
             if (isSidebarViewLike(leaf.view)) {
                 await leaf.view.updateActiveFile(indexFile, { skipDataRefresh: true });
@@ -291,7 +291,7 @@ export class CommentNavigationController {
             indexScopeRootFilePath?: string | null;
         } = {},
     ): Promise<void> {
-        const leaves = this.host.app.workspace.getLeavesOfType("sidenote2-view");
+        const leaves = this.host.app.workspace.getLeavesOfType("aside-view");
         for (const leaf of leaves) {
             if (isSidebarViewLike(leaf.view)) {
                 await leaf.view.updateActiveFile(file);
@@ -307,7 +307,7 @@ export class CommentNavigationController {
         file: TFile | null,
         sourceFilePath: string,
     ): Promise<void> {
-        const leaves = this.host.app.workspace.getLeavesOfType("sidenote2-view");
+        const leaves = this.host.app.workspace.getLeavesOfType("aside-view");
         for (const leaf of leaves) {
             if (isSidebarViewLike(leaf.view)) {
                 await leaf.view.updateActiveFile(file);
@@ -334,7 +334,7 @@ export class CommentNavigationController {
 
         workspace.iterateAllLeaves((leaf) => {
             const fileView = leaf.view instanceof FileView ? leaf.view : null;
-            const isEligible = !!fileView && fileView.getViewType() !== "sidenote2-view";
+            const isEligible = !!fileView && fileView.getViewType() !== "aside-view";
             candidates.push({
                 value: leaf,
                 filePath: fileView?.file?.path ?? null,

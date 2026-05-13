@@ -1,5 +1,5 @@
 import { App, Modal } from "obsidian";
-import type { SideNote2LogLevel } from "../../logs/logService";
+import type { AsideLogLevel } from "../../logs/logService";
 import type { AttachedLogFile, SupportReportPayload } from "../../support/supportTypes";
 import { formatFriendlyLocalDateTime } from "../../core/time/dateTime";
 import SupportImagePreviewModal from "./SupportImagePreviewModal";
@@ -17,7 +17,7 @@ interface SupportReportModalHost {
     attachedLog: AttachedLogFile | null;
     canLocateLogFileLocation(): boolean;
     useInteractiveLogPreview: boolean;
-    log(level: SideNote2LogLevel, area: string, event: string, payload?: Record<string, unknown>): Promise<void>;
+    log(level: AsideLogLevel, area: string, event: string, payload?: Record<string, unknown>): Promise<void>;
     locateLogFile(relativePath: string): Promise<boolean>;
     sendSupportReport(payload: SupportReportPayload): Promise<void>;
     showNotice(message: string): void;
@@ -59,17 +59,17 @@ export default class SupportReportModal extends Modal {
     onOpen(): void {
         const { contentEl } = this;
         contentEl.empty();
-        contentEl.addClass("sidenote2-support-report-modal");
+        contentEl.addClass("aside-support-report-modal");
         this.setTitle("Report an issue");
 
         const intro = contentEl.createEl("p", {
-            cls: "sidenote2-support-intro",
+            cls: "aside-support-intro",
             text: "Describe what happened. The plugin will attach the last 30 minutes of local logs automatically.",
         });
         intro.setAttribute("role", "note");
 
         this.emailInputEl = contentEl.createEl("input", {
-            cls: "sidenote2-support-field",
+            cls: "aside-support-field",
             attr: {
                 type: "email",
                 placeholder: "Email",
@@ -81,7 +81,7 @@ export default class SupportReportModal extends Modal {
         });
 
         this.titleInputEl = contentEl.createEl("input", {
-            cls: "sidenote2-support-field",
+            cls: "aside-support-field",
             attr: {
                 type: "text",
                 placeholder: "Title",
@@ -92,7 +92,7 @@ export default class SupportReportModal extends Modal {
         });
 
         this.contentInputEl = contentEl.createEl("textarea", {
-            cls: "sidenote2-support-textarea",
+            cls: "aside-support-textarea",
             attr: {
                 placeholder: "What happened? What did you expect instead?",
             },
@@ -101,24 +101,24 @@ export default class SupportReportModal extends Modal {
             this.content = this.contentInputEl?.value ?? "";
         });
 
-        const attachmentHeader = contentEl.createDiv("sidenote2-support-attachments-header");
+        const attachmentHeader = contentEl.createDiv("aside-support-attachments-header");
         attachmentHeader.createEl("h3", { text: "Attachments" });
         const addScreenshotButton = attachmentHeader.createEl("button", {
             text: "Add screenshots",
-            cls: "sidenote2-modal-cancel-btn",
+            cls: "aside-modal-cancel-btn",
         });
         addScreenshotButton.setAttribute("type", "button");
         addScreenshotButton.onclick = () => {
             this.openScreenshotPicker();
         };
 
-        this.attachmentsEl = contentEl.createDiv("sidenote2-support-attachments");
+        this.attachmentsEl = contentEl.createDiv("aside-support-attachments");
         this.renderAttachments();
 
-        const footer = contentEl.createDiv("sidenote2-modal-footer");
+        const footer = contentEl.createDiv("aside-modal-footer");
         const cancelButton = footer.createEl("button", {
             text: "Cancel",
-            cls: "sidenote2-modal-cancel-btn",
+            cls: "aside-modal-cancel-btn",
         });
         cancelButton.setAttribute("type", "button");
         cancelButton.onclick = () => {
@@ -127,7 +127,7 @@ export default class SupportReportModal extends Modal {
 
         this.sendButtonEl = footer.createEl("button", {
             text: "Send",
-            cls: "mod-cta sidenote2-modal-submit-btn",
+            cls: "mod-cta aside-modal-submit-btn",
         });
         this.sendButtonEl.setAttribute("type", "button");
         this.sendButtonEl.onclick = () => {
@@ -148,8 +148,8 @@ export default class SupportReportModal extends Modal {
 
         const logAttachment = this.host.attachedLog;
         if (logAttachment) {
-            const row = this.attachmentsEl.createDiv("sidenote2-support-attachment");
-            const meta = row.createDiv("sidenote2-support-attachment-meta");
+            const row = this.attachmentsEl.createDiv("aside-support-attachment");
+            const meta = row.createDiv("aside-support-attachment-meta");
             meta.createEl("strong", { text: logAttachment.fileName });
             meta.createEl("span", {
                 text: [
@@ -159,10 +159,10 @@ export default class SupportReportModal extends Modal {
                 ].filter(Boolean).join(" · "),
             });
 
-            const actions = row.createDiv("sidenote2-support-attachment-actions");
+            const actions = row.createDiv("aside-support-attachment-actions");
             const previewButton = actions.createEl("button", {
                 text: "Preview",
-                cls: "sidenote2-modal-cancel-btn",
+                cls: "aside-modal-cancel-btn",
             });
             previewButton.setAttribute("type", "button");
             previewButton.onclick = () => {
@@ -190,13 +190,13 @@ export default class SupportReportModal extends Modal {
                 }).open();
             };
         } else {
-            const emptyState = this.attachmentsEl.createDiv("sidenote2-support-attachment sidenote2-support-attachment-empty");
+            const emptyState = this.attachmentsEl.createDiv("aside-support-attachment aside-support-attachment-empty");
             emptyState.setText("Today’s log file is unavailable right now.");
         }
 
         for (const attachment of this.screenshotAttachments) {
-            const row = this.attachmentsEl.createDiv("sidenote2-support-attachment");
-            const meta = row.createDiv("sidenote2-support-attachment-meta");
+            const row = this.attachmentsEl.createDiv("aside-support-attachment");
+            const meta = row.createDiv("aside-support-attachment-meta");
             meta.createEl("strong", { text: attachment.file.name });
             meta.createEl("span", {
                 text: [
@@ -205,10 +205,10 @@ export default class SupportReportModal extends Modal {
                 ].join(" · "),
             });
 
-            const actions = row.createDiv("sidenote2-support-attachment-actions");
+            const actions = row.createDiv("aside-support-attachment-actions");
             const previewButton = actions.createEl("button", {
                 text: "Preview",
-                cls: "sidenote2-modal-cancel-btn",
+                cls: "aside-modal-cancel-btn",
             });
             previewButton.setAttribute("type", "button");
             previewButton.onclick = () => {
@@ -217,7 +217,7 @@ export default class SupportReportModal extends Modal {
 
             const removeButton = actions.createEl("button", {
                 text: "Remove",
-                cls: "sidenote2-modal-cancel-btn",
+                cls: "aside-modal-cancel-btn",
             });
             removeButton.setAttribute("type", "button");
             removeButton.onclick = () => {

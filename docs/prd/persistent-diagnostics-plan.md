@@ -2,10 +2,10 @@
 
 ## Goal
 
-Add real observability to SideNote2 so that when a user reports a bug, we can inspect a local diagnostic trail with enough checkpoints to explain:
+Add real observability to Aside so that when a user reports a bug, we can inspect a local diagnostic trail with enough checkpoints to explain:
 
 - what the user did
-- what SideNote2 believed the current state was
+- what Aside believed the current state was
 - what persistence or navigation step failed
 - what fallback path or error message fired
 
@@ -32,7 +32,7 @@ Store logs in the plugin folder under the vault config directory, not in `data.j
 
 Recommended location:
 
-- `.obsidian/plugins/side-note2/logs/`
+- `.obsidian/plugins/aside/logs/`
 
 Recommended file format:
 
@@ -156,9 +156,9 @@ Add an in-product support entrypoint instead of a log-folder command.
 Recommended behavior:
 
 - show a small support icon at the bottom-right of the sidebar
-- only show it when the current sidebar surface is relevant to SideNote2:
-  - a note with SideNote2-managed comments
-  - or the `SideNote2 index.md` view
+- only show it when the current sidebar surface is relevant to Aside:
+  - a note with Aside-managed comments
+  - or the `Aside index.md` view
 - clicking the icon opens a simple support form
 
 Recommended form fields:
@@ -177,7 +177,7 @@ Recommended attachment behavior:
 - let the user add one or more screenshots as extra attachments
 - let the user click `Send` from the same form
 
-This means we do not need a separate `SideNote2: Open logs folder` command as the main support workflow.
+This means we do not need a separate `Aside: Open logs folder` command as the main support workflow.
 
 ## Proposed Architecture
 
@@ -196,7 +196,7 @@ Replace the current lightweight `debug.ts` helper with a real log service that:
 Add a lightweight support-report UI that:
 
 - opens from the sidebar support icon
-- reads the current retained log file from `.obsidian/plugins/side-note2/logs/`
+- reads the current retained log file from `.obsidian/plugins/aside/logs/`
 - shows that file as an attachment row inside the form
 - allows opening the attachment before submit
 - allows the user to add screenshot attachments
@@ -259,7 +259,7 @@ If log writing fails:
 5. High-signal checkpoints exist across startup, mutation, persistence, navigation, and index flows.
 6. Logging failures never block note editing or side note persistence.
 7. The user-facing debug setting is removed.
-8. A support icon appears in the sidebar when the current surface is relevant to SideNote2-managed comments.
+8. A support icon appears in the sidebar when the current surface is relevant to Aside-managed comments.
 9. The support form auto-attaches the local log and lets the user open it before sending.
 10. The support form allows user-added screenshot attachments.
 11. No standalone `Open logs folder` support command is required for the normal user path.

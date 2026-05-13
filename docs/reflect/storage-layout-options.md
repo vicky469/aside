@@ -5,7 +5,7 @@ This note is about one concrete scaling problem:
 - the sample book note at  
   `/Users/wenqingli/Obsidian/public/public/books/The Goal_ A Process of Ongoing Improvement - Revised 3rd -- Eliyahu M_ Goldratt, Jeff Cox, Ensemble cast, Dwight Jon -- Revised 3rd Edition, 2006 -- isbn13 9781598870640 -- 95f4f3be72ed3c91ea065d8eb808b566 -- Anna’s Archive.md`
 - is already about `856,892` bytes and `10,012` lines
-- current SideNote2 storage rewrites the note itself because threads live in a trailing hidden JSON block
+- current Aside storage rewrites the note itself because threads live in a trailing hidden JSON block
 
 That works well for normal notes, but it is the wrong scaling shape for book-sized markdown files.
 
@@ -50,7 +50,7 @@ Putting the canonical side-note pointer into the source note frontmatter does no
 Why:
 
 - it still requires rewriting the huge source note at least once
-- it keeps SideNote2 coupled to the note body for metadata churn
+- it keeps Aside coupled to the note body for metadata churn
 - it makes imported or generated notes less clean
 
 So if we use frontmatter at all, it should live in side-note-owned storage, not in the huge source note.
@@ -64,7 +64,7 @@ Example layout:
 ```text
 .obsidian/
   plugins/
-    side-note2/
+    aside/
       sidenotes/
         by-note/
           95/
@@ -104,12 +104,12 @@ Suggested payload:
 - Minimal migration from current code because it still stores one structured thread array.
 - Easy to cache in memory.
 - Keeps the source note clean.
-- Fits the repo's existing pattern of storing larger durable plugin-owned state under `.obsidian/plugins/side-note2/...`.
+- Fits the repo's existing pattern of storing larger durable plugin-owned state under `.obsidian/plugins/aside/...`.
 
 ### Why it is not perfect
 
 - Global search over note bodies and side-note bodies needs an extra index pass.
-- Rename/move needs SideNote2 to update `notePath` inside the sidecar or maintain an external path index.
+- Rename/move needs Aside to update `notePath` inside the sidecar or maintain an external path index.
 
 ## Option 2: Per-Thread Markdown Files Plus Per-Note Manifest
 
@@ -200,16 +200,16 @@ Write path:
 
 ### Why it is not perfect
 
-- More complex than SideNote2 probably needs right now.
+- More complex than Aside probably needs right now.
 - Harder for humans to understand as the canonical storage shape.
 - Worse plain-file interoperability than the thread-markdown option.
 
 ## Recommendation
 
-The best fit for SideNote2 looks like this:
+The best fit for Aside looks like this:
 
 1. Canonical storage: per-note sidecar manifest in plugin data.
-2. Layout: `.obsidian/plugins/side-note2/sidenotes/by-note/<hash-prefix>/<full-hash>.json`.
+2. Layout: `.obsidian/plugins/aside/sidenotes/by-note/<hash-prefix>/<full-hash>.json`.
 3. Do not use source-note frontmatter as canonical storage.
 4. Do not use `data.json` for this payload.
 5. Optional future export mode: per-thread markdown files only as an export/import surface, not as the primary format.
@@ -225,7 +225,7 @@ Why this is the best first move:
 
 ## Why Plugin Data Instead Of `data.json`
 
-Use plugin data files under `.obsidian/plugins/side-note2/sidenotes/...`, not `saveData()` / `data.json`.
+Use plugin data files under `.obsidian/plugins/aside/sidenotes/...`, not `saveData()` / `data.json`.
 
 Why:
 
@@ -241,12 +241,12 @@ For note-local reads:
 
 1. normalize note path
 2. hash normalized note path
-3. read `.obsidian/plugins/side-note2/sidenotes/by-note/<shard>/<hash>.json`
+3. read `.obsidian/plugins/aside/sidenotes/by-note/<shard>/<hash>.json`
 4. fall back to legacy inline block only if no sidecar exists
 
 For global index rebuild:
 
-- scan `.obsidian/plugins/side-note2/sidenotes/by-note/**.json`
+- scan `.obsidian/plugins/aside/sidenotes/by-note/**.json`
 - or keep a small `sidenotes/index.json` that maps note path to sidecar path
 
 ## Reliability Rules
@@ -269,13 +269,13 @@ If we move to sidecars, we should adopt these rules from day one:
 5. If migration for one note fails, leave the legacy inline block untouched for that note and retry later instead of partially switching formats.
 6. After startup migration is in place, on first write for any still-legacy large note, migrate inline threads into the sidecar before normal persistence continues.
 7. Remove or stop updating the hidden block once migration is confirmed.
-8. Keep `SideNote2 index.md` as derived output, not primary storage.
+8. Keep `Aside index.md` as derived output, not primary storage.
 
 ## Migration Rollout Rule
 
 The migration should not be a separate maintenance task.
 
-- On the next release that introduces sidecar storage, SideNote2 should auto-run the note migration during plugin startup or version-upgrade handling.
+- On the next release that introduces sidecar storage, Aside should auto-run the note migration during plugin startup or version-upgrade handling.
 - Users should get the new storage format just by updating the plugin.
 - Manual migration commands can still exist for repair or re-run cases, but they should not be required for the main rollout.
 
@@ -295,7 +295,7 @@ Possible answers:
 Decision: **none**.
 
 - Source-note frontmatter is not used as canonical storage.
-- After migration, SideNote2 writes zero metadata back into the source note.
+- After migration, Aside writes zero metadata back into the source note.
 - The managed inline block is stripped from the note during migration and is never re-inserted.
 - Note identity lives in the sidecar (`notePath` field) and in the in-memory aggregate index.
 
@@ -307,7 +307,7 @@ This means the source note is treated as read-only for side-note purposes after 
 
 ### First cut (current)
 
-Canonical storage is now per-note sidecar JSON under `.obsidian/plugins/side-note2/sidenotes/by-note/<hash-prefix>/<full-hash>.json`.
+Canonical storage is now per-note sidecar JSON under `.obsidian/plugins/aside/sidenotes/by-note/<hash-prefix>/<full-hash>.json`.
 
 Key files:
 
