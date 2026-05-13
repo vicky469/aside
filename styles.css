@@ -66,17 +66,15 @@
     font-size: 14px !important;
 }
 
-.aside-index-selected-file-row,
-.aside-index-note-view li.aside-index-selected-file-row {
-    border-radius: 4px;
-    background: hsla(var(--interactive-accent-hsl), 0.18);
-    box-shadow: inset 3px 0 0 var(--interactive-accent);
-}
-
 .aside-index-selected-file,
 .aside-index-note-view .aside-index-selected-file {
     color: var(--text-normal);
     font-weight: 600;
+    display: inline-block;
+    padding: 1px 6px;
+    margin: -1px -6px;
+    border-radius: 4px;
+    background: hsla(var(--interactive-accent-hsl), 0.18);
 }
 
 .markdown-preview-view img[alt="Aside index header image"],

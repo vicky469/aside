@@ -48,12 +48,12 @@ test("index note file names are larger than metadata text", () => {
     assert.doesNotMatch(indexListRule.groups.body, /font-size:\s*12px\s*!important;/);
 });
 
-test("selected index file rows use the accent purple background", () => {
-    const selectedRowRule = css.match(
-        /\.aside-index-selected-file-row,[\s\S]*?\.aside-index-note-view li\.aside-index-selected-file-row\s*\{(?<body>[\s\S]*?)\}/,
+test("selected index file rows use accent background without a left strip", () => {
+    const selectedFileRule = css.match(
+        /\.aside-index-selected-file,[\s\S]*?\.aside-index-note-view \.aside-index-selected-file\s*\{(?<body>[\s\S]*?)\}/,
     );
 
-    assert.ok(selectedRowRule?.groups?.body, "missing selected index file row rule");
-    assert.match(selectedRowRule.groups.body, /background:\s*hsla\(var\(--interactive-accent-hsl\),\s*0\.(?:1[4-9]|2[0-9])\)/);
-    assert.match(selectedRowRule.groups.body, /box-shadow:\s*inset 3px 0 0 var\(--interactive-accent\)/);
+    assert.ok(selectedFileRule?.groups?.body, "missing selected index file rule");
+    assert.match(selectedFileRule.groups.body, /background:\s*hsla\(var\(--interactive-accent-hsl\),\s*0\.(?:1[4-9]|2[0-9])\)/);
+    assert.doesNotMatch(selectedFileRule.groups.body, /inset\s+3px\s+0\s+0\s+var\(--interactive-accent\)/);
 });
