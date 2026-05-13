@@ -48,7 +48,7 @@ function syncBetaDocs(version) {
 	const nextReadmeContent = replaceRequired(
 		replaceRequired(
 			readmeContent,
-			/https:\/\/github\.com\/vicky469\/Aside\/releases\/tag\/[^"]+/,
+			/https:\/\/github\.com\/vicky469\/aside\/releases\/tag\/[^"]+/,
 			`https://github.com/vicky469/aside/releases/tag/${version}`,
 			`${readmePath} beta badge link`,
 		),
