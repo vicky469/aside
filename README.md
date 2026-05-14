@@ -39,11 +39,7 @@ Aside
     </td>
   </tr>
 </table>
-Aside is an [Obsidian](https://obsidian.md) plugin for side comments that stay attached to the note. Inspired by [mofukuru/SideNote](https://github.com/mofukuru/SideNote).
-
-It is built for a minimal workflow: both humans and agents can work in the sidebar or the main markdown file.
-
-For development, setup, testing, and release workflow, see [README-dev.md](./README-dev.md).
+Aside is a tool for thought. It helps you capture, connect, and go deeper into your knowledge. Optionally, AI agents can assist you along the journey.
 
 ## Features
 
@@ -127,20 +123,6 @@ Restart Codex after installing the skill.
 
 - `Aside: Add comment to selection`
 
-## Storage
-
-Side notes sync through Aside plugin data when Obsidian Sync is syncing plugin data. The local sidecar files under `.obsidian/plugins/aside/sidenotes/by-note/<hash-prefix>/<full-hash>.json` are a hot cache that can be rebuilt from synced plugin data.
-
-On startup after storage migration releases, Aside automatically migrates legacy hidden `<!-- Aside comments -->` blocks into canonical plugin data and sidecar cache files, then strips the managed block from the source note.
-
-`Aside index.md` is still just a generated index, not separate storage.
-
-## Index Surfaces
-
-- `Aside index.md` stays a derived vault-wide aggregate note.
-- The index sidebar `Files` filter only scopes the sidebar view. Selecting one file there does not rewrite `Aside index.md` down to that single file section.
-- In the index sidebar list view, the nested-comments toggle is hidden when the filter scope resolves to exactly one file.
-- The generated index note only shows a visibility banner in resolved-only mode.
 
 ## Reporting Bugs
 
