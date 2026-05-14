@@ -10,7 +10,7 @@ test("disabled toolbar icon buttons are visibly unavailable and non-interactive"
     );
 
     assert.ok(disabledRule?.groups?.body, "missing disabled toolbar icon button rule");
-    assert.match(disabledRule.groups.body, /color:\s*var\(--text-faint\).*?!important;/);
+    assert.match(disabledRule.groups.body, /color:\s*var\(--text-faint\)\s*;/);
     assert.match(disabledRule.groups.body, /opacity:\s*0\.[0-5][0-9]?;/);
     assert.match(disabledRule.groups.body, /cursor:\s*default;/);
     assert.match(disabledRule.groups.body, /pointer-events:\s*none;/);
@@ -22,8 +22,8 @@ test("active sidebar tabs use theme text color instead of hardcoded black", () =
     );
 
     assert.ok(activeRule?.groups?.body, "missing active sidebar tab rule");
-    assert.match(activeRule.groups.body, /color:\s*var\(--text-normal\)\s*!important;/);
-    assert.match(activeRule.groups.body, /border-bottom-color:\s*var\(--text-normal\)\s*!important;/);
+    assert.match(activeRule.groups.body, /color:\s*var\(--text-normal\)\s*;/);
+    assert.match(activeRule.groups.body, /border-bottom-color:\s*var\(--text-normal\)\s*;/);
     assert.doesNotMatch(activeRule.groups.body, /#000|black/i);
 });
 
@@ -33,7 +33,7 @@ test("disabled sidebar tabs use a faded unavailable state", () => {
     );
 
     assert.ok(disabledTabRule?.groups?.body, "missing disabled sidebar tab rule");
-    assert.match(disabledTabRule.groups.body, /color:\s*var\(--text-faint\)\s*!important;/);
+    assert.match(disabledTabRule.groups.body, /color:\s*var\(--text-faint\)\s*;/);
     assert.match(disabledTabRule.groups.body, /opacity:\s*0\.55;/);
     assert.doesNotMatch(disabledTabRule.groups.body, /#000|black/i);
 });
@@ -44,8 +44,8 @@ test("index note file names are larger than metadata text", () => {
     );
 
     assert.ok(indexListRule?.groups?.body, "missing index note list font rule");
-    assert.match(indexListRule.groups.body, /font-size:\s*14px\s*!important;/);
-    assert.doesNotMatch(indexListRule.groups.body, /font-size:\s*12px\s*!important;/);
+    assert.match(indexListRule.groups.body, /font-size:\s*14px\s*;/);
+    assert.doesNotMatch(indexListRule.groups.body, /font-size:\s*12px\s*;/);
 });
 
 test("selected index file rows use accent background without a left strip", () => {

@@ -50,11 +50,6 @@
     );
 }
 
-.markdown-preview-view p:has(> img[alt="Aside index header image"]),
-.markdown-source-view.mod-cm6 .markdown-rendered p:has(> img[alt="Aside index header image"]) {
-    margin-bottom: 0.2rem;
-}
-
 .aside-index-note-view .markdown-preview-view li,
 .aside-index-note-view .markdown-preview-view li a[href^="obsidian://open"],
 .aside-index-note-view .markdown-source-view.mod-cm6 .markdown-rendered li,
@@ -63,7 +58,7 @@
 .aside-index-note-view .cm-line.HyperMD-list-line .cm-link,
 .aside-index-note-view .cm-line.HyperMD-list-line .cm-url,
 .aside-index-note-view .cm-line.HyperMD-list-line .cm-hmd-internal-link {
-    font-size: 14px !important;
+    font-size: 14px;
 }
 
 .aside-index-selected-file,
@@ -91,10 +86,10 @@
     width: min(100%, var(--aside-index-header-max-width));
     max-width: var(--aside-index-header-max-width);
     margin: 0 auto 0.75rem;
-    text-align: center !important;
-    color: #8a8a8a !important;
-    font-size: 12px !important;
-    line-height: 1.2 !important;
+    text-align: center;
+    color: #8a8a8a;
+    font-size: 12px;
+    line-height: 1.2;
 }
 
 .aside-confirm-modal h2 {
@@ -302,25 +297,25 @@
 
 .aside-sidebar-toolbar.is-index-toolbar button.clickable-icon.aside-toolbar-icon-button {
     flex: 0 0 22px;
-    width: 22px !important;
-    min-width: 22px !important;
-    max-width: 22px !important;
-    height: 22px !important;
-    min-height: 22px !important;
-    max-height: 22px !important;
-    padding: 0 !important;
+    width: 22px;
+    min-width: 22px;
+    max-width: 22px;
+    height: 22px;
+    min-height: 22px;
+    max-height: 22px;
+    padding: 0;
     border-radius: 8px;
     line-height: 1;
     --icon-size: 12px;
 }
 
 .aside-sidebar-toolbar.is-index-toolbar button.clickable-icon.aside-toolbar-icon-button > svg.svg-icon {
-    width: 12px !important;
-    min-width: 12px !important;
-    max-width: 12px !important;
-    height: 12px !important;
-    min-height: 12px !important;
-    max-height: 12px !important;
+    width: 12px;
+    min-width: 12px;
+    max-width: 12px;
+    height: 12px;
+    min-height: 12px;
+    max-height: 12px;
 }
 
 .aside-sidebar-toolbar-row.is-note-secondary-row {
@@ -436,21 +431,21 @@
 .aside-note-search-field > input.aside-note-search-input {
     display: block;
     width: 100%;
-    min-height: 24px !important;
-    height: 24px !important;
-    padding: 0 !important;
-    border: none !important;
+    min-height: 24px;
+    height: 24px;
+    padding: 0;
+    border: none;
     border-radius: 0;
-    background: transparent !important;
-    background-image: none !important;
-    color: var(--text-normal) !important;
+    background: transparent;
+    background-image: none;
+    color: var(--text-normal);
     font-size: 12px;
     line-height: 1.2;
     box-sizing: border-box;
-    appearance: none !important;
-    -webkit-appearance: none !important;
-    box-shadow: none !important;
-    outline: none !important;
+    appearance: none;
+    -webkit-appearance: none;
+    box-shadow: none;
+    outline: none;
     transition: border-color 0.14s ease, background-color 0.14s ease;
 }
 
@@ -458,23 +453,23 @@
 .aside-note-search-field > input.aside-note-search-input::-webkit-search-cancel-button,
 .aside-note-search-field > input.aside-note-search-input::-webkit-search-results-button,
 .aside-note-search-field > input.aside-note-search-input::-webkit-search-results-decoration {
-    -webkit-appearance: none !important;
-    appearance: none !important;
-    display: none !important;
+    -webkit-appearance: none;
+    appearance: none;
+    display: none;
 }
 
 .aside-note-search-field > input.aside-note-search-input::placeholder {
-    color: color-mix(in srgb, var(--text-faint) 88%, transparent) !important;
+    color: color-mix(in srgb, var(--text-faint) 88%, transparent);
     font-size: 12px;
 }
 
 .aside-note-search-field > input.aside-note-search-input:focus,
 .aside-note-search-field > input.aside-note-search-input:focus-visible,
 .aside-note-search-field > input.aside-note-search-input.is-focused {
-    outline: none !important;
-    border-color: transparent !important;
-    background: transparent !important;
-    box-shadow: none !important;
+    outline: none;
+    border-color: transparent;
+    background: transparent;
+    box-shadow: none;
 }
 
 .aside-note-search-field.is-tag-batch-input {
@@ -590,26 +585,25 @@
 }
 
 button.aside-tab-button {
-    all: unset;
     box-sizing: border-box;
-    display: inline-flex !important;
+    display: inline-flex;
     width: auto;
     align-items: center;
     justify-content: center;
     min-width: 0;
-    min-height: 0 !important;
-    height: auto !important;
-    padding: 4px 0 5px !important;
-    border: 0 !important;
-    border-bottom: 1px solid transparent !important;
-    border-radius: 0 !important;
-    background: transparent !important;
-    background-color: transparent !important;
-    color: var(--text-muted) !important;
+    min-height: 0;
+    height: auto;
+    padding: 4px 0 5px;
+    border: 0;
+    border-bottom: 1px solid transparent;
+    border-radius: 0;
+    background: transparent;
+    background-color: transparent;
+    color: var(--text-muted);
     font-size: var(--font-ui-smaller);
     font-family: inherit;
     line-height: 1.2;
-    font-weight: 400 !important;
+    font-weight: 400;
     letter-spacing: 0.03em;
     margin-bottom: -1px;
     white-space: nowrap;
@@ -619,50 +613,50 @@ button.aside-tab-button {
     -webkit-appearance: none;
     outline: none;
     text-decoration: none;
-    box-shadow: none !important;
+    box-shadow: none;
     transition: color 0.12s ease, border-color 0.12s ease;
 }
 
 button.aside-tab-button:hover {
-    background: transparent !important;
-    background-color: transparent !important;
-    background-image: none !important;
-    box-shadow: none !important;
-    color: var(--text-normal) !important;
+    background: transparent;
+    background-color: transparent;
+    background-image: none;
+    box-shadow: none;
+    color: var(--text-normal);
 }
 
 button.aside-tab-button:focus {
-    background: transparent !important;
-    background-color: transparent !important;
-    background-image: none !important;
-    color: var(--text-normal) !important;
-    box-shadow: none !important;
-    outline: none !important;
+    background: transparent;
+    background-color: transparent;
+    background-image: none;
+    color: var(--text-normal);
+    box-shadow: none;
+    outline: none;
 }
 
 button.aside-tab-button:focus-visible {
-    background: transparent !important;
-    background-color: transparent !important;
-    background-image: none !important;
-    color: var(--text-normal) !important;
-    box-shadow: none !important;
+    background: transparent;
+    background-color: transparent;
+    background-image: none;
+    color: var(--text-normal);
+    box-shadow: none;
     border-bottom-color: var(--aside-luxury-accent-line);
 }
 
 button.aside-tab-button.aside-tab-button--active {
-    color: var(--text-normal) !important;
-    font-weight: 700 !important;
-    border-bottom-color: var(--text-normal) !important;
-    background: transparent !important;
-    background-color: transparent !important;
-    background-image: none !important;
-    box-shadow: none !important;
+    color: var(--text-normal);
+    font-weight: 700;
+    border-bottom-color: var(--text-normal);
+    background: transparent;
+    background-color: transparent;
+    background-image: none;
+    box-shadow: none;
 }
 
 button.aside-tab-button:disabled,
 button.aside-tab-button[aria-disabled="true"] {
-    color: var(--text-faint) !important;
-    border-bottom-color: transparent !important;
+    color: var(--text-faint);
+    border-bottom-color: transparent;
     opacity: 0.55;
     cursor: default;
     pointer-events: none;
@@ -675,7 +669,7 @@ button.aside-tab-button[aria-disabled="true"] {
     margin-bottom: -1px;
     color: color-mix(in srgb, var(--icon-color, var(--text-faint, var(--text-muted))) 82%, var(--text-muted) 18%);
     background: transparent;
-    box-shadow: none !important;
+    box-shadow: none;
 }
 
 .aside-sidebar-toolbar-row.is-note-secondary-row .aside-toolbar-icon-button {
@@ -683,13 +677,13 @@ button.aside-tab-button[aria-disabled="true"] {
     height: 26px;
     border-radius: var(--aside-note-toolbar-radius);
     background: transparent;
-    box-shadow: none !important;
+    box-shadow: none;
 }
 
 .aside-sidebar-toolbar.is-note-toolbar .aside-toolbar-icon-button:hover,
 .aside-sidebar-toolbar.is-note-toolbar .aside-toolbar-icon-button:focus-visible {
     background: var(--aside-note-toolbar-control-hover);
-    box-shadow: none !important;
+    box-shadow: none;
 }
 
 .aside-filter-chip {
@@ -714,7 +708,7 @@ button.aside-tab-button[aria-disabled="true"] {
     -webkit-appearance: none;
     outline: none;
     text-decoration: none;
-    box-shadow: none !important;
+    box-shadow: none;
     transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 
@@ -741,7 +735,7 @@ button.aside-tab-button[aria-disabled="true"] {
     color: var(--text-normal);
     box-shadow:
         inset 0 0 0 1px color-mix(in srgb, var(--background-modifier-border) 58%, transparent),
-        0 1px 2px color-mix(in srgb, var(--background-modifier-box-shadow) 12%, transparent) !important;
+        0 1px 2px color-mix(in srgb, var(--background-modifier-box-shadow) 12%, transparent);
 }
 
 .aside-filter-chip-indicator {
@@ -938,8 +932,8 @@ button.aside-tab-button[aria-disabled="true"] {
 
 .aside-thought-trail .mermaid svg {
     display: block;
-    width: auto !important;
-    max-width: none !important;
+    width: auto;
+    max-width: none;
     height: auto;
     margin: 0 auto;
 }
@@ -1038,11 +1032,11 @@ button.aside-tab-button[aria-disabled="true"] {
 
 button.aside-toolbar-icon-button:disabled,
 button.aside-toolbar-icon-button[aria-disabled="true"] {
-    color: var(--text-faint) !important;
+    color: var(--text-faint);
     opacity: 0.42;
-    background: transparent !important;
-    border-color: transparent !important;
-    box-shadow: none !important;
+    background: transparent;
+    border-color: transparent;
+    box-shadow: none;
     cursor: default;
     pointer-events: none;
 }
@@ -1120,8 +1114,6 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
 .aside-comment-item.resolved .aside-timestamp,
 .aside-comment-item.resolved .aside-comment-content {
     text-decoration: line-through;
-    text-decoration-thickness: 0.08em;
-    text-decoration-color: var(--text-faint, var(--text-muted));
 }
 
 .aside-comment-item.deleted {
@@ -1133,8 +1125,6 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
 .aside-comment-item.deleted .aside-timestamp,
 .aside-comment-item.deleted .aside-comment-content {
     text-decoration: line-through;
-    text-decoration-thickness: 0.08em;
-    text-decoration-color: var(--text-faint, var(--text-muted));
 }
 
 .aside-comment-item.is-drag-source {
@@ -1209,7 +1199,7 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: flex-start;
     flex: 1 1 auto;
-    column-gap: 6px;
+    gap: 0 6px;
     min-width: 0;
     max-width: 100%;
 }
@@ -1308,13 +1298,13 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
     font-size: 0.92em;
 }
 
-.aside-comment-content :is(.math, .math-block, .katex-display, mjx-container[display="true"]) {
+.aside-comment-content :is(.math, .math-block, .katex-display, [jax][display="true"]) {
     margin-block: 0.35rem;
     overflow-x: auto;
     overflow-y: hidden;
 }
 
-.aside-comment-content :is(.katex, .math, .math-block, mjx-container) {
+.aside-comment-content :is(.katex, .math, .math-block, [jax]) {
     word-break: normal;
 }
 
@@ -1402,10 +1392,10 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
     text-decoration: none;
     cursor: pointer;
     user-select: none;
-    background: transparent !important;
-    border: 0 !important;
-    box-shadow: none !important;
-    padding: 0 !important;
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+    padding: 0;
     margin: 0;
     outline: none;
 }
@@ -1861,8 +1851,8 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
     z-index: 1;
     border: none;
     border-radius: 8px;
-    background: transparent !important;
-    color: transparent !important;
+    background: transparent;
+    color: transparent;
     -webkit-text-fill-color: transparent;
     caret-color: var(--text-normal);
     resize: vertical;
@@ -1884,8 +1874,8 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
 
 .aside-inline-textarea:focus {
     outline: none;
-    background: transparent !important;
-    color: var(--text-normal) !important;
+    background: transparent;
+    color: var(--text-normal);
     -webkit-text-fill-color: var(--text-normal);
 }
 
