@@ -6,8 +6,8 @@
 Aside
 </p>
 <p align="center">
-  <a href="https://github.com/vicky469/aside/releases/tag/2.0.67">
-    <img src="https://img.shields.io/badge/beta-2.0.67-f97316?style=flat-square" alt="Current beta">
+  <a href="https://github.com/vicky469/aside/releases/tag/2.0.68">
+    <img src="https://img.shields.io/badge/release-2.0.68-22c55e?style=flat-square" alt="Latest release">
   </a>
   <a href="https://buymeacoffee.com/vickyli">
     <img src="https://img.shields.io/badge/Buy%20me%20a%20coffee-support-FFDD00?style=flat-square&logo=buymeacoffee&logoColor=000000" alt="Buy Me a Coffee">
@@ -58,17 +58,11 @@ For development, setup, testing, and release workflow, see [README-dev.md](./REA
 
 ## How to Get Started
 
-1. Install BRAT
-   settings -> install community plugins -> BRAT
-2. Install the Aside beta
-   Open BRAT, enable Auto update if you want, then add the plugin as shown below.
-   <p align="center">
-     <img src="./assets/image.png" alt="Install Aside with BRAT" width="420">
-   </p>
-3. Use desktop Obsidian with a filesystem-backed vault.
-4. Install and sign in to Codex on the same machine.
+1. Install Aside
+   settings -> install community plugins -> type aside
+2. Install and sign in to Codex on the same machine.
    Quick check: open Terminal in your vault or project folder and run `codex`.
-5. Optional: install the Aside Codex skill if you also use external Codex handoff workflows.
+3. Optional: install the Aside Codex skill if you also use external headless workflows.
 ```
 $skill-installer install https://github.com/vicky469/aside/tree/main/skills/aside
 ```

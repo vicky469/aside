@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from "fs";
+import { readFileSync, writeFileSync } from "fs";
 
 const targetVersion = process.env.npm_package_version;
 
@@ -14,35 +14,7 @@ function replaceRequired(content, pattern, replacement, label) {
 	return content.replace(pattern, replacement);
 }
 
-function getNextPatchVersion(version) {
-	const [major, minor, patch] = version.split(".").map((value) => Number.parseInt(value, 10));
-	if ([major, minor, patch].some((value) => Number.isNaN(value))) {
-		throw new Error(`Invalid semver version: ${version}`);
-	}
-
-	return `${major}.${minor}.${patch + 1}`;
-}
-
-function syncBetaDocs(version) {
-    const nextPatchVersion = getNextPatchVersion(version);
-
-	const betaReleasePath = "docs/README-beta-release.md";
-	if (existsSync(betaReleasePath)) {
-		const betaReleaseContent = readFileSync(betaReleasePath, "utf8");
-		const nextBetaReleaseContent = replaceRequired(
-			replaceRequired(
-				betaReleaseContent,
-				/- Current beta tag: `[^`]+`/,
-				`- Current beta tag: \`${version}\``,
-				`${betaReleasePath} current beta tag`,
-			),
-			/Ship fixes as new patch releases, for example `[^`]+`, `[^`]+`, and so on\./,
-			`Ship fixes as new patch releases, for example \`${version}\`, \`${nextPatchVersion}\`, and so on.`,
-			`${betaReleasePath} patch example line`,
-		);
-		writeFileSync(betaReleasePath, nextBetaReleaseContent);
-	}
-
+function syncReleaseDocs(version) {
 	const readmePath = "README.md";
 	const readmeContent = readFileSync(readmePath, "utf8");
 	const nextReadmeContent = replaceRequired(
@@ -50,11 +22,11 @@ function syncBetaDocs(version) {
 			readmeContent,
 			/https:\/\/github\.com\/vicky469\/aside\/releases\/tag\/[^"]+/,
 			`https://github.com/vicky469/aside/releases/tag/${version}`,
-			`${readmePath} beta badge link`,
+			`${readmePath} release badge link`,
 		),
-		/https:\/\/img\.shields\.io\/badge\/beta-[^?"]+\?style=flat-square/,
-		`https://img.shields.io/badge/beta-${version}-f97316?style=flat-square`,
-		`${readmePath} beta badge image`,
+		/https:\/\/img\.shields\.io\/badge\/release-[^?"]+\?style=flat-square/,
+		`https://img.shields.io/badge/release-${version}-22c55e?style=flat-square`,
+		`${readmePath} release badge image`,
 	);
 	writeFileSync(readmePath, nextReadmeContent);
 }
@@ -69,4 +41,4 @@ const versions = JSON.parse(readFileSync("versions.json", "utf8"));
 versions[targetVersion] = minAppVersion;
 writeFileSync("versions.json", `${JSON.stringify(versions, null, "\t")}\n`);
 
-syncBetaDocs(targetVersion);
+syncReleaseDocs(targetVersion);

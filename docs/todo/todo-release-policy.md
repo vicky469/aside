@@ -1,31 +1,18 @@
-# TODO: Release Policy After Marketplace Launch
+# Release Policy After Marketplace Launch
 
 Current state:
-- Aside is still in beta.
-- We distribute through GitHub releases and BRAT.
-- We use normal GitHub releases so the newest version can be marked as `Latest`.
-
-Why:
-- GitHub does not allow a release to be both `Latest` and `Pre-release`.
-- While Aside is not yet in the Obsidian marketplace, treating beta builds as normal releases keeps the install/update path simpler.
-
-Future policy after marketplace launch:
-- Stable track:
-  - publish normal GitHub releases such as `1.1.0`, `1.1.1`
-  - these are the versions intended for marketplace users
-  - GitHub `Latest` should point to this track
-- Beta track:
-  - publish GitHub prereleases such as `1.2.0-beta.1`, `1.2.0-beta.2`
-  - these are intended for BRAT testers
-  - do not mark these as `Latest`
+- Aside is in the Obsidian community plugin marketplace.
+- Stable releases use GitHub releases and normal semver tags.
+- GitHub `Latest` should point to the newest marketplace-ready release.
 
 Semver guidance:
-- Stable: `MAJOR.MINOR.PATCH`
-- Beta: `MAJOR.MINOR.PATCH-beta.N`
+- Use `MAJOR.MINOR.PATCH` for marketplace releases.
 
-When to switch:
-- After Aside is accepted into the Obsidian community plugin marketplace.
-- At that point, split release automation so stable releases and beta prereleases are separate.
+Release checklist:
+- Update `manifest.json`, `versions.json`, `package.json`, `package-lock.json`, README badge, and `docs/releases/<version>.md`.
+- Run `npm run release:check`.
+- Inspect the shipped assets: `main.js`, `manifest.json`, and `styles.css`.
+- Publish the GitHub release and tag only after the release notes file exists and artifact inspection passes.
 
 Open follow-up:
-- decide whether beta builds should continue from `main` and stable releases from release branches, or whether both should be cut from `main` with manual version discipline
+- Keep release automation focused on marketplace releases.

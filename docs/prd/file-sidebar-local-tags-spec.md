@@ -19,7 +19,7 @@ export type SidebarPrimaryMode = "list" | "thought-trail" | "tags";
 interface CommentTagProjection {
   filePath: string;
   threadId: string;
-  tagRaw: string;          // e.g. "#alpha/beta"
+  tagRaw: string;          // e.g. "#alpha/topic"
   tagKey: string;          // lower-case normalized key
 }
 
