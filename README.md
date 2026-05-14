@@ -59,11 +59,10 @@ Aside is a tool for thought. It helps you capture, connect, and go deeper into y
 2. Install and sign in to Codex on the same machine.
    Quick check: open Terminal in your vault or project folder and run `codex`.
 3. Optional: install the Aside Codex skill if you also use external headless workflows.
-```
-$skill-installer install https://github.com/vicky469/aside/tree/main/skills/aside
-```
-
-Restart Codex after installing the skill.
+   ```
+   $skill-installer install https://github.com/vicky469/aside/tree/main/skills/aside
+   ```
+   Restart Codex after installing the skill.
 
 ## Workflow
 
