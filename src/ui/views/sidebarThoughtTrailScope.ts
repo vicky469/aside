@@ -18,6 +18,7 @@ export function buildRootedThoughtTrailScope(
 } {
     const graph = buildIndexFileFilterGraph(threads, {
         allCommentsNotePath: options.allCommentsNotePath,
+        includeLinkedTargetFiles: true,
         resolveWikiLinkPath: options.resolveWikiLinkPath,
         showResolved: null,
     });

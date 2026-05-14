@@ -111,7 +111,7 @@ test("filterCommentsByFilePaths returns only matching comment files", () => {
     );
 });
 
-test("deriveIndexSidebarScopedFilePaths returns only the selected manual filter file", () => {
+test("deriveIndexSidebarScopedFilePaths returns the selected root connected component", () => {
     const graph = buildIndexFileFilterGraph([
         createComment({ id: "a", filePath: "docs/a.md", comment: "[[B]]" }),
         createComment({ id: "b", filePath: "docs/b.md", comment: "" }),
@@ -124,11 +124,11 @@ test("deriveIndexSidebarScopedFilePaths returns only the selected manual filter 
 
     assert.deepEqual(
         deriveIndexSidebarScopedFilePaths(graph, "docs/a.md"),
-        ["docs/a.md"],
+        ["docs/a.md", "docs/b.md"],
     );
 });
 
-test("deriveIndexSidebarScopedFilePaths keeps index filters to one file at a time", () => {
+test("deriveIndexSidebarScopedFilePaths returns an empty scope for missing roots", () => {
     const graph = buildIndexFileFilterGraph([
         createComment({ id: "a", filePath: "docs/a.md", comment: "[[B]]" }),
         createComment({ id: "b", filePath: "docs/b.md", comment: "" }),
@@ -139,8 +139,8 @@ test("deriveIndexSidebarScopedFilePaths keeps index filters to one file at a tim
     });
 
     assert.deepEqual(
-        deriveIndexSidebarScopedFilePaths(graph, "docs/a.md"),
-        ["docs/a.md"],
+        deriveIndexSidebarScopedFilePaths(graph, "docs/missing.md"),
+        [],
     );
 });
 

@@ -11,6 +11,7 @@ import {
 } from "obsidian";
 import type { Comment, CommentThread, ReorderPlacement } from "../../commentManager";
 import { buildCommentLocationUrl, parseIndexFileOpenUrl } from "../../core/derived/allCommentsNote";
+import { buildThoughtTrailLines } from "../../core/derived/thoughtTrail";
 import {
     getAgentRunsForCommentThread,
     type AgentRunRecord,
@@ -122,7 +123,6 @@ import {
     type SidebarThoughtTrailOptions,
 } from "./sidebarThoughtTrailRenderer";
 import {
-    hasAvailableThoughtTrail,
     mergeCurrentFileThreadsForThoughtTrail,
     resolveModeWithThoughtTrailAvailability,
 } from "./sidebarThoughtTrailState";
@@ -144,6 +144,7 @@ function matchesResolvedVisibility(resolved: boolean | undefined, showResolved: 
 }
 
 const EMPTY_PINNED_SIDEBAR_THREAD_IDS: ReadonlySet<string> = new Set<string>();
+const THOUGHT_TRAIL_LOG_PATH_SAMPLE_LIMIT = 8;
 const DEFAULT_BATCH_TAG_FLOW_STATE: BatchTagFlowState = {
     isOpen: false,
     isApplying: false,
@@ -153,6 +154,29 @@ const DEFAULT_BATCH_TAG_FLOW_STATE: BatchTagFlowState = {
     candidateTagTexts: [],
     failures: [],
 };
+
+function getThoughtTrailUnavailableReason(
+    hasRootScope: boolean,
+    lineCount: number,
+): "no-root-scope" | "no-renderable-lines" | null {
+    if (!hasRootScope) {
+        return "no-root-scope";
+    }
+
+    return lineCount > 0 ? null : "no-renderable-lines";
+}
+
+function summarizeThoughtTrailPaths(paths: readonly string[]): {
+    count: number;
+    sample: string[];
+    omittedCount: number;
+} {
+    return {
+        count: paths.length,
+        sample: paths.slice(0, THOUGHT_TRAIL_LOG_PATH_SAMPLE_LIMIT),
+        omittedCount: Math.max(0, paths.length - THOUGHT_TRAIL_LOG_PATH_SAMPLE_LIMIT),
+    };
+}
 
 function matchesPageSidebarVisibility(
     thread: CommentThread,
@@ -1403,18 +1427,53 @@ export default class AsideView extends ItemView {
                 pinnedSidebarThreadIds,
                 showPinnedThreadsOnly,
             );
-            const isIndexThoughtTrailEnabled = isAllCommentsView && hasAvailableThoughtTrail({
-                allCommentsNotePath: this.plugin.getAllCommentsNotePath(),
-                comments: pinnedScopedVisibleThreads,
-                hasRootScope: filteredIndexFilePaths.length > 0,
-                resolveWikiLinkPath,
-                vaultName: this.app.vault.getName(),
-            });
+            const indexThoughtTrailLineCount = isAllCommentsView
+                ? buildThoughtTrailLines(this.app.vault.getName(), pinnedScopedVisibleThreads, {
+                    allCommentsNotePath: this.plugin.getAllCommentsNotePath(),
+                    resolveWikiLinkPath,
+                }).length
+                : 0;
+            const indexThoughtTrailUnavailableReason = isAllCommentsView
+                ? getThoughtTrailUnavailableReason(filteredIndexFilePaths.length > 0, indexThoughtTrailLineCount)
+                : null;
+            const isIndexThoughtTrailEnabled = isAllCommentsView && indexThoughtTrailUnavailableReason === null;
             if (isAllCommentsView) {
+                const indexSidebarModeBeforeAvailability = this.indexSidebarMode;
+                const filteredFileSummary = summarizeThoughtTrailPaths(filteredIndexFilePaths);
+                void this.plugin.logEvent("info", "thoughttrail", "thoughttrail.index.availability", {
+                    filePath: file.path,
+                    selectedRootFilePath: selectedIndexFileFilterRootPath,
+                    modeBefore: indexSidebarModeBeforeAvailability,
+                    isEnabled: isIndexThoughtTrailEnabled,
+                    unavailableReason: indexThoughtTrailUnavailableReason,
+                    showResolved,
+                    persistedThreadCount: persistedThreads.length,
+                    visibleThreadCount: visiblePersistedThreads.length,
+                    scopedVisibleThreadCount: pinnedScopedVisibleThreads.length,
+                    scopedAllThreadCount: pinnedScopedAllThreads.length,
+                    lineCount: indexThoughtTrailLineCount,
+                    filteredFileCount: filteredFileSummary.count,
+                    filteredFileSample: filteredFileSummary.sample,
+                    filteredFileOmittedCount: filteredFileSummary.omittedCount,
+                    graphAvailableFileCount: indexFileFilterGraph?.availableFiles.length ?? 0,
+                    rootHasComments: selectedIndexFileFilterRootPath
+                        ? indexFileFilterGraph?.fileCommentCounts.has(selectedIndexFileFilterRootPath) ?? false
+                        : false,
+                });
                 this.indexSidebarMode = resolveModeWithThoughtTrailAvailability(
                     this.indexSidebarMode,
                     isIndexThoughtTrailEnabled,
                 );
+                if (indexSidebarModeBeforeAvailability === "thought-trail" && this.indexSidebarMode !== "thought-trail") {
+                    void this.plugin.logEvent("warn", "thoughttrail", "thoughttrail.index.fallback", {
+                        filePath: file.path,
+                        selectedRootFilePath: selectedIndexFileFilterRootPath,
+                        reason: indexThoughtTrailUnavailableReason,
+                        lineCount: indexThoughtTrailLineCount,
+                        filteredFileCount: filteredFileSummary.count,
+                        scopedVisibleThreadCount: pinnedScopedVisibleThreads.length,
+                    });
+                }
             }
             const isIndexTagsMode = isAllCommentsView && this.indexSidebarMode === "tags";
             const indexTagThreadIds = isIndexTagsMode && this.noteSidebarVisibleTagFilterKey
@@ -1554,6 +1613,14 @@ export default class AsideView extends ItemView {
 
             if (isAllCommentsView && this.indexSidebarMode === "thought-trail") {
                 const trailComments = pinnedScopedVisibleThreads;
+                void this.plugin.logEvent("info", "thoughttrail", "thoughttrail.index.render", {
+                    filePath: file.path,
+                    selectedRootFilePath: selectedIndexFileFilterRootPath,
+                    trailThreadCount: trailComments.length,
+                    lineCount: indexThoughtTrailLineCount,
+                    filteredFileCount: filteredIndexFilePaths.length,
+                    filteredFileSample: filteredIndexFilePaths.slice(0, THOUGHT_TRAIL_LOG_PATH_SAMPLE_LIMIT),
+                });
                 await this.renderThoughtTrail(commentsContainer, trailComments, file, {
                     surface: "index",
                     hasRootScope: filteredIndexFilePaths.length > 0,
@@ -1668,14 +1735,43 @@ export default class AsideView extends ItemView {
         const pageThreadsWithDeleted = this.plugin.getThreadsForFile(file.path, { includeDeleted: true });
         const deletedCommentCount = countDeletedComments(pageThreadsWithDeleted);
         const hasResolvedThreadsInFile = persistedThreads.some((thread) => thread.resolved);
-        const isThoughtTrailEnabled = this.hasAvailableNoteThoughtTrailFromLoadedThreads(
+        const noteThoughtTrailAvailability = this.buildNoteThoughtTrailAvailabilityFromLoadedThreads(
             file,
             persistedThreads.filter((thread) => matchesResolvedVisibility(thread.resolved, showResolved)),
         );
+        const isThoughtTrailEnabled = noteThoughtTrailAvailability.isEnabled;
+        const noteSidebarModeBeforeAvailability = this.noteSidebarMode;
+        const scopedFileSummary = summarizeThoughtTrailPaths(noteThoughtTrailAvailability.scopedFilePaths);
+        void this.plugin.logEvent("info", "thoughttrail", "thoughttrail.note.availability", {
+            filePath: file.path,
+            modeBefore: noteSidebarModeBeforeAvailability,
+            isEnabled: isThoughtTrailEnabled,
+            unavailableReason: noteThoughtTrailAvailability.unavailableReason,
+            showResolved,
+            showDeleted,
+            currentFileThreadCount: persistedThreads.length,
+            currentVisibleThreadCount: noteThoughtTrailAvailability.currentVisibleThreadCount,
+            indexedThreadCount: noteThoughtTrailAvailability.indexedThreadCount,
+            mergedThreadCount: noteThoughtTrailAvailability.mergedThreadCount,
+            scopedThreadCount: noteThoughtTrailAvailability.scopedThreads.length,
+            lineCount: noteThoughtTrailAvailability.lineCount,
+            scopedFileCount: scopedFileSummary.count,
+            scopedFileSample: scopedFileSummary.sample,
+            scopedFileOmittedCount: scopedFileSummary.omittedCount,
+        });
         this.noteSidebarMode = resolveModeWithThoughtTrailAvailability(
             this.noteSidebarMode,
             isThoughtTrailEnabled,
         );
+        if (noteSidebarModeBeforeAvailability === "thought-trail" && this.noteSidebarMode !== "thought-trail") {
+            void this.plugin.logEvent("warn", "thoughttrail", "thoughttrail.note.fallback", {
+                filePath: file.path,
+                reason: noteThoughtTrailAvailability.unavailableReason,
+                lineCount: noteThoughtTrailAvailability.lineCount,
+                scopedFileCount: scopedFileSummary.count,
+                scopedThreadCount: noteThoughtTrailAvailability.scopedThreads.length,
+            });
+        }
         if (this.noteSidebarMode === "thought-trail") {
             await this.renderNoteThoughtTrailSidebar(shell, file, renderVersion, {
                 showDeleted,
@@ -1845,21 +1941,41 @@ export default class AsideView extends ItemView {
         const showResolved = this.plugin.shouldShowResolvedComments();
         const hasResolvedThreadsInFile = persistedThreads.some((thread) => thread.resolved);
 
-        await this.plugin.ensureIndexedCommentsLoaded();
-        if (renderVersion !== this.renderVersion || this.file?.path !== file.path) {
-            return;
-        }
-
         const { scopedFilePaths, scopedThreads } = this.buildNoteThoughtTrailScope(file, showResolved);
-        const isThoughtTrailEnabled = hasAvailableThoughtTrail({
+        const thoughtTrailLineCount = buildThoughtTrailLines(this.app.vault.getName(), scopedThreads, {
             allCommentsNotePath: this.plugin.getAllCommentsNotePath(),
-            comments: scopedThreads,
-            hasRootScope: scopedFilePaths.length > 0,
             resolveWikiLinkPath: (linkPath, sourceFilePath) => this.resolveThoughtTrailWikiLinkPath(linkPath, sourceFilePath),
-            vaultName: this.app.vault.getName(),
+        }).length;
+        const thoughtTrailUnavailableReason = getThoughtTrailUnavailableReason(
+            scopedFilePaths.length > 0,
+            thoughtTrailLineCount,
+        );
+        const isThoughtTrailEnabled = thoughtTrailUnavailableReason === null;
+        const scopedFileSummary = summarizeThoughtTrailPaths(scopedFilePaths);
+        void this.plugin.logEvent("info", "thoughttrail", "thoughttrail.note.render-check", {
+            filePath: file.path,
+            isEnabled: isThoughtTrailEnabled,
+            unavailableReason: thoughtTrailUnavailableReason,
+            showResolved,
+            showDeleted: options.showDeleted,
+            indexedThreadCount: this.plugin.getAllIndexedThreads().length,
+            currentFileThreadCount: persistedThreads.length,
+            scopedThreadCount: scopedThreads.length,
+            lineCount: thoughtTrailLineCount,
+            scopedFileCount: scopedFileSummary.count,
+            scopedFileSample: scopedFileSummary.sample,
+            scopedFileOmittedCount: scopedFileSummary.omittedCount,
         });
         if (!isThoughtTrailEnabled) {
             this.noteSidebarMode = "list";
+            void this.plugin.logEvent("warn", "thoughttrail", "thoughttrail.note.fallback", {
+                filePath: file.path,
+                reason: thoughtTrailUnavailableReason,
+                source: "render-check",
+                lineCount: thoughtTrailLineCount,
+                scopedFileCount: scopedFileSummary.count,
+                scopedThreadCount: scopedThreads.length,
+            });
             await this.renderPageSidebar(file, renderVersion);
             return;
         }
@@ -1896,6 +2012,13 @@ export default class AsideView extends ItemView {
 
         shell.commentsBodyEl.empty();
         this.resetStreamedReplyControllers();
+        void this.plugin.logEvent("info", "thoughttrail", "thoughttrail.note.render", {
+            filePath: file.path,
+            trailThreadCount: scopedThreads.length,
+            lineCount: thoughtTrailLineCount,
+            scopedFileCount: scopedFileSummary.count,
+            scopedFileSample: scopedFileSummary.sample,
+        });
         await this.renderThoughtTrail(shell.commentsBodyEl, scopedThreads, file, {
             surface: "note",
             hasRootScope: scopedFilePaths.length > 0,
@@ -1935,12 +2058,22 @@ export default class AsideView extends ItemView {
         });
     }
 
-    private hasAvailableNoteThoughtTrailFromLoadedThreads(
+    private buildNoteThoughtTrailAvailabilityFromLoadedThreads(
         file: TFile,
         currentFileThreads: CommentThread[],
-    ): boolean {
+    ): {
+        currentVisibleThreadCount: number;
+        indexedThreadCount: number;
+        mergedThreadCount: number;
+        scopedFilePaths: string[];
+        scopedThreads: CommentThread[];
+        lineCount: number;
+        unavailableReason: "no-root-scope" | "no-renderable-lines" | null;
+        isEnabled: boolean;
+    } {
+        const indexedThreads = this.plugin.getAllIndexedThreads();
         const mergedThreads = mergeCurrentFileThreadsForThoughtTrail(
-            this.plugin.getAllIndexedThreads(),
+            indexedThreads,
             file.path,
             currentFileThreads,
         );
@@ -1949,14 +2082,22 @@ export default class AsideView extends ItemView {
             allCommentsNotePath: this.plugin.getAllCommentsNotePath(),
             resolveWikiLinkPath: (linkPath, sourceFilePath) => this.resolveThoughtTrailWikiLinkPath(linkPath, sourceFilePath),
         });
-
-        return hasAvailableThoughtTrail({
+        const lineCount = buildThoughtTrailLines(this.app.vault.getName(), scope.scopedThreads, {
             allCommentsNotePath: this.plugin.getAllCommentsNotePath(),
-            comments: scope.scopedThreads,
-            hasRootScope: scope.scopedFilePaths.length > 0,
             resolveWikiLinkPath: (linkPath, sourceFilePath) => this.resolveThoughtTrailWikiLinkPath(linkPath, sourceFilePath),
-            vaultName: this.app.vault.getName(),
-        });
+        }).length;
+        const unavailableReason = getThoughtTrailUnavailableReason(scope.scopedFilePaths.length > 0, lineCount);
+
+        return {
+            currentVisibleThreadCount: currentFileThreads.length,
+            indexedThreadCount: indexedThreads.length,
+            mergedThreadCount: mergedThreads.length,
+            scopedFilePaths: scope.scopedFilePaths,
+            scopedThreads: scope.scopedThreads,
+            lineCount,
+            unavailableReason,
+            isEnabled: unavailableReason === null,
+        };
     }
 
     private resolveThoughtTrailWikiLinkPath(linkPath: string, sourceFilePath: string): string | null {
@@ -3291,7 +3432,7 @@ export default class AsideView extends ItemView {
                     mode,
                     source: "toolbar",
                 });
-                void this.renderComments();
+                void this.renderComments({ skipDataRefresh: true });
             },
         });
     }
@@ -3324,7 +3465,7 @@ export default class AsideView extends ItemView {
                     mode,
                     source: "toolbar",
                 });
-                void this.renderComments();
+                void this.renderComments({ skipDataRefresh: true });
             },
         });
     }

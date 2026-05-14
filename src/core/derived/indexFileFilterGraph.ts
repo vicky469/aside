@@ -11,6 +11,7 @@ const LEGACY_ALL_COMMENTS_NOTE_PATHS = new Set([
 
 export interface IndexFileFilterGraphBuildOptions {
     allCommentsNotePath?: string;
+    includeLinkedTargetFiles?: boolean;
     showResolved?: boolean | null;
     resolveWikiLinkPath?: (linkPath: string, sourceFilePath: string) => string | null;
 }
@@ -144,12 +145,12 @@ export function buildIndexFileFilterGraph(
         fileCommentCounts.set(filePath, (fileCommentCounts.get(filePath) ?? 0) + 1);
     }
 
-    const availableFiles = toSortedPaths(fileCommentCounts.keys());
-    const availableFileSet = new Set(availableFiles);
+    const availableFileSet = new Set(fileCommentCounts.keys());
+    const graphFileSet = new Set(availableFileSet);
     const outgoingAdjacency = new Map<string, Set<string>>();
     const undirectedAdjacency = new Map<string, Set<string>>();
 
-    for (const filePath of availableFiles) {
+    for (const filePath of graphFileSet) {
         outgoingAdjacency.set(filePath, new Set());
         undirectedAdjacency.set(filePath, new Set());
     }
@@ -172,12 +173,13 @@ export function buildIndexFileFilterGraph(
                     if (
                         normalizedTargetPath === sourceFilePath
                         || isAllCommentsNotePath(normalizedTargetPath, options.allCommentsNotePath)
-                        || !availableFileSet.has(normalizedTargetPath)
+                        || (!options.includeLinkedTargetFiles && !availableFileSet.has(normalizedTargetPath))
                         || seenTargets.has(normalizedTargetPath)
                     ) {
                         continue;
                     }
 
+                    graphFileSet.add(normalizedTargetPath);
                     seenTargets.add(normalizedTargetPath);
                     outgoingTargets.add(normalizedTargetPath);
                     sourceNeighbors.add(normalizedTargetPath);
@@ -185,6 +187,11 @@ export function buildIndexFileFilterGraph(
                 }
             }
         }
+    }
+    const availableFiles = toSortedPaths(graphFileSet);
+    for (const filePath of availableFiles) {
+        ensureAdjacencySet(outgoingAdjacency, filePath);
+        ensureAdjacencySet(undirectedAdjacency, filePath);
     }
     const {
         connectedComponentByFile,

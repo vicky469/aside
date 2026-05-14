@@ -81,3 +81,28 @@ test("buildRootedThoughtTrailScope returns no scope when the current file is abs
     assert.deepEqual(scoped.scopedFilePaths, []);
     assert.deepEqual(scoped.scopedThreads, []);
 });
+
+test("buildRootedThoughtTrailScope includes incoming links when the root has no side notes", () => {
+    const sourceThread = commentToThread(createComment({
+        id: "source-thread",
+        filePath: "docs/source.md",
+        comment: "This points at [[target]].",
+    }));
+    const unrelatedThread = commentToThread(createComment({
+        id: "unrelated-thread",
+        filePath: "docs/unrelated.md",
+        comment: "This stays on its own.",
+    }));
+
+    const scoped = buildRootedThoughtTrailScope(
+        [sourceThread, unrelatedThread],
+        {
+            rootFilePath: "docs/target.md",
+            allCommentsNotePath: "Aside index.md",
+            resolveWikiLinkPath: (linkPath) => linkPath === "target" ? "docs/target.md" : null,
+        },
+    );
+
+    assert.deepEqual(scoped.scopedFilePaths, ["docs/source.md", "docs/target.md"]);
+    assert.deepEqual(scoped.scopedThreads.map((thread) => thread.id), ["source-thread"]);
+});
