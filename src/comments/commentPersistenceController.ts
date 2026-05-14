@@ -707,17 +707,41 @@ export class CommentPersistenceController {
         }
     }
 
+    private hasKnownCommentsForDeletedFile(filePath: string, previousThreads: CommentThread[] | null): boolean {
+        if ((previousThreads?.length ?? 0) > 0) {
+            return true;
+        }
+
+        if (this.host.getCommentManager().getThreadsForFile(filePath, { includeDeleted: true }).length > 0) {
+            return true;
+        }
+
+        if (this.host.getAggregateCommentIndex().getThreadsForFile(filePath).length > 0) {
+            return true;
+        }
+
+        if (this.syncEventStore.getSnapshots().some((snapshot) =>
+            snapshot.notePath === filePath && snapshot.threads.length > 0)) {
+            return true;
+        }
+
+        return this.syncEventStore.getUnprocessedEvents().some((event) =>
+            this.eventTouchesNotePath(event, filePath));
+    }
+
     public async deleteStoredComments(filePath: string): Promise<void> {
         await this.sourceIdentityStore.refreshFromLatestPersistedData();
+        await this.syncEventStore.refreshFromLatestPersistedData();
         const sourceRecord = this.sourceIdentityStore.getRecordByPath(filePath);
         const previousThreads = (sourceRecord
             ? await this.sidecarStorage.readForSource(sourceRecord.sourceId, filePath)
             : null) ?? await this.sidecarStorage.read(filePath);
-        if (previousThreads && previousThreads.length > 0) {
+        if (this.hasKnownCommentsForDeletedFile(filePath, previousThreads)) {
             await this.syncEventStore.appendLocalEvents(filePath, [{
                 op: "deleteNote",
                 payload: {
                     notePath: filePath,
+                    ...(sourceRecord ? { sourceId: sourceRecord.sourceId } : {}),
                 },
             }]);
         }

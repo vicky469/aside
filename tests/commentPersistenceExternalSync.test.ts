@@ -5,7 +5,7 @@ import type { MarkdownView, TFile } from "obsidian";
 import { CommentManager, type CommentThread } from "../src/commentManager";
 import { CommentPersistenceController } from "../src/comments/commentPersistenceController";
 import type { PersistedPluginData } from "../src/settings/indexNoteSettingsPlanner";
-import { SideNoteSyncEventStore } from "../src/sync/sideNoteSyncEventStore";
+import { SideNoteSyncEventStore, type SideNoteSyncEventState } from "../src/sync/sideNoteSyncEventStore";
 import { serializeNoteCommentThreads, parseNoteComments } from "../src/core/storage/noteCommentStorage";
 import { AggregateCommentIndex } from "../src/index/AggregateCommentIndex";
 
@@ -1238,6 +1238,89 @@ test("comment persistence controller hydrates compacted snapshots into a missing
     } finally {
         globalThis.window = originalWindow;
     }
+});
+
+test("comment persistence controller records a delete tombstone for synced comments without a sidecar", async () => {
+    const file = createFile("docs/deleted.md");
+    const adapter = new FakeAdapter();
+    const commentManager = new CommentManager([]);
+    const aggregateCommentIndex = new AggregateCommentIndex();
+    let persistedData: PersistedPluginData = {};
+    let remoteEventCounter = 0;
+    let localEventCounter = 0;
+    const remoteThread = createThread(file.path);
+    const remoteEventStore = new SideNoteSyncEventStore({
+        readPersistedPluginData: () => persistedData,
+        writePersistedPluginData: async (data) => {
+            persistedData = data;
+        },
+        getDeviceId: () => "device-b",
+        createEventId: () => `remote-event-${++remoteEventCounter}`,
+        hashText: async (text) => `hash-${text.replace(/\//g, "_")}`,
+        now: () => 1710000000100 + remoteEventCounter,
+    });
+
+    await remoteEventStore.appendLocalEvents(file.path, [{
+        op: "createThread",
+        payload: {
+            thread: remoteThread,
+        },
+    }]);
+    await remoteEventStore.compactProcessedEventsForSnapshots([{
+        notePath: file.path,
+        threads: [remoteThread],
+    }]);
+
+    const controller = new CommentPersistenceController({
+        app: {
+            vault: {
+                adapter: adapter as unknown as DataAdapter,
+                process: async () => "",
+            },
+        } as never,
+        getAllCommentsNotePath: () => "Aside index.md",
+        getIndexHeaderImageUrl: () => "",
+        getIndexHeaderImageCaption: () => "",
+        shouldShowResolvedComments: () => false,
+        getMarkdownViewForFile: () => null,
+        getMarkdownFileByPath: () => null,
+        getCurrentNoteContent: async () => "",
+        getStoredNoteContent: async () => "",
+        getParsedNoteComments: (filePath, noteContent) => parseNoteComments(noteContent, filePath),
+        getPluginDataDirPath: () => ".obsidian/plugins/aside",
+        getSideNoteSyncDeviceId: () => "device-a",
+        readPersistedPluginData: () => persistedData,
+        writePersistedPluginData: async (data) => {
+            persistedData = data;
+        },
+        isAllCommentsNotePath: () => false,
+        isCommentableFile: (candidate): candidate is TFile => !!candidate && candidate.extension === "md",
+        isMarkdownEditorFocused: () => false,
+        getCommentManager: () => commentManager,
+        getAggregateCommentIndex: () => aggregateCommentIndex,
+        createCommentId: () => `local-event-${++localEventCounter}`,
+        hashText: async (text) => `hash-${text.replace(/\//g, "_")}`,
+        syncDerivedCommentLinksForFile: () => {},
+        refreshCommentViews: async () => {},
+        refreshAllCommentsSidebarViews: async () => {},
+        refreshEditorDecorations: () => {},
+        refreshMarkdownPreviews: () => {},
+        getCommentMentionedPageLabels: () => [],
+        syncIndexNoteLeafMode: async () => {},
+        log: async () => {},
+    });
+
+    await controller.deleteStoredComments(file.path);
+
+    const state = persistedData.sideNoteSyncEventState as SideNoteSyncEventState;
+    const localDeleteEvents = state.deviceLogs["device-a"]?.events.filter((event) =>
+        event.op === "deleteNote"
+        && event.notePath === file.path
+        && (event.payload as { notePath?: string }).notePath === file.path) ?? [];
+    const snapshot = Object.values(state.noteSnapshots).find((candidate) => candidate.notePath === file.path);
+
+    assert.equal(localDeleteEvents.length, 1);
+    assert.deepEqual(snapshot?.threads, []);
 });
 
 test("comment persistence controller skips incompatible compacted snapshots for existing files", async () => {
