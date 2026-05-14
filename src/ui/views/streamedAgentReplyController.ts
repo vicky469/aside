@@ -2,12 +2,14 @@ import type { AgentRunStreamState } from "../../core/agents/agentRuns";
 import { getAgentActorLabel } from "../../core/agents/agentActorRegistry";
 import { getAgentRunStatusPresentation } from "./sidebarPersistedComment";
 import { formatSidebarCommentMeta } from "./sidebarCommentSections";
+import { nodeInstanceOf } from "../domGuards";
 
 function createElement<K extends keyof HTMLElementTagNameMap>(
+    ownerDocument: Document,
     tagName: K,
     className?: string,
 ): HTMLElementTagNameMap[K] {
-    const element = document.createElement(tagName);
+    const element = ownerDocument.createElement(tagName);
     if (className) {
         element.className = className;
     }
@@ -62,11 +64,11 @@ export class StreamedAgentReplyController {
         const contentEl = this.contentEl;
         const actionsEl = this.actionsEl;
         if (
-            !(metaValueEl instanceof HTMLSpanElement)
-            || !(labelEl instanceof HTMLSpanElement)
-            || !(statusEl instanceof HTMLSpanElement)
-            || !(contentEl instanceof HTMLDivElement)
-            || !(actionsEl instanceof HTMLDivElement)
+            !nodeInstanceOf(metaValueEl, HTMLSpanElement)
+            || !nodeInstanceOf(labelEl, HTMLSpanElement)
+            || !nodeInstanceOf(statusEl, HTMLSpanElement)
+            || !nodeInstanceOf(contentEl, HTMLDivElement)
+            || !nodeInstanceOf(actionsEl, HTMLDivElement)
         ) {
             return;
         }
@@ -130,8 +132,9 @@ export class StreamedAgentReplyController {
         const shouldShowStatusText = stream.status !== "running" && stream.status !== "queued";
         statusEl.className = `aside-agent-run-status is-${stream.status}`;
         statusEl.replaceChildren();
+        const ownerDocument = statusEl.ownerDocument;
 
-        const markEl = createElement("span", `aside-agent-run-status-mark is-${presentation.markerKind}`);
+        const markEl = createElement(ownerDocument, "span", `aside-agent-run-status-mark is-${presentation.markerKind}`);
         if (presentation.marker) {
             markEl.textContent = presentation.marker;
         } else {
@@ -140,13 +143,13 @@ export class StreamedAgentReplyController {
         statusEl.appendChild(markEl);
 
         if (shouldShowStatusText && statusText) {
-            const textEl = createElement("span", "aside-agent-run-status-text");
+            const textEl = createElement(ownerDocument, "span", "aside-agent-run-status-text");
             textEl.textContent = statusText;
             statusEl.appendChild(textEl);
         }
 
         if (statusHintText) {
-            const hintEl = createElement("span", "aside-agent-run-status-hint");
+            const hintEl = createElement(ownerDocument, "span", "aside-agent-run-status-hint");
             hintEl.textContent = statusHintText;
             statusEl.appendChild(hintEl);
         }
@@ -184,16 +187,16 @@ export class StreamedAgentReplyController {
 
     private findThreadElement(containerEl: HTMLElement): HTMLDivElement | null {
         const threadEl = containerEl.querySelector(`.aside-thread-stack[data-thread-id="${this.threadId}"]`);
-        return threadEl instanceof HTMLDivElement ? threadEl : null;
+        return nodeInstanceOf(threadEl, HTMLDivElement) ? threadEl : null;
     }
 
     private ensureRepliesContainer(threadEl: HTMLDivElement): HTMLDivElement {
         const existing = threadEl.querySelector(".aside-thread-replies");
-        if (existing instanceof HTMLDivElement) {
+        if (nodeInstanceOf(existing, HTMLDivElement)) {
             return existing;
         }
 
-        const repliesEl = createElement("div", "aside-thread-replies");
+        const repliesEl = createElement(threadEl.ownerDocument, "div", "aside-thread-replies");
         threadEl.appendChild(repliesEl);
         return repliesEl;
     }
@@ -223,7 +226,7 @@ export class StreamedAgentReplyController {
 
         if (outputEntryId) {
             const persisted = threadEl.querySelector(`.aside-thread-entry-item[data-comment-id="${outputEntryId}"]`);
-            if (persisted instanceof HTMLDivElement) {
+            if (nodeInstanceOf(persisted, HTMLDivElement)) {
                 this.cardEl = persisted;
                 this.ownsCard = false;
                 const metaValueEl = persisted.querySelector(".aside-comment-meta-value");
@@ -231,11 +234,11 @@ export class StreamedAgentReplyController {
                 const statusEl = persisted.querySelector(".aside-agent-run-status");
                 const contentEl = persisted.querySelector(".aside-comment-content");
                 const actionsEl = persisted.querySelector(".aside-comment-actions");
-                this.metaValueEl = metaValueEl instanceof HTMLSpanElement ? metaValueEl : null;
-                this.labelEl = labelEl instanceof HTMLSpanElement ? labelEl : null;
-                this.statusEl = statusEl instanceof HTMLSpanElement ? statusEl : null;
-                this.contentEl = contentEl instanceof HTMLDivElement ? contentEl : null;
-                this.actionsEl = actionsEl instanceof HTMLDivElement ? actionsEl : null;
+                this.metaValueEl = nodeInstanceOf(metaValueEl, HTMLSpanElement) ? metaValueEl : null;
+                this.labelEl = nodeInstanceOf(labelEl, HTMLSpanElement) ? labelEl : null;
+                this.statusEl = nodeInstanceOf(statusEl, HTMLSpanElement) ? statusEl : null;
+                this.contentEl = nodeInstanceOf(contentEl, HTMLDivElement) ? contentEl : null;
+                this.actionsEl = nodeInstanceOf(actionsEl, HTMLDivElement) ? actionsEl : null;
                 this.captureBorrowedCardSnapshot();
                 persisted.classList.add("aside-agent-stream-active", "aside-agent-stream-item");
                 return persisted;
@@ -244,7 +247,7 @@ export class StreamedAgentReplyController {
 
         if (this.runId) {
             const existing = repliesEl.querySelector(`.aside-agent-stream-item[data-agent-run-id="${this.runId}"]`);
-            if (existing instanceof HTMLDivElement) {
+            if (nodeInstanceOf(existing, HTMLDivElement)) {
                 this.cardEl = existing;
                 this.ownsCard = true;
                 const metaValueEl = existing.querySelector(".aside-agent-stream-meta-value");
@@ -252,31 +255,32 @@ export class StreamedAgentReplyController {
                 const statusEl = existing.querySelector(".aside-agent-run-status");
                 const contentEl = existing.querySelector(".aside-agent-stream-content");
                 const actionsEl = existing.querySelector(".aside-comment-actions");
-                this.metaValueEl = metaValueEl instanceof HTMLSpanElement ? metaValueEl : null;
-                this.labelEl = labelEl instanceof HTMLSpanElement ? labelEl : null;
-                this.statusEl = statusEl instanceof HTMLSpanElement ? statusEl : null;
-                this.contentEl = contentEl instanceof HTMLDivElement ? contentEl : null;
-                this.actionsEl = actionsEl instanceof HTMLDivElement ? actionsEl : null;
+                this.metaValueEl = nodeInstanceOf(metaValueEl, HTMLSpanElement) ? metaValueEl : null;
+                this.labelEl = nodeInstanceOf(labelEl, HTMLSpanElement) ? labelEl : null;
+                this.statusEl = nodeInstanceOf(statusEl, HTMLSpanElement) ? statusEl : null;
+                this.contentEl = nodeInstanceOf(contentEl, HTMLDivElement) ? contentEl : null;
+                this.actionsEl = nodeInstanceOf(actionsEl, HTMLDivElement) ? actionsEl : null;
                 return existing;
             }
         }
 
-        const cardEl = createElement("div", "aside-comment-item aside-thread-item aside-thread-entry-item aside-agent-stream-item");
-        const headerEl = createElement("div", "aside-comment-header");
-        const headerMainEl = createElement("div", "aside-comment-header-main");
-        const metaEl = createElement("small", "aside-timestamp aside-comment-meta");
-        const metaValueEl = createElement("span", "aside-comment-meta-value aside-agent-stream-meta-value");
+        const ownerDocument = threadEl.ownerDocument;
+        const cardEl = createElement(ownerDocument, "div", "aside-comment-item aside-thread-item aside-thread-entry-item aside-agent-stream-item");
+        const headerEl = createElement(ownerDocument, "div", "aside-comment-header");
+        const headerMainEl = createElement(ownerDocument, "div", "aside-comment-header-main");
+        const metaEl = createElement(ownerDocument, "small", "aside-timestamp aside-comment-meta");
+        const metaValueEl = createElement(ownerDocument, "span", "aside-comment-meta-value aside-agent-stream-meta-value");
         metaEl.appendChild(metaValueEl);
         headerMainEl.appendChild(metaEl);
         headerEl.appendChild(headerMainEl);
-        const actionsEl = createElement("div", "aside-comment-actions aside-agent-stream-actions");
+        const actionsEl = createElement(ownerDocument, "div", "aside-comment-actions aside-agent-stream-actions");
         headerEl.appendChild(actionsEl);
-        const contentEl = createElement("div", "aside-comment-content aside-agent-stream-content");
-        const footerEl = createElement("div", "aside-thread-footer");
-        const footerMetaEl = createElement("div", "aside-thread-footer-meta");
-        const labelEl = createElement("span", "aside-comment-author-indicator aside-agent-stream-author");
-        const statusEl = createElement("span", "aside-agent-run-status is-running");
-        const markEl = createElement("span", "aside-agent-run-status-mark is-spinner");
+        const contentEl = createElement(ownerDocument, "div", "aside-comment-content aside-agent-stream-content");
+        const footerEl = createElement(ownerDocument, "div", "aside-thread-footer");
+        const footerMetaEl = createElement(ownerDocument, "div", "aside-thread-footer-meta");
+        const labelEl = createElement(ownerDocument, "span", "aside-comment-author-indicator aside-agent-stream-author");
+        const statusEl = createElement(ownerDocument, "span", "aside-agent-run-status is-running");
+        const markEl = createElement(ownerDocument, "span", "aside-agent-run-status-mark is-spinner");
         markEl.setAttribute("aria-hidden", "true");
         statusEl.appendChild(markEl);
 

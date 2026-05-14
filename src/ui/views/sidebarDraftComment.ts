@@ -2,6 +2,7 @@ import { isOrphanedComment, isPageComment } from "../../core/anchors/commentAnch
 import { MAX_SIDENOTE_WORDS, countCommentWords, exceedsCommentWordLimit } from "../../core/text/commentWordLimit";
 import { canSaveDraftWithoutComment, type DraftComment } from "../../domain/drafts";
 import { renderStyledDraftCommentFragment } from "../editor/commentEditorStyling";
+import { nodeInstanceOf } from "../domGuards";
 import { formatSidebarCommentMeta } from "./sidebarCommentSections";
 import type { SidebarDraftEditorController } from "./sidebarDraftEditor";
 import { estimateDraftTextareaRows } from "./sidebarDraftEditor";
@@ -141,7 +142,7 @@ function attachDraftActionButtonInteractions(
 
 function getSidebarScrollContainer(textarea: HTMLTextAreaElement): HTMLElement | null {
     const container = textarea.closest(".aside-view-container");
-    return container instanceof HTMLElement
+    return nodeInstanceOf(container, HTMLElement)
         ? container
         : null;
 }
@@ -170,7 +171,7 @@ export function computePinnedDraftScrollTop(
 
 function getDraftBottomObstructionTop(scrollContainer: HTMLElement, containerRect: DOMRect): number | undefined {
     const supportSlot = scrollContainer.querySelector?.(".aside-support-button-slot");
-    if (!(supportSlot instanceof HTMLElement)) {
+    if (!nodeInstanceOf(supportSlot, HTMLElement)) {
         return undefined;
     }
     const supportRect = supportSlot.getBoundingClientRect();
@@ -183,7 +184,7 @@ function getDraftBottomObstructionTop(scrollContainer: HTMLElement, containerRec
 export function pinDraftToTopOnMobile(textarea: HTMLTextAreaElement): void {
     const draftEl = textarea.closest(".aside-comment-draft");
     const scrollContainer = getSidebarScrollContainer(textarea);
-    if (!(draftEl instanceof HTMLElement) || !scrollContainer) {
+    if (!nodeInstanceOf(draftEl, HTMLElement) || !scrollContainer) {
         return;
     }
 
@@ -316,7 +317,7 @@ function renderDraftEditor(
         let viewportListenerAttached = false;
         const viewport = window.visualViewport ?? null;
         const pinFocusedDraft = () => {
-            if (document.activeElement === textarea) {
+            if (textarea.ownerDocument.activeElement === textarea) {
                 pinDraftToTopOnMobile(textarea);
             }
         };

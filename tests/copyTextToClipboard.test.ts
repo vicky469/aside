@@ -79,7 +79,7 @@ test("copyTextToClipboard falls back to document.execCommand", async () => {
 
     const copied = await copyTextToClipboard("Fallback text", {
         clipboard: null,
-        document: doc,
+        activeDocument: doc,
     });
 
     assert.equal(copied, true);
@@ -99,7 +99,7 @@ test("copyTextToClipboard returns false when no clipboard path works", async () 
 
     const copied = await copyTextToClipboard("Nope", {
         clipboard: failingClipboard,
-        document: null,
+        activeDocument: null,
     });
 
     assert.equal(copied, false);

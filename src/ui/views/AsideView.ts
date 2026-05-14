@@ -48,6 +48,7 @@ import {
     buildPageSidebarDraftRenderSignature,
     buildPageSidebarThreadRenderSignature,
 } from "./sidebarPageRenderSignature";
+import { nodeInstanceOf } from "../domGuards";
 import {
     applyBatchTagToThreads,
     persistBatchTagMutation,
@@ -906,8 +907,8 @@ export default class AsideView extends ItemView {
     }
 
     private scheduleNoteSidebarBatchTagSearchQuery(query: string): void {
-        const activeElement = document.activeElement;
-        const isBatchSearchInputFocused = activeElement instanceof HTMLInputElement
+        const activeElement = this.containerEl.ownerDocument.activeElement;
+        const isBatchSearchInputFocused = nodeInstanceOf(activeElement, HTMLInputElement)
             && activeElement.matches(".aside-note-search-input.aside-note-tag-batch-search-input");
         const activeSelectionStart = isBatchSearchInputFocused ? activeElement.selectionStart : null;
         const activeSelectionEnd = isBatchSearchInputFocused ? activeElement.selectionEnd : null;
@@ -1006,8 +1007,8 @@ export default class AsideView extends ItemView {
         }
 
         this.noteSidebarSearchInputValue = query;
-        const activeElement = document.activeElement;
-        const shouldRestoreFocus = activeElement instanceof HTMLInputElement
+        const activeElement = this.containerEl.ownerDocument.activeElement;
+        const shouldRestoreFocus = nodeInstanceOf(activeElement, HTMLInputElement)
             && activeElement.matches(".aside-note-search-input")
             && this.containerEl.contains(activeElement);
         if (query.trim() && this.noteSidebarMode === "thought-trail") {
@@ -1113,10 +1114,11 @@ export default class AsideView extends ItemView {
         this.unsubscribeFromAgentStreamUpdates = this.plugin.subscribeToAgentStreamUpdates((update) => {
             this.handleAgentStreamUpdate(update);
         });
-        document.addEventListener("keydown", this.interactionController.documentKeydownHandler, true);
-        document.addEventListener("mousedown", this.interactionController.documentMouseDownHandler, true);
-        document.addEventListener("copy", this.interactionController.documentCopyHandler, true);
-        document.addEventListener("selectionchange", this.interactionController.documentSelectionChangeHandler);
+        const doc = this.containerEl.ownerDocument;
+        doc.addEventListener("keydown", this.interactionController.documentKeydownHandler, true);
+        doc.addEventListener("mousedown", this.interactionController.documentMouseDownHandler, true);
+        doc.addEventListener("copy", this.interactionController.documentCopyHandler, true);
+        doc.addEventListener("selectionchange", this.interactionController.documentSelectionChangeHandler);
         this.containerEl.addEventListener("click", this.interactionController.sidebarClickHandler);
         void this.renderComments().catch((error) => {
             void this.plugin.logEvent("error", "sidebar", "sidebar.render.open.error", { error });
@@ -1129,10 +1131,11 @@ export default class AsideView extends ItemView {
         this.clearNoteSidebarSearchDebounceTimer();
         this.noteSidebarShell = null;
         this.resetStreamedReplyControllers();
-        document.removeEventListener("keydown", this.interactionController.documentKeydownHandler, true);
-        document.removeEventListener("mousedown", this.interactionController.documentMouseDownHandler, true);
-        document.removeEventListener("copy", this.interactionController.documentCopyHandler, true);
-        document.removeEventListener("selectionchange", this.interactionController.documentSelectionChangeHandler);
+        const doc = this.containerEl.ownerDocument;
+        doc.removeEventListener("keydown", this.interactionController.documentKeydownHandler, true);
+        doc.removeEventListener("mousedown", this.interactionController.documentMouseDownHandler, true);
+        doc.removeEventListener("copy", this.interactionController.documentCopyHandler, true);
+        doc.removeEventListener("selectionchange", this.interactionController.documentSelectionChangeHandler);
         this.containerEl.removeEventListener("click", this.interactionController.sidebarClickHandler);
         this.interactionController.cancelPendingRevealedCommentSelectionClear();
         await Promise.resolve();
@@ -1284,6 +1287,12 @@ export default class AsideView extends ItemView {
         this.resetStreamedReplyControllers();
         if (file) {
             const showDeleted = this.plugin.shouldShowDeletedComments();
+            if (isAllCommentsView && !options.skipDataRefresh) {
+                await this.plugin.ensureIndexedCommentsLoaded();
+                if (renderVersion !== this.renderVersion || this.file?.path !== file.path) {
+                    return;
+                }
+            }
             const indexFileFilterState = isAllCommentsView
                 ? await this.buildIndexFileFilterStateFromIndexNote(file)
                 : {
@@ -1350,9 +1359,7 @@ export default class AsideView extends ItemView {
             this.containerEl.empty();
             this.syncViewContainerClasses();
             const persistedThreads = isAllCommentsView
-                ? selectedIndexSourceFile
-                    ? this.plugin.getThreadsForFile(selectedIndexSourceFile.path, { includeDeleted: showDeleted })
-                    : []
+                ? this.plugin.getAllIndexedThreads()
                 : this.plugin.getThreadsForFile(file.path, { includeDeleted: showDeleted });
             const pageThreadsWithDeleted = isAllCommentsView
                 ? []
@@ -1395,9 +1402,7 @@ export default class AsideView extends ItemView {
             this.indexFileFilterGraph = indexFileFilterGraph;
 
             const filteredIndexFilePaths = isAllCommentsView
-                ? selectedIndexFileFilterRootPath
-                    ? [selectedIndexFileFilterRootPath]
-                    : []
+                ? deriveIndexSidebarScopedFilePaths(indexFileFilterGraph, selectedIndexFileFilterRootPath)
                 : [];
             const indexFileFilterOptions = indexFileFilterState.options;
             this.syncPinnedSidebarThreadIds(persistedThreads);
@@ -2157,10 +2162,10 @@ export default class AsideView extends ItemView {
                     ),
                     threadId: null,
                     render: () => {
-                        const stagingEl = document.createElement("div");
+                        const stagingEl = this.containerEl.ownerDocument.createElement("div");
                         this.renderDraftComment(stagingEl, item.draft);
                         const nextNode = stagingEl.firstElementChild;
-                        if (!(nextNode instanceof HTMLElement)) {
+                        if (!nodeInstanceOf(nextNode, HTMLElement)) {
                             throw new Error("Failed to render sidebar draft card.");
                         }
                         return Promise.resolve(nextNode);
@@ -2193,7 +2198,7 @@ export default class AsideView extends ItemView {
                 }),
                 threadId: item.thread.id,
                 render: async () => {
-                    const stagingEl = document.createElement("div");
+                    const stagingEl = this.containerEl.ownerDocument.createElement("div");
                     await this.renderPersistedComment(
                         stagingEl,
                         item.thread,
@@ -2205,7 +2210,7 @@ export default class AsideView extends ItemView {
                         appendDraftComment,
                     );
                     const nextNode = stagingEl.firstElementChild;
-                    if (!(nextNode instanceof HTMLElement)) {
+                    if (!nodeInstanceOf(nextNode, HTMLElement)) {
                         throw new Error("Failed to render sidebar thread card.");
                     }
                     if (!options.enableTagSelection) {
@@ -2526,7 +2531,7 @@ export default class AsideView extends ItemView {
     ): Promise<void> {
         const existingByKey = new Map<string, HTMLElement>();
         for (const child of Array.from(commentsBody.children)) {
-            if (!(child instanceof HTMLElement)) {
+            if (!nodeInstanceOf(child, HTMLElement)) {
                 continue;
             }
 
@@ -2578,7 +2583,7 @@ export default class AsideView extends ItemView {
 
         const desiredNodeSet = new Set(desiredNodes);
         for (const child of Array.from(commentsBody.children)) {
-            if (child instanceof HTMLElement && !desiredNodeSet.has(child)) {
+            if (nodeInstanceOf(child, HTMLElement) && !desiredNodeSet.has(child)) {
                 child.remove();
             }
         }
@@ -2600,7 +2605,7 @@ export default class AsideView extends ItemView {
         },
     ): void {
         for (const child of Array.from(commentsBody.children)) {
-            if (child instanceof HTMLDivElement && child.classList.contains("aside-empty-state")) {
+            if (nodeInstanceOf(child, HTMLDivElement) && child.classList.contains("aside-empty-state")) {
                 child.remove();
             }
         }
@@ -2747,7 +2752,7 @@ export default class AsideView extends ItemView {
         },
     ): void {
         for (const child of Array.from(commentsBody.children)) {
-            if (child instanceof HTMLDivElement && child.classList.contains("aside-empty-state")) {
+            if (nodeInstanceOf(child, HTMLDivElement) && child.classList.contains("aside-empty-state")) {
                 child.remove();
             }
         }
@@ -2867,7 +2872,7 @@ export default class AsideView extends ItemView {
         }
 
         const threadEl = this.containerEl.querySelector(`.aside-thread-stack[data-thread-id="${update.threadId}"]`);
-        if (!(threadEl instanceof HTMLDivElement)) {
+        if (!nodeInstanceOf(threadEl, HTMLDivElement)) {
             return;
         }
 
@@ -2878,7 +2883,7 @@ export default class AsideView extends ItemView {
         const visibleThreadIds = new Set<string>();
         const threadEls = Array.from(this.containerEl.querySelectorAll(".aside-thread-stack[data-thread-id]"));
         for (const threadEl of threadEls) {
-            if (!(threadEl instanceof HTMLDivElement)) {
+            if (!nodeInstanceOf(threadEl, HTMLDivElement)) {
                 continue;
             }
             const threadId = threadEl.getAttribute("data-thread-id");
@@ -3999,7 +4004,7 @@ export default class AsideView extends ItemView {
     }
 
     private getCommentItemFromEventTarget(target: EventTarget | null): HTMLElement | null {
-        return target instanceof Element
+        return nodeInstanceOf(target, Element)
             ? target.closest(".aside-comment-item")
             : null;
     }
@@ -4008,12 +4013,12 @@ export default class AsideView extends ItemView {
         target: EventTarget | null,
         filePath: string,
     ): SidebarReorderDragState | null {
-        if (!(target instanceof Element)) {
+        if (!nodeInstanceOf(target, Element)) {
             return null;
         }
 
         const handleEl = target.closest("[data-aside-drag-kind]");
-        if (!(handleEl instanceof HTMLElement)) {
+        if (!nodeInstanceOf(handleEl, HTMLElement)) {
             return null;
         }
 
@@ -4059,12 +4064,12 @@ export default class AsideView extends ItemView {
         placement: ReorderPlacement;
     } | null {
         const dragState = this.reorderDragState;
-        if (!dragState || dragState.kind !== "thread" || !(event.target instanceof Element)) {
+        if (!dragState || dragState.kind !== "thread" || !nodeInstanceOf(event.target, Element)) {
             return null;
         }
 
         const threadStackEl = event.target.closest(".aside-thread-stack[data-aside-page-thread='true']");
-        if (!(threadStackEl instanceof HTMLElement)) {
+        if (!nodeInstanceOf(threadStackEl, HTMLElement)) {
             return null;
         }
 
@@ -4073,7 +4078,7 @@ export default class AsideView extends ItemView {
         if (!targetThreadId || targetThreadId === dragState.threadId) {
             return null;
         }
-        if (!(targetCommentEl instanceof HTMLElement)) {
+        if (!nodeInstanceOf(targetCommentEl, HTMLElement)) {
             return null;
         }
 
@@ -4089,12 +4094,12 @@ export default class AsideView extends ItemView {
         targetThreadId: string;
     } | null {
         const dragState = this.reorderDragState;
-        if (!dragState || dragState.kind !== "thread-entry" || !(event.target instanceof Element)) {
+        if (!dragState || dragState.kind !== "thread-entry" || !nodeInstanceOf(event.target, Element)) {
             return null;
         }
 
         const threadStackEl = event.target.closest(".aside-thread-stack");
-        if (!(threadStackEl instanceof HTMLElement)) {
+        if (!nodeInstanceOf(threadStackEl, HTMLElement)) {
             return null;
         }
 
@@ -4112,7 +4117,7 @@ export default class AsideView extends ItemView {
         ) {
             return null;
         }
-        if (!(targetCommentEl instanceof HTMLElement)) {
+        if (!nodeInstanceOf(targetCommentEl, HTMLElement)) {
             return null;
         }
 
@@ -4267,9 +4272,10 @@ export default class AsideView extends ItemView {
     }
 
     onunload() {
-        document.removeEventListener("keydown", this.interactionController.documentKeydownHandler, true);
-        document.removeEventListener("copy", this.interactionController.documentCopyHandler, true);
-        document.removeEventListener("selectionchange", this.interactionController.documentSelectionChangeHandler);
+        const doc = this.containerEl.ownerDocument;
+        doc.removeEventListener("keydown", this.interactionController.documentKeydownHandler, true);
+        doc.removeEventListener("copy", this.interactionController.documentCopyHandler, true);
+        doc.removeEventListener("selectionchange", this.interactionController.documentSelectionChangeHandler);
         this.containerEl.removeEventListener("click", this.interactionController.sidebarClickHandler);
         this.interactionController.clearPendingFocus();
         this.interactionController.cancelPendingRevealedCommentSelectionClear();

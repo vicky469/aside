@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import process from "process";
 import { promisify } from "node:util";
 import { pathToFileURL } from "node:url";
-import builtins from "builtin-modules";
+import { builtinModules } from "node:module";
 
 const banner =
 	`/*
@@ -222,7 +222,7 @@ const context = await esbuild.context({
 		"@lezer/common",
 		"@lezer/highlight",
 		"@lezer/lr",
-		...builtins],
+		...builtinModules],
 	format: "cjs",
 	target: "es2018",
 	logLevel: "info",

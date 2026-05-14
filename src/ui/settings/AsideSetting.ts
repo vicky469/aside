@@ -136,7 +136,7 @@ export default class AsideSetting extends PluginSettingTab {
         };
         const blurIfAutoFocused = (button: ButtonComponent): void => {
             window.setTimeout(() => {
-                if (document.activeElement === button.buttonEl) {
+                if (button.buttonEl.ownerDocument.activeElement === button.buttonEl) {
                     button.buttonEl.blur();
                 }
             }, 0);

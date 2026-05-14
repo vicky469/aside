@@ -84,14 +84,19 @@ function getMonotonicNow(): number {
 
 function yieldToMainThread(): Promise<void> {
     return new Promise((resolve) => {
-        if (typeof globalThis.requestAnimationFrame === "function") {
-            globalThis.requestAnimationFrame(() => {
+        if (typeof window === "undefined") {
+            resolve();
+            return;
+        }
+
+        if (typeof window.requestAnimationFrame === "function") {
+            window.requestAnimationFrame(() => {
                 resolve();
             });
             return;
         }
 
-        setTimeout(resolve, 0);
+        window.setTimeout(resolve, 0);
     });
 }
 

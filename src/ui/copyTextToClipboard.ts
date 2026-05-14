@@ -25,7 +25,7 @@ export interface CopyTextDocument {
 
 export interface CopyTextEnvironment {
     clipboard?: ClipboardWriter | null;
-    document?: CopyTextDocument | null;
+    activeDocument?: CopyTextDocument | null;
 }
 
 function getDefaultClipboard(): ClipboardWriter | null {
@@ -37,11 +37,12 @@ function getDefaultClipboard(): ClipboardWriter | null {
 }
 
 function getDefaultDocument(): CopyTextDocument | null {
-    if (typeof document === "undefined") {
+    if (typeof window === "undefined") {
         return null;
     }
 
-    return document as unknown as CopyTextDocument;
+    const doc = (window as Window & { activeDocument?: Document }).activeDocument;
+    return doc ? doc as unknown as CopyTextDocument : null;
 }
 
 export async function copyTextToClipboard(
@@ -54,11 +55,11 @@ export async function copyTextToClipboard(
             await clipboard.writeText(text);
             return true;
         } catch {
-            // Fall back to document.execCommand for contexts without async clipboard support.
+            // Fall back to execCommand for contexts without async clipboard support.
         }
     }
 
-    const doc = environment.document === undefined ? getDefaultDocument() : environment.document;
+    const doc = environment.activeDocument === undefined ? getDefaultDocument() : environment.activeDocument;
     if (!doc) {
         return false;
     }

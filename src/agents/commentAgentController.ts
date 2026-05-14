@@ -138,8 +138,17 @@ function summarizeError(error: unknown): string {
     return "Agent execution failed.";
 }
 
+function getTimerWindow(): Window | null {
+    return typeof window === "undefined" ? null : window;
+}
+
 function sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+    const timerWindow = getTimerWindow();
+    if (!timerWindow) {
+        return Promise.resolve();
+    }
+
+    return new Promise((resolve) => timerWindow.setTimeout(resolve, ms));
 }
 
 function summarizeRemoteRuntimeEventCounts(
@@ -181,7 +190,7 @@ const FINAL_STREAM_RETENTION_MS = 30_000;
 export class CommentAgentController {
     private processingQueue = false;
     private readonly runStreams = new Map<string, AgentRunStreamState>();
-    private readonly runStreamPruneTimers = new Map<string, ReturnType<typeof setTimeout>>();
+    private readonly runStreamPruneTimers = new Map<string, number>();
     private readonly streamListeners = new Set<AgentStreamListener>();
     private readonly activeRunExecutions = new Map<string, ActiveRunExecution>();
     private readonly dispatchingRunIds = new Set<string>();
@@ -266,8 +275,9 @@ export class CommentAgentController {
 
     public dispose(): void {
         this.streamListeners.clear();
+        const timerWindow = getTimerWindow();
         for (const timer of this.runStreamPruneTimers.values()) {
-            clearTimeout(timer);
+            timerWindow?.clearTimeout(timer);
         }
         this.runStreamPruneTimers.clear();
         for (const execution of this.activeRunExecutions.values()) {
@@ -1234,7 +1244,12 @@ export class CommentAgentController {
 
     private scheduleSilentRunStreamPrune(runId: string): void {
         this.clearRunStreamPruneTimer(runId);
-        const timer = setTimeout(() => {
+        const timerWindow = getTimerWindow();
+        if (!timerWindow) {
+            return;
+        }
+
+        const timer = timerWindow.setTimeout(() => {
             this.runStreamPruneTimers.delete(runId);
             this.runStreams.delete(runId);
         }, FINAL_STREAM_RETENTION_MS);
@@ -1247,7 +1262,7 @@ export class CommentAgentController {
             return;
         }
 
-        clearTimeout(timer);
+        getTimerWindow()?.clearTimeout(timer);
         this.runStreamPruneTimers.delete(runId);
     }
 

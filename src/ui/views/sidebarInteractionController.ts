@@ -6,6 +6,7 @@ import {
 } from "../../core/text/commentReferences";
 import type { DraftComment } from "../../domain/drafts";
 import { copyTextToClipboard } from "../copyTextToClipboard";
+import { nodeInstanceOf } from "../domGuards";
 import { decideEditDismissal } from "./editDismissal";
 import { getSelectedSidebarClipboardText } from "./sidebarClipboardSelection";
 
@@ -30,6 +31,15 @@ function isDraftTextareaElement(element: Element | null): element is HTMLTextAre
         && typeof (element as HTMLElement).closest === "function"
         && typeof (element as HTMLTextAreaElement).setSelectionRange === "function"
         && typeof (element as HTMLTextAreaElement).dispatchEvent === "function";
+}
+
+function getElementWindow(element: HTMLElement): Window | null {
+    return element.win ?? (typeof window === "undefined" ? null : window);
+}
+
+function getElementDocument(element: HTMLElement): Document | null {
+    const elementWindow = getElementWindow(element) as (Window & { activeDocument?: Document }) | null;
+    return element.doc ?? element.ownerDocument ?? elementWindow?.activeDocument ?? null;
 }
 
 function isFocusableTextareaElement(element: Element | null): element is HTMLTextAreaElement {
@@ -86,7 +96,7 @@ export class SidebarInteractionController {
             return;
         }
 
-        const activeElement = document.activeElement;
+        const activeElement = getElementDocument(this.host.containerEl)?.activeElement ?? null;
         if (!isDraftTextareaElement(activeElement)) {
             return;
         }
@@ -144,10 +154,10 @@ export class SidebarInteractionController {
     private async handleSidebarClick(event: MouseEvent): Promise<void> {
         this.cancelPendingRevealedCommentSelectionClear();
         const target = event.target as Node | null;
-        const clickedComment = target instanceof HTMLElement
+        const clickedComment = nodeInstanceOf(target, HTMLElement)
             ? target.closest(".aside-comment-item")
             : null;
-        const clickedSectionChrome = target instanceof HTMLElement
+        const clickedSectionChrome = nodeInstanceOf(target, HTMLElement)
             ? target.closest(".aside-comments-list-actions, .aside-sidebar-toolbar, .aside-active-file-filters")
             : null;
         await this.handleDraftDismissal(target, {
@@ -234,7 +244,7 @@ export class SidebarInteractionController {
     }
 
     private scheduleRevealedCommentSelectionClear(): void {
-        const win = globalThis.window;
+        const win = getElementWindow(this.host.containerEl);
         if (!win || typeof win.requestAnimationFrame !== "function") {
             this.cancelPendingRevealedCommentSelectionClear();
             this.host.clearRevealedCommentSelection();
@@ -253,7 +263,7 @@ export class SidebarInteractionController {
             return;
         }
 
-        const win = globalThis.window;
+        const win = getElementWindow(this.host.containerEl);
         if (win && typeof win.cancelAnimationFrame === "function") {
             win.cancelAnimationFrame(this.pendingRevealedCommentClearFrame);
         }
@@ -355,17 +365,17 @@ export class SidebarInteractionController {
     public claimSidebarInteractionOwnership(focusTarget?: HTMLElement | null): void {
         this.host.app.workspace.setActiveLeaf(this.host.leaf, { focus: false });
 
-        if (focusTarget?.isConnected && document.activeElement !== focusTarget) {
+        if (focusTarget?.isConnected && getElementDocument(focusTarget)?.activeElement !== focusTarget) {
             focusTarget.focus({ preventScroll: true });
         }
     }
 
     public getEventTargetElement(target: EventTarget | null): HTMLElement | null {
-        if (target instanceof HTMLElement) {
+        if (nodeInstanceOf(target, HTMLElement)) {
             return target;
         }
 
-        return target instanceof Node ? target.parentElement : null;
+        return nodeInstanceOf(target, Node) ? target.parentElement : null;
     }
 
     public isSelectionInsideSidebarContent(selection: Selection | null = window.getSelection()): boolean {
@@ -467,9 +477,9 @@ export class SidebarInteractionController {
             return null;
         }
 
-        const element = node instanceof HTMLElement ? node : node.parentElement;
+        const element = nodeInstanceOf(node, HTMLElement) ? node : node.parentElement;
         const owner = element?.closest(".aside-comment-content");
-        return owner instanceof HTMLElement && this.host.containerEl.contains(owner) ? owner : null;
+        return nodeInstanceOf(owner, HTMLElement) && this.host.containerEl.contains(owner) ? owner : null;
     }
 
     private getSelectedSidebarText(): string | null {

@@ -1,3 +1,5 @@
+import { nodeInstanceOf } from "../domGuards";
+
 interface ParsedSvgDocumentLike<TElement> {
     documentElement: TElement | null;
     querySelector(selector: string): unknown;
@@ -30,15 +32,20 @@ export function parseTrustedMermaidSvgDocument<TElement extends SvgRootLike>(
 }
 
 export function parseTrustedMermaidSvg(svg: string): SVGSVGElement | null {
-    if (typeof DOMParser === "undefined" || typeof document === "undefined") {
+    if (typeof window === "undefined" || typeof window.DOMParser === "undefined") {
+        return null;
+    }
+
+    const ownerDocument = (window as Window & { activeDocument?: Document }).activeDocument;
+    if (!ownerDocument) {
         return null;
     }
 
     const importedRoot = parseTrustedMermaidSvgDocument(
         svg,
-        (svgMarkup) => new DOMParser().parseFromString(svgMarkup, "image/svg+xml"),
-        (svgRoot) => document.importNode(svgRoot, true),
+        (svgMarkup) => new window.DOMParser().parseFromString(svgMarkup, "image/svg+xml"),
+        (svgRoot) => ownerDocument.importNode(svgRoot, true),
     );
 
-    return importedRoot instanceof SVGSVGElement ? importedRoot : null;
+    return nodeInstanceOf(importedRoot, SVGSVGElement) ? importedRoot : null;
 }

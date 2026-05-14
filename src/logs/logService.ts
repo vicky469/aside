@@ -46,7 +46,9 @@ export interface AsideLogServiceOptions {
 }
 
 function createSessionId(): string {
-    const randomUuid = globalThis.crypto?.randomUUID?.();
+    const randomUuid = typeof window === "undefined"
+        ? undefined
+        : window.crypto?.randomUUID?.();
     if (randomUuid) {
         return randomUuid;
     }

@@ -18,6 +18,9 @@ interface MarkdownViewLike extends FileViewLike {
     editor: EditorLike;
     contentEl: {
         contains(node: unknown): boolean;
+        ownerDocument?: {
+            activeElement: unknown;
+        };
     };
     getMode(): string;
     getViewData?(): string;
@@ -149,7 +152,7 @@ export class WorkspaceViewController {
             return true;
         }
 
-        const activeElement = typeof document === "undefined" ? null : document.activeElement;
+        const activeElement = openViewLike.contentEl.ownerDocument?.activeElement ?? null;
         return !!activeElement && openViewLike.contentEl.contains(activeElement);
     }
 

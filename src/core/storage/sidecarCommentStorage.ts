@@ -41,7 +41,9 @@ async function ensureDirectory(adapter: DataAdapter, targetPath: string): Promis
 }
 
 function createTempFileSuffix(): string {
-    const randomUuid = globalThis.crypto?.randomUUID?.();
+    const randomUuid = typeof window === "undefined"
+        ? undefined
+        : window.crypto?.randomUUID?.();
     if (randomUuid) {
         return randomUuid;
     }

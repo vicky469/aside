@@ -138,11 +138,11 @@ function isPersistedPluginData(value: unknown): value is PersistedPluginData {
 type RemoteRuntimeFetchFallback = NonNullable<Parameters<typeof createRemoteRuntimeRequester>[0]["fetcher"]>;
 
 function getFetchFallback(): RemoteRuntimeFetchFallback | undefined {
-    if (typeof globalThis.fetch !== "function") {
+    if (typeof window === "undefined" || typeof window.fetch !== "function") {
         return undefined;
     }
 
-    return (input, init) => globalThis.fetch(input, init);
+    return (input, init) => window.fetch(input, init);
 }
 
 function getNodeRequire(): ((moduleName: string) => unknown) | null {
@@ -159,13 +159,13 @@ function getNodeRequire(): ((moduleName: string) => unknown) | null {
 }
 
 function getProcessEnv(): Record<string, string | undefined> {
-    const candidate = typeof globalThis !== "undefined"
-        ? (globalThis as typeof globalThis & {
+    const candidate = typeof window === "undefined"
+        ? undefined
+        : (window as Window & {
             process?: {
                 env?: Record<string, string | undefined>;
             };
-        }).process
-        : undefined;
+        }).process;
     return candidate?.env ?? {};
 }
 

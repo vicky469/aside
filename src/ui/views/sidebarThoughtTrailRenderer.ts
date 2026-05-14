@@ -12,22 +12,10 @@ import {
     extractThoughtTrailMermaidSource,
     getThoughtTrailMermaidRenderConfig,
 } from "../../core/derived/thoughtTrail";
+import { resolveMermaidRuntime } from "./mermaidRuntime";
 import { extractThoughtTrailClickTargets, parseThoughtTrailOpenFilePath, resolveThoughtTrailNodeId } from "./thoughtTrailNodeLinks";
 import { parseTrustedMermaidSvg } from "./thoughtTrailSvg";
-
-type MermaidRenderResult = string | {
-    bindFunctions?: (element: HTMLElement) => void;
-    svg?: string;
-};
-
-type MermaidRuntimeLike = {
-    getConfig?: () => unknown;
-    initialize: (config: unknown) => void;
-    mermaidAPI?: {
-        getConfig?: () => unknown;
-    };
-    render: (id: string, source: string) => Promise<MermaidRenderResult>;
-};
+import { nodeInstanceOf } from "../domGuards";
 
 export interface SidebarThoughtTrailRenderContext {
     app: App;
@@ -41,16 +29,6 @@ export interface SidebarThoughtTrailOptions {
     surface: "index" | "note";
     hasRootScope: boolean;
     rootFilePath: string | null;
-}
-
-function isMermaidRuntimeLike(value: unknown): value is MermaidRuntimeLike {
-    if (!value || typeof value !== "object") {
-        return false;
-    }
-
-    const candidate = value as Partial<MermaidRuntimeLike>;
-    return typeof candidate.initialize === "function"
-        && typeof candidate.render === "function";
 }
 
 function cloneMermaidConfig<T>(config: T): T {
@@ -155,14 +133,18 @@ async function renderThoughtTrailMermaid(
         );
 
         const fallbackMermaidEl = container.querySelector(".mermaid");
-        if (fallbackMermaidEl instanceof HTMLElement) {
+        if (nodeInstanceOf(fallbackMermaidEl, HTMLElement)) {
             fallbackMermaidEl.setAttribute("data-aside-thought-trail-renderer", "markdown");
         }
     };
 
-    await loadMermaid().catch(() => undefined);
-    const mermaidRuntime = (globalThis as typeof globalThis & { mermaid?: unknown }).mermaid;
-    if (!isMermaidRuntimeLike(mermaidRuntime)) {
+    const loadedMermaid: unknown = await loadMermaid().catch((): undefined => undefined);
+    const ownerWindow = (container.win ?? (typeof window === "undefined" ? null : window)) as (Window & { mermaid?: unknown }) | null;
+    const mermaidRuntime = resolveMermaidRuntime(
+        loadedMermaid,
+        ownerWindow?.mermaid,
+    );
+    if (!mermaidRuntime) {
         await fallbackToMarkdownRenderer();
         return;
     }
@@ -230,7 +212,7 @@ function bindThoughtTrailNodeLinks(
     }
 
     mermaidEl.querySelectorAll(".node, [data-id]").forEach((element) => {
-        if (!(element instanceof Element)) {
+        if (!nodeInstanceOf(element, Element)) {
             return;
         }
 
@@ -247,12 +229,12 @@ function bindThoughtTrailNodeLinks(
 
     mermaidEl.addEventListener("click", (event: Event) => {
         const target = event.target;
-        if (!(target instanceof Element)) {
+        if (!nodeInstanceOf(target, Element)) {
             return;
         }
 
         const nodeEl = target.closest(".node, [data-id]");
-        if (!(nodeEl instanceof Element)) {
+        if (!nodeInstanceOf(nodeEl, Element)) {
             return;
         }
 

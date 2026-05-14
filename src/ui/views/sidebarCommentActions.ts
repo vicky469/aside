@@ -293,7 +293,8 @@ export async function runSidebarPendingButtonAction(
 
 function renderObsidianExternalLinkIcon(container: HTMLElement): void {
     const svgNamespace = "http://www.w3.org/2000/svg";
-    const svgEl = document.createElementNS(svgNamespace, "svg");
+    const ownerDocument = container.ownerDocument;
+    const svgEl = ownerDocument.createElementNS(svgNamespace, "svg");
     svgEl.setAttribute("xmlns", svgNamespace);
     svgEl.setAttribute("class", "svg-icon aside-obsidian-external-link-icon");
     svgEl.setAttribute("viewBox", "0 0 32 32");
@@ -310,7 +311,7 @@ function renderObsidianExternalLinkIcon(container: HTMLElement): void {
         "M28 4 14 18",
     ];
     for (const d of paths) {
-        const pathEl = document.createElementNS(svgNamespace, "path");
+        const pathEl = ownerDocument.createElementNS(svgNamespace, "path");
         pathEl.setAttribute("d", d);
         svgEl.appendChild(pathEl);
     }

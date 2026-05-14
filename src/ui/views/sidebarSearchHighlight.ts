@@ -1,3 +1,5 @@
+import { nodeInstanceOf } from "../domGuards";
+
 export interface SidebarSearchHighlightRange {
     start: number;
     end: number;
@@ -96,7 +98,7 @@ function getSidebarSearchHighlightStyleId(highlightName: string): string {
 
 function getSidebarSearchHighlightRegistry(ownerDocument: Document): HighlightRegistryLike | null {
     const view = ownerDocument.defaultView;
-    const css = (view?.CSS ?? globalThis.CSS) as CssWithHighlights | undefined;
+    const css = view?.CSS as CssWithHighlights | undefined;
     const registry = css?.highlights;
     return registry
         && typeof registry.set === "function"
@@ -106,8 +108,7 @@ function getSidebarSearchHighlightRegistry(ownerDocument: Document): HighlightRe
 }
 
 function getSidebarHighlightConstructor(ownerDocument: Document): (new (...initialRanges: Range[]) => unknown) | null {
-    const candidate = ownerDocument.defaultView?.Highlight
-        ?? globalThis.Highlight;
+    const candidate = ownerDocument.defaultView?.Highlight;
     return typeof candidate === "function"
         ? candidate as new (...initialRanges: Range[]) => unknown
         : null;
@@ -147,7 +148,7 @@ function getSidebarSearchTextNodes(
         nodeFilter.SHOW_TEXT,
         {
             acceptNode: (node) => {
-                if (!(node instanceof Text) || !node.nodeValue?.trim()) {
+                if (!nodeInstanceOf(node, Text) || !node.nodeValue?.trim()) {
                     return nodeFilter.FILTER_SKIP;
                 }
 
@@ -167,7 +168,7 @@ function getSidebarSearchTextNodes(
 
     let currentNode = walker.nextNode();
     while (currentNode) {
-        if (currentNode instanceof Text) {
+        if (nodeInstanceOf(currentNode, Text)) {
             textNodes.push(currentNode);
         }
         currentNode = walker.nextNode();

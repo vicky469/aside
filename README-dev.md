@@ -43,7 +43,7 @@ The canonical storage precedence is encoded in `src/core/storage/canonicalCommen
 |   src/core/*  src/ui/*  src/index/*  src/cache/*           |
 |                                                            |
 | Build-time packages                                        |
-|   typescript  esbuild  builtin-modules  tslib              |
+|   typescript  esbuild  tslib                               |
 |   @types/node  @typescript-eslint/*  obsidian              |
 |                                                            |
 | Host/runtime APIs kept external                            |

@@ -24,6 +24,7 @@ import {
     isIndexNativeCollapseControlTarget,
 } from "./commentIndexClickTarget";
 import { buildPreviewHighlightWraps } from "./commentHighlightPlanner";
+import { nodeInstanceOf } from "../ui/domGuards";
 import {
     estimateIndexPreviewScrollTop,
     type IndexPreviewRenderedLineSample,
@@ -37,6 +38,10 @@ import { clampOffsetBeforeManagedSection } from "../core/text/editOffsets";
 
 const forceHighlightRefreshEffect = StateEffect.define<null>();
 const setManagedBlockHiddenEffect = StateEffect.define<boolean>();
+
+function getActiveDocument(): Document {
+    return (window as Window & { activeDocument: Document }).activeDocument;
+}
 
 interface ManagedBlockDecorationState {
     hidden: boolean;
@@ -207,7 +212,7 @@ export class CommentHighlightController {
         indexFilePath: string;
     } | null {
         const clickedTarget = findClickedIndexLivePreviewTarget(
-            target instanceof Element ? target : null,
+            nodeInstanceOf(target, Element) ? target : null,
         );
         if (!clickedTarget) {
             return null;
@@ -257,12 +262,12 @@ export class CommentHighlightController {
         }
 
         const markdownView = this.host.getMarkdownViewForFile(file);
-        if (!(markdownView?.contentEl instanceof HTMLElement)) {
+        if (!nodeInstanceOf(markdownView?.contentEl, HTMLElement)) {
             return null;
         }
 
         const previewRoot = markdownView.contentEl.querySelector(".markdown-preview-view, .markdown-rendered");
-        if (!(previewRoot instanceof HTMLElement)) {
+        if (!nodeInstanceOf(previewRoot, HTMLElement)) {
             return null;
         }
 
@@ -277,7 +282,7 @@ export class CommentHighlightController {
     ): HTMLElement | null {
         let targetRow: HTMLElement | null = null;
         previewRoot.querySelectorAll(this.indexPreviewLinkSelector).forEach((link) => {
-            if (!(link instanceof HTMLAnchorElement)) {
+            if (!nodeInstanceOf(link, HTMLAnchorElement)) {
                 return;
             }
 
@@ -287,7 +292,7 @@ export class CommentHighlightController {
             }
 
             const rowEl = link.closest("p, li");
-            if (rowEl instanceof HTMLElement) {
+            if (nodeInstanceOf(rowEl, HTMLElement)) {
                 targetRow = rowEl;
             }
         });
@@ -303,7 +308,7 @@ export class CommentHighlightController {
         const samples: IndexPreviewRenderedLineSample[] = [];
 
         previewRoot.querySelectorAll(this.indexPreviewLinkSelector).forEach((link) => {
-            if (!(link instanceof HTMLAnchorElement)) {
+            if (!nodeInstanceOf(link, HTMLAnchorElement)) {
                 return;
             }
 
@@ -318,7 +323,7 @@ export class CommentHighlightController {
             }
 
             const rowEl = link.closest("p, li");
-            if (!(rowEl instanceof HTMLElement)) {
+            if (!nodeInstanceOf(rowEl, HTMLElement)) {
                 return;
             }
 
@@ -340,7 +345,7 @@ export class CommentHighlightController {
         const samples: IndexPreviewRenderedLineSample[] = [];
 
         previewRoot.querySelectorAll(this.indexPreviewFileHeadingSelector).forEach((heading) => {
-            if (!(heading instanceof HTMLElement)) {
+            if (!nodeInstanceOf(heading, HTMLElement)) {
                 return;
             }
 
@@ -400,7 +405,7 @@ export class CommentHighlightController {
     ): boolean {
         let expanded = false;
         previewRoot.querySelectorAll(this.indexPreviewFileHeadingSelector).forEach((headingLabel) => {
-            if (!(headingLabel instanceof HTMLElement)) {
+            if (!nodeInstanceOf(headingLabel, HTMLElement)) {
                 return;
             }
 
@@ -409,17 +414,17 @@ export class CommentHighlightController {
             }
 
             const heading = headingLabel.closest("h5") ?? headingLabel.closest("h4");
-            if (!(heading instanceof HTMLHeadingElement)) {
+            if (!nodeInstanceOf(heading, HTMLHeadingElement)) {
                 return;
             }
 
             const headingContainer = heading.closest(heading.tagName.toLowerCase() === "h5" ? ".el-h5" : ".el-h4");
-            if (!(headingContainer instanceof HTMLElement) || !headingContainer.classList.contains("is-collapsed")) {
+            if (!nodeInstanceOf(headingContainer, HTMLElement) || !headingContainer.classList.contains("is-collapsed")) {
                 return;
             }
 
             const collapseToggle = heading.querySelector(".heading-collapse-indicator, .collapse-indicator, .collapse-icon");
-            if (collapseToggle instanceof HTMLElement) {
+            if (nodeInstanceOf(collapseToggle, HTMLElement)) {
                 collapseToggle.click();
             } else {
                 heading.click();
@@ -439,7 +444,7 @@ export class CommentHighlightController {
     ): boolean {
         let expanded = false;
         previewRoot.querySelectorAll(`${headingSelector}[data-heading]`).forEach((heading) => {
-            if (!(heading instanceof HTMLHeadingElement)) {
+            if (!nodeInstanceOf(heading, HTMLHeadingElement)) {
                 return;
             }
 
@@ -448,12 +453,12 @@ export class CommentHighlightController {
             }
 
             const headingContainer = heading.closest(`.${containerClass}`);
-            if (!(headingContainer instanceof HTMLElement) || !headingContainer.classList.contains("is-collapsed")) {
+            if (!nodeInstanceOf(headingContainer, HTMLElement) || !headingContainer.classList.contains("is-collapsed")) {
                 return;
             }
 
             const collapseToggle = heading.querySelector(".heading-collapse-indicator, .collapse-indicator, .collapse-icon");
-            if (collapseToggle instanceof HTMLElement) {
+            if (nodeInstanceOf(collapseToggle, HTMLElement)) {
                 collapseToggle.click();
             } else {
                 heading.click();
@@ -467,7 +472,7 @@ export class CommentHighlightController {
 
     private waitForPreviewFrame(): Promise<void> {
         return new Promise((resolve) => {
-            requestAnimationFrame(() => resolve());
+            window.requestAnimationFrame(() => resolve());
         });
     }
 
@@ -494,7 +499,7 @@ export class CommentHighlightController {
             return titlePath;
         }
 
-        if (element instanceof HTMLAnchorElement) {
+        if (nodeInstanceOf(element, HTMLAnchorElement)) {
             return parseIndexFileOpenUrl(element.getAttribute("href")?.trim() ?? "");
         }
 
@@ -503,7 +508,7 @@ export class CommentHighlightController {
 
     private prepareIndexPreviewLinks(element: HTMLElement): void {
         element.querySelectorAll(`a[href^="obsidian://${COMMENT_LOCATION_PROTOCOL}"], ${this.indexPreviewLinkSelector}`).forEach((link) => {
-            if (!(link instanceof HTMLAnchorElement)) {
+            if (!nodeInstanceOf(link, HTMLAnchorElement)) {
                 return;
             }
 
@@ -526,7 +531,7 @@ export class CommentHighlightController {
         });
 
         element.querySelectorAll(`a[href^="obsidian://open"], a[href^="obsidian://${INDEX_FILE_FILTER_PROTOCOL}"], a[data-aside-file-path]`).forEach((link) => {
-            if (!(link instanceof HTMLAnchorElement)) {
+            if (!nodeInstanceOf(link, HTMLAnchorElement)) {
                 return;
             }
 
@@ -555,7 +560,7 @@ export class CommentHighlightController {
         const selectedIndexFileScopeRootPath = this.host.getIndexFileScopeRootPath(sourcePath);
 
         element.querySelectorAll(this.indexPreviewLinkSelector).forEach((link) => {
-            if (!(link instanceof HTMLAnchorElement)) {
+            if (!nodeInstanceOf(link, HTMLAnchorElement)) {
                 return;
             }
 
@@ -565,13 +570,13 @@ export class CommentHighlightController {
 
             link.classList.remove("aside-highlight", "aside-highlight-preview", "aside-highlight-active");
 
-            if (rowEl instanceof HTMLElement) {
+            if (nodeInstanceOf(rowEl, HTMLElement)) {
                 rowEl.classList.toggle("aside-index-active-row", isActive);
             }
         });
 
         element.querySelectorAll(this.indexPreviewFileHeadingSelector).forEach((link) => {
-            if (!(link instanceof HTMLElement)) {
+            if (!nodeInstanceOf(link, HTMLElement)) {
                 return;
             }
 
@@ -581,7 +586,7 @@ export class CommentHighlightController {
             const rowEl = link.closest("p, li");
 
             link.classList.toggle("aside-index-selected-file", isSelected);
-            if (rowEl instanceof HTMLElement) {
+            if (nodeInstanceOf(rowEl, HTMLElement)) {
                 rowEl.classList.toggle("aside-index-selected-file-row", isSelected);
             }
         });
@@ -624,7 +629,7 @@ export class CommentHighlightController {
         };
 
         element.querySelectorAll(this.indexPreviewLinkSelector).forEach((link) => {
-            if (!(link instanceof HTMLAnchorElement) || link.dataset.asideIndexBound === "true") {
+            if (!nodeInstanceOf(link, HTMLAnchorElement) || link.dataset.asideIndexBound === "true") {
                 return;
             }
 
@@ -636,7 +641,7 @@ export class CommentHighlightController {
 
                 void this.host.activateIndexComment(target.commentId, sourcePath, target.filePath);
                 const previewRoot = element.closest(".markdown-preview-view, .markdown-rendered");
-                if (previewRoot instanceof HTMLElement) {
+                if (nodeInstanceOf(previewRoot, HTMLElement)) {
                     queueMicrotask(() => {
                         this.syncIndexPreviewLinkStates(previewRoot, sourcePath);
                     });
@@ -649,13 +654,13 @@ export class CommentHighlightController {
 
             bindActivator(link, activateLink);
             const rowEl = link.closest("p, li");
-            if (rowEl instanceof HTMLElement) {
+            if (nodeInstanceOf(rowEl, HTMLElement)) {
                 bindActivator(rowEl, activateLink);
             }
         });
 
         element.querySelectorAll(this.indexPreviewFileHeadingSelector).forEach((link) => {
-            if (!(link instanceof HTMLElement) || link.dataset.asideIndexBound === "true") {
+            if (!nodeInstanceOf(link, HTMLElement) || link.dataset.asideIndexBound === "true") {
                 return;
             }
 
@@ -668,7 +673,7 @@ export class CommentHighlightController {
                 void (async () => {
                     await this.host.activateIndexFileScope(sourcePath, filePath);
                     const previewRoot = element.closest(".markdown-preview-view, .markdown-rendered");
-                    if (previewRoot instanceof HTMLElement) {
+                    if (nodeInstanceOf(previewRoot, HTMLElement)) {
                         this.syncIndexPreviewLinkStates(previewRoot, sourcePath);
                     } else {
                         this.syncIndexPreviewLinkStates(element, sourcePath);
@@ -678,7 +683,7 @@ export class CommentHighlightController {
 
             bindActivator(link, activateFile);
             const rowEl = link.closest("p, li");
-            if (rowEl instanceof HTMLElement) {
+            if (nodeInstanceOf(rowEl, HTMLElement)) {
                 bindActivator(rowEl, activateFile);
             }
         });
@@ -795,7 +800,8 @@ export class CommentHighlightController {
         plugin.registerMarkdownPostProcessor(async (element, context) => {
             await this.applyPreviewHighlights(element, context);
         });
-        plugin.registerDomEvent(document, "mousedown", (event) => {
+        const eventDocument = getActiveDocument();
+        plugin.registerDomEvent(eventDocument, "mousedown", (event) => {
             if (!this.isPlainPrimaryClick(event)) {
                 return;
             }
@@ -809,7 +815,7 @@ export class CommentHighlightController {
             event.stopPropagation();
             event.stopImmediatePropagation();
         }, true);
-        plugin.registerDomEvent(document, "click", (event) => {
+        plugin.registerDomEvent(eventDocument, "click", (event) => {
             if (!this.isPlainPrimaryClick(event)) {
                 return;
             }
@@ -824,7 +830,7 @@ export class CommentHighlightController {
             event.stopImmediatePropagation();
             this.activateIndexInteraction(context);
         }, true);
-        plugin.registerDomEvent(document, "keydown", (event) => {
+        plugin.registerDomEvent(eventDocument, "keydown", (event) => {
             if (event.key !== "Enter" && event.key !== " ") {
                 return;
             }
@@ -1053,7 +1059,7 @@ export class CommentHighlightController {
                 }
 
                 const target = event.target;
-                if (!(target instanceof HTMLElement)) {
+                if (!nodeInstanceOf(target, HTMLElement)) {
                     return false;
                 }
 
@@ -1075,7 +1081,7 @@ export class CommentHighlightController {
                 }
 
                 const lineEl = target.closest(".cm-line");
-                if (!(lineEl instanceof HTMLElement)) {
+                if (!nodeInstanceOf(lineEl, HTMLElement)) {
                     return false;
                 }
 
@@ -1109,7 +1115,7 @@ export class CommentHighlightController {
                 }
 
                 const target = event.target;
-                if (!(target instanceof HTMLElement)) {
+                if (!nodeInstanceOf(target, HTMLElement)) {
                     return false;
                 }
 
@@ -1132,7 +1138,7 @@ export class CommentHighlightController {
                 }
 
                 const lineEl = target.closest(".cm-line");
-                if (!(lineEl instanceof HTMLElement)) {
+                if (!nodeInstanceOf(lineEl, HTMLElement)) {
                     return false;
                 }
 
@@ -1223,7 +1229,13 @@ export class CommentHighlightController {
         }
 
         const textNodes: Array<{ node: Text; start: number; end: number }> = [];
-        const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+        const ownerDocument = element.ownerDocument;
+        const nodeFilter = ownerDocument.defaultView?.NodeFilter;
+        if (!nodeFilter) {
+            return;
+        }
+
+        const walker = ownerDocument.createTreeWalker(element, nodeFilter.SHOW_TEXT);
         let offset = 0;
 
         while (walker.nextNode()) {
@@ -1278,11 +1290,11 @@ export class CommentHighlightController {
             }
 
             try {
-                const range = document.createRange();
+                const range = ownerDocument.createRange();
                 range.setStart(startPos.node, startPos.offsetInNode);
                 range.setEnd(endPos.node, endPos.offsetInNode);
 
-                const span = document.createElement("span");
+                const span = ownerDocument.createElement("span");
                 span.classList.add("aside-highlight", "aside-highlight-preview");
                 if (wrap.comment.resolved) {
                     span.classList.add("aside-highlight-resolved");

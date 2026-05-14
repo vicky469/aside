@@ -1,3 +1,5 @@
+import { nodeInstanceOf } from "../domGuards";
+
 const COMMENT_MENTION_PATTERN = /(^|[^\w])(@[A-Za-z0-9_/-]+(?:\.[A-Za-z0-9_/-]+)*)/g;
 
 function appendMentionNodes(
@@ -166,21 +168,26 @@ function createMentionFragment(
 
 export function decorateRenderedCommentMentions(container: HTMLElement): void {
     const document = container.ownerDocument;
+    const nodeFilter = document.defaultView?.NodeFilter;
+    if (!nodeFilter) {
+        return;
+    }
+
     const walker = document.createTreeWalker(
         container,
-        NodeFilter.SHOW_TEXT,
+        nodeFilter.SHOW_TEXT,
         {
             acceptNode: (node) => {
-                if (!(node instanceof Text) || !node.nodeValue || !node.nodeValue.includes("@")) {
-                    return NodeFilter.FILTER_REJECT;
+                if (!nodeInstanceOf(node, Text) || !node.nodeValue || !node.nodeValue.includes("@")) {
+                    return nodeFilter.FILTER_REJECT;
                 }
 
                 const parent = node.parentElement;
                 if (!parent || parent.closest("a, code, pre, .aside-comment-mention")) {
-                    return NodeFilter.FILTER_REJECT;
+                    return nodeFilter.FILTER_REJECT;
                 }
 
-                return NodeFilter.FILTER_ACCEPT;
+                return nodeFilter.FILTER_ACCEPT;
             },
         },
     );

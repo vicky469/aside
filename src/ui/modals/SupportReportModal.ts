@@ -228,7 +228,7 @@ export default class SupportReportModal extends Modal {
     }
 
     private openScreenshotPicker(): void {
-        const inputEl = document.createElement("input");
+        const inputEl = this.contentEl.ownerDocument.createElement("input");
         inputEl.type = "file";
         inputEl.accept = "image/png,image/jpeg,image/webp";
         inputEl.multiple = true;
@@ -242,7 +242,7 @@ export default class SupportReportModal extends Modal {
 
             this.screenshotAttachments = this.screenshotAttachments.concat(
                 selection.accepted.map((file) => ({
-                    id: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${file.name}`,
+                    id: this.contentEl.win.crypto?.randomUUID?.() ?? `${Date.now()}-${file.name}`,
                     file,
                 })),
             );
