@@ -1059,7 +1059,6 @@ export default class Aside extends Plugin {
                 modules,
                 env: getProcessEnv(),
                 skillName: "aside",
-                legacySkillNames: ["sidenote2"],
                 skillContent: bundledAsideSkillContent,
                 pluginVersion: this.manifest.version,
                 previouslySyncedPluginVersion: this.getSyncedBundledSidenoteSkillPluginVersion(),

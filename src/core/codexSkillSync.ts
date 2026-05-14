@@ -4,9 +4,7 @@ type FileEncoding = "utf8";
 export interface CodexSkillSyncModules {
     fsPromises: {
         access(path: string): Promise<void>;
-        mkdir(path: string, options: { recursive?: boolean }): Promise<string | undefined | void>;
         readFile(path: string, encoding: FileEncoding): Promise<string>;
-        rm(path: string, options: { recursive?: boolean; force?: boolean }): Promise<void>;
         writeFile(path: string, data: string, encoding: FileEncoding): Promise<void>;
     };
     os: {
@@ -46,6 +44,19 @@ function getCodexSkillsRoot(modules: CodexSkillSyncModules, env: ExecEnv): strin
         : modules.path.join(modules.os.homedir(), ".codex", "skills");
 }
 
+function getCodexSkillPaths(
+    modules: CodexSkillSyncModules,
+    env: ExecEnv,
+    skillName: string,
+): { skillDirPath: string; skillFilePath: string } {
+    const skillsRoot = getCodexSkillsRoot(modules, env);
+    const skillDirPath = modules.path.join(skillsRoot, skillName);
+    return {
+        skillDirPath,
+        skillFilePath: modules.path.join(skillDirPath, "SKILL.md"),
+    };
+}
+
 async function pathExists(modules: CodexSkillSyncModules, targetPath: string): Promise<boolean> {
     try {
         await modules.fsPromises.access(targetPath);
@@ -59,35 +70,23 @@ export async function syncInstalledCodexSkill(options: {
     modules: CodexSkillSyncModules;
     env?: ExecEnv;
     skillName: string;
-    legacySkillNames?: string[];
     skillContent: string;
     pluginVersion: string;
     previouslySyncedPluginVersion?: string | null;
 }): Promise<CodexSkillSyncResult> {
     const env = options.env ?? {};
-    const skillsRoot = getCodexSkillsRoot(options.modules, env);
-    const skillDirPath = options.modules.path.join(skillsRoot, options.skillName);
-    const skillFilePath = options.modules.path.join(skillDirPath, "SKILL.md");
-    const isSkillInstalled = await pathExists(options.modules, skillDirPath);
-    let shouldCreateFromLegacy = false;
+    const { skillDirPath, skillFilePath } = getCodexSkillPaths(options.modules, env, options.skillName);
+    const hasSkillFile = await pathExists(options.modules, skillFilePath);
 
-    if (!isSkillInstalled) {
-        const hasLegacySkill = await Promise.all(
-            (options.legacySkillNames ?? []).map((legacySkillName) =>
-                pathExists(options.modules, options.modules.path.join(skillsRoot, legacySkillName))
-            ),
-        );
-        if (!hasLegacySkill.some(Boolean)) {
-            return {
-                kind: "not-installed",
-                skillDirPath,
-                skillFilePath,
-            };
-        }
-        shouldCreateFromLegacy = true;
+    if (!hasSkillFile) {
+        return {
+            kind: "not-installed",
+            skillDirPath,
+            skillFilePath,
+        };
     }
 
-    if (!shouldCreateFromLegacy && options.previouslySyncedPluginVersion === options.pluginVersion) {
+    if (options.previouslySyncedPluginVersion === options.pluginVersion) {
         return {
             kind: "already-synced",
             skillDirPath,
@@ -95,18 +94,15 @@ export async function syncInstalledCodexSkill(options: {
         };
     }
 
-    if (await pathExists(options.modules, skillFilePath)) {
-        const installedSkill = await options.modules.fsPromises.readFile(skillFilePath, "utf8");
-        if (installedSkill === options.skillContent) {
-            return {
-                kind: "current",
-                skillDirPath,
-                skillFilePath,
-            };
-        }
+    const installedSkill = await options.modules.fsPromises.readFile(skillFilePath, "utf8");
+    if (installedSkill === options.skillContent) {
+        return {
+            kind: "current",
+            skillDirPath,
+            skillFilePath,
+        };
     }
 
-    await options.modules.fsPromises.mkdir(skillDirPath, { recursive: true });
     await options.modules.fsPromises.writeFile(skillFilePath, options.skillContent, "utf8");
     return {
         kind: "updated",

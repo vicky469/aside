@@ -1,5 +1,5 @@
 import * as assert from "node:assert/strict";
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import test from "node:test";
@@ -9,9 +9,7 @@ function createModules(homeDirectory: string): CodexSkillSyncModules {
     return {
         fsPromises: {
             access,
-            mkdir,
             readFile,
-            rm,
             writeFile,
         },
         os: {
@@ -23,6 +21,7 @@ function createModules(homeDirectory: string): CodexSkillSyncModules {
 
 test("syncInstalledCodexSkill skips when the skill is not installed", async () => {
     const codexHome = await mkdtemp(path.join(tmpdir(), "aside-codex-home-missing-"));
+    const skillFile = path.join(codexHome, "skills", "aside", "SKILL.md");
     const result = await syncInstalledCodexSkill({
         modules: createModules("/Users/ignored"),
         env: { CODEX_HOME: codexHome },
@@ -33,7 +32,7 @@ test("syncInstalledCodexSkill skips when the skill is not installed", async () =
     });
 
     assert.equal(result.kind, "not-installed");
-    await assert.rejects(access(path.join(codexHome, "skills", "aside", "SKILL.md")));
+    await assert.rejects(access(skillFile));
 });
 
 test("syncInstalledCodexSkill updates an installed stale skill without deleting unrelated files", async () => {
@@ -59,7 +58,7 @@ test("syncInstalledCodexSkill updates an installed stale skill without deleting 
     assert.equal(await readFile(path.join(skillDir, "extra.txt"), "utf8"), "old");
 });
 
-test("syncInstalledCodexSkill installs Aside when only the legacy SideNote2 skill exists", async () => {
+test("syncInstalledCodexSkill does not install Aside when only the legacy SideNote2 skill exists", async () => {
     const codexHome = await mkdtemp(path.join(tmpdir(), "aside-codex-home-legacy-"));
     const legacySkillDir = path.join(codexHome, "skills", "sidenote2");
     const skillDir = path.join(codexHome, "skills", "aside");
@@ -72,14 +71,13 @@ test("syncInstalledCodexSkill installs Aside when only the legacy SideNote2 skil
         modules: createModules("/Users/ignored"),
         env: { CODEX_HOME: codexHome },
         skillName: "aside",
-        legacySkillNames: ["sidenote2"],
         skillContent: "fresh skill body",
         pluginVersion: "2.0.64",
         previouslySyncedPluginVersion: "2.0.64",
     });
 
-    assert.equal(result.kind, "updated");
-    assert.equal(await readFile(skillFile, "utf8"), "fresh skill body");
+    assert.equal(result.kind, "not-installed");
+    await assert.rejects(access(skillFile));
     assert.equal(await readFile(path.join(legacySkillDir, "SKILL.md"), "utf8"), "legacy body");
 });
 
