@@ -410,7 +410,7 @@ export default class Aside extends Plugin {
         deleteStoredComments: (filePath) => this.commentPersistenceController.deleteStoredComments(filePath),
         clearParsedNoteCache: (filePath) => this.clearParsedNoteCache(filePath),
         clearDerivedCommentLinksForFile: (filePath) => this.derivedCommentMetadataManager.clearDerivedCommentLinksForFile(filePath),
-        isCommentableFile: (file): file is TFile => this.isCommentableFile(file),
+        isCommentableFile: (file): file is TFile => file instanceof TFile && this.isCommentableFile(file),
         loadCommentsForFile: (file) => this.loadCommentsForFile(file),
         refreshCommentViews: () => this.workspaceViewController.refreshCommentViews(),
         refreshEditorDecorations: () => this.refreshEditorDecorations(),

@@ -76,6 +76,21 @@ test("AggregateCommentIndex updates, renames, deletes, and returns cloned commen
     assert.equal(index.getCommentById("missing"), null);
 });
 
+test("AggregateCommentIndex deletes every cached file under a folder path", () => {
+    const index = new AggregateCommentIndex();
+    index.updateFile("Deleted/a.md", [createComment({ filePath: "Deleted/a.md", id: "deleted-a" })]);
+    index.updateFile("Deleted/nested/b.md", [createComment({ filePath: "Deleted/nested/b.md", id: "deleted-b" })]);
+    index.updateFile("Deletedness/c.md", [createComment({ filePath: "Deletedness/c.md", id: "keep-c" })]);
+    index.updateFile("Other.md", [createComment({ filePath: "Other.md", id: "keep-other" })]);
+
+    index.deleteFolder("Deleted");
+
+    assert.deepEqual(
+        index.getAllComments().map((comment) => comment.id).sort(),
+        ["keep-c", "keep-other"],
+    );
+});
+
 test("AggregateCommentIndex resolves child thread entries by id", () => {
     const index = new AggregateCommentIndex();
     const thread = commentToThread(createComment({ filePath: "a.md", id: "thread-1", comment: "parent" }));

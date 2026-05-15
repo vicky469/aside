@@ -1,4 +1,4 @@
-import type { Plugin, TFile } from "obsidian";
+import type { Plugin, TAbstractFile, TFile } from "obsidian";
 import type { CommentManager } from "../commentManager";
 import type { AggregateCommentIndex } from "../index/AggregateCommentIndex";
 
@@ -11,7 +11,7 @@ export interface PluginLifecycleHost {
     deleteStoredComments(filePath: string): Promise<void>;
     clearParsedNoteCache(filePath: string): void;
     clearDerivedCommentLinksForFile(filePath: string): void;
-    isCommentableFile(file: TFile | null): file is TFile;
+    isCommentableFile(file: TAbstractFile | null): file is TFile;
     loadCommentsForFile(file: TFile | null): Promise<unknown>;
     refreshCommentViews(): Promise<void>;
     refreshEditorDecorations(): void;
@@ -29,6 +29,44 @@ export class PluginLifecycleController {
     private readonly editorUpdateTimers: Record<string, number> = {};
 
     constructor(private readonly host: PluginLifecycleHost) {}
+
+    private getFolderChildren(file: TAbstractFile): TAbstractFile[] {
+        const children = (file as { children?: unknown }).children;
+        return Array.isArray(children)
+            ? children.filter((child): child is TAbstractFile => !!child && typeof (child as TAbstractFile).path === "string")
+            : [];
+    }
+
+    private isFolder(file: TAbstractFile): boolean {
+        return !("extension" in file);
+    }
+
+    private isFile(file: TAbstractFile): file is TFile {
+        return "extension" in file;
+    }
+
+    private collectCommentableFiles(file: TAbstractFile): TFile[] {
+        if (this.isFile(file) && this.host.isCommentableFile(file)) {
+            return [file];
+        }
+
+        return this.getFolderChildren(file)
+            .flatMap((child) => this.collectCommentableFiles(child));
+    }
+
+    private async clearDeletedCommentFile(filePath: string): Promise<void> {
+        await this.host.deleteStoredComments(filePath);
+        this.host.getCommentManager().replaceCommentsForFile(filePath, []);
+        this.host.clearParsedNoteCache(filePath);
+        this.host.getAggregateCommentIndex().deleteFile(filePath);
+        this.host.clearDerivedCommentLinksForFile(filePath);
+    }
+
+    private refreshAfterCommentDelete(): void {
+        void this.host.refreshCommentViews();
+        this.host.refreshEditorDecorations();
+        void this.host.refreshAggregateNoteNow();
+    }
 
     public async handleLayoutReady(): Promise<void> {
         await this.host.ensureSidebarView();
@@ -56,19 +94,29 @@ export class PluginLifecycleController {
         this.host.scheduleAggregateNoteRefresh();
     }
 
-    public async handleFileDelete(file: TFile | null): Promise<void> {
-        if (!this.host.isCommentableFile(file)) {
+    public async handleFileDelete(file: TAbstractFile | null): Promise<void> {
+        if (!file) {
             return;
         }
 
-        await this.host.deleteStoredComments(file.path);
-        this.host.getCommentManager().replaceCommentsForFile(file.path, []);
-        this.host.clearParsedNoteCache(file.path);
-        this.host.getAggregateCommentIndex().deleteFile(file.path);
-        this.host.clearDerivedCommentLinksForFile(file.path);
-        void this.host.refreshCommentViews();
-        this.host.refreshEditorDecorations();
-        void this.host.refreshAggregateNoteNow();
+        if (this.isFile(file)) {
+            if (!this.host.isCommentableFile(file)) {
+                return;
+            }
+
+            await this.clearDeletedCommentFile(file.path);
+            this.refreshAfterCommentDelete();
+            return;
+        }
+
+        const deletedFiles = this.collectCommentableFiles(file);
+        for (const deletedFile of deletedFiles) {
+            await this.clearDeletedCommentFile(deletedFile.path);
+        }
+
+        this.host.getCommentManager().deleteFolder(file.path);
+        this.host.getAggregateCommentIndex().deleteFolder(file.path);
+        this.refreshAfterCommentDelete();
     }
 
     public async handleFileModify(file: TFile | null): Promise<void> {

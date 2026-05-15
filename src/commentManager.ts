@@ -1,5 +1,6 @@
 import { resolveAnchorRange } from "./core/anchors/anchorResolver";
 import { getPageCommentLabel, isPageComment } from "./core/anchors/commentAnchors";
+import { isPathInsideFolder } from "./core/files/pathScope";
 import {
     isSoftDeleted,
     isSoftDeletedExpired,
@@ -358,6 +359,16 @@ export class CommentManager {
         this.setThreads(this.threads
             .filter((thread) => thread.filePath !== filePath)
             .concat(nextThreads.map((thread) => normalizeThread(thread))));
+        this.purgeExpiredDeletedComments();
+    }
+
+    deleteFolder(folderPath: string) {
+        const nextThreads = this.threads.filter((thread) => !isPathInsideFolder(thread.filePath, folderPath));
+        if (nextThreads.length === this.threads.length) {
+            return;
+        }
+
+        this.setThreads(nextThreads);
         this.purgeExpiredDeletedComments();
     }
 

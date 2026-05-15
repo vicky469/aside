@@ -1,6 +1,6 @@
 import * as assert from "node:assert/strict";
 import test from "node:test";
-import type { TFile } from "obsidian";
+import type { TAbstractFile, TFile } from "obsidian";
 import { CommentManager, type Comment } from "../src/commentManager";
 import { PluginLifecycleController } from "../src/app/pluginLifecycleController";
 import { AggregateCommentIndex } from "../src/index/AggregateCommentIndex";
@@ -11,6 +11,14 @@ function createFile(path: string): TFile {
         basename: path.split("/").pop()?.replace(/\.[^.]+$/, "") ?? path,
         extension: path.split(".").pop() ?? "",
     } as TFile;
+}
+
+function createFolder(path: string, children: TAbstractFile[] = []): TAbstractFile {
+    return {
+        path,
+        name: path.split("/").pop() ?? path,
+        children,
+    } as unknown as TAbstractFile;
 }
 
 function createComment(overrides: Partial<Comment> = {}): Comment {
@@ -83,7 +91,7 @@ function createHarness(options: {
         clearDerivedCommentLinksForFile: (filePath) => {
             clearedDerivedPaths.push(filePath);
         },
-        isCommentableFile: (file): file is TFile => !!file && file.extension === "md",
+        isCommentableFile: (file): file is TFile => !!file && (file as { extension?: unknown }).extension === "md",
         loadCommentsForFile: async (file) => {
             if (file) {
                 loadedFiles.push(file.path);
@@ -205,6 +213,32 @@ test("plugin lifecycle controller clears deleted comment files only when comment
     assert.equal(harness.getRefreshEditorDecorationsCount(), 1);
     assert.equal(harness.getRefreshAggregateNoteNowCount(), 1);
     assert.equal(harness.getScheduleAggregateNoteRefreshCount(), 0);
+});
+
+test("plugin lifecycle controller clears cached comments under deleted folders", async () => {
+    const deletedFolder = createFolder("Deleted");
+    const harness = createHarness({
+        initialComments: [
+            createComment({ filePath: "Deleted/a.md", id: "deleted-a" }),
+            createComment({ filePath: "Deleted/nested/b.md", id: "deleted-b" }),
+            createComment({ filePath: "Deletedness/c.md", id: "keep-c" }),
+        ],
+    });
+
+    await harness.controller.handleFileDelete(deletedFolder);
+
+    assert.deepEqual(
+        harness.commentManager.getAllComments().map((comment) => comment.id).sort(),
+        ["keep-c"],
+    );
+    assert.deepEqual(
+        harness.aggregateCommentIndex.getAllComments().map((comment) => comment.id).sort(),
+        ["keep-c"],
+    );
+    assert.deepEqual(harness.deletedStoredComments, []);
+    assert.equal(harness.getRefreshCommentViewsCount(), 1);
+    assert.equal(harness.getRefreshEditorDecorationsCount(), 1);
+    assert.equal(harness.getRefreshAggregateNoteNowCount(), 1);
 });
 
 test("plugin lifecycle controller only forwards markdown modify events", async () => {

@@ -1,4 +1,4 @@
-import type { EventRef, TFile, WorkspaceLeaf } from "obsidian";
+import type { EventRef, TAbstractFile, TFile, WorkspaceLeaf } from "obsidian";
 
 type WorkspaceEventName = "file-open" | "active-leaf-change" | "editor-change";
 type VaultEventName = "rename" | "delete" | "modify";
@@ -30,9 +30,13 @@ export interface PluginEventRouterHost {
     handleFileOpen(file: TFile | null): void;
     handleActiveLeafChange(leaf: WorkspaceLeaf | null): void;
     handleFileRename(file: TFile | null, oldPath: string): Promise<void>;
-    handleFileDelete(file: TFile | null): Promise<void>;
+    handleFileDelete(file: TAbstractFile | null): Promise<void>;
     handleFileModify(file: TFile | null): Promise<void>;
     handleEditorChange(filePath: string | null | undefined): void;
+}
+
+function isTAbstractFile(value: unknown): value is TAbstractFile {
+    return !!value && typeof (value as TAbstractFile).path === "string";
 }
 
 export class PluginEventRouter {
@@ -87,7 +91,7 @@ export class PluginEventRouter {
 
         this.host.registerEvent(
             this.host.app.vault.on("delete", async (file) => {
-                await this.host.handleFileDelete(this.host.isTFile(file) ? file : null);
+                await this.host.handleFileDelete(isTAbstractFile(file) ? file : null);
             }),
         );
 

@@ -6,6 +6,7 @@ import {
     getFirstThreadEntry,
     threadEntryToComment,
 } from "../commentManager";
+import { isPathInsideFolder } from "../core/files/pathScope";
 import { isSoftDeleted } from "../core/rules/deletedCommentVisibility";
 
 function isThreadLike(value: Comment | CommentThread): value is CommentThread {
@@ -55,6 +56,22 @@ export class AggregateCommentIndex {
             this.version += 1;
         }
         this.threadsByFile.delete(filePath);
+    }
+
+    deleteFolder(folderPath: string): void {
+        let changed = false;
+        for (const filePath of this.threadsByFile.keys()) {
+            if (!isPathInsideFolder(filePath, folderPath)) {
+                continue;
+            }
+
+            this.threadsByFile.delete(filePath);
+            changed = true;
+        }
+
+        if (changed) {
+            this.version += 1;
+        }
     }
 
     getAllThreads(): CommentThread[] {

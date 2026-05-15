@@ -1,6 +1,6 @@
 import * as assert from "node:assert/strict";
 import test from "node:test";
-import type { EventRef, TFile, WorkspaceLeaf } from "obsidian";
+import type { EventRef, TAbstractFile, TFile, WorkspaceLeaf } from "obsidian";
 import { PluginEventRouter } from "../src/app/pluginEventRouter";
 
 type WorkspaceEventName = "file-open" | "active-leaf-change" | "editor-change";
@@ -12,6 +12,13 @@ function createFile(path: string): TFile {
         basename: path.split("/").pop()?.replace(/\.[^.]+$/, "") ?? path,
         extension: path.split(".").pop() ?? "",
     } as TFile;
+}
+
+function createFolder(path: string): TAbstractFile {
+    return {
+        path,
+        name: path.split("/").pop() ?? path,
+    } as TAbstractFile;
 }
 
 function createHarness(options: { layoutReady?: boolean } = {}) {
@@ -54,7 +61,9 @@ function createHarness(options: { layoutReady?: boolean } = {}) {
         registerEvent: (eventRef) => {
             registeredEvents.push(eventRef);
         },
-        isTFile: (value): value is TFile => !!value && typeof (value as TFile).path === "string",
+        isTFile: (value): value is TFile => !!value
+            && typeof (value as TFile).path === "string"
+            && typeof (value as TFile).extension === "string",
         handleLayoutReady: async () => {
             calls.push("layout-ready");
         },
@@ -120,6 +129,17 @@ test("plugin event router exposes Obsidian event flow in one module", async () =
         "delete:docs/a.md",
         "modify:docs/a.md",
     ]);
+});
+
+test("plugin event router preserves deleted folder paths", async () => {
+    const harness = createHarness();
+    const folder = createFolder("Deleted");
+
+    await harness.router.register();
+    harness.vaultHandlers.get("delete")?.(folder);
+    await Promise.resolve();
+
+    assert.deepEqual(harness.calls, ["delete:Deleted"]);
 });
 
 test("plugin event router preserves immediate and deferred layout-ready handling", async () => {
