@@ -1,7 +1,6 @@
 import * as assert from "node:assert/strict";
 import test from "node:test";
 import {
-    appendNoteCommentEntryById,
     getManagedSectionEdit,
     getManagedSectionKind,
     getManagedSectionLineRange,
@@ -9,8 +8,6 @@ import {
     getManagedSectionStartLine,
     getVisibleNoteContent,
     parseNoteComments,
-    resolveNoteCommentById,
-    replaceNoteCommentBodyById,
     serializeNoteComments,
     serializeNoteCommentThreads,
 } from "../src/core/storage/noteCommentStorage";
@@ -264,110 +261,6 @@ test("serializeNoteComments removes the managed appendix when there are no comme
 
     assert.equal(withoutComments, "Body\n");
     assert.equal(parseNoteComments(withoutComments, "note.md").comments.length, 0);
-});
-
-test("replaceNoteCommentBodyById updates only the targeted stored comment", () => {
-    const original = serializeNoteComments("# Title\n\nAlpha beta gamma.\n", [
-        createComment({
-            id: "comment-1",
-            comment: "Original alpha",
-        }),
-        createComment({
-            id: "comment-2",
-            comment: "Original beta",
-            timestamp: 1710000001000,
-        }),
-    ]);
-
-    const updated = replaceNoteCommentBodyById(original, "note.md", "comment-2", "Updated beta\n");
-    assert.ok(updated);
-
-    const parsed = parseNoteComments(updated, "note.md");
-    assert.equal(parsed.comments[0].comment, "Original alpha");
-    assert.equal(parsed.comments[1].comment, "Updated beta");
-    assert.match(updated, /Alpha beta gamma\./);
-});
-
-test("replaceNoteCommentBodyById returns null when the target id is missing", () => {
-    const original = serializeNoteComments("Body\n", [createComment()]);
-    assert.equal(replaceNoteCommentBodyById(original, "note.md", "missing-id", "Updated"), null);
-});
-
-test("appendNoteCommentEntryById appends a new entry to the targeted thread", () => {
-    const original = serializeNoteComments("# Title\n\nAlpha beta gamma.\n", [
-        createComment({
-            id: "comment-1",
-            comment: "Original alpha",
-        }),
-    ]);
-
-    const updated = appendNoteCommentEntryById(original, "note.md", "comment-1", {
-        id: "entry-2",
-        body: "Follow up reply\n",
-        timestamp: 1710000001000,
-    });
-    assert.ok(updated);
-
-    const parsed = parseNoteComments(updated, "note.md");
-    assert.equal(parsed.comments.length, 1);
-    assert.equal(parsed.comments[0].comment, "Follow up reply");
-    assert.equal(parsed.threads[0].entries.length, 2);
-    assert.equal(parsed.threads[0].entries[0].body, "Original alpha");
-    assert.equal(parsed.threads[0].entries[1].id, "entry-2");
-    assert.equal(parsed.threads[0].entries[1].body, "Follow up reply");
-    assert.match(updated, /Alpha beta gamma\./);
-});
-
-test("appendNoteCommentEntryById returns null when the target id is missing", () => {
-    const original = serializeNoteComments("Body\n", [createComment()]);
-    assert.equal(appendNoteCommentEntryById(original, "note.md", "missing-id", {
-        id: "entry-2",
-        body: "Follow up",
-        timestamp: 1710000001000,
-    }), null);
-});
-
-test("resolveNoteCommentById marks the targeted thread resolved", () => {
-    const original = serializeNoteComments("# Title\n\nAlpha beta gamma.\n", [
-        createComment({
-            id: "comment-1",
-            resolved: false,
-        }),
-    ]);
-
-    const updated = resolveNoteCommentById(original, "note.md", "comment-1");
-    assert.ok(updated);
-
-    const parsed = parseNoteComments(updated, "note.md");
-    assert.equal(parsed.comments[0].resolved, true);
-    assert.equal(parsed.threads[0].resolved, true);
-    assert.match(updated, /"resolved": true/);
-});
-
-test("resolveNoteCommentById can target a child entry id and resolves the whole thread", () => {
-    const original = appendNoteCommentEntryById(serializeNoteComments("# Title\n\nAlpha beta gamma.\n", [
-        createComment({
-            id: "comment-1",
-            resolved: false,
-        }),
-    ]), "note.md", "comment-1", {
-        id: "entry-2",
-        body: "Follow up",
-        timestamp: 1710000001000,
-    });
-    assert.ok(original);
-
-    const updated = resolveNoteCommentById(original, "note.md", "entry-2");
-    assert.ok(updated);
-
-    const parsed = parseNoteComments(updated, "note.md");
-    assert.equal(parsed.comments[0].resolved, true);
-    assert.equal(parsed.threads[0].resolved, true);
-});
-
-test("resolveNoteCommentById returns null when the target id is missing", () => {
-    const original = serializeNoteComments("Body\n", [createComment()]);
-    assert.equal(resolveNoteCommentById(original, "note.md", "missing-id"), null);
 });
 
 test("getManagedSectionKind distinguishes threaded, unsupported, and missing managed blocks", () => {

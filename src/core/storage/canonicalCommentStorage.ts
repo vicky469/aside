@@ -1,4 +1,4 @@
-export type CanonicalCommentStorageSource = "none" | "inline" | "sidecar";
+export type CanonicalCommentStorageSource = "none" | "legacy-inline" | "sidecar";
 
 export type CanonicalCommentStorageAction =
     | "use-sidecar"
@@ -10,7 +10,6 @@ export interface CanonicalCommentStoragePlan {
     source: CanonicalCommentStorageSource;
     shouldRecoverRenamedSource: boolean;
     shouldStripInlineBlock: boolean;
-    shouldWriteInlineThreadsToSidecar: boolean;
 }
 
 export interface CanonicalCommentStorageInput {
@@ -26,17 +25,15 @@ export function planCanonicalCommentStorage(input: CanonicalCommentStorageInput)
             source: "sidecar",
             shouldRecoverRenamedSource: false,
             shouldStripInlineBlock: input.hasThreadedInlineBlock,
-            shouldWriteInlineThreadsToSidecar: false,
         };
     }
 
     if (input.inlineThreadCount > 0) {
         return {
             action: "migrate-inline",
-            source: "inline",
+            source: "legacy-inline",
             shouldRecoverRenamedSource: false,
             shouldStripInlineBlock: true,
-            shouldWriteInlineThreadsToSidecar: true,
         };
     }
 
@@ -45,6 +42,5 @@ export function planCanonicalCommentStorage(input: CanonicalCommentStorageInput)
         source: "none",
         shouldRecoverRenamedSource: true,
         shouldStripInlineBlock: input.hasThreadedInlineBlock,
-        shouldWriteInlineThreadsToSidecar: false,
     };
 }

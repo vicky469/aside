@@ -22,6 +22,7 @@ import {
     planCanonicalCommentStorage,
     type CanonicalCommentStorageSource,
 } from "../core/storage/canonicalCommentStorage";
+import { mergeLegacyInlineThreads } from "../core/storage/legacyInlineCommentMigration";
 import { normalizeDeletedAt, purgeExpiredDeletedThreads } from "../core/rules/deletedCommentVisibility";
 import { SidecarCommentStorage, type RemovedSidecarComments } from "../core/storage/sidecarCommentStorage";
 import {
@@ -492,84 +493,6 @@ function areCommentThreadsEqual(left: CommentThread, right: CommentThread): bool
 function areCommentThreadListsEqual(left: CommentThread[], right: CommentThread[]): boolean {
     return left.length === right.length
         && left.every((thread, index) => areCommentThreadsEqual(thread, right[index]));
-}
-
-function getLegacyInlineConflictEntryId(entryId: string): string {
-    return `legacy-inline-conflict-${entryId}`;
-}
-
-function createLegacyInlineConflictEntry(entry: CommentThreadEntry): CommentThreadEntry {
-    return {
-        id: getLegacyInlineConflictEntryId(entry.id),
-        body: [
-            "Legacy inline Aside block recovery.",
-            "",
-            "This version was preserved while cleaning up an old source-markdown Aside block:",
-            "",
-            entry.body,
-        ].join("\n"),
-        timestamp: entry.timestamp,
-    };
-}
-
-function mergeLegacyInlineThreads(
-    canonicalThreads: CommentThread[],
-    inlineThreads: CommentThread[],
-): { threads: CommentThread[]; changed: boolean } {
-    const mergedThreads = canonicalThreads.map((thread) => cloneThread(thread));
-    const threadIndexesById = new Map(mergedThreads.map((thread, index) => [thread.id, index]));
-    let changed = false;
-
-    for (const inlineThread of inlineThreads) {
-        const existingIndex = threadIndexesById.get(inlineThread.id);
-        if (existingIndex === undefined) {
-            threadIndexesById.set(inlineThread.id, mergedThreads.length);
-            mergedThreads.push(cloneThread(inlineThread));
-            changed = true;
-            continue;
-        }
-
-        const existingThread = mergedThreads[existingIndex];
-        const nextEntries = existingThread.entries.map((entry) => cloneThreadEntry(entry));
-        const entriesById = new Map(nextEntries.map((entry) => [entry.id, entry]));
-        let threadChanged = false;
-        for (const inlineEntry of inlineThread.entries) {
-            const existingEntry = entriesById.get(inlineEntry.id);
-            if (!existingEntry) {
-                nextEntries.push(cloneThreadEntry(inlineEntry));
-                threadChanged = true;
-                continue;
-            }
-
-            if (
-                !areThreadEntriesEqual(existingEntry, inlineEntry)
-                && !nextEntries.some((entry) => entry.id === getLegacyInlineConflictEntryId(inlineEntry.id))
-            ) {
-                nextEntries.push(createLegacyInlineConflictEntry(inlineEntry));
-                threadChanged = true;
-            }
-        }
-
-        if (!threadChanged) {
-            continue;
-        }
-
-        mergedThreads[existingIndex] = {
-            ...existingThread,
-            entries: nextEntries,
-            updatedAt: Math.max(
-                existingThread.updatedAt,
-                inlineThread.updatedAt,
-                ...nextEntries.map((entry) => entry.timestamp),
-            ),
-        };
-        changed = true;
-    }
-
-    return {
-        threads: mergedThreads,
-        changed,
-    };
 }
 
 export class CommentPersistenceController {
