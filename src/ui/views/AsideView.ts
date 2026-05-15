@@ -2720,13 +2720,18 @@ export default class AsideView extends ItemView {
         }
 
         const emptyStateEl = commentsBody.createDiv("aside-empty-state");
+        if (!hasSearchQuery && !options.showPinnedThreadsOnly && options.contentFilter === "all") {
+            emptyStateEl.createEl("p", {
+                text: NOTE_SIDEBAR_EMPTY_CREATE_HINT_TEXT,
+            });
+            return;
+        }
+
         emptyStateEl.createEl("p", {
             text: hasSearchQuery
                 ? `No ${searchSubjectLabel} match "${trimmedSearchQuery}" in this file.`
                 : options.showPinnedThreadsOnly
                     ? `No ${pluralFilterLabel} for this file yet.`
-                    : options.contentFilter === "all"
-                    ? "No side notes yet"
                     : `No ${pluralFilterLabel} for this file yet.`,
         });
         emptyStateEl.createEl("p", {
@@ -2734,8 +2739,6 @@ export default class AsideView extends ItemView {
                 ? "Clear search or try different words."
                 : options.showPinnedThreadsOnly
                     ? "Pin one or more side notes, or turn off the pin filter."
-                    : options.contentFilter === "all"
-                    ? NOTE_SIDEBAR_EMPTY_CREATE_HINT_TEXT
                     : `Turn off ${filterLabel} to return to all side notes.`,
         });
     }

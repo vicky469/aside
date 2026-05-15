@@ -1,4 +1,5 @@
 import * as assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
     NOTE_SIDEBAR_EMPTY_CREATE_HINT_TEXT,
@@ -52,4 +53,10 @@ test("note sidebar empty create hint includes page and anchored note paths", () 
         "Use + to add a page note, or select text and choose Add comment to selection.",
     );
     assert.doesNotMatch(NOTE_SIDEBAR_EMPTY_CREATE_HINT_TEXT, /right-click/);
+});
+
+test("note sidebar empty state omits redundant no-side-notes heading", () => {
+    const asideViewSource = readFileSync("src/ui/views/AsideView.ts", "utf8");
+
+    assert.doesNotMatch(asideViewSource, /No side notes yet/);
 });

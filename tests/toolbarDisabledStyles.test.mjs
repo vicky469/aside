@@ -38,6 +38,17 @@ test("disabled sidebar tabs use a faded unavailable state", () => {
     assert.doesNotMatch(disabledTabRule.groups.body, /#000|black/i);
 });
 
+test("empty states stay muted without promoted heading text", () => {
+    const emptyStateRule = css.match(
+        /\.aside-empty-state\s*\{(?<body>[\s\S]*?)\}/,
+    );
+
+    assert.ok(emptyStateRule?.groups?.body, "missing empty state rule");
+    assert.match(emptyStateRule.groups.body, /color:\s*var\(--text-muted\)\s*;/);
+    assert.match(emptyStateRule.groups.body, /font-size:\s*var\(--font-ui-small\)\s*;/);
+    assert.doesNotMatch(css, /\.aside-empty-state p:first-child\s*\{[\s\S]*?font-weight:\s*var\(--font-semibold\)/);
+});
+
 test("index note file names are larger than metadata text", () => {
     const indexListRule = css.match(
         /\.aside-index-note-view \.markdown-preview-view li,[\s\S]*?\.aside-index-note-view \.cm-line\.HyperMD-list-line \.cm-hmd-internal-link\s*\{(?<body>[\s\S]*?)\}/,

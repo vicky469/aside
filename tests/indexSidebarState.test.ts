@@ -4,7 +4,6 @@ import { commentToThread, type Comment } from "../src/commentManager";
 import {
     GENERIC_INDEX_EMPTY_STATE_TEXTS,
     filterIndexThreadsByExistingSourceFiles,
-    GENERIC_INDEX_EMPTY_STATE_PRIMARY_TEXT,
     scopeIndexThreadsByFilePaths,
     shouldShowActiveIndexEmptyState,
     shouldShowGenericIndexEmptyState,
@@ -152,13 +151,9 @@ test("shouldShowGenericIndexEmptyState hides the generic selected-file-filter em
 
 test("generic index empty state points users to file filtering", () => {
     assert.deepEqual(GENERIC_INDEX_EMPTY_STATE_TEXTS, [
-        "Choose a file",
         "Click a file in the index to see its side notes.",
     ]);
-    assert.equal(
-        GENERIC_INDEX_EMPTY_STATE_PRIMARY_TEXT,
-        "Choose a file",
-    );
-    assert.doesNotMatch(GENERIC_INDEX_EMPTY_STATE_PRIMARY_TEXT, /No side notes in the index yet\./);
+    assert.equal(GENERIC_INDEX_EMPTY_STATE_TEXTS.includes("Choose a file"), false);
+    assert.equal(GENERIC_INDEX_EMPTY_STATE_TEXTS.includes("No side notes yet"), false);
     assert.equal(GENERIC_INDEX_EMPTY_STATE_TEXTS.some((text) => text.includes("populate the index")), false);
 });

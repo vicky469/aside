@@ -2024,24 +2024,15 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
     height: 100%;
     padding: 20px;
     gap: 4px;
+    color: var(--text-muted);
     text-align: center;
+    font-size: var(--font-ui-small);
     line-height: 1.4;
 }
 
 .aside-empty-state p {
     max-width: 32em;
     margin: 0;
-}
-
-.aside-empty-state p:first-child {
-    color: var(--text-normal);
-    font-size: var(--font-ui-medium);
-    font-weight: var(--font-semibold);
-}
-
-.aside-empty-state p:not(:first-child) {
-    color: var(--text-muted);
-    font-size: var(--font-ui-small);
 }
 
 .aside-empty-state.aside-section-empty-state {

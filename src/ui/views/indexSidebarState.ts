@@ -2,9 +2,7 @@ import type { CommentThread } from "../../commentManager";
 import { filterCommentsByFilePaths } from "./indexFileFilter";
 import type { IndexSidebarMode } from "./viewState";
 
-export const GENERIC_INDEX_EMPTY_STATE_PRIMARY_TEXT = "Choose a file";
 export const GENERIC_INDEX_EMPTY_STATE_TEXTS = [
-    GENERIC_INDEX_EMPTY_STATE_PRIMARY_TEXT,
     "Click a file in the index to see its side notes.",
 ] as const;
 
