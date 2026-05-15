@@ -26,13 +26,15 @@ export function resolveWorkspaceLeafFile<T>(
 
 export function resolveWorkspaceLeafTargetInput<T>(
     leaf: unknown,
-    _workspaceActiveFile: T | null,
+    workspaceActiveFile: T | null,
     isFile: (value: unknown) => value is T,
     resolveFileByPath?: WorkspaceLeafFileResolver<T>,
 ): T | null {
     const fileValue = getWorkspaceLeafFileValue(leaf, resolveFileByPath);
     if (!fileValue.hasValue) {
-        return null;
+        return isMarkdownWorkspaceLeaf(leaf) && isFile(workspaceActiveFile)
+            ? workspaceActiveFile
+            : null;
     }
 
     return isFile(fileValue.value) ? fileValue.value : null;
@@ -106,6 +108,28 @@ function getWorkspaceLeafStateFilePath(leaf: unknown): string | null {
 
     const filePath = (state as { file?: unknown }).file;
     return typeof filePath === "string" && filePath.trim() ? filePath.trim() : null;
+}
+
+function isMarkdownWorkspaceLeaf(leaf: unknown): boolean {
+    if (!leaf || typeof leaf !== "object" || !("view" in leaf)) {
+        return false;
+    }
+
+    const view = leaf.view;
+    if (!view || typeof view !== "object") {
+        return false;
+    }
+
+    const getViewType = (view as { getViewType?: unknown }).getViewType;
+    if (typeof getViewType !== "function") {
+        return false;
+    }
+
+    try {
+        return getViewType.call(view) === "markdown";
+    } catch {
+        return false;
+    }
 }
 
 export function resolveWorkspaceFileTargets<T>(

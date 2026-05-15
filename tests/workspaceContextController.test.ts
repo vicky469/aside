@@ -104,13 +104,29 @@ test("workspace leaf target prefers view state when the leaf view still has the 
     assert.equal(resolved, currentFile);
 });
 
-test("workspace leaf target ignores leaf changes that temporarily have no file value", () => {
-    const markdownFile = createFile("docs/note.md");
+test("workspace leaf target uses the active file for a pending markdown leaf", () => {
+    const currentFile = createFile("docs/current.md");
 
     const resolved = resolveWorkspaceLeafTargetInput(
         {
             view: {
                 getViewType: () => "markdown",
+            },
+        },
+        currentFile,
+        (value): value is MockFile => value === currentFile,
+    );
+
+    assert.equal(resolved, currentFile);
+});
+
+test("workspace leaf target ignores non-markdown leaf changes that temporarily have no file value", () => {
+    const markdownFile = createFile("docs/note.md");
+
+    const resolved = resolveWorkspaceLeafTargetInput(
+        {
+            view: {
+                getViewType: () => "unsupported-view",
             },
         },
         markdownFile,
