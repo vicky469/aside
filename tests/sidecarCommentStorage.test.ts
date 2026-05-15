@@ -5,7 +5,7 @@ import type { DataAdapter } from "obsidian";
 import type { CommentThread } from "../src/commentManager";
 import { SidecarCommentStorage } from "../src/core/storage/sidecarCommentStorage";
 
-class FakeAdapter implements Pick<DataAdapter, "exists" | "mkdir" | "write" | "read" | "remove" | "rename"> {
+class FakeAdapter implements Pick<DataAdapter, "exists" | "mkdir" | "write" | "read" | "remove" | "rename" | "list"> {
     public readonly directories = new Set<string>();
     public readonly files = new Map<string, string>();
 
@@ -42,6 +42,29 @@ class FakeAdapter implements Pick<DataAdapter, "exists" | "mkdir" | "write" | "r
 
         this.files.set(normalizedNewPath, content);
         this.files.delete(normalizedPath);
+    }
+
+    async list(normalizedPath: string): Promise<{ files: string[]; folders: string[] }> {
+        const prefix = normalizedPath.endsWith("/") ? normalizedPath : `${normalizedPath}/`;
+        const files: string[] = [];
+        const folders = new Set<string>();
+        for (const filePath of this.files.keys()) {
+            if (!filePath.startsWith(prefix)) {
+                continue;
+            }
+
+            const relativePath = filePath.slice(prefix.length);
+            const slashIndex = relativePath.indexOf("/");
+            if (slashIndex === -1) {
+                files.push(filePath);
+            } else {
+                folders.add(`${prefix}${relativePath.slice(0, slashIndex)}`);
+            }
+        }
+        return {
+            files: files.sort((left, right) => left.localeCompare(right)),
+            folders: Array.from(folders).sort((left, right) => left.localeCompare(right)),
+        };
     }
 }
 
@@ -182,4 +205,85 @@ test("sidecar comment storage removes the sidecar file when the thread list beco
 
     assert.equal(await storage.exists(notePath), false);
     assert.equal(await storage.read(notePath), null);
+});
+
+test("sidecar comment storage removes note and source records for one missing note", async () => {
+    const adapter = new FakeAdapter();
+    const storage = new SidecarCommentStorage({
+        adapter: adapter as unknown as DataAdapter,
+        pluginDirPath: ".obsidian/plugins/aside",
+        hashText: async (text) => hashText(text),
+    });
+    const removedNotePath = "books/deleted.md";
+    const keptNotePath = "books/kept.md";
+
+    await storage.write(removedNotePath, [createThread(removedNotePath)]);
+    await storage.writeForSource("src-deleted", removedNotePath, [createThread(removedNotePath)]);
+    await storage.write(keptNotePath, [createThread(keptNotePath)]);
+
+    const removed = await storage.removeNote(removedNotePath);
+    const remaining = await storage.listStoredComments();
+
+    assert.equal(removed?.notePath, removedNotePath);
+    assert.equal(removed?.sourceId, "src-deleted");
+    assert.equal(await storage.exists(removedNotePath), false);
+    assert.equal(await storage.existsForSource("src-deleted"), false);
+    assert.deepEqual(remaining.map((record) => record.notePath), [keptNotePath]);
+});
+
+test("sidecar comment storage lists records across note and source sidecars without duplicates", async () => {
+    const adapter = new FakeAdapter();
+    const storage = new SidecarCommentStorage({
+        adapter: adapter as unknown as DataAdapter,
+        pluginDirPath: ".obsidian/plugins/aside",
+        hashText: async (text) => hashText(text),
+    });
+    const notePath = "books/example.md";
+
+    await storage.write(notePath, [createThread(notePath)]);
+    await storage.writeForSource("src-example", notePath, [createThread(notePath)]);
+
+    const records = await storage.listStoredComments();
+
+    assert.equal(records.length, 1);
+    assert.equal(records[0].notePath, notePath);
+    assert.equal(records[0].sourceId, "src-example");
+});
+
+test("sidecar comment storage removes note and source sidecars under a deleted folder", async () => {
+    const adapter = new FakeAdapter();
+    const storage = new SidecarCommentStorage({
+        adapter: adapter as unknown as DataAdapter,
+        pluginDirPath: ".obsidian/plugins/aside",
+        hashText: async (text) => hashText(text),
+    });
+    const deletedNotePath = "Deleted/note.md";
+    const nestedDeletedNotePath = "Deleted/nested/other.md";
+    const keptNotePath = "Deletedness/keep.md";
+
+    await storage.write(deletedNotePath, [createThread(deletedNotePath)]);
+    await storage.writeForSource("src-deleted", deletedNotePath, [createThread(deletedNotePath)]);
+    await storage.write(nestedDeletedNotePath, [createThread(nestedDeletedNotePath)]);
+    await storage.writeForSource("src-nested", nestedDeletedNotePath, [createThread(nestedDeletedNotePath)]);
+    await storage.write(keptNotePath, [createThread(keptNotePath)]);
+    await storage.writeForSource("src-kept", keptNotePath, [createThread(keptNotePath)]);
+
+    const removed = await storage.removeFolder("Deleted");
+
+    assert.deepEqual(
+        removed.map((record) => ({
+            notePath: record.notePath,
+            sourceId: record.sourceId,
+        })).sort((left, right) => left.notePath.localeCompare(right.notePath)),
+        [
+            { notePath: nestedDeletedNotePath, sourceId: "src-nested" },
+            { notePath: deletedNotePath, sourceId: "src-deleted" },
+        ],
+    );
+    assert.equal(await storage.exists(deletedNotePath), false);
+    assert.equal(await storage.existsForSource("src-deleted"), false);
+    assert.equal(await storage.exists(nestedDeletedNotePath), false);
+    assert.equal(await storage.existsForSource("src-nested"), false);
+    assert.equal(await storage.exists(keptNotePath), true);
+    assert.equal(await storage.existsForSource("src-kept"), true);
 });

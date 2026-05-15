@@ -109,3 +109,48 @@ test("source identity store does not claim a recreated file through a stale alia
     assert.equal(store.getRecordByPath("books/original.md")?.sourceId, recreated.sourceId);
     assert.equal(store.getRecordByPath("books/renamed.md")?.sourceId, original.sourceId);
 });
+
+test("source identity store removes deleted paths from persisted state", async () => {
+    let persistedData: PersistedPluginData = {};
+    let idCounter = 0;
+    const store = createStore({
+        read: () => persistedData,
+        write: async (data) => {
+            persistedData = data;
+        },
+        createSourceId: () => `src-${++idCounter}`,
+    });
+
+    const removed = await store.ensureSourceForPath("books/deleted.md", "fingerprint-a");
+    const kept = await store.ensureSourceForPath("books/kept.md", "fingerprint-b");
+
+    assert.equal((await store.removeSourceForPath("books/deleted.md"))?.sourceId, removed.sourceId);
+    assert.equal(store.getRecordByPath("books/deleted.md"), null);
+    assert.equal(store.getRecordByPath("books/kept.md")?.sourceId, kept.sourceId);
+});
+
+test("source identity store removes every source under a deleted folder", async () => {
+    let persistedData: PersistedPluginData = {};
+    let idCounter = 0;
+    const store = createStore({
+        read: () => persistedData,
+        write: async (data) => {
+            persistedData = data;
+        },
+        createSourceId: () => `src-${++idCounter}`,
+    });
+
+    await store.ensureSourceForPath("Deleted/a.md");
+    await store.ensureSourceForPath("Deleted/nested/b.md");
+    const kept = await store.ensureSourceForPath("Deletedness/c.md");
+
+    const removed = await store.removeSourcesInFolder("Deleted");
+
+    assert.deepEqual(removed.map((record) => record.currentPath), [
+        "Deleted/a.md",
+        "Deleted/nested/b.md",
+    ]);
+    assert.equal(store.getRecordByPath("Deleted/a.md"), null);
+    assert.equal(store.getRecordByPath("Deleted/nested/b.md"), null);
+    assert.equal(store.getRecordByPath("Deletedness/c.md")?.sourceId, kept.sourceId);
+});

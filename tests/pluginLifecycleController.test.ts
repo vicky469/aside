@@ -71,6 +71,7 @@ function createHarness(options: {
     let ensureSidebarViewCount = 0;
     const renamedStoredComments: Array<{ previousFilePath: string; nextFilePath: string }> = [];
     const deletedStoredComments: string[] = [];
+    const deletedStoredCommentFolders: string[] = [];
 
     const controller = new PluginLifecycleController({
         app: {} as never,
@@ -84,6 +85,9 @@ function createHarness(options: {
         },
         deleteStoredComments: async (filePath) => {
             deletedStoredComments.push(filePath);
+        },
+        deleteStoredCommentsInFolder: async (folderPath) => {
+            deletedStoredCommentFolders.push(folderPath);
         },
         clearParsedNoteCache: (filePath) => {
             clearedParsedPaths.push(filePath);
@@ -154,6 +158,7 @@ function createHarness(options: {
         getModifyHandledPath: () => modifyHandledPath,
         renamedStoredComments,
         deletedStoredComments,
+        deletedStoredCommentFolders,
     };
 }
 
@@ -236,6 +241,7 @@ test("plugin lifecycle controller clears cached comments under deleted folders",
         ["keep-c"],
     );
     assert.deepEqual(harness.deletedStoredComments, []);
+    assert.deepEqual(harness.deletedStoredCommentFolders, ["Deleted"]);
     assert.equal(harness.getRefreshCommentViewsCount(), 1);
     assert.equal(harness.getRefreshEditorDecorationsCount(), 1);
     assert.equal(harness.getRefreshAggregateNoteNowCount(), 1);

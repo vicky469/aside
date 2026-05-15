@@ -1,4 +1,5 @@
 import type { PersistedPluginData } from "../settings/indexNoteSettingsPlanner";
+import { isPathInsideFolder } from "../core/files/pathScope";
 
 export const SOURCE_IDENTITY_STATE_SCHEMA_VERSION = 1;
 
@@ -235,6 +236,55 @@ export class SourceIdentityStore {
         return Object.values(this.readState().sources)
             .map((record) => cloneRecord(record))
             .sort((left, right) => left.currentPath.localeCompare(right.currentPath));
+    }
+
+    public async removeSourceForPath(filePath: string): Promise<SourceIdentityRecord | null> {
+        const latestPersistedData = await this.host.readLatestPersistedPluginData?.()
+            ?? this.host.readPersistedPluginData();
+        const state = normalizeSourceIdentityState(latestPersistedData.sourceIdentityState);
+        const sourceId = state.pathToSourceId[filePath];
+        const record = sourceId ? state.sources[sourceId] : null;
+        if (!sourceId || !record) {
+            return null;
+        }
+
+        delete state.sources[sourceId];
+        await this.host.writePersistedPluginData({
+            ...latestPersistedData,
+            sourceIdentityState: cloneState({
+                ...state,
+                pathToSourceId: rebuildPathIndex(state.sources),
+            }),
+        });
+        return cloneRecord(record);
+    }
+
+    public async removeSourcesInFolder(folderPath: string): Promise<SourceIdentityRecord[]> {
+        const latestPersistedData = await this.host.readLatestPersistedPluginData?.()
+            ?? this.host.readPersistedPluginData();
+        const state = normalizeSourceIdentityState(latestPersistedData.sourceIdentityState);
+        const removedRecords: SourceIdentityRecord[] = [];
+        for (const [sourceId, record] of Object.entries(state.sources)) {
+            if (!isPathInsideFolder(record.currentPath, folderPath)) {
+                continue;
+            }
+
+            removedRecords.push(cloneRecord(record));
+            delete state.sources[sourceId];
+        }
+
+        if (removedRecords.length === 0) {
+            return [];
+        }
+
+        await this.host.writePersistedPluginData({
+            ...latestPersistedData,
+            sourceIdentityState: cloneState({
+                ...state,
+                pathToSourceId: rebuildPathIndex(state.sources),
+            }),
+        });
+        return removedRecords.sort((left, right) => left.currentPath.localeCompare(right.currentPath));
     }
 
     public async ensureSourceForPath(filePath: string, contentFingerprint: string | null = null): Promise<SourceIdentityRecord> {

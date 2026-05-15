@@ -176,6 +176,7 @@ export default class Aside extends Plugin {
     private logService: AsideLogService | null = null;
     private supportLogLocationAvailable: boolean | null = null;
     private runtime: "local" | "release" = "release";
+    private unloaded = false;
     private readonly remoteRuntimeRequester = createRemoteRuntimeRequester({
         primaryRequester: requestUrl,
         fetcher: getFetchFallback(),
@@ -408,6 +409,8 @@ export default class Aside extends Plugin {
         renameStoredComments: (previousFilePath, nextFilePath) =>
             this.commentPersistenceController.renameStoredComments(previousFilePath, nextFilePath),
         deleteStoredComments: (filePath) => this.commentPersistenceController.deleteStoredComments(filePath),
+        deleteStoredCommentsInFolder: (folderPath) =>
+            this.commentPersistenceController.deleteStoredCommentsInFolder(folderPath),
         clearParsedNoteCache: (filePath) => this.clearParsedNoteCache(filePath),
         clearDerivedCommentLinksForFile: (filePath) => this.derivedCommentMetadataManager.clearDerivedCommentLinksForFile(filePath),
         isCommentableFile: (file): file is TFile => file instanceof TFile && this.isCommentableFile(file),
@@ -517,6 +520,7 @@ export default class Aside extends Plugin {
     }
 
     async onload() {
+        this.unloaded = false;
         this.runtime = await this.detectRuntimeMode();
         this.logService = new AsideLogService({
             adapter: this.app.vault.adapter,
@@ -537,10 +541,6 @@ export default class Aside extends Plugin {
 
         this.commentManager = new CommentManager([]);
         await this.loadSettings();
-        await this.ensureSidecarStorageMigrated();
-        await this.ensureSideNoteSyncEventsMigrated();
-        await this.ensureSourceIdentitiesMigrated();
-        await this.commentPersistenceController.replaySyncedSideNoteEvents();
         this.pluginRegistrationController.register();
         this.registerEditorExtension([
             this.commentHighlightController.createLivePreviewManagedBlockPlugin(),
@@ -564,16 +564,48 @@ export default class Aside extends Plugin {
         void this.workspaceViewController.loadVisibleFiles().catch((error) => {
             this.warn("Failed to preload visible Aside comments during startup.", error, "startup", "startup.visible-files.preload.warn");
         });
+        void this.runStartupPersistenceMaintenance();
     }
 
     onunload() {
+        this.unloaded = true;
         void this.logEvent("info", "startup", "startup.unload");
         disposeAgentRuntimeProcesses();
         this.commentAgentController.dispose();
+        this.commentPersistenceController.dispose();
         this.pluginLifecycleController.clearPendingEditorRefreshes();
         this.derivedCommentMetadataManager.restoreMetadataCacheAugmentation();
         this.derivedCommentMetadataManager.clearAllDerivedCommentLinks();
         void this.logService?.flush();
+    }
+
+    private async runStartupPersistenceMaintenance(): Promise<void> {
+        try {
+            await this.ensureSidecarStorageMigrated();
+            if (this.unloaded) {
+                return;
+            }
+            await this.ensureSideNoteSyncEventsMigrated();
+            if (this.unloaded) {
+                return;
+            }
+            await this.ensureSourceIdentitiesMigrated();
+            if (this.unloaded) {
+                return;
+            }
+            await this.commentPersistenceController.replaySyncedSideNoteEvents();
+            if (this.unloaded) {
+                return;
+            }
+            await this.workspaceViewController.loadVisibleFiles();
+        } catch (error) {
+            this.warn(
+                "Failed to finish Aside startup maintenance.",
+                error,
+                "startup",
+                "startup.maintenance.warn",
+            );
+        }
     }
 
     async loadSettings() {

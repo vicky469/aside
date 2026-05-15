@@ -9,6 +9,7 @@ export interface PluginLifecycleHost {
     getAggregateCommentIndex(): AggregateCommentIndex;
     renameStoredComments(previousFilePath: string, nextFilePath: string): Promise<void>;
     deleteStoredComments(filePath: string): Promise<void>;
+    deleteStoredCommentsInFolder(folderPath: string): Promise<void>;
     clearParsedNoteCache(filePath: string): void;
     clearDerivedCommentLinksForFile(filePath: string): void;
     isCommentableFile(file: TAbstractFile | null): file is TFile;
@@ -56,6 +57,10 @@ export class PluginLifecycleController {
 
     private async clearDeletedCommentFile(filePath: string): Promise<void> {
         await this.host.deleteStoredComments(filePath);
+        this.clearDeletedCommentFileCache(filePath);
+    }
+
+    private clearDeletedCommentFileCache(filePath: string): void {
         this.host.getCommentManager().replaceCommentsForFile(filePath, []);
         this.host.clearParsedNoteCache(filePath);
         this.host.getAggregateCommentIndex().deleteFile(filePath);
@@ -110,8 +115,9 @@ export class PluginLifecycleController {
         }
 
         const deletedFiles = this.collectCommentableFiles(file);
+        await this.host.deleteStoredCommentsInFolder(file.path);
         for (const deletedFile of deletedFiles) {
-            await this.clearDeletedCommentFile(deletedFile.path);
+            this.clearDeletedCommentFileCache(deletedFile.path);
         }
 
         this.host.getCommentManager().deleteFolder(file.path);

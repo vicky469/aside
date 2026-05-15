@@ -1,10 +1,17 @@
 import type { DataAdapter } from "obsidian";
 import { cloneCommentThreads, type CommentThread } from "../../commentManager";
+import { isPathInsideFolder } from "../files/pathScope";
 
 const SIDECAR_STORAGE_VERSION = 1;
 
 interface StoredSidecarComments {
     version: number;
+    notePath: string;
+    sourceId?: string;
+    threads: CommentThread[];
+}
+
+export interface RemovedSidecarComments {
     notePath: string;
     sourceId?: string;
     threads: CommentThread[];
@@ -53,6 +60,28 @@ function createTempFileSuffix(): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return !!value && typeof value === "object";
+}
+
+function parseStoredSidecarComments(value: unknown): StoredSidecarComments | null {
+    if (
+        !isRecord(value)
+        || value.version !== SIDECAR_STORAGE_VERSION
+        || typeof value.notePath !== "string"
+        || !Array.isArray(value.threads)
+    ) {
+        return null;
+    }
+
+    const sourceId = typeof value.sourceId === "string" && value.sourceId.trim()
+        ? value.sourceId.trim()
+        : undefined;
+
+    return {
+        version: SIDECAR_STORAGE_VERSION,
+        notePath: value.notePath,
+        ...(sourceId ? { sourceId } : {}),
+        threads: cloneThreadsForNote(value.notePath, value.threads),
+    };
 }
 
 function cloneThreadsForNote(notePath: string, threads: unknown[]): CommentThread[] {
@@ -131,6 +160,13 @@ export class SidecarCommentStorage {
     }
 
     private async readStoragePath(storagePath: string, notePath: string): Promise<CommentThread[] | null> {
+        const payload = await this.readStoragePayload(storagePath);
+        return payload
+            ? cloneThreadsForNote(notePath, payload.threads)
+            : null;
+    }
+
+    private async readStoragePayload(storagePath: string): Promise<StoredSidecarComments | null> {
         if (!(await this.options.adapter.exists(storagePath))) {
             return null;
         }
@@ -138,11 +174,7 @@ export class SidecarCommentStorage {
         try {
             const rawContent = await this.options.adapter.read(storagePath);
             const parsed = JSON.parse(rawContent) as unknown;
-            if (!isRecord(parsed) || parsed.version !== SIDECAR_STORAGE_VERSION || !Array.isArray(parsed.threads)) {
-                return null;
-            }
-
-            return cloneThreadsForNote(notePath, parsed.threads);
+            return parseStoredSidecarComments(parsed);
         } catch {
             return null;
         }
@@ -239,12 +271,106 @@ export class SidecarCommentStorage {
         }
     }
 
+    public async listStoredComments(): Promise<RemovedSidecarComments[]> {
+        const recordsByNotePath = new Map<string, RemovedSidecarComments>();
+        for (const storagePath of await this.getAllStorageFiles()) {
+            const payload = await this.readStoragePayload(storagePath);
+            if (payload) {
+                this.mergeStoredRecord(recordsByNotePath, payload);
+            }
+        }
+        return this.sortStoredRecords(recordsByNotePath);
+    }
+
+    public async removeNote(notePath: string): Promise<RemovedSidecarComments | null> {
+        const [removed] = await this.removeMatchingRecords((payload) => payload.notePath === notePath);
+        return removed ?? null;
+    }
+
+    public async removeFolder(folderPath: string): Promise<RemovedSidecarComments[]> {
+        return this.removeMatchingRecords((payload) => isPathInsideFolder(payload.notePath, folderPath));
+    }
+
+    private async removeMatchingRecords(
+        matches: (payload: StoredSidecarComments) => boolean,
+    ): Promise<RemovedSidecarComments[]> {
+        const removedByNotePath = new Map<string, RemovedSidecarComments>();
+        for (const storagePath of await this.getAllStorageFiles()) {
+            const payload = await this.readStoragePayload(storagePath);
+            if (!payload || !matches(payload)) {
+                continue;
+            }
+
+            await this.removeStoragePath(storagePath);
+            this.mergeStoredRecord(removedByNotePath, payload);
+        }
+
+        return this.sortStoredRecords(removedByNotePath);
+    }
+
+    private mergeStoredRecord(
+        recordsByNotePath: Map<string, RemovedSidecarComments>,
+        payload: StoredSidecarComments,
+    ): void {
+        const existing = recordsByNotePath.get(payload.notePath);
+        recordsByNotePath.set(payload.notePath, {
+            notePath: payload.notePath,
+            sourceId: existing?.sourceId ?? payload.sourceId,
+            threads: existing?.threads.length ? existing.threads : cloneCommentThreads(payload.threads),
+        });
+    }
+
+    private sortStoredRecords(recordsByNotePath: Map<string, RemovedSidecarComments>): RemovedSidecarComments[] {
+        return Array.from(recordsByNotePath.values())
+            .sort((left, right) => left.notePath.localeCompare(right.notePath));
+    }
+
     private async removeStoragePath(storagePath: string): Promise<void> {
         if (!(await this.options.adapter.exists(storagePath))) {
             return;
         }
 
         await this.options.adapter.remove(storagePath);
+    }
+
+    private async getAllStorageFiles(): Promise<string[]> {
+        return this.listStorageFiles([
+            this.baseDirPath,
+            this.sourceBaseDirPath,
+            ...this.legacyBaseDirPaths,
+            ...this.legacySourceBaseDirPaths,
+        ]);
+    }
+
+    private async listStorageFiles(baseDirPaths: string[]): Promise<string[]> {
+        const files = new Set<string>();
+        for (const baseDirPath of baseDirPaths) {
+            for (const filePath of await this.listStorageFilesRecursively(baseDirPath)) {
+                files.add(filePath);
+            }
+        }
+        return Array.from(files).sort((left, right) => left.localeCompare(right));
+    }
+
+    private async listStorageFilesRecursively(directoryPath: string): Promise<string[]> {
+        if (!(await this.options.adapter.exists(directoryPath))) {
+            return [];
+        }
+
+        let listed: { files: string[]; folders: string[] };
+        try {
+            listed = await this.options.adapter.list(directoryPath);
+        } catch {
+            return [];
+        }
+
+        const nestedFiles = await Promise.all(
+            listed.folders.map((folderPath) => this.listStorageFilesRecursively(folderPath)),
+        );
+        return [
+            ...listed.files,
+            ...nestedFiles.flat(),
+        ];
     }
 
     public async getNoteStoragePath(notePath: string): Promise<string> {
