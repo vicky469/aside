@@ -6,6 +6,7 @@
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
 		"dev:install-built": "node scripts/install-built-plugin.mjs",
+		"dev:build-reload": "npm run build && npm run dev:install-built -- --vault .. && tmux new-session -d -s aside-reload-$(date +%s) 'obsidian plugin:reload id=aside vault=dev'",
 		"dgx:bridge": "node scripts/run-dgx-runtime-bridge.mjs",
 		"build": "npm run test && npm run lint && tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
 		"lint": "eslint src",
