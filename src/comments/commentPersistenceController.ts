@@ -585,6 +585,7 @@ export class CommentPersistenceController {
     private aggregateIndexInitializationPromise: Promise<void> | null = null;
     private fullSyncedEventReplayPromise: Promise<number> | null = null;
     private readonly targetedSyncedEventReplayPromises = new Map<string, Promise<number>>();
+    private disposed = false;
 
     constructor(private readonly host: CommentPersistenceHost) {
         this.sidecarStorage = new SidecarCommentStorage({
@@ -609,6 +610,25 @@ export class CommentPersistenceController {
             createSourceId: () => `src-${host.createCommentId()}`,
             now: () => Date.now(),
         });
+    }
+
+    public dispose(): void {
+        this.disposed = true;
+        if (this.aggregateRefreshTimer !== null && typeof window !== "undefined") {
+            window.clearTimeout(this.aggregateRefreshTimer);
+        }
+        this.aggregateRefreshTimer = null;
+        this.aggregateRefreshQueued = false;
+
+        if (typeof window !== "undefined") {
+            for (const timer of Object.values(this.pendingCommentPersistTimers)) {
+                window.clearTimeout(timer);
+            }
+        }
+        for (const filePath of Object.keys(this.pendingCommentPersistTimers)) {
+            delete this.pendingCommentPersistTimers[filePath];
+        }
+        this.commentViewRefreshSuppressions.clear();
     }
 
     private async getSourceContentFingerprint(noteContent: string): Promise<string | null> {
@@ -756,14 +776,21 @@ export class CommentPersistenceController {
     }
 
     public async migrateLegacyInlineCommentsOnStartup(): Promise<void> {
-        const markdownFiles = this.host.app.vault
-            .getMarkdownFiles()
-            .filter((file) => !this.host.isAllCommentsNotePath(file.path))
-            .sort((left, right) => left.path.localeCompare(right.path));
+        if (this.disposed) {
+            return;
+        }
+
+        const markdownFiles = this.getCommentableMarkdownFiles();
 
         let migratedCount = 0;
         for (const file of markdownFiles) {
+            if (this.disposed) {
+                return;
+            }
             const noteContent = await this.host.getCurrentNoteContent(file);
+            if (this.disposed) {
+                return;
+            }
             if (await this.ensureLegacyInlineCommentsMigrated(file, noteContent)) {
                 migratedCount += 1;
             }
@@ -775,6 +802,10 @@ export class CommentPersistenceController {
     }
 
     public async replaySyncedSideNoteEvents(targetNotePath?: string): Promise<number> {
+        if (this.disposed) {
+            return 0;
+        }
+
         const normalizedTargetNotePath = targetNotePath?.trim();
         if (normalizedTargetNotePath) {
             const existingTargetedReplay = this.targetedSyncedEventReplayPromises.get(normalizedTargetNotePath);
@@ -813,9 +844,21 @@ export class CommentPersistenceController {
     }
 
     private async replaySyncedSideNoteEventsNow(targetNotePath?: string): Promise<number> {
+        if (this.disposed) {
+            return 0;
+        }
         await this.sourceIdentityStore.refreshFromLatestPersistedData();
+        if (this.disposed) {
+            return 0;
+        }
         await this.syncEventStore.refreshFromLatestPersistedData();
+        if (this.disposed) {
+            return 0;
+        }
         await this.hydrateSyncedSideNoteSnapshots(targetNotePath);
+        if (this.disposed) {
+            return 0;
+        }
         const events = this.syncEventStore
             .getUnprocessedEvents()
             .filter((event) => !targetNotePath || this.eventTouchesNotePath(event, targetNotePath));
@@ -834,6 +877,9 @@ export class CommentPersistenceController {
         const processedEvents: SideNoteSyncEvent[] = [];
         const compactionSnapshots: SideNoteSyncSnapshotInput[] = [];
         for (const [notePath, noteEvents] of eventsByNotePath.entries()) {
+            if (this.disposed) {
+                return appliedEventCount;
+            }
             const targetNotePath = getSyncedEventTargetNotePath(notePath, noteEvents);
             const sourceId = getSyncedEventSourceId(noteEvents);
             const existingSourceRecord = sourceId
@@ -950,13 +996,17 @@ export class CommentPersistenceController {
     }
 
     public async migrateSidecarsToSyncedPluginDataOnStartup(): Promise<void> {
-        const markdownFiles = this.host.app.vault
-            .getMarkdownFiles()
-            .filter((file) => !this.host.isAllCommentsNotePath(file.path))
-            .sort((left, right) => left.path.localeCompare(right.path));
+        if (this.disposed) {
+            return;
+        }
+
+        const markdownFiles = this.getCommentableMarkdownFiles();
 
         let migratedCount = 0;
         for (const file of markdownFiles) {
+            if (this.disposed) {
+                return;
+            }
             const threads = await this.sidecarStorage.read(file.path);
             if (!threads || threads.length === 0) {
                 continue;
@@ -964,6 +1014,9 @@ export class CommentPersistenceController {
 
             const normalizedThreads = await this.normalizeThreadsForFile(file.path, threads);
             const noteContent = await this.host.getCurrentNoteContent(file);
+            if (this.disposed) {
+                return;
+            }
             const sourceRecord = await this.ensureSourceIdentityForFilePath(file.path, noteContent);
             await this.writeSourceAndPathSidecars(sourceRecord.sourceId, file.path, normalizedThreads);
             const eventInputs = buildSideNoteSyncEventInputsForThreadDiff([], normalizedThreads);
@@ -985,11 +1038,15 @@ export class CommentPersistenceController {
     }
 
     public async migrateSourceIdentitiesOnStartup(): Promise<void> {
+        if (this.disposed) {
+            return;
+        }
+
         await this.sourceIdentityStore.refreshFromLatestPersistedData();
-        const markdownFiles = this.host.app.vault
-            .getMarkdownFiles()
-            .filter((file) => !this.host.isAllCommentsNotePath(file.path))
-            .sort((left, right) => left.path.localeCompare(right.path));
+        if (this.disposed) {
+            return;
+        }
+        const markdownFiles = this.getCommentableMarkdownFiles();
         const snapshotsByPath = new Map(
             this.getLatestSnapshotsByNotePath(this.syncEventStore.getSnapshots())
                 .map((snapshot) => [snapshot.notePath, snapshot]),
@@ -998,7 +1055,13 @@ export class CommentPersistenceController {
         let sourceCount = 0;
         let sourceSidecarCount = 0;
         for (const file of markdownFiles) {
+            if (this.disposed) {
+                return;
+            }
             const noteContent = await this.host.getCurrentNoteContent(file);
+            if (this.disposed) {
+                return;
+            }
             const sourceRecord = await this.ensureSourceIdentityForFilePath(file.path, noteContent);
             sourceCount += 1;
 
@@ -1037,6 +1100,10 @@ export class CommentPersistenceController {
     }
 
     public async handleMarkdownFileModified(file: TFile): Promise<void> {
+        if (this.disposed) {
+            return;
+        }
+
         if (file.extension !== "md") {
             return;
         }
@@ -1086,6 +1153,10 @@ export class CommentPersistenceController {
     }
 
     public async loadCommentsForFile(file: TFile | null): Promise<Comment[]> {
+        if (this.disposed) {
+            return [];
+        }
+
         if (!file || this.host.isAllCommentsNotePath(file.path) || !this.host.isCommentableFile(file)) {
             return [];
         }
@@ -1097,14 +1168,25 @@ export class CommentPersistenceController {
     }
 
     public async ensureIndexedCommentsLoaded(): Promise<void> {
+        if (this.disposed) {
+            return;
+        }
+
         await this.replaySyncedSideNoteEvents();
+        if (this.disposed) {
+            return;
+        }
         const initializedNow = await this.ensureAggregateCommentIndexInitialized();
-        if (initializedNow) {
+        if (initializedNow && !this.disposed) {
             await this.refreshAggregateNoteNow();
         }
     }
 
     public async persistCommentsForFile(file: TFile, options: PersistOptions = {}): Promise<void> {
+        if (this.disposed) {
+            return;
+        }
+
         if (options.skipCommentViewRefresh) {
             this.scheduleCommentViewRefreshSuppression(file.path, 1);
         }
@@ -1113,6 +1195,10 @@ export class CommentPersistenceController {
     }
 
     public scheduleAggregateNoteRefresh(): void {
+        if (this.disposed) {
+            return;
+        }
+
         if (this.aggregateRefreshTimer !== null) {
             window.clearTimeout(this.aggregateRefreshTimer);
         }
@@ -1124,6 +1210,10 @@ export class CommentPersistenceController {
     }
 
     public async refreshAggregateNoteNow(): Promise<void> {
+        if (this.disposed) {
+            return;
+        }
+
         if (this.aggregateRefreshTimer !== null) {
             window.clearTimeout(this.aggregateRefreshTimer);
             this.aggregateRefreshTimer = null;
@@ -1171,6 +1261,10 @@ export class CommentPersistenceController {
     }
 
     private async ensureAggregateCommentIndexInitialized(): Promise<boolean> {
+        if (this.disposed) {
+            return false;
+        }
+
         if (this.aggregateIndexInitialized) {
             return false;
         }
@@ -1178,17 +1272,26 @@ export class CommentPersistenceController {
         let initializedNow = false;
         if (!this.aggregateIndexInitializationPromise) {
             this.aggregateIndexInitializationPromise = (async () => {
-                const markdownFiles = this.host.app.vault
-                    .getMarkdownFiles()
-                    .filter((file) => !this.host.isAllCommentsNotePath(file.path))
-                    .sort((left, right) => left.path.localeCompare(right.path));
+                const markdownFiles = this.getCommentableMarkdownFiles();
 
                 for (const file of markdownFiles) {
+                    if (this.disposed) {
+                        return;
+                    }
                     const noteContent = await this.host.getCurrentNoteContent(file);
+                    if (this.disposed) {
+                        return;
+                    }
                     const parsed = await this.getCanonicalThreadState(file, noteContent);
+                    if (this.disposed) {
+                        return;
+                    }
                     this.host.getAggregateCommentIndex().updateFile(file.path, parsed.threads);
                 }
 
+                if (this.disposed) {
+                    return;
+                }
                 this.aggregateIndexInitialized = true;
                 initializedNow = true;
             })().finally(() => {
@@ -1198,6 +1301,13 @@ export class CommentPersistenceController {
 
         await this.aggregateIndexInitializationPromise;
         return initializedNow;
+    }
+
+    private getCommentableMarkdownFiles(): TFile[] {
+        return this.host.app.vault
+            .getMarkdownFiles()
+            .filter((file): file is TFile => this.host.isCommentableFile(file))
+            .sort((left, right) => left.path.localeCompare(right.path));
     }
 
     private async normalizeThreadsForFile(filePath: string, threads: CommentThread[]): Promise<CommentThread[]> {
@@ -1316,6 +1426,10 @@ export class CommentPersistenceController {
     }
 
     private async hydrateSyncedSideNoteSnapshots(targetNotePath?: string): Promise<number> {
+        if (this.disposed) {
+            return 0;
+        }
+
         const snapshots = this.getLatestSnapshotsByNotePath(this.syncEventStore.getSnapshots())
             .filter((snapshot) => !targetNotePath || snapshot.notePath === targetNotePath);
         if (snapshots.length === 0) {
@@ -1325,11 +1439,18 @@ export class CommentPersistenceController {
         let hydratedCount = 0;
         let coveredWatermarks: Record<string, number> = {};
         for (const snapshot of snapshots) {
+            if (this.disposed) {
+                return hydratedCount;
+            }
+
             coveredWatermarks = mergeSyncWatermarks(coveredWatermarks, snapshot.coveredWatermarks);
             const file = this.host.getMarkdownFileByPath(snapshot.notePath);
             const noteContent = file && this.host.isCommentableFile(file)
                 ? await this.host.getCurrentNoteContent(file)
                 : null;
+            if (this.disposed) {
+                return hydratedCount;
+            }
             const sourceRecord = await this.ensureSourceIdentityForFilePath(
                 snapshot.notePath,
                 noteContent ?? undefined,
@@ -1362,6 +1483,9 @@ export class CommentPersistenceController {
             }
 
             await this.writeSourceAndPathSidecars(sourceRecord.sourceId, snapshot.notePath, normalizedThreads);
+            if (this.disposed) {
+                return hydratedCount;
+            }
             if (file && this.host.isCommentableFile(file) && noteContent !== null) {
                 const parsed = await this.parseAndNormalizeFileComments(snapshot.notePath, noteContent);
                 await this.syncThreadsIntoVisibleNoteContent(file, parsed.mainContent, normalizedThreads);
@@ -1790,6 +1914,10 @@ export class CommentPersistenceController {
     }
 
     private async afterCommentsChanged(filePath: string | null = null, options: PersistOptions = {}): Promise<void> {
+        if (this.disposed) {
+            return;
+        }
+
         const viewRefreshOptions = {
             skipDataRefresh: true,
         };
@@ -1831,6 +1959,10 @@ export class CommentPersistenceController {
     }
 
     private async enqueueAggregateNoteRefresh(): Promise<void> {
+        if (this.disposed) {
+            return;
+        }
+
         if (this.aggregateRefreshPromise) {
             this.aggregateRefreshQueued = true;
             await this.aggregateRefreshPromise;
@@ -1838,6 +1970,9 @@ export class CommentPersistenceController {
         }
 
         do {
+            if (this.disposed) {
+                return;
+            }
             this.aggregateRefreshQueued = false;
             this.aggregateRefreshPromise = this.refreshAggregateNote();
             try {
@@ -1849,11 +1984,18 @@ export class CommentPersistenceController {
     }
 
     private async refreshAggregateNote(): Promise<void> {
+        if (this.disposed) {
+            return;
+        }
+
         void this.host.log?.("info", "index", "index.refresh.begin", {
             showResolved: this.host.shouldShowResolvedComments(),
         });
         try {
             await this.ensureAggregateCommentIndexInitialized();
+            if (this.disposed) {
+                return;
+            }
             const comments = this.host.getAggregateCommentIndex().getAllComments();
             const noteOptions: AllCommentsNoteBuildOptions = {
                 allCommentsNotePath: this.host.getAllCommentsNotePath(),
@@ -1870,6 +2012,9 @@ export class CommentPersistenceController {
             const nextContent = buildAllCommentsNoteContent(this.host.app.vault.getName(), comments, noteOptions);
             const allCommentsNotePath = this.host.getAllCommentsNotePath();
             let existingFile = this.host.getMarkdownFileByPath(allCommentsNotePath);
+            if (this.disposed) {
+                return;
+            }
 
             if (!existingFile) {
                 const legacyFile = LEGACY_ALL_COMMENTS_NOTE_PATHS
@@ -1878,11 +2023,17 @@ export class CommentPersistenceController {
                     ?? this.host.getMarkdownFileByPath(LEGACY_ALL_COMMENTS_NOTE_PATH);
                 if (legacyFile) {
                     await this.host.app.fileManager.renameFile(legacyFile, allCommentsNotePath);
+                    if (this.disposed) {
+                        return;
+                    }
                     existingFile = this.host.getMarkdownFileByPath(allCommentsNotePath);
                 }
             }
 
             if (!existingFile) {
+                if (this.disposed) {
+                    return;
+                }
                 await this.host.app.vault.create(allCommentsNotePath, nextContent);
                 void this.host.log?.("info", "index", "index.refresh.success", {
                     commentCount: comments.length,
@@ -1892,10 +2043,16 @@ export class CommentPersistenceController {
             }
 
             const currentContent = await this.host.getCurrentNoteContent(existingFile);
+            if (this.disposed) {
+                return;
+            }
             const openView = this.host.getMarkdownViewForFile(existingFile);
             const contentChanged = currentContent !== nextContent;
             if (openView) {
                 await this.host.syncIndexNoteLeafMode(openView.leaf);
+                if (this.disposed) {
+                    return;
+                }
                 const viewContentChanged = openView.getViewData() !== nextContent;
                 if (viewContentChanged) {
                     openView.setViewData(nextContent, false);
@@ -1917,6 +2074,9 @@ export class CommentPersistenceController {
             }
 
             if (!openView) {
+                if (this.disposed) {
+                    return;
+                }
                 await this.host.app.vault.modify(existingFile, nextContent);
             }
 

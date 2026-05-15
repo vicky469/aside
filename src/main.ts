@@ -570,6 +570,7 @@ export default class Aside extends Plugin {
         void this.logEvent("info", "startup", "startup.unload");
         disposeAgentRuntimeProcesses();
         this.commentAgentController.dispose();
+        this.commentPersistenceController.dispose();
         this.pluginLifecycleController.clearPendingEditorRefreshes();
         this.derivedCommentMetadataManager.restoreMetadataCacheAugmentation();
         this.derivedCommentMetadataManager.clearAllDerivedCommentLinks();
