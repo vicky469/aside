@@ -1758,8 +1758,43 @@ test("comment persistence controller skips incompatible compacted snapshots for 
 });
 
 test("comment persistence startup index uses persisted sidecar paths instead of scanning vault markdown files", async () => {
+    const originalWindow = globalThis.window;
+    globalThis.window = {
+        setTimeout: () => 1,
+        clearTimeout: () => {},
+    } as unknown as typeof globalThis.window;
     const adapter = new FakeAdapter();
-    let persistedData: PersistedPluginData = {};
+    let persistedData: PersistedPluginData = {
+        sourceIdentityState: {
+            schemaVersion: 1,
+            sources: {
+                "src-commentless": {
+                    sourceId: "src-commentless",
+                    currentPath: "aside/node_modules/pkg/README.md",
+                    aliases: [],
+                    contentFingerprint: "hash-commentless",
+                    createdAt: 1710000000000,
+                    updatedAt: 1710000000000,
+                },
+            },
+            pathToSourceId: {},
+        },
+        sideNoteSyncEventState: {
+            schemaVersion: 1,
+            deviceLogs: {},
+            processedWatermarks: {},
+            compactedWatermarks: {},
+            noteSnapshots: {
+                "hash-empty-snapshot": {
+                    notePath: "aside/.worktrees/fix/README.md",
+                    noteHash: "hash-empty-snapshot",
+                    updatedAt: 1710000000000,
+                    coveredWatermarks: {},
+                    threads: [],
+                },
+            },
+        },
+    };
     const commentManager = new CommentManager([]);
     const aggregateCommentIndex = new AggregateCommentIndex();
     const indexNotePath = "Aside index.md";
@@ -1842,12 +1877,90 @@ test("comment persistence startup index uses persisted sidecar paths instead of 
         log: async () => {},
     });
 
-    await controller.ensureIndexedCommentsLoaded();
+    try {
+        await controller.ensureIndexedCommentsLoaded();
 
+        assert.deepEqual(readPaths, [keptFilePath]);
+        assert.equal(indexWrites.length, 1);
+        assert.match(indexWrites[0], /data-aside-file-path="notes\/kept\.md"/);
+        assert.doesNotMatch(indexWrites[0], /node_modules/);
+    } finally {
+        globalThis.window = originalWindow;
+    }
+});
+
+test("comment persistence source identity startup migration uses persisted comment paths", async () => {
+    const adapter = new FakeAdapter();
+    let persistedData: PersistedPluginData = {};
+    const commentManager = new CommentManager([]);
+    const aggregateCommentIndex = new AggregateCommentIndex();
+    const keptFilePath = "notes/kept.md";
+    const keptThread = createThread(keptFilePath);
+    const files = [
+        createFile(keptFilePath),
+        createFile("aside/node_modules/pkg/README.md"),
+        createFile("aside/.worktrees/fix/README.md"),
+    ];
+    const readPaths: string[] = [];
+    const keptSidecarPath = getSidecarStoragePath(keptFilePath);
+    adapter.directories.add(".obsidian/plugins/aside/sidenotes/by-note");
+    adapter.directories.add(keptSidecarPath.slice(0, keptSidecarPath.lastIndexOf("/")));
+    adapter.files.set(keptSidecarPath, serializeSidecarThreads(keptFilePath, [keptThread]));
+
+    const controller = new CommentPersistenceController({
+        app: {
+            vault: {
+                adapter: adapter as unknown as DataAdapter,
+                getMarkdownFiles: () => files,
+            },
+        } as never,
+        getAllCommentsNotePath: () => "Aside index.md",
+        getIndexHeaderImageUrl: () => "",
+        getIndexHeaderImageCaption: () => "",
+        shouldShowResolvedComments: () => false,
+        getMarkdownViewForFile: () => null,
+        getMarkdownFileByPath: (filePath) =>
+            files.find((file) => file.path === filePath) ?? null,
+        getCurrentNoteContent: async (file) => {
+            readPaths.push(file.path);
+            return "plain note";
+        },
+        getStoredNoteContent: async () => "plain note",
+        getParsedNoteComments: (filePath, noteContent) => parseNoteComments(noteContent, filePath),
+        getPluginDataDirPath: () => ".obsidian/plugins/aside",
+        getSideNoteSyncDeviceId: () => "device-a",
+        readPersistedPluginData: () => persistedData,
+        writePersistedPluginData: async (data) => {
+            persistedData = data;
+        },
+        isAllCommentsNotePath: () => false,
+        isCommentableFile: (candidate): candidate is TFile =>
+            !!candidate
+            && candidate.extension === "md",
+        isMarkdownEditorFocused: () => false,
+        getCommentManager: () => commentManager,
+        getAggregateCommentIndex: () => aggregateCommentIndex,
+        createCommentId: () => "generated-id",
+        hashText: async (text) => `hash-${text.replace(/\//g, "_")}`,
+        syncDerivedCommentLinksForFile: () => {},
+        refreshCommentViews: async () => {},
+        refreshAllCommentsSidebarViews: async () => {},
+        refreshEditorDecorations: () => {},
+        refreshMarkdownPreviews: () => {},
+        getCommentMentionedPageLabels: () => [],
+        syncIndexNoteLeafMode: async () => {},
+        log: async () => {},
+    });
+
+    await controller.migrateSourceIdentitiesOnStartup();
+
+    const sourceIdentityState = persistedData.sourceIdentityState as {
+        pathToSourceId?: Record<string, string>;
+    };
     assert.deepEqual(readPaths, [keptFilePath]);
-    assert.equal(indexWrites.length, 1);
-    assert.match(indexWrites[0], /data-aside-file-path="notes\/kept\.md"/);
-    assert.doesNotMatch(indexWrites[0], /node_modules/);
+    assert.ok(sourceIdentityState.pathToSourceId?.[keptFilePath]);
+    assert.equal(sourceIdentityState.pathToSourceId?.["aside/node_modules/pkg/README.md"], undefined);
+    assert.equal(sourceIdentityState.pathToSourceId?.["aside/.worktrees/fix/README.md"], undefined);
 });
 
 test("comment persistence disposal stops in-flight startup indexing", async () => {
