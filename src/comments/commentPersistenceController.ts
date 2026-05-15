@@ -1341,14 +1341,16 @@ export class CommentPersistenceController {
         let initializedNow = false;
         if (!this.aggregateIndexInitializationPromise) {
             this.aggregateIndexInitializationPromise = (async () => {
-                const markdownFiles = this.host.app.vault
-                    .getMarkdownFiles()
-                    .filter((file) => this.host.isCommentableFile(file))
-                    .sort((left, right) => left.path.localeCompare(right.path));
+                const persistedSourcePaths = await this.getPersistedCommentSourcePaths();
 
-                for (const file of markdownFiles) {
+                for (const filePath of persistedSourcePaths) {
                     if (this.disposed) {
                         break;
+                    }
+                    const file = this.host.getMarkdownFileByPath(filePath);
+                    if (!this.host.isCommentableFile(file)) {
+                        this.host.getAggregateCommentIndex().deleteFile(filePath);
+                        continue;
                     }
                     const noteContent = await this.host.getCurrentNoteContent(file);
                     if (this.disposed) {

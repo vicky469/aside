@@ -1757,20 +1757,26 @@ test("comment persistence controller skips incompatible compacted snapshots for 
     }
 });
 
-test("comment persistence startup index skips non-commentable markdown files", async () => {
+test("comment persistence startup index uses persisted sidecar paths instead of scanning vault markdown files", async () => {
     const adapter = new FakeAdapter();
     let persistedData: PersistedPluginData = {};
     const commentManager = new CommentManager([]);
     const aggregateCommentIndex = new AggregateCommentIndex();
     const indexNotePath = "Aside index.md";
+    const keptFilePath = "notes/kept.md";
+    const keptThread = createThread(keptFilePath);
     const files = [
-        createFile("notes/kept.md"),
+        createFile(keptFilePath),
         createFile("aside/node_modules/pkg/README.md"),
         createFile("aside/.worktrees/fix/README.md"),
         createFile(indexNotePath),
     ];
     const readPaths: string[] = [];
     const indexWrites: string[] = [];
+    const keptSidecarPath = getSidecarStoragePath(keptFilePath);
+    adapter.directories.add(".obsidian/plugins/aside/sidenotes/by-note");
+    adapter.directories.add(keptSidecarPath.slice(0, keptSidecarPath.lastIndexOf("/")));
+    adapter.files.set(keptSidecarPath, serializeSidecarThreads(keptFilePath, [keptThread]));
 
     const controller = new CommentPersistenceController({
         app: {
@@ -1820,7 +1826,6 @@ test("comment persistence startup index skips non-commentable markdown files", a
         isAllCommentsNotePath: (filePath) => filePath === indexNotePath,
         isCommentableFile: (candidate): candidate is TFile =>
             !!candidate
-            && candidate.path === "notes/kept.md"
             && candidate.extension === "md",
         isMarkdownEditorFocused: () => false,
         getCommentManager: () => commentManager,
@@ -1839,8 +1844,10 @@ test("comment persistence startup index skips non-commentable markdown files", a
 
     await controller.ensureIndexedCommentsLoaded();
 
-    assert.deepEqual(readPaths, ["notes/kept.md"]);
+    assert.deepEqual(readPaths, [keptFilePath]);
     assert.equal(indexWrites.length, 1);
+    assert.match(indexWrites[0], /data-aside-file-path="notes\/kept\.md"/);
+    assert.doesNotMatch(indexWrites[0], /node_modules/);
 });
 
 test("comment persistence disposal stops in-flight startup indexing", async () => {
@@ -1849,13 +1856,21 @@ test("comment persistence disposal stops in-flight startup indexing", async () =
     const commentManager = new CommentManager([]);
     const aggregateCommentIndex = new AggregateCommentIndex();
     const indexNotePath = "Aside index.md";
+    const firstFilePath = "notes/first.md";
+    const secondFilePath = "notes/second.md";
     const files = [
-        createFile("notes/first.md"),
-        createFile("notes/second.md"),
+        createFile(firstFilePath),
+        createFile(secondFilePath),
     ];
     const readPaths: string[] = [];
     const indexWrites: string[] = [];
     let controller: CommentPersistenceController | null = null;
+    adapter.directories.add(".obsidian/plugins/aside/sidenotes/by-note");
+    for (const filePath of [firstFilePath, secondFilePath]) {
+        const sidecarPath = getSidecarStoragePath(filePath);
+        adapter.directories.add(sidecarPath.slice(0, sidecarPath.lastIndexOf("/")));
+        adapter.files.set(sidecarPath, serializeSidecarThreads(filePath, [createThread(filePath)]));
+    }
 
     controller = new CommentPersistenceController({
         app: {
@@ -1886,10 +1901,11 @@ test("comment persistence disposal stops in-flight startup indexing", async () =
         getIndexHeaderImageCaption: () => "",
         shouldShowResolvedComments: () => false,
         getMarkdownViewForFile: () => null,
-        getMarkdownFileByPath: () => null,
+        getMarkdownFileByPath: (filePath) =>
+            files.find((file) => file.path === filePath) ?? null,
         getCurrentNoteContent: async (file) => {
             readPaths.push(file.path);
-            if (file.path === "notes/first.md") {
+            if (file.path === firstFilePath) {
                 controller?.dispose();
             }
             return "plain note";
@@ -1923,7 +1939,7 @@ test("comment persistence disposal stops in-flight startup indexing", async () =
 
     await controller.ensureIndexedCommentsLoaded();
 
-    assert.deepEqual(readPaths, ["notes/first.md"]);
+    assert.deepEqual(readPaths, [firstFilePath]);
     assert.equal(indexWrites.length, 0);
 });
 
