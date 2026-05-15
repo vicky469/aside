@@ -23,12 +23,12 @@ export function resolveWorkspaceLeafFile<T>(
 
 export function resolveWorkspaceLeafTargetInput<T>(
     leaf: unknown,
-    workspaceActiveFile: T | null,
+    _workspaceActiveFile: T | null,
     isFile: (value: unknown) => value is T,
 ): T | null {
     const fileValue = getWorkspaceLeafFileValue(leaf);
     if (!fileValue.hasValue) {
-        return workspaceActiveFile;
+        return null;
     }
 
     return isFile(fileValue.value) ? fileValue.value : null;

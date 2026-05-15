@@ -55,7 +55,7 @@ test("workspace leaf target does not fall back to the last markdown file for uns
     assert.equal(resolved, null);
 });
 
-test("workspace leaf target still falls back when a leaf temporarily has no file value", () => {
+test("workspace leaf target ignores leaf changes that temporarily have no file value", () => {
     const markdownFile = createFile("docs/note.md");
 
     const resolved = resolveWorkspaceLeafTargetInput(
@@ -68,5 +68,5 @@ test("workspace leaf target still falls back when a leaf temporarily has no file
         (value): value is MockFile => value === markdownFile,
     );
 
-    assert.equal(resolved, markdownFile);
+    assert.equal(resolved, null);
 });
