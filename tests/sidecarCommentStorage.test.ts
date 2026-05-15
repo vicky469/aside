@@ -68,6 +68,21 @@ class FakeAdapter implements Pick<DataAdapter, "exists" | "mkdir" | "write" | "r
     }
 }
 
+class EnoentOnRemoveAdapter extends FakeAdapter {
+    public readonly enoentOnRemove = new Set<string>();
+
+    async remove(normalizedPath: string): Promise<void> {
+        if (this.enoentOnRemove.has(normalizedPath)) {
+            this.files.delete(normalizedPath);
+            const error = new Error(`ENOENT: no such file or directory, unlink '${normalizedPath}'`) as Error & { code: string };
+            error.code = "ENOENT";
+            throw error;
+        }
+
+        await super.remove(normalizedPath);
+    }
+}
+
 function hashText(text: string): string {
     return createHash("sha256").update(text).digest("hex");
 }
@@ -286,4 +301,23 @@ test("sidecar comment storage removes note and source sidecars under a deleted f
     assert.equal(await storage.existsForSource("src-nested"), false);
     assert.equal(await storage.exists(keptNotePath), true);
     assert.equal(await storage.existsForSource("src-kept"), true);
+});
+
+test("sidecar comment storage ignores ENOENT while removing a deleted folder", async () => {
+    const adapter = new EnoentOnRemoveAdapter();
+    const storage = new SidecarCommentStorage({
+        adapter: adapter as unknown as DataAdapter,
+        pluginDirPath: ".obsidian/plugins/aside",
+        hashText: async (text) => hashText(text),
+    });
+    const deletedNotePath = "Deleted/note.md";
+
+    await storage.write(deletedNotePath, [createThread(deletedNotePath)]);
+    const storagePath = await storage.getNoteStoragePath(deletedNotePath);
+    adapter.enoentOnRemove.add(storagePath);
+
+    const removed = await storage.removeFolder("Deleted");
+
+    assert.deepEqual(removed.map((record) => record.notePath), [deletedNotePath]);
+    assert.equal(await storage.exists(deletedNotePath), false);
 });

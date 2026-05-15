@@ -62,6 +62,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
     return !!value && typeof value === "object";
 }
 
+function isMissingFileError(error: unknown): boolean {
+    if (isRecord(error) && error.code === "ENOENT") {
+        return true;
+    }
+
+    return error instanceof Error && error.message.includes("ENOENT");
+}
+
 function parseStoredSidecarComments(value: unknown): StoredSidecarComments | null {
     if (
         !isRecord(value)
@@ -197,9 +205,7 @@ export class SidecarCommentStorage {
         sourceId?: string,
     ): Promise<void> {
         if (threads.length === 0) {
-            if (await this.options.adapter.exists(storagePath)) {
-                await this.options.adapter.remove(storagePath);
-            }
+            await this.removeStoragePath(storagePath);
             return;
         }
 
@@ -219,14 +225,10 @@ export class SidecarCommentStorage {
         await ensureDirectory(this.options.adapter, getParentPath(storagePath));
         await this.options.adapter.write(tempPath, serialized);
         try {
-            if (await this.options.adapter.exists(storagePath)) {
-                await this.options.adapter.remove(storagePath);
-            }
+            await this.removeStoragePath(storagePath);
             await this.options.adapter.rename(tempPath, storagePath);
         } catch (error) {
-            if (await this.options.adapter.exists(tempPath)) {
-                await this.options.adapter.remove(tempPath);
-            }
+            await this.removeStoragePath(tempPath);
             throw error;
         }
     }
@@ -253,8 +255,8 @@ export class SidecarCommentStorage {
 
         const nextStoragePath = await this.getNoteStoragePath(nextNotePath);
         for (const oldStoragePath of await this.getNoteStoragePaths(previousNotePath)) {
-            if (oldStoragePath !== nextStoragePath && await this.options.adapter.exists(oldStoragePath)) {
-                await this.options.adapter.remove(oldStoragePath);
+            if (oldStoragePath !== nextStoragePath) {
+                await this.removeStoragePath(oldStoragePath);
             }
         }
     }
@@ -330,7 +332,13 @@ export class SidecarCommentStorage {
             return;
         }
 
-        await this.options.adapter.remove(storagePath);
+        try {
+            await this.options.adapter.remove(storagePath);
+        } catch (error) {
+            if (!isMissingFileError(error)) {
+                throw error;
+            }
+        }
     }
 
     private async getAllStorageFiles(): Promise<string[]> {
