@@ -139,6 +139,7 @@ import {
     type ToolbarChipOptions,
     type ToolbarIconButtonOptions,
 } from "./sidebarToolbarRenderer";
+import { updateRenderedActiveFileFilters } from "./sidebarActiveFileFilterDom";
 
 function matchesResolvedVisibility(resolved: boolean | undefined, showResolved: boolean): boolean {
     return showResolved ? resolved === true : resolved !== true;
@@ -3574,6 +3575,28 @@ export default class AsideView extends ItemView {
         return this.selectedIndexFileFilterRootPath;
     }
 
+    private updateRenderedIndexFileFilterImmediately(rootFilePath: string | null): void {
+        if (!this.file || !this.plugin.isAllCommentsNotePath(this.file.path)) {
+            return;
+        }
+
+        if (!rootFilePath) {
+            this.containerEl.querySelector(".aside-active-file-filters")?.remove();
+            return;
+        }
+
+        const filteredIndexFilePaths = deriveIndexSidebarScopedFilePaths(
+            this.indexFileFilterGraph,
+            rootFilePath,
+        );
+        updateRenderedActiveFileFilters(this.containerEl, {
+            rootFilePath,
+            filteredIndexFilePaths: filteredIndexFilePaths.length
+                ? filteredIndexFilePaths
+                : [rootFilePath],
+        });
+    }
+
 	public async setIndexFileFilterRootPath(filePath: string | null): Promise<void> {
 		const normalizedRootPath = normalizeIndexFileFilterRootPath(filePath);
         this.indexFileFilterAutoSelectSuppressed = normalizedRootPath === null;
@@ -3583,6 +3606,7 @@ export default class AsideView extends ItemView {
 
 		const didChangeFilter = this.selectedIndexFileFilterRootPath !== normalizedRootPath;
 		this.selectedIndexFileFilterRootPath = normalizedRootPath;
+        this.updateRenderedIndexFileFilterImmediately(normalizedRootPath);
         if (this.file) {
             this.plugin.syncIndexPreviewFileScope(this.file.path);
         }

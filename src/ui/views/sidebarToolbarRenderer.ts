@@ -1,5 +1,5 @@
 import { setIcon } from "obsidian";
-import { getIndexFileFilterLabel } from "./indexFileFilter";
+import { getActiveFileFilterPresentation } from "./sidebarActiveFileFilterDom";
 import type { SidebarPrimaryMode } from "./viewState";
 
 export interface ToolbarActionGuard {
@@ -207,12 +207,13 @@ export function renderActiveFileFilters(
     options: ActiveFileFiltersOptions,
     guard: ToolbarActionGuard,
 ): void {
+    const presentation = getActiveFileFilterPresentation(options);
     const filterBar = container.createDiv("aside-active-file-filters");
     const rootChip = filterBar.createDiv("aside-active-file-filter");
     rootChip.addClass("is-root");
 
     rootChip.createSpan({
-        text: getIndexFileFilterLabel(options.rootFilePath, options.filteredIndexFilePaths),
+        text: presentation.label,
         cls: "aside-active-file-filter-label",
     });
 
@@ -220,7 +221,7 @@ export function renderActiveFileFilters(
         cls: "aside-active-file-filter-clear clickable-icon",
     });
     clearButton.setAttribute("type", "button");
-    clearButton.setAttribute("aria-label", `Clear file filter for ${options.rootFilePath}`);
+    clearButton.setAttribute("aria-label", presentation.clearAriaLabel);
     setIcon(clearButton, "x");
     clearButton.onclick = async (event) => {
         event.preventDefault();
@@ -231,13 +232,8 @@ export function renderActiveFileFilters(
         options.onClear();
     };
 
-    const linkedFileCount = Math.max(0, options.filteredIndexFilePaths.length - 1);
     const summaryEl = filterBar.createDiv("aside-active-file-filter-summary");
-    summaryEl.setText(
-        linkedFileCount > 0
-            ? `+${linkedFileCount} linked file${linkedFileCount === 1 ? "" : "s"}`
-            : "1 file",
-    );
+    summaryEl.setText(presentation.summary);
 }
 
 function renderTabButton(

@@ -13,6 +13,7 @@ import {
     resolveAutoIndexFileFilterRootPath,
     shouldLimitIndexSidebarList,
 } from "../src/ui/views/indexFileFilter";
+import { updateRenderedActiveFileFilters } from "../src/ui/views/sidebarActiveFileFilterDom";
 
 function createComment(overrides: Partial<Comment> = {}): Comment {
     return {
@@ -176,4 +177,39 @@ test("getIndexFileFilterLabel falls back to full path when selected basenames co
         getIndexFileFilterLabel("notes/beta.md", ["notes/beta.md", "archive/alpha.md"]),
         "beta",
     );
+});
+
+test("updateRenderedActiveFileFilters replaces the visible filter chip immediately", () => {
+    const labelEl = { textContent: "old" };
+    const summaryEl = { textContent: "old summary" };
+    const clearButton = {
+        attributes: new Map<string, string>(),
+        setAttribute(name: string, value: string) {
+            this.attributes.set(name, value);
+        },
+    };
+    const container = {
+        querySelector(selector: string) {
+            if (selector === ".aside-active-file-filter-label") {
+                return labelEl;
+            }
+            if (selector === ".aside-active-file-filter-summary") {
+                return summaryEl;
+            }
+            if (selector === ".aside-active-file-filter-clear") {
+                return clearButton;
+            }
+            return null;
+        },
+    };
+
+    const updated = updateRenderedActiveFileFilters(container as unknown as HTMLElement, {
+        rootFilePath: "test.md",
+        filteredIndexFilePaths: ["test.md"],
+    });
+
+    assert.equal(updated, true);
+    assert.equal(labelEl.textContent, "test");
+    assert.equal(summaryEl.textContent, "1 file");
+    assert.equal(clearButton.attributes.get("aria-label"), "Clear file filter for test.md");
 });
