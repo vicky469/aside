@@ -23,7 +23,7 @@ import {
     type CanonicalCommentStorageSource,
 } from "../core/storage/canonicalCommentStorage";
 import { normalizeDeletedAt, purgeExpiredDeletedThreads } from "../core/rules/deletedCommentVisibility";
-import { SidecarCommentStorage } from "../core/storage/sidecarCommentStorage";
+import { SidecarCommentStorage, type RemovedSidecarComments } from "../core/storage/sidecarCommentStorage";
 import {
     buildSideNoteSyncEventInputsForThreadDiff,
     reduceSideNoteSyncEvents,
@@ -1340,23 +1340,19 @@ export class CommentPersistenceController {
         let initializedNow = false;
         if (!this.aggregateIndexInitializationPromise) {
             this.aggregateIndexInitializationPromise = (async () => {
-                const persistedSourcePaths = await this.getPersistedCommentSourcePaths();
+                const persistedSourceRecords = await this.getPersistedCommentSourceRecords();
 
-                for (const filePath of persistedSourcePaths) {
+                for (const record of persistedSourceRecords) {
                     if (this.disposed) {
                         break;
                     }
-                    const file = this.host.getMarkdownFileByPath(filePath);
+                    const file = this.host.getMarkdownFileByPath(record.notePath);
                     if (!this.host.isCommentableFile(file)) {
-                        this.host.getAggregateCommentIndex().deleteFile(filePath);
+                        this.host.getAggregateCommentIndex().deleteFile(record.notePath);
                         continue;
                     }
-                    const noteContent = await this.host.getCurrentNoteContent(file);
-                    if (this.disposed) {
-                        break;
-                    }
-                    const parsed = await this.getCanonicalThreadState(file, noteContent);
-                    this.host.getAggregateCommentIndex().updateFile(file.path, parsed.threads);
+                    const threads = await this.normalizeThreadsForFile(file.path, record.threads);
+                    this.host.getAggregateCommentIndex().updateFile(file.path, threads);
                 }
 
                 if (!this.disposed) {
@@ -1370,6 +1366,35 @@ export class CommentPersistenceController {
 
         await this.aggregateIndexInitializationPromise;
         return initializedNow;
+    }
+
+    private async getPersistedCommentSourceRecords(): Promise<RemovedSidecarComments[]> {
+        if (this.disposed) {
+            return [];
+        }
+        await this.syncEventStore.refreshFromLatestPersistedData();
+        if (this.disposed) {
+            return [];
+        }
+
+        const recordsByNotePath = new Map<string, RemovedSidecarComments>();
+        for (const record of await this.sidecarStorage.listStoredComments()) {
+            if (record.threads.length > 0) {
+                recordsByNotePath.set(record.notePath, record);
+            }
+        }
+
+        for (const snapshot of this.getLatestSnapshotsByNotePath(this.syncEventStore.getSnapshots())) {
+            if (!recordsByNotePath.has(snapshot.notePath) && snapshot.threads.length > 0) {
+                recordsByNotePath.set(snapshot.notePath, {
+                    notePath: snapshot.notePath,
+                    threads: snapshot.threads,
+                });
+            }
+        }
+
+        return Array.from(recordsByNotePath.values())
+            .sort((left, right) => left.notePath.localeCompare(right.notePath));
     }
 
     private isMissingStoredCommentSource(filePath: string): boolean {

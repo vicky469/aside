@@ -1757,7 +1757,7 @@ test("comment persistence controller skips incompatible compacted snapshots for 
     }
 });
 
-test("comment persistence startup index uses persisted sidecar paths instead of scanning vault markdown files", async () => {
+test("comment persistence startup index uses persisted sidecars without reading source notes", async () => {
     const originalWindow = globalThis.window;
     globalThis.window = {
         setTimeout: () => 1,
@@ -1880,7 +1880,7 @@ test("comment persistence startup index uses persisted sidecar paths instead of 
     try {
         await controller.ensureIndexedCommentsLoaded();
 
-        assert.deepEqual(readPaths, [keptFilePath]);
+        assert.deepEqual(readPaths, []);
         assert.equal(indexWrites.length, 1);
         assert.match(indexWrites[0], /data-aside-file-path="notes\/kept\.md"/);
         assert.doesNotMatch(indexWrites[0], /node_modules/);
@@ -1963,7 +1963,7 @@ test("comment persistence source identity startup migration uses persisted comme
     assert.equal(sourceIdentityState.pathToSourceId?.["aside/.worktrees/fix/README.md"], undefined);
 });
 
-test("comment persistence disposal stops in-flight startup indexing", async () => {
+test("comment persistence disposal skips startup index sidecar hydration", async () => {
     const adapter = new FakeAdapter();
     let persistedData: PersistedPluginData = {};
     const commentManager = new CommentManager([]);
@@ -1977,7 +1977,6 @@ test("comment persistence disposal stops in-flight startup indexing", async () =
     ];
     const readPaths: string[] = [];
     const indexWrites: string[] = [];
-    let controller: CommentPersistenceController | null = null;
     adapter.directories.add(".obsidian/plugins/aside/sidenotes/by-note");
     for (const filePath of [firstFilePath, secondFilePath]) {
         const sidecarPath = getSidecarStoragePath(filePath);
@@ -1985,7 +1984,7 @@ test("comment persistence disposal stops in-flight startup indexing", async () =
         adapter.files.set(sidecarPath, serializeSidecarThreads(filePath, [createThread(filePath)]));
     }
 
-    controller = new CommentPersistenceController({
+    const controller = new CommentPersistenceController({
         app: {
             vault: {
                 adapter: adapter as unknown as DataAdapter,
@@ -2018,9 +2017,6 @@ test("comment persistence disposal stops in-flight startup indexing", async () =
             files.find((file) => file.path === filePath) ?? null,
         getCurrentNoteContent: async (file) => {
             readPaths.push(file.path);
-            if (file.path === firstFilePath) {
-                controller?.dispose();
-            }
             return "plain note";
         },
         getStoredNoteContent: async () => "plain note",
@@ -2050,9 +2046,10 @@ test("comment persistence disposal stops in-flight startup indexing", async () =
         log: async () => {},
     });
 
+    controller.dispose();
     await controller.ensureIndexedCommentsLoaded();
 
-    assert.deepEqual(readPaths, [firstFilePath]);
+    assert.deepEqual(readPaths, []);
     assert.equal(indexWrites.length, 0);
 });
 
