@@ -79,6 +79,31 @@ test("workspace leaf target resolves a pending file from the leaf view state", (
     assert.equal(resolved, currentFile);
 });
 
+test("workspace leaf target prefers view state when the leaf view still has the previous file", () => {
+    const previousFile = createFile("docs/previous.md");
+    const currentFile = createFile("docs/current.md");
+
+    const resolved = resolveWorkspaceLeafTargetInput(
+        {
+            view: {
+                file: previousFile,
+                getViewType: () => "markdown",
+            },
+            getViewState: () => ({
+                type: "markdown",
+                state: {
+                    file: currentFile.path,
+                },
+            }),
+        },
+        previousFile,
+        (value): value is MockFile => value === previousFile || value === currentFile,
+        (path) => path === currentFile.path ? currentFile : null,
+    );
+
+    assert.equal(resolved, currentFile);
+});
+
 test("workspace leaf target ignores leaf changes that temporarily have no file value", () => {
     const markdownFile = createFile("docs/note.md");
 

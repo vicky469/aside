@@ -633,6 +633,9 @@ export class CommentHighlightController {
                 if (event.key !== "Enter" && event.key !== " ") {
                     return;
                 }
+                if (!shouldHandleTarget(event.target)) {
+                    return;
+                }
 
                 event.preventDefault();
                 event.stopPropagation();

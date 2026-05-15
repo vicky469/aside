@@ -60,6 +60,15 @@ function getWorkspaceLeafFileValue<T>(
         };
     }
 
+    const stateFilePath = getWorkspaceLeafStateFilePath(leaf);
+    if (stateFilePath && resolveFileByPath) {
+        const file = resolveFileByPath(stateFilePath);
+        return {
+            hasValue: true,
+            value: file,
+        };
+    }
+
     if ("file" in view && view.file !== null && view.file !== undefined) {
         return {
             hasValue: true,
@@ -67,18 +76,9 @@ function getWorkspaceLeafFileValue<T>(
         };
     }
 
-    const stateFilePath = getWorkspaceLeafStateFilePath(leaf);
-    if (!stateFilePath || !resolveFileByPath) {
-        return {
-            hasValue: false,
-            value: null,
-        };
-    }
-
-    const file = resolveFileByPath(stateFilePath);
     return {
-        hasValue: file !== null && file !== undefined,
-        value: file,
+        hasValue: false,
+        value: null,
     };
 }
 

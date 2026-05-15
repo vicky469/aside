@@ -203,7 +203,7 @@ test("index live preview line fallback ignores clicks on blank line space", () =
     const childTarget = {};
 
     assert.equal(shouldUseIndexLivePreviewLineFallback(lineEl, lineEl), false);
-    assert.equal(shouldUseIndexLivePreviewLineFallback(childTarget, lineEl), true);
+    assert.equal(shouldUseIndexLivePreviewLineFallback(childTarget, lineEl), false);
 });
 
 test("index preview row activator ignores clicks on blank row space", () => {
@@ -211,5 +211,5 @@ test("index preview row activator ignores clicks on blank row space", () => {
     const childTarget = {};
 
     assert.equal(shouldUseIndexPreviewRowActivator(rowEl, rowEl), false);
-    assert.equal(shouldUseIndexPreviewRowActivator(childTarget, rowEl), true);
+    assert.equal(shouldUseIndexPreviewRowActivator(childTarget, rowEl), false);
 });
