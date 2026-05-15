@@ -35,6 +35,14 @@ export function isIndexNativeCollapseControlTarget(target: ClosestLookupTarget |
     return !!target?.closest(INDEX_NATIVE_COLLAPSE_CONTROL_SELECTOR);
 }
 
+export function shouldUseIndexLivePreviewLineFallback(target: unknown, lineElement: unknown): boolean {
+    return target !== lineElement;
+}
+
+export function shouldUseIndexPreviewRowActivator(target: unknown, rowElement: unknown): boolean {
+    return target !== rowElement;
+}
+
 export function findClickedIndexLivePreviewTarget(
     target: ClosestLookupTarget | null,
 ): IndexLivePreviewClickTarget | null {

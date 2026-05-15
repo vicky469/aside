@@ -22,6 +22,8 @@ import { findClickedHighlightCommentId } from "./commentHighlightClickTarget";
 import {
     findClickedIndexLivePreviewTarget,
     isIndexNativeCollapseControlTarget,
+    shouldUseIndexPreviewRowActivator,
+    shouldUseIndexLivePreviewLineFallback,
 } from "./commentIndexClickTarget";
 import { buildPreviewHighlightWraps } from "./commentHighlightPlanner";
 import { nodeInstanceOf } from "../ui/domGuards";
@@ -593,7 +595,11 @@ export class CommentHighlightController {
     }
 
     private bindIndexPreviewLinkClicks(element: HTMLElement, sourcePath: string): void {
-        const bindActivator = (targetEl: HTMLElement, activate: () => void) => {
+        const bindActivator = (
+            targetEl: HTMLElement,
+            activate: () => void,
+            shouldHandleTarget: (target: EventTarget | null) => boolean = () => true,
+        ) => {
             if (targetEl.dataset.asideIndexBound === "true") {
                 return;
             }
@@ -603,12 +609,18 @@ export class CommentHighlightController {
                 if (!this.isPlainPrimaryClick(event)) {
                     return;
                 }
+                if (!shouldHandleTarget(event.target)) {
+                    return;
+                }
 
                 event.preventDefault();
                 event.stopPropagation();
             });
             targetEl.addEventListener("click", (event: MouseEvent) => {
                 if (!this.isPlainPrimaryClick(event)) {
+                    return;
+                }
+                if (!shouldHandleTarget(event.target)) {
                     return;
                 }
 
@@ -655,7 +667,11 @@ export class CommentHighlightController {
             bindActivator(link, activateLink);
             const rowEl = link.closest("p, li");
             if (nodeInstanceOf(rowEl, HTMLElement)) {
-                bindActivator(rowEl, activateLink);
+                bindActivator(
+                    rowEl,
+                    activateLink,
+                    (target) => shouldUseIndexPreviewRowActivator(target, rowEl),
+                );
             }
         });
 
@@ -684,7 +700,11 @@ export class CommentHighlightController {
             bindActivator(link, activateFile);
             const rowEl = link.closest("p, li");
             if (nodeInstanceOf(rowEl, HTMLElement)) {
-                bindActivator(rowEl, activateFile);
+                bindActivator(
+                    rowEl,
+                    activateFile,
+                    (target) => shouldUseIndexPreviewRowActivator(target, rowEl),
+                );
             }
         });
     }
@@ -1084,6 +1104,9 @@ export class CommentHighlightController {
                 if (!nodeInstanceOf(lineEl, HTMLElement)) {
                     return false;
                 }
+                if (!shouldUseIndexLivePreviewLineFallback(target, lineEl)) {
+                    return false;
+                }
 
                 let pos: number;
                 try {
@@ -1139,6 +1162,9 @@ export class CommentHighlightController {
 
                 const lineEl = target.closest(".cm-line");
                 if (!nodeInstanceOf(lineEl, HTMLElement)) {
+                    return false;
+                }
+                if (!shouldUseIndexLivePreviewLineFallback(target, lineEl)) {
                     return false;
                 }
 

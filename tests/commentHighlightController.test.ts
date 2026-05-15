@@ -5,6 +5,8 @@ import { findClickedHighlightCommentId } from "../src/comments/commentHighlightC
 import {
     findClickedIndexLivePreviewTarget,
     isIndexNativeCollapseControlTarget,
+    shouldUseIndexPreviewRowActivator,
+    shouldUseIndexLivePreviewLineFallback,
 } from "../src/comments/commentIndexClickTarget";
 import { buildPreviewHighlightWraps } from "../src/comments/commentHighlightPlanner";
 
@@ -194,4 +196,20 @@ test("findClickedIndexLivePreviewTarget returns null for non-index elements", ()
 
     assert.equal(findClickedIndexLivePreviewTarget(target), null);
     assert.equal(findClickedIndexLivePreviewTarget(null), null);
+});
+
+test("index live preview line fallback ignores clicks on blank line space", () => {
+    const lineEl = {};
+    const childTarget = {};
+
+    assert.equal(shouldUseIndexLivePreviewLineFallback(lineEl, lineEl), false);
+    assert.equal(shouldUseIndexLivePreviewLineFallback(childTarget, lineEl), true);
+});
+
+test("index preview row activator ignores clicks on blank row space", () => {
+    const rowEl = {};
+    const childTarget = {};
+
+    assert.equal(shouldUseIndexPreviewRowActivator(rowEl, rowEl), false);
+    assert.equal(shouldUseIndexPreviewRowActivator(childTarget, rowEl), true);
 });

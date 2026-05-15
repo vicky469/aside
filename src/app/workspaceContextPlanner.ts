@@ -6,6 +6,8 @@ export interface WorkspaceFileTargets<T> {
     sidebarFile: T | null;
 }
 
+export type WorkspaceLeafFileResolver<T> = (path: string) => T | null;
+
 export function resolveWorkspaceTargetInput<T>(
     eventFile: T | null,
     workspaceActiveFile: T | null,
@@ -16,8 +18,9 @@ export function resolveWorkspaceTargetInput<T>(
 export function resolveWorkspaceLeafFile<T>(
     leaf: unknown,
     isFile: (value: unknown) => value is T,
+    resolveFileByPath?: WorkspaceLeafFileResolver<T>,
 ): T | null {
-    const fileValue = getWorkspaceLeafFileValue(leaf);
+    const fileValue = getWorkspaceLeafFileValue(leaf, resolveFileByPath);
     return fileValue.hasValue && isFile(fileValue.value) ? fileValue.value : null;
 }
 
@@ -25,8 +28,9 @@ export function resolveWorkspaceLeafTargetInput<T>(
     leaf: unknown,
     _workspaceActiveFile: T | null,
     isFile: (value: unknown) => value is T,
+    resolveFileByPath?: WorkspaceLeafFileResolver<T>,
 ): T | null {
-    const fileValue = getWorkspaceLeafFileValue(leaf);
+    const fileValue = getWorkspaceLeafFileValue(leaf, resolveFileByPath);
     if (!fileValue.hasValue) {
         return null;
     }
@@ -34,7 +38,10 @@ export function resolveWorkspaceLeafTargetInput<T>(
     return isFile(fileValue.value) ? fileValue.value : null;
 }
 
-function getWorkspaceLeafFileValue(leaf: unknown): {
+function getWorkspaceLeafFileValue<T>(
+    leaf: unknown,
+    resolveFileByPath?: WorkspaceLeafFileResolver<T>,
+): {
     hasValue: boolean;
     value: unknown;
 } {
@@ -46,17 +53,59 @@ function getWorkspaceLeafFileValue(leaf: unknown): {
     }
 
     const view = leaf.view;
-    if (!view || typeof view !== "object" || !("file" in view)) {
+    if (!view || typeof view !== "object") {
         return {
             hasValue: false,
             value: null,
         };
     }
 
+    if ("file" in view && view.file !== null && view.file !== undefined) {
+        return {
+            hasValue: true,
+            value: view.file,
+        };
+    }
+
+    const stateFilePath = getWorkspaceLeafStateFilePath(leaf);
+    if (!stateFilePath || !resolveFileByPath) {
+        return {
+            hasValue: false,
+            value: null,
+        };
+    }
+
+    const file = resolveFileByPath(stateFilePath);
     return {
-        hasValue: view.file !== null && view.file !== undefined,
-        value: view.file,
+        hasValue: file !== null && file !== undefined,
+        value: file,
     };
+}
+
+function getWorkspaceLeafStateFilePath(leaf: unknown): string | null {
+    const getViewState = (leaf as { getViewState?: unknown }).getViewState;
+    if (typeof getViewState !== "function") {
+        return null;
+    }
+
+    let viewState: unknown;
+    try {
+        viewState = getViewState.call(leaf);
+    } catch {
+        return null;
+    }
+
+    if (!viewState || typeof viewState !== "object") {
+        return null;
+    }
+
+    const state = (viewState as { state?: unknown }).state;
+    if (!state || typeof state !== "object") {
+        return null;
+    }
+
+    const filePath = (state as { file?: unknown }).file;
+    return typeof filePath === "string" && filePath.trim() ? filePath.trim() : null;
 }
 
 export function resolveWorkspaceFileTargets<T>(

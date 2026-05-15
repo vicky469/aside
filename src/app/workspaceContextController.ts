@@ -63,6 +63,10 @@ export class WorkspaceContextController {
             leaf,
             this.host.app.workspace.getActiveFile(),
             (value): value is TFile => value instanceof TFile,
+            (filePath) => {
+                const file = this.host.app.vault.getAbstractFileByPath(filePath);
+                return file instanceof TFile ? file : null;
+            },
         );
         void this.syncIndexNoteLeafMode(leaf);
         this.syncIndexNoteViewClasses();

@@ -55,6 +55,30 @@ test("workspace leaf target does not fall back to the last markdown file for uns
     assert.equal(resolved, null);
 });
 
+test("workspace leaf target resolves a pending file from the leaf view state", () => {
+    const previousFile = createFile("docs/previous.md");
+    const currentFile = createFile("docs/current.md");
+
+    const resolved = resolveWorkspaceLeafTargetInput(
+        {
+            view: {
+                getViewType: () => "markdown",
+            },
+            getViewState: () => ({
+                type: "markdown",
+                state: {
+                    file: currentFile.path,
+                },
+            }),
+        },
+        previousFile,
+        (value): value is MockFile => value === currentFile,
+        (path) => path === currentFile.path ? currentFile : null,
+    );
+
+    assert.equal(resolved, currentFile);
+});
+
 test("workspace leaf target ignores leaf changes that temporarily have no file value", () => {
     const markdownFile = createFile("docs/note.md");
 
