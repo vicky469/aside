@@ -1590,3 +1590,88 @@ test("comment persistence disposal stops in-flight startup indexing", async () =
     assert.deepEqual(readPaths, ["notes/first.md"]);
     assert.equal(indexWrites.length, 0);
 });
+
+test("comment persistence can save again after a plugin reload", async () => {
+    const adapter = new FakeAdapter();
+    let persistedData: PersistedPluginData = {};
+    const file = createFile("test2.md");
+    const indexNotePath = "Aside index.md";
+    const commentManager = new CommentManager([createThread(file.path)]);
+    const aggregateCommentIndex = new AggregateCommentIndex();
+    const indexWrites: string[] = [];
+
+    const controller = new CommentPersistenceController({
+        app: {
+            vault: {
+                adapter: adapter as unknown as DataAdapter,
+                process: async (_file: TFile, change: (content: string) => string) => change("plain note"),
+                getMarkdownFiles: () => [file],
+                getName: () => "Dev Vault",
+                getAbstractFileByPath: (filePath: string) =>
+                    filePath === file.path ? file : null,
+                create: async (_filePath: string, content: string) => {
+                    indexWrites.push(content);
+                    return createFile(indexNotePath);
+                },
+                modify: async (_file: TFile, content: string) => {
+                    indexWrites.push(content);
+                },
+            },
+            metadataCache: {
+                getFirstLinkpathDest: () => null,
+            },
+            fileManager: {
+                renameFile: async () => {},
+            },
+        } as never,
+        getAllCommentsNotePath: () => indexNotePath,
+        getIndexHeaderImageUrl: () => "",
+        getIndexHeaderImageCaption: () => "",
+        shouldShowResolvedComments: () => false,
+        getMarkdownViewForFile: () => null,
+        getMarkdownFileByPath: (filePath) =>
+            filePath === file.path ? file : null,
+        getCurrentNoteContent: async () => "plain note",
+        getStoredNoteContent: async () => "plain note",
+        getParsedNoteComments: (filePath, noteContent) => parseNoteComments(noteContent, filePath),
+        getPluginDataDirPath: () => ".obsidian/plugins/aside",
+        getSideNoteSyncDeviceId: () => "device-a",
+        readPersistedPluginData: () => persistedData,
+        writePersistedPluginData: async (data) => {
+            persistedData = data;
+        },
+        isAllCommentsNotePath: (filePath) => filePath === indexNotePath,
+        isCommentableFile: (candidate): candidate is TFile =>
+            !!candidate
+            && candidate.extension === "md",
+        isMarkdownEditorFocused: () => false,
+        getCommentManager: () => commentManager,
+        getAggregateCommentIndex: () => aggregateCommentIndex,
+        createCommentId: () => "generated-id",
+        hashText: async (text) => `hash-${text.replace(/\//g, "_")}`,
+        syncDerivedCommentLinksForFile: () => {},
+        refreshCommentViews: async () => {},
+        refreshAllCommentsSidebarViews: async () => {},
+        refreshEditorDecorations: () => {},
+        refreshMarkdownPreviews: () => {},
+        getCommentMentionedPageLabels: () => [],
+        syncIndexNoteLeafMode: async () => {},
+        log: async () => {},
+    });
+
+    controller.dispose();
+    await controller.persistCommentsForFile(file, { immediateAggregateRefresh: true });
+    assert.equal(indexWrites.length, 0);
+
+    const revived = (controller as unknown as { reviveForLoad(): CommentPersistenceController }).reviveForLoad();
+    assert.notEqual(revived, controller);
+
+    await revived.persistCommentsForFile(file, { immediateAggregateRefresh: true });
+
+    assert.equal(indexWrites.length, 1);
+    assert.match(indexWrites[0], /test2\.md/);
+    const sidecar = JSON.parse(adapter.files.get(getSidecarStoragePath(file.path)) ?? "{}") as {
+        threads?: CommentThread[];
+    };
+    assert.equal(sidecar.threads?.length, 1);
+});

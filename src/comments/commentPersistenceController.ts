@@ -631,6 +631,12 @@ export class CommentPersistenceController {
         this.commentViewRefreshSuppressions.clear();
     }
 
+    public reviveForLoad(): CommentPersistenceController {
+        return this.disposed
+            ? new CommentPersistenceController(this.host)
+            : this;
+    }
+
     private async getSourceContentFingerprint(noteContent: string): Promise<string | null> {
         const normalizedContent = normalizeSourceContentForFingerprint(noteContent);
         return normalizedContent.length > 0

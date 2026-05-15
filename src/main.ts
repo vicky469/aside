@@ -295,7 +295,7 @@ export default class Aside extends Plugin {
         },
         log: (level, area, event, payload) => this.logEvent(level, area, event, payload),
     });
-    private readonly commentPersistenceController: CommentPersistenceController = new CommentPersistenceController({
+    private commentPersistenceController: CommentPersistenceController = new CommentPersistenceController({
         app: this.app,
         getAllCommentsNotePath: () => this.getAllCommentsNotePath(),
         getIndexHeaderImageUrl: () => this.getIndexHeaderImageUrl(),
@@ -402,7 +402,6 @@ export default class Aside extends Plugin {
     }, this.agentRunStore);
     private readonly pluginLifecycleController = new PluginLifecycleController({
         app: this.app,
-        ensureSidebarView: () => this.commentNavigationController.ensureSidebarView(true),
         getCommentManager: () => this.commentManager,
         getAggregateCommentIndex: () => this.aggregateCommentIndex,
         renameStoredComments: (previousFilePath, nextFilePath) =>
@@ -418,6 +417,9 @@ export default class Aside extends Plugin {
         scheduleAggregateNoteRefresh: () => this.scheduleAggregateNoteRefresh(),
         syncIndexNoteViewClasses: () => this.syncIndexNoteViewClasses(),
         handleMarkdownFileModified: (file) => this.commentPersistenceController.handleMarkdownFileModified(file),
+        detachSidebarViews: () => {
+            this.app.workspace.detachLeavesOfType("aside-view");
+        },
         scheduleTimer: (callback, ms) => window.setTimeout(callback, ms),
         clearTimer: (timerId) => window.clearTimeout(timerId),
         warn: (message, error) => {
@@ -532,6 +534,7 @@ export default class Aside extends Plugin {
             runtime: this.runtime,
             pluginVersion: this.manifest.version,
         });
+        this.commentPersistenceController = this.commentPersistenceController.reviveForLoad();
         addIcon(ASIDE_ICON_ID, ASIDE_ICON_SVG);
         addIcon(ASIDE_REGENERATE_ICON_ID, ASIDE_REGENERATE_ICON_SVG);
 
@@ -540,7 +543,6 @@ export default class Aside extends Plugin {
         await this.ensureSidecarStorageMigrated();
         await this.ensureSideNoteSyncEventsMigrated();
         await this.ensureSourceIdentitiesMigrated();
-        await this.commentPersistenceController.replaySyncedSideNoteEvents();
         this.pluginRegistrationController.register();
         this.registerEditorExtension([
             this.commentHighlightController.createLivePreviewManagedBlockPlugin(),
@@ -561,9 +563,6 @@ export default class Aside extends Plugin {
         this.workspaceContextController.initializeActiveFiles(activeFile);
         await this.pluginEventRouter.register();
         this.addSettingTab(new AsideSetting(this.app, this));
-        void this.workspaceViewController.loadVisibleFiles().catch((error) => {
-            this.warn("Failed to preload visible Aside comments during startup.", error, "startup", "startup.visible-files.preload.warn");
-        });
     }
 
     onunload() {
@@ -571,7 +570,7 @@ export default class Aside extends Plugin {
         disposeAgentRuntimeProcesses();
         this.commentAgentController.dispose();
         this.commentPersistenceController.dispose();
-        this.pluginLifecycleController.clearPendingEditorRefreshes();
+        this.pluginLifecycleController.handleUnload();
         this.derivedCommentMetadataManager.restoreMetadataCacheAugmentation();
         this.derivedCommentMetadataManager.clearAllDerivedCommentLinks();
         void this.logService?.flush();

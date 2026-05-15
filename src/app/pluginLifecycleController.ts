@@ -4,7 +4,6 @@ import type { AggregateCommentIndex } from "../index/AggregateCommentIndex";
 
 export interface PluginLifecycleHost {
     app: Plugin["app"];
-    ensureSidebarView(): Promise<void>;
     getCommentManager(): CommentManager;
     getAggregateCommentIndex(): AggregateCommentIndex;
     renameStoredComments(previousFilePath: string, nextFilePath: string): Promise<void>;
@@ -19,6 +18,7 @@ export interface PluginLifecycleHost {
     scheduleAggregateNoteRefresh(): void;
     syncIndexNoteViewClasses(): void;
     handleMarkdownFileModified(file: TFile): Promise<void>;
+    detachSidebarViews(): void;
     scheduleTimer(callback: () => void, ms: number): number;
     clearTimer(timerId: number): void;
     warn(message: string, error: unknown): void;
@@ -68,11 +68,7 @@ export class PluginLifecycleController {
         void this.host.refreshAggregateNoteNow();
     }
 
-    public async handleLayoutReady(): Promise<void> {
-        await this.host.ensureSidebarView();
-        void this.host.log?.("info", "startup", "startup.sidebar.ready");
-        await this.host.refreshCommentViews();
-        this.host.refreshEditorDecorations();
+    public handleLayoutReady(): void {
         this.host.syncIndexNoteViewClasses();
         void this.host.log?.("info", "startup", "startup.layout.ready");
     }
@@ -155,5 +151,10 @@ export class PluginLifecycleController {
         for (const filePath of Object.keys(this.editorUpdateTimers)) {
             delete this.editorUpdateTimers[filePath];
         }
+    }
+
+    public handleUnload(): void {
+        this.clearPendingEditorRefreshes();
+        this.host.detachSidebarViews();
     }
 }
