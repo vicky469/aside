@@ -6,8 +6,8 @@
 Aside
 </p>
 <p align="center">
-  <a href="https://github.com/vicky469/aside/releases/tag/2.0.69">
-    <img src="https://img.shields.io/badge/release-2.0.69-22c55e?style=flat-square" alt="Latest release">
+  <a href="https://github.com/vicky469/aside/releases/tag/2.0.70">
+    <img src="https://img.shields.io/badge/release-2.0.70-22c55e?style=flat-square" alt="Latest release">
   </a>
   <a href="https://buymeacoffee.com/vickyli">
     <img src="https://img.shields.io/badge/Buy%20me%20a%20coffee-support-FFDD00?style=flat-square&logo=buymeacoffee&logoColor=000000" alt="Buy Me a Coffee">
