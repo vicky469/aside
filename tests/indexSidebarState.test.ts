@@ -152,11 +152,12 @@ test("shouldShowGenericIndexEmptyState hides the generic selected-file-filter em
 
 test("generic index empty state points users to file filtering", () => {
     assert.deepEqual(GENERIC_INDEX_EMPTY_STATE_TEXTS, [
-        "Click a file in the index to filter the sidebar and see its side notes.",
+        "Choose a file",
+        "Click a file in the index to see its side notes.",
     ]);
     assert.equal(
         GENERIC_INDEX_EMPTY_STATE_PRIMARY_TEXT,
-        "Click a file in the index to filter the sidebar and see its side notes.",
+        "Choose a file",
     );
     assert.doesNotMatch(GENERIC_INDEX_EMPTY_STATE_PRIMARY_TEXT, /No side notes in the index yet\./);
     assert.equal(GENERIC_INDEX_EMPTY_STATE_TEXTS.some((text) => text.includes("populate the index")), false);

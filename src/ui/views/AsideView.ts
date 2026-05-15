@@ -1694,12 +1694,12 @@ export default class AsideView extends ItemView {
                     });
                 } else if (showResolved && totalScopedCount > 0) {
                     const emptyStateEl = commentsBody.createDiv("aside-empty-state aside-section-empty-state");
-                    emptyStateEl.createEl("p", { text: "No resolved comments for this file." });
-                    emptyStateEl.createEl("p", { text: "Turn off resolved to return to active comments." });
+                    emptyStateEl.createEl("p", { text: "No resolved side notes" });
+                    emptyStateEl.createEl("p", { text: "Turn off resolved to return to active side notes." });
                 } else if (hasResolvedComments && !showResolved) {
                     const emptyStateEl = commentsBody.createDiv("aside-empty-state aside-section-empty-state");
-                    emptyStateEl.createEl("p", { text: "No active comments for this file." });
-                    emptyStateEl.createEl("p", { text: "Turn on resolved to review archived comments only." });
+                    emptyStateEl.createEl("p", { text: "No active side notes" });
+                    emptyStateEl.createEl("p", { text: "Turn on resolved to review archived side notes." });
                 }
             }
         } else {
@@ -2681,7 +2681,7 @@ export default class AsideView extends ItemView {
                     : options.showPinnedThreadsOnly
                         ? `No resolved ${pluralFilterLabel} for this file.`
                         : options.contentFilter === "all"
-                        ? "No resolved comments for this file."
+                        ? "No resolved side notes"
                         : `No resolved ${pluralFilterLabel} for this file.`,
             });
             emptyStateEl.createEl("p", {
@@ -2690,7 +2690,7 @@ export default class AsideView extends ItemView {
                     : options.showPinnedThreadsOnly
                         ? `Turn off ${filterLabel} to return to the broader side note list.`
                         : options.contentFilter === "all"
-                        ? "Turn off resolved to return to active comments."
+                        ? "Turn off resolved to return to active side notes."
                         : `Turn off resolved to return to active ${pluralFilterLabel}.`,
             });
             return;
@@ -2704,7 +2704,7 @@ export default class AsideView extends ItemView {
                     : options.showPinnedThreadsOnly
                         ? `No active ${pluralFilterLabel} for this file.`
                         : options.contentFilter === "all"
-                        ? "No active comments for this file."
+                        ? "No active side notes"
                         : `No active ${pluralFilterLabel} for this file.`,
             });
             emptyStateEl.createEl("p", {
@@ -2713,7 +2713,7 @@ export default class AsideView extends ItemView {
                     : options.showPinnedThreadsOnly
                         ? "Turn on resolved to review archived pinned comments only."
                         : options.contentFilter === "all"
-                        ? "Turn on resolved to review archived comments only."
+                        ? "Turn on resolved to review archived side notes."
                         : `Turn on resolved to review archived ${pluralFilterLabel} only.`,
             });
             return;
@@ -2726,7 +2726,7 @@ export default class AsideView extends ItemView {
                 : options.showPinnedThreadsOnly
                     ? `No ${pluralFilterLabel} for this file yet.`
                     : options.contentFilter === "all"
-                    ? "No comments for this file yet."
+                    ? "No side notes yet"
                     : `No ${pluralFilterLabel} for this file yet.`,
         });
         emptyStateEl.createEl("p", {
