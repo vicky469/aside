@@ -22,6 +22,7 @@ import { findClickedHighlightCommentId } from "./commentHighlightClickTarget";
 import {
     findClickedIndexLivePreviewTarget,
     isIndexNativeCollapseControlTarget,
+    shouldBlockIndexPreviewBackgroundTarget,
     shouldUseIndexPreviewRowActivator,
     shouldUseIndexLivePreviewLineFallback,
 } from "./commentIndexClickTarget";
@@ -831,6 +832,13 @@ export class CommentHighlightController {
 
             const context = this.resolveIndexInteractionContext(event.target);
             if (!context) {
+                if (shouldBlockIndexPreviewBackgroundTarget(
+                    nodeInstanceOf(event.target, Element) ? event.target : null,
+                )) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    event.stopImmediatePropagation();
+                }
                 return;
             }
 
@@ -845,6 +853,13 @@ export class CommentHighlightController {
 
             const context = this.resolveIndexInteractionContext(event.target);
             if (!context) {
+                if (shouldBlockIndexPreviewBackgroundTarget(
+                    nodeInstanceOf(event.target, Element) ? event.target : null,
+                )) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    event.stopImmediatePropagation();
+                }
                 return;
             }
 

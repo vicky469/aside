@@ -18,6 +18,7 @@ export interface ClosestLookupTarget {
     closest(selector: string): {
         dataset?: Record<string, string | undefined>;
         getAttribute(name: string): string | null;
+        querySelector?(selector: string): unknown;
     } | null;
 }
 
@@ -30,6 +31,12 @@ const INDEX_NATIVE_COLLAPSE_CONTROL_SELECTOR = [
 const INDEX_COMMENT_LINK_SELECTOR = "a.aside-index-comment-link[data-aside-comment-url]";
 const INDEX_FILE_HEADING_SELECTOR = ".aside-index-heading-label[title], a[data-aside-file-path]";
 const INDEX_FILE_LINK_SELECTOR = "a[href^=\"obsidian://open\"], a[href^=\"obsidian://aside-index-file\"]";
+const INDEX_ROW_SELECTOR = "p, li";
+const INDEX_ACTIONABLE_TARGET_SELECTOR = [
+    INDEX_COMMENT_LINK_SELECTOR,
+    INDEX_FILE_HEADING_SELECTOR,
+    INDEX_FILE_LINK_SELECTOR,
+].join(", ");
 
 export function isIndexNativeCollapseControlTarget(target: ClosestLookupTarget | null): boolean {
     return !!target?.closest(INDEX_NATIVE_COLLAPSE_CONTROL_SELECTOR);
@@ -41,6 +48,20 @@ export function shouldUseIndexLivePreviewLineFallback(_target: unknown, _lineEle
 
 export function shouldUseIndexPreviewRowActivator(_target: unknown, _rowElement: unknown): boolean {
     return false;
+}
+
+export function shouldBlockIndexPreviewBackgroundTarget(target: ClosestLookupTarget | null): boolean {
+    if (!target || isIndexNativeCollapseControlTarget(target)) {
+        return false;
+    }
+
+    if (findClickedIndexLivePreviewTarget(target)) {
+        return false;
+    }
+
+    const row = target.closest(INDEX_ROW_SELECTOR);
+    return typeof row?.querySelector === "function"
+        && !!row.querySelector(INDEX_ACTIONABLE_TARGET_SELECTOR);
 }
 
 export function findClickedIndexLivePreviewTarget(

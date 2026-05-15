@@ -5,6 +5,7 @@ import { findClickedHighlightCommentId } from "../src/comments/commentHighlightC
 import {
     findClickedIndexLivePreviewTarget,
     isIndexNativeCollapseControlTarget,
+    shouldBlockIndexPreviewBackgroundTarget,
     shouldUseIndexPreviewRowActivator,
     shouldUseIndexLivePreviewLineFallback,
 } from "../src/comments/commentIndexClickTarget";
@@ -212,4 +213,40 @@ test("index preview row activator ignores clicks on blank row space", () => {
 
     assert.equal(shouldUseIndexPreviewRowActivator(rowEl, rowEl), false);
     assert.equal(shouldUseIndexPreviewRowActivator(childTarget, rowEl), false);
+});
+
+test("index preview background clicks are blocked only on generated index rows", () => {
+    const generatedRow = {
+        getAttribute: () => null,
+        querySelector: (selector: string) =>
+            selector.includes("a[href^=\"obsidian://open\"]")
+                ? { getAttribute: () => "obsidian://open?vault=dev&file=test.md" }
+                : null,
+    };
+    const rowBackgroundTarget = {
+        closest: (selector: string) => selector === "p, li" ? generatedRow : null,
+    };
+    const linkTarget = {
+        closest: (selector: string) => {
+            if (selector.includes("a[href^=\"obsidian://open\"]")) {
+                return {
+                    dataset: {},
+                    getAttribute: () => "obsidian://open?vault=dev&file=test.md",
+                };
+            }
+            if (selector === "p, li") {
+                return generatedRow;
+            }
+            return null;
+        },
+    };
+    const normalRowTarget = {
+        closest: (selector: string) => selector === "p, li"
+            ? { getAttribute: () => null, querySelector: () => null }
+            : null,
+    };
+
+    assert.equal(shouldBlockIndexPreviewBackgroundTarget(rowBackgroundTarget), true);
+    assert.equal(shouldBlockIndexPreviewBackgroundTarget(linkTarget), false);
+    assert.equal(shouldBlockIndexPreviewBackgroundTarget(normalRowTarget), false);
 });
