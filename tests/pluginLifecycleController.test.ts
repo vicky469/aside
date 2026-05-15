@@ -68,16 +68,13 @@ function createHarness(options: {
     let refreshAggregateNoteNowCount = 0;
     let syncIndexNoteViewClassesCount = 0;
     let modifyHandledPath: string | null = null;
-    let ensureSidebarViewCount = 0;
+    let detachSidebarViewsCount = 0;
     const renamedStoredComments: Array<{ previousFilePath: string; nextFilePath: string }> = [];
     const deletedStoredComments: string[] = [];
     const deletedStoredCommentFolders: string[] = [];
 
     const controller = new PluginLifecycleController({
         app: {} as never,
-        ensureSidebarView: async () => {
-            ensureSidebarViewCount += 1;
-        },
         getCommentManager: () => commentManager,
         getAggregateCommentIndex: () => aggregateCommentIndex,
         renameStoredComments: async (previousFilePath, nextFilePath) => {
@@ -123,6 +120,9 @@ function createHarness(options: {
         handleMarkdownFileModified: async (file) => {
             modifyHandledPath = file.path;
         },
+        detachSidebarViews: () => {
+            detachSidebarViewsCount += 1;
+        },
         scheduleTimer: (callback, _ms) => {
             const timerId = nextTimerId;
             nextTimerId += 1;
@@ -154,7 +154,7 @@ function createHarness(options: {
         getRefreshAggregateNoteNowCount: () => refreshAggregateNoteNowCount,
         getScheduleAggregateNoteRefreshCount: () => scheduleAggregateNoteRefreshCount,
         getSyncIndexNoteViewClassesCount: () => syncIndexNoteViewClassesCount,
-        getEnsureSidebarViewCount: () => ensureSidebarViewCount,
+        getDetachSidebarViewsCount: () => detachSidebarViewsCount,
         getModifyHandledPath: () => modifyHandledPath,
         renamedStoredComments,
         deletedStoredComments,
@@ -162,14 +162,13 @@ function createHarness(options: {
     };
 }
 
-test("plugin lifecycle controller handles layout ready by refreshing views and scheduling aggregate work", async () => {
+test("plugin lifecycle controller handles layout ready without eager comment hydration", async () => {
     const harness = createHarness();
 
     await harness.controller.handleLayoutReady();
 
-    assert.equal(harness.getEnsureSidebarViewCount(), 1);
-    assert.equal(harness.getRefreshCommentViewsCount(), 1);
-    assert.equal(harness.getRefreshEditorDecorationsCount(), 1);
+    assert.equal(harness.getRefreshCommentViewsCount(), 0);
+    assert.equal(harness.getRefreshEditorDecorationsCount(), 0);
     assert.equal(harness.getScheduleAggregateNoteRefreshCount(), 0);
     assert.equal(harness.getSyncIndexNoteViewClassesCount(), 1);
 });
@@ -273,4 +272,17 @@ test("plugin lifecycle controller debounces editor refreshes and reports refresh
     assert.equal(harness.getRefreshEditorDecorationsCount(), 0);
     assert.equal(harness.warnings.length, 1);
     assert.equal(harness.warnings[0].message, "Failed to refresh decorations on editor-change");
+});
+
+test("plugin lifecycle controller unload clears timers and detaches stale sidebar views", () => {
+    const harness = createHarness();
+
+    harness.controller.handleEditorChange("docs/file.md");
+    const timerId = harness.getScheduledTimerIds()[0];
+
+    harness.controller.handleUnload();
+
+    assert.deepEqual(harness.clearedTimers, [timerId]);
+    assert.deepEqual(harness.getScheduledTimerIds(), []);
+    assert.equal(harness.getDetachSidebarViewsCount(), 1);
 });

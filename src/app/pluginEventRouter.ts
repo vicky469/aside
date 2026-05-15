@@ -26,7 +26,7 @@ export interface PluginEventRouterHost {
     };
     registerEvent(eventRef: EventRef): void;
     isTFile(value: unknown): value is TFile;
-    handleLayoutReady(): Promise<void>;
+    handleLayoutReady(): void | Promise<void>;
     handleFileOpen(file: TFile | null): void;
     handleActiveLeafChange(leaf: WorkspaceLeaf | null): void;
     handleFileRename(file: TFile | null, oldPath: string): Promise<void>;

@@ -1,21 +1,8 @@
 import type { TFile } from "obsidian";
 import { isAllCommentsNotePath } from "../derived/allCommentsNote";
 
-const IGNORED_COMMENTABLE_PATH_SEGMENTS = new Set([
-    "node_modules",
-]);
-
-function isIgnoredCommentablePath(filePath: string): boolean {
-    return filePath
-        .replace(/\\/g, "/")
-        .split("/")
-        .some((segment) => segment.startsWith(".") || IGNORED_COMMENTABLE_PATH_SEGMENTS.has(segment));
-}
-
 export function isMarkdownCommentablePath(filePath: string, allCommentsNotePath?: string): boolean {
-    return /\.md$/i.test(filePath)
-        && !isAllCommentsNotePath(filePath, allCommentsNotePath)
-        && !isIgnoredCommentablePath(filePath);
+    return /\.md$/i.test(filePath) && !isAllCommentsNotePath(filePath, allCommentsNotePath);
 }
 
 export function isSidebarSupportedPath(filePath: string, allCommentsNotePath?: string): boolean {
