@@ -250,3 +250,17 @@ test("index preview background clicks are blocked only on generated index rows",
     assert.equal(shouldBlockIndexPreviewBackgroundTarget(linkTarget), false);
     assert.equal(shouldBlockIndexPreviewBackgroundTarget(normalRowTarget), false);
 });
+
+test("index preview background clicks are blocked on the generated preview surface", () => {
+    const indexPreviewBackgroundTarget = {
+        closest: () => null,
+        matches: (selector: string) => selector.includes(".aside-index-note-view .markdown-preview-sizer"),
+    };
+    const normalPreviewBackgroundTarget = {
+        closest: () => null,
+        matches: () => false,
+    };
+
+    assert.equal(shouldBlockIndexPreviewBackgroundTarget(indexPreviewBackgroundTarget), true);
+    assert.equal(shouldBlockIndexPreviewBackgroundTarget(normalPreviewBackgroundTarget), false);
+});

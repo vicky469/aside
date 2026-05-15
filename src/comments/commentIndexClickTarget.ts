@@ -15,6 +15,7 @@ export type IndexLivePreviewClickTarget =
     };
 
 export interface ClosestLookupTarget {
+    matches?(selector: string): boolean;
     closest(selector: string): {
         dataset?: Record<string, string | undefined>;
         getAttribute(name: string): string | null;
@@ -32,6 +33,11 @@ const INDEX_COMMENT_LINK_SELECTOR = "a.aside-index-comment-link[data-aside-comme
 const INDEX_FILE_HEADING_SELECTOR = ".aside-index-heading-label[title], a[data-aside-file-path]";
 const INDEX_FILE_LINK_SELECTOR = "a[href^=\"obsidian://open\"], a[href^=\"obsidian://aside-index-file\"]";
 const INDEX_ROW_SELECTOR = "p, li";
+const INDEX_PREVIEW_BACKGROUND_SELECTOR = [
+    ".aside-index-note-view .markdown-preview-view",
+    ".aside-index-note-view .markdown-preview-sizer",
+    ".aside-index-note-view .markdown-preview-section",
+].join(", ");
 const INDEX_ACTIONABLE_TARGET_SELECTOR = [
     INDEX_COMMENT_LINK_SELECTOR,
     INDEX_FILE_HEADING_SELECTOR,
@@ -60,8 +66,13 @@ export function shouldBlockIndexPreviewBackgroundTarget(target: ClosestLookupTar
     }
 
     const row = target.closest(INDEX_ROW_SELECTOR);
-    return typeof row?.querySelector === "function"
-        && !!row.querySelector(INDEX_ACTIONABLE_TARGET_SELECTOR);
+    if (typeof row?.querySelector === "function"
+        && !!row.querySelector(INDEX_ACTIONABLE_TARGET_SELECTOR)) {
+        return true;
+    }
+
+    return typeof target.matches === "function"
+        && target.matches(INDEX_PREVIEW_BACKGROUND_SELECTOR);
 }
 
 export function findClickedIndexLivePreviewTarget(
