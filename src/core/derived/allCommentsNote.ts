@@ -397,11 +397,9 @@ function appendFileSections(
             .slice()
             .sort((left, right) => left.localeCompare(right));
         for (const filePath of folderFilePaths) {
-            lines.push(`- ${formatFileLink(filePath)}`);
             const tags = tagsByFileKey.get(normalizeNotePath(filePath)) ?? [];
-            if (tags.length) {
-                lines.push(`  ${tags.join(" ")}`);
-            }
+            const tagSuffix = tags.length ? `  ${tags.join(" ")}` : "";
+            lines.push(`- ${formatFileLink(filePath)}${tagSuffix}`);
         }
 
         lines.push("");

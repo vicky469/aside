@@ -257,9 +257,10 @@ test("buildAllCommentsNoteContent renders deduped source-file tags", () => {
     ]);
 
     assert.equal(
-        content.includes(`${expectedFileRow("Projects/Alpha/Note A.md")}\n  #follow/up #idea #Review`),
+        content.includes(`${expectedFileRow("Projects/Alpha/Note A.md")}  #follow/up #idea #Review`),
         true,
     );
+    assert.equal(content.includes(`${expectedFileRow("Projects/Alpha/Note A.md")}\n  #follow/up`), false);
     assert.equal(content.includes("Tags:"), false);
 });
 
@@ -296,7 +297,7 @@ test("buildAllCommentsNoteContent includes tags from every visible thread entry"
     });
 
     assert.equal(
-        content.includes(`${expectedFileRow("Projects/Alpha/Note A.md")}\n  #reply #root`),
+        content.includes(`${expectedFileRow("Projects/Alpha/Note A.md")}  #reply #root`),
         true,
     );
     assert.equal(content.includes("#hidden"), false);
