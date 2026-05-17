@@ -400,7 +400,7 @@ function appendFileSections(
             lines.push(`- ${formatFileLink(filePath)}`);
             const tags = tagsByFileKey.get(normalizeNotePath(filePath)) ?? [];
             if (tags.length) {
-                lines.push(`  Tags: ${tags.join(" ")}`);
+                lines.push(`  ${tags.join(" ")}`);
             }
         }
 
