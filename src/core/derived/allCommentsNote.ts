@@ -396,10 +396,14 @@ function appendFileSections(
         const folderFilePaths = (filePathsByFolder.get(folderPath) ?? [])
             .slice()
             .sort((left, right) => left.localeCompare(right));
-        for (const filePath of folderFilePaths) {
+        for (let index = 0; index < folderFilePaths.length; index += 1) {
+            const filePath = folderFilePaths[index];
             const tags = tagsByFileKey.get(normalizeNotePath(filePath)) ?? [];
             const tagSuffix = tags.length ? `  ${tags.join(" ")}` : "";
             lines.push(`- ${formatFileLink(filePath)}${tagSuffix}`);
+            if (index < folderFilePaths.length - 1) {
+                lines.push("");
+            }
         }
 
         lines.push("");

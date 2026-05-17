@@ -232,7 +232,7 @@ test("buildAllCommentsNoteContent lists unique files grouped by folder", () => {
     assert.equal(content.match(/^Projects\/Alpha$/gm)?.length ?? 0, 1);
     assert.equal(countOccurrences(content, expectedFileRow("Projects/Alpha/Note A.md")), 1);
     assert.equal(countOccurrences(content, expectedFileRow("Projects/Alpha/Note B.md")), 1);
-    assert.equal(content.includes(`Projects/Alpha\n${expectedFileRow("Projects/Alpha/Note A.md")}\n${expectedFileRow("Projects/Alpha/Note B.md")}`), true);
+    assert.equal(content.includes(`Projects/Alpha\n${expectedFileRow("Projects/Alpha/Note A.md")}\n\n${expectedFileRow("Projects/Alpha/Note B.md")}`), true);
     assert.doesNotMatch(content, /commentId=/);
     assert.doesNotMatch(content, /aside-index-kind-dot/);
 });
