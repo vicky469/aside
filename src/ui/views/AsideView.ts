@@ -6,6 +6,7 @@ import {
     TFile,
     WorkspaceLeaf,
     Platform,
+    htmlToMarkdown,
     setIcon,
     type ViewStateResult,
 } from "obsidian";
@@ -4196,6 +4197,7 @@ export default class AsideView extends ItemView {
             updateDraftCommentText: (commentId, commentText) => {
                 this.plugin.updateDraftCommentText(commentId, commentText);
             },
+            convertHtmlToMarkdown: (html) => htmlToMarkdown(html),
             setIcon: (element, icon) => {
                 setIcon(element, icon);
             },
@@ -4217,6 +4219,7 @@ export default class AsideView extends ItemView {
             updateDraftCommentText: (commentId, commentText) => {
                 this.plugin.updateDraftCommentText(commentId, commentText);
             },
+            convertHtmlToMarkdown: (html) => htmlToMarkdown(html),
             setIcon: (element, icon) => {
                 setIcon(element, icon);
             },

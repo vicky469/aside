@@ -268,3 +268,57 @@ test("sidebar draft editor controller applies highlight formatting directly", ()
     assert.equal(textarea.selectionEnd, 13);
     assert.deepEqual(dispatchedEvents, ["input"]);
 });
+
+test("sidebar draft editor controller continues markdown lists directly", () => {
+    const dispatchedEvents: string[] = [];
+    const controller = createDraftEditorController();
+    const textarea = {
+        value: "- first item",
+        selectionStart: 12,
+        selectionEnd: 12,
+        dispatchEvent: (event: Event) => {
+            dispatchedEvents.push(event.type);
+            return true;
+        },
+        setSelectionRange(start: number, end: number) {
+            textarea.selectionStart = start;
+            textarea.selectionEnd = end;
+        },
+        rows: 2,
+    } as unknown as HTMLTextAreaElement;
+
+    const applied = controller.applyDraftListContinuation("draft-1", textarea, false);
+
+    assert.equal(applied, true);
+    assert.equal(textarea.value, "- first item\n- ");
+    assert.equal(textarea.selectionStart, 15);
+    assert.equal(textarea.selectionEnd, 15);
+    assert.deepEqual(dispatchedEvents, ["input"]);
+});
+
+test("sidebar draft editor controller leaves non-list enter handling native", () => {
+    const dispatchedEvents: string[] = [];
+    const controller = createDraftEditorController();
+    const textarea = {
+        value: "plain paragraph",
+        selectionStart: 15,
+        selectionEnd: 15,
+        dispatchEvent: (event: Event) => {
+            dispatchedEvents.push(event.type);
+            return true;
+        },
+        setSelectionRange(start: number, end: number) {
+            textarea.selectionStart = start;
+            textarea.selectionEnd = end;
+        },
+        rows: 2,
+    } as unknown as HTMLTextAreaElement;
+
+    const applied = controller.applyDraftListContinuation("draft-1", textarea, false);
+
+    assert.equal(applied, false);
+    assert.equal(textarea.value, "plain paragraph");
+    assert.equal(textarea.selectionStart, 15);
+    assert.equal(textarea.selectionEnd, 15);
+    assert.deepEqual(dispatchedEvents, []);
+});

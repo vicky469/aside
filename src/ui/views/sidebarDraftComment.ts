@@ -1,6 +1,7 @@
 import { isOrphanedComment, isPageComment } from "../../core/anchors/commentAnchors";
 import { MAX_SIDENOTE_WORDS, countCommentWords, exceedsCommentWordLimit } from "../../core/text/commentWordLimit";
 import { canSaveDraftWithoutComment, type DraftComment } from "../../domain/drafts";
+import { applyDraftPasteEditToTextarea, type HtmlToMarkdownConverter } from "../editor/commentEditorPaste";
 import { renderStyledDraftCommentFragment } from "../editor/commentEditorStyling";
 import { nodeInstanceOf } from "../domGuards";
 import { formatSidebarCommentMeta } from "./sidebarCommentSections";
@@ -19,6 +20,7 @@ export interface SidebarDraftCommentHost {
     shouldPinFocusedDraftToTop: boolean;
     isSavingDraft(commentId: string): boolean;
     updateDraftCommentText(commentId: string, commentText: string): void;
+    convertHtmlToMarkdown?: HtmlToMarkdownConverter;
     setIcon(element: HTMLElement, icon: string): void;
     claimSidebarInteractionOwnership(focusTarget?: HTMLElement | null): void;
     saveDraft(
@@ -313,6 +315,12 @@ function renderDraftEditor(
     textarea.addEventListener("mouseup", stopPropagation);
     textarea.addEventListener("click", stopPropagation);
     textarea.addEventListener("dblclick", stopPropagation);
+    textarea.addEventListener("paste", (event) => {
+        if (!host.convertHtmlToMarkdown) {
+            return;
+        }
+        applyDraftPasteEditToTextarea(textarea, event, host.convertHtmlToMarkdown);
+    });
     if (host.shouldPinFocusedDraftToTop) {
         let viewportListenerAttached = false;
         const viewport = window.visualViewport ?? null;
@@ -394,6 +402,18 @@ function renderDraftEditor(
         if (event.key === "Escape") {
             event.preventDefault();
             host.cancelDraft(comment.id);
+            return;
+        }
+
+        if (
+            event.key === "Enter"
+            && !event.shiftKey
+            && !event.metaKey
+            && !event.ctrlKey
+            && !event.altKey
+            && draftEditorController.applyDraftListContinuation(comment.id, textarea, comment.mode === "edit")
+        ) {
+            consumeShortcut();
         }
     }, { capture: true });
     textarea.addEventListener("scroll", syncPreview);

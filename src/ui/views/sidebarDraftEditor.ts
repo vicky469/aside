@@ -3,7 +3,12 @@ import { compareCommentsForSidebarOrder } from "../../core/anchors/commentSectio
 import { matchesResolvedCommentVisibility, filterCommentsByResolvedVisibility } from "../../core/rules/resolvedCommentVisibility";
 import { extractTagsFromText } from "../../core/text/commentTags";
 import type { DraftComment } from "../../domain/drafts";
-import { toggleMarkdownBold, toggleMarkdownHighlight, type TextEditResult } from "../editor/commentEditorFormatting";
+import {
+    continueMarkdownList,
+    toggleMarkdownBold,
+    toggleMarkdownHighlight,
+    type TextEditResult,
+} from "../editor/commentEditorFormatting";
 import { findOpenWikiLinkQuery, replaceOpenWikiLinkQuery } from "../editor/commentEditorLinks";
 import { findOpenTagQuery, replaceOpenTagQuery } from "../editor/commentEditorTags";
 
@@ -101,6 +106,24 @@ export class SidebarDraftEditorController {
             textarea.selectionEnd,
         );
         this.applyDraftEditorEdit(commentId, textarea, edit, isEditMode);
+    }
+
+    public applyDraftListContinuation(
+        commentId: string,
+        textarea: HTMLTextAreaElement,
+        isEditMode: boolean,
+    ): boolean {
+        const edit = continueMarkdownList(
+            textarea.value,
+            textarea.selectionStart,
+            textarea.selectionEnd,
+        );
+        if (!edit) {
+            return false;
+        }
+
+        this.applyDraftEditorEdit(commentId, textarea, edit, isEditMode);
+        return true;
     }
 
     public openDraftLinkSuggest(
