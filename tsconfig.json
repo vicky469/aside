@@ -9,6 +9,9 @@
     "importHelpers": true,
     "isolatedModules": true,
     "strictNullChecks": true,
+    "types": [
+      "node"
+    ],
     "lib": [
       "DOM",
       "ES5",
@@ -17,7 +20,8 @@
     ]
   },
   "include": [
-    "**/*.ts",
-    "**/*.d.ts"
+    "src/**/*.ts",
+    "src/**/*.d.ts",
+    "shared/**/*.d.ts"
   ]
 }
