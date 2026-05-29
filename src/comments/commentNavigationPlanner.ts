@@ -24,6 +24,10 @@ export interface CommentRevealScrollTarget {
     };
 }
 
+export function shouldScrollSourceForCommentReveal(comment: { anchorKind?: "selection" | "page" }): boolean {
+    return comment.anchorKind !== "page";
+}
+
 export function pickPinnedCommentableFile<T>(
     activeFile: T | null,
     activeSidebarFile: T | null,
@@ -48,10 +52,6 @@ export function pickSidebarTargetFile<T>(
 ): T | null {
     if (isSidebarSupportedFile(activeFile)) {
         return activeFile;
-    }
-
-    if (activeFile) {
-        return null;
     }
 
     return activeSidebarFile;

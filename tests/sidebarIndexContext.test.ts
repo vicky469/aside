@@ -7,6 +7,7 @@ import {
     pickPreferredFileLeafCandidate,
     pickSidebarTargetFile,
     resolveIndexSidebarScopeRootPath,
+    shouldScrollSourceForCommentReveal,
     shouldRevealSidebarLeaf,
 } from "../src/comments/commentNavigationPlanner";
 import {
@@ -62,7 +63,7 @@ class MockPlugin {
     getSidebarTargetFileFixed(activeFile: MockFile | null): MockFile | null {
         return pickSidebarTargetFile(
             activeFile,
-            this.activeMarkdownFile,
+            this.activeSidebarFile,
             (file): file is MockFile => !!file && file.extension === "md",
         );
     }
@@ -188,14 +189,16 @@ test("fixed sidebar target uses Aside index when it is the active note", () => {
     assert.deepEqual(target, { path: ALL_COMMENTS_NOTE_PATH, extension: "md" });
 });
 
-test("fixed sidebar target clears when the active file is unsupported", () => {
+test("fixed sidebar target keeps the last supported file when the active file is unsupported", () => {
     const plugin = new MockPlugin();
+    plugin.activeSidebarFile = { path: "docs/note.md", extension: "md" };
+
     const target = plugin.getSidebarTargetFileFixed({
         path: "docs/file.pdf",
         extension: "pdf",
     });
 
-    assert.equal(target, null);
+    assert.deepEqual(target, { path: "docs/note.md", extension: "md" });
 });
 
 test("pinned commentable file falls back from an unsupported active file to the sidebar target", () => {
@@ -246,6 +249,20 @@ test("workspace file targets preserve the current sidebar file when leaf changes
     assert.deepEqual(target.activeMarkdownFile, { path: "last-note.md", extension: "md" });
     assert.deepEqual(target.activeSidebarFile, { path: ALL_COMMENTS_NOTE_PATH, extension: "md" });
     assert.deepEqual(target.sidebarFile, { path: ALL_COMMENTS_NOTE_PATH, extension: "md" });
+});
+
+test("workspace file targets preserve the current sidebar file when the active file is unsupported", () => {
+    const target = resolveWorkspaceFileTargets(
+        { path: "docs/board.canvas", extension: "canvas" },
+        { path: "last-note.md", extension: "md" },
+        { path: "docs/note.md", extension: "md" },
+        (file): file is MockFile => !!file && file.extension === "md" && file.path !== ALL_COMMENTS_NOTE_PATH,
+        (file): file is MockFile => !!file && file.extension === "md",
+    );
+
+    assert.deepEqual(target.activeMarkdownFile, { path: "last-note.md", extension: "md" });
+    assert.deepEqual(target.activeSidebarFile, { path: "docs/note.md", extension: "md" });
+    assert.deepEqual(target.sidebarFile, { path: "docs/note.md", extension: "md" });
 });
 
 test("workspace target input prefers the real active file when the event file is missing", () => {
@@ -366,6 +383,12 @@ test("anchored reveal scroll target prefers the resolved anchor range when it ch
             to: { line: 379, ch: 31 },
         },
     );
+});
+
+test("source scrolling is limited to anchored comment reveals", () => {
+    assert.equal(shouldScrollSourceForCommentReveal({ anchorKind: "page" }), false);
+    assert.equal(shouldScrollSourceForCommentReveal({ anchorKind: "selection" }), true);
+    assert.equal(shouldScrollSourceForCommentReveal({}), true);
 });
 
 test("sidebar reveal helper skips revealing an existing sidebar leaf for index-origin sync", () => {

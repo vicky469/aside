@@ -144,14 +144,10 @@ export function resolveWorkspaceFileTargets<T>(
         : activeMarkdownFile;
     const nextActiveSidebarFile = isSidebarSupportedFile(file)
         ? file
-        : file === null
-            ? activeSidebarFile
-            : null;
+        : activeSidebarFile;
     const sidebarFile = isSidebarSupportedFile(file)
         ? file
-        : file === null
-            ? activeSidebarFile
-            : null;
+        : activeSidebarFile;
 
     return {
         activeMarkdownFile: nextActiveMarkdownFile,

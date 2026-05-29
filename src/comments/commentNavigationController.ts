@@ -3,7 +3,6 @@ import type { Plugin } from "obsidian";
 import type { Comment } from "../commentManager";
 import type { RevealedCommentStateUpdateOptions } from "./commentSessionController";
 import type { DraftComment } from "../domain/drafts";
-import { isPageComment } from "../core/anchors/commentAnchors";
 import { resolveAnchorRange } from "../core/anchors/anchorResolver";
 import { parseNoteComments } from "../core/storage/noteCommentStorage";
 import {
@@ -11,6 +10,7 @@ import {
     pickExactFileLeafCandidate,
     pickPreferredFileLeafCandidate,
     resolveIndexSidebarScopeRootPath,
+    shouldScrollSourceForCommentReveal,
     shouldRevealSidebarLeaf,
     type PreferredFileLeafCandidate,
 } from "./commentNavigationPlanner";
@@ -384,17 +384,7 @@ export class CommentNavigationController {
             return;
         }
 
-        const editor = markdownView.editor;
-        if (isPageComment(comment)) {
-            editor.setSelection({ line: 0, ch: 0 }, { line: 0, ch: 0 });
-            editor.scrollIntoView(
-                {
-                    from: { line: 0, ch: 0 },
-                    to: { line: 0, ch: 0 },
-                },
-                true,
-            );
-            editor.focus();
+        if (!shouldScrollSourceForCommentReveal(comment)) {
             void this.host.log?.("info", "navigation", "navigation.reveal.resolved", {
                 commentId: comment.id,
                 filePath: comment.filePath,
@@ -404,6 +394,7 @@ export class CommentNavigationController {
             return;
         }
 
+        const editor = markdownView.editor;
         const currentContent = editor.getValue();
         const parsed = parseNoteComments(currentContent, comment.filePath);
         const resolvedAnchor = resolveAnchorRange(parsed.mainContent, comment);
