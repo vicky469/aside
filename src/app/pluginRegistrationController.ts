@@ -1,4 +1,8 @@
 import type { TFile } from "obsidian";
+import {
+    EDITOR_SELECTION_COMMENT_ACTION_LABELS,
+    type EditorSelectionCommentAction,
+} from "../comments/editorSelectionCommentAction";
 
 export interface EditorMenuItemLike {
     setTitle(title: string): EditorMenuItemLike;
@@ -47,6 +51,7 @@ export interface PluginRegistrationHost {
     addRibbonIcon(icon: string, title: string, callback: () => void): void;
     createSidebarView(leaf: unknown): unknown;
     startDraftFromEditorSelection(editor: EditorSelectionLike, file: TFile | null): Promise<unknown>;
+    getEditorSelectionAction(editor: EditorSelectionLike, file: TFile | null): EditorSelectionCommentAction;
     highlightCommentById(filePath: string | null, commentId: string): Promise<void>;
     openCommentById(filePath: string | null, commentId: string): Promise<void>;
     openIndexNote(): Promise<void> | void;
@@ -96,8 +101,9 @@ export class PluginRegistrationController {
                 return;
             }
 
+            const selectionAction = this.host.getEditorSelectionAction(editor, view.file);
             menu.addItem((item) => {
-                item.setTitle("Add comment to selection")
+                item.setTitle(EDITOR_SELECTION_COMMENT_ACTION_LABELS[selectionAction])
                     .setIcon(this.host.iconId)
                     .onClick(async () => {
                         await this.host.startDraftFromEditorSelection(editor, view.file);

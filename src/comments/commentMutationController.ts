@@ -526,6 +526,31 @@ export class CommentMutationController {
         return true;
     }
 
+    public async orphanCommentThreadAnchor(commentId: string): Promise<boolean> {
+        void this.host.log?.("info", "draft", "thread.anchor.orphan.begin", { commentId });
+        const latestTarget = await this.loadLatestCommentTarget(commentId);
+        if (!latestTarget) {
+            return false;
+        }
+
+        if (latestTarget.latestComment.anchorKind === "page") {
+            this.host.showNotice("Page notes do not have text anchors to remove.");
+            return false;
+        }
+
+        const changed = this.host.getCommentManager().orphanCommentThreadAnchor(commentId);
+        if (!changed) {
+            return false;
+        }
+
+        await this.host.persistCommentsForFile(latestTarget.file, { immediateAggregateRefresh: true });
+        void this.host.log?.("info", "draft", "thread.anchor.orphan.success", {
+            commentId,
+            filePath: latestTarget.file.path,
+        });
+        return true;
+    }
+
     public async moveCommentThreadToFile(
         threadId: string,
         targetFilePath: string,

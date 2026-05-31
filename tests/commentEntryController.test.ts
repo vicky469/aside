@@ -45,10 +45,11 @@ function createHost(options: { knownComments?: Comment[]; threadIdsByCommentId?:
     const loadedFiles: string[] = [];
     const markedFiles: string[] = [];
     const highlightedCommentIds: string[] = [];
+    const orphanedCommentIds: string[] = [];
     const notices: string[] = [];
     const knownComments = new Map((options.knownComments ?? []).map((comment) => [comment.id, comment]));
 
-    const host: CommentEntryHost = {
+    const host = {
         getAllCommentsNotePath: () => ALL_COMMENTS_NOTE_PATH,
         getFileByPath: (filePath) => createFile(filePath),
         isCommentableFile: (file): file is TFile => !!file && isCommentableFilePath(file.path),
@@ -71,10 +72,19 @@ function createHost(options: { knownComments?: Comment[]; threadIdsByCommentId?:
         activateViewAndHighlightComment: async (commentId) => {
             highlightedCommentIds.push(commentId);
         },
+        getCommentsForFile: (filePath) =>
+            (options.knownComments ?? []).filter((comment) => comment.filePath === filePath),
+        orphanCommentThreadAnchor: async (commentId) => {
+            orphanedCommentIds.push(commentId);
+            return true;
+        },
         createCommentId: () => "comment-1",
         showNotice: (message) => {
             notices.push(message);
         },
+    } as CommentEntryHost & {
+        getCommentsForFile(filePath: string): Comment[];
+        orphanCommentThreadAnchor(commentId: string): Promise<boolean>;
     };
 
     return {
@@ -83,6 +93,7 @@ function createHost(options: { knownComments?: Comment[]; threadIdsByCommentId?:
         loadedFiles,
         markedFiles,
         highlightedCommentIds,
+        orphanedCommentIds,
         notices,
     };
 }
@@ -114,6 +125,37 @@ test("comment entry controller starts a draft from editor selection", async () =
     assert.equal(host.draftCalls[0].skipCommentViewRefresh, true);
     assert.equal(host.draftCalls[0].refreshEditorDecorations, undefined);
     assert.deepEqual(host.highlightedCommentIds, ["comment-1"]);
+    assert.deepEqual(host.notices, []);
+});
+
+test("comment entry controller orphans an existing anchor when the editor selection matches it", async () => {
+    const file = createFile("docs/architecture.md");
+    const existingComment: Comment = {
+        id: "comment-existing",
+        filePath: file.path,
+        startLine: 2,
+        startChar: 4,
+        endLine: 2,
+        endChar: 8,
+        selectedText: "beta",
+        selectedTextHash: "hash:beta",
+        comment: "Existing note",
+        timestamp: 123,
+        anchorKind: "selection",
+        orphaned: false,
+        resolved: false,
+    };
+    const host = createHost({ knownComments: [existingComment] });
+
+    const started = await host.controller.startDraftFromEditorSelection(
+        createEditor("beta", { line: 2, ch: 4 }, { line: 2, ch: 8 }),
+        file,
+    );
+
+    assert.equal(started, true);
+    assert.deepEqual(host.orphanedCommentIds, ["comment-existing"]);
+    assert.deepEqual(host.draftCalls, []);
+    assert.deepEqual(host.highlightedCommentIds, []);
     assert.deepEqual(host.notices, []);
 });
 

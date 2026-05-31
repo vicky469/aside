@@ -210,9 +210,12 @@ export default class Aside extends Plugin {
         loadCommentsForFile: (file) => this.loadCommentsForFile(file),
         getKnownCommentById: (commentId) => this.getKnownCommentById(commentId),
         getKnownThreadIdByCommentId: (commentId) => this.getKnownThreadById(commentId)?.id ?? null,
+        getCommentsForFile: (filePath) => this.commentManager.getCommentsForFile(filePath),
         markDraftFileActive: (file) => this.markDraftFileActive(file),
         setDraftComment: (draftComment, hostFilePath, options) =>
             this.commentSessionController.setDraftComment(draftComment, hostFilePath, options),
+        orphanCommentThreadAnchor: (commentId) =>
+            this.commentMutationController.orphanCommentThreadAnchor(commentId),
         activateViewAndHighlightComment: (commentId) => this.activateViewAndHighlightComment(commentId),
         createCommentId: () => generateCommentId(),
         showNotice: (message) => {
@@ -460,6 +463,8 @@ export default class Aside extends Plugin {
         createSidebarView: (leaf) => new AsideView(leaf as WorkspaceLeaf, this),
         startDraftFromEditorSelection: (editor, file) =>
             this.commentEntryController.startDraftFromEditorSelection(editor as unknown as Editor, file),
+        getEditorSelectionAction: (editor, file) =>
+            this.commentEntryController.getEditorSelectionAction(editor as unknown as Editor, file),
         highlightCommentById: (filePath, commentId) => this.highlightCommentById(filePath, commentId),
         openCommentById: (filePath, commentId) => this.openCommentById(filePath, commentId),
         openIndexNote: () => this.openIndexNote(),

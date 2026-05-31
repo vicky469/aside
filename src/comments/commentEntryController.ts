@@ -4,6 +4,10 @@ import { getPageCommentLabel } from "../core/anchors/commentAnchors";
 import { isMarkdownCommentableFile } from "../core/rules/commentableFiles";
 import type { DraftComment, DraftSelection } from "../domain/drafts";
 import type { SetDraftCommentOptions } from "./commentSessionController";
+import {
+    findMatchingEditorSelectionAnchor,
+    type EditorSelectionCommentAction,
+} from "./editorSelectionCommentAction";
 
 export interface CommentEntryHost {
     getAllCommentsNotePath(): string;
@@ -12,12 +16,14 @@ export interface CommentEntryHost {
     loadCommentsForFile(file: TFile): Promise<unknown>;
     getKnownCommentById(commentId: string): Comment | null;
     getKnownThreadIdByCommentId(commentId: string): string | null;
+    getCommentsForFile(filePath: string): Comment[];
     markDraftFileActive(file: TFile): void;
     setDraftComment(
         draftComment: DraftComment | null,
         hostFilePath?: string | null,
         options?: SetDraftCommentOptions,
     ): Promise<void>;
+    orphanCommentThreadAnchor(commentId: string): Promise<boolean>;
     activateViewAndHighlightComment(commentId: string): Promise<void>;
     createCommentId(): string;
     showNotice(message: string): void;
@@ -27,23 +33,23 @@ export interface CommentEntryHost {
 export class CommentEntryController {
     constructor(private readonly host: CommentEntryHost) {}
 
+    public getEditorSelectionAction(editor: Editor, file: TFile | null): EditorSelectionCommentAction {
+        return this.findMatchingSelectionAnchor(editor, file) ? "orphan-anchor" : "add-comment";
+    }
+
     public async startDraftFromEditorSelection(editor: Editor, file: TFile | null): Promise<boolean> {
-        const selectedText = editor.getSelection();
-        if (!(file && selectedText.trim().length > 0)) {
+        const selection = this.readEditorSelection(editor, file);
+        if (!selection) {
             this.host.showNotice("Please select some text to add a comment.");
             return false;
         }
 
-        const cursorStart = editor.getCursor("from");
-        const cursorEnd = editor.getCursor("to");
-        return this.startNewCommentDraft({
-            file,
-            selectedText,
-            startLine: cursorStart.line,
-            startChar: cursorStart.ch,
-            endLine: cursorEnd.line,
-            endChar: cursorEnd.ch,
-        });
+        const existingAnchor = this.findMatchingSelectionAnchorForSelection(selection);
+        if (existingAnchor) {
+            return this.host.orphanCommentThreadAnchor(existingAnchor.id);
+        }
+
+        return this.startNewCommentDraft(selection);
     }
 
     public async startPageCommentDraft(file: TFile | null): Promise<boolean> {
@@ -123,6 +129,47 @@ export class CommentEntryController {
         });
         await this.host.activateViewAndHighlightComment(draft.id);
         return true;
+    }
+
+    private readEditorSelection(editor: Editor, file: TFile | null): DraftSelection | null {
+        const selectedText = editor.getSelection();
+        if (!(file && selectedText.trim().length > 0)) {
+            return null;
+        }
+
+        const cursorStart = editor.getCursor("from");
+        const cursorEnd = editor.getCursor("to");
+        return {
+            file,
+            selectedText,
+            startLine: cursorStart.line,
+            startChar: cursorStart.ch,
+            endLine: cursorEnd.line,
+            endChar: cursorEnd.ch,
+        };
+    }
+
+    private findMatchingSelectionAnchor(editor: Editor, file: TFile | null): Comment | null {
+        const selection = this.readEditorSelection(editor, file);
+        return this.findMatchingSelectionAnchorForSelection(selection);
+    }
+
+    private findMatchingSelectionAnchorForSelection(selection: DraftSelection | null): Comment | null {
+        if (!selection) {
+            return null;
+        }
+
+        return findMatchingEditorSelectionAnchor(
+            this.host.getCommentsForFile(selection.file.path),
+            {
+                filePath: selection.file.path,
+                selectedText: selection.selectedText,
+                startLine: selection.startLine,
+                startChar: selection.startChar,
+                endLine: selection.endLine,
+                endChar: selection.endChar,
+            },
+        );
     }
 
     private buildDraftComment(selection: DraftSelection): DraftComment {

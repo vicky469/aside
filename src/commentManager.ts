@@ -668,6 +668,16 @@ export class CommentManager {
         thread.orphaned = false;
     }
 
+    orphanCommentThreadAnchor(id: string): boolean {
+        const thread = this.findThreadById(id);
+        if (!thread || isPageComment(thread) || thread.orphaned === true) {
+            return false;
+        }
+
+        thread.orphaned = true;
+        return true;
+    }
+
     renameFile(oldPath: string, newPath: string) {
         let changed = false;
         this.threads.forEach((thread) => {

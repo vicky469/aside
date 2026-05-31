@@ -1480,3 +1480,32 @@ test("comment mutation controller rejects re-anchoring inside the managed commen
         "Select text outside the Aside comments block to re-anchor this side note.",
     ]);
 });
+
+test("comment mutation controller marks a selected thread orphaned without deleting the note", async () => {
+    const comment = createComment({
+        id: "comment-1",
+        anchorKind: "selection",
+        orphaned: false,
+        comment: "Keep this note",
+    });
+    const host = createHost({
+        knownComments: [comment],
+        loadedComments: [comment],
+    });
+
+    const orphaned = await host.controller.orphanCommentThreadAnchor(comment.id);
+
+    assert.equal(orphaned, true);
+    assert.deepEqual(host.persistedFiles, [{
+        path: comment.filePath,
+        immediateAggregateRefresh: true,
+    }]);
+
+    const persistedComment = host.manager.getCommentById(comment.id);
+    assert.ok(persistedComment);
+    assert.equal(persistedComment.orphaned, true);
+    assert.equal(persistedComment.anchorKind, "selection");
+    assert.equal(persistedComment.comment, "Keep this note");
+    assert.equal(persistedComment.selectedText, comment.selectedText);
+    assert.deepEqual(host.notices, []);
+});
