@@ -44,6 +44,12 @@ export interface SidebarModeControlOptions {
     isTagsEnabled: boolean;
     isThoughtTrailEnabled: boolean;
     onChange(mode: SidebarPrimaryMode): void;
+    pinnedSidebarFileAction?: {
+        active: boolean;
+        ariaLabel: string;
+        disabled?: boolean;
+        onClick(): void;
+    };
 }
 
 export interface ActiveFileFiltersOptions {
@@ -200,6 +206,9 @@ export function renderSidebarModeControl(
             options.onChange("thought-trail");
         },
     }, guard);
+    if (options.pinnedSidebarFileAction) {
+        renderPinnedSidebarFileButton(modeGroup, options.pinnedSidebarFileAction, guard);
+    }
 }
 
 export function renderActiveFileFilters(
@@ -260,6 +269,30 @@ function renderTabButton(
     button.tabIndex = options.active && !options.disabled ? 0 : -1;
     button.onclick = async () => {
         if (options.disabled) {
+            return;
+        }
+        if (!(await guard.beforeAction())) {
+            return;
+        }
+        options.onClick();
+    };
+}
+
+function renderPinnedSidebarFileButton(
+    container: HTMLElement,
+    options: NonNullable<SidebarModeControlOptions["pinnedSidebarFileAction"]>,
+    guard: ToolbarActionGuard,
+): void {
+    const button = container.createEl("button", {
+        cls: `clickable-icon aside-comment-section-add-button aside-toolbar-icon-button aside-sidebar-file-pin-button${options.active ? " is-active" : ""}`,
+    });
+    button.setAttribute("type", "button");
+    button.setAttribute("aria-label", options.ariaLabel);
+    button.setAttribute("aria-pressed", options.active ? "true" : "false");
+    button.disabled = options.disabled ?? false;
+    setIcon(button, "pin");
+    button.onclick = async () => {
+        if (button.disabled) {
             return;
         }
         if (!(await guard.beforeAction())) {

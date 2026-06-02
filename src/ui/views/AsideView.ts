@@ -99,7 +99,9 @@ import {
     normalizeSidebarPrimaryMode,
     normalizeIndexFileFilterRootPath,
     resolveIndexFileFilterRootPathFromState,
+    resolvePinnedSidebarFilePathFromState,
     resolvePinnedSidebarStateByFilePathFromState,
+    shouldIgnorePinnedSidebarActiveFileUpdate,
     type BatchTagFlowState,
     type FileTagIndex,
     type CustomViewState,
@@ -334,6 +336,7 @@ export default class AsideView extends ItemView {
     private pinnedSidebarThreadIds = new Set<string>();
     private showPinnedSidebarThreadsOnly = false;
     private pinnedSidebarStateByFilePath: Record<string, PinnedSidebarFileState> = {};
+    private pinnedSidebarFilePath: string | null = null;
     private selectedIndexFileFilterRootPath: string | null = null;
     private indexFileFilterAutoSelectSuppressed = false;
     private indexFileFilterGraph: IndexFileFilterGraph | null = null;
@@ -359,6 +362,45 @@ export default class AsideView extends ItemView {
 
     private getNormalizedPinnedSidebarStateFilePath(filePath: string | null | undefined): string | null {
         return normalizeIndexFileFilterRootPath(filePath);
+    }
+
+    private getNormalizedSidebarFilePath(file: TFile | null): string | null {
+        return normalizeIndexFileFilterRootPath(file?.path ?? null);
+    }
+
+    private getPinnedSidebarFileAction(): NonNullable<SidebarModeControlOptions["pinnedSidebarFileAction"]> {
+        const currentFilePath = this.getNormalizedSidebarFilePath(this.file);
+        const isPinned = this.pinnedSidebarFilePath !== null;
+        return {
+            active: isPinned,
+            ariaLabel: isPinned ? "Unpin sidebar from current file" : "Pin sidebar to current file",
+            disabled: !isPinned && !currentFilePath,
+            onClick: () => {
+                void this.togglePinnedSidebarFile();
+            },
+        };
+    }
+
+    private async togglePinnedSidebarFile(): Promise<void> {
+        if (this.pinnedSidebarFilePath !== null) {
+            this.pinnedSidebarFilePath = null;
+            this.setCurrentFile(
+                normalizeSidebarViewFile(
+                    this.plugin.getSidebarTargetFile(),
+                    (candidate): candidate is TFile => this.plugin.isSidebarSupportedFile(candidate),
+                ),
+            );
+            await this.renderComments({ skipDataRefresh: true });
+            return;
+        }
+
+        const currentFilePath = this.getNormalizedSidebarFilePath(this.file);
+        if (!currentFilePath) {
+            return;
+        }
+
+        this.pinnedSidebarFilePath = currentFilePath;
+        await this.renderComments({ skipDataRefresh: true });
     }
 
     private savePinnedSidebarStateForFilePath(filePath: string | null | undefined): void {
@@ -1154,6 +1196,12 @@ export default class AsideView extends ItemView {
             }
         }
 
+        const nextPinnedSidebarFilePath = resolvePinnedSidebarFilePathFromState(state);
+        if (nextPinnedSidebarFilePath !== undefined && nextPinnedSidebarFilePath !== this.pinnedSidebarFilePath) {
+            this.pinnedSidebarFilePath = nextPinnedSidebarFilePath;
+            shouldRender = true;
+        }
+
         const nextMode = normalizeIndexSidebarMode(state.indexSidebarMode);
         if (nextMode && nextMode !== this.indexSidebarMode) {
             this.indexSidebarMode = nextMode;
@@ -1210,9 +1258,15 @@ export default class AsideView extends ItemView {
     }
 
     public async updateActiveFile(file: TFile | null, options: { skipDataRefresh?: boolean } = {}) {
-        this.setCurrentFile(
-            normalizeSidebarViewFile(file, (candidate): candidate is TFile => this.plugin.isSidebarSupportedFile(candidate)),
-        );
+        const nextFile = normalizeSidebarViewFile(file, (candidate): candidate is TFile => this.plugin.isSidebarSupportedFile(candidate));
+        if (shouldIgnorePinnedSidebarActiveFileUpdate({
+            pinnedSidebarFilePath: this.pinnedSidebarFilePath,
+            nextFilePath: this.getNormalizedSidebarFilePath(nextFile),
+        })) {
+            return;
+        }
+
+        this.setCurrentFile(nextFile);
         await this.renderComments(options);
     }
 
@@ -3422,6 +3476,7 @@ export default class AsideView extends ItemView {
             showTagsTab: true,
             isTagsEnabled: options.isTagsEnabled,
             isThoughtTrailEnabled: options.isThoughtTrailEnabled,
+            pinnedSidebarFileAction: this.getPinnedSidebarFileAction(),
             onChange: (mode) => {
                 if (mode === "tags" && !options.isTagsEnabled) {
                     return;
@@ -3453,6 +3508,7 @@ export default class AsideView extends ItemView {
             showTagsTab: true,
             isTagsEnabled: true,
             isThoughtTrailEnabled,
+            pinnedSidebarFileAction: this.getPinnedSidebarFileAction(),
             onChange: (mode) => {
                 if (mode === "thought-trail" && !isThoughtTrailEnabled) {
                     return;
@@ -4295,6 +4351,7 @@ export default class AsideView extends ItemView {
             indexSidebarMode: this.indexSidebarMode,
             noteSidebarMode: this.noteSidebarMode,
             indexFileFilterRootPath: this.selectedIndexFileFilterRootPath,
+            pinnedSidebarFilePath: this.pinnedSidebarFilePath,
             pinnedSidebarStateByFilePath: {
                 ...this.pinnedSidebarStateByFilePath,
             },

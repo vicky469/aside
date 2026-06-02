@@ -53,6 +53,7 @@ export interface CustomViewState extends Record<string, unknown> {
     indexFileFilterRootPath?: string | null;
     indexFileFilterPaths?: string[];
     pinnedSidebarStateByFilePath?: Record<string, PinnedSidebarFileState>;
+    pinnedSidebarFilePath?: string | null;
 }
 
 export function normalizeSidebarPrimaryMode(value: unknown): SidebarPrimaryMode | null {
@@ -98,6 +99,28 @@ export function resolveIndexFileFilterRootPathFromState(state: Pick<CustomViewSt
     }
 
     return undefined;
+}
+
+export function resolvePinnedSidebarFilePathFromState(
+    state: Pick<CustomViewState, "pinnedSidebarFilePath">,
+): string | null | undefined {
+    if (!hasOwn(state, "pinnedSidebarFilePath")) {
+        return undefined;
+    }
+
+    if (typeof state.pinnedSidebarFilePath === "string" || state.pinnedSidebarFilePath === null) {
+        return normalizeIndexFileFilterRootPath(state.pinnedSidebarFilePath);
+    }
+
+    return null;
+}
+
+export function shouldIgnorePinnedSidebarActiveFileUpdate(options: {
+    pinnedSidebarFilePath: string | null;
+    nextFilePath: string | null;
+}): boolean {
+    return options.pinnedSidebarFilePath !== null
+        && options.nextFilePath !== options.pinnedSidebarFilePath;
 }
 
 function hasOwn(target: object, key: string): boolean {

@@ -5,7 +5,9 @@ import {
     normalizeSidebarPrimaryMode,
     normalizeIndexFileFilterRootPath,
     resolvePinnedSidebarStateByFilePathFromState,
+    resolvePinnedSidebarFilePathFromState,
     resolveIndexFileFilterRootPathFromState,
+    shouldIgnorePinnedSidebarActiveFileUpdate,
 } from "../src/ui/views/viewState";
 
 test("normalizeSidebarPrimaryMode accepts the supported sidebar modes only", () => {
@@ -115,4 +117,38 @@ test("resolvePinnedSidebarStateByFilePathFromState returns undefined when pin st
         resolvePinnedSidebarStateByFilePathFromState({}),
         undefined,
     );
+});
+
+test("resolvePinnedSidebarFilePathFromState normalizes the pinned sidebar file path", () => {
+    assert.equal(
+        resolvePinnedSidebarFilePathFromState({ pinnedSidebarFilePath: " docs\\a.md " }),
+        "docs/a.md",
+    );
+    assert.equal(
+        resolvePinnedSidebarFilePathFromState({ pinnedSidebarFilePath: "" }),
+        null,
+    );
+    assert.equal(
+        resolvePinnedSidebarFilePathFromState({ pinnedSidebarFilePath: null }),
+        null,
+    );
+    assert.equal(
+        resolvePinnedSidebarFilePathFromState({}),
+        undefined,
+    );
+});
+
+test("shouldIgnorePinnedSidebarActiveFileUpdate freezes the sidebar away from other active files only", () => {
+    assert.equal(shouldIgnorePinnedSidebarActiveFileUpdate({
+        pinnedSidebarFilePath: "docs/a.md",
+        nextFilePath: "docs/b.md",
+    }), true);
+    assert.equal(shouldIgnorePinnedSidebarActiveFileUpdate({
+        pinnedSidebarFilePath: "docs/a.md",
+        nextFilePath: "docs/a.md",
+    }), false);
+    assert.equal(shouldIgnorePinnedSidebarActiveFileUpdate({
+        pinnedSidebarFilePath: null,
+        nextFilePath: "docs/b.md",
+    }), false);
 });

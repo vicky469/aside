@@ -288,6 +288,7 @@
 
 .aside-sidebar-toolbar-row.is-note-primary-row .aside-sidebar-toolbar-group.is-mode-group {
     flex: 1 1 auto;
+    flex-wrap: nowrap;
     min-width: 0;
 }
 
@@ -584,6 +585,7 @@
 .aside-tablist {
     display: flex;
     align-items: center;
+    flex: 1 1 auto;
     width: auto;
     min-width: 0;
     gap: 14px;
@@ -670,6 +672,19 @@ button.aside-tab-button[aria-disabled="true"] {
     opacity: 0.55;
     cursor: default;
     pointer-events: none;
+}
+
+button.aside-sidebar-file-pin-button {
+    flex: 0 0 26px;
+    width: 26px;
+    min-width: 26px;
+    max-width: 26px;
+    height: 26px;
+    min-height: 26px;
+    max-height: 26px;
+    margin-left: auto;
+    padding: 0;
+    --icon-size: 13px;
 }
 
 .aside-sidebar-toolbar-row.is-note-primary-row .aside-toolbar-icon-button {
