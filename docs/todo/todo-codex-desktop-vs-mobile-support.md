@@ -16,17 +16,15 @@ I need a short current-state reference for two questions:
 2. What mobile support actually looks like in the current branch.
 3. What is still missing to turn the DGX Spark route into a clean supported product path.
 
-This note is intentionally narrower than the cross-platform runtime plan. It describes the current implementation and the immediate gaps.
+This note is intentionally narrower than the cross-platform runtime plan. It now preserves historical mobile/DGX thinking, but the active implementation is local-runtime only.
 
 ## Current `@codex` Paths
 
-Today, built-in `@codex` has two runtime paths in code:
+Today, built-in `@codex` has one runtime path in code:
 
 1. desktop local runtime: `direct-cli`
-2. remote bridge runtime: `openclaw-acp`
 
-The local desktop path is still the original implementation.
-The remote bridge path is now also implemented in the plugin runtime and is the only mobile-capable route.
+The previous remote bridge runtime path and `openclaw-acp` implementation were removed from the active plugin.
 
 ### Local desktop path
 
@@ -38,16 +36,9 @@ High-level flow:
 4. If the resolved runtime is local, the plugin launches the local `codex` executable from desktop Obsidian.
 5. Streamed progress and final reply are appended back into the same thread.
 
-### Remote bridge path
+### Removed remote bridge path
 
-High-level flow:
-
-1. The user types `@codex` in a Aside comment.
-2. Aside resolves the runtime before queuing the run.
-3. If the resolved runtime is remote, the plugin builds the thread/note prompt context locally.
-4. The plugin calls the configured remote bridge endpoint.
-5. The remote bridge streams progress and output deltas back through poll responses.
-6. Aside appends the final reply into the same thread.
+The old bridge settings, client request code, run polling, cancellation, and DGX bridge runner have been removed. Future mobile or DGX work would need a fresh runtime contract and settings surface.
 
 Key files:
 
@@ -55,7 +46,6 @@ Key files:
 - [src/core/text/agentDirectives.ts](../../src/core/text/agentDirectives.ts)
 - [src/agents/commentAgentController.ts](../../src/agents/commentAgentController.ts)
 - [src/agents/agentRuntimeAdapter.ts](../../src/agents/agentRuntimeAdapter.ts)
-- [src/agents/openclawRuntimeBridge.ts](../../src/agents/openclawRuntimeBridge.ts)
 - [src/agents/agentRuntimeSelection.ts](../../src/agents/agentRuntimeSelection.ts)
 - [src/main.ts](../../src/main.ts)
 
@@ -63,10 +53,7 @@ Key files:
 
 `@codex` is currently wired to the `codex-app-server` runtime strategy in [codexActor.ts](../../src/core/agents/codexActor.ts).
 
-Desktop currently supports two practical cases:
-
-1. local runtime on the same machine
-2. remote bridge runtime if configured
+Desktop currently supports the local runtime on the same machine.
 
 The local runtime path depends on desktop-only capabilities:
 
@@ -81,12 +68,10 @@ The actual runtime dispatch happens in [agentRuntimeAdapter.ts](../../src/agents
 - supported `codex` runs go through `runCodexDirect(...)`
 - if Node/Electron process access is unavailable, the call fails immediately
 
-Desktop remote support already exists in parallel through [commentAgentController.ts](../../src/agents/commentAgentController.ts) and [openclawRuntimeBridge.ts](../../src/agents/openclawRuntimeBridge.ts).
-
 Important capability distinction:
 
 - local desktop runtime is the current fully capable path
-- the current remote bridge path is still simpler than the intended DGX target and needs productization plus parity work
+- the previous remote bridge path has been removed from the active plugin
 
 ## What "supported on mobile" currently means
 
@@ -346,9 +331,7 @@ Relevant current code:
 
 - desktop local runtime probe and process launch:
   [src/agents/agentRuntimeAdapter.ts](../../src/agents/agentRuntimeAdapter.ts)
-- remote bridge request contract:
-  [src/agents/openclawRuntimeBridge.ts](../../src/agents/openclawRuntimeBridge.ts)
-- remote run lifecycle in the plugin:
+- agent run lifecycle in the plugin:
   [src/agents/commentAgentController.ts](../../src/agents/commentAgentController.ts)
 
 ## Recommended DGX Architecture

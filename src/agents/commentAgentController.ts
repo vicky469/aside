@@ -26,7 +26,6 @@ import {
     buildAgentPromptContext,
     type AgentPromptContext,
 } from "./agentPromptContextPlanner";
-import type { RemoteRuntimeResponseEnvelope } from "./openclawRuntimeBridge";
 
 export interface SavedUserEntryEvent {
     threadId: string;
@@ -82,13 +81,6 @@ export interface CommentAgentHost {
         abortSignal?: AbortSignal;
     }): Promise<AgentRuntimeResponse>;
     resolveAgentRuntimeSelection(): Promise<AgentRuntimeSelection>;
-    startRemoteRuntimeRun(options: {
-        agent: AsideAgentTarget;
-        promptText: string;
-        metadata: Record<string, unknown>;
-    }): Promise<RemoteRuntimeResponseEnvelope>;
-    pollRemoteRuntimeRun(runId: string, afterCursor?: string | null, waitMs?: number): Promise<RemoteRuntimeResponseEnvelope>;
-    cancelRemoteRuntimeRun(runId: string): Promise<RemoteRuntimeResponseEnvelope>;
     showNotice(message: string): void;
     log?(level: "info" | "warn" | "error", area: string, event: string, payload?: Record<string, unknown>): Promise<void>;
 }
@@ -98,21 +90,10 @@ const AGENT_CONFLICT_NOTICE = "Use only one explicit supported agent target per 
 const AGENT_RETRY_NOTICE = `Retry requires a single explicit ${PRIMARY_SUPPORTED_AGENT.directive} target in the triggering entry.`;
 const AGENT_PENDING_SESSION_NOTICE = "The previous Aside agent run did not finish. Retry the thread to run it again.";
 const AGENT_DESKTOP_RUNTIME_NOTICE = "Agent execution requires desktop Obsidian with a filesystem-backed vault.";
-const AGENT_REMOTE_RESUME_FAILED_NOTICE = "The previous remote run could not be resumed.";
-const AGENT_REMOTE_NO_RESPONSE_TIMEOUT_NOTICE = "Cancelled automatically after 3 minutes without a response from the remote runtime.";
 const AGENT_REGENERATE_REPLACE_FAILED_NOTICE = "Unable to replace the previous agent reply.";
 const AGENT_CANCELLED_NOTICE = "Cancelled.";
 const AGENT_STATUS_CANCELLED = "Cancelled";
-const REMOTE_POLL_INTERVAL_MS = 350;
-const REMOTE_FAST_POLL_INTERVAL_MS = 120;
-const REMOTE_EAGER_POLL_INTERVAL_MS = 150;
-const REMOTE_EAGER_EMPTY_POLL_LIMIT = 6;
-const REMOTE_BACKOFF_EMPTY_POLL_LIMIT = 12;
-const REMOTE_BACKOFF_POLL_INTERVAL_MS = 1_000;
-const REMOTE_LONG_POLL_WAIT_MS = 1_500;
-const REMOTE_NO_REPLY_TIMEOUT_MS = 180_000;
 const LOCAL_MAX_CONCURRENT_RUNS = 3;
-const REMOTE_MAX_CONCURRENT_RUNS = 3;
 const BUILT_IN_ASIDE_SKILL_NAME = "aside";
 const BUILT_IN_ASIDE_SKILL_MODE = "write";
 const UTF8_ENCODER = new TextEncoder();
@@ -123,14 +104,6 @@ interface ActiveRunExecution {
     abortController: AbortController;
     cancelRequested: boolean;
 }
-
-type RemoteRuntimeEventCounts = {
-    progressEventCount: number;
-    outputDeltaEventCount: number;
-    completedEventCount: number;
-    failedEventCount: number;
-    cancelledEventCount: number;
-};
 
 function summarizeError(error: unknown): string {
     if (error instanceof Error && error.message.trim()) {
@@ -144,48 +117,6 @@ function getTimerWindow(): Window | null {
     return typeof window === "undefined" ? null : window;
 }
 
-function sleep(ms: number): Promise<void> {
-    const timerWindow = getTimerWindow();
-    if (!timerWindow) {
-        return Promise.resolve();
-    }
-
-    return new Promise((resolve) => timerWindow.setTimeout(resolve, ms));
-}
-
-function summarizeRemoteRuntimeEventCounts(
-    events: ReadonlyArray<RemoteRuntimeResponseEnvelope["events"][number]>,
-): RemoteRuntimeEventCounts {
-    const counts: RemoteRuntimeEventCounts = {
-        progressEventCount: 0,
-        outputDeltaEventCount: 0,
-        completedEventCount: 0,
-        failedEventCount: 0,
-        cancelledEventCount: 0,
-    };
-
-    for (const event of events) {
-        switch (event.type) {
-            case "progress":
-                counts.progressEventCount += 1;
-                break;
-            case "output_delta":
-                counts.outputDeltaEventCount += 1;
-                break;
-            case "completed":
-                counts.completedEventCount += 1;
-                break;
-            case "failed":
-                counts.failedEventCount += 1;
-                break;
-            case "cancelled":
-                counts.cancelledEventCount += 1;
-                break;
-        }
-    }
-
-    return counts;
-}
 type AgentStreamListener = (update: AgentStreamUpdate) => void;
 const FINAL_STREAM_RETENTION_MS = 30_000;
 
@@ -211,30 +142,6 @@ export class CommentAgentController {
         const now = this.host.now();
         for (const run of this.store.getRuns()) {
             if (run.status !== "queued" && run.status !== "running") {
-                continue;
-            }
-
-            if (run.runtime === "openclaw-acp") {
-                if (run.remoteExecutionId) {
-                    const updated = await this.store.updateRun(run.id, (currentRun) => ({
-                        ...currentRun,
-                        status: "queued",
-                    }));
-                    changed = changed || !!updated;
-                    continue;
-                }
-
-                if (run.status === "queued") {
-                    continue;
-                }
-
-                const updated = await this.store.updateRun(run.id, (currentRun) => ({
-                    ...currentRun,
-                    status: "failed",
-                    endedAt: now,
-                    error: AGENT_REMOTE_RESUME_FAILED_NOTICE,
-                }));
-                changed = changed || !!updated;
                 continue;
             }
 
@@ -450,19 +357,6 @@ export class CommentAgentController {
             execution.cancelRequested = true;
             execution.abortController.abort();
         }
-        if (run.runtime === "openclaw-acp" && run.remoteExecutionId) {
-            try {
-                await this.host.cancelRemoteRuntimeRun(run.remoteExecutionId);
-            } catch (error) {
-                void this.host.log?.("warn", "agents", "agents.remote.cancel.warn", {
-                    runId,
-                    threadId: run.threadId,
-                    runtime: run.runtime,
-                    error,
-                });
-            }
-        }
-
         const existingStream = this.runStreams.get(runId);
         const partialText = existingStream?.partialText.trim().length
             ? existingStream.partialText
@@ -544,9 +438,7 @@ export class CommentAgentController {
     }
 
     private getRuntimeConcurrencyLimit(runtime: AgentRunRuntime): number {
-        return runtime === "openclaw-acp"
-            ? REMOTE_MAX_CONCURRENT_RUNS
-            : LOCAL_MAX_CONCURRENT_RUNS;
+        return LOCAL_MAX_CONCURRENT_RUNS;
     }
 
     private getInFlightRuns(): AgentRunRecord[] {
@@ -659,23 +551,14 @@ export class CommentAgentController {
         });
 
         try {
-            if (runningRun.runtime === "openclaw-acp") {
-                await this.executeRemoteRun({
-                    run: runningRun,
-                    outputEntryId,
-                    startedAt: runningRun.startedAt ?? startedAt,
-                    runtimeContext,
-                });
-            } else {
-                await this.executeLocalRun({
-                    run: runningRun,
-                    outputEntryId,
-                    replaceOutputEntryId,
-                    startedAt: runningRun.startedAt ?? startedAt,
-                    runtimePrompt: runtimeContext.promptText,
-                    execution,
-                });
-            }
+            await this.executeLocalRun({
+                run: runningRun,
+                outputEntryId,
+                replaceOutputEntryId,
+                startedAt: runningRun.startedAt ?? startedAt,
+                runtimePrompt: runtimeContext.promptText,
+                execution,
+            });
         } catch (error) {
             if (this.isRunCancellationRequested(runId) || isAgentRuntimeCancelledError(error)) {
                 return;
@@ -796,210 +679,6 @@ export class CommentAgentController {
             replaceOutputEntryId: options.replaceOutputEntryId,
             startedAt: options.startedAt,
         });
-    }
-
-    private async executeRemoteRun(options: {
-        run: AgentRunRecord;
-        outputEntryId: string;
-        startedAt: number;
-        runtimeContext: AgentPromptContext;
-    }): Promise<void> {
-        let remoteExecutionId = options.run.remoteExecutionId ?? null;
-        let remoteCursor = options.run.remoteCursor ?? null;
-        let partialText = this.runStreams.get(options.run.id)?.partialText ?? "";
-        let consecutiveEmptyPolls = 0;
-
-        let response: RemoteRuntimeResponseEnvelope;
-        if (remoteExecutionId) {
-            this.logRemotePollRequested(options.run, {
-                requestKind: "resume",
-                remoteExecutionId,
-                afterCursor: remoteCursor,
-                waitMs: REMOTE_LONG_POLL_WAIT_MS,
-                consecutiveEmptyPolls,
-            });
-            response = await this.host.pollRemoteRuntimeRun(remoteExecutionId, remoteCursor, REMOTE_LONG_POLL_WAIT_MS);
-            this.logRemotePollResponse(options.run, response, {
-                requestKind: "resume",
-                remoteExecutionId,
-                afterCursor: remoteCursor,
-                waitMs: REMOTE_LONG_POLL_WAIT_MS,
-                consecutiveEmptyPolls,
-            });
-        } else {
-            response = await this.host.startRemoteRuntimeRun({
-                agent: options.run.requestedAgent,
-                promptText: options.runtimeContext.promptText,
-                metadata: {
-                    notePath: options.run.filePath,
-                    contextScope: options.runtimeContext.scope,
-                    contextBytes: options.runtimeContext.byteLength,
-                    pluginVersion: this.host.getPluginVersion(),
-                    capability: "workspace-aware",
-                    skills: [BUILT_IN_ASIDE_SKILL_NAME],
-                    skillMode: BUILT_IN_ASIDE_SKILL_MODE,
-                },
-            });
-            this.logRemoteStartResponse(options.run, response);
-            remoteExecutionId = response.runId;
-            if (!remoteExecutionId) {
-                throw new Error("Remote runtime did not return a run id.");
-            }
-        }
-
-        while (true) {
-            if (this.isRunCancellationRequested(options.run.id)) {
-                return;
-            }
-
-            const previousCursor = remoteCursor;
-            remoteExecutionId = response.runId ?? remoteExecutionId;
-            remoteCursor = response.cursor ?? remoteCursor;
-            if (!remoteExecutionId) {
-                throw new Error("Remote runtime did not return a run id.");
-            }
-
-            const updatedRun = await this.store.updateRun(options.run.id, (currentRun) => ({
-                ...currentRun,
-                remoteExecutionId: remoteExecutionId ?? undefined,
-                remoteCursor: remoteCursor ?? undefined,
-            }));
-            const activeRun = updatedRun ?? this.store.getRunById(options.run.id) ?? options.run;
-
-            let progressText: string | null = null;
-            let completedReplyText: string | null = response.replyText;
-            let failureMessage: string | null = response.error;
-            let cancelledMessage: string | null = null;
-            const cursorAdvanced = remoteCursor !== previousCursor;
-
-            for (const event of response.events) {
-                switch (event.type) {
-                    case "progress":
-                        progressText = event.text;
-                        break;
-                    case "output_delta":
-                        partialText += event.text;
-                        break;
-                    case "completed":
-                        completedReplyText = event.replyText;
-                        break;
-                    case "failed":
-                        failureMessage = event.error;
-                        break;
-                    case "cancelled":
-                        cancelledMessage = event.message ?? AGENT_CANCELLED_NOTICE;
-                        break;
-                }
-            }
-
-            const hasRemoteProgress = response.events.length > 0
-                || cursorAdvanced
-                || !!response.replyText;
-            const updatedAt = this.host.now();
-
-            this.updateRunStream(
-                options.run.id,
-                this.buildRunStreamState(activeRun, {
-                    status: response.status === "queued" ? "queued" : "running",
-                    statusHintText: progressText ?? undefined,
-                    partialText,
-                    startedAt: options.startedAt,
-                    updatedAt,
-                    outputEntryId: options.outputEntryId,
-                }),
-            );
-
-            if (response.httpStatus === 404 && options.run.remoteExecutionId) {
-                throw new Error(AGENT_REMOTE_RESUME_FAILED_NOTICE);
-            }
-
-            if (response.status === "completed") {
-                await this.completeRunWithReply({
-                    run: activeRun,
-                    runtime: "openclaw-acp",
-                    replyText: completedReplyText ?? partialText,
-                    outputEntryId: options.outputEntryId,
-                    startedAt: options.startedAt,
-                });
-                return;
-            }
-
-            if (response.status === "failed") {
-                throw new Error(failureMessage ?? "Remote runtime failed.");
-            }
-
-            if (response.status === "cancelled") {
-                const cancelledRun = await this.store.updateRun(options.run.id, (currentRun) => ({
-                    ...currentRun,
-                    status: "cancelled",
-                    endedAt: this.host.now(),
-                    error: cancelledMessage ?? AGENT_CANCELLED_NOTICE,
-                    remoteExecutionId: remoteExecutionId ?? undefined,
-                    remoteCursor: remoteCursor ?? undefined,
-                }));
-                if (cancelledRun) {
-                    this.setRunStream(this.buildRunStreamState(cancelledRun, {
-                        status: "cancelled",
-                        statusText: AGENT_STATUS_CANCELLED,
-                        partialText,
-                        startedAt: options.startedAt,
-                        updatedAt: cancelledRun.endedAt ?? this.host.now(),
-                        outputEntryId: options.outputEntryId,
-                        error: cancelledMessage ?? AGENT_CANCELLED_NOTICE,
-                    }));
-                    await this.refreshStatusViews();
-                    this.clearRunStream(options.run.id, options.run.threadId);
-                }
-                return;
-            }
-
-            const hasReceivedReplyText = partialText.trim().length > 0 || !!completedReplyText;
-            const elapsedWithoutReplyMs = updatedAt - options.startedAt;
-            if (!hasReceivedReplyText && elapsedWithoutReplyMs >= REMOTE_NO_REPLY_TIMEOUT_MS) {
-                void this.host.log?.("warn", "agents", "agents.remote.auto_cancelled", {
-                    runId: options.run.id,
-                    threadId: options.run.threadId,
-                    requestedAgent: options.run.requestedAgent,
-                    remoteExecutionId,
-                    cursor: remoteCursor,
-                    status: response.status,
-                    consecutiveEmptyPolls,
-                    elapsedWithoutReplyMs,
-                });
-                await this.cancelRun(options.run.id, {
-                    message: AGENT_REMOTE_NO_RESPONSE_TIMEOUT_NOTICE,
-                });
-                return;
-            }
-
-            consecutiveEmptyPolls = hasRemoteProgress
-                ? 0
-                : consecutiveEmptyPolls + 1;
-
-            const nextPollDelayMs = hasRemoteProgress
-                ? REMOTE_FAST_POLL_INTERVAL_MS
-                : (!options.run.remoteExecutionId && consecutiveEmptyPolls <= REMOTE_EAGER_EMPTY_POLL_LIMIT)
-                    ? REMOTE_EAGER_POLL_INTERVAL_MS
-                    : consecutiveEmptyPolls >= REMOTE_BACKOFF_EMPTY_POLL_LIMIT
-                        ? REMOTE_BACKOFF_POLL_INTERVAL_MS
-                        : REMOTE_POLL_INTERVAL_MS;
-            await sleep(nextPollDelayMs);
-            this.logRemotePollRequested(options.run, {
-                requestKind: "poll",
-                remoteExecutionId,
-                afterCursor: remoteCursor,
-                waitMs: REMOTE_LONG_POLL_WAIT_MS,
-                consecutiveEmptyPolls,
-            });
-            response = await this.host.pollRemoteRuntimeRun(remoteExecutionId, remoteCursor, REMOTE_LONG_POLL_WAIT_MS);
-            this.logRemotePollResponse(options.run, response, {
-                requestKind: "poll",
-                remoteExecutionId,
-                afterCursor: remoteCursor,
-                waitMs: REMOTE_LONG_POLL_WAIT_MS,
-                consecutiveEmptyPolls,
-            });
-        }
     }
 
     private async completeRunWithReply(options: {
@@ -1317,69 +996,6 @@ export class CommentAgentController {
 
         getTimerWindow()?.clearTimeout(timer);
         this.runStreamPruneTimers.delete(runId);
-    }
-
-    private logRemoteStartResponse(run: AgentRunRecord, response: RemoteRuntimeResponseEnvelope): void {
-        const counts = summarizeRemoteRuntimeEventCounts(response.events);
-        void this.host.log?.("info", "agents", "agents.remote.start.response", {
-            runId: run.id,
-            threadId: run.threadId,
-            requestedAgent: run.requestedAgent,
-            remoteExecutionId: response.runId,
-            httpStatus: response.httpStatus,
-            status: response.status,
-            cursor: response.cursor,
-            eventCount: response.events.length,
-            ...counts,
-            hasReplyText: !!response.replyText,
-            hasError: !!response.error,
-        });
-    }
-
-    private logRemotePollRequested(run: AgentRunRecord, options: {
-        requestKind: "resume" | "poll";
-        remoteExecutionId: string;
-        afterCursor: string | null;
-        waitMs: number;
-        consecutiveEmptyPolls: number;
-    }): void {
-        void this.host.log?.("info", "agents", "agents.remote.poll.requested", {
-            runId: run.id,
-            threadId: run.threadId,
-            requestedAgent: run.requestedAgent,
-            requestKind: options.requestKind,
-            remoteExecutionId: options.remoteExecutionId,
-            afterCursor: options.afterCursor,
-            waitMs: options.waitMs,
-            consecutiveEmptyPolls: options.consecutiveEmptyPolls,
-        });
-    }
-
-    private logRemotePollResponse(run: AgentRunRecord, response: RemoteRuntimeResponseEnvelope, options: {
-        requestKind: "resume" | "poll";
-        remoteExecutionId: string;
-        afterCursor: string | null;
-        waitMs: number;
-        consecutiveEmptyPolls: number;
-    }): void {
-        const counts = summarizeRemoteRuntimeEventCounts(response.events);
-        void this.host.log?.("info", "agents", "agents.remote.poll.response", {
-            runId: run.id,
-            threadId: run.threadId,
-            requestedAgent: run.requestedAgent,
-            requestKind: options.requestKind,
-            remoteExecutionId: response.runId ?? options.remoteExecutionId,
-            afterCursor: options.afterCursor,
-            waitMs: options.waitMs,
-            httpStatus: response.httpStatus,
-            status: response.status,
-            cursor: response.cursor,
-            eventCount: response.events.length,
-            ...counts,
-            hasReplyText: !!response.replyText,
-            hasError: !!response.error,
-            consecutiveEmptyPolls: options.consecutiveEmptyPolls,
-        });
     }
 
     private emitStreamUpdate(threadId: string, stream: AgentRunStreamState | null): void {

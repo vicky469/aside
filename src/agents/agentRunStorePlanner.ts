@@ -1,13 +1,9 @@
-import { cloneAgentRunRecords, type AgentRunRecord, type AgentRunRuntime, type AgentRunStatus } from "../core/agents/agentRuns";
+import { cloneAgentRunRecords, type AgentRunRecord, type AgentRunStatus } from "../core/agents/agentRuns";
 import { normalizeAgentRuntimeModePreference } from "../core/agents/agentRuntimePreferences";
 import { normalizeAgentTarget } from "../core/config/agentTargets";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return !!value && typeof value === "object" && !Array.isArray(value);
-}
-
-function normalizeRuntime(value: unknown): AgentRunRuntime {
-    return value === "openclaw-acp" ? "openclaw-acp" : "direct-cli";
 }
 
 function normalizeStatus(value: unknown): AgentRunStatus | null {
@@ -60,7 +56,7 @@ function normalizeAgentRunRecord(value: unknown): AgentRunRecord | null {
         triggerEntryId,
         filePath,
         requestedAgent: normalizeAgentTarget(value.requestedAgent),
-        runtime: normalizeRuntime(value.runtime),
+        runtime: "direct-cli",
         status,
         promptText,
         createdAt,
@@ -72,8 +68,6 @@ function normalizeAgentRunRecord(value: unknown): AgentRunRecord | null {
         modePreference: normalizeOptionalString(value.modePreference)
             ? normalizeAgentRuntimeModePreference(value.modePreference)
             : undefined,
-        remoteExecutionId: normalizeOptionalString(value.remoteExecutionId),
-        remoteCursor: normalizeOptionalString(value.remoteCursor),
     };
 }
 

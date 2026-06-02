@@ -1,4 +1,4 @@
-import { addIcon, WorkspaceLeaf, TFile, Notice, Plugin, normalizePath, MarkdownView, FileSystemAdapter, requestUrl, FileView, Platform, type Editor } from "obsidian";
+import { addIcon, WorkspaceLeaf, TFile, Notice, Plugin, normalizePath, MarkdownView, FileSystemAdapter, FileView, Platform, type Editor } from "obsidian";
 import { Comment, CommentManager, CommentThread, type ReorderPlacement } from "./commentManager";
 import { CommentEntryController } from "./comments/commentEntryController";
 import {
@@ -38,24 +38,11 @@ import {
     type CodexRuntimeDiagnostics,
 } from "./agents/agentRuntimeAdapter";
 import {
-    getRemoteRuntimeAvailability as getRemoteRuntimeAvailabilitySnapshot,
     resolveAgentRuntimeSelection as resolveAgentRuntimeSelectionPlan,
     type AgentRuntimeSelection,
-    type RemoteRuntimeAvailability,
 } from "./agents/agentRuntimeSelection";
-import {
-    cancelRemoteRuntimeRun,
-    createRemoteRuntimeRequester,
-    pollRemoteRuntimeRun,
-    probeRemoteRuntimeBridge,
-    startRemoteRuntimeRun,
-    type RemoteRuntimeHealthEnvelope,
-    type RemoteRuntimeResponseEnvelope,
-} from "./agents/openclawRuntimeBridge";
-import { buildLocalSecretStorageKey, LocalSecretStore } from "./settings/localSecretStore";
 import type { AgentRunRecord, AgentRunStreamState } from "./core/agents/agentRuns";
 import {
-    normalizeRemoteRuntimeBearerToken,
     type AgentRuntimeModePreference,
 } from "./core/agents/agentRuntimePreferences";
 import { DraftComment, DraftSelection } from "./domain/drafts";
@@ -135,16 +122,6 @@ function isPersistedPluginData(value: unknown): value is PersistedPluginData {
     return isRecord(value);
 }
 
-type RemoteRuntimeFetchFallback = NonNullable<Parameters<typeof createRemoteRuntimeRequester>[0]["fetcher"]>;
-
-function getFetchFallback(): RemoteRuntimeFetchFallback | undefined {
-    if (typeof window === "undefined" || typeof window.fetch !== "function") {
-        return undefined;
-    }
-
-    return (input, init) => window.fetch(input, init);
-}
-
 function getNodeRequire(): ((moduleName: string) => unknown) | null {
     if (typeof window === "undefined") {
         return null;
@@ -177,17 +154,6 @@ export default class Aside extends Plugin {
     private supportLogLocationAvailable: boolean | null = null;
     private runtime: "local" | "release" = "release";
     private unloaded = false;
-    private readonly remoteRuntimeRequester = createRemoteRuntimeRequester({
-        primaryRequester: requestUrl,
-        fetcher: getFetchFallback(),
-    });
-    private readonly localSecretStore = new LocalSecretStore(
-        buildLocalSecretStorageKey(this.manifest.id, this.app.vault.getName()),
-        [buildLocalSecretStorageKey(LEGACY_PLUGIN_ID, this.app.vault.getName(), {
-            namespace: "sidenote2",
-        })],
-        getSafeLocalStorage(),
-    );
     private readonly workspaceViewController: WorkspaceViewController = new WorkspaceViewController({
         app: this.app,
         isSidebarSupportedFile: (file): file is TFile => isSidebarSupportedFile(file, this.getAllCommentsNotePath()),
@@ -396,9 +362,6 @@ export default class Aside extends Plugin {
         },
         runAgentRuntime: (invocation) => runAgentRuntime(invocation),
         resolveAgentRuntimeSelection: () => this.resolveAgentRuntimeSelection(),
-        startRemoteRuntimeRun: (options) => this.startRemoteRuntimeRun(options),
-        pollRemoteRuntimeRun: (runId, afterCursor, waitMs) => this.pollRemoteRuntimeRun(runId, afterCursor, waitMs),
-        cancelRemoteRuntimeRun: (runId) => this.cancelRemoteRuntimeRun(runId),
         showNotice: (message) => {
             this.showNotice(message, "agents", "agents.notice");
         },
@@ -645,28 +608,8 @@ export default class Aside extends Plugin {
         return this.indexNoteSettingsController.getAgentRuntimeMode();
     }
 
-    public getRemoteRuntimeBaseUrl(): string {
-        return this.indexNoteSettingsController.getRemoteRuntimeBaseUrl();
-    }
-
-    public getRemoteRuntimeBearerToken(): string {
-        return this.localSecretStore.readSecrets().remoteRuntimeBearerToken ?? "";
-    }
-
     public async setAgentRuntimeMode(nextMode: AgentRuntimeModePreference): Promise<void> {
         await this.indexNoteSettingsController.setAgentRuntimeMode(nextMode);
-    }
-
-    public async setRemoteRuntimeBaseUrl(nextUrlInput: string): Promise<void> {
-        await this.indexNoteSettingsController.setRemoteRuntimeBaseUrl(nextUrlInput);
-    }
-
-    public setRemoteRuntimeBearerToken(nextTokenInput: string): Promise<void> {
-        const nextToken = normalizeRemoteRuntimeBearerToken(nextTokenInput);
-        this.localSecretStore.writeSecrets({
-            remoteRuntimeBearerToken: nextToken,
-        });
-        return Promise.resolve();
     }
 
     public getAgentRuns(): AgentRunRecord[] {
@@ -712,59 +655,10 @@ export default class Aside extends Plugin {
         return probeCodexRuntimeDiagnostics();
     }
 
-    public getRemoteRuntimeAvailability(): RemoteRuntimeAvailability {
-        return getRemoteRuntimeAvailabilitySnapshot({
-            remoteRuntimeBaseUrl: this.getRemoteRuntimeBaseUrl(),
-            remoteRuntimeBearerToken: this.getRemoteRuntimeBearerToken(),
-        });
-    }
-
     public async resolveAgentRuntimeSelection(): Promise<AgentRuntimeSelection> {
         return resolveAgentRuntimeSelectionPlan({
             modePreference: this.getAgentRuntimeMode(),
-            isDesktopWithFilesystem: this.app.vault.adapter instanceof FileSystemAdapter,
             localDiagnostics: await this.getCodexRuntimeDiagnostics(),
-            remoteRuntimeBaseUrl: this.getRemoteRuntimeBaseUrl(),
-            remoteRuntimeBearerToken: this.getRemoteRuntimeBearerToken(),
-        });
-    }
-
-    public async startRemoteRuntimeRun(options: {
-        agent: string;
-        promptText: string;
-        metadata: Record<string, unknown>;
-    }): Promise<RemoteRuntimeResponseEnvelope> {
-        return startRemoteRuntimeRun(this.remoteRuntimeRequester, {
-            baseUrl: this.getRemoteRuntimeBaseUrl(),
-            bearerToken: this.getRemoteRuntimeBearerToken(),
-            agent: options.agent,
-            promptText: options.promptText,
-            metadata: options.metadata,
-        });
-    }
-
-    public async pollRemoteRuntimeRun(runId: string, afterCursor?: string | null, waitMs?: number): Promise<RemoteRuntimeResponseEnvelope> {
-        return pollRemoteRuntimeRun(this.remoteRuntimeRequester, {
-            baseUrl: this.getRemoteRuntimeBaseUrl(),
-            bearerToken: this.getRemoteRuntimeBearerToken(),
-            runId,
-            afterCursor,
-            waitMs,
-        });
-    }
-
-    public async cancelRemoteRuntimeRun(runId: string): Promise<RemoteRuntimeResponseEnvelope> {
-        return cancelRemoteRuntimeRun(this.remoteRuntimeRequester, {
-            baseUrl: this.getRemoteRuntimeBaseUrl(),
-            bearerToken: this.getRemoteRuntimeBearerToken(),
-            runId,
-        });
-    }
-
-    public async probeRemoteRuntimeBridge(): Promise<RemoteRuntimeHealthEnvelope> {
-        return probeRemoteRuntimeBridge(this.remoteRuntimeRequester, {
-            baseUrl: this.getRemoteRuntimeBaseUrl(),
-            bearerToken: this.getRemoteRuntimeBearerToken(),
         });
     }
 

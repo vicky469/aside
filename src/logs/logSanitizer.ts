@@ -10,7 +10,6 @@ const DISALLOWED_TEXT_KEYS = new Set([
     "token",
     "authorization",
     "bearerToken",
-    "remoteRuntimeBearerToken",
 ]);
 
 export interface LogSanitizerContext {

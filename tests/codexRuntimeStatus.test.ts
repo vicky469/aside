@@ -5,7 +5,6 @@ import {
     getCodexRuntimeStatusPresentation,
     getCodexRuntimeStatusPresentationForSelection,
     getLocalRuntimeOptionStatusPresentation,
-    getRemoteRuntimeOptionStatusPresentation,
 } from "../src/ui/settings/codexRuntimeStatus";
 
 test("codex runtime status presentation reports available clearly", () => {
@@ -48,17 +47,17 @@ test("codex runtime status presentation exposes checking copy", () => {
     );
 });
 
-test("codex runtime status presentation reflects resolved remote runtime selection", () => {
+test("codex runtime status presentation reflects resolved local runtime selection", () => {
     assert.deepEqual(
         getCodexRuntimeStatusPresentationForSelection({
             kind: "resolved",
-            runtime: "openclaw-acp",
+            runtime: "direct-cli",
             modePreference: "auto",
-            ownershipMessage: "Using remote runtime",
+            ownershipMessage: "Using your local Codex setup",
         }),
         {
             title: "Codex runtime: Available",
-            description: "Using remote runtime",
+            description: "Using your local Codex setup",
         },
     );
 });
@@ -68,16 +67,16 @@ test("codex runtime status presentation reflects blocked runtime selection", () 
         getCodexRuntimeStatusPresentationForSelection({
             kind: "blocked",
             modePreference: "auto",
-            notice: "Remote bridge is not configured.",
+            notice: "Built-in @codex requires desktop Obsidian.",
         }),
         {
             title: "Codex runtime: Unavailable",
-            description: "Remote bridge is not configured.",
+            description: "Built-in @codex requires desktop Obsidian.",
         },
     );
 });
 
-test("runtime option status presentation reports local and remote availability for the settings picker", () => {
+test("runtime option status presentation reports local availability for the settings picker", () => {
     assert.deepEqual(
         getLocalRuntimeOptionStatusPresentation({
             status: "available",
@@ -87,32 +86,6 @@ test("runtime option status presentation reports local and remote availability f
             label: "Local ✅",
             description: "Built-in @codex can run in this Obsidian environment.",
             available: true,
-        },
-    );
-
-    assert.deepEqual(
-        getRemoteRuntimeOptionStatusPresentation({
-            status: "available",
-            message: "Using remote runtime",
-            originHost: "remote.example.com",
-        }),
-        {
-            label: "Remote ✅",
-            description: "Remote bridge configured at remote.example.com.",
-            available: true,
-        },
-    );
-
-    assert.deepEqual(
-        getRemoteRuntimeOptionStatusPresentation({
-            status: "missing-base-url",
-            message: "Remote bridge is not configured.",
-            originHost: null,
-        }),
-        {
-            label: "Remote ❌",
-            description: "Remote bridge is not configured.",
-            available: false,
         },
     );
 });

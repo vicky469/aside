@@ -6,7 +6,6 @@ import { AgentRunStore } from "../src/agents/agentRunStore";
 import { CommentAgentController } from "../src/agents/commentAgentController";
 import type { PersistedPluginData } from "../src/settings/indexNoteSettingsPlanner";
 import type { AgentRuntimeSelection } from "../src/agents/agentRuntimeSelection";
-import type { RemoteRuntimeResponseEnvelope } from "../src/agents/openclawRuntimeBridge";
 
 function createFile(path: string): TFile {
     return {
@@ -69,13 +68,6 @@ function createHarness(options: {
         onProgressText?: (progressText: string) => void;
         abortSignal?: AbortSignal;
     }) => Promise<{ runtime: "direct-cli"; replyText: string }>;
-    startRemoteRuntimeRun?: (options: {
-        agent: "codex" | "claude";
-        promptText: string;
-        metadata: Record<string, unknown>;
-    }) => Promise<RemoteRuntimeResponseEnvelope>;
-    pollRemoteRuntimeRun?: (runId: string, afterCursor?: string | null, waitMs?: number) => Promise<RemoteRuntimeResponseEnvelope>;
-    cancelRemoteRuntimeRun?: (runId: string) => Promise<RemoteRuntimeResponseEnvelope>;
 } = {}) {
     let persistedData: PersistedPluginData = options.initialPersistedData ?? {};
     const commentManager = new CommentManager(options.initialComments ?? [createComment()]);
@@ -90,9 +82,6 @@ function createHarness(options: {
         payload?: Record<string, unknown>;
     }> = [];
     const runtimeCalls: Array<{ target: "codex" | "claude"; prompt: string; cwd: string; vaultRootPath?: string | null }> = [];
-    const remoteStartCalls: Array<{ agent: "codex" | "claude"; promptText: string; metadata: Record<string, unknown> }> = [];
-    const remotePollCalls: Array<{ runId: string; afterCursor?: string | null; waitMs?: number }> = [];
-    const remoteCancelCalls: string[] = [];
     let refreshCount = 0;
     let idCounter = 1;
     let now = 100;
@@ -178,51 +167,6 @@ function createHarness(options: {
             modePreference: "auto",
             ownershipMessage: "Using your local Codex setup",
         },
-        startRemoteRuntimeRun: async (remoteOptions) => {
-            remoteStartCalls.push(remoteOptions);
-            if (options.startRemoteRuntimeRun) {
-                return options.startRemoteRuntimeRun(remoteOptions);
-            }
-            return {
-                httpStatus: 200,
-                status: "completed",
-                cursor: "evt-1",
-                runId: "remote-run-1",
-                events: [],
-                replyText: "Remote done",
-                error: null,
-            };
-        },
-        pollRemoteRuntimeRun: async (runId, afterCursor, waitMs) => {
-            remotePollCalls.push({ runId, afterCursor, waitMs });
-            if (options.pollRemoteRuntimeRun) {
-                return options.pollRemoteRuntimeRun(runId, afterCursor, waitMs);
-            }
-            return {
-                httpStatus: 200,
-                status: "completed",
-                cursor: afterCursor ?? "evt-1",
-                runId,
-                events: [],
-                replyText: "Remote done",
-                error: null,
-            };
-        },
-        cancelRemoteRuntimeRun: async (runId) => {
-            remoteCancelCalls.push(runId);
-            if (options.cancelRemoteRuntimeRun) {
-                return options.cancelRemoteRuntimeRun(runId);
-            }
-            return {
-                httpStatus: 202,
-                status: "cancelled",
-                cursor: null,
-                runId,
-                events: [],
-                replyText: null,
-                error: null,
-            };
-        },
         showNotice: (message) => {
             notices.push(message);
         },
@@ -241,9 +185,6 @@ function createHarness(options: {
         notices,
         logEntries,
         runtimeCalls,
-        remoteStartCalls,
-        remotePollCalls,
-        remoteCancelCalls,
         getRefreshCount: () => refreshCount,
         getPersistedData: () => persistedData,
     };
@@ -325,8 +266,8 @@ test("comment agent controller blocks a run when runtime selection is unavailabl
     const harness = createHarness({
         runtimeSelection: {
             kind: "blocked",
-            modePreference: "remote",
-            notice: "Remote bridge is not configured.",
+            modePreference: "auto",
+            notice: "Built-in @codex requires desktop Obsidian.",
         },
     });
 
@@ -337,254 +278,8 @@ test("comment agent controller blocks a run when runtime selection is unavailabl
         body: "@codex review this",
     });
 
-    assert.deepEqual(harness.notices, ["Remote bridge is not configured."]);
+    assert.deepEqual(harness.notices, ["Built-in @codex requires desktop Obsidian."]);
     assert.equal(harness.controller.getLatestAgentRunForThread("thread-1"), null);
-});
-
-test("comment agent controller can run through the remote bridge and persist resume fields", async () => {
-    const pollResponses: RemoteRuntimeResponseEnvelope[] = [{
-        httpStatus: 200,
-        status: "running",
-        cursor: "evt-2",
-        runId: "remote-run-1",
-        events: [
-            { type: "progress", text: "Preparing context" },
-            { type: "output_delta", text: "Hello" },
-        ],
-        replyText: null,
-        error: null,
-    }, {
-        httpStatus: 200,
-        status: "completed",
-        cursor: "evt-3",
-        runId: "remote-run-1",
-        events: [],
-        replyText: "Hello world",
-        error: null,
-    }];
-    const harness = createHarness({
-        runtimeSelection: {
-            kind: "resolved",
-            runtime: "openclaw-acp",
-            modePreference: "remote",
-            ownershipMessage: "Using remote runtime",
-        },
-        startRemoteRuntimeRun: async () => ({
-            httpStatus: 200,
-            status: "queued",
-            cursor: "evt-1",
-            runId: "remote-run-1",
-            events: [],
-            replyText: null,
-            error: null,
-        }),
-        pollRemoteRuntimeRun: async () => pollResponses.shift() ?? {
-            httpStatus: 200,
-            status: "completed",
-            cursor: "evt-3",
-            runId: "remote-run-1",
-            events: [],
-            replyText: "Hello world",
-            error: null,
-        },
-    });
-
-    await harness.controller.handleSavedUserEntry({
-        threadId: "thread-1",
-        entryId: "thread-1",
-        filePath: "Folder/Note.md",
-        body: "@codex review this",
-    });
-    await waitForAgentQueueToDrain(harness.controller);
-
-    const latestRun = harness.controller.getLatestAgentRunForThread("thread-1");
-    assert.equal(latestRun?.runtime, "openclaw-acp");
-    assert.equal(latestRun?.status, "succeeded");
-    assert.equal(latestRun?.remoteExecutionId, "remote-run-1");
-    assert.equal(latestRun?.remoteCursor, "evt-3");
-    assert.equal(harness.editedEntries.at(-1)?.body, "Hello world");
-    assert.equal(harness.remoteStartCalls[0]?.metadata.contextScope, "page");
-    assert.equal(typeof harness.remoteStartCalls[0]?.metadata.contextBytes, "number");
-    assert.deepEqual(harness.remoteStartCalls[0]?.metadata.skills, ["aside"]);
-    assert.equal(harness.remoteStartCalls[0]?.metadata.skillMode, "write");
-    assert.match(harness.remoteStartCalls[0]?.promptText ?? "", /Request:\n<<<\n@codex say hi\n>>>/);
-    assert.deepEqual(
-        harness.remotePollCalls.map((call) => call.waitMs),
-        [1_500, 1_500],
-    );
-    assert.equal(
-        harness.logEntries.find((entry) => entry.event === "agents.remote.start.response")?.payload?.status,
-        "queued",
-    );
-    assert.deepEqual(
-        harness.logEntries
-            .filter((entry) => entry.event === "agents.remote.poll.requested")
-            .map((entry) => ({
-                requestKind: entry.payload?.requestKind,
-                afterCursor: entry.payload?.afterCursor,
-                waitMs: entry.payload?.waitMs,
-            })),
-        [
-            { requestKind: "poll", afterCursor: "evt-1", waitMs: 1_500 },
-            { requestKind: "poll", afterCursor: "evt-2", waitMs: 1_500 },
-        ],
-    );
-    assert.deepEqual(
-        harness.logEntries
-            .filter((entry) => entry.event === "agents.remote.poll.response")
-            .map((entry) => ({
-                status: entry.payload?.status,
-                cursor: entry.payload?.cursor,
-                eventCount: entry.payload?.eventCount,
-                progressEventCount: entry.payload?.progressEventCount,
-                outputDeltaEventCount: entry.payload?.outputDeltaEventCount,
-            })),
-        [
-            {
-                status: "running",
-                cursor: "evt-2",
-                eventCount: 2,
-                progressEventCount: 1,
-                outputDeltaEventCount: 1,
-            },
-            {
-                status: "completed",
-                cursor: "evt-3",
-                eventCount: 0,
-                progressEventCount: 0,
-                outputDeltaEventCount: 0,
-            },
-        ],
-    );
-});
-
-test("comment agent controller auto-cancels remote runs after 3 minutes without reply text", async () => {
-    const harness = createHarness({
-        nowIncrement: 70_000,
-        runtimeSelection: {
-            kind: "resolved",
-            runtime: "openclaw-acp",
-            modePreference: "remote",
-            ownershipMessage: "Using remote runtime",
-        },
-        startRemoteRuntimeRun: async () => ({
-            httpStatus: 200,
-            status: "running",
-            cursor: "evt-1",
-            runId: "remote-run-1",
-            events: [{ type: "progress", text: "Queued remotely" }],
-            replyText: null,
-            error: null,
-        }),
-        pollRemoteRuntimeRun: async () => ({
-            httpStatus: 200,
-            status: "running",
-            cursor: "evt-1",
-            runId: "remote-run-1",
-            events: [],
-            replyText: null,
-            error: null,
-        }),
-    });
-
-    await harness.controller.handleSavedUserEntry({
-        threadId: "thread-1",
-        entryId: "thread-1",
-        filePath: "Folder/Note.md",
-        body: "@codex review this",
-    });
-    await waitForAgentQueueToDrain(harness.controller);
-
-    const latestRun = harness.controller.getLatestAgentRunForThread("thread-1");
-    assert.equal(latestRun?.status, "cancelled");
-    assert.match(latestRun?.error ?? "", /3 minutes/i);
-    assert.match(latestRun?.error ?? "", /without a response/i);
-    assert.equal(harness.commentManager.getCommentById("generated-2")?.comment, "");
-    assert.deepEqual(harness.remoteCancelCalls, ["remote-run-1"]);
-    assert.equal(
-        harness.logEntries.find((entry) => entry.event === "agents.remote.auto_cancelled")?.payload?.cursor,
-        "evt-1",
-    );
-});
-
-test("comment agent controller runs remote jobs in parallel across different threads", async () => {
-    const pollResolvers = new Map<string, () => void>();
-    let nextRunIndex = 0;
-    const harness = createHarness({
-        initialComments: [
-            createComment({
-                id: "thread-1",
-                filePath: "Folder/Note.md",
-                comment: "@codex review the first thread",
-            }),
-            createComment({
-                id: "thread-2",
-                filePath: "Folder/Note.md",
-                comment: "@codex review the second thread",
-                selectedText: "Beta",
-            }),
-        ],
-        runtimeSelection: {
-            kind: "resolved",
-            runtime: "openclaw-acp",
-            modePreference: "remote",
-            ownershipMessage: "Using remote runtime",
-        },
-        startRemoteRuntimeRun: async () => ({
-            httpStatus: 200,
-            status: "queued",
-            cursor: null,
-            runId: `remote-run-${++nextRunIndex}`,
-            events: [],
-            replyText: null,
-            error: null,
-        }),
-        pollRemoteRuntimeRun: async (runId) => {
-            await new Promise<void>((resolve) => {
-                pollResolvers.set(runId, resolve);
-            });
-            return {
-                httpStatus: 200,
-                status: "completed",
-                cursor: `${runId}-done`,
-                runId,
-                events: [],
-                replyText: `Done ${runId}`,
-                error: null,
-            };
-        },
-    });
-
-    await harness.controller.handleSavedUserEntry({
-        threadId: "thread-1",
-        entryId: "thread-1",
-        filePath: "Folder/Note.md",
-        body: "@codex review the first thread",
-    });
-    await harness.controller.handleSavedUserEntry({
-        threadId: "thread-2",
-        entryId: "thread-2",
-        filePath: "Folder/Note.md",
-        body: "@codex review the second thread",
-    });
-
-    for (let attempt = 0; attempt < 40 && harness.remoteStartCalls.length < 2; attempt += 1) {
-        await new Promise((resolve) => setTimeout(resolve, 10));
-    }
-    for (let attempt = 0; attempt < 40 && pollResolvers.size < 2; attempt += 1) {
-        await new Promise((resolve) => setTimeout(resolve, 10));
-    }
-
-    assert.equal(harness.remoteStartCalls.length, 2);
-    assert.equal(harness.controller.getLatestAgentRunForThread("thread-1")?.status, "running");
-    assert.equal(harness.controller.getLatestAgentRunForThread("thread-2")?.status, "running");
-
-    pollResolvers.get("remote-run-1")?.();
-    pollResolvers.get("remote-run-2")?.();
-    await waitForAgentQueueToDrain(harness.controller);
-
-    assert.equal(harness.controller.getLatestAgentRunForThread("thread-1")?.status, "succeeded");
-    assert.equal(harness.controller.getLatestAgentRunForThread("thread-2")?.status, "succeeded");
 });
 
 test("comment agent controller runs local jobs in parallel across different threads", async () => {
@@ -987,7 +682,7 @@ test("comment agent controller packs note path, page context, and transcript int
     assert.match(prompt, /Request:\n<<<\n@codex summarize the focus section\n>>>/);
 });
 
-test("comment agent controller resumes a persisted remote run after restart instead of failing it", async () => {
+test("comment agent controller marks persisted in-flight runs failed after restart", async () => {
     const harness = createHarness({
         initialPersistedData: {
             agentRuns: [{
@@ -996,40 +691,22 @@ test("comment agent controller resumes a persisted remote run after restart inst
                 triggerEntryId: "thread-1",
                 filePath: "Folder/Note.md",
                 requestedAgent: "codex",
-                runtime: "openclaw-acp",
+                runtime: "direct-cli",
                 status: "running",
                 promptText: "@codex continue",
                 createdAt: 100,
                 startedAt: 101,
-                remoteExecutionId: "remote-run-1",
-                remoteCursor: "evt-1",
             }],
         },
-        runtimeSelection: {
-            kind: "resolved",
-            runtime: "openclaw-acp",
-            modePreference: "auto",
-            ownershipMessage: "Using remote runtime",
-        },
-        pollRemoteRuntimeRun: async (_runId, afterCursor) => ({
-            httpStatus: 200,
-            status: "completed",
-            cursor: "evt-2",
-            runId: "remote-run-1",
-            events: [],
-            replyText: afterCursor === "evt-1" ? "Resumed reply" : "Unexpected",
-            error: null,
-        }),
     });
 
     await harness.controller.reconcilePendingRunsFromPreviousSession();
     await waitForAgentQueueToDrain(harness.controller);
 
     const latestRun = harness.controller.getLatestAgentRunForThread("thread-1");
-    assert.equal(latestRun?.status, "succeeded");
-    assert.equal(latestRun?.remoteExecutionId, "remote-run-1");
-    assert.equal(latestRun?.remoteCursor, "evt-2");
-    assert.equal(harness.editedEntries.at(-1)?.body, "Resumed reply");
+    assert.equal(latestRun?.status, "failed");
+    assert.equal(latestRun?.error, "The previous Aside agent run did not finish. Retry the thread to run it again.");
+    assert.deepEqual(harness.editedEntries, []);
 });
 
 test("comment agent controller keeps the final stream card in place when a run succeeds", async () => {

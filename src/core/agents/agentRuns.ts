@@ -2,7 +2,7 @@ import type { CommentThread } from "../../commentManager";
 import type { AsideAgentTarget } from "../config/agentTargets";
 import type { AgentRuntimeModePreference } from "./agentRuntimePreferences";
 
-export type AgentRunRuntime = "openclaw-acp" | "direct-cli";
+export type AgentRunRuntime = "direct-cli";
 export type AgentRunStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
 
 export interface AgentRunStreamState {
@@ -36,8 +36,6 @@ export interface AgentRunRecord {
     outputEntryId?: string;
     error?: string;
     modePreference?: AgentRuntimeModePreference;
-    remoteExecutionId?: string;
-    remoteCursor?: string;
 }
 
 export function cloneAgentRunRecord(run: AgentRunRecord): AgentRunRecord {

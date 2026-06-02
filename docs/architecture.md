@@ -17,8 +17,8 @@ Read this as the structural map of the plugin.
 - `src/main.ts` is the composition root. It detects `runtime=local|release`, wires the controllers, manager, cache, aggregate index, metadata augmentation, logging, and the sidebar view registration.
 - `src/app/*` owns the Obsidian plugin shell: event intake, lifecycle, registration, refresh coordination, workspace context, and workspace view adapters.
 - `src/comments/*` owns comment workflows: entry, mutation, session, navigation, highlight, persistence, index click routing, and related planners.
-- `src/agents/*` owns Codex and remote runtime orchestration: prompt context, run store, runtime selection, local adapter, and remote bridge.
-- `src/settings/*` owns persisted plugin settings and local secret storage.
+- `src/agents/*` owns local Codex orchestration: prompt context, run store, runtime selection, and the local adapter.
+- `src/settings/*` owns persisted plugin settings.
 - `src/sync/*` owns synced side-note event and source-identity stores.
 - `*Planner.ts` files hold the pure routing, normalization, and selection decisions that app/comment/agent modules call.
 - `src/commentManager.ts` owns the in-memory comment list.

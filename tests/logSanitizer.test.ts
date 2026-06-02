@@ -44,16 +44,16 @@ test("sanitizeErrorForLog keeps concise error metadata and removes absolute path
     });
 });
 
-test("sanitizeLogPayload redacts remote runtime credentials and strips url secrets", () => {
+test("sanitizeLogPayload redacts credentials and strips url secrets", () => {
     const payload = sanitizeLogPayload({
-        remoteRuntimeBearerToken: "secret-token",
+        bearerToken: "secret-token",
         authorization: "Bearer secret-token",
-        remoteRuntimeBaseUrl: "https://user:pass@remote.example.com/api?token=secret#frag",
-        endpoint: "https://remote.example.com/v1/aside/runs?after=evt-9",
+        serviceBaseUrl: "https://user:pass@example.com/api?token=secret#frag",
+        endpoint: "https://example.com/v1/aside/runs?after=evt-9",
     }, context);
 
     assert.deepEqual(payload, {
-        remoteRuntimeBaseUrl: "https://remote.example.com/api",
-        endpoint: "https://remote.example.com/v1/aside/runs",
+        serviceBaseUrl: "https://example.com/api",
+        endpoint: "https://example.com/v1/aside/runs",
     });
 });

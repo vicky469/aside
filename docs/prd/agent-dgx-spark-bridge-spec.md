@@ -24,25 +24,22 @@ It defines a private or allowlisted DGX-hosted remote runtime running on an NVID
 
 ## Current Repo State
 
-The plugin already contains most of the client-side remote runtime plumbing:
+The active plugin is local-runtime only. The previous remote bridge client,
+device-local bridge token storage, and advanced remote bridge settings surface
+have been removed from the codebase.
 
-- remote bridge request contract:
-  [src/agents/openclawRuntimeBridge.ts](../../src/agents/openclawRuntimeBridge.ts)
-- remote run lifecycle, persistence, restart reconciliation, cancel:
+Relevant remaining code:
+
+- local agent run lifecycle:
   [src/agents/commentAgentController.ts](../../src/agents/commentAgentController.ts)
 - local desktop Codex process launch and event parsing:
   [src/agents/agentRuntimeAdapter.ts](../../src/agents/agentRuntimeAdapter.ts)
-- runtime settings persistence and device-local secret storage:
+- runtime preference normalization:
   [src/settings/indexNoteSettingsController.ts](../../src/settings/indexNoteSettingsController.ts),
-  [src/settings/localSecretStore.ts](../../src/settings/localSecretStore.ts)
-- current settings surface:
   [src/ui/settings/AsideSetting.ts](../../src/ui/settings/AsideSetting.ts)
 
-That means the DGX route is not blocked on inventing a new plugin-side thread model.
-It is mainly blocked on:
-
-1. a concrete DGX bridge service that implements the existing remote contract
-2. productizing the current remote settings and runtime copy
+That means a future DGX route would need a new plugin-side bridge client and
+settings surface instead of relying on an existing remote contract.
 3. keeping prompt and event behavior close to the existing desktop local runtime
 
 ## Final Decisions

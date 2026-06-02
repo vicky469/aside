@@ -1,7 +1,6 @@
 import type { Plugin, TFile } from "obsidian";
 import {
     normalizeAgentRuntimeModePreference,
-    normalizeRemoteRuntimeBaseUrl,
     type AgentRuntimeModePreference,
 } from "../core/agents/agentRuntimePreferences";
 import {
@@ -81,10 +80,6 @@ export class IndexNoteSettingsController {
 
     public getAgentRuntimeMode(): AgentRuntimeModePreference {
         return normalizeAgentRuntimeModePreference(this.host.getSettings().agentRuntimeMode);
-    }
-
-    public getRemoteRuntimeBaseUrl(): string {
-        return normalizeRemoteRuntimeBaseUrl(this.host.getSettings().remoteRuntimeBaseUrl);
     }
 
     public isAllCommentsNotePath(filePath: string): boolean {
@@ -281,24 +276,6 @@ export class IndexNoteSettingsController {
         await this.saveSettings();
     }
 
-    public async setRemoteRuntimeBaseUrl(nextUrlInput: string): Promise<void> {
-        const settings = this.host.getSettings();
-        const nextUrl = normalizeRemoteRuntimeBaseUrl(nextUrlInput);
-        if (!shouldApplyNormalizedSettingChange({
-            currentStoredValue: settings.remoteRuntimeBaseUrl,
-            currentNormalizedValue: this.getRemoteRuntimeBaseUrl(),
-            nextNormalizedValue: nextUrl,
-        })) {
-            return;
-        }
-
-        this.host.setSettings({
-            ...settings,
-            remoteRuntimeBaseUrl: nextUrl,
-        });
-        await this.saveSettings();
-    }
-
     public readPersistedPluginData(): PersistedPluginData {
         return {
             ...this.persistedPluginData,
@@ -312,6 +289,7 @@ export class IndexNoteSettingsController {
         delete persistedData.confirmDelete;
         delete persistedData.enableDebugMode;
         delete persistedData.preferredAgentTarget;
+        delete persistedData.remoteRuntimeBaseUrl;
         this.persistedPluginData = {
             ...persistedData,
         };

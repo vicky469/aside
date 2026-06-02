@@ -1,7 +1,6 @@
 import type { CodexRuntimeDiagnostics } from "../../agents/agentRuntimeAdapter";
 import type {
     AgentRuntimeSelection,
-    RemoteRuntimeAvailability,
 } from "../../agents/agentRuntimeSelection";
 
 export interface CodexRuntimeStatusPresentation {
@@ -91,25 +90,4 @@ export function getLocalRuntimeOptionStatusPresentation(
                 available: false,
             };
     }
-}
-
-export function getRemoteRuntimeOptionStatusPresentation(
-    availability: RemoteRuntimeAvailability,
-): RuntimeOptionStatusPresentation {
-    if (availability.status === "available") {
-        const description = availability.originHost
-            ? `Remote bridge configured at ${availability.originHost}.`
-            : "Remote bridge is configured.";
-        return {
-            label: "Remote ✅",
-            description,
-            available: true,
-        };
-    }
-
-    return {
-        label: "Remote ❌",
-        description: availability.message,
-        available: false,
-    };
 }

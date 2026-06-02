@@ -1,6 +1,5 @@
 import {
     normalizeAgentRuntimeModePreference,
-    normalizeRemoteRuntimeBaseUrl,
 } from "../core/agents/agentRuntimePreferences";
 import {
     ALL_COMMENTS_NOTE_PATH,
@@ -19,6 +18,7 @@ export type PersistedPluginData = Partial<AsideSettings> & {
     agentRuns?: unknown;
     confirmDelete?: unknown;
     enableDebugMode?: unknown;
+    remoteRuntimeBaseUrl?: unknown;
     syncedBundledSidenoteSkillPluginVersion?: unknown;
     sidecarStorageMigrationVersion?: unknown;
     sideNoteSyncEventState?: unknown;
@@ -71,13 +71,13 @@ export function resolveLoadedSettings(
             agentRuntimeMode: hasOwn(loaded ?? {}, "agentRuntimeMode")
                 ? normalizeAgentRuntimeModePreference(loaded?.agentRuntimeMode)
                 : defaults.agentRuntimeMode,
-            remoteRuntimeBaseUrl: hasOwn(loaded ?? {}, "remoteRuntimeBaseUrl")
-                ? normalizeRemoteRuntimeBaseUrl(loaded?.remoteRuntimeBaseUrl)
-                : defaults.remoteRuntimeBaseUrl,
         },
         shouldRewriteLegacySettings: hasOwn(loaded ?? {}, "confirmDelete")
             || hasOwn(loaded ?? {}, "preferredAgentTarget")
             || hasOwn(loaded ?? {}, "enableDebugMode")
+            || hasOwn(loaded ?? {}, "remoteRuntimeBaseUrl")
+            || (hasOwn(loaded ?? {}, "agentRuntimeMode")
+                && normalizeAgentRuntimeModePreference(loaded?.agentRuntimeMode) !== loaded?.agentRuntimeMode)
             || indexNotePath !== loadedIndexNotePath,
     };
 }
