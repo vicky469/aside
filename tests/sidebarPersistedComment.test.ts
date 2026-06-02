@@ -1064,3 +1064,68 @@ test("renderPersistedCommentCard keeps Add to file inline before agent metadata"
         className.includes("aside-thread-footer-meta-separator")
     ), false);
 });
+
+test("renderPersistedCommentCard reuses toolbar pin styling for page note pins", async () => {
+    const thread = createThreadWithEntries({
+        anchorKind: "page",
+        entries: [
+            { id: "comment-1", body: "Page note", timestamp: 100 },
+        ],
+    });
+    const host: SidebarPersistedCommentHost = {
+        activeCommentId: null,
+        currentFilePath: "docs/architecture.md",
+        currentUserLabel: "You",
+        showSourceRedirectAction: false,
+        showBookmarkAndPinControls: true,
+        showDeletedComments: false,
+        enablePageThreadReorder: false,
+        enableChildEntryMove: false,
+        enableSoftDeleteActions: false,
+        showNestedComments: false,
+        showNestedCommentsByDefault: false,
+        getKnownCommentById: () => null,
+        editDraftComment: null,
+        appendDraftComment: null,
+        agentRun: null,
+        agentStream: null,
+        threadAgentRuns: [],
+        getEventTargetElement: () => null,
+        isSelectionInsideSidebarContent: () => false,
+        claimSidebarInteractionOwnership: () => {},
+        insertCommentMarkdownIntoFile: async () => true,
+        renderMarkdown: async (markdown, container) => {
+            (container as unknown as FakeElement).textContent = markdown;
+        },
+        openSidebarInternalLink: async () => {},
+        openCommentFromCard: async () => {},
+        openCommentInEditor: async () => {},
+        shareComment: async () => {},
+        saveVisibleDraftIfPresent: async () => true,
+        setShowNestedCommentsForThread: () => {},
+        resolveComment: () => true,
+        unresolveComment: () => true,
+        moveCommentThread: () => {},
+        restoreComment: () => true,
+        clearDeletedComment: () => true,
+        startEditDraft: () => {},
+        isPinnedThread: () => true,
+        togglePinnedThread: () => {},
+        startAppendEntryDraft: () => {},
+        retryAgentRun: () => true,
+        retryAgentPromptForComment: () => true,
+        reanchorCommentThreadToCurrentSelection: () => {},
+        deleteCommentWithConfirm: () => true,
+        renderAppendDraft: () => {},
+        renderInlineEditDraft: () => {},
+        setIcon: () => {},
+    };
+    const root = new FakeElement("div");
+
+    await renderPersistedCommentCard(root as unknown as HTMLDivElement, thread, host);
+
+    const pinButton = root.findAllByClass("aside-comment-action-pin")[0];
+    assert.ok(pinButton);
+    assert.equal(pinButton.classList.contains("aside-toolbar-icon-button"), true);
+    assert.equal(pinButton.classList.contains("aside-sidebar-file-pin-button"), true);
+});

@@ -118,6 +118,8 @@ export function renderPinActionButton(
         cls: [
             "clickable-icon",
             "aside-comment-action-button",
+            "aside-toolbar-icon-button",
+            "aside-sidebar-file-pin-button",
             "aside-comment-action-pin",
             pinAction.active ? "is-active" : "",
         ].filter(Boolean).join(" "),
