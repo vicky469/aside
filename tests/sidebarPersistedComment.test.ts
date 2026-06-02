@@ -1082,6 +1082,10 @@ test("renderPersistedCommentCard puts agent metadata above status and Add to fil
     assert.notEqual(addToFileIndex, -1);
     assert.notEqual(statusIndex, -1);
     assert.notEqual(metadataIndex, -1);
+    const addToFileEl = childFooterMeta.children[addToFileIndex];
+    assert.equal(addToFileEl?.tagName, "button");
+    assert.equal(addToFileEl?.getAttribute("type"), "button");
+    assert.equal(addToFileEl?.getAttribute("role"), null);
     assert.ok(metadataIndex < statusIndex);
     assert.ok(metadataIndex < addToFileIndex);
     assert.ok(statusIndex < addToFileIndex);

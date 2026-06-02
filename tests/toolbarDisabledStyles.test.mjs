@@ -87,3 +87,55 @@ test("selected index file rows use accent background without a left strip", () =
     assert.match(selectedFileRule.groups.body, /background:\s*hsla\(var\(--interactive-accent-hsl\),\s*0\.(?:1[4-9]|2[0-9])\)/);
     assert.doesNotMatch(selectedFileRule.groups.body, /inset\s+3px\s+0\s+0\s+var\(--interactive-accent\)/);
 });
+
+test("thread footer meta action uses a minimal muted text action", () => {
+    const baseRule = css.match(
+        /\.aside-thread-footer-meta-action\s*\{(?<body>[\s\S]*?)\}/,
+    );
+    const hoverFocusRule = css.match(
+        /(?:^|\n)\.aside-thread-footer-meta-action:hover,[\s\S]*?\n\.aside-thread-footer-meta-action:focus-visible\s*\{(?<body>[\s\S]*?)\}/,
+    );
+    const focusRule = css.match(
+        /(?:^|\n\n)\.aside-thread-footer-meta-action:focus-visible\s*\{(?<body>[\s\S]*?)\}/,
+    );
+    const activeRule = css.match(
+        /\.aside-thread-footer-meta-action:active\s*\{(?<body>[\s\S]*?)\}/,
+    );
+    const buttonResetRule = css.match(
+        /button\.aside-thread-footer-meta-action\s*\{(?<body>[\s\S]*?)\}/,
+    );
+    const buttonHoverFocusRule = css.match(
+        /button\.aside-thread-footer-meta-action:hover,[\s\S]*?button\.aside-thread-footer-meta-action:focus-visible\s*\{(?<body>[\s\S]*?)\}/,
+    );
+
+    assert.ok(baseRule?.groups?.body, "missing thread footer meta action base rule");
+    assert.match(baseRule.groups.body, /color:\s*var\(--text-muted\)\s*;/);
+    assert.match(baseRule.groups.body, /font-weight:\s*400\s*;/);
+    assert.match(baseRule.groups.body, /background:\s*transparent\s*;/);
+    assert.match(baseRule.groups.body, /border:\s*0\s*;/);
+    assert.match(baseRule.groups.body, /border-radius:\s*0\s*;/);
+    assert.match(baseRule.groups.body, /box-shadow:\s*none\s*;/);
+    assert.doesNotMatch(baseRule.groups.body, /var\(--background-primary\)|var\(--button-radius/);
+
+    assert.ok(hoverFocusRule?.groups?.body, "missing thread footer meta action hover/focus rule");
+    assert.match(hoverFocusRule.groups.body, /color:\s*var\(--text-normal\)\s*;/);
+    assert.match(hoverFocusRule.groups.body, /background:\s*transparent\s*;/);
+    assert.doesNotMatch(hoverFocusRule.groups.body, /background-modifier-hover/);
+    assert.ok(focusRule?.groups?.body, "missing thread footer meta action focus rule");
+    assert.match(focusRule.groups.body, /box-shadow:\s*none\s*;/);
+
+    assert.ok(activeRule?.groups?.body, "missing thread footer meta action active rule");
+    assert.match(activeRule.groups.body, /background:\s*transparent\s*;/);
+
+    assert.ok(buttonResetRule?.groups?.body, "missing native button reset for thread footer meta action");
+    assert.match(buttonResetRule.groups.body, /-webkit-appearance:\s*none\s*;/);
+    assert.match(buttonResetRule.groups.body, /color:\s*var\(--text-muted\)\s*!important\s*;/);
+    assert.match(buttonResetRule.groups.body, /background:\s*transparent\s*!important\s*;/);
+    assert.match(buttonResetRule.groups.body, /background-image:\s*none\s*!important\s*;/);
+    assert.match(buttonResetRule.groups.body, /box-shadow:\s*none\s*!important\s*;/);
+    assert.match(buttonResetRule.groups.body, /filter:\s*none\s*!important\s*;/);
+    assert.match(buttonResetRule.groups.body, /text-shadow:\s*none\s*!important\s*;/);
+
+    assert.ok(buttonHoverFocusRule?.groups?.body, "missing native button hover/focus color override");
+    assert.match(buttonHoverFocusRule.groups.body, /color:\s*var\(--text-normal\)\s*!important\s*;/);
+});

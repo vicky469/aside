@@ -790,13 +790,12 @@ function renderThreadFooterActions(
     }
     if (options.insertAction) {
         const insertAction = options.insertAction;
-        const addButton = footerMetaEl.createSpan({
+        const addButton = footerMetaEl.createEl("button", {
             cls: "aside-thread-footer-meta-action",
             text: "Add to file",
         });
+        addButton.setAttribute("type", "button");
         attachSidebarActionButtonInteractions(addButton, host);
-        addButton.tabIndex = 0;
-        addButton.setAttribute("role", "button");
         const runInsert = async (event: Event) => {
             event.preventDefault();
             event.stopPropagation();
@@ -806,13 +805,6 @@ function renderThreadFooterActions(
             await host.insertCommentMarkdownIntoFile(insertAction.markdown);
         };
         addButton.addEventListener("click", (event) => {
-            void runInsert(event);
-        });
-        addButton.addEventListener("keydown", (event: KeyboardEvent) => {
-            if (event.key !== "Enter" && event.key !== " ") {
-                return;
-            }
-
             void runInsert(event);
         });
     }

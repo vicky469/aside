@@ -1402,10 +1402,14 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
 }
 
 .aside-thread-footer-meta-action {
-    display: inline;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     flex: 0 0 auto;
+    min-height: 18px;
     white-space: nowrap;
-    color: var(--text-normal);
+    color: var(--text-muted);
+    font-family: inherit;
     font-size: var(--font-ui-smaller);
     font-weight: 400;
     line-height: 1.2;
@@ -1415,10 +1419,27 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
     user-select: none;
     background: transparent;
     border: 0;
+    border-radius: 0;
     box-shadow: none;
-    padding: 0;
+    padding: 0 4px;
     margin: 0;
     outline: none;
+    appearance: none;
+}
+
+button.aside-thread-footer-meta-action {
+    -webkit-appearance: none;
+    color: var(--text-muted) !important;
+    background: transparent !important;
+    background-image: none !important;
+    box-shadow: none !important;
+    filter: none !important;
+    text-shadow: none !important;
+}
+
+button.aside-thread-footer-meta-action:hover,
+button.aside-thread-footer-meta-action:focus-visible {
+    color: var(--text-normal) !important;
 }
 
 .aside-agent-run-status + .aside-thread-footer-meta-action {
@@ -1428,7 +1449,18 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
 .aside-thread-footer-meta-action:hover,
 .aside-thread-footer-meta-action:focus-visible {
     color: var(--text-normal);
+    background: transparent;
+    border-color: var(--text-faint);
     text-decoration: none;
+}
+
+.aside-thread-footer-meta-action:focus-visible {
+    border-color: var(--interactive-accent);
+    box-shadow: none;
+}
+
+.aside-thread-footer-meta-action:active {
+    background: transparent;
 }
 
 .aside-comment-author-indicator {
