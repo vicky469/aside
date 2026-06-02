@@ -5,7 +5,9 @@ import { getAgentActorLabel } from "../../core/agents/agentActorRegistry";
 import {
     getAgentRunByOutputEntryId,
     getLatestAgentRunForTriggerEntry,
+    mergeAgentRunMetadata,
     type AgentRunRecord,
+    type AgentRunMetadata,
     type AgentRunStreamState,
 } from "../../core/agents/agentRuns";
 import type { AsideAgentTarget } from "../../core/config/agentTargets";
@@ -151,6 +153,54 @@ export function getAgentRunStatusPresentation(status: AgentRunRecord["status"]):
 
 function getAgentLabel(target: AgentRunRecord["requestedAgent"]): string {
     return getAgentActorLabel(target);
+}
+
+function formatSkillMetadataLabel(skill: { name: string; mode?: string }): string {
+    return skill.mode ? `${skill.name} (${skill.mode})` : skill.name;
+}
+
+export function formatAgentRunMetadataFrontmatter(metadata: AgentRunMetadata): string | null {
+    const normalizedMetadata = mergeAgentRunMetadata(metadata, {});
+    const lines: string[] = [];
+    const skills = normalizedMetadata.usedSkills
+        ?.map((skill) => formatSkillMetadataLabel(skill))
+        .join(", ");
+    if (skills) {
+        lines.push(`skills: ${skills}`);
+    }
+
+    const tools = normalizedMetadata.usedTools?.join(", ");
+    if (tools) {
+        lines.push(`tools: ${tools}`);
+    }
+
+    const urls = normalizedMetadata.usedUrls?.join(", ");
+    if (urls) {
+        lines.push(`urls: ${urls}`);
+    }
+
+    return lines.length
+        ? ["---", ...lines, "---"].join("\n")
+        : null;
+}
+
+export function renderAgentRunMetadataFrontmatter(
+    metaEl: HTMLElement,
+    metadata: AgentRunMetadata,
+): void {
+    const existing = metaEl.querySelector(".aside-agent-run-metadata-frontmatter");
+    existing?.remove();
+
+    const frontmatter = formatAgentRunMetadataFrontmatter(metadata);
+    metaEl.classList.toggle("has-agent-run-metadata", !!frontmatter);
+    if (!frontmatter) {
+        return;
+    }
+
+    metaEl.createEl("span", {
+        cls: "aside-agent-run-metadata-frontmatter",
+        text: frontmatter,
+    });
 }
 
 function buildSidebarCommentAuthorPresentation(
@@ -739,10 +789,6 @@ function renderThreadFooterActions(
     }
     if (options.insertAction) {
         const insertAction = options.insertAction;
-        footerMetaEl.createSpan({
-            cls: "aside-thread-footer-meta-separator",
-            text: "·",
-        });
         const addButton = footerMetaEl.createSpan({
             cls: "aside-thread-footer-meta-action",
             text: "Add to file",
@@ -768,6 +814,9 @@ function renderThreadFooterActions(
 
             void runInsert(event);
         });
+    }
+    if (agentRun) {
+        renderAgentRunMetadataFrontmatter(footerMetaEl, agentRun);
     }
 
     if (!(options.showShareAction || options.showAddEntryAction || options.showRetryAction || options.moveAction)) {

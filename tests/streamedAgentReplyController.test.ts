@@ -98,9 +98,8 @@ test("streamed agent reply controller hides borrowed footer actions while stream
     const labelEl = new FakeLabelElement();
     const statusEl = new FakeContainerElement();
     const footerMetaEl = new FakeContainerElement();
-    const separatorNode = createFakeNode("separator");
     const addToFileNode = createFakeNode("add-to-file");
-    footerMetaEl.childNodes = [labelEl, statusEl, separatorNode, addToFileNode];
+    footerMetaEl.childNodes = [labelEl, statusEl, addToFileNode];
 
     controller.ownsCard = false;
     controller.labelEl = labelEl;

@@ -1,4 +1,9 @@
-import type { AgentRunRuntime } from "../core/agents/agentRuns";
+import {
+    normalizeAgentRunToolNames,
+    normalizeAgentRunUrls,
+    type AgentRunMetadata,
+    type AgentRunRuntime,
+} from "../core/agents/agentRuns";
 import { getAgentActorById } from "../core/agents/agentActorRegistry";
 import * as sideNotePromptPolicy from "../../shared/sideNotePromptPolicy.js";
 import type { AsideAgentTarget } from "../core/config/agentTargets";
@@ -69,10 +74,11 @@ export interface AgentRuntimeInvocation {
     vaultRootPath?: string | null;
     onPartialText?: (partialText: string) => void;
     onProgressText?: (progressText: string) => void;
+    onRunMetadata?: (metadata: AgentRunMetadata) => void;
     abortSignal?: AbortSignal;
 }
 
-export interface AgentRuntimeResult {
+export interface AgentRuntimeResult extends AgentRunMetadata {
     runtime: AgentRunRuntime;
     replyText: string;
 }
@@ -503,6 +509,80 @@ function extractCodexProgressTextFromThreadItem(item: unknown): string | null {
     }
 }
 
+function collectUrlStrings(value: unknown, urls: Set<string>, depth: number = 0): void {
+    if (depth > 5 || value == null) {
+        return;
+    }
+
+    if (typeof value === "string") {
+        const matches = value.match(/https?:\/\/[^\s"'<>]+/gu) ?? [];
+        for (const match of matches) {
+            for (const url of normalizeAgentRunUrls([match])) {
+                urls.add(url);
+            }
+        }
+        return;
+    }
+
+    if (Array.isArray(value)) {
+        for (const item of value) {
+            collectUrlStrings(item, urls, depth + 1);
+        }
+        return;
+    }
+
+    if (!isRecord(value)) {
+        return;
+    }
+
+    for (const item of Object.values(value)) {
+        collectUrlStrings(item, urls, depth + 1);
+    }
+}
+
+function getCodexThreadItemToolName(item: Record<string, unknown>): string | null {
+    if (typeof item.tool === "string") {
+        return item.tool;
+    }
+
+    if (typeof item.name === "string") {
+        return item.name;
+    }
+
+    if (typeof item.command === "string") {
+        return "shell";
+    }
+
+    switch (item.type) {
+        case "webSearch":
+            return "web-search";
+        case "fileChange":
+            return "file-change";
+        default:
+            return null;
+    }
+}
+
+export function extractCodexRunMetadataFromThreadItem(item: unknown): Required<Pick<AgentRunMetadata, "usedTools" | "usedUrls">> {
+    if (!isRecord(item) || typeof item.type !== "string") {
+        return {
+            usedTools: [],
+            usedUrls: [],
+        };
+    }
+
+    const usedTools = normalizeAgentRunToolNames([
+        getCodexThreadItemToolName(item),
+    ].filter((tool): tool is string => !!tool));
+    const urlSet = new Set<string>();
+    collectUrlStrings(item, urlSet);
+
+    return {
+        usedTools,
+        usedUrls: Array.from(urlSet),
+    };
+}
+
 export async function resolveAgentExecutionEnv(
     modules: NodeModules,
     baseEnv: ExecEnv = getBaseProcessEnv(),
@@ -763,6 +843,8 @@ async function runCodexDirect(
         let activeAgentMessageItemId: string | null = null;
         let streamedText = "";
         let finalText: string | null = null;
+        const usedTools = new Set<string>();
+        const usedUrls = new Set<string>();
         const reasoningSummaryBuffers = new Map<string, string>();
         let abortHandler: (() => void) | null = null;
         const pendingResponses = new Map<string, {
@@ -816,7 +898,33 @@ async function runCodexDirect(
             resolve({
                 runtime: "direct-cli",
                 replyText,
+                usedTools: Array.from(usedTools),
+                usedUrls: Array.from(usedUrls),
             });
+        };
+
+        const handleRunMetadata = (item: unknown): void => {
+            const metadata = extractCodexRunMetadataFromThreadItem(item);
+            let changed = false;
+            for (const tool of metadata.usedTools) {
+                if (!usedTools.has(tool)) {
+                    usedTools.add(tool);
+                    changed = true;
+                }
+            }
+            for (const url of metadata.usedUrls) {
+                if (!usedUrls.has(url)) {
+                    usedUrls.add(url);
+                    changed = true;
+                }
+            }
+
+            if (changed) {
+                invocation.onRunMetadata?.({
+                    usedTools: Array.from(usedTools),
+                    usedUrls: Array.from(usedUrls),
+                });
+            }
         };
 
         const sendMessage = (message: JsonRpcRequestMessage | JsonRpcNotificationMessage) => {
@@ -896,6 +1004,7 @@ async function runCodexDirect(
                     }
 
                     const item = isRecord(params) ? params.item : undefined;
+                    handleRunMetadata(item);
                     handleItemMessage(item);
                     const progressText = extractCodexProgressTextFromThreadItem(item);
                     if (progressText) {
@@ -953,7 +1062,9 @@ async function runCodexDirect(
                         return;
                     }
 
-                    handleItemMessage(isRecord(params) ? params.item : undefined);
+                    const item = isRecord(params) ? params.item : undefined;
+                    handleRunMetadata(item);
+                    handleItemMessage(item);
                     return;
                 }
                 case "turn/completed": {

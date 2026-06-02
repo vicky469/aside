@@ -6,6 +6,8 @@ import {
     getLatestAgentRunForTriggerEntry,
     getLatestAgentRunForThread,
     getQueuedAgentRuns,
+    mergeAgentRunMetadata,
+    type AgentRunMetadata,
     type AgentRunRecord,
     type AgentRunRuntime,
     type AgentRunStreamState,
@@ -34,7 +36,7 @@ export interface SavedUserEntryEvent {
     body: string;
 }
 
-export interface AgentRuntimeResponse {
+export interface AgentRuntimeResponse extends AgentRunMetadata {
     runtime: AgentRunRuntime;
     replyText: string;
 }
@@ -78,6 +80,7 @@ export interface CommentAgentHost {
         vaultRootPath?: string | null;
         onPartialText?: (partialText: string) => void;
         onProgressText?: (progressText: string) => void;
+        onRunMetadata?: (metadata: AgentRunMetadata) => void;
         abortSignal?: AbortSignal;
     }): Promise<AgentRuntimeResponse>;
     resolveAgentRuntimeSelection(): Promise<AgentRuntimeSelection>;
@@ -574,11 +577,13 @@ export class CommentAgentController {
         const failureText = existingStream?.partialText.trim().length
             ? existingStream.partialText
             : message;
+        const failureMetadata = mergeAgentRunMetadata(run, existingStream ?? {});
         if (run.outputEntryId) {
             await this.host.editComment(run.outputEntryId, failureText, { skipCommentViewRefresh: true });
         }
         const failedRun = await this.store.updateRun(runId, (currentRun) => ({
             ...currentRun,
+            ...failureMetadata,
             status: "failed",
             endedAt: this.host.now(),
             error: message,
@@ -640,7 +645,10 @@ export class CommentAgentController {
 
                 this.updateRunStream(
                     options.run.id,
-                    this.buildRunStreamState(options.run, {
+                    this.buildRunStreamState({
+                        ...options.run,
+                        ...mergeAgentRunMetadata(options.run, this.runStreams.get(options.run.id) ?? {}),
+                    }, {
                         status: "running",
                         statusHintText: normalizedProgressText,
                         partialText: this.runStreams.get(options.run.id)?.partialText ?? "",
@@ -657,12 +665,38 @@ export class CommentAgentController {
 
                 this.updateRunStream(
                     options.run.id,
-                    this.buildRunStreamState(options.run, {
+                    this.buildRunStreamState({
+                        ...options.run,
+                        ...mergeAgentRunMetadata(options.run, this.runStreams.get(options.run.id) ?? {}),
+                    }, {
                         status: "running",
                         partialText,
                         startedAt: options.startedAt,
                         updatedAt: this.host.now(),
                         outputEntryId: options.outputEntryId,
+                    }),
+                );
+            },
+            onRunMetadata: (metadata) => {
+                if (this.isRunCancellationRequested(options.run.id)) {
+                    return;
+                }
+
+                const currentStream = this.runStreams.get(options.run.id);
+                const mergedMetadata = mergeAgentRunMetadata(currentStream ?? options.run, metadata);
+                this.updateRunStream(
+                    options.run.id,
+                    this.buildRunStreamState({
+                        ...options.run,
+                        ...mergedMetadata,
+                    }, {
+                        status: "running",
+                        statusHintText: currentStream?.statusHintText,
+                        partialText: currentStream?.partialText ?? "",
+                        startedAt: options.startedAt,
+                        updatedAt: this.host.now(),
+                        outputEntryId: options.outputEntryId,
+                        ...mergedMetadata,
                     }),
                 );
             },
@@ -675,6 +709,7 @@ export class CommentAgentController {
             run: options.run,
             runtime: runtimeResponse.runtime,
             replyText: runtimeResponse.replyText,
+            replyMetadata: runtimeResponse,
             outputEntryId: options.outputEntryId,
             replaceOutputEntryId: options.replaceOutputEntryId,
             startedAt: options.startedAt,
@@ -685,6 +720,7 @@ export class CommentAgentController {
         run: AgentRunRecord;
         runtime: AgentRunRuntime;
         replyText: string;
+        replyMetadata?: AgentRunMetadata;
         outputEntryId: string;
         replaceOutputEntryId?: string;
         startedAt: number;
@@ -699,7 +735,10 @@ export class CommentAgentController {
         }
 
         const timestamp = this.host.now();
-        this.updateRunStream(options.run.id, this.buildRunStreamState(options.run, {
+        this.updateRunStream(options.run.id, this.buildRunStreamState({
+            ...options.run,
+            ...mergeAgentRunMetadata(options.run, this.runStreams.get(options.run.id) ?? {}),
+        }, {
             status: "running",
             partialText: replyText,
             startedAt: options.startedAt,
@@ -719,6 +758,7 @@ export class CommentAgentController {
 
         const completedRun = await this.store.updateRun(options.run.id, (run) => ({
             ...run,
+            ...mergeAgentRunMetadata(run, options.replyMetadata ?? {}),
             runtime: options.runtime,
             status: "succeeded",
             endedAt: timestamp,
@@ -877,11 +917,16 @@ export class CommentAgentController {
             modePreference: options.modePreference,
             retryOfRunId: options.retryOfRunId,
             outputEntryId: options.outputEntryId,
+            usedSkills: [{
+                name: BUILT_IN_ASIDE_SKILL_NAME,
+                mode: BUILT_IN_ASIDE_SKILL_MODE,
+                source: "built-in",
+            }],
         };
     }
 
     private buildRunStreamState(
-        run: Pick<AgentRunRecord, "id" | "threadId" | "requestedAgent" | "runtime">,
+        run: Pick<AgentRunRecord, "id" | "threadId" | "requestedAgent" | "runtime"> & AgentRunMetadata,
         options: {
             status: AgentRunRecord["status"];
             statusText?: string;
@@ -891,8 +936,9 @@ export class CommentAgentController {
             updatedAt: number;
             outputEntryId?: string;
             error?: string;
-        },
+        } & AgentRunMetadata,
     ): AgentRunStreamState {
+        const metadata = mergeAgentRunMetadata(run, options);
         return {
             runId: run.id,
             threadId: run.threadId,
@@ -906,6 +952,7 @@ export class CommentAgentController {
             updatedAt: options.updatedAt,
             outputEntryId: options.outputEntryId,
             error: options.error,
+            ...metadata,
         };
     }
 
@@ -942,6 +989,9 @@ export class CommentAgentController {
             && previous.statusHintText === nextStream.statusHintText
             && previous.error === nextStream.error
             && previous.outputEntryId === nextStream.outputEntryId
+            && JSON.stringify(previous.usedSkills ?? []) === JSON.stringify(nextStream.usedSkills ?? [])
+            && JSON.stringify(previous.usedTools ?? []) === JSON.stringify(nextStream.usedTools ?? [])
+            && JSON.stringify(previous.usedUrls ?? []) === JSON.stringify(nextStream.usedUrls ?? [])
         ) {
             this.runStreams.set(runId, {
                 ...previous,

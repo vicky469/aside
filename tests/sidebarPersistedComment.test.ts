@@ -16,12 +16,15 @@ import {
     getAppendDraftInsertAfterEntryId,
     getRenderableThreadEntries,
     getAgentRunStatusPresentation,
+    formatAgentRunMetadataFrontmatter,
+    renderPersistedCommentCard,
     resolveSidebarCommentAuthor,
     shouldShowRetryActionForSidebarComment,
     shouldRenderChildEntryMoveHandle,
     shouldRenderSidebarCommentAuthor,
     shouldRenderNestedThreadEntries,
     shouldRenderThreadNestedToggle,
+    type SidebarPersistedCommentHost,
 } from "../src/ui/views/sidebarPersistedComment";
 import { formatSidebarCommentMeta } from "../src/ui/views/sidebarCommentSections";
 
@@ -73,7 +76,172 @@ function createAgentRun(overrides: Partial<AgentRunRecord> = {}): AgentRunRecord
         retryOfRunId: overrides.retryOfRunId,
         outputEntryId: overrides.outputEntryId ?? "entry-2",
         error: overrides.error,
+        usedSkills: overrides.usedSkills,
+        usedTools: overrides.usedTools,
+        usedUrls: overrides.usedUrls,
     };
+}
+
+class FakeClassList {
+    constructor(private readonly owner: FakeElement) {}
+
+    public add(...tokens: string[]): void {
+        this.owner.className = mergeClassName(this.owner.className, tokens);
+    }
+
+    public remove(...tokens: string[]): void {
+        const removeSet = new Set(tokens);
+        this.owner.className = this.owner.className
+            .split(/\s+/)
+            .filter((token) => token && !removeSet.has(token))
+            .join(" ");
+    }
+
+    public contains(token: string): boolean {
+        return this.owner.className.split(/\s+/).includes(token);
+    }
+
+    public toggle(token: string, force?: boolean): boolean {
+        const shouldHaveToken = force ?? !this.contains(token);
+        if (shouldHaveToken) {
+            this.add(token);
+        } else {
+            this.remove(token);
+        }
+        return shouldHaveToken;
+    }
+}
+
+class FakeElement {
+    public readonly children: FakeElement[] = [];
+    public parentElement: FakeElement | null = null;
+    public textContent = "";
+    public tabIndex = 0;
+    public hidden = false;
+    public disabled = false;
+    public onclick: unknown = null;
+    public readonly style = { display: "" };
+    public readonly classList = new FakeClassList(this);
+    public readonly ownerDocument = { defaultView: null };
+    private readonly attributes = new Map<string, string>();
+
+    constructor(
+        public readonly tagName: string,
+        public className = "",
+    ) {}
+
+    public createDiv(className?: string | { cls?: string }): FakeElement {
+        return this.createChild("div", typeof className === "string" ? className : className?.cls);
+    }
+
+    public createSpan(options?: string | { cls?: string; text?: string }): FakeElement {
+        return this.createChild("span", typeof options === "string" ? options : options?.cls, typeof options === "string" ? undefined : options?.text);
+    }
+
+    public createEl(tagName: string, options: { cls?: string; text?: string } = {}): FakeElement {
+        return this.createChild(tagName, options.cls, options.text);
+    }
+
+    public appendChild(child: FakeElement): FakeElement {
+        child.parentElement = this;
+        this.children.push(child);
+        return child;
+    }
+
+    public replaceChildren(...children: FakeElement[]): void {
+        this.children.splice(0, this.children.length);
+        children.forEach((child) => {
+            this.appendChild(child);
+        });
+    }
+
+    public remove(): void {
+        if (!this.parentElement) {
+            return;
+        }
+        const siblings = this.parentElement.children;
+        const index = siblings.indexOf(this);
+        if (index >= 0) {
+            siblings.splice(index, 1);
+        }
+        this.parentElement = null;
+    }
+
+    public addClass(className: string): void {
+        this.classList.add(className);
+    }
+
+    public setText(text: string): void {
+        this.textContent = text;
+    }
+
+    public setAttribute(name: string, value: string): void {
+        this.attributes.set(name, value);
+    }
+
+    public getAttribute(name: string): string | null {
+        return this.attributes.get(name) ?? null;
+    }
+
+    public addEventListener(): void {}
+
+    public querySelector(selector: string): FakeElement | null {
+        return this.find((element) => matchesFakeSelector(element, selector));
+    }
+
+    public querySelectorAll(_selector: string): FakeElement[] {
+        return [];
+    }
+
+    public findAllByClass(className: string): FakeElement[] {
+        const matches: FakeElement[] = [];
+        this.collect((element) => {
+            if (element.classList.contains(className)) {
+                matches.push(element);
+            }
+        });
+        return matches;
+    }
+
+    private createChild(tagName: string, className = "", text = ""): FakeElement {
+        const child = new FakeElement(tagName, className);
+        child.textContent = text;
+        return this.appendChild(child);
+    }
+
+    private find(predicate: (element: FakeElement) => boolean): FakeElement | null {
+        for (const child of this.children) {
+            if (predicate(child)) {
+                return child;
+            }
+            const match = child.find(predicate);
+            if (match) {
+                return match;
+            }
+        }
+        return null;
+    }
+
+    private collect(visitor: (element: FakeElement) => void): void {
+        for (const child of this.children) {
+            visitor(child);
+            child.collect(visitor);
+        }
+    }
+}
+
+function mergeClassName(current: string, tokens: string[]): string {
+    return Array.from(new Set([
+        ...current.split(/\s+/).filter(Boolean),
+        ...tokens.filter(Boolean),
+    ])).join(" ");
+}
+
+function matchesFakeSelector(element: FakeElement, selector: string): boolean {
+    if (!selector.startsWith(".")) {
+        return false;
+    }
+    return element.classList.contains(selector.slice(1));
 }
 
 test("buildPersistedCommentPresentation includes page and active classes for page notes", () => {
@@ -789,4 +957,110 @@ test("getAgentRunStatusPresentation distinguishes queued from running", () => {
         marker: null,
         markerKind: "spinner",
     });
+});
+
+test("formatAgentRunMetadataFrontmatter renders compact run metadata", () => {
+    assert.equal(
+        formatAgentRunMetadataFrontmatter(createAgentRun({
+            usedSkills: [{ name: "aside", mode: "write", source: "built-in" }],
+            usedTools: ["browser-use.browser_navigate", "browser-use.browser_navigate"],
+            usedUrls: ["https://example.com/page?token=secret#section"],
+        })),
+        [
+            "---",
+            "skills: aside (write)",
+            "tools: browser-use.browser_navigate",
+            "urls: https://example.com/page",
+            "---",
+        ].join("\n"),
+    );
+    assert.equal(formatAgentRunMetadataFrontmatter(createAgentRun()), null);
+    assert.equal(
+        formatAgentRunMetadataFrontmatter(createAgentRun({
+            usedTools: ["shell"],
+        })),
+        null,
+    );
+});
+
+test("renderPersistedCommentCard keeps Add to file inline before agent metadata", async () => {
+    const thread = createThreadWithEntries({
+        entries: [
+            { id: "comment-1", body: "@codex draft this", timestamp: 100 },
+            { id: "entry-2", body: "Agent reply", timestamp: 110 },
+        ],
+    });
+    const host: SidebarPersistedCommentHost = {
+        activeCommentId: null,
+        currentFilePath: "docs/architecture.md",
+        currentUserLabel: "You",
+        showSourceRedirectAction: false,
+        showBookmarkAndPinControls: false,
+        showDeletedComments: false,
+        enablePageThreadReorder: false,
+        enableChildEntryMove: false,
+        enableSoftDeleteActions: false,
+        showNestedComments: true,
+        showNestedCommentsByDefault: true,
+        getKnownCommentById: () => null,
+        editDraftComment: null,
+        appendDraftComment: null,
+        agentRun: null,
+        agentStream: null,
+        threadAgentRuns: [
+            createAgentRun({
+                outputEntryId: "entry-2",
+                usedSkills: [{ name: "aside", mode: "write", source: "built-in" }],
+            }),
+        ],
+        getEventTargetElement: () => null,
+        isSelectionInsideSidebarContent: () => false,
+        claimSidebarInteractionOwnership: () => {},
+        insertCommentMarkdownIntoFile: async () => true,
+        renderMarkdown: async (markdown, container) => {
+            (container as unknown as FakeElement).textContent = markdown;
+        },
+        openSidebarInternalLink: async () => {},
+        openCommentFromCard: async () => {},
+        openCommentInEditor: async () => {},
+        shareComment: async () => {},
+        saveVisibleDraftIfPresent: async () => true,
+        setShowNestedCommentsForThread: () => {},
+        resolveComment: () => true,
+        unresolveComment: () => true,
+        moveCommentThread: () => {},
+        restoreComment: () => true,
+        clearDeletedComment: () => true,
+        startEditDraft: () => {},
+        isPinnedThread: () => false,
+        togglePinnedThread: () => {},
+        startAppendEntryDraft: () => {},
+        retryAgentRun: () => true,
+        retryAgentPromptForComment: () => true,
+        reanchorCommentThreadToCurrentSelection: () => {},
+        deleteCommentWithConfirm: () => true,
+        renderAppendDraft: () => {},
+        renderInlineEditDraft: () => {},
+        setIcon: () => {},
+    };
+    const root = new FakeElement("div");
+
+    await renderPersistedCommentCard(root as unknown as HTMLDivElement, thread, host);
+
+    const childFooterMeta = root.findAllByClass("aside-thread-footer-meta")[1];
+    assert.ok(childFooterMeta);
+    const childClasses = childFooterMeta.children.map((child) => child.className);
+    const addToFileIndex = childClasses.findIndex((className) =>
+        className.includes("aside-thread-footer-meta-action")
+    );
+    const metadataIndex = childClasses.findIndex((className) =>
+        className.includes("aside-agent-run-metadata-frontmatter")
+    );
+
+    assert.notEqual(addToFileIndex, -1);
+    assert.notEqual(metadataIndex, -1);
+    assert.ok(addToFileIndex < metadataIndex);
+    assert.equal(childClasses.some((className) =>
+        className.includes("aside-thread-footer-meta-separator")
+    ), false);
 });

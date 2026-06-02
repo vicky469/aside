@@ -16,6 +16,15 @@ test("normalizePersistedAgentRuns keeps valid records, normalizes legacy remote 
             createdAt: 100,
             remoteExecutionId: "remote-run-1",
             remoteCursor: "evt-1",
+            usedSkills: [
+                { name: " aside ", mode: " write ", source: " built-in " },
+                { name: "" },
+            ],
+            usedTools: [" browser-use.browser_navigate ", "", 1],
+            usedUrls: [
+                "https://example.com/path?token=secret#frag",
+                "not a url",
+            ],
         },
         {
             id: "bad-run",
@@ -37,5 +46,12 @@ test("normalizePersistedAgentRuns keeps valid records, normalizes legacy remote 
         outputEntryId: undefined,
         error: undefined,
         modePreference: undefined,
+        usedSkills: [{
+            name: "aside",
+            mode: "write",
+            source: "built-in",
+        }],
+        usedTools: ["browser-use.browser_navigate"],
+        usedUrls: ["https://example.com/path"],
     }]);
 });

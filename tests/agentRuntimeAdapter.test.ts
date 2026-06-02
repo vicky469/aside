@@ -5,6 +5,7 @@ import {
     buildSideNotePrompt,
     createWorkspaceWriteSandboxPolicy,
     extractCodexProgressTextFromJsonEvent,
+    extractCodexRunMetadataFromThreadItem,
     extractCodexTextDeltaFromJsonEvent,
     getCodexRuntimeDiagnostics,
     resetResolvedAgentExecutionEnvForTests,
@@ -187,6 +188,42 @@ test("extractCodexTextDeltaFromJsonEvent reads assistant deltas from exec json e
             },
         }),
         null,
+    );
+});
+
+test("extractCodexRunMetadataFromThreadItem captures tool names and sanitized urls", () => {
+    assert.deepEqual(
+        extractCodexRunMetadataFromThreadItem({
+            type: "mcpToolCall",
+            tool: "browser-use.browser_navigate",
+            arguments: {
+                url: "https://example.com/page?token=secret#debug",
+            },
+        }),
+        {
+            usedTools: ["browser-use.browser_navigate"],
+            usedUrls: ["https://example.com/page"],
+        },
+    );
+    assert.deepEqual(
+        extractCodexRunMetadataFromThreadItem({
+            type: "webSearch",
+            query: "Aside plugin",
+        }),
+        {
+            usedTools: ["web-search"],
+            usedUrls: [],
+        },
+    );
+    assert.deepEqual(
+        extractCodexRunMetadataFromThreadItem({
+            type: "commandExecution",
+            command: "npm run build",
+        }),
+        {
+            usedTools: [],
+            usedUrls: [],
+        },
     );
 });
 

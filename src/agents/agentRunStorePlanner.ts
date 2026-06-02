@@ -1,4 +1,11 @@
-import { cloneAgentRunRecords, type AgentRunRecord, type AgentRunStatus } from "../core/agents/agentRuns";
+import {
+    cloneAgentRunRecords,
+    normalizeAgentRunSkillMetadata,
+    normalizeAgentRunToolNames,
+    normalizeAgentRunUrls,
+    type AgentRunRecord,
+    type AgentRunStatus,
+} from "../core/agents/agentRuns";
 import { normalizeAgentRuntimeModePreference } from "../core/agents/agentRuntimePreferences";
 import { normalizeAgentTarget } from "../core/config/agentTargets";
 
@@ -50,6 +57,10 @@ function normalizeAgentRunRecord(value: unknown): AgentRunRecord | null {
         return null;
     }
 
+    const usedSkills = normalizeAgentRunSkillMetadata(value.usedSkills);
+    const usedTools = normalizeAgentRunToolNames(value.usedTools);
+    const usedUrls = normalizeAgentRunUrls(value.usedUrls);
+
     return {
         id,
         threadId,
@@ -68,6 +79,9 @@ function normalizeAgentRunRecord(value: unknown): AgentRunRecord | null {
         modePreference: normalizeOptionalString(value.modePreference)
             ? normalizeAgentRuntimeModePreference(value.modePreference)
             : undefined,
+        ...(usedSkills.length ? { usedSkills } : {}),
+        ...(usedTools.length ? { usedTools } : {}),
+        ...(usedUrls.length ? { usedUrls } : {}),
     };
 }
 

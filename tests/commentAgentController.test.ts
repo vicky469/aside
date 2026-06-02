@@ -67,7 +67,12 @@ function createHarness(options: {
         onPartialText?: (partialText: string) => void;
         onProgressText?: (progressText: string) => void;
         abortSignal?: AbortSignal;
-    }) => Promise<{ runtime: "direct-cli"; replyText: string }>;
+    }) => Promise<{
+        runtime: "direct-cli";
+        replyText: string;
+        usedTools?: string[];
+        usedUrls?: string[];
+    }>;
 } = {}) {
     let persistedData: PersistedPluginData = options.initialPersistedData ?? {};
     const commentManager = new CommentManager(options.initialComments ?? [createComment()]);
@@ -234,6 +239,11 @@ test("comment agent controller appends a reply and marks the run succeeded", asy
     assert.equal(latestRun?.status, "succeeded");
     assert.equal(latestRun?.requestedAgent, "codex");
     assert.equal(latestRun?.outputEntryId, "generated-2");
+    assert.deepEqual(latestRun?.usedSkills, [{
+        name: "aside",
+        mode: "write",
+        source: "built-in",
+    }]);
     assert.deepEqual(harness.appendedEntries, [{
         threadId: "thread-1",
         body: "",
@@ -260,6 +270,30 @@ test("comment agent controller appends a reply and marks the run succeeded", asy
             source: "built-in",
         }],
     );
+});
+
+test("comment agent controller persists runtime tool and url metadata", async () => {
+    const harness = createHarness({
+        customRunAgentRuntime: async () => ({
+            runtime: "direct-cli",
+            replyText: "Ship it.",
+            usedTools: ["browser-use.browser_navigate"],
+            usedUrls: ["http://localhost:3000/dashboard?token=secret#debug"],
+        }),
+    });
+
+    await harness.controller.handleSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "@codex review this",
+    });
+    await waitForAgentQueueToDrain(harness.controller);
+
+    const latestRun = harness.controller.getLatestAgentRunForThread("thread-1");
+    assert.equal(latestRun?.status, "succeeded");
+    assert.deepEqual(latestRun?.usedTools, ["browser-use.browser_navigate"]);
+    assert.deepEqual(latestRun?.usedUrls, ["http://localhost:3000/dashboard"]);
 });
 
 test("comment agent controller blocks a run when runtime selection is unavailable", async () => {

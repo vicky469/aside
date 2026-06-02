@@ -1396,20 +1396,16 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
     min-width: 0;
 }
 
-.aside-thread-footer-meta-separator {
-    flex: 0 0 auto;
-    color: var(--text-faint, var(--text-muted));
-    font-size: var(--font-ui-smaller, 11px);
-    line-height: 1;
-    opacity: 0.7;
-    user-select: none;
+.aside-thread-footer-meta.has-agent-run-metadata {
+    flex-wrap: wrap;
+    row-gap: 2px;
 }
 
 .aside-thread-footer-meta-action {
     display: inline;
     flex: 0 0 auto;
     white-space: nowrap;
-    color: var(--text-faint, var(--text-muted));
+    color: var(--text-normal);
     font-size: var(--font-ui-smaller);
     font-weight: 400;
     line-height: 1.2;
@@ -1526,6 +1522,21 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
 
 .aside-agent-run-status.is-cancelled {
     color: var(--text-faint, var(--text-muted));
+}
+
+.aside-agent-run-metadata-frontmatter {
+    display: block;
+    flex: 1 0 100%;
+    min-width: 0;
+    margin-top: 1px;
+    color: var(--text-faint, var(--text-muted));
+    font-family: var(--font-monospace);
+    font-size: var(--font-ui-smaller, 11px);
+    font-weight: 400;
+    line-height: 1.25;
+    opacity: 0.86;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
 }
 
 .aside-agent-stream-item .aside-agent-run-status {
