@@ -87,6 +87,7 @@ function createHarness(options: {
         payload?: Record<string, unknown>;
     }> = [];
     const runtimeCalls: Array<{ target: "codex" | "claude"; prompt: string; cwd: string; vaultRootPath?: string | null }> = [];
+    const runtimeSelectionCalls: Array<"codex" | "claude"> = [];
     let refreshCount = 0;
     let idCounter = 1;
     let now = 100;
@@ -166,11 +167,14 @@ function createHarness(options: {
                 replyText: options.runtimeReplyText ?? "Done",
             };
         },
-        resolveAgentRuntimeSelection: async () => options.runtimeSelection ?? {
-            kind: "resolved",
-            runtime: "direct-cli",
-            modePreference: "auto",
-            ownershipMessage: "Using your local Codex setup",
+        resolveAgentRuntimeSelection: async (target: "codex" | "claude") => {
+            runtimeSelectionCalls.push(target);
+            return options.runtimeSelection ?? {
+                kind: "resolved",
+                runtime: "direct-cli",
+                modePreference: "auto",
+                ownershipMessage: `Using your local ${target === "claude" ? "Claude" : "Codex"} setup`,
+            };
         },
         showNotice: (message) => {
             notices.push(message);
@@ -190,6 +194,7 @@ function createHarness(options: {
         notices,
         logEntries,
         runtimeCalls,
+        runtimeSelectionCalls,
         getRefreshCount: () => refreshCount,
         getPersistedData: () => persistedData,
     };
@@ -270,6 +275,50 @@ test("comment agent controller appends a reply and marks the run succeeded", asy
             source: "built-in",
         }],
     );
+});
+
+test("comment agent controller dispatches claude as a peer provider", async () => {
+    const harness = createHarness({
+        runtimeReplyText: "Claude reply.",
+    });
+
+    await harness.controller.handleSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "@claude review this",
+    });
+    await waitForAgentQueueToDrain(harness.controller);
+
+    const latestRun = harness.controller.getLatestAgentRunForThread("thread-1");
+    assert.equal(latestRun?.status, "succeeded");
+    assert.equal(latestRun?.requestedAgent, "claude");
+    assert.deepEqual(harness.runtimeSelectionCalls, ["claude"]);
+    assert.equal(harness.runtimeCalls[0]?.target, "claude");
+    assert.deepEqual(latestRun?.usedSkills, [{
+        name: "aside",
+        mode: "write",
+        source: "built-in",
+    }]);
+    assert.deepEqual(harness.editedEntries, [{
+        commentId: "generated-2",
+        body: "Claude reply.",
+    }]);
+});
+
+test("comment agent controller treats mixed supported agents as a conflict", async () => {
+    const harness = createHarness();
+
+    await harness.controller.handleSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "@codex and @claude compare this",
+    });
+    await waitForAgentQueueToDrain(harness.controller);
+
+    assert.deepEqual(harness.notices, ["Use only one explicit supported agent target per side note."]);
+    assert.deepEqual(harness.runtimeCalls, []);
 });
 
 test("comment agent controller persists runtime tool and url metadata", async () => {
@@ -1010,17 +1059,17 @@ test("comment agent controller does not synthesize transient stream text when th
     assert.equal(harness.getRefreshCount(), 3);
 });
 
-test("comment agent controller shows a notice for unsupported agent mentions", async () => {
+test("comment agent controller ignores entries without explicit agent mentions", async () => {
     const harness = createHarness();
 
     await harness.controller.handleSavedUserEntry({
         threadId: "thread-1",
         entryId: "thread-1",
         filePath: "Folder/Note.md",
-        body: "@claude review this",
+        body: "review this",
     });
     await waitForAgentQueueToDrain(harness.controller);
 
-    assert.deepEqual(harness.notices, ["This build currently supports @codex only."]);
+    assert.deepEqual(harness.notices, []);
     assert.deepEqual(harness.runtimeCalls, []);
 });

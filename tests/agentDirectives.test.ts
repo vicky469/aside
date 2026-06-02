@@ -20,20 +20,20 @@ test("parseAgentDirectives ignores repeated mentions of the same supported targe
     });
 });
 
-test("parseAgentDirectives treats unsupported agent mentions as unsupported", () => {
+test("parseAgentDirectives resolves claude as a supported peer target", () => {
     assert.deepEqual(parseAgentDirectives("ping foo@example.com then ask @claude"), {
-        target: null,
+        target: "claude",
         hasConflict: false,
-        matchedTargets: [],
-        unsupportedTargets: ["claude"],
+        matchedTargets: ["claude"],
+        unsupportedTargets: [],
     });
 });
 
-test("parseAgentDirectives blocks mixed supported and unsupported agent mentions", () => {
+test("parseAgentDirectives blocks mixed supported agent mentions", () => {
     assert.deepEqual(parseAgentDirectives("ask @codex and @claude"), {
         target: null,
-        hasConflict: false,
-        matchedTargets: ["codex"],
-        unsupportedTargets: ["claude"],
+        hasConflict: true,
+        matchedTargets: ["codex", "claude"],
+        unsupportedTargets: [],
     });
 });

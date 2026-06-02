@@ -8,6 +8,8 @@ import {
     normalizeAgentRuntimeModePreference,
     type AgentRuntimeModePreference,
 } from "../../core/agents/agentRuntimePreferences";
+import { getSupportedAgentActors } from "../../core/agents/agentActorRegistry";
+import type { AsideAgentTarget } from "../../core/config/agentTargets";
 import {
     resolveAgentRuntimeSelection,
     type AgentRuntimeSelection,
@@ -17,9 +19,11 @@ import {
     normalizeAllCommentsNoteImageUrl,
     normalizeAllCommentsNotePath,
 } from "../../core/derived/allCommentsNote";
-import type { CodexRuntimeDiagnostics } from "../../agents/agentRuntimeAdapter";
+import type { AgentRuntimeDiagnostics } from "../../agents/agentRuntimeAdapter";
 import {
+    createCheckingAgentRuntimeDiagnostics,
     createCheckingCodexRuntimeDiagnostics,
+    getAgentRuntimeStatusPresentation,
     getLocalRuntimeOptionStatusPresentation,
     type RuntimeOptionStatusPresentation,
 } from "./codexRuntimeStatus";
@@ -41,7 +45,7 @@ export const DEFAULT_SETTINGS: AsideSettings = {
 
 export default class AsideSetting extends PluginSettingTab {
     plugin: Aside;
-    private codexStatusRefreshToken = 0;
+    private agentStatusRefreshToken = 0;
 
     constructor(app: App, plugin: Aside) {
         super(app, plugin);
@@ -56,28 +60,66 @@ export default class AsideSetting extends PluginSettingTab {
             .setName("Agent runtime")
             .setHeading();
 
-        let localDiagnostics: CodexRuntimeDiagnostics = createCheckingCodexRuntimeDiagnostics();
-        let runtimeSelection: AgentRuntimeSelection = this.resolveRuntimeSelection(localDiagnostics);
+        const supportedActors = getSupportedAgentActors();
+        const localDiagnosticsByTarget = new Map<AsideAgentTarget, AgentRuntimeDiagnostics>(
+            supportedActors.map((actor) => [actor.id, createCheckingAgentRuntimeDiagnostics(actor.id)]),
+        );
+        let runtimeSelection: AgentRuntimeSelection = this.resolveRuntimeSelection(
+            "codex",
+            localDiagnosticsByTarget.get("codex") ?? createCheckingCodexRuntimeDiagnostics(),
+        );
         let localRuntimeButton: ButtonComponent | null = null;
         let recheckRuntimeButton: ButtonComponent | null = null;
+        const runtimeStatusSettings = new Map<AsideAgentTarget, Setting>();
 
         const preferredRuntimeSetting = new Setting(containerEl)
             .setName("Preferred runtime")
             .setDesc("Checking runtime availability...");
 
+        for (const actor of supportedActors) {
+            const setting = new Setting(containerEl)
+                .setName(`${actor.label} CLI`)
+                .setDesc(createCheckingAgentRuntimeDiagnostics(actor.id).message);
+            runtimeStatusSettings.set(actor.id, setting);
+        }
+
+        const getAggregateDiagnostics = (): AgentRuntimeDiagnostics => {
+            const diagnostics = supportedActors.map((actor) =>
+                localDiagnosticsByTarget.get(actor.id) ?? createCheckingAgentRuntimeDiagnostics(actor.id)
+            );
+            const available = diagnostics.find((item) => item.status === "available");
+            if (available) {
+                return {
+                    status: "available",
+                    message: "At least one local Aside agent is available.",
+                };
+            }
+
+            const checking = diagnostics.find((item) => item.status === "checking");
+            if (checking) {
+                return {
+                    status: "checking",
+                    message: "Checking local Aside agent runtimes...",
+                };
+            }
+
+            return diagnostics[0] ?? {
+                status: "unavailable",
+                message: "Local Aside agent execution is unavailable on this device.",
+            };
+        };
+
         const buildRuntimeSelectionDescription = (): string => {
             const storedMode = this.plugin.getAgentRuntimeMode();
             if (storedMode === "auto") {
                 if (runtimeSelection.kind === "resolved") {
-                    return "Automatic mode currently uses your local Codex setup. Choose Local below to make it explicit.";
+                    return "Automatic mode uses the local provider named in each explicit agent mention. Choose Local below to make it explicit.";
                 }
 
                 return `Automatic mode is currently blocked. ${runtimeSelection.notice}`;
             }
 
-            return runtimeSelection.kind === "resolved"
-                ? runtimeSelection.ownershipMessage
-                : runtimeSelection.notice;
+            return "Local mode uses the provider named in each explicit agent mention. Availability is shown below.";
         };
         const updateRuntimeButton = (
             button: ButtonComponent | null,
@@ -94,11 +136,19 @@ export default class AsideSetting extends PluginSettingTab {
             button.buttonEl.setAttribute("aria-pressed", selected ? "true" : "false");
         };
         const renderRuntimeSetting = (): void => {
+            const aggregateDiagnostics = getAggregateDiagnostics();
+            runtimeSelection = this.resolveRuntimeSelection("codex", aggregateDiagnostics);
             preferredRuntimeSetting.setDesc(buildRuntimeSelectionDescription());
             updateRuntimeButton(
                 localRuntimeButton,
-                getLocalRuntimeOptionStatusPresentation(localDiagnostics),
+                getLocalRuntimeOptionStatusPresentation(aggregateDiagnostics),
             );
+            for (const actor of supportedActors) {
+                const diagnostics = localDiagnosticsByTarget.get(actor.id)
+                    ?? createCheckingAgentRuntimeDiagnostics(actor.id);
+                const presentation = getAgentRuntimeStatusPresentation(actor.id, diagnostics);
+                runtimeStatusSettings.get(actor.id)?.setDesc(presentation.description);
+            }
         };
         const setRuntimeButtonsDisabled = (disabled: boolean): void => {
             localRuntimeButton?.setDisabled(disabled);
@@ -112,32 +162,43 @@ export default class AsideSetting extends PluginSettingTab {
             }, 0);
         };
         const refreshRuntimeSetting = async () => {
-            const refreshToken = ++this.codexStatusRefreshToken;
-            localDiagnostics = createCheckingCodexRuntimeDiagnostics();
-            runtimeSelection = this.resolveRuntimeSelection(localDiagnostics);
+            const refreshToken = ++this.agentStatusRefreshToken;
+            for (const actor of supportedActors) {
+                localDiagnosticsByTarget.set(actor.id, createCheckingAgentRuntimeDiagnostics(actor.id));
+            }
             renderRuntimeSetting();
             try {
-                localDiagnostics = await this.plugin.getCodexRuntimeDiagnostics();
-                if (refreshToken !== this.codexStatusRefreshToken) {
+                const nextDiagnostics = await Promise.all(supportedActors.map(async (actor) => {
+                    try {
+                        return {
+                            target: actor.id,
+                            diagnostics: await this.plugin.getAgentRuntimeDiagnostics(actor.id),
+                        };
+                    } catch {
+                        return {
+                            target: actor.id,
+                            diagnostics: {
+                                status: "unavailable",
+                                message: `${actor.label} could not be launched from this Obsidian environment.`,
+                            } satisfies AgentRuntimeDiagnostics,
+                        };
+                    }
+                }));
+                if (refreshToken !== this.agentStatusRefreshToken) {
                     return;
+                }
+                for (const item of nextDiagnostics) {
+                    localDiagnosticsByTarget.set(item.target, item.diagnostics);
                 }
             } catch {
-                if (refreshToken !== this.codexStatusRefreshToken) {
-                    return;
-                }
-                localDiagnostics = {
-                    status: "unavailable",
-                    message: "Codex could not be launched from this Obsidian environment.",
-                };
+                // Each provider probe handles its own failure above.
             }
-            runtimeSelection = this.resolveRuntimeSelection(localDiagnostics);
             renderRuntimeSetting();
         };
         const persistRuntimeMode = async (mode: "local") => {
             setRuntimeButtonsDisabled(true);
             try {
                 await this.plugin.setAgentRuntimeMode(mode);
-                runtimeSelection = this.resolveRuntimeSelection(localDiagnostics);
                 renderRuntimeSetting();
             } finally {
                 setRuntimeButtonsDisabled(false);
@@ -199,9 +260,11 @@ export default class AsideSetting extends PluginSettingTab {
     }
 
     private resolveRuntimeSelection(
-        localDiagnostics: CodexRuntimeDiagnostics,
+        target: AsideAgentTarget,
+        localDiagnostics: AgentRuntimeDiagnostics,
     ): AgentRuntimeSelection {
         return resolveAgentRuntimeSelection({
+            target,
             modePreference: this.plugin.getAgentRuntimeMode(),
             localDiagnostics,
         });

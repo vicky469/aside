@@ -1,10 +1,13 @@
-import type { CodexRuntimeDiagnostics } from "./agentRuntimeAdapter";
+import type { AgentRuntimeDiagnostics } from "./agentRuntimeAdapter";
 import type { AgentRunRuntime } from "../core/agents/agentRuns";
 import type { AgentRuntimeModePreference } from "../core/agents/agentRuntimePreferences";
+import type { AsideAgentTarget } from "../core/config/agentTargets";
+import { getAgentActorLabel } from "../core/agents/agentActorRegistry";
 
 export interface RuntimeAvailabilityContext {
+    target: AsideAgentTarget;
     modePreference: AgentRuntimeModePreference;
-    localDiagnostics: CodexRuntimeDiagnostics;
+    localDiagnostics: AgentRuntimeDiagnostics;
 }
 
 export interface ResolvedAgentRuntimeSelection {
@@ -24,8 +27,8 @@ export type AgentRuntimeSelection =
     | ResolvedAgentRuntimeSelection
     | BlockedAgentRuntimeSelection;
 
-export function getAgentRuntimeOwnershipMessage(runtime: AgentRunRuntime): string {
-    return "Using your local Codex setup";
+export function getAgentRuntimeOwnershipMessage(runtime: AgentRunRuntime, target: AsideAgentTarget): string {
+    return `Using your local ${getAgentActorLabel(target)} setup`;
 }
 
 export function getAgentRuntimeStatusLabel(runtime: AgentRunRuntime): string {
@@ -36,12 +39,15 @@ export function getAgentRuntimeCapabilityLabel(runtime: AgentRunRuntime): string
     return "Capability: Workspace-aware";
 }
 
-function resolveLocalRuntimeSelection(modePreference: AgentRuntimeModePreference): ResolvedAgentRuntimeSelection {
+function resolveLocalRuntimeSelection(
+    modePreference: AgentRuntimeModePreference,
+    target: AsideAgentTarget,
+): ResolvedAgentRuntimeSelection {
     return {
         kind: "resolved",
         runtime: "direct-cli",
         modePreference,
-        ownershipMessage: getAgentRuntimeOwnershipMessage("direct-cli"),
+        ownershipMessage: getAgentRuntimeOwnershipMessage("direct-cli", target),
     };
 }
 
@@ -53,7 +59,7 @@ function blockRuntimeSelection(modePreference: AgentRuntimeModePreference, notic
     };
 }
 
-function getLocalRuntimeUnavailableNotice(localDiagnostics: CodexRuntimeDiagnostics): string {
+function getLocalRuntimeUnavailableNotice(localDiagnostics: AgentRuntimeDiagnostics): string {
     const message = typeof localDiagnostics.message === "string"
         ? localDiagnostics.message.trim()
         : "";
@@ -63,6 +69,6 @@ function getLocalRuntimeUnavailableNotice(localDiagnostics: CodexRuntimeDiagnost
 export function resolveAgentRuntimeSelection(context: RuntimeAvailabilityContext): AgentRuntimeSelection {
     const localAvailable = context.localDiagnostics.status === "available";
     return localAvailable
-        ? resolveLocalRuntimeSelection(context.modePreference)
+        ? resolveLocalRuntimeSelection(context.modePreference, context.target)
         : blockRuntimeSelection(context.modePreference, getLocalRuntimeUnavailableNotice(context.localDiagnostics));
 }

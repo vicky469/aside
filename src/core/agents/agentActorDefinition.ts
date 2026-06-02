@@ -1,6 +1,6 @@
 export type AsideAgentTarget = "codex" | "claude";
 
-export type AgentActorRuntimeStrategy = "codex-app-server" | "unsupported";
+export type AgentActorRuntimeStrategy = "codex-app-server" | "claude-cli" | "unsupported";
 
 export interface AgentActorDefinition {
     id: AsideAgentTarget;

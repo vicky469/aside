@@ -33,6 +33,7 @@ test("buildSideNotePrompt carries built-in Aside write-mode terminology", () => 
     assert.match(prompt, /Use the built-in Aside workflow/i);
     assert.match(prompt, /side note and side comment both mean an Aside thread or entry/i);
     assert.match(prompt, /A page note is scoped to the current markdown page/i);
-    assert.match(prompt, /in-note @codex requests default to write mode/i);
+    assert.match(prompt, /in-note agent requests default to write mode/i);
+    assert.match(prompt, /@codex, @claude, or future agent directives/i);
     assert.match(prompt, /Do not claim that side notes were added, updated, or resolved unless you actually made the change/i);
 });

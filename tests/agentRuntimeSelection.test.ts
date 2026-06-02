@@ -14,6 +14,7 @@ test("normalizeAgentRuntimeModePreference treats legacy remote preference as aut
 
 test("resolveAgentRuntimeSelection resolves local in auto mode when local Codex is available", () => {
     assert.deepEqual(resolveAgentRuntimeSelection({
+        target: "codex",
         modePreference: "auto",
         localDiagnostics: {
             status: "available",
@@ -29,6 +30,7 @@ test("resolveAgentRuntimeSelection resolves local in auto mode when local Codex 
 
 test("resolveAgentRuntimeSelection blocks in auto mode on non-filesystem devices", () => {
     assert.deepEqual(resolveAgentRuntimeSelection({
+        target: "codex",
         modePreference: "auto",
         localDiagnostics: {
             status: "unsupported",
@@ -43,6 +45,7 @@ test("resolveAgentRuntimeSelection blocks in auto mode on non-filesystem devices
 
 test("resolveAgentRuntimeSelection honors explicit local mode", () => {
     assert.deepEqual(resolveAgentRuntimeSelection({
+        target: "codex",
         modePreference: "local",
         localDiagnostics: {
             status: "available",
@@ -58,6 +61,7 @@ test("resolveAgentRuntimeSelection honors explicit local mode", () => {
 
 test("resolveAgentRuntimeSelection blocks in explicit local mode with the real local diagnostics", () => {
     assert.deepEqual(resolveAgentRuntimeSelection({
+        target: "codex",
         modePreference: "local",
         localDiagnostics: {
             status: "unsupported",
@@ -71,7 +75,8 @@ test("resolveAgentRuntimeSelection blocks in explicit local mode with the real l
 });
 
 test("agent runtime labels stay local and ownership-explicit", () => {
-    assert.equal(getAgentRuntimeOwnershipMessage("direct-cli"), "Using your local Codex setup");
+    assert.equal(getAgentRuntimeOwnershipMessage("direct-cli", "codex"), "Using your local Codex setup");
+    assert.equal(getAgentRuntimeOwnershipMessage("direct-cli", "claude"), "Using your local Claude setup");
     assert.equal(getAgentRuntimeStatusLabel("direct-cli"), "Runtime: Local");
     assert.equal(getAgentRuntimeCapabilityLabel("direct-cli"), "Capability: Workspace-aware");
 });

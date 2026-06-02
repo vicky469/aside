@@ -1421,6 +1421,10 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
     outline: none;
 }
 
+.aside-agent-run-status + .aside-thread-footer-meta-action {
+    margin-inline-start: 4px;
+}
+
 .aside-thread-footer-meta-action:hover,
 .aside-thread-footer-meta-action:focus-visible {
     color: var(--text-normal);

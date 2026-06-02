@@ -83,10 +83,12 @@ export interface AgentRuntimeResult extends AgentRunMetadata {
     replyText: string;
 }
 
-export type CodexRuntimeDiagnostics = {
+export type AgentRuntimeDiagnostics = {
     status: "checking" | "available" | "missing" | "unsupported" | "unavailable";
     message: string;
 };
+export type CodexRuntimeDiagnostics = AgentRuntimeDiagnostics;
+export type ClaudeRuntimeDiagnostics = AgentRuntimeDiagnostics;
 
 export class AgentRuntimeCancelledError extends Error {
     constructor(message: string = "Agent execution cancelled.") {
@@ -674,6 +676,48 @@ export async function getCodexRuntimeDiagnostics(
     }
 }
 
+export async function getClaudeRuntimeDiagnostics(
+    modulesOverride?: NodeModules | null,
+    baseEnv: ExecEnv = getBaseProcessEnv(),
+): Promise<ClaudeRuntimeDiagnostics> {
+    const modules = modulesOverride ?? getNodeModules();
+    if (!modules) {
+        return {
+            status: "unsupported",
+            message: "Built-in @claude requires desktop Obsidian.",
+        };
+    }
+
+    try {
+        const env = await resolveAgentExecutionEnv(modules, baseEnv);
+        await execFileAsync(
+            modules,
+            "claude",
+            ["--help"],
+            {
+                cwd: env.HOME ?? "/",
+                env,
+            },
+        );
+        return {
+            status: "available",
+            message: "Claude CLI is available.",
+        };
+    } catch (error) {
+        if (isExecErrorWithCode(error, "ENOENT")) {
+            return {
+                status: "missing",
+                message: "Claude CLI was not found on PATH.",
+            };
+        }
+
+        return {
+            status: "unavailable",
+            message: "Claude CLI is not authenticated or could not start.",
+        };
+    }
+}
+
 export function disposeAgentRuntimeProcesses(): void {
     for (const childProcess of activeAgentRuntimeProcesses) {
         try {
@@ -766,6 +810,121 @@ function extractAgentMessageText(value: unknown): {
         id: typeof value.id === "string" ? value.id : null,
         text: typeof value.text === "string" ? value.text : null,
     };
+}
+
+function getClaudeEventType(event: unknown): string | null {
+    return firstStringAtPaths(event, [
+        ["type"],
+        ["event_type"],
+    ]);
+}
+
+function isClaudeAssistantSnapshot(event: unknown): boolean {
+    return getClaudeEventType(event) === "assistant";
+}
+
+function getClaudeContentBlocks(event: unknown): Record<string, unknown>[] {
+    const content = getNestedValue(event, ["message", "content"]) ?? getNestedValue(event, ["content"]);
+    if (!Array.isArray(content)) {
+        return [];
+    }
+
+    return content.filter((item): item is Record<string, unknown> => isRecord(item));
+}
+
+function normalizeClaudeToolName(value: unknown): string | null {
+    if (typeof value !== "string") {
+        return null;
+    }
+
+    const normalized = value.replace(/\s+/gu, " ").trim();
+    if (!normalized) {
+        return null;
+    }
+
+    return /^(bash|shell)$/iu.test(normalized) ? "shell" : normalized;
+}
+
+function getFirstClaudeToolName(event: unknown): string | null {
+    for (const block of getClaudeContentBlocks(event)) {
+        if (block.type !== "tool_use") {
+            continue;
+        }
+
+        const toolName = normalizeClaudeToolName(block.name);
+        if (toolName) {
+            return toolName;
+        }
+    }
+
+    return null;
+}
+
+export function extractClaudeTextDeltaFromJsonEvent(event: unknown): string | null {
+    const eventType = getClaudeEventType(event);
+    if (eventType === "content_block_delta") {
+        return firstStringAtPaths(event, [
+            ["delta", "text"],
+            ["text"],
+        ]);
+    }
+
+    if (eventType !== "assistant") {
+        return null;
+    }
+
+    return joinTextContentItems(getNestedValue(event, ["message", "content"]))
+        ?? joinTextContentItems(getNestedValue(event, ["content"]));
+}
+
+export function extractClaudeReplyTextFromJsonEvent(event: unknown): string | null {
+    if (getClaudeEventType(event) !== "result") {
+        return null;
+    }
+
+    const subtype = firstStringAtPaths(event, [["subtype"]]);
+    if (subtype && subtype !== "success") {
+        return null;
+    }
+
+    return firstStringAtPaths(event, [
+        ["result"],
+        ["message", "content"],
+        ["content"],
+    ]);
+}
+
+export function extractClaudeRunMetadataFromJsonEvent(event: unknown): Required<Pick<AgentRunMetadata, "usedTools" | "usedUrls">> {
+    const toolBlocks = getClaudeContentBlocks(event)
+        .filter((block) => block.type === "tool_use");
+    const toolNames = toolBlocks
+        .map((block) => normalizeClaudeToolName(block.name))
+        .filter((tool): tool is string => !!tool);
+    const urlSet = new Set<string>();
+    for (const block of toolBlocks) {
+        collectUrlStrings(block.input ?? block, urlSet);
+    }
+
+    return {
+        usedTools: normalizeAgentRunToolNames(toolNames),
+        usedUrls: Array.from(urlSet),
+    };
+}
+
+export function extractClaudeProgressTextFromJsonEvent(event: unknown): string | null {
+    const eventType = getClaudeEventType(event);
+    if (eventType === "system" && firstStringAtPaths(event, [["subtype"]]) === "init") {
+        return "Starting Claude";
+    }
+
+    const toolName = getFirstClaudeToolName(event);
+    if (!toolName) {
+        return null;
+    }
+
+    return toolName === "shell"
+        ? "Running command"
+        : normalizeProgressText(`Using ${toolName}`);
 }
 
 function extractCodexEventContext(value: unknown): {
@@ -1251,6 +1410,233 @@ async function runCodexDirect(
     });
 }
 
+const CLAUDE_APPEND_SYSTEM_PROMPT = [
+    "You generate end-user reply text for an Aside note thread.",
+    "Return only the final note reply. Answer directly.",
+    "Never mention skills, searches, notes, files, prompts, tools, AGENTS instructions, context-loading, or your process.",
+].join(" ");
+
+export function buildClaudeCliArgs(): string[] {
+    return [
+        "-p",
+        "--verbose",
+        "--output-format",
+        "stream-json",
+        "--include-partial-messages",
+        "--no-session-persistence",
+        "--append-system-prompt",
+        CLAUDE_APPEND_SYSTEM_PROMPT,
+    ];
+}
+
+async function runClaudeDirect(
+    modules: NodeModules,
+    invocation: AgentRuntimeInvocation,
+): Promise<AgentRuntimeResult> {
+    if (invocation.abortSignal?.aborted) {
+        throw new AgentRuntimeCancelledError();
+    }
+
+    const childProcess = await spawnInteractiveAgentRuntimeProcess(
+        modules,
+        "claude",
+        buildClaudeCliArgs(),
+        {
+            cwd: invocation.cwd,
+        },
+    );
+
+    return await new Promise<AgentRuntimeResult>((resolve, reject) => {
+        let settled = false;
+        let stdoutBuffer = "";
+        let stderrBuffer = "";
+        let streamedText = "";
+        let finalText: string | null = null;
+        const usedTools = new Set<string>();
+        const usedUrls = new Set<string>();
+        let abortHandler: (() => void) | null = null;
+
+        const cleanup = () => {
+            activeAgentRuntimeProcesses.delete(childProcess);
+            if (invocation.abortSignal && abortHandler) {
+                invocation.abortSignal.removeEventListener("abort", abortHandler);
+                abortHandler = null;
+            }
+        };
+
+        const finalizeError = (error: unknown) => {
+            if (settled) {
+                return;
+            }
+
+            settled = true;
+            cleanup();
+            try {
+                childProcess.kill("SIGTERM");
+            } catch {
+                // ignore best-effort cleanup failures
+            }
+            reject(error instanceof Error ? error : new Error(String(error)));
+        };
+
+        const finalizeSuccess = (replyText: string) => {
+            if (settled) {
+                return;
+            }
+
+            settled = true;
+            cleanup();
+            try {
+                childProcess.stdin?.end();
+            } catch {
+                // ignore best-effort shutdown failures
+            }
+            resolve({
+                runtime: "direct-cli",
+                replyText,
+                usedTools: Array.from(usedTools),
+                usedUrls: Array.from(usedUrls),
+            });
+        };
+
+        const publishMetadata = (event: unknown): void => {
+            const metadata = extractClaudeRunMetadataFromJsonEvent(event);
+            let changed = false;
+            for (const tool of metadata.usedTools) {
+                if (!usedTools.has(tool)) {
+                    usedTools.add(tool);
+                    changed = true;
+                }
+            }
+            for (const url of metadata.usedUrls) {
+                if (!usedUrls.has(url)) {
+                    usedUrls.add(url);
+                    changed = true;
+                }
+            }
+
+            if (changed) {
+                invocation.onRunMetadata?.({
+                    usedTools: Array.from(usedTools),
+                    usedUrls: Array.from(usedUrls),
+                });
+            }
+        };
+
+        const handleStdoutEvent = (event: unknown): void => {
+            publishMetadata(event);
+
+            const progressText = extractClaudeProgressTextFromJsonEvent(event);
+            if (progressText) {
+                invocation.onProgressText?.(progressText);
+            }
+
+            const replyText = extractClaudeReplyTextFromJsonEvent(event);
+            if (replyText) {
+                finalText = replyText;
+            }
+
+            const textDelta = extractClaudeTextDeltaFromJsonEvent(event);
+            if (!textDelta) {
+                return;
+            }
+
+            streamedText = isClaudeAssistantSnapshot(event)
+                ? textDelta
+                : `${streamedText}${textDelta}`;
+            invocation.onPartialText?.(sanitizeAgentReplyText(streamedText));
+        };
+
+        const flushStdoutBuffer = () => {
+            if (!stdoutBuffer.trim()) {
+                stdoutBuffer = "";
+                return;
+            }
+
+            const parsed = parseJsonLine(stdoutBuffer);
+            stdoutBuffer = "";
+            if (parsed !== null) {
+                handleStdoutEvent(parsed);
+            }
+        };
+
+        childProcess.stdout?.on("data", (chunk) => {
+            const text = typeof chunk === "string" ? chunk : chunk.toString("utf8");
+            stdoutBuffer += text;
+            while (true) {
+                const newlineIndex = stdoutBuffer.indexOf("\n");
+                if (newlineIndex === -1) {
+                    break;
+                }
+
+                const line = stdoutBuffer.slice(0, newlineIndex);
+                stdoutBuffer = stdoutBuffer.slice(newlineIndex + 1);
+                const parsed = parseJsonLine(line);
+                if (parsed !== null) {
+                    handleStdoutEvent(parsed);
+                }
+            }
+        });
+
+        childProcess.stderr?.on("data", (chunk) => {
+            const text = typeof chunk === "string" ? chunk : chunk.toString("utf8");
+            stderrBuffer += text;
+        });
+
+        childProcess.on("error", (error) => {
+            finalizeError(error);
+        });
+
+        childProcess.on("close", (code, signal) => {
+            flushStdoutBuffer();
+            if (settled) {
+                return;
+            }
+
+            const replyText = sanitizeAgentReplyText(finalText ?? streamedText);
+            if (code === 0 && replyText) {
+                finalizeSuccess(replyText);
+                return;
+            }
+
+            if (code === 0) {
+                finalizeError(new Error("Claude returned an empty response."));
+                return;
+            }
+
+            const stderrMessage = stderrBuffer.trim();
+            finalizeError(new Error(
+                stderrMessage || `spawn claude exited with code ${code ?? "null"}${signal ? ` signal ${signal}` : ""}`,
+            ));
+        });
+
+        if (invocation.abortSignal) {
+            abortHandler = () => {
+                finalizeError(new AgentRuntimeCancelledError());
+            };
+            invocation.abortSignal.addEventListener("abort", abortHandler, { once: true });
+            if (invocation.abortSignal.aborted) {
+                abortHandler();
+                return;
+            }
+        }
+
+        try {
+            const stdin = childProcess.stdin;
+            if (!stdin) {
+                throw new Error("Claude CLI did not expose stdin.");
+            }
+            stdin.write(buildSideNotePrompt({
+                promptText: invocation.prompt,
+                vaultRootPath: invocation.vaultRootPath,
+            }));
+            stdin.end();
+        } catch (error) {
+            finalizeError(error);
+        }
+    });
+}
+
 export async function runAgentRuntime(invocation: AgentRuntimeInvocation): Promise<AgentRuntimeResult> {
     const modules = getNodeModules();
     if (!modules) {
@@ -1265,6 +1651,8 @@ export async function runAgentRuntime(invocation: AgentRuntimeInvocation): Promi
     switch (actor.runtimeStrategy) {
         case "codex-app-server":
             return runCodexDirect(modules, invocation);
+        case "claude-cli":
+            return runClaudeDirect(modules, invocation);
         default:
             throw new Error(`${actor.label} does not have an executable runtime strategy.`);
     }

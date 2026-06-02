@@ -1,12 +1,18 @@
 import * as assert from "node:assert/strict";
 import test from "node:test";
 import {
+    buildClaudeCliArgs,
+    extractClaudeProgressTextFromJsonEvent,
+    extractClaudeReplyTextFromJsonEvent,
+    extractClaudeRunMetadataFromJsonEvent,
+    extractClaudeTextDeltaFromJsonEvent,
     extractCodexProgressTextDeltaFromJsonEvent,
     buildSideNotePrompt,
     createWorkspaceWriteSandboxPolicy,
     extractCodexProgressTextFromJsonEvent,
     extractCodexRunMetadataFromThreadItem,
     extractCodexTextDeltaFromJsonEvent,
+    getClaudeRuntimeDiagnostics,
     getCodexRuntimeDiagnostics,
     resetResolvedAgentExecutionEnvForTests,
     resolveAgentExecutionEnv,
@@ -163,6 +169,79 @@ test("getCodexRuntimeDiagnostics reports a missing codex binary clearly", async 
     });
 });
 
+test("getClaudeRuntimeDiagnostics reports Claude as available when the process can be launched", async () => {
+    resetResolvedAgentExecutionEnvForTests();
+
+    let helpChecked = false;
+    const modules = createRuntimeModules((file, args, options, callback) => {
+        if (file === "/bin/zsh") {
+            callback(null, "/Users/test/.nvm/bin:/usr/bin\n", "");
+            return createTrackedProcessStub();
+        }
+
+        helpChecked = true;
+        assert.equal(file, "claude");
+        assert.deepEqual(args, ["--help"]);
+        assert.equal(options.cwd, "/Users/test");
+        assert.equal(options.env?.PATH, "/Users/test/.nvm/bin:/usr/bin");
+        callback(null, "claude help", "");
+        return createTrackedProcessStub();
+    });
+
+    const diagnostics = await getClaudeRuntimeDiagnostics(modules, {
+        HOME: "/Users/test",
+        PATH: "/usr/bin",
+        SHELL: "/bin/zsh",
+    });
+
+    assert.equal(helpChecked, true);
+    assert.deepEqual(diagnostics, {
+        status: "available",
+        message: "Claude CLI is available.",
+    });
+});
+
+test("getClaudeRuntimeDiagnostics reports a missing claude binary clearly", async () => {
+    resetResolvedAgentExecutionEnvForTests();
+
+    const modules = createRuntimeModules((file, _args, _options, callback) => {
+        if (file === "/bin/zsh") {
+            callback(null, "/Users/test/.nvm/bin:/usr/bin\n", "");
+            return createTrackedProcessStub();
+        }
+
+        callback(Object.assign(new Error("missing claude"), { code: "ENOENT" }), "", "");
+        return createTrackedProcessStub();
+    });
+
+    const diagnostics = await getClaudeRuntimeDiagnostics(modules, {
+        HOME: "/Users/test",
+        PATH: "/usr/bin",
+        SHELL: "/bin/zsh",
+    });
+
+    assert.deepEqual(diagnostics, {
+        status: "missing",
+        message: "Claude CLI was not found on PATH.",
+    });
+});
+
+test("buildClaudeCliArgs includes verbose for print stream-json output", () => {
+    assert.deepEqual(
+        buildClaudeCliArgs(),
+        [
+            "-p",
+            "--verbose",
+            "--output-format",
+            "stream-json",
+            "--include-partial-messages",
+            "--no-session-persistence",
+            "--append-system-prompt",
+            "You generate end-user reply text for an Aside note thread. Return only the final note reply. Answer directly. Never mention skills, searches, notes, files, prompts, tools, AGENTS instructions, context-loading, or your process.",
+        ],
+    );
+});
+
 test("extractCodexTextDeltaFromJsonEvent reads assistant deltas from exec json events", () => {
     assert.equal(
         extractCodexTextDeltaFromJsonEvent({
@@ -224,6 +303,118 @@ test("extractCodexRunMetadataFromThreadItem captures tool names and sanitized ur
             usedTools: [],
             usedUrls: [],
         },
+    );
+});
+
+test("extractClaudeTextDeltaFromJsonEvent reads assistant partial message text", () => {
+    assert.equal(
+        extractClaudeTextDeltaFromJsonEvent({
+            type: "assistant",
+            message: {
+                content: [{ type: "text", text: "Hello" }],
+            },
+        }),
+        "Hello",
+    );
+    assert.equal(
+        extractClaudeTextDeltaFromJsonEvent({
+            type: "content_block_delta",
+            delta: {
+                type: "text_delta",
+                text: " world",
+            },
+        }),
+        " world",
+    );
+    assert.equal(
+        extractClaudeTextDeltaFromJsonEvent({
+            type: "system",
+            subtype: "init",
+        }),
+        null,
+    );
+});
+
+test("extractClaudeReplyTextFromJsonEvent reads final result text", () => {
+    assert.equal(
+        extractClaudeReplyTextFromJsonEvent({
+            type: "result",
+            subtype: "success",
+            result: "Final reply",
+        }),
+        "Final reply",
+    );
+    assert.equal(
+        extractClaudeReplyTextFromJsonEvent({
+            type: "result",
+            subtype: "error_max_turns",
+            result: "ignore",
+        }),
+        null,
+    );
+});
+
+test("extractClaudeRunMetadataFromJsonEvent captures tool names and sanitized urls", () => {
+    assert.deepEqual(
+        extractClaudeRunMetadataFromJsonEvent({
+            type: "assistant",
+            message: {
+                content: [{
+                    type: "tool_use",
+                    name: "WebFetch",
+                    input: {
+                        url: "https://example.com/page?token=secret#debug",
+                    },
+                }],
+            },
+        }),
+        {
+            usedTools: ["WebFetch"],
+            usedUrls: ["https://example.com/page"],
+        },
+    );
+    assert.deepEqual(
+        extractClaudeRunMetadataFromJsonEvent({
+            type: "assistant",
+            message: {
+                content: [{
+                    type: "tool_use",
+                    name: "Bash",
+                    input: {
+                        command: "git status",
+                    },
+                }],
+            },
+        }),
+        {
+            usedTools: [],
+            usedUrls: [],
+        },
+    );
+});
+
+test("extractClaudeProgressTextFromJsonEvent reports concise tool progress", () => {
+    assert.equal(
+        extractClaudeProgressTextFromJsonEvent({
+            type: "assistant",
+            message: {
+                content: [{
+                    type: "tool_use",
+                    name: "Read",
+                    input: {
+                        file_path: "Folder/Note.md",
+                    },
+                }],
+            },
+        }),
+        "Using Read",
+    );
+    assert.equal(
+        extractClaudeProgressTextFromJsonEvent({
+            type: "system",
+            subtype: "init",
+        }),
+        "Starting Claude",
     );
 });
 

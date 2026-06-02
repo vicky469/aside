@@ -2,6 +2,7 @@ import { strict as assert } from "node:assert";
 import test from "node:test";
 import {
     createCheckingCodexRuntimeDiagnostics,
+    getAgentRuntimeStatusPresentation,
     getCodexRuntimeStatusPresentation,
     getCodexRuntimeStatusPresentationForSelection,
     getLocalRuntimeOptionStatusPresentation,
@@ -16,6 +17,19 @@ test("codex runtime status presentation reports available clearly", () => {
         {
             title: "Codex runtime: Available",
             description: "Built-in @codex can run in this Obsidian environment.",
+        },
+    );
+});
+
+test("agent runtime status presentation reports claude availability clearly", () => {
+    assert.deepEqual(
+        getAgentRuntimeStatusPresentation("claude", {
+            status: "available",
+            message: "Claude CLI is available.",
+        }),
+        {
+            title: "Claude runtime: Available",
+            description: "Built-in @claude can run in this Obsidian environment.",
         },
     );
 });
@@ -84,7 +98,7 @@ test("runtime option status presentation reports local availability for the sett
         }),
         {
             label: "Local ✅",
-            description: "Built-in @codex can run in this Obsidian environment.",
+            description: "At least one local Aside agent can run in this Obsidian environment.",
             available: true,
         },
     );

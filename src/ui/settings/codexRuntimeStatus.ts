@@ -1,7 +1,9 @@
-import type { CodexRuntimeDiagnostics } from "../../agents/agentRuntimeAdapter";
+import type { AgentRuntimeDiagnostics } from "../../agents/agentRuntimeAdapter";
 import type {
     AgentRuntimeSelection,
 } from "../../agents/agentRuntimeSelection";
+import type { AsideAgentTarget } from "../../core/config/agentTargets";
+import { getAgentActorById } from "../../core/agents/agentActorRegistry";
 
 export interface CodexRuntimeStatusPresentation {
     title: string;
@@ -14,31 +16,43 @@ export interface RuntimeOptionStatusPresentation {
     available: boolean;
 }
 
-const CHECKING_MESSAGE = "Checking whether @codex is available...";
+function getCheckingMessage(target: AsideAgentTarget): string {
+    const actor = getAgentActorById(target);
+    return `Checking whether ${actor.directive} is available...`;
+}
 
-export function getCodexRuntimeStatusPresentation(
-    diagnostics: CodexRuntimeDiagnostics,
+export function getAgentRuntimeStatusPresentation(
+    target: AsideAgentTarget,
+    diagnostics: AgentRuntimeDiagnostics,
 ): CodexRuntimeStatusPresentation {
+    const actor = getAgentActorById(target);
+    const checkingMessage = getCheckingMessage(target);
     switch (diagnostics.status) {
         case "available":
             return {
-                title: "Codex runtime: Available",
-                description: "Built-in @codex can run in this Obsidian environment.",
+                title: `${actor.label} runtime: Available`,
+                description: `Built-in ${actor.directive} can run in this Obsidian environment.`,
             };
         case "checking":
             return {
-                title: "Codex runtime: Checking...",
-                description: CHECKING_MESSAGE,
+                title: `${actor.label} runtime: Checking...`,
+                description: checkingMessage,
             };
         case "missing":
         case "unsupported":
         case "unavailable":
         default:
             return {
-                title: "Codex runtime: Unavailable on this device",
-                description: diagnostics.message || CHECKING_MESSAGE,
+                title: `${actor.label} runtime: Unavailable on this device`,
+                description: diagnostics.message || checkingMessage,
             };
     }
+}
+
+export function getCodexRuntimeStatusPresentation(
+    diagnostics: AgentRuntimeDiagnostics,
+): CodexRuntimeStatusPresentation {
+    return getAgentRuntimeStatusPresentation("codex", diagnostics);
 }
 
 export function getCodexRuntimeStatusPresentationForSelection(
@@ -57,27 +71,31 @@ export function getCodexRuntimeStatusPresentationForSelection(
     };
 }
 
-export function createCheckingCodexRuntimeDiagnostics(): CodexRuntimeDiagnostics {
+export function createCheckingAgentRuntimeDiagnostics(target: AsideAgentTarget): AgentRuntimeDiagnostics {
     return {
         status: "checking",
-        message: CHECKING_MESSAGE,
+        message: getCheckingMessage(target),
     };
 }
 
+export function createCheckingCodexRuntimeDiagnostics(): AgentRuntimeDiagnostics {
+    return createCheckingAgentRuntimeDiagnostics("codex");
+}
+
 export function getLocalRuntimeOptionStatusPresentation(
-    diagnostics: CodexRuntimeDiagnostics,
+    diagnostics: AgentRuntimeDiagnostics,
 ): RuntimeOptionStatusPresentation {
     switch (diagnostics.status) {
         case "available":
             return {
                 label: "Local ✅",
-                description: "Built-in @codex can run in this Obsidian environment.",
+                description: "At least one local Aside agent can run in this Obsidian environment.",
                 available: true,
             };
         case "checking":
             return {
                 label: "Local ...",
-                description: CHECKING_MESSAGE,
+                description: diagnostics.message,
                 available: false,
             };
         case "missing":
@@ -86,7 +104,7 @@ export function getLocalRuntimeOptionStatusPresentation(
         default:
             return {
                 label: "Local ❌",
-                description: diagnostics.message || CHECKING_MESSAGE,
+                description: diagnostics.message || "Local Aside agent execution is unavailable on this device.",
                 available: false,
             };
     }

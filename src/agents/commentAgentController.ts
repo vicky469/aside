@@ -13,10 +13,7 @@ import {
     type AgentRunStreamState,
 } from "../core/agents/agentRuns";
 import type { AgentRuntimeModePreference } from "../core/agents/agentRuntimePreferences";
-import {
-    getPrimarySupportedAgentActor,
-    resolveUnsupportedAgentNotice,
-} from "../core/agents/agentActorRegistry";
+import { resolveUnsupportedAgentNotice } from "../core/agents/agentActorRegistry";
 import type { AsideAgentTarget } from "../core/config/agentTargets";
 import { parseAgentDirectives } from "../core/text/agentDirectives";
 import { AgentRunStore } from "./agentRunStore";
@@ -83,14 +80,13 @@ export interface CommentAgentHost {
         onRunMetadata?: (metadata: AgentRunMetadata) => void;
         abortSignal?: AbortSignal;
     }): Promise<AgentRuntimeResponse>;
-    resolveAgentRuntimeSelection(): Promise<AgentRuntimeSelection>;
+    resolveAgentRuntimeSelection(target: AsideAgentTarget): Promise<AgentRuntimeSelection>;
     showNotice(message: string): void;
     log?(level: "info" | "warn" | "error", area: string, event: string, payload?: Record<string, unknown>): Promise<void>;
 }
 
-const PRIMARY_SUPPORTED_AGENT = getPrimarySupportedAgentActor();
 const AGENT_CONFLICT_NOTICE = "Use only one explicit supported agent target per side note.";
-const AGENT_RETRY_NOTICE = `Retry requires a single explicit ${PRIMARY_SUPPORTED_AGENT.directive} target in the triggering entry.`;
+const AGENT_RETRY_NOTICE = "Retry requires a single explicit supported agent target in the triggering entry.";
 const AGENT_PENDING_SESSION_NOTICE = "The previous Aside agent run did not finish. Retry the thread to run it again.";
 const AGENT_DESKTOP_RUNTIME_NOTICE = "Agent execution requires desktop Obsidian with a filesystem-backed vault.";
 const AGENT_REGENERATE_REPLACE_FAILED_NOTICE = "Unable to replace the previous agent reply.";
@@ -207,7 +203,7 @@ export class CommentAgentController {
         if (!resolvedTarget) {
             return;
         }
-        const runtimeSelection = await this.host.resolveAgentRuntimeSelection();
+        const runtimeSelection = await this.host.resolveAgentRuntimeSelection(resolvedTarget);
         if (runtimeSelection.kind === "blocked") {
             this.host.showNotice(runtimeSelection.notice);
             return;
@@ -288,7 +284,7 @@ export class CommentAgentController {
         if (!resolvedTarget) {
             return false;
         }
-        const runtimeSelection = await this.host.resolveAgentRuntimeSelection();
+        const runtimeSelection = await this.host.resolveAgentRuntimeSelection(resolvedTarget);
         if (runtimeSelection.kind === "blocked") {
             this.host.showNotice(runtimeSelection.notice);
             return false;

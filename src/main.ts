@@ -33,9 +33,10 @@ import { WorkspaceViewController } from "./app/workspaceViewController";
 import { AgentRunStore } from "./agents/agentRunStore";
 import {
     disposeAgentRuntimeProcesses,
+    getClaudeRuntimeDiagnostics as probeClaudeRuntimeDiagnostics,
     getCodexRuntimeDiagnostics as probeCodexRuntimeDiagnostics,
     runAgentRuntime,
-    type CodexRuntimeDiagnostics,
+    type AgentRuntimeDiagnostics,
 } from "./agents/agentRuntimeAdapter";
 import {
     resolveAgentRuntimeSelection as resolveAgentRuntimeSelectionPlan,
@@ -45,6 +46,8 @@ import type { AgentRunRecord, AgentRunStreamState } from "./core/agents/agentRun
 import {
     type AgentRuntimeModePreference,
 } from "./core/agents/agentRuntimePreferences";
+import type { AsideAgentTarget } from "./core/config/agentTargets";
+import { getAgentActorById } from "./core/agents/agentActorRegistry";
 import { DraftComment, DraftSelection } from "./domain/drafts";
 import { parsePromptDeleteSetting } from "./core/config/appConfig";
 import { DerivedCommentMetadataManager } from "./core/derived/derivedCommentMetadata";
@@ -361,7 +364,7 @@ export default class Aside extends Plugin {
             );
         },
         runAgentRuntime: (invocation) => runAgentRuntime(invocation),
-        resolveAgentRuntimeSelection: () => this.resolveAgentRuntimeSelection(),
+        resolveAgentRuntimeSelection: (target) => this.resolveAgentRuntimeSelection(target),
         showNotice: (message) => {
             this.showNotice(message, "agents", "agents.notice");
         },
@@ -644,21 +647,38 @@ export default class Aside extends Plugin {
         await this.indexNoteSettingsController.setIndexHeaderImageCaption(nextCaptionInput);
     }
 
-    public async getCodexRuntimeDiagnostics(): Promise<CodexRuntimeDiagnostics> {
+    public async getAgentRuntimeDiagnostics(target: AsideAgentTarget): Promise<AgentRuntimeDiagnostics> {
+        const actor = getAgentActorById(target);
         if (!(this.app.vault.adapter instanceof FileSystemAdapter)) {
             return {
                 status: "unsupported",
-                message: "Built-in @codex requires desktop Obsidian with a filesystem-backed vault.",
+                message: `Built-in ${actor.directive} requires desktop Obsidian with a filesystem-backed vault.`,
             };
         }
 
-        return probeCodexRuntimeDiagnostics();
+        switch (actor.runtimeStrategy) {
+            case "codex-app-server":
+                return probeCodexRuntimeDiagnostics();
+            case "claude-cli":
+                return probeClaudeRuntimeDiagnostics();
+            case "unsupported":
+            default:
+                return {
+                    status: "unsupported",
+                    message: actor.unsupportedNotice ?? `${actor.label} is not supported in this build.`,
+                };
+        }
     }
 
-    public async resolveAgentRuntimeSelection(): Promise<AgentRuntimeSelection> {
+    public async getCodexRuntimeDiagnostics(): Promise<AgentRuntimeDiagnostics> {
+        return this.getAgentRuntimeDiagnostics("codex");
+    }
+
+    public async resolveAgentRuntimeSelection(target: AsideAgentTarget): Promise<AgentRuntimeSelection> {
         return resolveAgentRuntimeSelectionPlan({
+            target,
             modePreference: this.getAgentRuntimeMode(),
-            localDiagnostics: await this.getCodexRuntimeDiagnostics(),
+            localDiagnostics: await this.getAgentRuntimeDiagnostics(target),
         });
     }
 

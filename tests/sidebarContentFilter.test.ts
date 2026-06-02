@@ -60,7 +60,7 @@ test("sidebar content filters separate agent and ordinary threads", () => {
     );
 });
 
-test("sidebar content filter counters only count supported agent mentions", () => {
+test("sidebar content filter counters count supported agent mentions", () => {
     const noteThread = createThread({ id: "thread-note" });
     const agentThread = createThread({
         id: "thread-agent",
@@ -69,10 +69,10 @@ test("sidebar content filter counters only count supported agent mentions", () =
             { id: "entry-agent-child", body: "Follow up for @codex", timestamp: 200 },
         ],
     });
-    const unsupportedAgentThread = createThread({
-        id: "thread-unsupported",
+    const claudeAgentThread = createThread({
+        id: "thread-claude",
         entries: [
-            { id: "thread-unsupported", body: "Ask @claude to help", timestamp: 100 },
+            { id: "thread-claude", body: "Ask @claude to help", timestamp: 100 },
         ],
     });
     const emailThread = createThread({
@@ -82,7 +82,7 @@ test("sidebar content filter counters only count supported agent mentions", () =
         ],
     });
 
-    assert.equal(countAgentThreads([noteThread, agentThread, unsupportedAgentThread, emailThread]), 1);
+    assert.equal(countAgentThreads([noteThread, agentThread, claudeAgentThread, emailThread]), 2);
 });
 
 test("sidebar search matches selected text and entry bodies case-insensitively", () => {
