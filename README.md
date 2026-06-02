@@ -50,19 +50,20 @@ Aside is a tool for thought. It helps you capture, connect, and go deeper into y
 - Keeps resolved comments archived instead of removing them.
 - Generates `Aside index.md` as a vault-wide comment index.
 - Lets the index sidebar switch between the comment list and a thought-trail graph built from side-note wiki links. The graph follows those links across connected markdown files, so it can show multi-step trails instead of only direct one-hop links.
-- Built-in `@codex` side notes on desktop Obsidian. Type `@codex` in a thread, watch the reply stream in the sidebar, and keep the final answer in the same thread.
+- Built-in local agent replies on desktop Obsidian. Type `@codex` or `@claude` in a thread, watch the reply stream in the sidebar, and keep the final answer in the same thread.
 
 ## How to Get Started
 
 1. Install Aside
    settings -> install community plugins -> type aside
-2. Install and sign in to Codex on the same machine.
-   Quick check: open Terminal in your vault or project folder and run `codex`.
-3. Install the Aside Codex skill.
+2. Install and sign in to the local agent CLI you want to use on the same machine.
+   - For `@codex`, open Terminal in your vault or project folder and run `codex`.
+   - For `@claude`, open Terminal in your vault or project folder and run `claude`.
+3. Optional: install the public Aside skill for external agent workflows.
    ```
    $skill-installer install https://github.com/vicky469/aside/tree/main/skills/aside
    ```
-   Restart Codex after installing the skill. Aside auto refreshes the installed skill on desktop startup when it is already present, but it does not install or remove the skill for you.
+   Built-in Aside agent replies do not require a separate skill install. Aside auto refreshes the installed Codex skill on desktop startup when it is already present, but it does not install or remove the skill for you.
 
 ## Workflow
 
@@ -70,9 +71,9 @@ Aside is a tool for thought. It helps you capture, connect, and go deeper into y
 2. Add a side note.
    You can select text and right-click `Add comment to selection`, or use the sidebar for a page note.
 3. Write your comment in the sidebar.
-   Type `@codex` if you want Codex to take the task.
+   Type `@codex` if you want Codex to take the task, or `@claude` if you want Claude to take it.
 4. Save the note.
-5. Aside runs Codex locally and appends the reply back into the same thread.
+5. Aside runs the selected local agent and appends the reply back into the same thread.
 
 ## Glossary
 
@@ -106,7 +107,7 @@ Aside is a tool for thought. It helps you capture, connect, and go deeper into y
 | --- | --- |
 | Save draft | Click `Save`. |
 | Insert a newline | Press `Enter`. |
-| Ask Codex from a side note | Type `@codex` in the note, then save it. |
+| Ask a local agent from a side note | Type `@codex` or `@claude` in the note, then save it. |
 | Link a note | Type `[[` to open note suggestions and insert an Obsidian wikilink. |
 | Add a tag | Type `#` to open tag suggestions and insert a tag. |
 | Reopen link or tag suggestions | Press `Tab` while the cursor is inside an unfinished `[[...` or `#...` token. |

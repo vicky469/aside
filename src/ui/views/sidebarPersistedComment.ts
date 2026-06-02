@@ -197,10 +197,11 @@ export function renderAgentRunMetadataFrontmatter(
         return;
     }
 
-    metaEl.createEl("span", {
+    const frontmatterEl = metaEl.createEl("span", {
         cls: "aside-agent-run-metadata-frontmatter",
         text: frontmatter,
     });
+    metaEl.insertBefore(frontmatterEl, metaEl.firstChild);
 }
 
 function buildSidebarCommentAuthorPresentation(

@@ -130,6 +130,10 @@ class FakeElement {
         public className = "",
     ) {}
 
+    public get firstChild(): FakeElement | null {
+        return this.children[0] ?? null;
+    }
+
     public createDiv(className?: string | { cls?: string }): FakeElement {
         return this.createChild("div", typeof className === "string" ? className : className?.cls);
     }
@@ -145,6 +149,21 @@ class FakeElement {
     public appendChild(child: FakeElement): FakeElement {
         child.parentElement = this;
         this.children.push(child);
+        return child;
+    }
+
+    public insertBefore(child: FakeElement, referenceChild: FakeElement | null): FakeElement {
+        if (child === referenceChild) {
+            return child;
+        }
+        child.remove();
+        child.parentElement = this;
+        const index = referenceChild ? this.children.indexOf(referenceChild) : -1;
+        if (index >= 0) {
+            this.children.splice(index, 0, child);
+        } else {
+            this.children.push(child);
+        }
         return child;
     }
 
@@ -983,7 +1002,7 @@ test("formatAgentRunMetadataFrontmatter renders compact run metadata", () => {
     );
 });
 
-test("renderPersistedCommentCard keeps Add to file inline before agent metadata", async () => {
+test("renderPersistedCommentCard puts agent metadata above status and Add to file", async () => {
     const thread = createThreadWithEntries({
         entries: [
             { id: "comment-1", body: "@codex draft this", timestamp: 100 },
@@ -1053,13 +1072,19 @@ test("renderPersistedCommentCard keeps Add to file inline before agent metadata"
     const addToFileIndex = childClasses.findIndex((className) =>
         className.includes("aside-thread-footer-meta-action")
     );
+    const statusIndex = childClasses.findIndex((className) =>
+        className.includes("aside-agent-run-status")
+    );
     const metadataIndex = childClasses.findIndex((className) =>
         className.includes("aside-agent-run-metadata-frontmatter")
     );
 
     assert.notEqual(addToFileIndex, -1);
+    assert.notEqual(statusIndex, -1);
     assert.notEqual(metadataIndex, -1);
-    assert.ok(addToFileIndex < metadataIndex);
+    assert.ok(metadataIndex < statusIndex);
+    assert.ok(metadataIndex < addToFileIndex);
+    assert.ok(statusIndex < addToFileIndex);
     assert.equal(childClasses.some((className) =>
         className.includes("aside-thread-footer-meta-separator")
     ), false);
