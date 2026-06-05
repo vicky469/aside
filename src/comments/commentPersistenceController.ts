@@ -29,7 +29,7 @@ import {
     buildSideNoteSyncEventInputsForThreadDiff,
     reduceSideNoteSyncEvents,
     type SideNoteSyncEvent,
-} from "../core/storage/sideNoteSyncEvents";
+} from "../storage/comments/sideNoteSyncEvents";
 import { remapSelectionOffsetAfterManagedSectionEdit } from "../core/text/editOffsets";
 import type { AggregateCommentIndex } from "../index/AggregateCommentIndex";
 import { shouldSkipAggregateViewRefresh } from "./commentPersistencePlanner";

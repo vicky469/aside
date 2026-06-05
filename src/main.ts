@@ -16,6 +16,7 @@ import {
     type SaveDraftOptions,
     type SetCommentPinnedOptions,
 } from "./comments/commentMutationController";
+import type { BatchTagMutationResult } from "./comments/commentBatchTagOperations";
 import { CommentNavigationController } from "./comments/commentNavigationController";
 import { pickPinnedCommentableFile, pickPreferredFileLeafCandidate, pickSidebarTargetFile, type PreferredFileLeafCandidate } from "./comments/commentNavigationPlanner";
 import { CommentPersistenceController } from "./comments/commentPersistenceController";
@@ -1640,6 +1641,28 @@ export default class Aside extends Plugin {
 
     async editComment(commentId: string, newCommentText: string): Promise<boolean> {
         return this.commentMutationController.editComment(commentId, newCommentText);
+    }
+
+    async applyTagToThreads(
+        filePath: string,
+        selectedThreadIds: readonly string[],
+        normalizedTagText: string,
+    ): Promise<BatchTagMutationResult> {
+        return this.commentMutationController.applyTagToThreads(filePath, selectedThreadIds, normalizedTagText);
+    }
+
+    async removeTagFromThreads(
+        filePath: string,
+        selectedThreadIds: readonly string[],
+        normalizedTagText: string,
+        targetTagTextForNotice: string,
+    ): Promise<BatchTagMutationResult> {
+        return this.commentMutationController.removeTagFromThreads(
+            filePath,
+            selectedThreadIds,
+            normalizedTagText,
+            targetTagTextForNotice,
+        );
     }
 
     async deleteComment(

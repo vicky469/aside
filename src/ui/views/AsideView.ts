@@ -54,9 +54,6 @@ import {
 } from "./sidebarPageRenderSignature";
 import { nodeInstanceOf } from "../domGuards";
 import {
-    applyBatchTagToThreads,
-    persistBatchTagMutation,
-    removeBatchTagFromThreads,
     threadHasTag,
 } from "./sidebarBatchTagOperations";
 import {
@@ -2470,25 +2467,7 @@ export default class AsideView extends ItemView {
         const selectedThreadIds = Array.from(this.noteSidebarSelectedTagIds);
 
         try {
-            const result = await persistBatchTagMutation({
-                filePath,
-                selectedThreadIds,
-                manager: this.plugin.getCommentManager(),
-                mutate: () => applyBatchTagToThreads({
-                    filePath,
-                    selectedThreadIds,
-                    getThreadById: (threadId) => this.plugin.getThreadById(threadId) ?? undefined,
-                    editComment: (commentId, nextBody) => {
-                        this.plugin.getCommentManager().editComment(commentId, nextBody);
-                    },
-                    normalizedTagText,
-                }),
-                persist: async () => {
-                    if (this.file) {
-                        await this.plugin.persistCommentsForFile(this.file, { immediateAggregateRefresh: true });
-                    }
-                },
-            });
+            const result = await this.plugin.applyTagToThreads(filePath, selectedThreadIds, normalizedTagText);
 
             this.noteSidebarBatchTagFlow = {
                 ...this.noteSidebarBatchTagFlow,
@@ -2558,26 +2537,12 @@ export default class AsideView extends ItemView {
         const selectedThreadIds = Array.from(this.noteSidebarSelectedTagIds);
         const targetTagTextForNotice = selectedTagText ?? "selected tag";
         try {
-            const result = await persistBatchTagMutation({
+            const result = await this.plugin.removeTagFromThreads(
                 filePath,
                 selectedThreadIds,
-                manager: this.plugin.getCommentManager(),
-                mutate: () => removeBatchTagFromThreads({
-                    filePath,
-                    selectedThreadIds,
-                    getThreadById: (threadId) => this.plugin.getThreadById(threadId) ?? undefined,
-                    editComment: (commentId, nextBody) => {
-                        this.plugin.getCommentManager().editComment(commentId, nextBody);
-                    },
-                    normalizedTagText,
-                    targetTagTextForNotice,
-                }),
-                persist: async () => {
-                    if (this.file) {
-                        await this.plugin.persistCommentsForFile(this.file, { immediateAggregateRefresh: true });
-                    }
-                },
-            });
+                normalizedTagText,
+                targetTagTextForNotice,
+            );
 
             this.noteSidebarBatchTagFlow = {
                 ...this.noteSidebarBatchTagFlow,

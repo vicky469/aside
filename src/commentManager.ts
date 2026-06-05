@@ -4,7 +4,6 @@ import { isPathInsideFolder } from "./core/files/pathScope";
 import {
     isSoftDeleted,
     isSoftDeletedExpired,
-    normalizeDeletedAt,
     purgeExpiredDeletedThreads,
 } from "./core/rules/deletedCommentVisibility";
 import {
@@ -12,59 +11,50 @@ import {
     type CommentEntryLookup,
     type CommentLookupIndexes,
 } from "./core/commentLookupIndex";
+import {
+    commentToThread,
+    isCommentThreadLike,
+    threadEntryToComment,
+    threadToComment,
+    type Comment,
+} from "./domain/comments/commentProjection";
+import {
+    cloneCommentThread,
+    cloneCommentThreadEntry,
+    getFirstThreadEntry,
+    normalizeCommentThread,
+} from "./domain/comments/commentThreadNormalization";
+import {
+    compareThreadsByPosition,
+    moveItemByIdRelative,
+} from "./domain/comments/commentThreadOrdering";
+import type {
+    CommentQueryOptions,
+    CommentThread,
+    CommentThreadEntry,
+    ReorderPlacement,
+} from "./domain/comments/commentThread";
 
-export type CommentAnchorKind = "selection" | "page";
-
-export interface CommentThreadEntry {
-    id: string;
-    body: string;
-    timestamp: number;
-    deletedAt?: number;
-}
-
-export interface CommentThread {
-    id: string;
-    filePath: string;
-    startLine: number;
-    startChar: number;
-    endLine: number;
-    endChar: number;
-    selectedText: string;
-    selectedTextHash: string;
-    anchorKind?: CommentAnchorKind;
-    orphaned?: boolean;
-    isPinned?: boolean;
-    resolved?: boolean;
-    deletedAt?: number;
-    entries: CommentThreadEntry[];
-    createdAt: number;
-    updatedAt: number;
-}
-
-export interface Comment {
-    id: string;
-    filePath: string;
-    startLine: number;
-    startChar: number;
-    endLine: number;
-    endChar: number;
-    selectedText: string;
-    selectedTextHash: string;
-    comment: string;
-    timestamp: number;
-    anchorKind?: CommentAnchorKind;
-    orphaned?: boolean;
-    isPinned?: boolean;
-    resolved?: boolean;
-    deletedAt?: number;
-    entryCount?: number;
-}
-
-export interface CommentQueryOptions {
-    includeDeleted?: boolean;
-}
-
-export type ReorderPlacement = "before" | "after";
+export type {
+    CommentAnchorKind,
+    CommentQueryOptions,
+    CommentThread,
+    CommentThreadEntry,
+    ReorderPlacement,
+} from "./domain/comments/commentThread";
+export type { Comment } from "./domain/comments/commentProjection";
+export {
+    commentToThread,
+    threadEntryToComment,
+    threadToComment,
+} from "./domain/comments/commentProjection";
+export {
+    cloneCommentThread,
+    cloneCommentThreads,
+    getFirstThreadEntry,
+    getLatestThreadEntry,
+    normalizeCommentThread,
+} from "./domain/comments/commentThreadNormalization";
 
 const COORDINATE_SYNC_MIN_BATCH_SIZE = 5;
 const COORDINATE_SYNC_MAX_BATCH_MS = 8;
@@ -101,174 +91,10 @@ function yieldToMainThread(): Promise<void> {
     });
 }
 
-function compareThreadsByPosition(left: CommentThread, right: CommentThread): number {
-    if (left.startLine !== right.startLine) {
-        return left.startLine - right.startLine;
-    }
-    if (left.startChar !== right.startChar) {
-        return left.startChar - right.startChar;
-    }
-    return left.createdAt - right.createdAt;
-}
-
-function cloneThreadEntry(entry: CommentThreadEntry): CommentThreadEntry {
-    const deletedAt = normalizeDeletedAt(entry.deletedAt);
-    return {
-        id: entry.id,
-        body: entry.body,
-        timestamp: entry.timestamp,
-        ...(deletedAt !== undefined ? { deletedAt } : {}),
-    };
-}
-
-export function cloneCommentThread(thread: CommentThread): CommentThread {
-    return {
-        ...thread,
-        entries: thread.entries.map((entry) => cloneThreadEntry(entry)),
-    };
-}
-
-export function cloneCommentThreads(threads: CommentThread[]): CommentThread[] {
-    return threads.map((thread) => cloneCommentThread(thread));
-}
-
-export function getLatestThreadEntry(thread: CommentThread): CommentThreadEntry {
-    return thread.entries[thread.entries.length - 1] ?? {
-        id: thread.id,
-        body: "",
-        timestamp: thread.updatedAt || thread.createdAt,
-    };
-}
-
-export function getFirstThreadEntry(thread: CommentThread): CommentThreadEntry {
-    return thread.entries[0] ?? {
-        id: thread.id,
-        body: "",
-        timestamp: thread.createdAt || thread.updatedAt,
-    };
-}
-
-function normalizeThread(thread: CommentThread): CommentThread {
-    const entries = thread.entries.length > 0
-        ? thread.entries.map((entry) => cloneThreadEntry(entry))
-        : [{
-            id: thread.id,
-            body: "",
-            timestamp: thread.updatedAt || thread.createdAt,
-        }];
-    const firstEntry = entries[0];
-    const latestEntry = entries[entries.length - 1];
-
-    return {
-        ...thread,
-        anchorKind: thread.anchorKind === "page" ? "page" : "selection",
-        orphaned: thread.anchorKind === "page" ? false : thread.orphaned === true,
-        isPinned: thread.isPinned === true,
-        resolved: thread.resolved === true,
-        deletedAt: normalizeDeletedAt(thread.deletedAt),
-        entries,
-        createdAt: thread.createdAt || firstEntry.timestamp,
-        updatedAt: thread.updatedAt || latestEntry.timestamp,
-    };
-}
-
 function hasExpiredDeletedComments(threads: readonly CommentThread[], now: number): boolean {
     return threads.some((thread) =>
         isSoftDeletedExpired(thread.deletedAt, now)
         || thread.entries.some((entry) => isSoftDeletedExpired(entry.deletedAt, now)));
-}
-
-export function commentToThread(comment: Comment): CommentThread {
-    return normalizeThread({
-        id: comment.id,
-        filePath: comment.filePath,
-        startLine: comment.startLine,
-        startChar: comment.startChar,
-        endLine: comment.endLine,
-        endChar: comment.endChar,
-        selectedText: comment.selectedText,
-        selectedTextHash: comment.selectedTextHash,
-        anchorKind: comment.anchorKind === "page" ? "page" : "selection",
-        orphaned: comment.orphaned === true,
-        isPinned: comment.isPinned === true,
-        resolved: comment.resolved === true,
-        deletedAt: normalizeDeletedAt(comment.deletedAt),
-        entries: [{
-            id: comment.id,
-            body: comment.comment,
-            timestamp: comment.timestamp,
-            deletedAt: normalizeDeletedAt(comment.deletedAt),
-        }],
-        createdAt: comment.timestamp,
-        updatedAt: comment.timestamp,
-    });
-}
-
-export function threadToComment(thread: CommentThread): Comment {
-    const normalized = normalizeThread(thread);
-    const latestEntry = getLatestThreadEntry(normalized);
-    return {
-        ...threadEntryToComment(normalized, latestEntry),
-        id: normalized.id,
-        isPinned: normalized.isPinned === true,
-    };
-}
-
-export function threadEntryToComment(thread: CommentThread, entry: CommentThreadEntry): Comment {
-    const normalized = normalizeThread(thread);
-    const deletedAt = normalizeDeletedAt(entry.deletedAt) ?? normalized.deletedAt;
-
-    return {
-        id: entry.id,
-        filePath: normalized.filePath,
-        startLine: normalized.startLine,
-        startChar: normalized.startChar,
-        endLine: normalized.endLine,
-        endChar: normalized.endChar,
-        selectedText: normalized.selectedText,
-        selectedTextHash: normalized.selectedTextHash,
-        comment: entry.body,
-        timestamp: entry.timestamp,
-        anchorKind: normalized.anchorKind,
-        orphaned: normalized.orphaned === true,
-        ...(normalized.id === entry.id && normalized.isPinned === true ? { isPinned: true } : {}),
-        resolved: normalized.resolved === true,
-        ...(deletedAt !== undefined ? { deletedAt } : {}),
-        entryCount: normalized.entries.length,
-    };
-}
-
-function isThreadLike(value: Comment | CommentThread): value is CommentThread {
-    return Array.isArray((value as CommentThread).entries);
-}
-
-function moveItemByIdRelative<T extends { id: string }>(
-    items: readonly T[],
-    movedId: string,
-    targetId: string,
-    placement: ReorderPlacement,
-): T[] | null {
-    if (movedId === targetId) {
-        return null;
-    }
-
-    const movedItem = items.find((item) => item.id === movedId);
-    if (!movedItem) {
-        return null;
-    }
-
-    const remainingItems = items.filter((item) => item.id !== movedId);
-    const targetIndex = remainingItems.findIndex((item) => item.id === targetId);
-    if (targetIndex === -1) {
-        return null;
-    }
-
-    const insertionIndex = placement === "before"
-        ? targetIndex
-        : targetIndex + 1;
-    const nextItems = remainingItems.slice();
-    nextItems.splice(insertionIndex, 0, movedItem);
-    return nextItems;
 }
 
 export class CommentManager {
@@ -277,7 +103,7 @@ export class CommentManager {
     private coordinateSyncVersionByFile = new Map<string, number>();
 
     constructor(items: Array<Comment | CommentThread>) {
-        this.threads = items.map((item) => normalizeThread(isThreadLike(item) ? item : commentToThread(item)));
+        this.threads = items.map((item) => normalizeCommentThread(isCommentThreadLike(item) ? item : commentToThread(item)));
         this.rebuildLookupIndexes();
         this.purgeExpiredDeletedComments();
     }
@@ -358,7 +184,7 @@ export class CommentManager {
     replaceThreadsForFile(filePath: string, nextThreads: CommentThread[]) {
         this.setThreads(this.threads
             .filter((thread) => thread.filePath !== filePath)
-            .concat(nextThreads.map((thread) => normalizeThread(thread))));
+            .concat(nextThreads.map((thread) => normalizeCommentThread(thread))));
         this.purgeExpiredDeletedComments();
     }
 
@@ -377,7 +203,7 @@ export class CommentManager {
     }
 
     addThread(newThread: CommentThread) {
-        const normalizedThread = normalizeThread(newThread);
+        const normalizedThread = normalizeCommentThread(newThread);
         const insertionIndex = this.threads.findIndex((thread) =>
             thread.filePath === normalizedThread.filePath
             && compareThreadsByPosition(normalizedThread, thread) < 0);
@@ -398,7 +224,7 @@ export class CommentManager {
             return;
         }
 
-        thread.entries.push(cloneThreadEntry(entry));
+        thread.entries.push(cloneCommentThreadEntry(entry));
         thread.updatedAt = Math.max(thread.updatedAt, entry.timestamp);
         this.rebuildLookupIndexes();
     }
@@ -774,7 +600,7 @@ export class CommentManager {
         }
 
         this.setThreads(purgeExpiredDeletedThreads(this.threads, now)
-            .map((thread) => normalizeThread(thread)));
+            .map((thread) => normalizeCommentThread(thread)));
     }
 }
 

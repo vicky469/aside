@@ -1,4 +1,4 @@
-import type { CommentThread, CommentThreadEntry } from "../../commentManager";
+import type { CommentThread, CommentThreadEntry } from "../../domain/comments/commentThread";
 
 export const SOFT_DELETE_RETENTION_MS = 1 * 24 * 60 * 60 * 1000;
 

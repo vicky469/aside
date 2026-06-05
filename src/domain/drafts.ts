@@ -1,6 +1,6 @@
 import type { TFile } from "obsidian";
-import type { CommentAnchorKind } from "../commentManager";
-import type { Comment } from "../commentManager";
+import type { Comment } from "./comments/commentProjection";
+import type { CommentAnchorKind } from "./comments/commentThread";
 
 export interface DraftComment extends Comment {
     mode: "new" | "edit" | "append";

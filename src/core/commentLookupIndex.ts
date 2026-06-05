@@ -1,4 +1,4 @@
-import type { CommentThread, CommentThreadEntry } from "../commentManager";
+import type { CommentThread, CommentThreadEntry } from "../domain/comments/commentThread";
 
 export interface CommentEntryLookup {
     thread: CommentThread;

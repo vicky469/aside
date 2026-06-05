@@ -9,6 +9,13 @@ import { getManagedSectionRange, getVisibleNoteContent } from "../core/storage/n
 import { canSaveDraftWithoutComment, type DraftComment, type DraftSelection } from "../domain/drafts";
 import type { SavedUserEntryEvent } from "../agents/commentAgentController";
 import type { SetDraftCommentOptions } from "./commentSessionController";
+import {
+    applyBatchTagToThreads,
+    persistBatchTagMutation,
+    removeBatchTagFromThreads,
+    type BatchTagMutationResult,
+    type BatchTagOperationResult,
+} from "./commentBatchTagOperations";
 
 type PersistOptions = {
     immediateAggregateRefresh?: boolean;
@@ -41,6 +48,23 @@ export type ResolveCommentOptions = CommentMutationPersistBehaviorOptions;
 export type SetCommentPinnedOptions = CommentMutationPersistBehaviorOptions;
 export type MoveCommentThreadOptions = CommentMutationPersistBehaviorOptions;
 export type MoveCommentEntryOptions = CommentMutationPersistBehaviorOptions;
+
+function buildBatchTagFileFailure(
+    selectedThreadIds: readonly string[],
+    message: string,
+): BatchTagMutationResult {
+    return {
+        failures: selectedThreadIds.map((threadId) => ({
+            threadId,
+            reason: "not-found",
+            message,
+        })),
+        successfulIds: [],
+        failedIds: selectedThreadIds.slice(),
+        hasMutations: false,
+        persistError: null,
+    };
+}
 
 export interface CommentMutationHost {
     getAllCommentsNotePath(): string;
@@ -302,6 +326,64 @@ export class CommentMutationController {
             refreshEditorDecorations: options.refreshEditorDecorations,
         });
         return true;
+    }
+
+    public async applyTagToThreads(
+        filePath: string,
+        selectedThreadIds: readonly string[],
+        normalizedTagText: string,
+    ): Promise<BatchTagMutationResult> {
+        return this.mutateBatchTagsForFile(filePath, selectedThreadIds, (loadedFilePath) =>
+            applyBatchTagToThreads({
+                filePath: loadedFilePath,
+                selectedThreadIds,
+                getThreadById: (threadId) => this.host.getCommentManager().getThreadById(threadId),
+                editComment: (commentId, nextBody) => {
+                    this.host.getCommentManager().editComment(commentId, nextBody);
+                },
+                normalizedTagText,
+            }));
+    }
+
+    public async removeTagFromThreads(
+        filePath: string,
+        selectedThreadIds: readonly string[],
+        normalizedTagText: string,
+        targetTagTextForNotice: string,
+    ): Promise<BatchTagMutationResult> {
+        return this.mutateBatchTagsForFile(filePath, selectedThreadIds, (loadedFilePath) =>
+            removeBatchTagFromThreads({
+                filePath: loadedFilePath,
+                selectedThreadIds,
+                getThreadById: (threadId) => this.host.getCommentManager().getThreadById(threadId),
+                editComment: (commentId, nextBody) => {
+                    this.host.getCommentManager().editComment(commentId, nextBody);
+                },
+                normalizedTagText,
+                targetTagTextForNotice,
+            }));
+    }
+
+    private async mutateBatchTagsForFile(
+        filePath: string,
+        selectedThreadIds: readonly string[],
+        mutate: (loadedFilePath: string) => BatchTagOperationResult,
+    ): Promise<BatchTagMutationResult> {
+        const file = this.host.getFileByPath(filePath);
+        if (!this.host.isCommentableFile(file)) {
+            return buildBatchTagFileFailure(selectedThreadIds, "Thread was not found in this file.");
+        }
+
+        await this.host.loadCommentsForFile(file);
+        return persistBatchTagMutation({
+            filePath: file.path,
+            selectedThreadIds,
+            manager: this.host.getCommentManager(),
+            mutate: () => mutate(file.path),
+            persist: async () => {
+                await this.host.persistCommentsForFile(file, { immediateAggregateRefresh: true });
+            },
+        });
     }
 
     public async appendEntry(draftComment: DraftComment): Promise<boolean> {

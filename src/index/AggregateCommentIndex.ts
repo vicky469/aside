@@ -1,20 +1,20 @@
-import type { Comment, CommentThread } from "../commentManager";
+import type { Comment } from "../domain/comments/commentProjection";
 import {
     commentToThread,
+    isCommentThreadLike,
     threadToComment,
+    threadEntryToComment,
+} from "../domain/comments/commentProjection";
+import type { CommentThread } from "../domain/comments/commentThread";
+import {
     cloneCommentThread,
     getFirstThreadEntry,
-    threadEntryToComment,
-} from "../commentManager";
+} from "../domain/comments/commentThreadNormalization";
 import { isPathInsideFolder } from "../core/files/pathScope";
 import { isSoftDeleted } from "../core/rules/deletedCommentVisibility";
 
-function isThreadLike(value: Comment | CommentThread): value is CommentThread {
-    return Array.isArray((value as CommentThread).entries);
-}
-
 function toThreads(items: Array<Comment | CommentThread>): CommentThread[] {
-    return items.map((item) => isThreadLike(item) ? cloneCommentThread(item) : commentToThread(item));
+    return items.map((item) => isCommentThreadLike(item) ? cloneCommentThread(item) : commentToThread(item));
 }
 
 export class AggregateCommentIndex {

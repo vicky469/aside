@@ -1,4 +1,6 @@
-export type CommentAnchorKind = "selection" | "page";
+import type { CommentAnchorKind } from "../../domain/comments/commentThread";
+
+export type { CommentAnchorKind } from "../../domain/comments/commentThread";
 export type CommentAnchorStatus = "anchored" | "orphaned" | "page";
 
 interface AnchorLike {

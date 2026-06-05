@@ -19,13 +19,23 @@ export const SHARED_SIDEBAR_MODE_TABS: readonly SidebarModeTabDefinition[] = [
     { mode: "thought-trail", label: "Thought Trail" },
 ] as const;
 
+export const TAGS_SIDEBAR_MODE_TAB: SidebarModeTabDefinition = { mode: "tags", label: "Tags" };
+
+export function getSidebarModeTabs(availability: SidebarModeAvailability): SidebarModeTabDefinition[] {
+    return [
+        SHARED_SIDEBAR_MODE_TABS[0],
+        ...(availability.isTagsEnabled ? [TAGS_SIDEBAR_MODE_TAB] : []),
+        ...SHARED_SIDEBAR_MODE_TABS.slice(1),
+    ];
+}
+
 export function isSidebarModeAvailable(
     mode: SidebarPrimaryMode,
     availability: SidebarModeAvailability,
 ): boolean {
     switch (mode) {
         case "tags":
-            return false;
+            return availability.isTagsEnabled;
         case "todo":
             return availability.isTodoEnabled;
         case "agent":

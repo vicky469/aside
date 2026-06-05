@@ -1,8 +1,8 @@
 import { setIcon } from "obsidian";
 import { getActiveFileFilterPresentation } from "./sidebarActiveFileFilterDom";
 import {
+    getSidebarModeTabs,
     isSidebarModeAvailable,
-    SHARED_SIDEBAR_MODE_TABS,
     type SidebarModeAvailability,
 } from "./sidebarModeTabs";
 import type { SidebarPrimaryMode } from "./viewState";
@@ -183,7 +183,7 @@ export function renderSidebarModeControl(
     const modeGroup = container.createDiv("aside-sidebar-toolbar-group is-mode-group");
     const tabList = modeGroup.createDiv(`aside-tablist is-${options.mode}`);
     tabList.setAttribute("role", "tablist");
-    for (const tab of SHARED_SIDEBAR_MODE_TABS) {
+    for (const tab of getSidebarModeTabs(options)) {
         renderTabButton(tabList, {
             label: tab.label,
             active: options.mode === tab.mode,

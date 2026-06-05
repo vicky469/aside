@@ -94,7 +94,7 @@ Use this shortcut table:
 | Symptom | First files to inspect |
 | --- | --- |
 | Draft does not save or disappears | `src/ui/views/AsideView.ts`, `src/ui/views/sidebarDraftEditor.ts`, `src/domain/drafts.ts` |
-| Comment saved but not persisted to canonical storage | `src/comments/commentPersistenceController.ts`, `src/core/storage/canonicalCommentStorage.ts`, `src/core/storage/sidecarCommentStorage.ts`, `src/core/storage/sideNoteSyncEvents.ts` |
+| Comment saved but not persisted to canonical storage | `src/comments/commentPersistenceController.ts`, `src/core/storage/canonicalCommentStorage.ts`, `src/core/storage/sidecarCommentStorage.ts`, `src/storage/comments/sideNoteSyncEvents.ts` |
 | Comment exists but highlight is wrong | `src/core/anchors/anchorResolver.ts`, `src/core/derived/editorHighlightRanges.ts`, `src/commentManager.ts` |
 | Sidebar or index sidebar shows wrong grouping or visibility | `src/ui/views/sidebarCommentSections.ts`, `src/ui/views/AsideView.ts`, `src/commentManager.ts` |
 | Sidebar card click, link, or action buttons behave incorrectly | `src/ui/views/sidebarPersistedComment.ts`, `src/ui/views/AsideView.ts`, `src/ui/views/commentPointerAction.ts` |

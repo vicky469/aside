@@ -3,7 +3,7 @@ import {
     normalizeSideNoteSyncEvent,
     type SideNoteSyncEvent,
     type SideNoteSyncEventInput,
-} from "../core/storage/sideNoteSyncEvents";
+} from "../storage/comments/sideNoteSyncEvents";
 import { cloneCommentThreads, type CommentThread } from "../commentManager";
 import type { PersistedPluginData } from "../settings/indexNoteSettingsPlanner";
 
