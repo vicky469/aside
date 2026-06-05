@@ -1544,6 +1544,9 @@ export default class AsideView extends ItemView {
                     this.indexSidebarMode,
                     indexSidebarThreadGroupCounts,
                 );
+                if (this.indexSidebarMode === "tags") {
+                    this.indexSidebarMode = "list";
+                }
                 if (indexSidebarModeBeforeAvailability === "thought-trail" && this.indexSidebarMode !== "thought-trail") {
                     void this.plugin.logEvent("warn", "thoughttrail", "thoughttrail.index.fallback", {
                         filePath: file.path,
@@ -1671,7 +1674,7 @@ export default class AsideView extends ItemView {
                     succeeded: 0,
                     failed: 0,
                 },
-                isTagsEnabled: true,
+                isTagsEnabled: !isAllCommentsView,
                 isThoughtTrailEnabled: isIndexThoughtTrailEnabled,
                 sidebarThreadGroupCounts: indexSidebarThreadGroupCounts,
                 noteSidebarContentFilter: "all",
