@@ -1,6 +1,7 @@
 import type { Comment, CommentThread } from "../../commentManager";
 import { getCommentSelectionLabel, getCommentStatusLabel, isAnchoredComment, isPageComment } from "../anchors/commentAnchors";
 import { extractWikiLinks } from "../text/commentMentions";
+import { extractTagsFromText } from "../text/commentTags";
 
 const ALL_COMMENTS_NOTE_PATH = "Aside index.md";
 const LEGACY_ALL_COMMENTS_NOTE_PATHS = new Set([
@@ -31,6 +32,8 @@ export interface ThoughtTrailBuildOptions {
     allCommentsNotePath?: string;
     resolveWikiLinkPath?: (linkPath: string, sourceFilePath: string) => string | null;
 }
+
+export type ThoughtTrailFileTagLookup = (filePath: string) => readonly string[] | null | undefined;
 
 interface ThoughtTrailEdge {
     comment: Comment | CommentThread;
@@ -250,6 +253,69 @@ function buildEdgesBySourceFile(
     return edgesBySourceFile;
 }
 
+function normalizeThoughtTrailTagKey(value: string): string | null {
+    const normalized = value.trim().replace(/^#+/, "");
+    return normalized ? normalized.toLowerCase() : null;
+}
+
+function getNormalizedThoughtTrailTagKeys(tags: readonly string[] | null | undefined): Set<string> {
+    const keys = new Set<string>();
+    for (const tag of tags ?? []) {
+        const key = normalizeThoughtTrailTagKey(tag);
+        if (key) {
+            keys.add(key);
+        }
+    }
+
+    return keys;
+}
+
+function hasEveryTagKey(candidateKeys: Set<string>, requiredKeys: Set<string>): boolean {
+    for (const requiredKey of requiredKeys) {
+        if (!candidateKeys.has(requiredKey)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+export function buildThoughtTrailCommentTagsByFilePath(
+    comments: ReadonlyArray<Comment | CommentThread>,
+): Map<string, string[]> {
+    const tagsByFilePath = new Map<string, Map<string, string>>();
+
+    for (const comment of comments) {
+        const filePath = normalizeNotePath(comment.filePath);
+        let tagsByKey = tagsByFilePath.get(filePath);
+        for (const body of getCommentBodies(comment)) {
+            for (const rawTag of extractTagsFromText(body)) {
+                const tagKey = rawTag.slice(1).toLowerCase();
+                if (!tagKey) {
+                    continue;
+                }
+
+                if (!tagsByKey) {
+                    tagsByKey = new Map<string, string>();
+                    tagsByFilePath.set(filePath, tagsByKey);
+                }
+                if (!tagsByKey.has(tagKey)) {
+                    tagsByKey.set(tagKey, rawTag);
+                }
+            }
+        }
+    }
+
+    return new Map(
+        Array.from(tagsByFilePath.entries()).map(([filePath, tagsByKey]) => [
+            filePath,
+            Array.from(tagsByKey.entries())
+                .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey))
+                .map(([, tagText]) => tagText),
+        ]),
+    );
+}
+
 function getOrderedRoots(edgesBySourceFile: Map<string, ThoughtTrailEdge[]>): string[] {
     const sourceFilePaths = Array.from(edgesBySourceFile.keys()).sort((left, right) => left.localeCompare(right));
     const incomingCounts = new Map<string, number>();
@@ -299,6 +365,80 @@ function getOrderedRoots(edgesBySourceFile: Map<string, ThoughtTrailEdge[]>): st
     }
 
     return orderedRoots;
+}
+
+export function buildTagRelatedFileLines(
+    vaultName: string,
+    sourceFilePath: string,
+    candidateFilePaths: readonly string[],
+    getTagsForFilePath: ThoughtTrailFileTagLookup,
+): string[] {
+    const normalizedSourcePath = normalizeNotePath(sourceFilePath);
+    const sourceTagKeys = getNormalizedThoughtTrailTagKeys(getTagsForFilePath(normalizedSourcePath));
+    if (!sourceTagKeys.size) {
+        return [];
+    }
+
+    const matchedFilePaths: string[] = [];
+    const seenFilePaths = new Set<string>();
+    for (const candidateFilePath of candidateFilePaths) {
+        const normalizedCandidatePath = normalizeNotePath(candidateFilePath);
+        if (
+            !normalizedCandidatePath
+            || normalizedCandidatePath === normalizedSourcePath
+            || seenFilePaths.has(normalizedCandidatePath)
+        ) {
+            continue;
+        }
+
+        seenFilePaths.add(normalizedCandidatePath);
+        const candidateTagKeys = getNormalizedThoughtTrailTagKeys(getTagsForFilePath(normalizedCandidatePath));
+        if (hasEveryTagKey(candidateTagKeys, sourceTagKeys)) {
+            matchedFilePaths.push(normalizedCandidatePath);
+        }
+    }
+
+    if (!matchedFilePaths.length) {
+        return [];
+    }
+
+    const nodeLabelByFilePath = buildCompactNodeLabels([normalizedSourcePath, ...matchedFilePaths]);
+    const nodeLines: string[] = [];
+    const edgeLines: string[] = [];
+    const clickLines: string[] = [];
+    const nodeIds = new Map<string, string>();
+
+    const ensureNode = (filePath: string): string => {
+        const existing = nodeIds.get(filePath);
+        if (existing) {
+            return existing;
+        }
+
+        const nodeId = `n${nodeIds.size}`;
+        nodeIds.set(filePath, nodeId);
+        const label = JSON.stringify(toMermaidText(nodeLabelByFilePath.get(filePath) ?? formatNodeLabel(filePath)));
+        nodeLines.push(`    ${nodeId}[${label}]`);
+        clickLines.push(
+            `    click ${nodeId} href ${JSON.stringify(buildNoteOpenUrl(vaultName, filePath))} ${JSON.stringify(`Open ${normalizeNotePath(filePath)}`)}`,
+        );
+        return nodeId;
+    };
+
+    const sourceId = ensureNode(normalizedSourcePath);
+    for (const matchedFilePath of matchedFilePaths) {
+        const targetId = ensureNode(matchedFilePath);
+        edgeLines.push(`    ${sourceId} --> ${targetId}`);
+    }
+
+    return [
+        THOUGHT_TRAIL_MERMAID_INIT,
+        "```mermaid",
+        "flowchart TD",
+        ...nodeLines,
+        ...edgeLines,
+        ...clickLines,
+        "```",
+    ];
 }
 
 export function buildThoughtTrailLines(

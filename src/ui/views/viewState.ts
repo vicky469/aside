@@ -1,6 +1,6 @@
 import { getNormalizedFilterPath, normalizeIndexFileFilterPaths } from "./indexFileFilter";
 
-export type SidebarPrimaryMode = "list" | "tags" | "thought-trail";
+export type SidebarPrimaryMode = "list" | "tags" | "todo" | "agent" | "thought-trail";
 export type IndexSidebarMode = SidebarPrimaryMode;
 export type NoteSidebarMode = SidebarPrimaryMode;
 
@@ -33,7 +33,7 @@ export interface BatchTagFlowState {
 }
 
 export interface NoteSidebarTagsUiState {
-    mode: "list" | "tags" | "thought-trail";
+    mode: SidebarPrimaryMode;
     searchQuery: string;
     searchInputValue: string;
     selectedThreadIds: readonly string[];
@@ -57,13 +57,13 @@ export interface CustomViewState extends Record<string, unknown> {
 }
 
 export function normalizeSidebarPrimaryMode(value: unknown): SidebarPrimaryMode | null {
-    return value === "list" || value === "tags" || value === "thought-trail"
+    return value === "list" || value === "tags" || value === "todo" || value === "agent" || value === "thought-trail"
         ? value
         : null;
 }
 
 export function normalizeIndexSidebarMode(value: unknown): IndexSidebarMode | null {
-    return value === "list" || value === "tags" || value === "thought-trail"
+    return value === "list" || value === "tags" || value === "todo" || value === "agent" || value === "thought-trail"
         ? value
         : null;
 }

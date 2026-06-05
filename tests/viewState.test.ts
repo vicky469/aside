@@ -13,16 +13,20 @@ import {
 test("normalizeSidebarPrimaryMode accepts the supported sidebar modes only", () => {
     assert.equal(normalizeSidebarPrimaryMode("list"), "list");
     assert.equal(normalizeSidebarPrimaryMode("tags"), "tags");
+    assert.equal(normalizeSidebarPrimaryMode("todo"), "todo");
+    assert.equal(normalizeSidebarPrimaryMode("agent"), "agent");
     assert.equal(normalizeSidebarPrimaryMode("thought-trail"), "thought-trail");
-    assert.equal(normalizeSidebarPrimaryMode("agent"), null);
+    assert.equal(normalizeSidebarPrimaryMode("queue"), null);
     assert.equal(normalizeSidebarPrimaryMode(undefined), null);
 });
 
 test("normalizeIndexSidebarMode accepts index modes", () => {
     assert.equal(normalizeIndexSidebarMode("list"), "list");
     assert.equal(normalizeIndexSidebarMode("tags"), "tags");
+    assert.equal(normalizeIndexSidebarMode("todo"), "todo");
+    assert.equal(normalizeIndexSidebarMode("agent"), "agent");
     assert.equal(normalizeIndexSidebarMode("thought-trail"), "thought-trail");
-    assert.equal(normalizeIndexSidebarMode("agent"), null);
+    assert.equal(normalizeIndexSidebarMode("queue"), null);
     assert.equal(normalizeIndexSidebarMode(undefined), null);
 });
 

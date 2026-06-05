@@ -1,5 +1,10 @@
 import { setIcon } from "obsidian";
 import { getActiveFileFilterPresentation } from "./sidebarActiveFileFilterDom";
+import {
+    isSidebarModeAvailable,
+    SHARED_SIDEBAR_MODE_TABS,
+    type SidebarModeAvailability,
+} from "./sidebarModeTabs";
 import type { SidebarPrimaryMode } from "./viewState";
 
 export interface ToolbarActionGuard {
@@ -38,11 +43,8 @@ export interface SidebarSearchInputOptions {
     onInput(value: string, selection: { selectionStart: number | null; selectionEnd: number | null }): void;
 }
 
-export interface SidebarModeControlOptions {
+export interface SidebarModeControlOptions extends SidebarModeAvailability {
     mode: SidebarPrimaryMode;
-    showTagsTab: boolean;
-    isTagsEnabled: boolean;
-    isThoughtTrailEnabled: boolean;
     onChange(mode: SidebarPrimaryMode): void;
     pinnedSidebarFileAction?: {
         active: boolean;
@@ -181,31 +183,16 @@ export function renderSidebarModeControl(
     const modeGroup = container.createDiv("aside-sidebar-toolbar-group is-mode-group");
     const tabList = modeGroup.createDiv(`aside-tablist is-${options.mode}`);
     tabList.setAttribute("role", "tablist");
-    renderTabButton(tabList, {
-        label: "List",
-        active: options.mode === "list",
-        onClick: () => {
-            options.onChange("list");
-        },
-    }, guard);
-    if (options.showTagsTab) {
+    for (const tab of SHARED_SIDEBAR_MODE_TABS) {
         renderTabButton(tabList, {
-            label: "Tags",
-            active: options.mode === "tags",
-            disabled: !options.isTagsEnabled,
+            label: tab.label,
+            active: options.mode === tab.mode,
+            disabled: !isSidebarModeAvailable(tab.mode, options),
             onClick: () => {
-                options.onChange("tags");
+                options.onChange(tab.mode);
             },
         }, guard);
     }
-    renderTabButton(tabList, {
-        label: "Thought Trail",
-        active: options.mode === "thought-trail",
-        disabled: !options.isThoughtTrailEnabled,
-        onClick: () => {
-            options.onChange("thought-trail");
-        },
-    }, guard);
     if (options.pinnedSidebarFileAction) {
         renderPinnedSidebarFileButton(modeGroup, options.pinnedSidebarFileAction, guard);
     }

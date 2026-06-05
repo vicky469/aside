@@ -29,6 +29,7 @@ export interface SidebarThoughtTrailOptions {
     surface: "index" | "note";
     hasRootScope: boolean;
     rootFilePath: string | null;
+    candidateFilePaths: readonly string[];
 }
 
 function cloneMermaidConfig<T>(config: T): T {
@@ -44,6 +45,18 @@ function extractDirectRenderMermaidSource(lines: string[]): string {
         .split("\n")
         .filter((line) => !/^\s*click\s+\S+\s+href\s+/.test(line))
         .join("\n");
+}
+
+function renderThoughtTrailSourceControl(container: HTMLElement): void {
+    const controlEl = container.createDiv("aside-thought-trail-source-control");
+    controlEl.createSpan({
+        cls: "aside-thought-trail-source-label",
+        text: "Related Files By",
+    });
+    controlEl.createSpan({
+        cls: "aside-thought-trail-source-value",
+        text: "Wikilinks",
+    });
 }
 
 export async function renderSidebarThoughtTrail(
@@ -66,13 +79,14 @@ export async function renderSidebarThoughtTrail(
     }
 
     const rootFilePath = options.rootFilePath;
+    renderThoughtTrailSourceControl(thoughtTrailEl);
     const relatedFileLines = buildThoughtTrailLines(context.app.vault.getName(), comments, {
-        allCommentsNotePath: context.allCommentsNotePath,
-        resolveWikiLinkPath: (linkPath, sourceFilePath) => {
-            const linkedFile = context.app.metadataCache.getFirstLinkpathDest(linkPath, sourceFilePath);
-            return linkedFile instanceof TFile ? linkedFile.path : null;
-        },
-    });
+            allCommentsNotePath: context.allCommentsNotePath,
+            resolveWikiLinkPath: (linkPath, sourceFilePath) => {
+                const linkedFile = context.app.metadataCache.getFirstLinkpathDest(linkPath, sourceFilePath);
+                return linkedFile instanceof TFile ? linkedFile.path : null;
+            },
+        });
     await renderThoughtTrailSection(thoughtTrailEl, {
         emptyStateText: options.surface === "note"
             ? [
@@ -85,7 +99,6 @@ export async function renderSidebarThoughtTrail(
             ],
         sourcePath: rootFilePath || file.path,
         thoughtTrailLines: relatedFileLines,
-        title: "Related Files",
     }, context);
 }
 
@@ -95,15 +108,10 @@ async function renderThoughtTrailSection(
         emptyStateText: string[];
         sourcePath: string;
         thoughtTrailLines: string[];
-        title: string;
     },
     context: SidebarThoughtTrailRenderContext,
 ): Promise<void> {
     const sectionEl = container.createDiv("aside-thought-trail-section");
-    sectionEl.createEl("h4", {
-        cls: "aside-thought-trail-section-title",
-        text: options.title,
-    });
     if (!options.thoughtTrailLines.length) {
         const emptyStateEl = sectionEl.createDiv("aside-empty-state aside-section-empty-state");
         options.emptyStateText.forEach((text) => {

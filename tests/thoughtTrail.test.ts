@@ -1,6 +1,8 @@
 import * as assert from "node:assert/strict";
 import test from "node:test";
 import {
+    buildThoughtTrailCommentTagsByFilePath,
+    buildTagRelatedFileLines,
     buildThoughtTrailLines,
     extractThoughtTrailMermaidSource,
     getThoughtTrailMermaidRenderConfig,
@@ -263,6 +265,63 @@ test("buildThoughtTrailLines includes links from older child entries in a thread
 
     assert.equal(lines.includes("    n0 -->|\"setup\"| n1"), true);
     assert.equal(lines.includes("    n1[\"file2\"]"), true);
+});
+
+test("buildTagRelatedFileLines renders a deduped file set that shares the source tag set", () => {
+    const tagsByPath = new Map<string, string[]>([
+        ["docs/source.md", ["#Project/Alpha", "#Status"]],
+        ["docs/a.md", ["#project/alpha", "#status", "#extra"]],
+        ["docs/b.md", ["#project/alpha"]],
+        ["docs/c.md", ["#STATUS", "#PROJECT/ALPHA"]],
+    ]);
+    const lines = buildTagRelatedFileLines(
+        "dev",
+        "docs/source.md",
+        ["docs/source.md", "docs/a.md", "docs/a.md", "docs/b.md", "docs/c.md"],
+        (filePath: string) => tagsByPath.get(filePath) ?? [],
+    );
+
+    assert.equal(lines[0], THOUGHT_TRAIL_INIT);
+    assert.equal(lines[1], "```mermaid");
+    assert.equal(lines[2], "flowchart TD");
+    assert.equal(lines.filter((line: string) => line.includes("Open docs/source.md")).length, 1);
+    assert.equal(lines.filter((line: string) => line.includes("Open docs/a.md")).length, 1);
+    assert.equal(lines.filter((line: string) => line.includes("Open docs/c.md")).length, 1);
+    assert.equal(lines.some((line: string) => line.includes("Open docs/b.md")), false);
+    assert.equal(lines.filter((line: string) => /^\s+n0 --> n\d+$/.test(line)).length, 2);
+});
+
+test("buildTagRelatedFileLines returns no graph when the source file has no tags", () => {
+    assert.deepEqual(
+        buildTagRelatedFileLines(
+            "dev",
+            "docs/source.md",
+            ["docs/a.md"],
+            () => [],
+        ),
+        [],
+    );
+});
+
+test("buildThoughtTrailCommentTagsByFilePath collects tags from side comment entries", () => {
+    const tagsByPath = buildThoughtTrailCommentTagsByFilePath([
+        createThread({
+            id: "thread-a",
+            filePath: "docs/source.md",
+            entries: [
+                { id: "entry-a1", body: "Root note #semantic-triplet", timestamp: 100 },
+                { id: "entry-a2", body: "Reply repeats #Semantic-Triplet and adds #graph", timestamp: 200 },
+            ],
+        }),
+        createComment({
+            id: "comment-b",
+            filePath: "docs/target.md",
+            comment: "Legacy flat comment #graph",
+        }),
+    ]);
+
+    assert.deepEqual(tagsByPath.get("docs/source.md"), ["#graph", "#semantic-triplet"]);
+    assert.deepEqual(tagsByPath.get("docs/target.md"), ["#graph"]);
 });
 
 test("extractThoughtTrailMermaidSource removes the init line and fences", () => {

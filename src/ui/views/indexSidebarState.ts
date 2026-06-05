@@ -1,5 +1,6 @@
 import type { CommentThread } from "../../commentManager";
 import { filterCommentsByFilePaths } from "./indexFileFilter";
+import { isSidebarListLikeMode } from "./sidebarModeTabs";
 import type { IndexSidebarMode } from "./viewState";
 
 export const GENERIC_INDEX_EMPTY_STATE_TEXTS = [
@@ -44,7 +45,7 @@ export function shouldShowIndexListToolbarChips(
     isAllCommentsView: boolean,
     indexSidebarMode: IndexSidebarMode,
 ): boolean {
-    return !isAllCommentsView || indexSidebarMode === "list" || indexSidebarMode === "tags";
+    return !isAllCommentsView || isSidebarListLikeMode(indexSidebarMode);
 }
 
 export function shouldShowResolvedIndexEmptyState(

@@ -85,6 +85,8 @@ test("shouldShowResolvedToolbarChip keeps the resolved toggle visible while reso
 test("shouldShowIndexListToolbarChips hides list-only chips when thought trail is active", () => {
     assert.equal(shouldShowIndexListToolbarChips(true, "list"), true);
     assert.equal(shouldShowIndexListToolbarChips(true, "tags"), true);
+    assert.equal(shouldShowIndexListToolbarChips(true, "todo"), true);
+    assert.equal(shouldShowIndexListToolbarChips(true, "agent"), true);
     assert.equal(shouldShowIndexListToolbarChips(true, "thought-trail"), false);
     assert.equal(shouldShowIndexListToolbarChips(false, "thought-trail"), true);
 });

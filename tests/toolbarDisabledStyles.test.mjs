@@ -38,6 +38,27 @@ test("disabled sidebar tabs use a faded unavailable state", () => {
     assert.doesNotMatch(disabledTabRule.groups.body, /#000|black/i);
 });
 
+test("thought trail source selector uses native Obsidian theme colors", () => {
+    const sourceControlRule = css.match(
+        /\.aside-thought-trail-source-control\s*\{(?<body>[\s\S]*?)\}/,
+    );
+    const sourceOptionRule = css.match(
+        /\.aside-thought-trail-source-option\s*\{(?<body>[\s\S]*?)\}/,
+    );
+    const sourceInputRule = css.match(
+        /\.aside-thought-trail-source-option input\[type="radio"\]\s*\{(?<body>[\s\S]*?)\}/,
+    );
+
+    assert.ok(sourceControlRule?.groups?.body, "missing thought trail source control rule");
+    assert.ok(sourceOptionRule?.groups?.body, "missing thought trail source option rule");
+    assert.ok(sourceInputRule?.groups?.body, "missing thought trail source radio rule");
+    assert.match(sourceControlRule.groups.body, /color:\s*var\(--text-muted\)\s*;/);
+    assert.match(sourceOptionRule.groups.body, /color:\s*var\(--text-muted\)\s*;/);
+    assert.match(sourceOptionRule.groups.body, /font-size:\s*var\(--font-ui-smaller\)\s*;/);
+    assert.match(sourceInputRule.groups.body, /accent-color:\s*var\(--interactive-accent\)\s*;/);
+    assert.doesNotMatch(sourceControlRule.groups.body + sourceOptionRule.groups.body + sourceInputRule.groups.body, /#[0-9a-f]{3,6}|purple|blue/i);
+});
+
 test("empty states stay muted without promoted heading text", () => {
     const emptyStateRule = css.match(
         /\.aside-empty-state\s*\{(?<body>[\s\S]*?)\}/,

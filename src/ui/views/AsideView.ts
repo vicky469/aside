@@ -12,7 +12,9 @@ import {
 } from "obsidian";
 import type { Comment, CommentThread, ReorderPlacement } from "../../commentManager";
 import { buildCommentLocationUrl, parseIndexFileOpenUrl } from "../../core/derived/allCommentsNote";
-import { buildThoughtTrailLines } from "../../core/derived/thoughtTrail";
+import {
+    buildThoughtTrailLines,
+} from "../../core/derived/thoughtTrail";
 import {
     getAgentRunsForCommentThread,
     type AgentRunRecord,
@@ -130,6 +132,18 @@ import {
     mergeCurrentFileThreadsForThoughtTrail,
     resolveModeWithThoughtTrailAvailability,
 } from "./sidebarThoughtTrailState";
+import {
+    isSidebarListLikeMode,
+    isSidebarModeAvailable,
+    type SidebarModeAvailability,
+} from "./sidebarModeTabs";
+import {
+    EMPTY_SIDEBAR_THREAD_GROUP_COUNTS,
+    filterThreadsBySidebarGroupMode,
+    getSidebarThreadGroupCounts,
+    resolveModeWithSidebarGroupAvailability,
+    type SidebarThreadGroupCounts,
+} from "./sidebarThreadGroups";
 import {
     renderActiveFileFilters,
     renderSidebarModeControl,
@@ -1367,7 +1381,7 @@ export default class AsideView extends ItemView {
                 : null;
             let selectedIndexSourceFile: TFile | null = null;
             if (isAllCommentsView && selectedIndexFileFilterRootPath !== this.selectedIndexFileFilterRootPath) {
-                this.selectedIndexFileFilterRootPath = selectedIndexFileFilterRootPath;
+                    this.selectedIndexFileFilterRootPath = selectedIndexFileFilterRootPath;
                 this.plugin.syncIndexPreviewFileScope(file.path);
             }
 
@@ -1384,7 +1398,7 @@ export default class AsideView extends ItemView {
                         firstIndexFilePath: indexFileFilterState.firstFilePath,
                         autoSelectSuppressed: this.indexFileFilterAutoSelectSuppressed,
                     });
-                    this.selectedIndexFileFilterRootPath = selectedIndexFileFilterRootPath;
+                            this.selectedIndexFileFilterRootPath = selectedIndexFileFilterRootPath;
                     this.plugin.syncIndexPreviewFileScope(file.path);
                     if (selectedIndexFileFilterRootPath) {
                         const fallbackSourceFile = this.app.vault.getAbstractFileByPath(selectedIndexFileFilterRootPath);
@@ -1394,7 +1408,7 @@ export default class AsideView extends ItemView {
                                 await this.plugin.loadCommentsForFile(fallbackSourceFile);
                             }
                         } else {
-                            this.selectedIndexFileFilterRootPath = null;
+                                            this.selectedIndexFileFilterRootPath = null;
                             selectedIndexFileFilterRootPath = null;
                             this.plugin.syncIndexPreviewFileScope(file.path);
                         }
@@ -1488,6 +1502,9 @@ export default class AsideView extends ItemView {
                 pinnedSidebarThreadIds,
                 showPinnedThreadsOnly,
             );
+            const indexSidebarThreadGroupCounts = isAllCommentsView
+                ? getSidebarThreadGroupCounts(pinnedScopedAllThreads)
+                : EMPTY_SIDEBAR_THREAD_GROUP_COUNTS;
             const indexThoughtTrailLineCount = isAllCommentsView
                 ? buildThoughtTrailLines(this.app.vault.getName(), pinnedScopedVisibleThreads, {
                     allCommentsNotePath: this.plugin.getAllCommentsNotePath(),
@@ -1525,6 +1542,10 @@ export default class AsideView extends ItemView {
                     this.indexSidebarMode,
                     isIndexThoughtTrailEnabled,
                 );
+                this.indexSidebarMode = resolveModeWithSidebarGroupAvailability(
+                    this.indexSidebarMode,
+                    indexSidebarThreadGroupCounts,
+                );
                 if (indexSidebarModeBeforeAvailability === "thought-trail" && this.indexSidebarMode !== "thought-trail") {
                     void this.plugin.logEvent("warn", "thoughttrail", "thoughttrail.index.fallback", {
                         filePath: file.path,
@@ -1536,20 +1557,26 @@ export default class AsideView extends ItemView {
                     });
                 }
             }
+            const groupFilteredScopedVisibleThreads = isAllCommentsView
+                ? filterThreadsBySidebarGroupMode(pinnedScopedVisibleThreads, this.indexSidebarMode)
+                : pinnedScopedVisibleThreads;
+            const groupFilteredScopedAllThreads = isAllCommentsView
+                ? filterThreadsBySidebarGroupMode(pinnedScopedAllThreads, this.indexSidebarMode)
+                : pinnedScopedAllThreads;
             const isIndexTagsMode = isAllCommentsView && this.indexSidebarMode === "tags";
             const indexTagThreadIds = isIndexTagsMode && this.noteSidebarVisibleTagFilterKey
                 ? this.noteSidebarTagIndex?.threadIdsByTag.get(this.noteSidebarVisibleTagFilterKey) ?? null
                 : null;
             const tagFilteredScopedVisibleThreads = isIndexTagsMode
                 ? indexTagThreadIds
-                    ? pinnedScopedVisibleThreads.filter((thread) => indexTagThreadIds.has(thread.id))
+                    ? groupFilteredScopedVisibleThreads.filter((thread) => indexTagThreadIds.has(thread.id))
                     : []
-                : pinnedScopedVisibleThreads;
+                : groupFilteredScopedVisibleThreads;
             const tagFilteredScopedAllThreads = isIndexTagsMode
                 ? indexTagThreadIds
-                    ? pinnedScopedAllThreads.filter((thread) => indexTagThreadIds.has(thread.id))
+                    ? groupFilteredScopedAllThreads.filter((thread) => indexTagThreadIds.has(thread.id))
                     : []
-                : pinnedScopedAllThreads;
+                : groupFilteredScopedAllThreads;
             const searchMatchedVisibleThreads = rankThreadsBySidebarSearchQuery(
                 tagFilteredScopedVisibleThreads,
                 this.indexSidebarSearchQuery,
@@ -1620,7 +1647,7 @@ export default class AsideView extends ItemView {
                     replacedThreadId,
                 );
             const limitedComments = isAllCommentsView
-                && (this.indexSidebarMode === "list" || this.indexSidebarMode === "tags")
+                && isSidebarListLikeMode(this.indexSidebarMode)
                 && shouldLimitIndexSidebarList(selectedIndexFileFilterRootPath, this.indexSidebarSearchQuery)
                 ? limitIndexSidebarListItems(renderableItems)
                 : {
@@ -1648,6 +1675,7 @@ export default class AsideView extends ItemView {
                 },
                 isTagsEnabled: true,
                 isThoughtTrailEnabled: isIndexThoughtTrailEnabled,
+                sidebarThreadGroupCounts: indexSidebarThreadGroupCounts,
                 noteSidebarContentFilter: "all",
                 noteSidebarMode: this.noteSidebarMode,
                 addPageCommentAction: !isAllCommentsView
@@ -1686,6 +1714,7 @@ export default class AsideView extends ItemView {
                     surface: "index",
                     hasRootScope: filteredIndexFilePaths.length > 0,
                     rootFilePath: selectedIndexFileFilterRootPath,
+                    candidateFilePaths: filteredIndexFilePaths,
                 });
                 if (this.plugin.isLocalRuntime()) {
                     renderSupportButton(this.containerEl, this.plugin, {
@@ -1848,16 +1877,25 @@ export default class AsideView extends ItemView {
         }
         this.syncPinnedSidebarThreadIds(persistedThreads);
         const contentFilteredThreads = this.filterNoteSidebarThreadsByContentFilter(file.path, persistedThreads);
+        const sidebarThreadGroupCounts = getSidebarThreadGroupCounts(contentFilteredThreads);
+        this.noteSidebarMode = resolveModeWithSidebarGroupAvailability(
+            this.noteSidebarMode,
+            sidebarThreadGroupCounts,
+        );
         const pinnedContentFilteredThreads = filterThreadsByPinnedSidebarViewState(
             contentFilteredThreads,
             this.pinnedSidebarThreadIds,
             this.showPinnedSidebarThreadsOnly,
         );
+        const groupModeThreads = filterThreadsBySidebarGroupMode(
+            pinnedContentFilteredThreads,
+            this.noteSidebarMode,
+        );
         const tagModeThreads = this.noteSidebarMode === "tags" && this.noteSidebarVisibleTagFilterKey
-            ? pinnedContentFilteredThreads.filter((thread) =>
+            ? groupModeThreads.filter((thread) =>
                 this.noteSidebarTagIndex?.threadIdsByTag.get(this.noteSidebarVisibleTagFilterKey ?? "")?.has(thread.id) ?? false,
             )
-            : pinnedContentFilteredThreads;
+            : groupModeThreads;
         const searchMatchedThreads = rankThreadsBySidebarSearchQuery(
             tagModeThreads,
             this.noteSidebarSearchQuery,
@@ -1934,6 +1972,7 @@ export default class AsideView extends ItemView {
             },
             isTagsEnabled: true,
             isThoughtTrailEnabled,
+            sidebarThreadGroupCounts,
             noteSidebarContentFilter: this.noteSidebarContentFilter,
             noteSidebarMode: this.noteSidebarMode,
             addPageCommentAction: {
@@ -2001,6 +2040,9 @@ export default class AsideView extends ItemView {
         const deletedCommentCount = countDeletedComments(pageThreadsWithDeleted);
         const showResolved = this.plugin.shouldShowResolvedComments();
         const hasResolvedThreadsInFile = persistedThreads.some((thread) => thread.resolved);
+        const sidebarThreadGroupCounts = getSidebarThreadGroupCounts(
+            this.filterNoteSidebarThreadsByContentFilter(file.path, persistedThreads),
+        );
 
         const { scopedFilePaths, scopedThreads } = this.buildNoteThoughtTrailScope(file, showResolved);
         const thoughtTrailLineCount = buildThoughtTrailLines(this.app.vault.getName(), scopedThreads, {
@@ -2057,6 +2099,7 @@ export default class AsideView extends ItemView {
             },
             isTagsEnabled: true,
             isThoughtTrailEnabled,
+            sidebarThreadGroupCounts,
             noteSidebarContentFilter: this.noteSidebarContentFilter,
             noteSidebarMode: this.noteSidebarMode,
             addPageCommentAction: {
@@ -2084,6 +2127,7 @@ export default class AsideView extends ItemView {
             surface: "note",
             hasRootScope: scopedFilePaths.length > 0,
             rootFilePath: file.path,
+            candidateFilePaths: scopedFilePaths,
         });
 
         shell.supportSlotEl.empty();
@@ -2686,7 +2730,11 @@ export default class AsideView extends ItemView {
             ? options.contentFilter === "all"
                 ? "pinned side notes"
                 : pluralFilterLabel
-            : options.contentFilter === "all"
+            : options.noteSidebarMode === "todo"
+                ? "todo side notes"
+                : options.noteSidebarMode === "agent"
+                    ? "agent side notes"
+                    : options.contentFilter === "all"
                 ? "side notes"
                 : pluralFilterLabel;
         const selectedTagLabel = options.noteSidebarMode === "tags" && options.visibleTagFilterKey
@@ -2776,6 +2824,24 @@ export default class AsideView extends ItemView {
         }
 
         const emptyStateEl = commentsBody.createDiv("aside-empty-state");
+        if (!hasSearchQuery && !options.showPinnedThreadsOnly && options.contentFilter === "all" && options.noteSidebarMode === "todo") {
+            emptyStateEl.createEl("p", {
+                text: "No todo side notes in this file yet.",
+            });
+            emptyStateEl.createEl("p", {
+                text: "Add @todo to any side note or reply to show it here.",
+            });
+            return;
+        }
+        if (!hasSearchQuery && !options.showPinnedThreadsOnly && options.contentFilter === "all" && options.noteSidebarMode === "agent") {
+            emptyStateEl.createEl("p", {
+                text: "No agent side notes in this file yet.",
+            });
+            emptyStateEl.createEl("p", {
+                text: "Add an agent mention to any side note or reply to show it here.",
+            });
+            return;
+        }
         if (!hasSearchQuery && !options.showPinnedThreadsOnly && options.contentFilter === "all") {
             emptyStateEl.createEl("p", {
                 text: NOTE_SIDEBAR_EMPTY_CREATE_HINT_TEXT,
@@ -3056,6 +3122,7 @@ export default class AsideView extends ItemView {
             };
             isTagsEnabled: boolean;
             isThoughtTrailEnabled: boolean;
+            sidebarThreadGroupCounts?: SidebarThreadGroupCounts;
             noteSidebarContentFilter: SidebarContentFilter;
             noteSidebarMode: SidebarPrimaryMode;
             addPageCommentAction: {
@@ -3076,13 +3143,14 @@ export default class AsideView extends ItemView {
         const activePrimaryMode = options.isAllCommentsView
             ? this.indexSidebarMode
             : options.noteSidebarMode;
+        const sidebarThreadGroupCounts = options.sidebarThreadGroupCounts ?? EMPTY_SIDEBAR_THREAD_GROUP_COUNTS;
         const showListOrTagToolbarChips = options.isAllCommentsView
             ? shouldShowIndexListToolbarChips(options.isAllCommentsView, this.indexSidebarMode)
-            : activePrimaryMode === "list" || activePrimaryMode === "tags";
+            : isSidebarListLikeMode(activePrimaryMode);
         const shouldShowNoteSearchInput = !options.isAllCommentsView
-            && (activePrimaryMode === "list" || activePrimaryMode === "tags");
+            && isSidebarListLikeMode(activePrimaryMode);
         const shouldShowAddPageCommentAction = !!options.addPageCommentAction
-            && (options.isAllCommentsView || activePrimaryMode === "list" || activePrimaryMode === "tags");
+            && (options.isAllCommentsView || isSidebarListLikeMode(activePrimaryMode));
         const shouldShowResolvedChip = showListOrTagToolbarChips
             && !options.isAgentMode
             && shouldShowResolvedToolbarChip(options.hasResolvedComments, showResolved);
@@ -3116,9 +3184,23 @@ export default class AsideView extends ItemView {
         if (options.isAllCommentsView) {
             const modeRow = toolbarEl.createDiv("aside-sidebar-toolbar-row");
             modeRow.addClass("is-note-primary-row");
-            this.renderIndexModeControl(modeRow, {
+            this.renderPrimarySidebarModeControl(modeRow, {
+                mode: this.indexSidebarMode,
                 isTagsEnabled: options.isTagsEnabled,
                 isThoughtTrailEnabled: options.isThoughtTrailEnabled,
+                groupCounts: sidebarThreadGroupCounts,
+                onChange: (mode) => {
+                    this.indexSidebarMode = mode;
+                    if (mode !== "list") {
+                        this.showPinnedSidebarThreadsOnly = false;
+                        this.savePinnedSidebarStateForFilePath(this.file?.path ?? null);
+                    }
+                    void this.plugin.logEvent("info", "index", "index.mode.changed", {
+                        mode,
+                        source: "toolbar",
+                    });
+                    void this.renderComments({ skipDataRefresh: true });
+                },
             });
 
             indexChipRow = toolbarEl.createDiv("aside-sidebar-toolbar-row");
@@ -3138,7 +3220,28 @@ export default class AsideView extends ItemView {
         } else {
             const modeRow = toolbarEl.createDiv("aside-sidebar-toolbar-row");
             modeRow.addClass("is-note-primary-row");
-            this.renderNoteModeControl(modeRow, options.isThoughtTrailEnabled);
+            this.renderPrimarySidebarModeControl(modeRow, {
+                mode: this.noteSidebarMode,
+                isTagsEnabled: options.isTagsEnabled,
+                isThoughtTrailEnabled: options.isThoughtTrailEnabled,
+                groupCounts: sidebarThreadGroupCounts,
+                onChange: (mode, previousMode) => {
+                    this.noteSidebarMode = mode;
+                    if (previousMode === "tags" && mode !== "tags") {
+                        this.noteSidebarSelectedTagIds.clear();
+                        this.clearNoteSidebarBatchTagFlowPanel();
+                    }
+                    if (mode !== "list") {
+                        this.showPinnedSidebarThreadsOnly = false;
+                        this.savePinnedSidebarStateForFilePath(this.file?.path ?? null);
+                    }
+                    void this.plugin.logEvent("info", "note", "note.mode.changed", {
+                        mode,
+                        source: "toolbar",
+                    });
+                    void this.renderComments({ skipDataRefresh: true });
+                },
+            });
 
             if (shouldShowNoteSearchInput || showListOrTagToolbarChips || shouldShowAddPageCommentAction || options.noteSidebarMode === "tags") {
                 const actionsRow = toolbarEl.createDiv("aside-sidebar-toolbar-row");
@@ -3464,74 +3567,35 @@ export default class AsideView extends ItemView {
         });
     }
 
-    private renderIndexModeControl(
+    private renderPrimarySidebarModeControl(
         container: HTMLElement,
         options: {
+            mode: SidebarPrimaryMode;
             isTagsEnabled: boolean;
             isThoughtTrailEnabled: boolean;
+            groupCounts: SidebarThreadGroupCounts;
+            onChange(mode: SidebarPrimaryMode, previousMode: SidebarPrimaryMode): void;
         },
     ): void {
-        this.renderSidebarModeControl(container, {
-            mode: this.indexSidebarMode,
-            showTagsTab: true,
+        const availability: SidebarModeAvailability = {
             isTagsEnabled: options.isTagsEnabled,
+            isTodoEnabled: options.groupCounts.todo > 0,
+            isAgentEnabled: options.groupCounts.agent > 0,
             isThoughtTrailEnabled: options.isThoughtTrailEnabled,
-            pinnedSidebarFileAction: this.getPinnedSidebarFileAction(),
-            onChange: (mode) => {
-                if (mode === "tags" && !options.isTagsEnabled) {
-                    return;
-                }
-                if (mode === "thought-trail" && !options.isThoughtTrailEnabled) {
-                    return;
-                }
-                if (this.indexSidebarMode === mode) {
-                    return;
-                }
-
-                this.indexSidebarMode = mode;
-                if (mode !== "list") {
-                    this.showPinnedSidebarThreadsOnly = false;
-                    this.savePinnedSidebarStateForFilePath(this.file?.path ?? null);
-                }
-                void this.plugin.logEvent("info", "index", "index.mode.changed", {
-                    mode,
-                    source: "toolbar",
-                });
-                void this.renderComments({ skipDataRefresh: true });
-            },
-        });
-    }
-
-    private renderNoteModeControl(container: HTMLElement, isThoughtTrailEnabled: boolean): void {
+        };
         this.renderSidebarModeControl(container, {
-            mode: this.noteSidebarMode,
-            showTagsTab: true,
-            isTagsEnabled: true,
-            isThoughtTrailEnabled,
+            mode: options.mode,
+            ...availability,
             pinnedSidebarFileAction: this.getPinnedSidebarFileAction(),
             onChange: (mode) => {
-                if (mode === "thought-trail" && !isThoughtTrailEnabled) {
+                if (!isSidebarModeAvailable(mode, availability)) {
                     return;
                 }
-                if (this.noteSidebarMode === mode) {
+                if (options.mode === mode) {
                     return;
                 }
 
-                const previousMode = this.noteSidebarMode;
-                this.noteSidebarMode = mode;
-                if (previousMode === "tags" && mode !== "tags") {
-                    this.noteSidebarSelectedTagIds.clear();
-                    this.clearNoteSidebarBatchTagFlowPanel();
-                }
-                if (mode !== "list") {
-                    this.showPinnedSidebarThreadsOnly = false;
-                    this.savePinnedSidebarStateForFilePath(this.file?.path ?? null);
-                }
-                void this.plugin.logEvent("info", "note", "note.mode.changed", {
-                    mode,
-                    source: "toolbar",
-                });
-                void this.renderComments({ skipDataRefresh: true });
+                options.onChange(mode, options.mode);
             },
         });
     }
@@ -3695,7 +3759,7 @@ export default class AsideView extends ItemView {
             return;
         }
 
-        if (this.noteSidebarMode === "tags" || this.noteSidebarMode === "list") {
+        if (isSidebarListLikeMode(this.noteSidebarMode)) {
             return;
         }
 
