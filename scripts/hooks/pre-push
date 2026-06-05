@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# pre-push: enforce two-remote routing for aside
+#
+# Rules:
+#   origin  → only main is allowed
+#   private → feat/* and main are allowed
+#   anything else → warn and allow (unknown remote)
+#
+# Install: git config core.hooksPath scripts/hooks
+
+remote="$1"
+
+# Read pushed refs from stdin: local_ref local_sha remote_ref remote_sha
+while read -r local_ref _local_sha _remote_ref _remote_sha; do
+  # Extract branch name from ref (refs/heads/feat/foo → feat/foo)
+  branch="${local_ref#refs/heads/}"
+
+  # Allow branch deletions (local_ref is "(delete)" for git push --delete)
+  [[ "$local_ref" == "(delete)" ]] && continue
+
+  if [[ "$remote" == "origin" && "$branch" != "main" ]]; then
+    echo ""
+    echo "  BLOCKED: cannot push '$branch' to origin."
+    echo ""
+    echo "  aside uses a two-remote model:"
+    echo "    origin  → public Obsidian marketplace repo (main only)"
+    echo "    private → private repo for unreleased features (feat/* branches)"
+    echo ""
+    echo "  To push this branch:   git push private $branch"
+    echo "  To ship to public:     squash-merge into main, then push origin main"
+    echo ""
+    echo "  See docs/todo/private-features-strategy.md for the full workflow."
+    echo ""
+    exit 1
+  fi
+done
+
+exit 0

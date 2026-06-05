@@ -66,6 +66,24 @@ If the user already supplied an `obsidian://aside-comment?...` URI or legacy `ob
 
 Do not overwrite an existing Aside thread when the user clearly asked to reply.
 
+## Two-Remote Model (CRITICAL)
+
+This repo uses two remotes. Every agent must follow this routing without exception.
+
+```
+origin  → github.com/vicky469/aside          (public, Obsidian marketplace)
+private → github.com/vicky469/aside-private   (private, unreleased features)
+```
+
+**Rules:**
+- `git push origin` is only allowed for `main`. The pre-push hook enforces this and will block any other branch.
+- All `feat/*` branches go to `private` only: `git push private <branch>`
+- Never push a feature branch to `origin` directly, even if the user asks casually. Confirm they mean it.
+- When shipping a private feature to public: squash-merge into `main`, write one clean commit message, then `git push origin main`.
+- On a fresh clone, run `git config core.hooksPath scripts/hooks` to install the hook. If this is not set, the routing enforcement is silent.
+
+Full rationale: `docs/todo/private-features-strategy.md`
+
 ## Release Notes Requirement
 
 - Every release must include `docs/releases/<version>.md`.
