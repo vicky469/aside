@@ -1654,6 +1654,55 @@ button.aside-thread-footer-meta-action:focus-visible {
     color: var(--text-normal);
 }
 
+.aside-index-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    min-height: 120px;
+    gap: 6px;
+}
+
+.aside-index-loading::before {
+    content: "LOADING";
+    font-family: monospace;
+    font-size: 9px;
+    letter-spacing: 3px;
+    opacity: 0.3;
+}
+
+.aside-index-loading::after {
+    content: "";
+    width: 80px;
+    height: 10px;
+    border: 1.5px solid currentColor;
+    opacity: 0.35;
+    background-image: repeating-linear-gradient(
+        to right,
+        currentColor 0,
+        currentColor 8px,
+        transparent 8px,
+        transparent 10px
+    );
+    background-size: 0% 100%;
+    background-repeat: no-repeat;
+    animation: aside-pixel-bar-fill 1.2s steps(8, end) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .aside-index-loading::after {
+        animation: none;
+        background-size: 50% 100%;
+    }
+}
+
+@keyframes aside-pixel-bar-fill {
+    0% { background-size: 0% 100%; }
+    87.5% { background-size: 100% 100%; }
+    100% { background-size: 100% 100%; }
+}
+
 @keyframes aside-agent-status-spin {
     from {
         transform: rotate(0deg);

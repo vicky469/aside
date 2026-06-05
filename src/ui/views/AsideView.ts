@@ -3738,6 +3738,9 @@ export default class AsideView extends ItemView {
 			});
 		}
 		this.interactionController.clearActiveState();
+        this.containerEl.empty();
+        this.containerEl.createDiv("aside-index-loading");
+        await new Promise<void>(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
 		await this.renderComments();
 	}
 
