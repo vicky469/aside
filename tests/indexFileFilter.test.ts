@@ -14,6 +14,76 @@ import {
     shouldLimitIndexSidebarList,
 } from "../src/ui/views/indexFileFilter";
 import { updateRenderedActiveFileFilters } from "../src/ui/views/sidebarActiveFileFilterDom";
+import { showIndexSidebarListLoadingState } from "../src/ui/views/sidebarIndexLoadingState";
+
+class FakeElement {
+    public readonly children: FakeElement[] = [];
+    public readonly attributes = new Map<string, string>();
+    public className = "";
+    public textContent = "";
+    public readonly ownerDocument = {
+        createElement: (tagName: string) => new FakeElement(tagName),
+    };
+
+    constructor(public readonly tagName: string) {}
+
+    public appendChild(child: FakeElement): FakeElement {
+        this.children.push(child);
+        return child;
+    }
+
+    public matches(selector: string): boolean {
+        return selector
+            .split(",")
+            .map((part) => part.trim())
+            .some((part) => part.startsWith(".") && this.hasClass(part.slice(1)));
+    }
+
+    public querySelector(selector: string): FakeElement | null {
+        if (this.matches(selector)) {
+            return this;
+        }
+
+        for (const child of this.children) {
+            const match = child.querySelector(selector);
+            if (match) {
+                return match;
+            }
+        }
+
+        return null;
+    }
+
+    public replaceChildren(...children: FakeElement[]): void {
+        this.children.length = 0;
+        this.textContent = "";
+        this.children.push(...children);
+    }
+
+    public setAttribute(name: string, value: string): void {
+        this.attributes.set(name, value);
+    }
+
+    private hasClass(className: string): boolean {
+        return this.className.split(/\s+/).includes(className);
+    }
+}
+
+function assertTypedRippleLoadingElement(loadingEl: FakeElement): void {
+    assert.equal(loadingEl.className, "aside-index-list-loading");
+    assert.equal(loadingEl.attributes.get("aria-label"), "Loading comments");
+    assert.equal(loadingEl.children.length, 5);
+    assert.deepEqual(
+        loadingEl.children.map((child) => [child.className, child.textContent, child.attributes.get("aria-hidden")]),
+        [
+            ["aside-index-list-loading-dot", ".", "true"],
+            ["aside-index-list-loading-dot", ".", "true"],
+            ["aside-index-list-loading-dot", ".", "true"],
+            ["aside-index-list-loading-dot", ".", "true"],
+            ["aside-index-list-loading-dot", ".", "true"],
+        ],
+    );
+}
 
 function createComment(overrides: Partial<Comment> = {}): Comment {
     return {
@@ -212,4 +282,50 @@ test("updateRenderedActiveFileFilters replaces the visible filter chip immediate
     assert.equal(labelEl.textContent, "test");
     assert.equal(summaryEl.textContent, "1 file");
     assert.equal(clearButton.attributes.get("aria-label"), "Clear file filter for test.md");
+});
+
+test("showIndexSidebarListLoadingState clears stale comments and inserts typed ripple loader", () => {
+    const root = new FakeElement("div");
+    const list = new FakeElement("div");
+    list.className = "aside-comments-list";
+    const staleComment = new FakeElement("article");
+    staleComment.className = "aside-comment-item";
+    staleComment.textContent = "stale comment";
+    list.appendChild(staleComment);
+    root.appendChild(list);
+
+    const rendered = showIndexSidebarListLoadingState(root as unknown as HTMLElement);
+
+    assert.equal(rendered, true);
+    assert.equal(list.children.length, 1);
+    assertTypedRippleLoadingElement(list.children[0]);
+});
+
+test("showIndexSidebarListLoadingState replaces non-list index content with a loading list", () => {
+    const root = new FakeElement("div");
+    const container = new FakeElement("div");
+    container.className = "aside-comments-container";
+    const toolbar = new FakeElement("div");
+    toolbar.className = "aside-sidebar-toolbar";
+    toolbar.textContent = "toolbar";
+    const activeFilter = new FakeElement("div");
+    activeFilter.className = "aside-active-file-filters";
+    activeFilter.textContent = "filter";
+    const thoughtTrail = new FakeElement("div");
+    thoughtTrail.className = "aside-thought-trail";
+    thoughtTrail.textContent = "old trail";
+    container.appendChild(toolbar);
+    container.appendChild(activeFilter);
+    container.appendChild(thoughtTrail);
+    root.appendChild(container);
+
+    const rendered = showIndexSidebarListLoadingState(root as unknown as HTMLElement);
+
+    assert.equal(rendered, true);
+    assert.deepEqual(container.children.map((child) => child.className), [
+        "aside-sidebar-toolbar",
+        "aside-active-file-filters",
+        "aside-comments-list",
+    ]);
+    assertTypedRippleLoadingElement(container.children[2].children[0]);
 });

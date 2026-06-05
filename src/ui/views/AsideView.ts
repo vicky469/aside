@@ -46,6 +46,7 @@ import {
     type IndexFileFilterOption,
 } from "./indexFileFilter";
 import { INDEX_SIDEBAR_LIST_LIMIT, limitIndexSidebarListItems } from "./indexSidebarListLimit";
+import { showIndexSidebarListLoadingState } from "./sidebarIndexLoadingState";
 import { SidebarInteractionController } from "./sidebarInteractionController";
 import {
     buildPageSidebarDraftRenderSignature,
@@ -3718,6 +3719,23 @@ export default class AsideView extends ItemView {
         });
     }
 
+    private async waitForIndexSidebarListLoadingPaint(): Promise<void> {
+        if (typeof window === "undefined") {
+            return;
+        }
+
+        await new Promise<void>((resolve) => {
+            if (typeof window.requestAnimationFrame === "function") {
+                window.requestAnimationFrame(() => {
+                    window.setTimeout(resolve, 0);
+                });
+                return;
+            }
+
+            window.setTimeout(resolve, 0);
+        });
+    }
+
 	public async setIndexFileFilterRootPath(filePath: string | null): Promise<void> {
 		const normalizedRootPath = normalizeIndexFileFilterRootPath(filePath);
         this.indexFileFilterAutoSelectSuppressed = normalizedRootPath === null;
@@ -3738,9 +3756,9 @@ export default class AsideView extends ItemView {
 			});
 		}
 		this.interactionController.clearActiveState();
-        this.containerEl.empty();
-        this.containerEl.createDiv("aside-index-loading");
-        await new Promise<void>(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
+        if (showIndexSidebarListLoadingState(this.containerEl)) {
+            await this.waitForIndexSidebarListLoadingPaint();
+        }
 		await this.renderComments();
 	}
 

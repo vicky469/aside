@@ -1122,6 +1122,63 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
     margin-bottom: 0;
 }
 
+.aside-index-list-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    min-height: 96px;
+    color: var(--text-muted);
+    font-family: var(--font-monospace, monospace);
+    font-size: calc(var(--font-ui-small) + 1px);
+    line-height: 1;
+}
+
+.aside-index-list-loading-dot {
+    display: inline-block;
+    width: 0.55em;
+    text-align: center;
+    opacity: 0.28;
+    animation: aside-index-list-loading-ripple 0.9s ease-in-out infinite;
+}
+
+.aside-index-list-loading-dot:nth-child(2) {
+    animation-delay: 0.08s;
+}
+
+.aside-index-list-loading-dot:nth-child(3) {
+    animation-delay: 0.16s;
+}
+
+.aside-index-list-loading-dot:nth-child(4) {
+    animation-delay: 0.24s;
+}
+
+.aside-index-list-loading-dot:nth-child(5) {
+    animation-delay: 0.32s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .aside-index-list-loading-dot {
+        animation: none;
+        opacity: 0.72;
+        transform: none;
+    }
+}
+
+@keyframes aside-index-list-loading-ripple {
+    0%,
+    100% {
+        opacity: 0.28;
+        transform: translateY(0);
+    }
+
+    40% {
+        opacity: 0.9;
+        transform: translateY(-2px);
+    }
+}
+
 .aside-thread-stack {
     --aside-thread-indent: 22px;
     margin-bottom: 8px;
@@ -1654,54 +1711,6 @@ button.aside-thread-footer-meta-action:focus-visible {
     color: var(--text-normal);
 }
 
-.aside-index-loading {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    height: 100%;
-    min-height: 120px;
-    gap: 6px;
-}
-
-.aside-index-loading::before {
-    content: "LOADING";
-    font-family: monospace;
-    font-size: 9px;
-    letter-spacing: 3px;
-    opacity: 0.3;
-}
-
-.aside-index-loading::after {
-    content: "";
-    width: 80px;
-    height: 10px;
-    border: 1.5px solid currentColor;
-    opacity: 0.35;
-    background-image: repeating-linear-gradient(
-        to right,
-        currentColor 0,
-        currentColor 8px,
-        transparent 8px,
-        transparent 10px
-    );
-    background-size: 0% 100%;
-    background-repeat: no-repeat;
-    animation: aside-pixel-bar-fill 1.2s steps(8, end) infinite;
-}
-
-@media (prefers-reduced-motion: reduce) {
-    .aside-index-loading::after {
-        animation: none;
-        background-size: 50% 100%;
-    }
-}
-
-@keyframes aside-pixel-bar-fill {
-    0% { background-size: 0% 100%; }
-    87.5% { background-size: 100% 100%; }
-    100% { background-size: 100% 100%; }
-}
 
 @keyframes aside-agent-status-spin {
     from {
