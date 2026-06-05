@@ -73,14 +73,16 @@ This repo uses two remotes. Every agent must follow this routing without excepti
 ```
 origin  → github.com/vicky469/aside          (public, Obsidian marketplace)
 private → github.com/vicky469/aside-private   (private, unreleased features)
+icloud  → ~/iCloud Drive/git-repos/aside-private.git  (local backup)
 ```
 
 **Rules:**
 - `git push origin` is only allowed for `main`. The pre-push hook enforces this and will block any other branch.
 - All `feat/*` branches go to `private` only: `git push private <branch>`
+- The hook automatically mirrors to `icloud` after every successful `private` push. No extra command needed.
 - Never push a feature branch to `origin` directly, even if the user asks casually. Confirm they mean it.
 - When shipping a private feature to public: squash-merge into `main`, write one clean commit message, then `git push origin main`.
-- On a fresh clone, run `git config core.hooksPath scripts/hooks` to install the hook. If this is not set, the routing enforcement is silent.
+- On a fresh clone, run `git config core.hooksPath scripts/hooks` and add the icloud remote: `git remote add icloud ~/Library/Mobile\ Documents/com~apple~CloudDocs/git-repos/aside-private.git`
 
 Full rationale: `docs/todo/private-features-strategy.md`
 

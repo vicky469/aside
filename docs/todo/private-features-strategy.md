@@ -4,14 +4,15 @@
 
 `aside` is a public Obsidian marketplace plugin. The core plugin stays public — that's the distribution channel and community trust. But some features are commercially sensitive (potential paid tier, power-user workflows, agent integrations) and should not be visible in the public repo until deliberately shipped.
 
-## Two-remote model
+## Three-remote model
 
 ```
-origin  → github.com/vicky469/aside          (public, Obsidian marketplace)
-private → github.com/vicky469/aside-private   (private, unreleased features)
+origin  → github.com/vicky469/aside                           (public, Obsidian marketplace)
+private → github.com/vicky469/aside-private                   (private GitHub repo)
+icloud  → ~/iCloud Drive/git-repos/aside-private.git          (local iCloud backup)
 ```
 
-All development still happens in the same local repo. You just choose which remote to push to.
+All development still happens in the same local repo. `icloud` is a bare repo inside iCloud Drive — it syncs automatically to all your Apple devices and acts as an offline-capable backup independent of GitHub.
 
 ## Day-to-day workflow
 

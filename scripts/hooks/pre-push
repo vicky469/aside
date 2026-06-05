@@ -1,22 +1,22 @@
 #!/usr/bin/env bash
-# pre-push: enforce two-remote routing for aside
+# pre-push: enforce two-remote routing and mirror private → iCloud
 #
 # Rules:
 #   origin  → only main is allowed
-#   private → feat/* and main are allowed
-#   anything else → warn and allow (unknown remote)
+#   private → feat/* and main allowed; auto-mirrors to iCloud after push
+#   icloud  → allowed (mirror target)
 #
 # Install: git config core.hooksPath scripts/hooks
 
 remote="$1"
+refs=()
 
-# Read pushed refs from stdin: local_ref local_sha remote_ref remote_sha
 while read -r local_ref _local_sha _remote_ref _remote_sha; do
-  # Extract branch name from ref (refs/heads/feat/foo → feat/foo)
-  branch="${local_ref#refs/heads/}"
-
-  # Allow branch deletions (local_ref is "(delete)" for git push --delete)
+  # Allow branch deletions
   [[ "$local_ref" == "(delete)" ]] && continue
+
+  branch="${local_ref#refs/heads/}"
+  refs+=("$branch")
 
   if [[ "$remote" == "origin" && "$branch" != "main" ]]; then
     echo ""
@@ -34,5 +34,16 @@ while read -r local_ref _local_sha _remote_ref _remote_sha; do
     exit 1
   fi
 done
+
+# After a successful push to private, mirror to iCloud backup
+if [[ "$remote" == "private" && "${#refs[@]}" -gt 0 ]]; then
+  icloud_remote="$(git remote get-url icloud 2>/dev/null)"
+  if [[ -n "$icloud_remote" ]]; then
+    echo "  Mirroring to iCloud backup..."
+    for branch in "${refs[@]}"; do
+      git push icloud "$branch" --quiet 2>&1 && echo "  ✓ icloud ← $branch" || echo "  ✗ icloud mirror failed for $branch (continuing)"
+    done
+  fi
+fi
 
 exit 0
