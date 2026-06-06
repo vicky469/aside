@@ -29,7 +29,6 @@ function createThread(overrides: Partial<CommentThread> = {}): CommentThread {
         selectedTextHash: overrides.selectedTextHash ?? "hash:selected",
         anchorKind: overrides.anchorKind ?? "selection",
         orphaned: overrides.orphaned ?? false,
-        resolved: overrides.resolved ?? false,
         deletedAt: overrides.deletedAt,
         entries: overrides.entries ?? [
             { id: overrides.id ?? "thread-1", body: "Parent entry", timestamp: 100 },
@@ -329,7 +328,6 @@ test("entering deleted mode clears filters and search so all soft-deleted thread
     assert.deepEqual(
         toggleDeletedSidebarViewState({
             showDeleted: false,
-            showResolved: true,
             contentFilter: "agents",
             showPinnedThreadsOnly: true,
             pinnedThreadIds: new Set(["thread-1"]),
@@ -338,7 +336,6 @@ test("entering deleted mode clears filters and search so all soft-deleted thread
         }),
         {
             showDeleted: true,
-            showResolved: false,
             contentFilter: "all",
             showPinnedThreadsOnly: false,
             pinnedThreadIds: new Set(["thread-1"]),
@@ -352,7 +349,6 @@ test("leaving deleted mode keeps the already-cleared sidebar state stable", () =
     assert.deepEqual(
         toggleDeletedSidebarViewState({
             showDeleted: true,
-            showResolved: false,
             contentFilter: "all",
             showPinnedThreadsOnly: false,
             pinnedThreadIds: new Set<string>(),
@@ -361,7 +357,6 @@ test("leaving deleted mode keeps the already-cleared sidebar state stable", () =
         }),
         {
             showDeleted: false,
-            showResolved: false,
             contentFilter: "all",
             showPinnedThreadsOnly: false,
             pinnedThreadIds: new Set<string>(),

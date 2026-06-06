@@ -447,24 +447,10 @@ export class CommentManager {
         return true;
     }
 
-    resolveComment(id: string) {
-        const thread = this.findThreadById(id);
-        if (thread) {
-            thread.resolved = true;
-        }
-    }
-
     setCommentPinnedState(id: string, isPinned: boolean) {
         const thread = this.findThreadById(id);
         if (thread) {
             thread.isPinned = isPinned;
-        }
-    }
-
-    unresolveComment(id: string) {
-        const thread = this.findThreadById(id);
-        if (thread) {
-            thread.resolved = false;
         }
     }
 

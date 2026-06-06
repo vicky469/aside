@@ -42,7 +42,6 @@ function createComment(overrides: Partial<Comment> = {}): Comment {
         timestamp: overrides.timestamp ?? 100,
         anchorKind: overrides.anchorKind ?? "selection",
         orphaned: overrides.orphaned ?? false,
-        resolved: overrides.resolved ?? false,
         deletedAt: overrides.deletedAt,
     };
 }
@@ -267,14 +266,12 @@ test("buildPersistedCommentPresentation includes page and active classes for pag
     const presentation = buildPersistedCommentPresentation(createThread({
         id: "comment-2",
         anchorKind: "page",
-        resolved: true,
     }), "comment-2");
 
     assert.deepEqual(presentation.classes, [
         "aside-comment-item",
         "aside-thread-item",
         "page-note",
-        "resolved",
         "active",
     ]);
 });
@@ -320,32 +317,6 @@ test("buildPersistedCommentPresentation omits re-anchor action for page notes", 
     assert.equal(presentation.reanchorAction, null);
 });
 
-test("buildPersistedCommentPresentation chooses the right resolve action copy and icon", () => {
-    const unresolved = buildPersistedCommentPresentation(createThread({ resolved: false }), null);
-    const resolved = buildPersistedCommentPresentation(createThread({ resolved: true }), null);
-
-    assert.deepEqual(unresolved.redirectHint, {
-        ariaLabel: "Open source note",
-        icon: "obsidian-external-link",
-    });
-    assert.deepEqual(unresolved.shareAction, {
-        ariaLabel: "Share side note",
-        icon: "share",
-    });
-    assert.deepEqual(unresolved.moveAction, {
-        ariaLabel: "Move to another file",
-        icon: "arrow-right-left",
-    });
-    assert.deepEqual(unresolved.resolveAction, {
-        ariaLabel: "Resolve side note",
-        icon: "check",
-    });
-    assert.deepEqual(resolved.resolveAction, {
-        ariaLabel: "Reopen side note",
-        icon: "rotate-ccw",
-    });
-});
-
 test("buildPersistedCommentPresentation shows the parent entry time without a note count", () => {
     const thread = createThreadWithEntries({
         entries: [
@@ -368,7 +339,6 @@ test("buildPersistedCommentPresentation shows the parent entry time without a no
 test("buildPersistedThreadEntryPresentation gives child entries their own indented card styling", () => {
     const thread = createThreadWithEntries({
         orphaned: true,
-        resolved: true,
         entries: [
             { id: "entry-1", body: "Parent", timestamp: 100 },
             { id: "entry-2", body: "Child", timestamp: 200 },
@@ -385,7 +355,6 @@ test("buildPersistedThreadEntryPresentation gives child entries their own indent
         "aside-thread-item",
         "aside-thread-entry-item",
         "orphaned",
-        "resolved",
         "active",
     ]);
     assert.equal(
@@ -393,7 +362,6 @@ test("buildPersistedThreadEntryPresentation gives child entries their own indent
         formatSidebarCommentMeta({
             timestamp: childEntry.timestamp,
             orphaned: true,
-            resolved: true,
         }),
     );
     assert.equal(presentation.metaPreviewText, null);
@@ -1045,8 +1013,6 @@ test("renderPersistedCommentCard puts agent metadata above status and Add to fil
         shareComment: async () => {},
         saveVisibleDraftIfPresent: async () => true,
         setShowNestedCommentsForThread: () => {},
-        resolveComment: () => true,
-        unresolveComment: () => true,
         moveCommentThread: () => {},
         restoreComment: () => true,
         clearDeletedComment: () => true,
@@ -1132,8 +1098,6 @@ test("renderPersistedCommentCard reuses toolbar pin styling for page note pins",
         shareComment: async () => {},
         saveVisibleDraftIfPresent: async () => true,
         setShowNestedCommentsForThread: () => {},
-        resolveComment: () => true,
-        unresolveComment: () => true,
         moveCommentThread: () => {},
         restoreComment: () => true,
         clearDeletedComment: () => true,

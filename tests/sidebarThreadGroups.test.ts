@@ -24,7 +24,6 @@ function createThread(
         selectedTextHash: overrides.selectedTextHash ?? `hash:${id}`,
         anchorKind: overrides.anchorKind ?? "selection",
         orphaned: overrides.orphaned ?? false,
-        resolved: overrides.resolved ?? false,
         deletedAt: overrides.deletedAt,
         entries: bodies.map((body, index) => ({
             id: `${id}-${index}`,

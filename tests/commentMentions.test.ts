@@ -15,7 +15,6 @@ function createComment(overrides: Partial<Comment> = {}): Comment {
         selectedTextHash: "hash-1",
         comment: "",
         timestamp: 1710000000000,
-        resolved: false,
         ...overrides,
     };
 }
@@ -32,7 +31,6 @@ function createThread(overrides: Partial<CommentThread> = {}): CommentThread {
         selectedTextHash: overrides.selectedTextHash ?? "hash-1",
         anchorKind: overrides.anchorKind ?? "selection",
         orphaned: overrides.orphaned ?? false,
-        resolved: overrides.resolved ?? false,
         entries: overrides.entries ?? [],
         createdAt: overrides.createdAt ?? 1710000000000,
         updatedAt: overrides.updatedAt ?? 1710000001000,
@@ -115,16 +113,11 @@ test("buildDerivedCommentLinks creates native link cache entries and counts", ()
     );
 });
 
-test("buildDerivedCommentLinks skips resolved comments and self-links", () => {
+test("buildDerivedCommentLinks skips self-links", () => {
     const derivedLinks = buildDerivedCommentLinks(
         [
             createComment({
                 comment: "[[tmp]] [[tmp5]]",
-            }),
-            createComment({
-                id: "comment-2",
-                resolved: true,
-                comment: "[[tmp6]]",
             }),
         ],
         "tmp",

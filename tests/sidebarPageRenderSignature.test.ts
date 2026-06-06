@@ -20,7 +20,6 @@ function createThread(overrides: Partial<CommentThread> = {}): CommentThread {
         selectedTextHash: overrides.selectedTextHash ?? "hash:selected",
         anchorKind: overrides.anchorKind ?? "selection",
         orphaned: overrides.orphaned ?? false,
-        resolved: overrides.resolved ?? false,
         deletedAt: overrides.deletedAt,
         entries: overrides.entries ?? [
             { id: "thread-1", body: "Parent entry", timestamp: 100 },
@@ -45,7 +44,6 @@ function createDraft(overrides: Partial<DraftComment> = {}): DraftComment {
         timestamp: overrides.timestamp ?? 100,
         anchorKind: overrides.anchorKind ?? "selection",
         orphaned: overrides.orphaned ?? false,
-        resolved: overrides.resolved ?? false,
         deletedAt: overrides.deletedAt,
         mode: overrides.mode ?? "append",
         threadId: overrides.threadId ?? "thread-1",

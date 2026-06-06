@@ -155,7 +155,6 @@ function normalizeThread(candidate: unknown, notePath: string): CommentThread | 
         anchorKind: candidate.anchorKind === "page" ? "page" : "selection",
         orphaned: candidate.anchorKind === "page" ? false : candidate.orphaned === true,
         isPinned: candidate.isPinned === true,
-        resolved: candidate.resolved === true,
         deletedAt: normalizeDeletedAt(candidate.deletedAt),
         entries,
         createdAt: candidate.createdAt,
@@ -415,11 +414,7 @@ function applyEvent(threads: CommentThread[], event: SideNoteSyncEvent): Comment
         case "deleteEntry":
             return applyDeleteEntry(threads, event);
         case "setThreadResolved":
-            return applyThreadFlag(threads, event, (thread, payload) => ({
-                ...thread,
-                resolved: payload.resolved === true,
-                updatedAt: typeof payload.updatedAt === "number" ? payload.updatedAt : Math.max(thread.updatedAt, event.createdAt),
-            }));
+            return threads;
         case "setThreadDeleted":
             return applyThreadFlag(threads, event, (thread, payload) => {
                 const deletedAt = normalizeDeletedAt(payload.deletedAt) ?? (payload.deleted === false ? undefined : event.createdAt);
@@ -649,17 +644,6 @@ export function buildSideNoteSyncEventInputsForThreadDiff(
                     selectedTextHash: nextThread.selectedTextHash,
                     anchorKind: nextThread.anchorKind ?? "selection",
                     orphaned: nextThread.orphaned === true,
-                    updatedAt: nextThread.updatedAt,
-                },
-            });
-        }
-
-        if ((previousThread.resolved === true) !== (nextThread.resolved === true)) {
-            inputs.push({
-                op: "setThreadResolved",
-                payload: {
-                    threadId: nextThread.id,
-                    resolved: nextThread.resolved === true,
                     updatedAt: nextThread.updatedAt,
                 },
             });

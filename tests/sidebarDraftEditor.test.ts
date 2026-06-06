@@ -26,7 +26,6 @@ function createComment(overrides: Partial<Comment> = {}): Comment {
         timestamp: overrides.timestamp ?? 100,
         anchorKind: overrides.anchorKind ?? "selection",
         orphaned: overrides.orphaned ?? false,
-        resolved: overrides.resolved ?? false,
     };
 }
 
@@ -48,11 +47,10 @@ function createDraftEditorController() {
     });
 }
 
-test("getSidebarComments replaces the persisted version of the draft, hides resolved comments, and sorts consistently", () => {
+test("getSidebarComments replaces the persisted version of the draft and sorts consistently", () => {
     const persistedComments = [
         createComment({ id: "comment-b", filePath: "docs/b.md", startLine: 8, timestamp: 300 }),
         createComment({ id: "draft-1", filePath: "docs/b.md", startLine: 12, timestamp: 400 }),
-        createComment({ id: "comment-resolved", filePath: "docs/a.md", resolved: true, timestamp: 50 }),
         createComment({ id: "comment-page", filePath: "docs/a.md", anchorKind: "page", startLine: 20, startChar: 0, endLine: 20, endChar: 0, timestamp: 150 }),
         createComment({ id: "comment-a", filePath: "docs/a.md", startLine: 3, timestamp: 200 }),
     ];
@@ -64,7 +62,7 @@ test("getSidebarComments replaces the persisted version of the draft, hides reso
         comment: "Draft body",
     });
 
-    const comments = getSidebarComments(persistedComments, draft, false);
+    const comments = getSidebarComments(persistedComments, draft);
 
     assert.deepEqual(comments.map((comment) => ({
         id: comment.id,
@@ -91,24 +89,12 @@ test("getSidebarComments applies file filters to both persisted comments and dra
     });
 
     assert.deepEqual(
-        getSidebarComments(persistedComments, draft, false, ["docs/b.md"]).map((comment) => comment.id),
+        getSidebarComments(persistedComments, draft, ["docs/b.md"]).map((comment) => comment.id),
         ["comment-b"],
     );
     assert.deepEqual(
-        getSidebarComments(persistedComments, draft, false, ["docs/c.md"]).map((comment) => comment.id),
+        getSidebarComments(persistedComments, draft, ["docs/c.md"]).map((comment) => comment.id),
         ["draft-1"],
-    );
-});
-
-test("getSidebarComments shows only resolved comments when the resolved toggle is on", () => {
-    const persistedComments = [
-        createComment({ id: "comment-unresolved", filePath: "docs/a.md", timestamp: 100, resolved: false }),
-        createComment({ id: "comment-resolved", filePath: "docs/a.md", timestamp: 200, resolved: true }),
-    ];
-
-    assert.deepEqual(
-        getSidebarComments(persistedComments, null, true).map((comment) => comment.id),
-        ["comment-resolved"],
     );
 });
 

@@ -16,7 +16,6 @@ function createComment(overrides: Partial<Comment> = {}): Comment {
         selectedTextHash: "hash-target",
         comment: "note",
         timestamp: 1710000000000,
-        resolved: false,
         ...overrides,
     };
 }

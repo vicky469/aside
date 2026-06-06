@@ -15,19 +15,17 @@ function createComment(overrides: Partial<Comment> = {}): Comment {
         selectedTextHash: "hash-1",
         comment: "hello",
         timestamp: 1710000000000,
-        resolved: false,
         ...overrides,
     };
 }
 
-test("buildEditorHighlightRanges highlights unresolved comments by stored coordinates", () => {
+test("buildEditorHighlightRanges highlights comments by stored coordinates", () => {
     const docText = "alpha beta gamma";
     const ranges = buildEditorHighlightRanges(
         docText,
         docText,
         [createComment()],
         null,
-        false,
         "comment-1",
     );
 
@@ -35,57 +33,8 @@ test("buildEditorHighlightRanges highlights unresolved comments by stored coordi
         commentId: "comment-1",
         from: 6,
         to: 10,
-        resolved: false,
         active: true,
     }]);
-});
-
-test("buildEditorHighlightRanges hides resolved comments when showResolved is off", () => {
-    const docText = "alpha beta gamma";
-    const ranges = buildEditorHighlightRanges(
-        docText,
-        docText,
-        [createComment({ resolved: true })],
-        null,
-        false,
-        "comment-1",
-    );
-
-    assert.deepEqual(ranges, []);
-});
-
-test("buildEditorHighlightRanges includes resolved comments when showResolved is on", () => {
-    const docText = "alpha beta gamma";
-    const ranges = buildEditorHighlightRanges(
-        docText,
-        docText,
-        [createComment({ resolved: true })],
-        null,
-        true,
-        "comment-1",
-    );
-
-    assert.deepEqual(ranges, [{
-        commentId: "comment-1",
-        from: 6,
-        to: 10,
-        resolved: true,
-        active: true,
-    }]);
-});
-
-test("buildEditorHighlightRanges hides unresolved comments when showResolved is on", () => {
-    const docText = "alpha beta gamma";
-    const ranges = buildEditorHighlightRanges(
-        docText,
-        docText,
-        [createComment({ resolved: false })],
-        null,
-        true,
-        "comment-1",
-    );
-
-    assert.deepEqual(ranges, []);
 });
 
 test("buildEditorHighlightRanges supports multiline anchors", () => {
@@ -101,7 +50,6 @@ test("buildEditorHighlightRanges supports multiline anchors", () => {
             selectedText: "ha\nbe",
         })],
         null,
-        false,
         "comment-1",
     );
 
@@ -109,7 +57,6 @@ test("buildEditorHighlightRanges supports multiline anchors", () => {
         commentId: "comment-1",
         from: 3,
         to: 8,
-        resolved: false,
         active: true,
     }]);
 });
@@ -125,7 +72,6 @@ test("buildEditorHighlightRanges falls back to the nearest matching occurrence",
             selectedText: "beta",
         })],
         null,
-        false,
         "comment-1",
     );
 
@@ -133,7 +79,6 @@ test("buildEditorHighlightRanges falls back to the nearest matching occurrence",
         commentId: "comment-1",
         from: 9,
         to: 13,
-        resolved: false,
         active: true,
     }]);
 });
@@ -151,7 +96,6 @@ test("buildEditorHighlightRanges resolves anchors when multiline anchor text col
             selectedText: "## title\ntitle content",
         })],
         null,
-        false,
         "comment-1",
     );
 
@@ -159,7 +103,6 @@ test("buildEditorHighlightRanges resolves anchors when multiline anchor text col
         commentId: "comment-1",
         from: 8,
         to: 30,
-        resolved: false,
         active: true,
     }]);
 });
@@ -171,7 +114,6 @@ test("buildEditorHighlightRanges skips orphaned comments", () => {
         docText,
         [createComment({ orphaned: true })],
         null,
-        false,
         "comment-1",
     );
 
@@ -190,7 +132,6 @@ test("buildEditorHighlightRanges skips page notes", () => {
             endChar: 0,
         })],
         null,
-        false,
         "comment-1",
     );
 
@@ -204,7 +145,6 @@ test("buildEditorHighlightRanges keeps passive highlights without an active comm
         docText,
         [createComment()],
         null,
-        false,
         null,
     );
 
@@ -212,7 +152,6 @@ test("buildEditorHighlightRanges keeps passive highlights without an active comm
         commentId: "comment-1",
         from: 6,
         to: 10,
-        resolved: false,
         active: false,
     }]);
 });
@@ -233,7 +172,6 @@ test("buildEditorHighlightRanges marks only the active anchored comment", () => 
             }),
         ],
         null,
-        false,
         "comment-2",
     );
 
@@ -242,14 +180,12 @@ test("buildEditorHighlightRanges marks only the active anchored comment", () => 
             commentId: "comment-1",
             from: 6,
             to: 10,
-            resolved: false,
             active: false,
         },
         {
             commentId: "comment-2",
             from: 17,
             to: 22,
-            resolved: false,
             active: true,
         },
     ]);

@@ -5,12 +5,9 @@ import {
     GENERIC_INDEX_EMPTY_STATE_TEXTS,
     filterIndexThreadsByExistingSourceFiles,
     scopeIndexThreadsByFilePaths,
-    shouldShowActiveIndexEmptyState,
     shouldShowGenericIndexEmptyState,
     shouldShowIndexListToolbarChips,
     shouldShowNestedToolbarChip,
-    shouldShowResolvedIndexEmptyState,
-    shouldShowResolvedToolbarChip,
 } from "../src/ui/views/indexSidebarState";
 
 function createComment(overrides: Partial<Comment> = {}): Comment {
@@ -27,7 +24,6 @@ function createComment(overrides: Partial<Comment> = {}): Comment {
         timestamp: overrides.timestamp ?? 100,
         anchorKind: overrides.anchorKind ?? "selection",
         orphaned: overrides.orphaned ?? false,
-        resolved: overrides.resolved ?? false,
     };
 }
 
@@ -37,7 +33,7 @@ test("scopeIndexThreadsByFilePaths keeps all threads when no file filter is sele
         commentToThread(createComment({ id: "b", filePath: "docs/b.md" })),
     ];
     const allThreads = visibleThreads.concat([
-        commentToThread(createComment({ id: "c", filePath: "docs/c.md", resolved: true })),
+        commentToThread(createComment({ id: "c", filePath: "docs/c.md" })),
     ]);
 
     const scoped = scopeIndexThreadsByFilePaths(visibleThreads, allThreads, []);
@@ -52,7 +48,7 @@ test("scopeIndexThreadsByFilePaths filters both visible and total threads by the
         commentToThread(createComment({ id: "b", filePath: "docs/b.md" })),
     ];
     const allThreads = visibleThreads.concat([
-        commentToThread(createComment({ id: "c", filePath: "docs/c.md", resolved: true })),
+        commentToThread(createComment({ id: "c", filePath: "docs/c.md" })),
     ]);
 
     const scoped = scopeIndexThreadsByFilePaths(visibleThreads, allThreads, ["docs/b.md", "docs/c.md"]);
@@ -74,12 +70,6 @@ test("filterIndexThreadsByExistingSourceFiles drops threads whose source file no
     );
 
     assert.deepEqual(filtered.map((thread) => thread.id), ["a", "c"]);
-});
-
-test("shouldShowResolvedToolbarChip keeps the resolved toggle visible while resolved mode is active", () => {
-    assert.equal(shouldShowResolvedToolbarChip(false, false), false);
-    assert.equal(shouldShowResolvedToolbarChip(true, false), true);
-    assert.equal(shouldShowResolvedToolbarChip(false, true), true);
 });
 
 test("shouldShowIndexListToolbarChips hides list-only chips when thought trail is active", () => {
@@ -112,20 +102,6 @@ test("shouldShowNestedToolbarChip shows the nested toggle whenever nested commen
         selectedIndexFileFilterRootPath: null,
         filteredIndexFileCount: 1,
     }), true);
-});
-
-test("shouldShowResolvedIndexEmptyState points back to active notes when resolved mode hides all scoped items", () => {
-    assert.equal(shouldShowResolvedIndexEmptyState(true, 3, 0), true);
-    assert.equal(shouldShowResolvedIndexEmptyState(true, 0, 0), false);
-    assert.equal(shouldShowResolvedIndexEmptyState(false, 3, 0), false);
-    assert.equal(shouldShowResolvedIndexEmptyState(true, 3, 1), false);
-});
-
-test("shouldShowActiveIndexEmptyState points to resolved notes when active mode hides all scoped items", () => {
-    assert.equal(shouldShowActiveIndexEmptyState(false, 3, 0), true);
-    assert.equal(shouldShowActiveIndexEmptyState(true, 3, 0), false);
-    assert.equal(shouldShowActiveIndexEmptyState(false, 0, 0), false);
-    assert.equal(shouldShowActiveIndexEmptyState(false, 3, 1), false);
 });
 
 test("shouldShowGenericIndexEmptyState hides the generic selected-file-filter empty panel", () => {

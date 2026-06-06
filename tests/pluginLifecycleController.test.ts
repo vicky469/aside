@@ -35,7 +35,6 @@ function createComment(overrides: Partial<Comment> = {}): Comment {
         timestamp: overrides.timestamp ?? 1,
         anchorKind: overrides.anchorKind ?? "selection",
         orphaned: overrides.orphaned ?? false,
-        resolved: overrides.resolved ?? false,
     };
 }
 

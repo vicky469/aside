@@ -12,7 +12,6 @@ import {
     type DeleteCommentOptions,
     type MoveCommentEntryOptions,
     type MoveCommentThreadOptions,
-    type ResolveCommentOptions,
     type SaveDraftOptions,
     type SetCommentPinnedOptions,
 } from "./comments/commentMutationController";
@@ -21,7 +20,6 @@ import { CommentNavigationController } from "./comments/commentNavigationControl
 import { pickPinnedCommentableFile, pickPreferredFileLeafCandidate, pickSidebarTargetFile, type PreferredFileLeafCandidate } from "./comments/commentNavigationPlanner";
 import { CommentPersistenceController } from "./comments/commentPersistenceController";
 import type { SetSidebarViewStateOptions } from "./comments/commentSessionController";
-import { getResolvedVisibilityForCommentSelection } from "./comments/commentSelectionVisibility";
 import { CommentSessionController } from "./comments/commentSessionController";
 import { IndexNoteSettingsController } from "./settings/indexNoteSettingsController";
 import type { PersistedPluginData } from "./settings/indexNoteSettingsPlanner";
@@ -202,7 +200,6 @@ export default class Aside extends Plugin {
         getCurrentNoteContent: (file) => this.workspaceViewController.getCurrentNoteContent(file),
         getParsedNoteComments: (filePath, noteContent) => this.getParsedNoteComments(filePath, noteContent),
         isAllCommentsNotePath: (path) => this.isAllCommentsNotePath(path),
-        shouldShowResolvedComments: () => this.commentSessionController.shouldShowResolvedComments(),
         getDraftForFile: (filePath) => this.commentSessionController.getDraftForFile(filePath),
         getRevealedCommentId: (filePath) => this.commentSessionController.getRevealedCommentId(filePath),
         getIndexFileScopeRootPath: (indexFilePath) => this.getIndexFileScopeRootPath(indexFilePath),
@@ -218,8 +215,6 @@ export default class Aside extends Plugin {
         getSidebarTargetFilePath: () => this.getSidebarTargetFile()?.path ?? null,
         getDraftComment: () => this.commentSessionController.getDraftComment(),
         getSavingDraftCommentId: () => this.commentSessionController.getSavingDraftCommentId(),
-        shouldShowResolvedComments: () => this.commentSessionController.shouldShowResolvedComments(),
-        setShowResolvedComments: (showResolved, options) => this.setShowResolvedComments(showResolved, options),
         setDraftComment: (draftComment, hostFilePath, options) =>
             this.commentSessionController.setDraftComment(draftComment, hostFilePath, options),
         setDraftCommentValue: (draftComment) => this.commentSessionController.setDraftCommentValue(draftComment),
@@ -274,7 +269,6 @@ export default class Aside extends Plugin {
         getAllCommentsNotePath: () => this.getAllCommentsNotePath(),
         getIndexHeaderImageUrl: () => this.getIndexHeaderImageUrl(),
         getIndexHeaderImageCaption: () => this.getIndexHeaderImageCaption(),
-        shouldShowResolvedComments: () => this.commentSessionController.shouldShowResolvedComments(),
         getMarkdownViewForFile: (file) => this.workspaceViewController.getMarkdownViewForFile(file),
         getMarkdownFileByPath: (filePath) => this.workspaceViewController.getMarkdownFileByPath(filePath),
         getCurrentNoteContent: (file) => this.workspaceViewController.getCurrentNoteContent(file),
@@ -1272,32 +1266,6 @@ export default class Aside extends Plugin {
         await this.commentNavigationController.updateSidebarViews(file, options);
     }
 
-    public shouldShowResolvedComments(): boolean {
-        return this.commentSessionController.shouldShowResolvedComments();
-    }
-
-    public async setShowResolvedComments(
-        showResolved: boolean,
-        options: {
-            deferAggregateRefresh?: boolean;
-            skipCommentViewRefresh?: boolean;
-        } = {},
-    ): Promise<boolean> {
-        const changed = await this.commentSessionController.setShowResolvedComments(showResolved, {
-            skipCommentViewRefresh: options.skipCommentViewRefresh,
-        });
-        if (!changed) {
-            return false;
-        }
-
-        if (options.deferAggregateRefresh) {
-            this.scheduleAggregateNoteRefresh();
-        } else {
-            await this.refreshAggregateNoteNow();
-        }
-        return true;
-    }
-
     public shouldShowNestedComments(): boolean {
         return this.commentSessionController.shouldShowNestedComments();
     }
@@ -1564,16 +1532,8 @@ export default class Aside extends Plugin {
         return comment;
     }
 
-    private async ensureCommentSelectionVisible(commentId: string, filePath?: string | null): Promise<void> {
-        const comment = await this.loadKnownCommentSelectionTarget(commentId, filePath);
-
-        const nextShowResolved = getResolvedVisibilityForCommentSelection(
-            comment,
-            this.commentSessionController.shouldShowResolvedComments(),
-        );
-        if (nextShowResolved !== null) {
-            await this.setShowResolvedComments(nextShowResolved);
-        }
+    private async ensureCommentSelectionVisible(_commentId: string, _filePath?: string | null): Promise<void> {
+        // no-op: resolved visibility removed
     }
 
     /**
@@ -1693,26 +1653,12 @@ export default class Aside extends Plugin {
         return this.commentMutationController.clearDeletedComment(commentId);
     }
 
-    async resolveComment(
-        commentId: string,
-        options?: ResolveCommentOptions,
-    ): Promise<boolean> {
-        return this.commentMutationController.resolveComment(commentId, options);
-    }
-
     async setCommentPinnedState(
         commentId: string,
         isPinned: boolean,
         options?: SetCommentPinnedOptions,
     ): Promise<boolean> {
         return this.commentMutationController.setCommentPinnedState(commentId, isPinned, options);
-    }
-
-    async unresolveComment(
-        commentId: string,
-        options?: ResolveCommentOptions,
-    ): Promise<boolean> {
-        return this.commentMutationController.unresolveComment(commentId, options);
     }
 
     private getCurrentSelectionForFile(file: TFile): DraftSelection | null {

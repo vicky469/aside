@@ -28,10 +28,6 @@ export function filterIndexThreadsByExistingSourceFiles(
     return threads.filter((thread) => hasSourceFile(thread.filePath));
 }
 
-export function shouldShowResolvedToolbarChip(hasResolvedComments: boolean, showResolved: boolean): boolean {
-    return hasResolvedComments || showResolved;
-}
-
 export function shouldShowNestedToolbarChip(options: {
     hasNestedComments: boolean;
     isAllCommentsView: boolean;
@@ -46,22 +42,6 @@ export function shouldShowIndexListToolbarChips(
     indexSidebarMode: IndexSidebarMode,
 ): boolean {
     return !isAllCommentsView || isSidebarListLikeMode(indexSidebarMode);
-}
-
-export function shouldShowResolvedIndexEmptyState(
-    showResolved: boolean,
-    totalScopedCount: number,
-    renderedItemCount: number,
-): boolean {
-    return showResolved && totalScopedCount > 0 && renderedItemCount === 0;
-}
-
-export function shouldShowActiveIndexEmptyState(
-    showResolved: boolean,
-    resolvedCount: number,
-    renderedItemCount: number,
-): boolean {
-    return !showResolved && resolvedCount > 0 && renderedItemCount === 0;
 }
 
 export function shouldShowGenericIndexEmptyState(options: {

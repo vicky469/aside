@@ -99,7 +99,6 @@ function createThread(filePath: string): CommentThread {
         selectedTextHash: "hash-target",
         anchorKind: "selection",
         orphaned: false,
-        resolved: false,
         entries: [{
             id: "entry-1",
             body: "hello",

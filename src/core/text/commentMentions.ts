@@ -77,10 +77,6 @@ export function buildDerivedCommentLinks(
     const unresolved: Record<string, number> = {};
 
     for (const comment of comments) {
-        if (comment.resolved === true) {
-            continue;
-        }
-
         const seenTargets = new Set<string>();
         for (const body of getCommentBodies(comment)) {
             for (const match of extractWikiLinks(body)) {

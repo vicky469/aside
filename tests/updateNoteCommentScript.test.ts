@@ -67,7 +67,6 @@ function createComment(overrides: Partial<Comment> = {}): Comment {
         selectedTextHash: "hash-1",
         comment: "Original body",
         timestamp: 1710000000000,
-        resolved: false,
         ...overrides,
     };
 }

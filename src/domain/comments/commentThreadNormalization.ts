@@ -56,7 +56,6 @@ export function normalizeCommentThread(thread: CommentThread): CommentThread {
         anchorKind: thread.anchorKind === "page" ? "page" : "selection",
         orphaned: thread.anchorKind === "page" ? false : thread.orphaned === true,
         isPinned: thread.isPinned === true,
-        resolved: thread.resolved === true,
         deletedAt: normalizeDeletedAt(thread.deletedAt),
         entries,
         createdAt: thread.createdAt || firstEntry.timestamp,

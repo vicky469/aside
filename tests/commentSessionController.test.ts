@@ -17,7 +17,6 @@ function createDraft(overrides: Partial<DraftComment> = {}): DraftComment {
         timestamp: overrides.timestamp ?? 123,
         anchorKind: overrides.anchorKind ?? "selection",
         orphaned: overrides.orphaned ?? false,
-        resolved: overrides.resolved ?? false,
         mode: overrides.mode ?? "new",
     };
 }
@@ -51,34 +50,6 @@ function createHarness() {
         clearedMarkdownSelections,
     };
 }
-
-test("comment session controller refreshes comment visibility when resolved comments are toggled", async () => {
-    const harness = createHarness();
-
-    assert.equal(harness.controller.shouldShowResolvedComments(), false);
-    assert.equal(await harness.controller.setShowResolvedComments(true), true);
-    assert.equal(harness.controller.shouldShowResolvedComments(), true);
-    assert.equal(harness.getRefreshCommentViewsCount(), 1);
-    assert.equal(harness.getRefreshEditorDecorationsCount(), 1);
-    assert.equal(harness.getRefreshMarkdownPreviewsCount(), 1);
-
-    assert.equal(await harness.controller.setShowResolvedComments(true), false);
-    assert.equal(harness.getRefreshCommentViewsCount(), 1);
-    assert.equal(harness.getRefreshEditorDecorationsCount(), 1);
-    assert.equal(harness.getRefreshMarkdownPreviewsCount(), 1);
-});
-
-test("comment session controller can skip sidebar rerenders while still updating resolved visibility surfaces", async () => {
-    const harness = createHarness();
-
-    assert.equal(await harness.controller.setShowResolvedComments(true, {
-        skipCommentViewRefresh: true,
-    }), true);
-    assert.equal(harness.controller.shouldShowResolvedComments(), true);
-    assert.equal(harness.getRefreshCommentViewsCount(), 0);
-    assert.equal(harness.getRefreshEditorDecorationsCount(), 1);
-    assert.equal(harness.getRefreshMarkdownPreviewsCount(), 1);
-});
 
 test("comment session controller refreshes comment views when nested comments are toggled", async () => {
     const harness = createHarness();

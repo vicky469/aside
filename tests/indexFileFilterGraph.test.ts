@@ -20,7 +20,6 @@ function createComment(overrides: Partial<Comment> = {}): Comment {
         timestamp: overrides.timestamp ?? 100,
         anchorKind: overrides.anchorKind ?? "selection",
         orphaned: overrides.orphaned ?? false,
-        resolved: overrides.resolved ?? false,
     };
 }
 
@@ -36,7 +35,6 @@ function createThread(overrides: Partial<CommentThread> = {}): CommentThread {
         selectedTextHash: overrides.selectedTextHash ?? "hash:comment",
         anchorKind: overrides.anchorKind ?? "selection",
         orphaned: overrides.orphaned ?? false,
-        resolved: overrides.resolved ?? false,
         entries: overrides.entries ?? [],
         createdAt: overrides.createdAt ?? 100,
         updatedAt: overrides.updatedAt ?? 200,
@@ -141,80 +139,6 @@ test("buildIndexFileFilterGraph ignores targets without side notes, self-links, 
         "docs/a.md",
         "docs/b.md",
     ]);
-});
-
-test("buildIndexFileFilterGraph respects resolved-only visibility when building counts and closure", () => {
-    const comments = [
-        createComment({
-            id: "a-active",
-            filePath: "docs/a.md",
-            resolved: false,
-            comment: "[[B]]",
-        }),
-        createComment({
-            id: "b-active",
-            filePath: "docs/b.md",
-            resolved: false,
-            comment: "",
-        }),
-        createComment({
-            id: "r-only",
-            filePath: "docs/r.md",
-            resolved: true,
-            comment: "[[S]]",
-        }),
-        createComment({
-            id: "s-only",
-            filePath: "docs/s.md",
-            resolved: true,
-            comment: "",
-        }),
-    ];
-    const resolveWikiLinkPath = createResolver({
-        B: "docs/b.md",
-        S: "docs/s.md",
-    });
-
-    const activeGraph = buildIndexFileFilterGraph(comments, {
-        showResolved: false,
-        resolveWikiLinkPath,
-    });
-    const resolvedGraph = buildIndexFileFilterGraph(comments, {
-        showResolved: true,
-        resolveWikiLinkPath,
-    });
-
-    assert.deepEqual(activeGraph.availableFiles, ["docs/a.md", "docs/b.md"]);
-    assert.deepEqual(resolvedGraph.availableFiles, ["docs/r.md", "docs/s.md"]);
-    assert.deepEqual(getIndexFileFilterConnectedComponent(activeGraph, "docs/a.md"), [
-        "docs/a.md",
-        "docs/b.md",
-    ]);
-    assert.deepEqual(getIndexFileFilterConnectedComponent(resolvedGraph, "docs/r.md"), [
-        "docs/r.md",
-        "docs/s.md",
-    ]);
-    assert.equal(activeGraph.fileCommentCounts.get("docs/r.md"), undefined);
-    assert.equal(resolvedGraph.fileCommentCounts.get("docs/a.md"), undefined);
-});
-
-test("buildIndexFileFilterGraph can include both active and resolved comments when requested", () => {
-    const graph = buildIndexFileFilterGraph([
-        createComment({
-            id: "a-active",
-            filePath: "docs/a.md",
-            resolved: false,
-        }),
-        createComment({
-            id: "r-resolved",
-            filePath: "docs/r.md",
-            resolved: true,
-        }),
-    ], {
-        showResolved: null,
-    });
-
-    assert.deepEqual(graph.availableFiles, ["docs/a.md", "docs/r.md"]);
 });
 
 test("getIndexFileFilterConnectedComponent returns empty for missing roots", () => {

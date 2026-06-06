@@ -23,7 +23,6 @@ function createComment(overrides: Partial<Comment> = {}): Comment {
         selectedTextHash: overrides.selectedTextHash ?? "hash-1",
         comment: overrides.comment ?? "",
         timestamp: overrides.timestamp ?? 1710000000000,
-        resolved: overrides.resolved ?? false,
         anchorKind: overrides.anchorKind ?? "selection",
         orphaned: overrides.orphaned ?? false,
     };
@@ -41,7 +40,6 @@ function createThread(overrides: Partial<CommentThread> = {}): CommentThread {
         selectedTextHash: overrides.selectedTextHash ?? "hash-1",
         anchorKind: overrides.anchorKind ?? "selection",
         orphaned: overrides.orphaned ?? false,
-        resolved: overrides.resolved ?? false,
         entries: overrides.entries ?? [],
         createdAt: overrides.createdAt ?? 1710000000000,
         updatedAt: overrides.updatedAt ?? 1710000001000,

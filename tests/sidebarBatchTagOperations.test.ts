@@ -21,7 +21,6 @@ function createThread(overrides: Partial<CommentThread> = {}): CommentThread {
         selectedTextHash: overrides.selectedTextHash ?? "hash:selected",
         anchorKind: overrides.anchorKind ?? "selection",
         orphaned: overrides.orphaned ?? false,
-        resolved: overrides.resolved ?? false,
         deletedAt: overrides.deletedAt,
         entries: overrides.entries ?? [
             { id: "thread-1", body: "Parent entry", timestamp: 100 },

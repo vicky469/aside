@@ -19,7 +19,6 @@ export interface CommentThread {
     anchorKind?: CommentAnchorKind;
     orphaned?: boolean;
     isPinned?: boolean;
-    resolved?: boolean;
     deletedAt?: number;
     entries: CommentThreadEntry[];
     createdAt: number;

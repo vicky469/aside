@@ -1,5 +1,4 @@
 import type { Comment, CommentThread } from "../../commentManager";
-import { filterCommentsByResolvedVisibility } from "../rules/resolvedCommentVisibility";
 import {
     buildSideNoteReferenceUrl,
     LEGACY_SIDE_NOTE_REFERENCE_PROTOCOL,
@@ -57,7 +56,6 @@ export interface AllCommentsNoteBuildOptions {
     allCommentsNotePath?: string;
     headerImageUrl?: string;
     headerImageCaption?: string | null;
-    showResolved?: boolean;
     getSourceFileTags?: (filePath: string) => readonly string[] | null | undefined;
     getMentionedPageLabels?: (comment: Comment) => string[];
     hasSourceFile?: (filePath: string) => boolean;
@@ -483,7 +481,6 @@ export function buildAllCommentsNoteContent(
 ): string {
     const headerImageUrl = normalizeAllCommentsNoteImageUrl(options.headerImageUrl);
     const headerImageCaption = normalizeAllCommentsNoteImageCaption(options.headerImageCaption);
-    const showResolved = options.showResolved ?? false;
     const lines: string[] = [
         `![${ALL_COMMENTS_NOTE_IMAGE_ALT}](${headerImageUrl})`,
     ];
@@ -491,13 +488,10 @@ export function buildAllCommentsNoteContent(
         lines.push(`<div class="aside-index-header-caption" style="${ALL_COMMENTS_NOTE_IMAGE_CAPTION_STYLE}">${escapeHtmlText(headerImageCaption)}</div>`);
     }
     lines.push("");
-    const visibleComments = filterCommentsByResolvedVisibility(
-        comments.filter((comment) => (
-            !isAllCommentsNotePath(comment.filePath, options.allCommentsNotePath)
-            && (options.hasSourceFile?.(comment.filePath) ?? true)
-        )),
-        showResolved,
-    );
+    const visibleComments = comments.filter((comment) => (
+        !isAllCommentsNotePath(comment.filePath, options.allCommentsNotePath)
+        && (options.hasSourceFile?.(comment.filePath) ?? true)
+    ));
 
     if (!visibleComments.length) {
         return `${lines.join("\n").trimEnd()}\n`;

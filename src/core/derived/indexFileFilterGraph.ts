@@ -1,5 +1,4 @@
 import type { Comment, CommentThread } from "../../commentManager";
-import { filterCommentsByResolvedVisibility } from "../rules/resolvedCommentVisibility";
 import { extractWikiLinks } from "../text/commentMentions";
 
 const ALL_COMMENTS_NOTE_PATH = "Aside index.md";
@@ -12,7 +11,6 @@ const LEGACY_ALL_COMMENTS_NOTE_PATHS = new Set([
 export interface IndexFileFilterGraphBuildOptions {
     allCommentsNotePath?: string;
     includeLinkedTargetFiles?: boolean;
-    showResolved?: boolean | null;
     resolveWikiLinkPath?: (linkPath: string, sourceFilePath: string) => string | null;
 }
 
@@ -134,10 +132,7 @@ export function buildIndexFileFilterGraph(
     comments: Array<Comment | CommentThread>,
     options: IndexFileFilterGraphBuildOptions = {},
 ): IndexFileFilterGraph {
-    const scopedComments = comments.filter((comment) => !isAllCommentsNotePath(comment.filePath, options.allCommentsNotePath));
-    const visibleComments = options.showResolved === null
-        ? scopedComments
-        : filterCommentsByResolvedVisibility(scopedComments, options.showResolved ?? false);
+    const visibleComments = comments.filter((comment) => !isAllCommentsNotePath(comment.filePath, options.allCommentsNotePath));
     const fileCommentCounts = new Map<string, number>();
 
     for (const comment of visibleComments) {

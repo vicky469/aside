@@ -21,7 +21,7 @@ function getSidecarPath(vaultRoot: string, noteRelativePath: string): string {
     return path.join(vaultRoot, ".obsidian", "plugins", "aside", "sidenotes", "by-note", shard, `${hash}.json`);
 }
 
-async function readSidecar(vaultRoot: string, noteRelativePath: string): Promise<{ version: number; notePath: string; threads: Array<{ id: string; resolved: boolean; entries: Array<{ id: string; body: string; timestamp: number }> }> } | null> {
+async function readSidecar(vaultRoot: string, noteRelativePath: string): Promise<{ version: number; notePath: string; threads: Array<{ id: string; entries: Array<{ id: string; body: string; timestamp: number }> }> } | null> {
     const sidecarPath = getSidecarPath(vaultRoot, noteRelativePath);
     try {
         const raw = await readFile(sidecarPath, "utf8");
@@ -53,7 +53,6 @@ function createComment(overrides: Partial<Comment> = {}): Comment {
         timestamp: overrides.timestamp ?? 1710000000000,
         anchorKind: overrides.anchorKind ?? "page",
         orphaned: overrides.orphaned ?? false,
-        resolved: overrides.resolved ?? false,
     };
 }
 
@@ -72,7 +71,6 @@ test("generate-large-graph-fixture preserves existing Aside threads in fixture n
         selectedText: "g30-chain-c01-n01",
         selectedTextHash: "hash:g30-chain-c01-n01",
         comment: "Old synthetic body",
-        resolved: true,
         timestamp: 1710000000000,
     }));
     syntheticThread.entries.push({
@@ -117,7 +115,6 @@ test("generate-large-graph-fixture preserves existing Aside threads in fixture n
 
     const updatedSyntheticThread = sidecar!.threads.find((thread) => thread.id === "lg-g30-chain-c01-n01");
     assert.ok(updatedSyntheticThread);
-    assert.equal(updatedSyntheticThread.resolved, true);
     assert.equal(updatedSyntheticThread.entries.length, 2);
     assert.match(updatedSyntheticThread.entries[0].body, /Synthetic graph fixture for chain-size-30-component-01\./);
     assert.match(updatedSyntheticThread.entries[0].body, /\[\[g30-chain-c01-n02\]\]/);

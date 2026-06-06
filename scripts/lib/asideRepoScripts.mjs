@@ -56,15 +56,6 @@ function printUpdateNoteCommentUsage(stream = process.stderr) {
     );
 }
 
-function printResolveNoteCommentUsage(stream = process.stderr) {
-    stream.write(
-        [
-            "Usage:",
-            "  node scripts/resolve-note-comment.mjs (--file <note.md> --id <comment-id> | --uri <obsidian://aside-comment?...>) [--settle-ms <milliseconds>]",
-        ].join("\n") + "\n",
-    );
-}
-
 function printInstallBundledSkillUsage(stream = process.stderr) {
     stream.write(
         [
@@ -389,32 +380,6 @@ function parseAppendOrUpdateArgs(argv) {
     const hasUriTarget = Boolean(options.uri);
     if (contentSources !== 1 || (hasFileOrIdTarget ? 1 : 0) + (hasUriTarget ? 1 : 0) !== 1 || (hasFileOrIdTarget && !hasFileAndIdTarget)) {
         throw new Error("Expected exactly one target form: either --file with --id, or --uri, plus exactly one comment source.");
-    }
-
-    return options;
-}
-
-function parseResolveArgs(argv) {
-    const options = {
-        file: "",
-        id: "",
-        uri: "",
-        settleMs: 0,
-    };
-
-    const result = parseCommentTargetArgs(argv, options);
-    if (result === null) {
-        return null;
-    }
-    if (typeof result === "string") {
-        throw new Error(`Unknown argument: ${result}`);
-    }
-
-    const hasFileOrIdTarget = Boolean(options.file || options.id);
-    const hasFileAndIdTarget = Boolean(options.file && options.id);
-    const hasUriTarget = Boolean(options.uri);
-    if ((hasFileOrIdTarget ? 1 : 0) + (hasUriTarget ? 1 : 0) !== 1 || (hasFileOrIdTarget && !hasFileAndIdTarget)) {
-        throw new Error("Expected exactly one target form: either --file with --id, or --uri.");
     }
 
     return options;
@@ -1350,70 +1315,6 @@ export async function runUpdateNoteComment(argv, io = { stdout: process.stdout, 
     }
 
     io.stdout.write(`Updated comment ${commentId} in ${notePath}\n`);
-    return 0;
-}
-
-export async function runResolveNoteComment(argv, io = { stdout: process.stdout, stderr: process.stderr }) {
-    let options;
-    try {
-        options = parseResolveArgs(argv);
-    } catch (error) {
-        io.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
-        printResolveNoteCommentUsage(io.stderr);
-        return 1;
-    }
-
-    if (options === null) {
-        printResolveNoteCommentUsage(io.stdout);
-        return 0;
-    }
-
-    let writeTarget;
-    try {
-        writeTarget = await resolveCommentWriteTarget(options);
-    } catch (error) {
-        io.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
-        return 1;
-    }
-
-    const { notePath, commentId, vaultRoot, noteRelativePath } = writeTarget;
-
-    let threads;
-    let noteContent;
-    let hadLegacyBlock;
-    try {
-        ({ threads, noteContent, hadLegacyBlock } = await loadThreadsWithFallback(vaultRoot, notePath, noteRelativePath));
-    } catch (error) {
-        io.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
-        return 1;
-    }
-
-    let found = false;
-    const updatedThreads = threads.map((thread) => {
-        const matchesThread = thread.id === commentId || thread.entries.some((entry) => entry.id === commentId);
-        if (!matchesThread) {
-            return thread;
-        }
-        found = true;
-        return { ...thread, resolved: true };
-    });
-
-    if (!found) {
-        io.stderr.write(`Comment id not found: ${commentId}\n`);
-        return 1;
-    }
-
-    await writeSidecar(vaultRoot, noteRelativePath, updatedThreads);
-
-    const migrationResult = await stripLegacyBlockIfNeeded(vaultRoot, notePath, noteRelativePath, noteContent, hadLegacyBlock, options.settleMs);
-    if (migrationResult.kind === "changed") {
-        io.stderr.write(
-            `Note content changed during sidecar migration; legacy block may still exist in ${notePath}. `
-            + "Rerun after Obsidian Sync or other local edits settle.\n",
-        );
-    }
-
-    io.stdout.write(`Resolved comment ${commentId} in ${notePath}\n`);
     return 0;
 }
 

@@ -17,7 +17,6 @@ function createComment(overrides: Partial<Comment> = {}): Comment {
         selectedTextHash: "hash-1",
         comment: "This is a side note.",
         timestamp: 1710000000000,
-        resolved: false,
         ...overrides,
     };
 }
@@ -54,7 +53,7 @@ test("ParsedNoteCache reuses parsed output for unchanged content and evicts olde
 test("AggregateCommentIndex updates, renames, deletes, and returns cloned comments", () => {
     const index = new AggregateCommentIndex();
     index.updateFile("a.md", [createComment({ filePath: "a.md", id: "a-1" })]);
-    index.updateFile("b.md", [createComment({ filePath: "b.md", id: "b-1", resolved: true })]);
+    index.updateFile("b.md", [createComment({ filePath: "b.md", id: "b-1" })]);
 
     const initial = index.getAllComments();
     assert.equal(initial.length, 2);

@@ -14,11 +14,10 @@ function createComment(id: string, timestamp: number, text: string): Comment {
         selectedTextHash: "hash",
         comment: text,
         timestamp,
-        resolved: false,
     };
 }
 
-test("CommentManager edits/deletes/resolves by id under timestamp collision", () => {
+test("CommentManager edits/deletes by id under timestamp collision", () => {
     const sameTimestamp = Date.now();
     const first = createComment("id-1", sameTimestamp, "first");
     const second = createComment("id-2", sameTimestamp, "second");
@@ -26,18 +25,9 @@ test("CommentManager edits/deletes/resolves by id under timestamp collision", ()
     const manager = new CommentManager([first, second]);
 
     manager.editComment("id-2", "second-updated");
-    let comments = manager.getCommentsForFile("note.md");
+    const comments = manager.getCommentsForFile("note.md");
     assert.equal(comments.find((comment) => comment.id === "id-1")?.comment, "first");
     assert.equal(comments.find((comment) => comment.id === "id-2")?.comment, "second-updated");
-
-    manager.resolveComment("id-1");
-    comments = manager.getCommentsForFile("note.md");
-    assert.equal(comments.find((comment) => comment.id === "id-1")?.resolved, true);
-    assert.equal(comments.find((comment) => comment.id === "id-2")?.resolved, false);
-
-    manager.unresolveComment("id-1");
-    comments = manager.getCommentsForFile("note.md");
-    assert.equal(comments.find((comment) => comment.id === "id-1")?.resolved, false);
 
     manager.deleteComment("id-1", sameTimestamp + 5);
     const remaining = manager.getCommentsForFile("note.md");

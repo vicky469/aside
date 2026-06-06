@@ -20,7 +20,6 @@ export function buildRootedThoughtTrailScope(
         allCommentsNotePath: options.allCommentsNotePath,
         includeLinkedTargetFiles: true,
         resolveWikiLinkPath: options.resolveWikiLinkPath,
-        showResolved: null,
     });
     const scopedFilePaths = getIndexFileFilterConnectedComponent(graph, options.rootFilePath);
 

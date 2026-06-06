@@ -21,7 +21,6 @@ export interface Comment {
     anchorKind?: CommentAnchorKind;
     orphaned?: boolean;
     isPinned?: boolean;
-    resolved?: boolean;
     deletedAt?: number;
     entryCount?: number;
 }
@@ -43,7 +42,6 @@ export function commentToThread(comment: Comment): CommentThread {
         anchorKind: comment.anchorKind === "page" ? "page" : "selection",
         orphaned: comment.orphaned === true,
         isPinned: comment.isPinned === true,
-        resolved: comment.resolved === true,
         deletedAt: normalizeDeletedAt(comment.deletedAt),
         entries: [{
             id: comment.id,
@@ -84,7 +82,6 @@ export function threadEntryToComment(thread: CommentThread, entry: CommentThread
         anchorKind: normalized.anchorKind,
         orphaned: normalized.orphaned === true,
         ...(normalized.id === entry.id && normalized.isPinned === true ? { isPinned: true } : {}),
-        resolved: normalized.resolved === true,
         ...(deletedAt !== undefined ? { deletedAt } : {}),
         entryCount: normalized.entries.length,
     };

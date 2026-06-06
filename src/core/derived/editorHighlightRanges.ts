@@ -1,14 +1,12 @@
 import type { Comment } from "../../commentManager";
 import { resolveAnchorRange } from "../anchors/anchorResolver";
 import { isAnchoredComment } from "../anchors/commentAnchors";
-import { filterCommentsByResolvedVisibility, matchesResolvedCommentVisibility } from "../rules/resolvedCommentVisibility";
 import { sortCommentsByPosition } from "../storage/noteCommentStorage";
 
 export interface EditorHighlightRange {
     commentId: string;
     from: number;
     to: number;
-    resolved: boolean;
     active: boolean;
 }
 
@@ -45,19 +43,13 @@ function lineChToOffset(text: string, lineStarts: readonly number[], line: numbe
 function getVisibleCommentsForHighlighting(
     storedComments: Comment[],
     draftComment: Comment | null,
-    showResolved: boolean,
 ): Comment[] {
     const commentsWithoutDraft = draftComment
         ? storedComments.filter((comment) => comment.id !== draftComment.id)
         : storedComments.slice();
 
-    const visibleComments = filterCommentsByResolvedVisibility(commentsWithoutDraft, showResolved);
-    const visibleDraft = draftComment && matchesResolvedCommentVisibility(draftComment, showResolved)
-        ? draftComment
-        : null;
-
     return sortCommentsByPosition(
-        (visibleDraft ? visibleComments.concat(visibleDraft) : visibleComments)
+        (draftComment ? commentsWithoutDraft.concat(draftComment) : commentsWithoutDraft)
             .filter((comment) => isAnchoredComment(comment))
     );
 }
@@ -67,13 +59,11 @@ export function buildEditorHighlightRanges(
     searchableText: string,
     storedComments: Comment[],
     draftComment: Comment | null,
-    showResolved: boolean,
     activeCommentId: string | null,
 ): EditorHighlightRange[] {
     const comments = getVisibleCommentsForHighlighting(
         storedComments,
         draftComment,
-        showResolved,
     );
     if (!comments.length) {
         return [];
@@ -109,7 +99,6 @@ export function buildEditorHighlightRanges(
                 commentId: comment.id,
                 from,
                 to,
-                resolved: comment.resolved === true,
                 active: comment.id === activeCommentId,
             });
         }

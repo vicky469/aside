@@ -73,7 +73,6 @@ export interface CommentPersistenceHost {
     getAllCommentsNotePath(): string;
     getIndexHeaderImageUrl(): string;
     getIndexHeaderImageCaption(): string;
-    shouldShowResolvedComments(): boolean;
     getMarkdownViewForFile(file: TFile): MarkdownView | null;
     getMarkdownFileByPath(filePath: string): TFile | null;
     getCurrentNoteContent(file: TFile): Promise<string>;
@@ -508,7 +507,6 @@ function areCommentThreadsEqual(left: CommentThread, right: CommentThread): bool
         && (left.anchorKind ?? "selection") === (right.anchorKind ?? "selection")
         && (left.orphaned === true) === (right.orphaned === true)
         && (left.isPinned === true) === (right.isPinned === true)
-        && (left.resolved === true) === (right.resolved === true)
         && normalizeDeletedAt(left.deletedAt) === normalizeDeletedAt(right.deletedAt)
         && left.createdAt === right.createdAt
         && left.updatedAt === right.updatedAt
@@ -2112,9 +2110,7 @@ export class CommentPersistenceController {
         if (this.disposed) {
             return;
         }
-        void this.host.log?.("info", "index", "index.refresh.begin", {
-            showResolved: this.host.shouldShowResolvedComments(),
-        });
+        void this.host.log?.("info", "index", "index.refresh.begin", {});
         try {
             const prunedMissingSourceCount = await this.pruneMissingStoredCommentSources();
             if (this.disposed) {
@@ -2129,7 +2125,6 @@ export class CommentPersistenceController {
                 allCommentsNotePath: this.host.getAllCommentsNotePath(),
                 headerImageUrl: this.host.getIndexHeaderImageUrl(),
                 headerImageCaption: this.host.getIndexHeaderImageCaption(),
-                showResolved: this.host.shouldShowResolvedComments(),
                 hasSourceFile: (filePath: string) => isTFileLike(this.host.app.vault.getAbstractFileByPath(filePath)),
                 getSourceFileTags: (filePath: string) => {
                     const file = this.host.app.vault.getAbstractFileByPath(filePath);

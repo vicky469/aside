@@ -59,6 +59,7 @@ function renderThoughtTrailSourceControl(
     options: {
         source: SidebarThoughtTrailSource;
         radioGroupName: string;
+        tagsDisabled?: boolean;
         onSourceChange(source: SidebarThoughtTrailSource): void;
     },
 ): void {
@@ -69,8 +70,9 @@ function renderThoughtTrailSourceControl(
     });
     const sourceOptionsEl = controlEl.createDiv("aside-thought-trail-source-options");
     for (const source of ["wikilinks", "tags"] as const) {
+        const isDisabled = source === "tags" && options.tagsDisabled;
         const labelEl = sourceOptionsEl.createEl("label", {
-            cls: "aside-thought-trail-source-option",
+            cls: `aside-thought-trail-source-option${isDisabled ? " is-disabled" : ""}`,
         });
         const inputEl = labelEl.createEl("input", {
             type: "radio",
@@ -80,6 +82,7 @@ function renderThoughtTrailSourceControl(
             },
         });
         inputEl.checked = options.source === source;
+        inputEl.disabled = isDisabled ?? false;
         inputEl.addEventListener("change", () => {
             if (inputEl.checked) {
                 options.onSourceChange(source);
@@ -117,14 +120,6 @@ function renderTagRelatedFilesList(
     }
 }
 
-function getTagSourceEmptyState(options: SidebarThoughtTrailOptions): string[] {
-    const sourceTags = options.rootFilePath ? options.getTagsForFilePath(options.rootFilePath) ?? [] : [];
-    if (!sourceTags.length) {
-        return ["No tags found for this file yet."];
-    }
-
-    return ["No related files share this file's tags."];
-}
 
 export async function renderSidebarThoughtTrail(
     container: HTMLDivElement,
@@ -146,28 +141,22 @@ export async function renderSidebarThoughtTrail(
     }
 
     const rootFilePath = options.rootFilePath;
+    const tagGroups = buildTagGroupedRelatedFiles(
+        rootFilePath,
+        options.candidateFilePaths,
+        options.getTagsForFilePath,
+    );
     renderThoughtTrailSourceControl(thoughtTrailEl, {
         source: options.source,
         radioGroupName: `aside-thought-trail-source-${context.renderVersion}-${options.surface}-${encodeURIComponent(rootFilePath)}`,
+        tagsDisabled: !tagGroups.length,
         onSourceChange: (source) => {
             options.onSourceChange(source);
         },
     });
     if (options.source === "tags") {
-        const groups = buildTagGroupedRelatedFiles(
-            rootFilePath,
-            options.candidateFilePaths,
-            options.getTagsForFilePath,
-        );
         const sectionEl = thoughtTrailEl.createDiv("aside-thought-trail-section");
-        if (!groups.length) {
-            const emptyStateEl = sectionEl.createDiv("aside-empty-state aside-section-empty-state");
-            for (const text of getTagSourceEmptyState(options)) {
-                emptyStateEl.createEl("p", { text });
-            }
-        } else {
-            renderTagRelatedFilesList(sectionEl, groups, context);
-        }
+        renderTagRelatedFilesList(sectionEl, tagGroups, context);
         return;
     }
 

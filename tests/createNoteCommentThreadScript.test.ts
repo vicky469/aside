@@ -71,7 +71,6 @@ function createThread(overrides: Partial<CommentThread> = {}): CommentThread {
         selectedTextHash: "hash-1",
         anchorKind: "selection",
         orphaned: false,
-        resolved: false,
         entries: [
             {
                 id: "entry-1",

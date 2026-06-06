@@ -15,17 +15,15 @@ test("formatSidebarCommentMeta omits repeated page and anchored labels", () => {
         timestamp: Date.UTC(2024, 0, 1, 13, 30),
         anchorKind: "page",
     });
-    const orphanedResolvedMeta = formatSidebarCommentMeta({
+    const orphanedMeta = formatSidebarCommentMeta({
         timestamp: Date.UTC(2024, 0, 1, 13, 30),
         anchorKind: "selection",
         orphaned: true,
-        resolved: true,
     });
 
     assert.equal(anchoredMeta.includes("anchored"), false);
     assert.equal(pageMeta.includes("page note"), false);
-    assert.equal(orphanedResolvedMeta.includes("orphaned"), true);
-    assert.equal(orphanedResolvedMeta.includes("resolved"), true);
+    assert.equal(orphanedMeta.includes("orphaned"), true);
 });
 
 test("formatSidebarCommentSelectedTextPreview normalizes anchored selections and skips page notes", () => {

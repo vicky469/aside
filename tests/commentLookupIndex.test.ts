@@ -17,7 +17,6 @@ function createThread(id: string, filePath: string, entryIds: string[]): Comment
         selectedTextHash: `hash-${id}`,
         anchorKind: "selection",
         orphaned: false,
-        resolved: false,
         entries: entryIds.map((entryId, index) => ({
             id: entryId,
             body: `body ${entryId}`,

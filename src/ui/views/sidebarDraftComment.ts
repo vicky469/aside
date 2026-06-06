@@ -61,9 +61,6 @@ export function buildDraftCommentPresentation(
     if (isOrphanedComment(comment)) {
         classes.push("orphaned");
     }
-    if (comment.resolved) {
-        classes.push("resolved");
-    }
     if (activeCommentId === comment.id) {
         classes.push("active");
     }

@@ -32,7 +32,6 @@ interface StoredNoteCommentThread {
     anchorKind?: "selection" | "page";
     orphaned?: boolean;
     isPinned?: boolean;
-    resolved?: boolean;
     deletedAt?: number;
     entries: StoredNoteCommentThreadEntry[];
     createdAt: number;
@@ -119,7 +118,6 @@ function normalizeThread(thread: CommentThread): CommentThread {
         anchorKind: thread.anchorKind === "page" ? "page" : "selection",
         orphaned: thread.anchorKind === "page" ? false : thread.orphaned === true,
         isPinned: thread.isPinned === true,
-        resolved: thread.resolved === true,
         deletedAt: normalizeDeletedAt(thread.deletedAt),
         entries,
         createdAt: thread.createdAt || firstEntry?.timestamp || 0,
@@ -174,7 +172,6 @@ function toStoredThread(thread: CommentThread): StoredNoteCommentThread {
         anchorKind: normalized.anchorKind === "page" ? "page" : undefined,
         orphaned: normalized.orphaned === true ? true : undefined,
         isPinned: normalized.isPinned === true ? true : undefined,
-        resolved: normalized.resolved === true ? true : undefined,
         ...(deletedAt !== undefined ? { deletedAt } : {}),
         entries: normalized.entries.map((entry) => toStoredThreadEntry(entry)),
         createdAt: normalized.createdAt,
@@ -259,7 +256,6 @@ function fromStoredThread(candidate: unknown, filePath: string): CommentThread |
         anchorKind: item.anchorKind === "page" ? "page" : "selection",
         orphaned: item.orphaned === true,
         isPinned: item.isPinned === true,
-        resolved: item.resolved === true,
         deletedAt: normalizeDeletedAt(item.deletedAt),
         entries,
         createdAt: item.createdAt,
@@ -610,7 +606,6 @@ export function serializeNoteComments(noteContent: string, comments: Comment[]):
         anchorKind: comment.anchorKind === "page" ? "page" : "selection",
         orphaned: comment.orphaned === true,
         isPinned: comment.isPinned === true,
-        resolved: comment.resolved === true,
         ...(normalizeDeletedAt(comment.deletedAt) !== undefined
             ? { deletedAt: normalizeDeletedAt(comment.deletedAt) }
             : {}),
@@ -676,7 +671,6 @@ export function getManagedSectionEdit(noteContent: string, comments: Comment[]):
         selectedTextHash: comment.selectedTextHash,
         anchorKind: comment.anchorKind === "page" ? "page" : "selection",
         orphaned: comment.orphaned === true,
-        resolved: comment.resolved === true,
         entries: [{
             id: comment.id,
             body: comment.comment,

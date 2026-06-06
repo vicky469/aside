@@ -20,7 +20,6 @@ function createDraft(overrides: Partial<DraftComment> = {}): DraftComment {
         timestamp: overrides.timestamp ?? 100,
         anchorKind: overrides.anchorKind ?? "selection",
         orphaned: overrides.orphaned ?? false,
-        resolved: overrides.resolved ?? false,
         mode: overrides.mode ?? "new",
     };
 }
@@ -28,7 +27,6 @@ function createDraft(overrides: Partial<DraftComment> = {}): DraftComment {
 test("buildDraftCommentPresentation includes draft state classes and add/save label", () => {
     const createPresentation = buildDraftCommentPresentation(createDraft({
         anchorKind: "page",
-        resolved: true,
         mode: "new",
     }), "draft-1");
     const editPresentation = buildDraftCommentPresentation(createDraft({
@@ -42,7 +40,6 @@ test("buildDraftCommentPresentation includes draft state classes and add/save la
         "aside-comment-draft",
         "is-new",
         "page-note",
-        "resolved",
         "active",
     ]);
     assert.equal(createPresentation.saveLabel, "Add");

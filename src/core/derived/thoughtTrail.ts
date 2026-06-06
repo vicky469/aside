@@ -142,10 +142,6 @@ function formatEdgeLabel(comment: Comment | CommentThread): string | null {
             : `${getCommentStatusLabel(comment)}: ${selectedPreview}`;
     }
 
-    if (comment.resolved) {
-        return toMermaidText(`${label} (resolved)`);
-    }
-
     return toMermaidText(label);
 }
 

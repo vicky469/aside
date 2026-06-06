@@ -25,7 +25,6 @@ function createComment(overrides: Partial<Comment> = {}): Comment {
         selectedTextHash: "hash-beta",
         comment: "First comment",
         timestamp: 1710000000000,
-        resolved: false,
         ...overrides,
     };
 }
@@ -46,30 +45,14 @@ test("note-backed comment lifecycle stays aligned with aggregate output", () => 
 
     manager.replaceCommentsForFile(filePath, parsed.comments);
     manager.editComment("comment-1", "Updated comment");
-    manager.resolveComment("comment-1");
     note = serializeNoteComments(note, manager.getCommentsForFile(filePath));
     parsed = parseNoteComments(note, filePath);
 
     assert.equal(parsed.comments.length, 1);
     assert.equal(parsed.comments[0].comment, "Updated comment");
-    assert.equal(parsed.comments[0].resolved, true);
 
-    const aggregateWhenResolved = buildAllCommentsNoteContent("dev", parsed.comments, {
-        showResolved: true,
-    });
-    assert.equal(aggregateWhenResolved.includes(FOLDER_NOTE_INDEX_ROW), true);
-
-    manager.replaceCommentsForFile(filePath, parsed.comments);
-    manager.unresolveComment("comment-1");
-    note = serializeNoteComments(note, manager.getCommentsForFile(filePath));
-    parsed = parseNoteComments(note, filePath);
-
-    assert.equal(parsed.comments[0].resolved, false);
-
-    const aggregateWhenReopened = buildAllCommentsNoteContent("dev", parsed.comments, {
-        showResolved: false,
-    });
-    assert.equal(aggregateWhenReopened.includes(FOLDER_NOTE_INDEX_ROW), true);
+    const aggregateAfterEdit = buildAllCommentsNoteContent("dev", parsed.comments);
+    assert.equal(aggregateAfterEdit.includes(FOLDER_NOTE_INDEX_ROW), true);
 
     manager.replaceCommentsForFile(filePath, parsed.comments);
     manager.deleteComment("comment-1", deletedAt);
@@ -103,7 +86,6 @@ test("note-backed comments preserve deleted child entries through storage while 
         selectedTextHash: "hash-alpha",
         anchorKind: "selection",
         orphaned: false,
-        resolved: false,
         entries: [
             {
                 id: "thread-1",

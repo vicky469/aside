@@ -16,7 +16,6 @@ import {
 } from "../core/derived/allCommentsNote";
 import { isIndexFileFilterPathSelected } from "../ui/views/indexFileFilter";
 import { buildEditorHighlightRanges } from "../core/derived/editorHighlightRanges";
-import { matchesResolvedCommentVisibility } from "../core/rules/resolvedCommentVisibility";
 import { chooseCommentStateForOpenEditor } from "../core/rules/commentSyncPolicy";
 import { findClickedHighlightCommentId } from "./commentHighlightClickTarget";
 import {
@@ -124,7 +123,6 @@ export interface CommentHighlightHost {
     getCurrentNoteContent(file: TFile): Promise<string>;
     getParsedNoteComments(filePath: string, noteContent: string): ParsedNoteComments;
     isAllCommentsNotePath(path: string): boolean;
-    shouldShowResolvedComments(): boolean;
     getDraftForFile(filePath: string): DraftComment | null;
     getRevealedCommentId(filePath: string): string | null;
     getIndexFileScopeRootPath(indexFilePath: string): string | null;
@@ -999,21 +997,16 @@ export class CommentHighlightController {
                         parsed.comments,
                     );
                     const draftComment = host.getDraftForFile(filePath);
-                    const showResolved = host.shouldShowResolvedComments();
                     const ranges = buildEditorHighlightRanges(
                         currentNoteText,
                         searchableText,
                         storedComments,
                         draftComment,
-                        showResolved,
                         host.getRevealedCommentId(filePath),
                     );
 
                     ranges.forEach((range) => {
                         const classes = ["aside-highlight"];
-                        if (range.resolved) {
-                            classes.push("aside-highlight-resolved");
-                        }
                         if (range.active) {
                             classes.push("aside-highlight-active");
                         }
@@ -1265,8 +1258,7 @@ export class CommentHighlightController {
                 isAnchoredComment(comment)
                 && !!comment.selectedText
                 && comment.startLine >= sectionInfo.lineStart
-                && comment.endLine <= sectionInfo.lineEnd
-                && matchesResolvedCommentVisibility(comment, this.host.shouldShowResolvedComments()),
+                && comment.endLine <= sectionInfo.lineEnd,
             );
         if (!comments.length) {
             return;
@@ -1340,9 +1332,6 @@ export class CommentHighlightController {
 
                 const span = ownerDocument.createElement("span");
                 span.classList.add("aside-highlight", "aside-highlight-preview");
-                if (wrap.comment.resolved) {
-                    span.classList.add("aside-highlight-resolved");
-                }
                 if (wrap.comment.id === activeCommentId) {
                     span.classList.add("aside-highlight-active");
                 }

@@ -36,7 +36,6 @@ import {
     renderReorderHandle,
     renderRestoreButton,
     renderSourceRedirectButton,
-    runSidebarPendingButtonAction,
 } from "./sidebarCommentActions";
 import {
     formatSidebarCommentMeta,
@@ -66,10 +65,6 @@ export interface PersistedCommentPresentation extends BasePersistedCommentPresen
         icon: string;
     };
     moveAction: {
-        ariaLabel: string;
-        icon: string;
-    };
-    resolveAction: {
         ariaLabel: string;
         icon: string;
     };
@@ -111,8 +106,6 @@ export interface SidebarPersistedCommentHost {
     shareComment(comment: Comment): Promise<void>;
     saveVisibleDraftIfPresent(): Promise<boolean>;
     setShowNestedCommentsForThread(threadId: string, showNestedComments: boolean): void;
-    resolveComment(commentId: string): Promise<boolean> | Promise<void> | boolean | void;
-    unresolveComment(commentId: string): Promise<boolean> | Promise<void> | boolean | void;
     moveCommentThread(threadId: string, sourceFilePath: string): void;
     restoreComment(commentId: string): Promise<boolean> | Promise<void> | boolean | void;
     clearDeletedComment(commentId: string): Promise<boolean> | Promise<void> | boolean | void;
@@ -310,9 +303,6 @@ function buildBasePersistedCommentPresentation(
     if (isOrphanedComment(comment)) {
         classes.push("orphaned");
     }
-    if (comment.resolved) {
-        classes.push("resolved");
-    }
     if (comment.deletedAt) {
         classes.push("deleted");
     }
@@ -352,10 +342,6 @@ export function buildPersistedCommentPresentation(
         moveAction: {
             ariaLabel: "Move to another file",
             icon: "arrow-right-left",
-        },
-        resolveAction: {
-            ariaLabel: comment.resolved ? "Reopen side note" : "Resolve side note",
-            icon: comment.resolved ? "rotate-ccw" : "check",
         },
     };
 }
@@ -1110,23 +1096,6 @@ export async function renderPersistedCommentCard(
                     host,
                 );
             }
-            const resolveButton = actionsEl.createEl("button", {
-                cls: "clickable-icon aside-comment-action-button aside-comment-action-resolve",
-            });
-            attachSidebarActionButtonInteractions(resolveButton, host);
-            resolveButton.setAttribute("type", "button");
-            resolveButton.setAttribute("aria-label", presentation.resolveAction.ariaLabel);
-            host.setIcon(resolveButton, presentation.resolveAction.icon);
-            resolveButton.onclick = async (event) => {
-                await runSidebarPendingButtonAction(resolveButton, host, event, async () => {
-                    if (thread.resolved) {
-                        await host.unresolveComment(thread.id);
-                    } else {
-                        await host.resolveComment(thread.id);
-                    }
-                });
-            };
-
             if (!host.showSourceRedirectAction) {
                 renderEditButton(actionsEl, comment.id, host, "Edit side note");
             }

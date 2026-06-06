@@ -1292,16 +1292,6 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
     border-color: var(--color-orange, var(--text-warning, var(--text-accent)));
 }
 
-.aside-comment-item.resolved {
-    --aside-comment-background: var(--background-primary-alt, var(--background-secondary));
-    opacity: 0.7;
-}
-
-.aside-comment-item.resolved .aside-timestamp,
-.aside-comment-item.resolved .aside-comment-content {
-    text-decoration: line-through;
-}
-
 .aside-comment-item.deleted {
     --aside-comment-background: var(--background-primary-alt, var(--background-secondary));
     opacity: 0.76;
@@ -2763,17 +2753,6 @@ button.aside-thread-footer-meta-action:focus-visible {
     box-shadow:
         inset 0 -2px 0 hsla(var(--interactive-accent-hsl), calc(var(--aside-highlight-line-alpha) + 0.18)),
         0 0 0 1px hsla(var(--interactive-accent-hsl), 0.18);
-}
-
-.aside-highlight-resolved {
-    background: hsla(var(--interactive-accent-hsl), calc(var(--aside-highlight-bg-alpha) * 0.72));
-    box-shadow: inset 0 -1.5px 0 hsla(var(--interactive-accent-hsl), calc(var(--aside-highlight-line-alpha) * 0.8));
-}
-
-.aside-highlight-resolved.aside-highlight-active {
-    box-shadow:
-        inset 0 -2px 0 hsla(var(--interactive-accent-hsl), calc(var(--aside-highlight-line-alpha) * 0.92)),
-        0 0 0 1px hsla(var(--interactive-accent-hsl), 0.14);
 }
 
 .markdown-preview-view .aside-highlight,

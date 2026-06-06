@@ -78,7 +78,6 @@ const PRETTY_PAYLOAD_LABELS: Record<string, string> = {
     relativePath: "path",
     rootFilePath: "root",
     screenshotCount: "screenshots",
-    showResolved: "resolved",
     sizeBytes: "size",
     skippedViewRefresh: "view refresh",
     source: "source",

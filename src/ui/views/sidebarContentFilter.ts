@@ -221,7 +221,6 @@ export function toggleSidebarContentFilterState(
 
 export function toggleDeletedSidebarViewState(options: {
     showDeleted: boolean;
-    showResolved: boolean;
     contentFilter: SidebarContentFilter;
     showPinnedThreadsOnly: boolean;
     pinnedThreadIds: ReadonlySet<string>;
@@ -229,7 +228,6 @@ export function toggleDeletedSidebarViewState(options: {
     searchInputValue: string;
 }): {
     showDeleted: boolean;
-    showResolved: boolean;
     contentFilter: SidebarContentFilter;
     showPinnedThreadsOnly: boolean;
     pinnedThreadIds: Set<string>;
@@ -239,7 +237,6 @@ export function toggleDeletedSidebarViewState(options: {
     if (options.showDeleted) {
         return {
             showDeleted: false,
-            showResolved: options.showResolved,
             contentFilter: options.contentFilter,
             showPinnedThreadsOnly: options.showPinnedThreadsOnly,
             pinnedThreadIds: new Set(options.pinnedThreadIds),
@@ -250,7 +247,6 @@ export function toggleDeletedSidebarViewState(options: {
 
     return {
         showDeleted: true,
-        showResolved: false,
         contentFilter: "all",
         showPinnedThreadsOnly: false,
         pinnedThreadIds: new Set(options.pinnedThreadIds),

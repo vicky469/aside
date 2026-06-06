@@ -143,7 +143,6 @@ test("comment entry controller orphans an existing anchor when the editor select
         timestamp: 123,
         anchorKind: "selection",
         orphaned: false,
-        resolved: false,
     };
     const host = createHost({ knownComments: [existingComment] });
 
@@ -231,7 +230,6 @@ test("comment entry controller starts an append-entry draft using the resolved v
         timestamp: 123,
         anchorKind: "selection",
         orphaned: false,
-        resolved: false,
     };
     const host = createHost({ knownComments: [existingComment] });
 
@@ -270,7 +268,6 @@ test("comment entry controller can start an append-entry draft from a child entr
         timestamp: 456,
         anchorKind: "selection",
         orphaned: false,
-        resolved: false,
     };
     const host = createHost({
         knownComments: [childComment],

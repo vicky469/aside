@@ -25,7 +25,6 @@ function createComment(overrides: Partial<Comment> = {}): Comment {
         selectedTextHash: "hash-1",
         comment: "This is a side note.",
         timestamp: 1710000000000,
-        resolved: false,
         ...overrides,
     };
 }
@@ -142,18 +141,15 @@ test("serializeNoteComments replaces an existing managed appendix instead of dup
     const secondPass = serializeNoteComments(firstPass, [
         createComment({
             comment: "Updated body",
-            resolved: true,
         }),
     ]);
 
     assert.equal((secondPass.match(/<!-- Aside comments/g) || []).length, 1);
-    assert.match(secondPass, /"resolved": true/);
     assert.match(secondPass, /"body": "Updated body"/);
 
     const parsed = parseNoteComments(secondPass, "note.md");
     assert.equal(parsed.comments.length, 1);
     assert.equal(parsed.comments[0].comment, "Updated body");
-    assert.equal(parsed.comments[0].resolved, true);
 });
 
 test("serializeNoteComments preserves page-note and orphaned anchor metadata", () => {

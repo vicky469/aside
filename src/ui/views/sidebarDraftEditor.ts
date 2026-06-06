@@ -1,6 +1,5 @@
 import type { Comment } from "../../commentManager";
 import { compareCommentsForSidebarOrder } from "../../core/anchors/commentSectionOrder";
-import { matchesResolvedCommentVisibility, filterCommentsByResolvedVisibility } from "../../core/rules/resolvedCommentVisibility";
 import { extractTagsFromText } from "../../core/text/commentTags";
 import type { DraftComment } from "../../domain/drafts";
 import {
@@ -38,7 +37,6 @@ export interface SidebarDraftEditorHost {
 export function getSidebarComments(
     persistedComments: Comment[],
     draftComment: DraftComment | null,
-    showResolved: boolean,
     selectedFilePaths: readonly string[] = [],
 ): Array<Comment | DraftComment> {
     const selectedFileSet = selectedFilePaths.length
@@ -50,15 +48,13 @@ export function getSidebarComments(
     const fileScopedComments = selectedFileSet
         ? commentsWithoutDraft.filter((comment) => selectedFileSet.has(comment.filePath))
         : commentsWithoutDraft;
-    const visibleComments = filterCommentsByResolvedVisibility(fileScopedComments, showResolved);
     const visibleDraft = !draftComment
         || (!selectedFileSet || selectedFileSet.has(draftComment.filePath))
-            && matchesResolvedCommentVisibility(draftComment, showResolved)
         ? draftComment
         : null;
     const mergedComments = visibleDraft
-        ? visibleComments.concat(visibleDraft)
-        : visibleComments;
+        ? fileScopedComments.concat(visibleDraft)
+        : fileScopedComments;
 
     return mergedComments
         .slice()

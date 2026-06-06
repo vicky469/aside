@@ -84,12 +84,9 @@ import {
     filterIndexThreadsByExistingSourceFiles,
     GENERIC_INDEX_EMPTY_STATE_TEXTS,
     scopeIndexThreadsByFilePaths,
-    shouldShowActiveIndexEmptyState,
     shouldShowGenericIndexEmptyState,
     shouldShowIndexListToolbarChips,
     shouldShowNestedToolbarChip,
-    shouldShowResolvedIndexEmptyState,
-    shouldShowResolvedToolbarChip,
 } from "./indexSidebarState";
 import { StreamedAgentReplyController } from "./streamedAgentReplyController";
 import {
@@ -163,10 +160,6 @@ import {
 } from "./sidebarToolbarRenderer";
 import { updateRenderedActiveFileFilters } from "./sidebarActiveFileFilterDom";
 
-function matchesResolvedVisibility(resolved: boolean | undefined, showResolved: boolean): boolean {
-    return showResolved ? resolved === true : resolved !== true;
-}
-
 const EMPTY_PINNED_SIDEBAR_THREAD_IDS: ReadonlySet<string> = new Set<string>();
 const THOUGHT_TRAIL_LOG_PATH_SAMPLE_LIMIT = 8;
 const DEFAULT_BATCH_TAG_FLOW_STATE: BatchTagFlowState = {
@@ -234,7 +227,6 @@ function summarizeThoughtTrailPaths(paths: readonly string[]): {
 function matchesPageSidebarVisibility(
     thread: CommentThread,
     options: {
-        showResolved: boolean;
         showDeleted: boolean;
     },
 ): boolean {
@@ -242,11 +234,7 @@ function matchesPageSidebarVisibility(
         return isSoftDeleted(thread) || hasDeletedComments(thread);
     }
 
-    if (isSoftDeleted(thread)) {
-        return false;
-    }
-
-    return matchesResolvedVisibility(thread.resolved, options.showResolved);
+    return !isSoftDeleted(thread);
 }
 
 function parseSidebarPrimaryMode(value: unknown): SidebarPrimaryMode | null {
@@ -838,34 +826,6 @@ export default class AsideView extends ItemView {
         await this.renderComments({
             skipDataRefresh: true,
         });
-    }
-
-    private async setSidebarCommentResolvedState(commentId: string, resolved: boolean): Promise<void> {
-        const currentFilePath = this.getCurrentLocalNoteSidebarFilePath();
-        const updated = resolved
-            ? await this.plugin.resolveComment(
-                commentId,
-                currentFilePath
-                    ? {
-                        deferAggregateRefresh: true,
-                        skipPersistedViewRefresh: true,
-                    }
-                    : undefined,
-            )
-            : await this.plugin.unresolveComment(
-                commentId,
-                currentFilePath
-                    ? {
-                        deferAggregateRefresh: true,
-                        skipPersistedViewRefresh: true,
-                    }
-                    : undefined,
-            );
-        if (!updated) {
-            return;
-        }
-
-        await this.rerenderLocalNoteSidebarIfStillShowing(currentFilePath);
     }
 
     private async deleteSidebarComment(commentId: string): Promise<boolean> {
@@ -1471,7 +1431,6 @@ export default class AsideView extends ItemView {
             const deletedCommentCount = isAllCommentsView
                 ? 0
                 : countDeletedComments(pageThreadsWithDeleted);
-            const showResolved = this.plugin.shouldShowResolvedComments();
             const allAgentRuns = this.plugin.getAgentRuns();
             this.noteSidebarTagIndex = isAllCommentsView && selectedIndexSourceFile
                 ? this.rebuildNoteSidebarTagIndex(selectedIndexSourceFile.path, persistedThreads)
@@ -1487,9 +1446,8 @@ export default class AsideView extends ItemView {
             }
             const visiblePersistedThreads = persistedThreads.filter((thread) =>
                 isAllCommentsView
-                    ? matchesResolvedVisibility(thread.resolved, showResolved)
+                    ? !isSoftDeleted(thread)
                     : matchesPageSidebarVisibility(thread, {
-                        showResolved,
                         showDeleted,
                     }));
             const resolveWikiLinkPath = (linkPath: string, sourceFilePath: string): string | null =>
@@ -1499,7 +1457,6 @@ export default class AsideView extends ItemView {
                     ? buildIndexFileFilterGraph(persistedThreads, {
                     allCommentsNotePath: this.plugin.getAllCommentsNotePath(),
                     resolveWikiLinkPath,
-                    showResolved,
                 })
                     : null
                 : null;
@@ -1572,7 +1529,6 @@ export default class AsideView extends ItemView {
                     modeBefore: indexSidebarModeBeforeAvailability,
                     isEnabled: isIndexThoughtTrailEnabled,
                     unavailableReason: indexThoughtTrailUnavailableReason,
-                    showResolved,
                     persistedThreadCount: persistedThreads.length,
                     visibleThreadCount: visiblePersistedThreads.length,
                     scopedVisibleThreadCount: pinnedScopedVisibleThreads.length,
@@ -1638,7 +1594,6 @@ export default class AsideView extends ItemView {
             );
             const draftComment = this.plugin.getDraftForView(file.path);
             const visibleDraftComment = draftComment
-                && matchesResolvedVisibility(draftComment.resolved, showResolved)
                 && matchesPinnedSidebarDraftVisibility(
                     draftComment,
                     showPinnedThreadsOnly ? pinnedSidebarThreadIds : EMPTY_PINNED_SIDEBAR_THREAD_IDS,
@@ -1660,8 +1615,6 @@ export default class AsideView extends ItemView {
                 }
             }
             const totalScopedCount = searchMatchedAllThreads.length;
-            const resolvedCount = searchMatchedAllThreads.filter((thread) => thread.resolved).length;
-            const hasResolvedComments = resolvedCount > 0;
             const hasNestedComments = searchScopedVisibleThreads.some((thread) => thread.entries.length > 1)
                 || visibleDraftComment?.mode === "append";
             const nestedEditDraftThreadId = getNestedThreadIdForEditDraft(
@@ -1713,8 +1666,6 @@ export default class AsideView extends ItemView {
 
             this.renderSidebarToolbar(commentsContainer, {
                 isAllCommentsView,
-                resolvedCount,
-                hasResolvedComments,
                 hasDeletedComments: !isAllCommentsView && pageThreadsWithDeleted.some((thread) => hasDeletedComments(thread)),
                 deletedCommentCount,
                 showDeletedComments: showDeleted,
@@ -1825,20 +1776,10 @@ export default class AsideView extends ItemView {
                 if (isAllCommentsView) {
                     this.renderIndexSidebarEmptyState(commentsBody, {
                         renderedItemCount: renderedItems.length,
-                        showResolved,
                         totalScopedCount,
-                        resolvedCount,
                         filteredIndexFilePaths,
                         searchQuery: this.indexSidebarSearchQuery,
                     });
-                } else if (showResolved && totalScopedCount > 0) {
-                    const emptyStateEl = commentsBody.createDiv("aside-empty-state aside-section-empty-state");
-                    emptyStateEl.createEl("p", { text: "No resolved side notes" });
-                    emptyStateEl.createEl("p", { text: "Turn off resolved to return to active side notes." });
-                } else if (hasResolvedComments && !showResolved) {
-                    const emptyStateEl = commentsBody.createDiv("aside-empty-state aside-section-empty-state");
-                    emptyStateEl.createEl("p", { text: "No active side notes" });
-                    emptyStateEl.createEl("p", { text: "Turn on resolved to review archived side notes." });
                 }
             }
         } else {
@@ -1861,7 +1802,6 @@ export default class AsideView extends ItemView {
     private async renderPageSidebar(file: TFile, renderVersion: number): Promise<void> {
         const shell = this.ensureNoteSidebarShell(file.path);
         const showDeleted = this.plugin.shouldShowDeletedComments();
-        const showResolved = this.plugin.shouldShowResolvedComments();
         const draftComment = this.plugin.getDraftForView(file.path);
         if (draftComment && this.noteSidebarMode === "thought-trail") {
             this.noteSidebarMode = "list";
@@ -1878,10 +1818,9 @@ export default class AsideView extends ItemView {
         const persistedThreads = this.plugin.getThreadsForFile(file.path, { includeDeleted: showDeleted });
         const pageThreadsWithDeleted = this.plugin.getThreadsForFile(file.path, { includeDeleted: true });
         const deletedCommentCount = countDeletedComments(pageThreadsWithDeleted);
-        const hasResolvedThreadsInFile = persistedThreads.some((thread) => thread.resolved);
         const noteThoughtTrailAvailability = this.buildNoteThoughtTrailAvailabilityFromLoadedThreads(
             file,
-            persistedThreads.filter((thread) => matchesResolvedVisibility(thread.resolved, showResolved)),
+            persistedThreads.filter((thread) => !isSoftDeleted(thread)),
         );
         const isThoughtTrailEnabled = noteThoughtTrailAvailability.isEnabled;
         const noteSidebarModeBeforeAvailability = this.noteSidebarMode;
@@ -1891,7 +1830,6 @@ export default class AsideView extends ItemView {
             modeBefore: noteSidebarModeBeforeAvailability,
             isEnabled: isThoughtTrailEnabled,
             unavailableReason: noteThoughtTrailAvailability.unavailableReason,
-            showResolved,
             showDeleted,
             currentFileThreadCount: persistedThreads.length,
             currentVisibleThreadCount: noteThoughtTrailAvailability.currentVisibleThreadCount,
@@ -1956,7 +1894,6 @@ export default class AsideView extends ItemView {
         );
         const allAgentRuns = this.plugin.getAgentRuns();
         const visibleDraftComment = draftComment
-            && matchesResolvedVisibility(draftComment.resolved, showResolved)
             && matchesPinnedSidebarDraftVisibility(draftComment, this.getPinnedSidebarFilterThreadIds())
             ? draftComment
             : null;
@@ -1972,12 +1909,9 @@ export default class AsideView extends ItemView {
         }
         const visiblePersistedThreads = searchScopedThreads.filter((thread) =>
             matchesPageSidebarVisibility(thread, {
-                showResolved,
                 showDeleted,
             }));
         const totalScopedCount = searchMatchedThreads.length;
-        const resolvedCount = searchMatchedThreads.filter((thread) => thread.resolved).length;
-        const hasResolvedComments = resolvedCount > 0;
         const hasNestedComments = searchScopedThreads.some((thread) => thread.entries.length > 1)
             || visibleDraftComment?.mode === "append";
         const nestedEditDraftThreadId = getNestedThreadIdForEditDraft(
@@ -2013,8 +1947,6 @@ export default class AsideView extends ItemView {
         shell.toolbarSlotEl.empty();
         this.renderSidebarToolbar(shell.toolbarSlotEl, {
             isAllCommentsView: false,
-            resolvedCount,
-            hasResolvedComments: hasResolvedThreadsInFile,
             hasDeletedComments: pageThreadsWithDeleted.some((thread) => hasDeletedComments(thread)),
             deletedCommentCount,
             showDeletedComments: showDeleted,
@@ -2058,9 +1990,7 @@ export default class AsideView extends ItemView {
         this.refreshSidebarSearchHighlights(shell.commentsBodyEl, this.noteSidebarSearchQuery);
         this.renderPageSidebarEmptyState(shell.commentsBodyEl, {
             renderedItemCount: renderableItems.length,
-            showResolved,
             totalScopedCount,
-            hasResolvedComments,
             noteSidebarMode: this.noteSidebarMode,
             visibleTagFilterKey: this.noteSidebarVisibleTagFilterKey,
             hasAnyTags: (this.noteSidebarTagIndex?.threadIdsByTag.size ?? 0) > 0,
@@ -2092,13 +2022,11 @@ export default class AsideView extends ItemView {
         const persistedThreads = this.plugin.getThreadsForFile(file.path, { includeDeleted: options.showDeleted });
         const pageThreadsWithDeleted = this.plugin.getThreadsForFile(file.path, { includeDeleted: true });
         const deletedCommentCount = countDeletedComments(pageThreadsWithDeleted);
-        const showResolved = this.plugin.shouldShowResolvedComments();
-        const hasResolvedThreadsInFile = persistedThreads.some((thread) => thread.resolved);
         const sidebarThreadGroupCounts = getSidebarThreadGroupCounts(
             this.filterNoteSidebarThreadsByContentFilter(file.path, persistedThreads),
         );
 
-        const { scopedFilePaths, scopedThreads } = this.buildNoteThoughtTrailScope(file, showResolved);
+        const { scopedFilePaths, scopedThreads } = this.buildNoteThoughtTrailScope(file);
         const thoughtTrailLineCount = buildThoughtTrailLines(this.app.vault.getName(), scopedThreads, {
             allCommentsNotePath: this.plugin.getAllCommentsNotePath(),
             resolveWikiLinkPath: (linkPath, sourceFilePath) => this.resolveThoughtTrailWikiLinkPath(linkPath, sourceFilePath),
@@ -2117,7 +2045,6 @@ export default class AsideView extends ItemView {
             filePath: file.path,
             isEnabled: isThoughtTrailEnabled,
             unavailableReason: thoughtTrailUnavailableReason,
-            showResolved,
             showDeleted: options.showDeleted,
             indexedThreadCount: this.plugin.getAllIndexedThreads().length,
             currentFileThreadCount: persistedThreads.length,
@@ -2144,8 +2071,6 @@ export default class AsideView extends ItemView {
         shell.toolbarSlotEl.empty();
         this.renderSidebarToolbar(shell.toolbarSlotEl, {
             isAllCommentsView: false,
-            resolvedCount: persistedThreads.filter((thread) => thread.resolved).length,
-            hasResolvedComments: hasResolvedThreadsInFile,
             hasDeletedComments: pageThreadsWithDeleted.some((thread) => hasDeletedComments(thread)),
             deletedCommentCount,
             showDeletedComments: options.showDeleted,
@@ -2203,7 +2128,6 @@ export default class AsideView extends ItemView {
 
     private buildNoteThoughtTrailScope(
         file: TFile,
-        showResolved: boolean,
     ): {
         scopedFilePaths: string[];
         scopedThreads: CommentThread[];
@@ -2215,7 +2139,7 @@ export default class AsideView extends ItemView {
         const visibleTrailThreads = filterIndexThreadsByExistingSourceFiles(
             this.plugin.getAllIndexedThreads(),
             hasExistingSourceFile,
-        ).filter((thread) => matchesResolvedVisibility(thread.resolved, showResolved));
+        ).filter((thread) => !isSoftDeleted(thread));
 
         return buildRootedThoughtTrailScope(visibleTrailThreads, {
             rootFilePath: file.path,
@@ -2548,7 +2472,6 @@ export default class AsideView extends ItemView {
         const persistedThreads = this.plugin.getThreadsForFile(filePath, {
             includeDeleted: this.plugin.shouldShowDeletedComments(),
         });
-        const showResolved = this.plugin.shouldShowResolvedComments();
         const contentFilteredThreads = this.filterNoteSidebarThreadsByContentFilter(filePath, persistedThreads);
         const pinnedContentFilteredThreads = filterThreadsByPinnedSidebarViewState(
             contentFilteredThreads,
@@ -2566,7 +2489,6 @@ export default class AsideView extends ItemView {
         );
         return searchMatchedThreads
             .filter((thread) => matchesPageSidebarVisibility(thread, {
-                showResolved,
                 showDeleted: this.plugin.shouldShowDeletedComments(),
             }))
             .map((thread) => thread.id);
@@ -2808,9 +2730,7 @@ export default class AsideView extends ItemView {
         commentsBody: HTMLDivElement,
         options: {
             renderedItemCount: number;
-            showResolved: boolean;
             totalScopedCount: number;
-            hasResolvedComments: boolean;
             contentFilter: SidebarContentFilter;
             showPinnedThreadsOnly: boolean;
             searchQuery: string;
@@ -2873,12 +2793,9 @@ export default class AsideView extends ItemView {
 
         if (options.noteSidebarMode === "tags" && options.visibleTagFilterKey && selectedTagLabel) {
             const emptyStateEl = commentsBody.createDiv("aside-empty-state aside-section-empty-state");
-            const tagSubjectLabel = options.showResolved
-                ? `resolved ${searchSubjectLabel}`
-                : searchSubjectLabel;
             const baseLabel = hasSearchQuery
-                ? `No ${tagSubjectLabel} tagged with ${selectedTagLabel} match "${trimmedSearchQuery}" in this file.`
-                : `No ${tagSubjectLabel} tagged with ${selectedTagLabel} in this file.`;
+                ? `No ${searchSubjectLabel} tagged with ${selectedTagLabel} match "${trimmedSearchQuery}" in this file.`
+                : `No ${searchSubjectLabel} tagged with ${selectedTagLabel} in this file.`;
             const suggestion = hasSearchQuery
                 ? "Clear search or choose a different tag."
                 : "Choose a different tag or clear the tag filter.";
@@ -2888,52 +2805,6 @@ export default class AsideView extends ItemView {
             });
             emptyStateEl.createEl("p", {
                 text: suggestion,
-            });
-            return;
-        }
-
-        if (options.showResolved && options.totalScopedCount > 0) {
-            const emptyStateEl = commentsBody.createDiv("aside-empty-state aside-section-empty-state");
-            emptyStateEl.createEl("p", {
-                text: hasSearchQuery
-                    ? `No resolved ${searchSubjectLabel} match "${trimmedSearchQuery}" in this file.`
-                    : options.showPinnedThreadsOnly
-                        ? `No resolved ${pluralFilterLabel} for this file.`
-                        : options.contentFilter === "all"
-                        ? "No resolved side notes"
-                        : `No resolved ${pluralFilterLabel} for this file.`,
-            });
-            emptyStateEl.createEl("p", {
-                text: hasSearchQuery
-                    ? "Turn off resolved or clear search to broaden the results."
-                    : options.showPinnedThreadsOnly
-                        ? `Turn off ${filterLabel} to return to the broader side note list.`
-                        : options.contentFilter === "all"
-                        ? "Turn off resolved to return to active side notes."
-                        : `Turn off resolved to return to active ${pluralFilterLabel}.`,
-            });
-            return;
-        }
-
-        if (!options.showResolved && options.hasResolvedComments) {
-            const emptyStateEl = commentsBody.createDiv("aside-empty-state aside-section-empty-state");
-            emptyStateEl.createEl("p", {
-                text: hasSearchQuery
-                    ? `No active ${searchSubjectLabel} match "${trimmedSearchQuery}" in this file.`
-                    : options.showPinnedThreadsOnly
-                        ? `No active ${pluralFilterLabel} for this file.`
-                        : options.contentFilter === "all"
-                        ? "No active side notes"
-                        : `No active ${pluralFilterLabel} for this file.`,
-            });
-            emptyStateEl.createEl("p", {
-                text: hasSearchQuery
-                    ? "Turn on resolved or clear search to broaden the results."
-                    : options.showPinnedThreadsOnly
-                        ? "Turn on resolved to review archived pinned comments only."
-                        : options.contentFilter === "all"
-                        ? "Turn on resolved to review archived side notes."
-                        : `Turn on resolved to review archived ${pluralFilterLabel} only.`,
             });
             return;
         }
@@ -2984,9 +2855,7 @@ export default class AsideView extends ItemView {
         commentsBody: HTMLDivElement,
         options: {
             renderedItemCount: number;
-            showResolved: boolean;
             totalScopedCount: number;
-            resolvedCount: number;
             filteredIndexFilePaths: readonly string[];
             searchQuery: string;
         },
@@ -3005,20 +2874,8 @@ export default class AsideView extends ItemView {
         const hasSearchQuery = trimmedSearchQuery.length > 0;
         const hasFileFilter = options.filteredIndexFilePaths.length > 0;
         const scopeLabel = hasFileFilter ? "the selected file filter" : "the current index view";
-        const showResolvedEmptyState = shouldShowResolvedIndexEmptyState(
-            options.showResolved,
-            options.totalScopedCount,
-            options.renderedItemCount,
-        );
-        const showActiveEmptyState = shouldShowActiveIndexEmptyState(
-            options.showResolved,
-            options.resolvedCount,
-            options.renderedItemCount,
-        );
         if (
-            !showResolvedEmptyState
-            && !showActiveEmptyState
-            && !shouldShowGenericIndexEmptyState({
+            !shouldShowGenericIndexEmptyState({
                 hasFileFilter,
                 hasSearchQuery,
                 renderedItemCount: options.renderedItemCount,
@@ -3027,46 +2884,6 @@ export default class AsideView extends ItemView {
             return;
         }
         const emptyStateEl = commentsBody.createDiv("aside-empty-state aside-section-empty-state");
-
-        if (showResolvedEmptyState) {
-            emptyStateEl.createEl("p", {
-                text: hasSearchQuery
-                    ? `No resolved side notes match "${trimmedSearchQuery}" in ${scopeLabel}.`
-                    : hasFileFilter
-                        ? "No resolved side notes match the selected file filter."
-                        : "No resolved side notes match the current index view.",
-            });
-            emptyStateEl.createEl("p", {
-                text: hasSearchQuery
-                    ? hasFileFilter
-                        ? "Turn off resolved, clear search, or choose a different root file."
-                        : "Turn off resolved or clear search to broaden the index results."
-                    : hasFileFilter
-                        ? "Turn off resolved or choose a different root file."
-                        : "Turn off resolved to return to active side notes.",
-            });
-            return;
-        }
-
-        if (showActiveEmptyState) {
-            emptyStateEl.createEl("p", {
-                text: hasSearchQuery
-                    ? `No active side notes match "${trimmedSearchQuery}" in ${scopeLabel}.`
-                    : hasFileFilter
-                        ? "No active side notes match the selected file filter."
-                        : "No active side notes match the current index view.",
-            });
-            emptyStateEl.createEl("p", {
-                text: hasSearchQuery
-                    ? hasFileFilter
-                        ? "Turn on resolved, clear search, or choose a different root file."
-                        : "Turn on resolved or clear search to broaden the index results."
-                    : hasFileFilter
-                        ? "Turn on resolved or choose a different root file."
-                        : "Turn on resolved to review archived side notes only.",
-            });
-            return;
-        }
 
         if (hasSearchQuery) {
             emptyStateEl.createEl("p", {
@@ -3186,12 +3003,10 @@ export default class AsideView extends ItemView {
 
     private async toggleDeletedSidebarMode(options: {
         showDeleted: boolean;
-        showResolved: boolean;
         contentFilter: SidebarContentFilter;
     }): Promise<void> {
         const nextState = toggleDeletedSidebarViewState({
             showDeleted: options.showDeleted,
-            showResolved: options.showResolved,
             contentFilter: options.contentFilter,
             showPinnedThreadsOnly: this.showPinnedSidebarThreadsOnly,
             pinnedThreadIds: this.pinnedSidebarThreadIds,
@@ -3205,9 +3020,6 @@ export default class AsideView extends ItemView {
         this.clearNoteSidebarSearchDebounceTimer();
         this.noteSidebarSearchQuery = nextState.searchQuery;
         this.noteSidebarSearchInputValue = nextState.searchInputValue;
-        if (nextState.showResolved !== options.showResolved) {
-            await this.plugin.setShowResolvedComments(nextState.showResolved);
-        }
         if (nextState.showDeleted !== options.showDeleted) {
             await this.plugin.setShowDeletedComments(nextState.showDeleted);
         }
@@ -3224,8 +3036,6 @@ export default class AsideView extends ItemView {
         container: HTMLElement,
         options: {
             isAllCommentsView: boolean;
-            resolvedCount: number;
-            hasResolvedComments: boolean;
             hasDeletedComments: boolean;
             deletedCommentCount: number;
             showDeletedComments: boolean;
@@ -3250,7 +3060,6 @@ export default class AsideView extends ItemView {
             filteredIndexFilePaths: string[];
         },
     ) {
-        const showResolved = this.plugin.shouldShowResolvedComments();
         const showNestedComments = this.plugin.shouldShowNestedComments();
         const showDeletedComments = options.showDeletedComments;
         const showPinnedThreadsOnly = this.showPinnedSidebarThreadsOnly;
@@ -3266,9 +3075,6 @@ export default class AsideView extends ItemView {
             && isSidebarListLikeMode(activePrimaryMode);
         const shouldShowAddPageCommentAction = !!options.addPageCommentAction
             && (options.isAllCommentsView || isSidebarListLikeMode(activePrimaryMode));
-        const shouldShowResolvedChip = showListOrTagToolbarChips
-            && !options.isAgentMode
-            && shouldShowResolvedToolbarChip(options.hasResolvedComments, showResolved);
         const shouldShowNestedChip = showListOrTagToolbarChips && shouldShowNestedToolbarChip({
             hasNestedComments: options.hasNestedComments,
             isAllCommentsView: options.isAllCommentsView,
@@ -3280,7 +3086,6 @@ export default class AsideView extends ItemView {
             && showDeletedComments;
         const shouldRenderToolbar = options.isAllCommentsView
             || (!options.isAllCommentsView && options.noteSidebarMode === "thought-trail")
-            || shouldShowResolvedChip
             || shouldShowNestedChip
             || shouldShowAddPageCommentAction
             || options.noteSidebarMode === "tags";
@@ -3397,17 +3202,6 @@ export default class AsideView extends ItemView {
                 },
             });
         }
-        if (shouldShowResolvedChip) {
-            this.renderToolbarIconButton(actionGroup, {
-                icon: "check",
-                active: showResolved,
-                ariaLabel: showResolved ? "Show active comments" : "Show resolved comments only",
-                onClick: () => {
-                    void this.plugin.setShowResolvedComments(!showResolved);
-                },
-            });
-        }
-
         if (shouldShowNestedChip) {
             this.renderToolbarIconButton(actionGroup, {
                 icon: showNestedComments ? "chevrons-up" : "chevrons-down",
@@ -3429,7 +3223,6 @@ export default class AsideView extends ItemView {
                 onClick: () => {
                     void this.toggleDeletedSidebarMode({
                         showDeleted: showDeletedComments,
-                        showResolved,
                         contentFilter: options.noteSidebarContentFilter,
                     });
                 },
@@ -3782,8 +3575,6 @@ export default class AsideView extends ItemView {
         const commentsContainer = this.containerEl.createDiv("aside-comments-container");
         this.renderSidebarToolbar(commentsContainer, {
             isAllCommentsView: true,
-            resolvedCount: 0,
-            hasResolvedComments: false,
             hasDeletedComments: false,
             deletedCommentCount: 0,
             showDeletedComments: false,
@@ -3807,9 +3598,7 @@ export default class AsideView extends ItemView {
         const commentsBody = this.renderCommentsList(commentsContainer);
         this.renderIndexSidebarEmptyState(commentsBody, {
             renderedItemCount: 0,
-            showResolved: this.plugin.shouldShowResolvedComments(),
             totalScopedCount: 0,
-            resolvedCount: 0,
             filteredIndexFilePaths: [],
             searchQuery: "",
         });
@@ -4250,8 +4039,6 @@ export default class AsideView extends ItemView {
             setShowNestedCommentsForThread: (threadId, showNestedComments) => {
                 void this.plugin.setShowNestedCommentsForThread(threadId, showNestedComments);
             },
-            resolveComment: (commentId) => this.setSidebarCommentResolvedState(commentId, true),
-            unresolveComment: (commentId) => this.setSidebarCommentResolvedState(commentId, false),
             moveCommentThread: (threadId, sourceFilePath) => {
                 this.openMoveCommentThreadModal(threadId, sourceFilePath);
             },
@@ -4479,7 +4266,6 @@ export default class AsideView extends ItemView {
         if (
             !targetThread
             || targetThread.deletedAt
-            || targetThread.resolved
             || targetThread.filePath !== dragState.filePath
         ) {
             return null;

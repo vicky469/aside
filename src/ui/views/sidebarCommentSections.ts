@@ -3,7 +3,6 @@ import { isOrphanedComment } from "../../core/anchors/commentAnchors";
 
 export interface SidebarCommentPresentationLike {
     timestamp: number;
-    resolved?: boolean;
     anchorKind?: CommentAnchorKind;
     orphaned?: boolean;
     deletedAt?: number;
@@ -84,9 +83,6 @@ export function formatSidebarCommentMeta(comment: SidebarCommentPresentationLike
 
     if (isOrphanedComment(comment)) {
         segments.push("orphaned");
-    }
-    if (comment.resolved) {
-        segments.push("resolved");
     }
     if (comment.deletedAt) {
         segments.push("deleted");

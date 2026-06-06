@@ -26,7 +26,6 @@ export class CommentSessionController {
     private readonly draftSessionStore = new DraftSessionStore();
     private readonly revealedCommentSelectionStore = new RevealedCommentSelectionStore();
     private readonly nestedCommentThreadOverrideIds = new Set<string>();
-    private showResolvedComments = false;
     private showDeletedComments = false;
     private showNestedComments = true;
 
@@ -102,29 +101,6 @@ export class CommentSessionController {
 
     public setDraftHostFilePath(hostFilePath: string | null): void {
         this.draftSessionStore.setDraftHostFilePath(hostFilePath);
-    }
-
-    public shouldShowResolvedComments(): boolean {
-        return this.showResolvedComments;
-    }
-
-    public async setShowResolvedComments(
-        showResolved: boolean,
-        options: SetSidebarViewStateOptions = {},
-    ): Promise<boolean> {
-        if (this.showResolvedComments === showResolved) {
-            return false;
-        }
-
-        this.showResolvedComments = showResolved;
-        if (!options.skipCommentViewRefresh) {
-            await this.host.refreshCommentViews({
-                skipDataRefresh: true,
-            });
-        }
-        this.host.refreshEditorDecorations();
-        this.host.refreshMarkdownPreviews();
-        return true;
     }
 
     public shouldShowNestedComments(): boolean {

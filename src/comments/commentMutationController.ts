@@ -44,7 +44,6 @@ export type CommentMutationPersistBehaviorOptions = {
 };
 
 export type DeleteCommentOptions = CommentMutationPersistBehaviorOptions;
-export type ResolveCommentOptions = CommentMutationPersistBehaviorOptions;
 export type SetCommentPinnedOptions = CommentMutationPersistBehaviorOptions;
 export type MoveCommentThreadOptions = CommentMutationPersistBehaviorOptions;
 export type MoveCommentEntryOptions = CommentMutationPersistBehaviorOptions;
@@ -71,14 +70,6 @@ export interface CommentMutationHost {
     getSidebarTargetFilePath(): string | null;
     getDraftComment(): DraftComment | null;
     getSavingDraftCommentId(): string | null;
-    shouldShowResolvedComments(): boolean;
-    setShowResolvedComments(
-        showResolved: boolean,
-        options?: {
-            deferAggregateRefresh?: boolean;
-            skipCommentViewRefresh?: boolean;
-        },
-    ): Promise<boolean>;
     setDraftComment(
         draftComment: DraftComment | null,
         hostFilePath?: string | null,
@@ -515,21 +506,6 @@ export class CommentMutationController {
         return true;
     }
 
-    public async resolveComment(
-        commentId: string,
-        options: ResolveCommentOptions = {},
-    ): Promise<boolean> {
-        void this.host.log?.("info", "draft", "thread.resolve", { commentId });
-        const latestTarget = await this.loadLatestCommentTarget(commentId);
-        if (!latestTarget) {
-            return false;
-        }
-
-        this.host.getCommentManager().resolveComment(commentId);
-        await this.host.persistCommentsForFile(latestTarget.file, this.buildPersistOptions(options));
-        return true;
-    }
-
     public async setCommentPinnedState(
         commentId: string,
         isPinned: boolean,
@@ -547,27 +523,6 @@ export class CommentMutationController {
 
         this.host.getCommentManager().setCommentPinnedState(commentId, isPinned);
         await this.host.persistCommentsForFile(latestTarget.file, this.buildPersistOptions(options));
-        return true;
-    }
-
-    public async unresolveComment(
-        commentId: string,
-        options: ResolveCommentOptions = {},
-    ): Promise<boolean> {
-        void this.host.log?.("info", "draft", "thread.reopen", { commentId });
-        const latestTarget = await this.loadLatestCommentTarget(commentId);
-        if (!latestTarget) {
-            return false;
-        }
-
-        this.host.getCommentManager().unresolveComment(commentId);
-        await this.host.persistCommentsForFile(latestTarget.file, this.buildPersistOptions(options));
-        if (this.host.shouldShowResolvedComments()) {
-            await this.host.setShowResolvedComments(false, {
-                deferAggregateRefresh: options.deferAggregateRefresh === true,
-                skipCommentViewRefresh: options.skipPersistedViewRefresh === true,
-            });
-        }
         return true;
     }
 
@@ -734,7 +689,7 @@ export class CommentMutationController {
             this.host.showNotice("Choose a different parent side note.");
             return false;
         }
-        if (targetThread.deletedAt || targetThread.resolved) {
+        if (targetThread.deletedAt) {
             this.host.showNotice("Choose an active parent side note.");
             return false;
         }

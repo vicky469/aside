@@ -36,7 +36,6 @@ function createComment(overrides: Partial<Comment> = {}): Comment {
         selectedTextHash: "hash-1",
         comment: "This is a side note.",
         timestamp: 1710000000000,
-        resolved: false,
         ...overrides,
     };
 }
@@ -58,7 +57,6 @@ function createThread(overrides: Partial<CommentThread> = {}): CommentThread {
         }],
         createdAt: 1710000000000,
         updatedAt: 1710000000000,
-        resolved: false,
         ...overrides,
     };
 }
@@ -282,43 +280,12 @@ test("buildAllCommentsNoteContent includes tags from every visible thread entry"
                 },
             ],
         }),
-        createThread({
-            id: "thread-2",
-            filePath: "Projects/Alpha/Note B.md",
-            resolved: true,
-            entries: [{
-                id: "entry-3",
-                body: "Resolved #hidden",
-                timestamp: 1710000002000,
-            }],
-        }),
-    ], {
-        showResolved: false,
-    });
+    ]);
 
     assert.equal(
         content.includes(`${expectedFileRow("Projects/Alpha/Note A.md")}  #reply #root`),
         true,
     );
-    assert.equal(content.includes("#hidden"), false);
-});
-
-test("buildAllCommentsNoteContent keeps resolved visibility filtering", () => {
-    const content = buildAllCommentsNoteContent("dev", [
-        createComment({
-            filePath: "B.md",
-        }),
-        createComment({
-            id: "comment-2",
-            filePath: "A.md",
-            resolved: true,
-        }),
-    ], {
-        showResolved: false,
-    });
-
-    assert.equal(content.includes(expectedFileRow("B.md")), true);
-    assert.equal(content.includes('data-aside-file-path="A.md"'), false);
 });
 
 test("buildAllCommentsNoteContent renders only the header when there are no comments", () => {

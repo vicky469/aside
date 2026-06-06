@@ -27,7 +27,6 @@ function createThread(filePath: string, overrides: Partial<CommentThread> = {}):
         selectedTextHash: "hash-target",
         anchorKind: "selection",
         orphaned: false,
-        resolved: false,
         entries: [{
             id: "entry-1",
             body: "hello",
@@ -137,7 +136,6 @@ test("side-note sync reducer retargets renameSource events that use nextPath", (
 test("side-note sync diff emits compact mutation events", () => {
     const previous = createThread("docs/note.md");
     const next = createThread("docs/note.md", {
-        resolved: true,
         entries: [
             previous.entries[0],
             {
@@ -151,7 +149,7 @@ test("side-note sync diff emits compact mutation events", () => {
 
     const inputs = buildSideNoteSyncEventInputsForThreadDiff([previous], [next]);
 
-    assert.deepEqual(inputs.map((input) => input.op), ["setThreadResolved", "appendEntry"]);
+    assert.deepEqual(inputs.map((input) => input.op), ["appendEntry"]);
 });
 
 test("side-note sync diff preserves child-targeted append entry order", () => {
