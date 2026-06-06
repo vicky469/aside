@@ -3575,6 +3575,7 @@ export default class AsideView extends ItemView {
         this.containerEl.empty();
         this.syncViewContainerClasses();
 
+        const liveThreadGroupCounts = getSidebarThreadGroupCounts(this.plugin.getAllIndexedThreads());
         const commentsContainer = this.containerEl.createDiv("aside-comments-container");
         this.renderSidebarToolbar(commentsContainer, {
             isAllCommentsView: true,
@@ -3589,7 +3590,7 @@ export default class AsideView extends ItemView {
             },
             isTagsEnabled: false,
             isThoughtTrailEnabled: false,
-            sidebarThreadGroupCounts: EMPTY_SIDEBAR_THREAD_GROUP_COUNTS,
+            sidebarThreadGroupCounts: liveThreadGroupCounts,
             noteSidebarContentFilter: "all",
             noteSidebarMode: this.noteSidebarMode,
             addPageCommentAction: null,
