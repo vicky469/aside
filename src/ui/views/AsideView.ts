@@ -351,7 +351,7 @@ export default class AsideView extends ItemView {
     private readonly toolbarActionGuard: ToolbarActionGuard = {
         beforeAction: () => this.saveVisibleDraftIfPresent(),
     };
-    private indexSidebarMode: IndexSidebarMode = "list";
+    private indexSidebarMode: IndexSidebarMode = "todo";
     private noteSidebarMode: SidebarPrimaryMode = "list";
     private noteSidebarContentFilter: SidebarContentFilter = "all";
     private noteSidebarSearchQuery = "";
@@ -1520,13 +1520,13 @@ export default class AsideView extends ItemView {
                 )
                 : null;
             const isIndexThoughtTrailEnabled = isAllCommentsView && indexThoughtTrailUnavailableReason === null;
+            let effectiveIndexSidebarMode = this.indexSidebarMode;
             if (isAllCommentsView) {
-                const indexSidebarModeBeforeAvailability = this.indexSidebarMode;
                 const filteredFileSummary = summarizeThoughtTrailPaths(filteredIndexFilePaths);
                 void this.plugin.logEvent("info", "thoughttrail", "thoughttrail.index.availability", {
                     filePath: file.path,
                     selectedRootFilePath: selectedIndexFileFilterRootPath,
-                    modeBefore: indexSidebarModeBeforeAvailability,
+                    modeBefore: effectiveIndexSidebarMode,
                     isEnabled: isIndexThoughtTrailEnabled,
                     unavailableReason: indexThoughtTrailUnavailableReason,
                     persistedThreadCount: persistedThreads.length,
@@ -1542,18 +1542,18 @@ export default class AsideView extends ItemView {
                         ? indexFileFilterGraph?.fileCommentCounts.has(selectedIndexFileFilterRootPath) ?? false
                         : false,
                 });
-                this.indexSidebarMode = resolveModeWithThoughtTrailAvailability(
-                    this.indexSidebarMode,
+                effectiveIndexSidebarMode = resolveModeWithThoughtTrailAvailability(
+                    effectiveIndexSidebarMode,
                     isIndexThoughtTrailEnabled,
                 );
-                this.indexSidebarMode = resolveModeWithSidebarGroupAvailability(
-                    this.indexSidebarMode,
+                effectiveIndexSidebarMode = resolveModeWithSidebarGroupAvailability(
+                    effectiveIndexSidebarMode,
                     indexSidebarThreadGroupCounts,
                 );
-                if (this.indexSidebarMode === "tags") {
-                    this.indexSidebarMode = "list";
+                if (effectiveIndexSidebarMode === "tags") {
+                    effectiveIndexSidebarMode = "list";
                 }
-                if (indexSidebarModeBeforeAvailability === "thought-trail" && this.indexSidebarMode !== "thought-trail") {
+                if (this.indexSidebarMode === "thought-trail" && effectiveIndexSidebarMode !== "thought-trail") {
                     void this.plugin.logEvent("warn", "thoughttrail", "thoughttrail.index.fallback", {
                         filePath: file.path,
                         selectedRootFilePath: selectedIndexFileFilterRootPath,
@@ -1565,12 +1565,12 @@ export default class AsideView extends ItemView {
                 }
             }
             const groupFilteredScopedVisibleThreads = isAllCommentsView
-                ? filterThreadsBySidebarGroupMode(pinnedScopedVisibleThreads, this.indexSidebarMode)
+                ? filterThreadsBySidebarGroupMode(pinnedScopedVisibleThreads, effectiveIndexSidebarMode)
                 : pinnedScopedVisibleThreads;
             const groupFilteredScopedAllThreads = isAllCommentsView
-                ? filterThreadsBySidebarGroupMode(pinnedScopedAllThreads, this.indexSidebarMode)
+                ? filterThreadsBySidebarGroupMode(pinnedScopedAllThreads, effectiveIndexSidebarMode)
                 : pinnedScopedAllThreads;
-            const isIndexTagsMode = isAllCommentsView && this.indexSidebarMode === "tags";
+            const isIndexTagsMode = isAllCommentsView && effectiveIndexSidebarMode === "tags";
             const indexTagThreadIds = isIndexTagsMode && this.noteSidebarVisibleTagFilterKey
                 ? this.noteSidebarTagIndex?.threadIdsByTag.get(this.noteSidebarVisibleTagFilterKey) ?? null
                 : null;
@@ -1651,7 +1651,7 @@ export default class AsideView extends ItemView {
                     replacedThreadId,
                 );
             const limitedComments = isAllCommentsView
-                && isSidebarListLikeMode(this.indexSidebarMode)
+                && isSidebarListLikeMode(effectiveIndexSidebarMode)
                 && shouldLimitIndexSidebarList(selectedIndexFileFilterRootPath, this.indexSidebarSearchQuery)
                 ? limitIndexSidebarListItems(renderableItems)
                 : {
@@ -1680,6 +1680,7 @@ export default class AsideView extends ItemView {
                 sidebarThreadGroupCounts: indexSidebarThreadGroupCounts,
                 noteSidebarContentFilter: "all",
                 noteSidebarMode: this.noteSidebarMode,
+                effectiveIndexSidebarMode,
                 addPageCommentAction: !isAllCommentsView
                     ? {
                         icon: "plus",
@@ -1702,7 +1703,7 @@ export default class AsideView extends ItemView {
                 );
             }
 
-            if (isAllCommentsView && this.indexSidebarMode === "thought-trail") {
+            if (isAllCommentsView && effectiveIndexSidebarMode === "thought-trail") {
                 const trailComments = pinnedScopedVisibleThreads;
                 void this.plugin.logEvent("info", "thoughttrail", "thoughttrail.index.render", {
                     filePath: file.path,
@@ -3050,6 +3051,7 @@ export default class AsideView extends ItemView {
             sidebarThreadGroupCounts?: SidebarThreadGroupCounts;
             noteSidebarContentFilter: SidebarContentFilter;
             noteSidebarMode: SidebarPrimaryMode;
+            effectiveIndexSidebarMode?: IndexSidebarMode;
             addPageCommentAction: {
                 icon: string;
                 ariaLabel: string;
@@ -3064,12 +3066,13 @@ export default class AsideView extends ItemView {
         const showDeletedComments = options.showDeletedComments;
         const showPinnedThreadsOnly = this.showPinnedSidebarThreadsOnly;
         const hasPinnedThreads = this.pinnedSidebarThreadIds.size > 0;
+        const resolvedIndexSidebarMode = options.effectiveIndexSidebarMode ?? this.indexSidebarMode;
         const activePrimaryMode = options.isAllCommentsView
-            ? this.indexSidebarMode
+            ? resolvedIndexSidebarMode
             : options.noteSidebarMode;
         const sidebarThreadGroupCounts = options.sidebarThreadGroupCounts ?? EMPTY_SIDEBAR_THREAD_GROUP_COUNTS;
         const showListOrTagToolbarChips = options.isAllCommentsView
-            ? shouldShowIndexListToolbarChips(options.isAllCommentsView, this.indexSidebarMode)
+            ? shouldShowIndexListToolbarChips(options.isAllCommentsView, resolvedIndexSidebarMode)
             : isSidebarListLikeMode(activePrimaryMode);
         const shouldShowNoteSearchInput = !options.isAllCommentsView
             && isSidebarListLikeMode(activePrimaryMode);
@@ -3105,7 +3108,7 @@ export default class AsideView extends ItemView {
             const modeRow = toolbarEl.createDiv("aside-sidebar-toolbar-row");
             modeRow.addClass("is-note-primary-row");
             this.renderPrimarySidebarModeControl(modeRow, {
-                mode: this.indexSidebarMode,
+                mode: resolvedIndexSidebarMode,
                 surface: "index",
                 isTagsEnabled: options.isTagsEnabled,
                 isThoughtTrailEnabled: options.isThoughtTrailEnabled,
