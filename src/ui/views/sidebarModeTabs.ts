@@ -46,7 +46,7 @@ export function getSidebarModeTabGroups(
         modes: SidebarPrimaryMode[];
     }> = surface === "index"
         ? [
-            { scope: "local", modes: ["list", "agent"] },
+            { scope: "local", modes: ["list"] },
             { scope: "global", modes: ["todo", "thought-trail"] },
         ]
         : [
