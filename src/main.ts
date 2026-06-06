@@ -69,6 +69,7 @@ import {
 } from "./ui/asideIcon";
 import SupportLogInspectorModal from "./ui/modals/SupportLogInspectorModal";
 import AsideView from "./ui/views/AsideView";
+import { shouldShowTransientNotice } from "./ui/notices/noticePolicy";
 import {
     AsideLogService,
     type AsideLogLevel,
@@ -1099,7 +1100,9 @@ export default class Aside extends Plugin {
         event: string,
         payload?: Record<string, unknown>,
     ): void {
-        new Notice(message);
+        if (shouldShowTransientNotice({ message, area, event })) {
+            new Notice(message);
+        }
         void this.logEvent("warn", area, event, {
             ...payload,
             message,

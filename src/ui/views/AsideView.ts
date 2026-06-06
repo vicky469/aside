@@ -2,7 +2,6 @@ import {
     ItemView,
     MarkdownView,
     MarkdownRenderer,
-    Notice,
     TFile,
     WorkspaceLeaf,
     Platform,
@@ -2577,7 +2576,6 @@ export default class AsideView extends ItemView {
         const selectedTagText = this.getNoteSidebarBatchTagText();
         const normalizedTagText = selectedTagText ? normalizeTagText(selectedTagText) : "";
         if (!normalizedTagText) {
-            new Notice("Enter a valid tag before applying.");
             return;
         }
         const normalizedTagKey = normalizedTagText.slice(1).toLowerCase();
@@ -2612,15 +2610,8 @@ export default class AsideView extends ItemView {
             await this.renderComments({ skipDataRefresh: true });
 
             if (result.persistError !== null) {
-                void new Notice("Failed to save tag changes. Your comments were restored.");
                 return;
             }
-
-            void new Notice(
-                result.failures.length === 0
-                    ? `Applied ${normalizedTagText} to ${result.successfulIds.length} thread${result.successfulIds.length === 1 ? "" : "s"}.`
-                    : `Applied ${normalizedTagText} to ${result.successfulIds.length} thread${result.successfulIds.length === 1 ? "" : "s"} with ${result.failures.length} failure${result.failures.length === 1 ? "" : "s"}.`,
-            );
         } finally {
             this.noteSidebarBatchTagFlow = {
                 ...this.noteSidebarBatchTagFlow,
@@ -2690,15 +2681,8 @@ export default class AsideView extends ItemView {
             });
 
             if (result.persistError !== null) {
-                void new Notice("Failed to save tag changes. Your comments were restored.");
                 return;
             }
-
-            void new Notice(
-                result.failures.length === 0
-                    ? `Removed ${normalizedTagText} from ${result.successfulIds.length} thread${result.successfulIds.length === 1 ? "" : "s"}.`
-                    : `Removed ${normalizedTagText} from ${result.successfulIds.length} thread${result.successfulIds.length === 1 ? "" : "s"} with ${result.failures.length} failure${result.failures.length === 1 ? "" : "s"}.`,
-            );
         } finally {
             this.noteSidebarBatchTagFlow = {
                 ...this.noteSidebarBatchTagFlow,
@@ -3929,7 +3913,6 @@ export default class AsideView extends ItemView {
     ): Promise<boolean> {
         const normalizedMarkdown = markdown.trim();
         if (!normalizedMarkdown) {
-            new Notice("Unable to add that content.");
             return false;
         }
 
@@ -3938,14 +3921,12 @@ export default class AsideView extends ItemView {
 
         const editableView = await ensureEditableMarkdownLeafForInsert(target.leaf);
         if (!editableView) {
-            new Notice("Unable to open that file for editing.");
             return false;
         }
 
         const editor = editableView.editor;
         const insertEdit = buildSidebarFileInsertEdit(editor.getValue(), normalizedMarkdown, cursorLine);
         if (!insertEdit) {
-            new Notice("Unable to add that content.");
             return false;
         }
 
@@ -3953,14 +3934,12 @@ export default class AsideView extends ItemView {
         const nextPosition = editor.offsetToPos(editor.posToOffset(insertEdit.position) + insertEdit.text.length);
         editor.setSelection(nextPosition, nextPosition);
         editableView.editor.focus();
-        new Notice("Added to file.");
         return true;
     }
 
     private async insertCommentMarkdownIntoFile(markdown: string): Promise<boolean> {
         const availableTargets = this.getOpenMarkdownFileInsertTargets();
         if (!availableTargets.length) {
-            new Notice("Open a markdown file first.");
             return false;
         }
 
@@ -3970,7 +3949,6 @@ export default class AsideView extends ItemView {
                 return await this.insertCommentMarkdownIntoOpenFile(directTarget, markdown);
             } catch (error) {
                 console.error("Failed to add comment markdown to the open file", error);
-                new Notice("Unable to add to that file.");
                 return false;
             }
         }
@@ -3999,18 +3977,16 @@ export default class AsideView extends ItemView {
                     const latestTarget = this.getOpenMarkdownFileInsertTargets()
                         .find((target) => target.file.path === suggestion.filePath);
                     if (!latestTarget) {
-                        new Notice("That file is no longer open.");
                         settle(false);
                         return;
                     }
 
                     try {
-                        settle(await this.insertCommentMarkdownIntoOpenFile(latestTarget, markdown));
-                    } catch (error) {
-                        console.error("Failed to add comment markdown to file", error);
-                        new Notice("Unable to add to that file.");
-                        settle(false);
-                    }
+                    settle(await this.insertCommentMarkdownIntoOpenFile(latestTarget, markdown));
+                } catch (error) {
+                    console.error("Failed to add comment markdown to file", error);
+                    settle(false);
+                }
                 },
                 onCloseModal: () => {
                     if (!selectionStarted) {
@@ -4087,8 +4063,7 @@ export default class AsideView extends ItemView {
             openCommentInEditor: (persistedComment) => this.interactionController.openCommentInEditor(persistedComment),
             shareComment: async (persistedComment) => {
                 const commentUrl = buildCommentLocationUrl(this.app.vault.getName(), persistedComment);
-                const copied = await copyTextToClipboard(commentUrl);
-                new Notice(copied ? "Copied side note link." : "Failed to copy side note link.");
+                await copyTextToClipboard(commentUrl);
             },
             saveVisibleDraftIfPresent: () => this.saveVisibleDraftIfPresent(),
             setShowNestedCommentsForThread: (threadId, showNestedComments) => {

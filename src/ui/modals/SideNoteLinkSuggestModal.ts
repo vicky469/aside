@@ -1,6 +1,5 @@
 import {
     type App,
-    Notice,
     SuggestModal,
 } from "obsidian";
 import {
@@ -81,10 +80,8 @@ export default class SideNoteLinkSuggestModal extends SuggestModal<SideNoteLinkS
                 const file = await createSideNoteLinkNote(this.app, suggestion.notePath);
                 const linkText = this.app.metadataCache.fileToLinktext(file, this.sourcePath, true);
                 await this.onChooseLink(`[[${linkText}]]`);
-                new Notice(`Created ${file.basename}`);
             } catch (error) {
                 console.error("Failed to create linked note", error);
-                new Notice("Failed to create note.");
             }
         })();
     }
