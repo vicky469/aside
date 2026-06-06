@@ -44,6 +44,21 @@ class FakeContainerElement {
     }
 }
 
+class FakeStatusChildElement extends FakeContainerElement {
+    public textContent = "";
+}
+
+class FakeStatusElement extends FakeContainerElement {
+    public readonly ownerDocument = {
+        createElement: () => new FakeStatusChildElement(),
+    };
+    public readonly parentElement = null;
+
+    public appendChild(node: unknown): void {
+        this.childNodes.push(node);
+    }
+}
+
 test("streamed agent reply controller restores borrowed nodes without cloning away handlers", () => {
     const controller = new StreamedAgentReplyController("thread-1") as any;
     const metaValueEl = new FakeTextValue();
@@ -125,4 +140,39 @@ test("streamed agent reply controller formats process log separately from reply 
         "Reading thread context\nRunning command: rg \"Codex\" src",
     );
     assert.equal(formatAgentProcessLogText({ processLogLines: [] }), "");
+});
+
+test("streamed agent reply controller shows only the latest process line as status hint", () => {
+    const controller = new StreamedAgentReplyController("thread-1") as any;
+    const statusEl = new FakeStatusElement();
+
+    controller.syncStatus(statusEl, "Codex", {
+        runId: "run-1",
+        threadId: "thread-1",
+        requestedAgent: "codex",
+        runtime: "direct-cli",
+        status: "running",
+        statusHintText: "Running command: rg \"Codex\" src",
+        processLogLines: [
+            "Reading   thread context",
+            "Running command: rg \"Codex\" src",
+        ],
+        partialText: "",
+        startedAt: 100,
+        updatedAt: 101,
+    });
+
+    const hintEl = statusEl.childNodes.find((node) =>
+        node instanceof FakeStatusChildElement
+        && node.className === "aside-agent-run-status-hint"
+    ) as FakeStatusChildElement | undefined;
+
+    assert.equal(
+        hintEl?.textContent,
+        "Running command: rg \"Codex\" src",
+    );
+    assert.equal(
+        statusEl.getAttribute("aria-label"),
+        "Codex Running command: rg \"Codex\" src. running",
+    );
 });

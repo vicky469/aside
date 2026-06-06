@@ -32,6 +32,14 @@ export function formatAgentProcessLogText(
         .join("\n");
 }
 
+function formatAgentStatusHintText(stream: AgentRunStreamState): string | null {
+    const processLogText = stream.status === "queued" || stream.status === "running"
+        ? formatAgentProcessLogText(stream)
+        : "";
+    const latestProcessLogLine = processLogText.split("\n").filter((line) => line.length > 0).at(-1) ?? "";
+    return latestProcessLogLine || stream.statusHintText?.trim() || null;
+}
+
 export class StreamedAgentReplyController {
     private cardEl: HTMLDivElement | null = null;
     private metaValueEl: HTMLSpanElement | null = null;
@@ -108,11 +116,8 @@ export class StreamedAgentReplyController {
         this.syncActions(actionsEl, stream);
 
         const processLogText = formatAgentProcessLogText(stream);
-        const processLogEl = this.ensureProcessLogElement(cardEl, contentEl);
-        if (processLogEl.textContent !== processLogText) {
-            processLogEl.textContent = processLogText;
-        }
-        processLogEl.hidden = processLogText.length === 0;
+        this.processLogEl?.remove();
+        this.processLogEl = null;
 
         if (contentEl.textContent !== stream.partialText) {
             contentEl.textContent = stream.partialText;
@@ -158,7 +163,7 @@ export class StreamedAgentReplyController {
     private syncStatus(statusEl: HTMLSpanElement, label: string, stream: AgentRunStreamState): void {
         const presentation = getAgentRunStatusPresentation(stream.status);
         const statusText = stream.statusText?.trim() || null;
-        const statusHintText = stream.statusHintText?.trim() || null;
+        const statusHintText = formatAgentStatusHintText(stream);
         const shouldShowStatusText = stream.status !== "running" && stream.status !== "queued";
         statusEl.className = `aside-agent-run-status is-${stream.status}`;
         statusEl.replaceChildren();
@@ -267,13 +272,14 @@ export class StreamedAgentReplyController {
                 const statusEl = persisted.querySelector(".aside-agent-run-status");
                 const footerMetaEl = persisted.querySelector(".aside-thread-footer-meta");
                 const processLogEl = persisted.querySelector(".aside-agent-process-log");
+                processLogEl?.remove();
                 const contentEl = persisted.querySelector(".aside-comment-content");
                 const actionsEl = persisted.querySelector(".aside-comment-actions");
                 this.metaValueEl = nodeInstanceOf(metaValueEl, HTMLSpanElement) ? metaValueEl : null;
                 this.labelEl = nodeInstanceOf(labelEl, HTMLSpanElement) ? labelEl : null;
                 this.statusEl = nodeInstanceOf(statusEl, HTMLSpanElement) ? statusEl : null;
                 this.footerMetaEl = nodeInstanceOf(footerMetaEl, HTMLDivElement) ? footerMetaEl : null;
-                this.processLogEl = nodeInstanceOf(processLogEl, HTMLDivElement) ? processLogEl : null;
+                this.processLogEl = null;
                 this.contentEl = nodeInstanceOf(contentEl, HTMLDivElement) ? contentEl : null;
                 this.actionsEl = nodeInstanceOf(actionsEl, HTMLDivElement) ? actionsEl : null;
                 this.captureBorrowedCardSnapshot();
@@ -292,13 +298,14 @@ export class StreamedAgentReplyController {
                 const statusEl = existing.querySelector(".aside-agent-run-status");
                 const footerMetaEl = existing.querySelector(".aside-thread-footer-meta");
                 const processLogEl = existing.querySelector(".aside-agent-process-log");
+                processLogEl?.remove();
                 const contentEl = existing.querySelector(".aside-agent-stream-content");
                 const actionsEl = existing.querySelector(".aside-comment-actions");
                 this.metaValueEl = nodeInstanceOf(metaValueEl, HTMLSpanElement) ? metaValueEl : null;
                 this.labelEl = nodeInstanceOf(labelEl, HTMLSpanElement) ? labelEl : null;
                 this.statusEl = nodeInstanceOf(statusEl, HTMLSpanElement) ? statusEl : null;
                 this.footerMetaEl = nodeInstanceOf(footerMetaEl, HTMLDivElement) ? footerMetaEl : null;
-                this.processLogEl = nodeInstanceOf(processLogEl, HTMLDivElement) ? processLogEl : null;
+                this.processLogEl = null;
                 this.contentEl = nodeInstanceOf(contentEl, HTMLDivElement) ? contentEl : null;
                 this.actionsEl = nodeInstanceOf(actionsEl, HTMLDivElement) ? actionsEl : null;
                 return existing;
@@ -316,8 +323,6 @@ export class StreamedAgentReplyController {
         headerEl.appendChild(headerMainEl);
         const actionsEl = createElement(ownerDocument, "div", "aside-comment-actions aside-agent-stream-actions");
         headerEl.appendChild(actionsEl);
-        const processLogEl = createElement(ownerDocument, "div", "aside-agent-process-log");
-        processLogEl.hidden = true;
         const contentEl = createElement(ownerDocument, "div", "aside-comment-content aside-agent-stream-content");
         const footerEl = createElement(ownerDocument, "div", "aside-thread-footer");
         const footerMetaEl = createElement(ownerDocument, "div", "aside-thread-footer-meta");
@@ -331,7 +336,6 @@ export class StreamedAgentReplyController {
         footerMetaEl.appendChild(statusEl);
         footerEl.appendChild(footerMetaEl);
         cardEl.appendChild(headerEl);
-        cardEl.appendChild(processLogEl);
         cardEl.appendChild(contentEl);
         cardEl.appendChild(footerEl);
         repliesEl.appendChild(cardEl);
@@ -341,29 +345,11 @@ export class StreamedAgentReplyController {
         this.metaValueEl = metaValueEl;
         this.labelEl = labelEl;
         this.statusEl = statusEl;
-        this.processLogEl = processLogEl;
+        this.processLogEl = null;
         this.contentEl = contentEl;
         this.actionsEl = actionsEl;
         this.footerMetaEl = footerMetaEl;
         return cardEl;
-    }
-
-    private ensureProcessLogElement(cardEl: HTMLDivElement, contentEl: HTMLDivElement): HTMLDivElement {
-        if (this.processLogEl?.isConnected) {
-            return this.processLogEl;
-        }
-
-        const existing = cardEl.querySelector(".aside-agent-process-log");
-        if (nodeInstanceOf(existing, HTMLDivElement)) {
-            this.processLogEl = existing;
-            return existing;
-        }
-
-        const processLogEl = createElement(cardEl.ownerDocument, "div", "aside-agent-process-log");
-        processLogEl.hidden = true;
-        cardEl.insertBefore(processLogEl, contentEl);
-        this.processLogEl = processLogEl;
-        return processLogEl;
     }
 
     private captureBorrowedCardSnapshot(): void {

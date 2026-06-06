@@ -1526,25 +1526,6 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
     display: none;
 }
 
-.aside-agent-process-log {
-    margin: 4px 0 6px;
-    padding: 6px 8px;
-    border: 1px solid var(--background-modifier-border);
-    border-radius: 5px;
-    background: var(--background-secondary-alt, var(--background-secondary));
-    color: var(--text-muted);
-    font-family: var(--font-monospace);
-    font-size: var(--font-ui-smaller, 11px);
-    font-weight: 400;
-    line-height: 1.35;
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-}
-
-.aside-agent-process-log[hidden] {
-    display: none;
-}
-
 .aside-agent-stream-author {
     color: var(--interactive-accent);
 }
@@ -1704,7 +1685,9 @@ button.aside-thread-footer-meta-action:focus-visible {
 }
 
 .aside-agent-run-status-hint {
+    min-width: 0;
     color: var(--text-faint, var(--text-muted));
+    font-weight: 400;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
