@@ -15,6 +15,9 @@ while read -r local_ref _local_sha _remote_ref _remote_sha; do
   # Allow branch deletions
   [[ "$local_ref" == "(delete)" ]] && continue
 
+  # Allow tags to pass through to any remote
+  [[ "$local_ref" == refs/tags/* ]] && continue
+
   branch="${local_ref#refs/heads/}"
   refs+=("$branch")
 
