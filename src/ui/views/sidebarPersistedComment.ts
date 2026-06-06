@@ -41,6 +41,10 @@ import {
     formatSidebarCommentMeta,
     formatSidebarCommentSelectedTextPreview,
 } from "./sidebarCommentSections";
+import {
+    decodeSidebarLinkTarget,
+    isLocalHtmlFileLinkTarget,
+} from "./sidebarLocalFileLinks";
 export {
     buildPersistedCommentPinActionPresentation,
     type PersistedCommentPinActionPresentation,
@@ -447,24 +451,6 @@ function getSidebarRenderedLinkTarget(link: HTMLAnchorElement): string {
     return link.getAttribute("href") || link.getAttribute("data-href") || link.innerText;
 }
 
-function decodeSidebarLinkTarget(href: string): string {
-    try {
-        return decodeURIComponent(href);
-    } catch (_error) {
-        return href;
-    }
-}
-
-function isLocalHtmlFileLinkTarget(href: string): boolean {
-    const trimmed = href.trim();
-    if (!trimmed || trimmed.startsWith("//") || /^[a-z][a-z0-9+.-]*:/i.test(trimmed)) {
-        return false;
-    }
-
-    const pathPart = trimmed.split("#", 1)[0].split("?", 1)[0];
-    return /\.html?$/i.test(decodeSidebarLinkTarget(pathPart));
-}
-
 async function renderThreadEntryContent(
     container: HTMLDivElement,
     thread: CommentThread,
@@ -646,7 +632,12 @@ function attachSidebarCommentCardInteractions(
             event.preventDefault();
             const href = getSidebarRenderedLinkTarget(link);
             if (href) {
-                void host.openSidebarInternalLink(href, comment.filePath, contentWrapper);
+                void host.openSidebarInternalLink(
+                    href,
+                    comment.filePath,
+                    contentWrapper,
+                    isLocalHtmlFileLinkTarget(href) ? { openAsTab: true } : undefined,
+                );
             }
             return;
         }

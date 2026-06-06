@@ -67,6 +67,7 @@ import {
     unlockSidebarContentFilterForDraft,
     type SidebarContentFilter,
 } from "./sidebarContentFilter";
+import { getSidebarCommentCardOpenAction } from "./sidebarCommentCardNavigation";
 import { renderPersistedCommentCard } from "./sidebarPersistedComment";
 import {
     buildStoredOrderSidebarItems,
@@ -4038,13 +4039,19 @@ export default class AsideView extends ItemView {
             openSidebarInternalLink: (href, sourcePath, focusTarget, options) =>
                 this.interactionController.openSidebarInternalLink(href, sourcePath, focusTarget, options),
             openCommentFromCard: async (persistedComment) => {
-                if (isIndexView && currentFilePath) {
+                const openAction = getSidebarCommentCardOpenAction({
+                    isIndexView,
+                    isNonDesktopClient: this.isNonDesktopClient(),
+                    isPinnedMarkdownFileSidebar: this.pinnedSidebarFilePath !== null,
+                });
+
+                if (openAction === "reveal-index" && currentFilePath) {
                     this.interactionController.setActiveComment(persistedComment.id);
                     await this.plugin.revealIndexCommentFromSidebar(persistedComment.id, currentFilePath);
                     return;
                 }
 
-                if (this.isNonDesktopClient()) {
+                if (openAction === "select-only") {
                     this.interactionController.setActiveComment(persistedComment.id);
                     return;
                 }

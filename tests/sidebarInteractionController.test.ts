@@ -138,18 +138,45 @@ function createCommentElement(ids: { commentId?: string; draftId?: string } = {}
 function createHarness() {
     const matchingCommentEl = createCommentElement({ commentId: "comment-1" });
     const otherActiveEl = createCommentElement({ commentId: "comment-2" });
+    const htmlFile = {
+        path: "tmp.recruitment.html",
+        basename: "tmp.recruitment",
+        extension: "html",
+    };
     let renderCalls = 0;
     const revealedComments: string[] = [];
     const openedCommentTargets: Array<{ filePath: string | null; commentId: string }> = [];
     const openedLinks: Array<{ href: string; sourcePath: string }> = [];
+    const openedFiles: Array<{ path: string; active: boolean }> = [];
+    const leafRequests: unknown[] = [];
+    const htmlLeaf = {
+        openFile: async (
+            file: { path: string },
+            openState?: { active?: boolean },
+        ) => {
+            openedFiles.push({
+                path: file.path,
+                active: openState?.active === true,
+            });
+        },
+    };
 
     const controller = new SidebarInteractionController({
         app: {
             vault: {
                 getName: () => "dev",
+                getAbstractFileByPath: (path: string) => path === htmlFile.path ? htmlFile : null,
+            },
+            metadataCache: {
+                getFirstLinkpathDest: (linkpath: string, sourcePath: string) =>
+                    linkpath === htmlFile.path && sourcePath === "chat-01.md" ? htmlFile : null,
             },
             workspace: {
                 activeLeaf: null,
+                getLeaf: (request: unknown) => {
+                    leafRequests.push(request);
+                    return htmlLeaf;
+                },
                 setActiveLeaf: () => {},
             },
         } as never,
@@ -192,6 +219,8 @@ function createHarness() {
         revealedComments,
         openedCommentTargets,
         openedLinks,
+        openedFiles,
+        leafRequests,
     };
 }
 
@@ -230,6 +259,24 @@ test("sidebar interaction controller routes local side note protocol links throu
         filePath: "docs/target.md",
         commentId: "comment-9",
     }]);
+    assert.deepEqual(harness.openedLinks, []);
+});
+
+test("sidebar interaction controller opens local html comment links in an Obsidian tab", async () => {
+    const harness = createHarness();
+
+    await harness.controller.openSidebarInternalLink(
+        "tmp.recruitment.html",
+        "chat-01.md",
+        {} as HTMLElement,
+        { openAsTab: true },
+    );
+
+    assert.deepEqual(harness.openedFiles, [{
+        path: "tmp.recruitment.html",
+        active: true,
+    }]);
+    assert.deepEqual(harness.leafRequests, ["tab"]);
     assert.deepEqual(harness.openedLinks, []);
 });
 

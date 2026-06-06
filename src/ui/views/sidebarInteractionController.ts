@@ -9,6 +9,7 @@ import { copyTextToClipboard } from "../copyTextToClipboard";
 import { nodeInstanceOf } from "../domGuards";
 import { decideEditDismissal } from "./editDismissal";
 import { getSelectedSidebarClipboardText } from "./sidebarClipboardSelection";
+import { getLocalHtmlFileLinkPath } from "./sidebarLocalFileLinks";
 
 function isModShortcut(event: KeyboardEvent, code: string, key?: string): boolean {
     if (!(event.metaKey || event.ctrlKey) || event.altKey) {
@@ -47,6 +48,22 @@ function isFocusableTextareaElement(element: Element | null): element is HTMLTex
         && typeof (element as HTMLTextAreaElement).value === "string"
         && typeof (element as HTMLTextAreaElement).focus === "function"
         && typeof (element as HTMLTextAreaElement).setSelectionRange === "function";
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+    return !!value && typeof value === "object";
+}
+
+function isTFileLike(value: unknown): value is TFile {
+    return isObject(value)
+        && typeof value.path === "string"
+        && typeof value.basename === "string"
+        && typeof value.extension === "string";
+}
+
+function isHtmlFile(file: TFile): boolean {
+    const extension = file.extension.toLowerCase();
+    return extension === "html" || extension === "htm";
 }
 
 export interface SidebarInteractionHost {
@@ -405,6 +422,16 @@ export class SidebarInteractionController {
             return;
         }
 
+        const localHtmlFile = this.resolveLocalHtmlFile(href, sourcePath);
+        if (localHtmlFile) {
+            const targetLeaf = options.openAsTab === true
+                ? this.host.app.workspace.getLeaf("tab")
+                : this.host.getPreferredFileLeaf() ?? this.host.app.workspace.getLeaf(false);
+            await targetLeaf.openFile(localHtmlFile, { active: true });
+            this.claimSidebarInteractionOwnership(focusTarget);
+            return;
+        }
+
         const targetLeaf = this.host.getPreferredFileLeaf();
         if (targetLeaf) {
             this.host.app.workspace.setActiveLeaf(targetLeaf, { focus: false });
@@ -412,6 +439,25 @@ export class SidebarInteractionController {
 
         await this.host.openLinkText(href, sourcePath, options.openAsTab === true);
         this.claimSidebarInteractionOwnership(focusTarget);
+    }
+
+    private resolveLocalHtmlFile(href: string, sourcePath: string): TFile | null {
+        const linkPath = getLocalHtmlFileLinkPath(href);
+        if (!linkPath) {
+            return null;
+        }
+
+        const linkedFile = this.host.app.metadataCache.getFirstLinkpathDest(linkPath, sourcePath);
+        if (isTFileLike(linkedFile) && isHtmlFile(linkedFile)) {
+            return linkedFile;
+        }
+
+        const directFile = this.host.app.vault.getAbstractFileByPath(linkPath);
+        if (isTFileLike(directFile) && isHtmlFile(directFile)) {
+            return directFile;
+        }
+
+        return null;
     }
 
     public async openCommentInEditor(comment: Comment): Promise<void> {
