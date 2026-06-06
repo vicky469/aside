@@ -11,22 +11,12 @@ import {
 import { getSupportedAgentActors } from "../../core/agents/agentActorRegistry";
 import type { AsideAgentTarget } from "../../core/config/agentTargets";
 import {
-    resolveAgentRuntimeSelection,
-    type AgentRuntimeSelection,
-} from "../../agents/agentRuntimeSelection";
-import {
     normalizeAllCommentsNoteImageCaption,
     normalizeAllCommentsNoteImageUrl,
     normalizeAllCommentsNotePath,
 } from "../../core/derived/allCommentsNote";
 import type { AgentRuntimeDiagnostics } from "../../agents/agentRuntimeAdapter";
-import {
-    createCheckingAgentRuntimeDiagnostics,
-    createCheckingCodexRuntimeDiagnostics,
-    getAgentRuntimeStatusPresentation,
-    getLocalRuntimeOptionStatusPresentation,
-    type RuntimeOptionStatusPresentation,
-} from "./codexRuntimeStatus";
+import { createCheckingAgentRuntimeDiagnostics } from "./codexRuntimeStatus";
 import type Aside from "../../main";
 
 export interface AsideSettings {
@@ -64,105 +54,43 @@ export default class AsideSetting extends PluginSettingTab {
         const localDiagnosticsByTarget = new Map<AsideAgentTarget, AgentRuntimeDiagnostics>(
             supportedActors.map((actor) => [actor.id, createCheckingAgentRuntimeDiagnostics(actor.id)]),
         );
-        let runtimeSelection: AgentRuntimeSelection = this.resolveRuntimeSelection(
-            "codex",
-            localDiagnosticsByTarget.get("codex") ?? createCheckingCodexRuntimeDiagnostics(),
-        );
-        let localRuntimeButton: ButtonComponent | null = null;
         let recheckRuntimeButton: ButtonComponent | null = null;
-        const runtimeStatusSettings = new Map<AsideAgentTarget, Setting>();
 
-        const preferredRuntimeSetting = new Setting(containerEl)
-            .setName("Preferred runtime")
-            .setDesc("Checking runtime availability...");
-
-        for (const actor of supportedActors) {
-            const setting = new Setting(containerEl)
-                .setName(`${actor.label} CLI`)
-                .setDesc(createCheckingAgentRuntimeDiagnostics(actor.id).message);
-            runtimeStatusSettings.set(actor.id, setting);
-        }
-
-        const getAggregateDiagnostics = (): AgentRuntimeDiagnostics => {
-            const diagnostics = supportedActors.map((actor) =>
-                localDiagnosticsByTarget.get(actor.id) ?? createCheckingAgentRuntimeDiagnostics(actor.id)
-            );
-            const available = diagnostics.find((item) => item.status === "available");
-            if (available) {
-                return {
-                    status: "available",
-                    message: "At least one local Aside agent is available.",
-                };
+        const getStatusBadge = (diagnostics: AgentRuntimeDiagnostics): string => {
+            switch (diagnostics.status) {
+                case "available": return "✅";
+                case "checking": return "...";
+                default: return "❌";
             }
-
-            const checking = diagnostics.find((item) => item.status === "checking");
-            if (checking) {
-                return {
-                    status: "checking",
-                    message: "Checking local Aside agent runtimes...",
-                };
-            }
-
-            return diagnostics[0] ?? {
-                status: "unavailable",
-                message: "Local Aside agent execution is unavailable on this device.",
-            };
         };
 
-        const buildRuntimeSelectionDescription = (): string => {
-            const storedMode = this.plugin.getAgentRuntimeMode();
-            if (storedMode === "auto") {
-                if (runtimeSelection.kind === "resolved") {
-                    return "Automatic mode uses the local provider named in each explicit agent mention. Choose Local below to make it explicit.";
-                }
+        const runtimeStatusSetting = new Setting(containerEl)
+            .setDesc(
+                supportedActors
+                    .map((actor) => `${actor.directive} ${getStatusBadge(createCheckingAgentRuntimeDiagnostics(actor.id))}`)
+                    .join("  "),
+            )
+            .addButton((button) => {
+                recheckRuntimeButton = button;
+                button.setButtonText("Re-check").onClick(() => {
+                    void refreshRuntimeSetting();
+                });
+            });
 
-                return `Automatic mode is currently blocked. ${runtimeSelection.notice}`;
-            }
-
-            return "Local mode uses the provider named in each explicit agent mention. Availability is shown below.";
-        };
-        const updateRuntimeButton = (
-            button: ButtonComponent | null,
-            presentation: RuntimeOptionStatusPresentation,
-        ): void => {
-            if (!button) {
-                return;
-            }
-
-            const selected = this.plugin.getAgentRuntimeMode() === "local";
-            button.setButtonText(presentation.label);
-            button.setTooltip(presentation.description);
-            button.buttonEl.classList.toggle("mod-cta", selected);
-            button.buttonEl.setAttribute("aria-pressed", selected ? "true" : "false");
-        };
         const renderRuntimeSetting = (): void => {
-            const aggregateDiagnostics = getAggregateDiagnostics();
-            runtimeSelection = this.resolveRuntimeSelection("codex", aggregateDiagnostics);
-            preferredRuntimeSetting.setDesc(buildRuntimeSelectionDescription());
-            updateRuntimeButton(
-                localRuntimeButton,
-                getLocalRuntimeOptionStatusPresentation(aggregateDiagnostics),
+            runtimeStatusSetting.setDesc(
+                supportedActors
+                    .map((actor) => {
+                        const diagnostics = localDiagnosticsByTarget.get(actor.id)
+                            ?? createCheckingAgentRuntimeDiagnostics(actor.id);
+                        return `${actor.directive} ${getStatusBadge(diagnostics)}`;
+                    })
+                    .join("  "),
             );
-            for (const actor of supportedActors) {
-                const diagnostics = localDiagnosticsByTarget.get(actor.id)
-                    ?? createCheckingAgentRuntimeDiagnostics(actor.id);
-                const presentation = getAgentRuntimeStatusPresentation(actor.id, diagnostics);
-                runtimeStatusSettings.get(actor.id)?.setDesc(presentation.description);
-            }
-        };
-        const setRuntimeButtonsDisabled = (disabled: boolean): void => {
-            localRuntimeButton?.setDisabled(disabled);
-            recheckRuntimeButton?.setDisabled(disabled);
-        };
-        const blurIfAutoFocused = (button: ButtonComponent): void => {
-            window.setTimeout(() => {
-                if (button.buttonEl.ownerDocument.activeElement === button.buttonEl) {
-                    button.buttonEl.blur();
-                }
-            }, 0);
         };
         const refreshRuntimeSetting = async () => {
             const refreshToken = ++this.agentStatusRefreshToken;
+            recheckRuntimeButton?.setDisabled(true);
             for (const actor of supportedActors) {
                 localDiagnosticsByTarget.set(actor.id, createCheckingAgentRuntimeDiagnostics(actor.id));
             }
@@ -194,38 +122,8 @@ export default class AsideSetting extends PluginSettingTab {
                 // Each provider probe handles its own failure above.
             }
             renderRuntimeSetting();
+            recheckRuntimeButton?.setDisabled(false);
         };
-        const persistRuntimeMode = async (mode: "local") => {
-            setRuntimeButtonsDisabled(true);
-            try {
-                await this.plugin.setAgentRuntimeMode(mode);
-                renderRuntimeSetting();
-            } finally {
-                setRuntimeButtonsDisabled(false);
-            }
-        };
-
-        preferredRuntimeSetting.addButton((button) => {
-            localRuntimeButton = button;
-            button.onClick(async () => {
-                await persistRuntimeMode("local");
-            });
-            blurIfAutoFocused(button);
-        });
-        preferredRuntimeSetting.addButton((button) => {
-            recheckRuntimeButton = button;
-            button
-                .setButtonText("Re-check")
-                .onClick(async () => {
-                    setRuntimeButtonsDisabled(true);
-                    try {
-                        await refreshRuntimeSetting();
-                    } finally {
-                        setRuntimeButtonsDisabled(false);
-                    }
-                });
-        });
-        renderRuntimeSetting();
         void refreshRuntimeSetting();
 
         new Setting(containerEl)
@@ -259,14 +157,4 @@ export default class AsideSetting extends PluginSettingTab {
             );
     }
 
-    private resolveRuntimeSelection(
-        target: AsideAgentTarget,
-        localDiagnostics: AgentRuntimeDiagnostics,
-    ): AgentRuntimeSelection {
-        return resolveAgentRuntimeSelection({
-            target,
-            modePreference: this.plugin.getAgentRuntimeMode(),
-            localDiagnostics,
-        });
-    }
 }
