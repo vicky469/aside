@@ -1476,8 +1476,8 @@ export default class AsideView extends ItemView {
                 ? selectedIndexFileFilterRootPath
                     ? scopeIndexThreadsByFilePaths(visiblePersistedThreads, persistedThreads, filteredIndexFilePaths)
                     : {
-                        scopedVisibleThreads: [],
-                        scopedAllThreads: [],
+                        scopedVisibleThreads: visiblePersistedThreads,
+                        scopedAllThreads: persistedThreads,
                     }
                 : {
                     scopedVisibleThreads: visiblePersistedThreads,
