@@ -1,4 +1,5 @@
 const TAG_CHARACTER_REGEX = /[\p{L}\p{N}_/-]/u;
+const TAG_START_CHARACTER_REGEX = /[\p{L}_]/u;
 
 export function isTagCharacter(char: string): boolean {
     return char.length === 1 && TAG_CHARACTER_REGEX.test(char);
@@ -25,13 +26,14 @@ export function extractTagsFromText(value: string): string[] {
             continue;
         }
 
+        const firstChar = value.charAt(index + 1);
+        if (!firstChar || !TAG_START_CHARACTER_REGEX.test(firstChar)) {
+            continue;
+        }
+
         let end = index + 1;
         while (end < value.length && isTagCharacter(value.charAt(end))) {
             end += 1;
-        }
-
-        if (end === index + 1) {
-            continue;
         }
 
         tags.push(normalizeTagText(value.slice(index, end)));
