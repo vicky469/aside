@@ -262,6 +262,56 @@ function matchesFakeSelector(element: FakeElement, selector: string): boolean {
     return element.classList.contains(selector.slice(1));
 }
 
+function createRenderHost(overrides: Partial<SidebarPersistedCommentHost> = {}): SidebarPersistedCommentHost {
+    return {
+        activeCommentId: null,
+        currentFilePath: "docs/architecture.md",
+        currentUserLabel: "You",
+        showSourceRedirectAction: false,
+        showBookmarkAndPinControls: false,
+        showDeletedComments: false,
+        enablePageThreadReorder: false,
+        enableChildEntryMove: false,
+        enableSoftDeleteActions: false,
+        showNestedComments: true,
+        showNestedCommentsByDefault: true,
+        getKnownCommentById: () => null,
+        editDraftComment: null,
+        appendDraftComment: null,
+        agentRun: null,
+        agentStream: null,
+        threadAgentRuns: [],
+        getEventTargetElement: () => null,
+        isSelectionInsideSidebarContent: () => false,
+        claimSidebarInteractionOwnership: () => {},
+        insertCommentMarkdownIntoFile: async () => true,
+        renderMarkdown: async (markdown, container) => {
+            (container as unknown as FakeElement).textContent = markdown;
+        },
+        openSidebarInternalLink: async () => {},
+        openCommentFromCard: async () => {},
+        openCommentInEditor: async () => {},
+        shareComment: async () => {},
+        saveVisibleDraftIfPresent: async () => true,
+        setShowNestedCommentsForThread: () => {},
+        moveCommentThread: () => {},
+        restoreComment: () => true,
+        clearDeletedComment: () => true,
+        startEditDraft: () => {},
+        isPinnedThread: () => false,
+        togglePinnedThread: () => {},
+        startAppendEntryDraft: () => {},
+        retryAgentRun: () => true,
+        retryAgentPromptForComment: () => true,
+        reanchorCommentThreadToCurrentSelection: () => {},
+        deleteCommentWithConfirm: () => true,
+        renderAppendDraft: () => {},
+        renderInlineEditDraft: () => {},
+        setIcon: () => {},
+        ...overrides,
+    };
+}
+
 test("buildPersistedCommentPresentation includes page and active classes for page notes", () => {
     const presentation = buildPersistedCommentPresentation(createThread({
         id: "comment-2",
@@ -404,6 +454,120 @@ test("shouldRenderChildEntryMoveHandle hides child drag handles for deleted entr
         entryDeleted: false,
         threadDeleted: true,
     }), false);
+});
+
+test("renderPersistedCommentCard renders a drag handle for top-level anchored threads", async () => {
+    const root = new FakeElement("div");
+
+    await renderPersistedCommentCard(
+        root as unknown as HTMLDivElement,
+        createThread(),
+        createRenderHost({
+            enableChildEntryMove: true,
+        }),
+    );
+
+    const handles = root.findAllByClass("aside-comment-drag-handle");
+    assert.equal(handles.length, 1);
+    assert.equal(handles[0].getAttribute("data-aside-drag-kind"), "thread");
+    assert.equal(handles[0].getAttribute("data-aside-thread-id"), "comment-1");
+});
+
+test("renderPersistedCommentCard does not render a nesting drag handle for page threads", async () => {
+    const root = new FakeElement("div");
+
+    await renderPersistedCommentCard(
+        root as unknown as HTMLDivElement,
+        createThread({
+            anchorKind: "page",
+            selectedText: "Architecture",
+            startLine: 0,
+            startChar: 0,
+            endLine: 0,
+            endChar: 0,
+        }),
+        createRenderHost({
+            enableChildEntryMove: true,
+        }),
+    );
+
+    assert.equal(root.findAllByClass("aside-comment-drag-handle").length, 0);
+});
+
+test("renderPersistedCommentCard renders anchored child selected-text previews", async () => {
+    const root = new FakeElement("div");
+    const thread = createThreadWithEntries({
+        entries: [
+            { id: "comment-1", body: "Parent", timestamp: 100 },
+            {
+                id: "entry-2",
+                body: "Child",
+                timestamp: 200,
+                anchor: {
+                    filePath: "docs/architecture.md",
+                    startLine: 12,
+                    startChar: 0,
+                    endLine: 12,
+                    endChar: 11,
+                    selectedText: "child point",
+                    selectedTextHash: "hash:child point",
+                    anchorKind: "selection",
+                },
+            },
+        ],
+        createdAt: 100,
+        updatedAt: 200,
+    });
+
+    await renderPersistedCommentCard(
+        root as unknown as HTMLDivElement,
+        thread,
+        createRenderHost(),
+    );
+
+    assert.deepEqual(
+        root.findAllByClass("aside-comment-meta-preview").map((element) => element.textContent),
+        ["comment", "child point"],
+    );
+});
+
+test("renderPersistedCommentCard does not show selected text as content for empty anchored child entries", async () => {
+    const root = new FakeElement("div");
+    const thread = createThreadWithEntries({
+        entries: [
+            { id: "comment-1", body: "Parent", timestamp: 100 },
+            {
+                id: "entry-2",
+                body: "",
+                timestamp: 200,
+                anchor: {
+                    filePath: "docs/architecture.md",
+                    startLine: 12,
+                    startChar: 0,
+                    endLine: 13,
+                    endChar: 11,
+                    selectedText: "child point\ncontinued",
+                    selectedTextHash: "hash:child point",
+                    anchorKind: "selection",
+                },
+            },
+        ],
+        createdAt: 100,
+        updatedAt: 200,
+    });
+
+    await renderPersistedCommentCard(
+        root as unknown as HTMLDivElement,
+        thread,
+        createRenderHost(),
+    );
+
+    const anchorPreviews = root.findAllByClass("aside-thread-entry-anchor-preview");
+    assert.equal(anchorPreviews.length, 0);
+    assert.deepEqual(
+        root.findAllByClass("aside-comment-meta-preview").map((element) => element.textContent),
+        ["comment", "child point continued"],
+    );
 });
 
 test("shouldRenderNestedThreadEntries hides stored child comments when nested comments are off", () => {

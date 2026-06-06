@@ -945,7 +945,7 @@ test("comment mutation controller moves a thread into another file as a page not
         host.manager.getThreadsForFile("Folder/Other.md", { includeDeleted: true }).map((thread) => thread.id),
         ["thread-1", "thread-2"],
     );
-    assert.deepEqual(host.notices, ["Moved side note to Other."]);
+    assert.deepEqual(host.notices, []);
     assert.deepEqual(host.openedMoveTargetFiles, ["Folder/Other.md"]);
 });
 
@@ -1038,7 +1038,7 @@ test("comment mutation controller moves a child entry under another thread in th
         ["thread-2", "entry-2"],
     );
     assert.equal(host.manager.getCommentById("entry-2")?.comment, "Child reply");
-    assert.deepEqual(host.notices, ["Moved side note under Target anchor."]);
+    assert.deepEqual(host.notices, []);
 });
 
 test("comment mutation controller can defer move-entry refresh work for lightweight local sidebar updates", async () => {
@@ -1084,6 +1084,102 @@ test("comment mutation controller can defer move-entry refresh work for lightwei
         refreshEditorDecorations: false,
         refreshMarkdownPreviews: false,
     }]);
+});
+
+test("comment mutation controller nests a root anchored thread under another thread", async () => {
+    const source = createComment({
+        id: "thread-1",
+        filePath: "Folder/Source.md",
+        startLine: 6,
+        startChar: 1,
+        endLine: 6,
+        endChar: 14,
+        selectedText: "Source anchor",
+        selectedTextHash: "hash:Source anchor",
+        comment: "Root body",
+        timestamp: 300,
+    });
+    const target = createComment({
+        id: "thread-2",
+        filePath: "Folder/Source.md",
+        selectedText: "Target anchor",
+        selectedTextHash: "hash:Target anchor",
+        comment: "Target root body",
+        timestamp: 500,
+    });
+    const host = createHost({
+        knownComments: [source, target],
+        loadedComments: [source, target],
+        now: 900,
+    });
+
+    const nested = await host.controller.nestCommentThreadUnderThread(source.id, target.id);
+
+    assert.equal(nested, true);
+    assert.deepEqual(host.persistedFiles, [{
+        path: "Folder/Source.md",
+        immediateAggregateRefresh: true,
+    }]);
+    assert.equal(host.manager.getThreadById(source.id)?.id, target.id);
+    assert.deepEqual(
+        host.manager.getThreadById(target.id)?.entries.map((entry) => entry.id),
+        ["thread-2", "thread-1"],
+    );
+    assert.deepEqual(host.manager.getThreadById(target.id)?.entries[1]?.anchor, {
+        filePath: "Folder/Source.md",
+        startLine: 6,
+        startChar: 1,
+        endLine: 6,
+        endChar: 14,
+        selectedText: "Source anchor",
+        selectedTextHash: "hash:Source anchor",
+        anchorKind: "selection",
+    });
+    assert.deepEqual(host.notices, []);
+});
+
+test("comment mutation controller moves child entries after a target child", async () => {
+    const source = createComment({
+        id: "thread-1",
+        filePath: "Folder/Source.md",
+        selectedText: "Source anchor",
+        selectedTextHash: "hash:Source anchor",
+        comment: "Root body",
+        timestamp: 300,
+    });
+    const target = createComment({
+        id: "thread-2",
+        filePath: "Folder/Source.md",
+        selectedText: "Target anchor",
+        selectedTextHash: "hash:Target anchor",
+        comment: "Target root body",
+        timestamp: 500,
+    });
+    const host = createHost({
+        knownComments: [source, target],
+        loadedComments: [source, target],
+        now: 900,
+    });
+    host.manager.appendEntry(source.id, {
+        id: "entry-2",
+        body: "Child reply",
+        timestamp: 400,
+    });
+    host.manager.appendEntry(target.id, {
+        id: "target-child",
+        body: "Existing child",
+        timestamp: 600,
+    });
+
+    const moved = await host.controller.moveCommentEntryToThread("entry-2", target.id, {
+        insertAfterCommentId: "target-child",
+    });
+
+    assert.equal(moved, true);
+    assert.deepEqual(
+        host.manager.getThreadById(target.id)?.entries.map((entry) => entry.id),
+        ["thread-2", "target-child", "entry-2"],
+    );
 });
 
 test("comment mutation controller rejects moving a root thread through the child move path", async () => {

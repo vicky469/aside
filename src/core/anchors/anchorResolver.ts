@@ -174,7 +174,7 @@ function collapseWhitespaceForAnchorMatch(text: string): CollapsedWhitespaceText
     };
 }
 
-function pickWhitespaceCollapsedTextMatch(
+export function pickWhitespaceCollapsedTextMatch(
     text: string,
     target: string,
     options: {

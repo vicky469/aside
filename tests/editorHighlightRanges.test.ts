@@ -1,6 +1,10 @@
 import * as assert from "node:assert/strict";
 import test from "node:test";
-import type { Comment } from "../src/commentManager";
+import {
+    threadEntryToComment,
+    type Comment,
+    type CommentThread,
+} from "../src/commentManager";
 import { buildEditorHighlightRanges } from "../src/core/derived/editorHighlightRanges";
 
 function createComment(overrides: Partial<Comment> = {}): Comment {
@@ -189,4 +193,59 @@ test("buildEditorHighlightRanges marks only the active anchored comment", () => 
             active: true,
         },
     ]);
+});
+
+test("buildEditorHighlightRanges includes anchored child entries", () => {
+    const docText = "alpha beta gamma";
+    const thread: CommentThread = {
+        id: "thread-1",
+        filePath: "note.md",
+        startLine: 0,
+        startChar: 0,
+        endLine: 0,
+        endChar: 5,
+        selectedText: "alpha",
+        selectedTextHash: "hash-alpha",
+        anchorKind: "selection",
+        entries: [
+            {
+                id: "thread-1",
+                body: "main",
+                timestamp: 1710000000000,
+            },
+            {
+                id: "entry-2",
+                body: "point",
+                timestamp: 1710000001000,
+                anchor: {
+                    filePath: "note.md",
+                    startLine: 0,
+                    startChar: 6,
+                    endLine: 0,
+                    endChar: 10,
+                    selectedText: "beta",
+                    selectedTextHash: "hash-beta",
+                    anchorKind: "selection",
+                },
+            } as CommentThread["entries"][number],
+        ],
+        createdAt: 1710000000000,
+        updatedAt: 1710000001000,
+    };
+    const childComment = threadEntryToComment(thread, thread.entries[1]);
+
+    const ranges = buildEditorHighlightRanges(
+        docText,
+        docText,
+        [childComment],
+        null,
+        "entry-2",
+    );
+
+    assert.deepEqual(ranges, [{
+        commentId: "entry-2",
+        from: 6,
+        to: 10,
+        active: true,
+    }]);
 });

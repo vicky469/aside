@@ -11,6 +11,7 @@ import {
     CommentMutationController,
     type DeleteCommentOptions,
     type MoveCommentEntryOptions,
+    type NestCommentThreadOptions,
     type MoveCommentThreadOptions,
     type SaveDraftOptions,
     type SetCommentPinnedOptions,
@@ -1497,6 +1498,14 @@ export default class Aside extends Plugin {
         options?: MoveCommentEntryOptions,
     ): Promise<boolean> {
         return this.commentMutationController.moveCommentEntryToThread(commentId, targetThreadId, options);
+    }
+
+    public async nestCommentThreadUnderThread(
+        sourceThreadId: string,
+        targetThreadId: string,
+        options?: NestCommentThreadOptions,
+    ): Promise<boolean> {
+        return this.commentMutationController.nestCommentThreadUnderThread(sourceThreadId, targetThreadId, options);
     }
 
     private markDraftFileActive(file: TFile) {

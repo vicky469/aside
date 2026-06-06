@@ -1,4 +1,4 @@
-import type { CommentThread, CommentThreadEntry } from "../../domain/comments/commentThread";
+import type { CommentThread, CommentThreadEntry, CommentThreadEntryAnchor } from "../../domain/comments/commentThread";
 import { cloneCommentThread, cloneCommentThreads } from "../../domain/comments/commentThreadNormalization";
 import { normalizeDeletedAt, purgeExpiredDeletedThreads } from "../../core/rules/deletedCommentVisibility";
 
@@ -12,6 +12,7 @@ export type SideNoteSyncOp =
     | "deleteEntry"
     | "setThreadResolved"
     | "setThreadDeleted"
+    | "removeThread"
     | "setThreadPinned"
     | "updateAnchor"
     | "moveThread"
@@ -51,6 +52,37 @@ function isRecord(value: unknown): value is Record<string, unknown> {
     return !!value && typeof value === "object" && !Array.isArray(value);
 }
 
+function normalizeThreadEntryAnchor(candidate: unknown): CommentThreadEntryAnchor | undefined {
+    if (!isRecord(candidate)) {
+        return undefined;
+    }
+
+    if (
+        typeof candidate.filePath !== "string"
+        || typeof candidate.startLine !== "number"
+        || typeof candidate.startChar !== "number"
+        || typeof candidate.endLine !== "number"
+        || typeof candidate.endChar !== "number"
+        || typeof candidate.selectedText !== "string"
+        || typeof candidate.selectedTextHash !== "string"
+        || candidate.anchorKind !== "selection"
+    ) {
+        return undefined;
+    }
+
+    return {
+        filePath: candidate.filePath,
+        startLine: candidate.startLine,
+        startChar: candidate.startChar,
+        endLine: candidate.endLine,
+        endChar: candidate.endChar,
+        selectedText: candidate.selectedText,
+        selectedTextHash: candidate.selectedTextHash,
+        anchorKind: "selection",
+        ...(candidate.orphaned === true ? { orphaned: true } : {}),
+    };
+}
+
 function encodeUtf8Base64Url(value: string): string {
     const bytes = new TextEncoder().encode(value);
     let binary = "";
@@ -86,6 +118,7 @@ function isSideNoteSyncOp(value: unknown): value is SideNoteSyncOp {
         || value === "deleteEntry"
         || value === "setThreadResolved"
         || value === "setThreadDeleted"
+        || value === "removeThread"
         || value === "setThreadPinned"
         || value === "updateAnchor"
         || value === "moveThread"
@@ -114,6 +147,7 @@ function normalizeThreadEntry(candidate: unknown): CommentThreadEntry | null {
         body: candidate.body,
         timestamp: candidate.timestamp,
         ...(deletedAt !== undefined ? { deletedAt } : {}),
+        ...(normalizeThreadEntryAnchor(candidate.anchor) ? { anchor: normalizeThreadEntryAnchor(candidate.anchor) } : {}),
     };
 }
 
@@ -321,6 +355,15 @@ function applyThreadFlag(
     return nextThreads;
 }
 
+function applyRemoveThread(threads: CommentThread[], event: SideNoteSyncEvent): CommentThread[] {
+    const payload = getPayloadRecord(event);
+    if (typeof payload?.threadId !== "string") {
+        return threads;
+    }
+
+    return threads.filter((thread) => thread.id !== payload.threadId);
+}
+
 function applyUpdateAnchor(threads: CommentThread[], event: SideNoteSyncEvent): CommentThread[] {
     return applyThreadFlag(threads, event, (thread, payload) => ({
         ...thread,
@@ -424,6 +467,8 @@ function applyEvent(threads: CommentThread[], event: SideNoteSyncEvent): Comment
                     updatedAt: typeof payload.updatedAt === "number" ? payload.updatedAt : Math.max(thread.updatedAt, deletedAt ?? event.createdAt),
                 };
             });
+        case "removeThread":
+            return applyRemoveThread(threads, event);
         case "setThreadPinned":
             return applyThreadFlag(threads, event, (thread, payload) => ({
                 ...thread,
@@ -552,7 +597,30 @@ function areEntriesEqual(left: CommentThreadEntry, right: CommentThreadEntry): b
     return left.id === right.id
         && left.body === right.body
         && left.timestamp === right.timestamp
-        && normalizeDeletedAt(left.deletedAt) === normalizeDeletedAt(right.deletedAt);
+        && normalizeDeletedAt(left.deletedAt) === normalizeDeletedAt(right.deletedAt)
+        && areEntryAnchorsEqual(left.anchor, right.anchor);
+}
+
+function areEntryAnchorsEqual(
+    left: CommentThreadEntryAnchor | undefined,
+    right: CommentThreadEntryAnchor | undefined,
+): boolean {
+    if (!left && !right) {
+        return true;
+    }
+    if (!left || !right) {
+        return false;
+    }
+
+    return left.filePath === right.filePath
+        && left.startLine === right.startLine
+        && left.startChar === right.startChar
+        && left.endLine === right.endLine
+        && left.endChar === right.endChar
+        && left.selectedText === right.selectedText
+        && left.selectedTextHash === right.selectedTextHash
+        && left.anchorKind === right.anchorKind
+        && (left.orphaned === true) === (right.orphaned === true);
 }
 
 function hasAnchorChanged(left: CommentThread, right: CommentThread): boolean {
@@ -731,10 +799,9 @@ export function buildSideNoteSyncEventInputsForThreadDiff(
         }
 
         inputs.push({
-            op: "setThreadDeleted",
+            op: "removeThread",
             payload: {
                 threadId: previousThread.id,
-                deleted: true,
                 updatedAt: previousThread.updatedAt,
             },
         });

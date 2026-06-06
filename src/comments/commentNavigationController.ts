@@ -411,7 +411,6 @@ export class CommentNavigationController {
                 anchorKind: "selection",
             });
         } else {
-            this.host.showNotice("Side note anchor text is missing; showing the stored location.");
             void this.host.log?.("warn", "navigation", "navigation.reveal.fallback", {
                 commentId: comment.id,
                 filePath: comment.filePath,

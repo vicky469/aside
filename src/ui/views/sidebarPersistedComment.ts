@@ -406,7 +406,7 @@ export function buildPersistedThreadEntryPresentation(
     ]);
     return {
         ...presentation,
-        metaPreviewText: null,
+        metaPreviewText: entry.anchor ? presentation.metaPreviewText : null,
     };
 }
 
@@ -1023,6 +1023,12 @@ export async function renderPersistedCommentCard(
         && !host.showDeletedComments
         && !comment.deletedAt
         && !thread.deletedAt;
+    const isDraggableAnchoredThread = host.enableChildEntryMove
+        && !isPageComment(comment)
+        && !host.showSourceRedirectAction
+        && !host.showDeletedComments
+        && !comment.deletedAt
+        && !thread.deletedAt;
     if (isDraggablePageThread) {
         threadEl.setAttribute("data-aside-page-thread", "true");
     }
@@ -1103,7 +1109,7 @@ export async function renderPersistedCommentCard(
                 renderDeleteButton(actionsEl, comment.id, host, "Delete side note thread");
             }
         }
-        if (isDraggablePageThread) {
+        if (isDraggablePageThread || isDraggableAnchoredThread) {
             renderReorderHandle(actionsEl, thread.id, host);
         }
         if (presentation.reanchorAction && !comment.deletedAt) {

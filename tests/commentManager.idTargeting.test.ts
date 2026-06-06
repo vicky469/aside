@@ -164,6 +164,106 @@ test("CommentManager reorders child entries only within their parent thread", ()
     assert.equal(manager.reorderThreadEntries("thread-1", "entry-4", "thread-1", "before"), false);
 });
 
+test("CommentManager nests a top-level anchored thread under another thread", () => {
+    const mainThread = commentToThread(createComment("thread-main", 1710000000000, "main"));
+    const pointThread = commentToThread({
+        ...createComment("thread-point", 1710000001000, "point"),
+        startLine: 4,
+        startChar: 2,
+        endLine: 4,
+        endChar: 13,
+        selectedText: "point anchor",
+        selectedTextHash: "hash-point",
+    });
+    pointThread.entries.push({
+        id: "entry-follow-up",
+        body: "follow up",
+        timestamp: 1710000002000,
+    });
+    const manager = new CommentManager([mainThread, pointThread]);
+
+    assert.equal(manager.nestThreadUnderThread("note.md", "thread-point", "thread-main"), true);
+
+    const threads = manager.getThreadsForFile("note.md");
+    assert.deepEqual(threads.map((thread) => thread.id), ["thread-main"]);
+    assert.deepEqual(
+        threads[0].entries.map((entry) => entry.id),
+        ["thread-main", "thread-point", "entry-follow-up"],
+    );
+    assert.deepEqual(threads[0].entries[1]?.anchor, {
+        filePath: "note.md",
+        startLine: 4,
+        startChar: 2,
+        endLine: 4,
+        endChar: 13,
+        selectedText: "point anchor",
+        selectedTextHash: "hash-point",
+        anchorKind: "selection",
+    });
+    assert.equal(manager.getCommentById("thread-point")?.selectedText, "point anchor");
+});
+
+test("CommentManager deduplicates child entries and preserves the richest copy", () => {
+    const thread = commentToThread(createComment("thread-main", 1710000000000, "main"));
+    thread.entries.push({
+        id: "entry-point",
+        body: "",
+        timestamp: 1710000001000,
+    });
+    thread.entries.push({
+        id: "entry-point",
+        body: "visible body",
+        timestamp: 1710000002000,
+        anchor: {
+            filePath: "note.md",
+            startLine: 4,
+            startChar: 2,
+            endLine: 4,
+            endChar: 13,
+            selectedText: "point anchor",
+            selectedTextHash: "hash-point",
+            anchorKind: "selection",
+        },
+    });
+
+    const manager = new CommentManager([thread]);
+    const entries = manager.getThreadById("thread-main")?.entries ?? [];
+
+    assert.deepEqual(entries.map((entry) => entry.id), ["thread-main", "entry-point"]);
+    assert.equal(entries[1]?.body, "visible body");
+    assert.deepEqual(entries[1]?.anchor, {
+        filePath: "note.md",
+        startLine: 4,
+        startChar: 2,
+        endLine: 4,
+        endChar: 13,
+        selectedText: "point anchor",
+        selectedTextHash: "hash-point",
+        anchorKind: "selection",
+    });
+});
+
+test("CommentManager rejects nesting page-note threads", () => {
+    const mainThread = commentToThread(createComment("thread-main", 1710000000000, "main"));
+    const pageThread = commentToThread({
+        ...createComment("thread-page", 1710000001000, "page"),
+        startLine: 0,
+        startChar: 0,
+        endLine: 0,
+        endChar: 0,
+        selectedText: "note.md",
+        selectedTextHash: "hash-page",
+        anchorKind: "page",
+    });
+    const manager = new CommentManager([mainThread, pageThread]);
+
+    assert.equal(manager.nestThreadUnderThread("note.md", "thread-page", "thread-main"), false);
+    assert.deepEqual(
+        manager.getThreadsForFile("note.md").map((thread) => thread.id),
+        ["thread-main", "thread-page"],
+    );
+});
+
 test("CommentManager keeps id and file lookups current after replacement and rename", () => {
     const manager = new CommentManager([
         createComment("old-thread", 1710000000000, "old"),

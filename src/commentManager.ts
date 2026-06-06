@@ -21,6 +21,7 @@ import {
 import {
     cloneCommentThread,
     cloneCommentThreadEntry,
+    cloneCommentThreadEntryAnchor,
     getFirstThreadEntry,
     normalizeCommentThread,
 } from "./domain/comments/commentThreadNormalization";
@@ -32,6 +33,7 @@ import type {
     CommentQueryOptions,
     CommentThread,
     CommentThreadEntry,
+    CommentThreadEntryAnchor,
     ReorderPlacement,
 } from "./domain/comments/commentThread";
 
@@ -40,6 +42,7 @@ export type {
     CommentQueryOptions,
     CommentThread,
     CommentThreadEntry,
+    CommentThreadEntryAnchor,
     ReorderPlacement,
 } from "./domain/comments/commentThread";
 export type { Comment } from "./domain/comments/commentProjection";
@@ -95,6 +98,43 @@ function hasExpiredDeletedComments(threads: readonly CommentThread[], now: numbe
     return threads.some((thread) =>
         isSoftDeletedExpired(thread.deletedAt, now)
         || thread.entries.some((entry) => isSoftDeletedExpired(entry.deletedAt, now)));
+}
+
+function createThreadEntryAnchorFromThread(thread: CommentThread): CommentThreadEntryAnchor {
+    return {
+        filePath: thread.filePath,
+        startLine: thread.startLine,
+        startChar: thread.startChar,
+        endLine: thread.endLine,
+        endChar: thread.endChar,
+        selectedText: thread.selectedText,
+        selectedTextHash: thread.selectedTextHash,
+        anchorKind: "selection",
+        ...(thread.orphaned === true ? { orphaned: true } : {}),
+    };
+}
+
+function insertEntriesAfter(
+    entries: CommentThreadEntry[],
+    insertedEntries: CommentThreadEntry[],
+    insertAfterEntryId?: string,
+): CommentThreadEntry[] {
+    const clonedEntries = entries.map((entry) => cloneCommentThreadEntry(entry));
+    const clonedInsertedEntries = insertedEntries.map((entry) => cloneCommentThreadEntry(entry));
+    if (!insertAfterEntryId) {
+        return clonedEntries.concat(clonedInsertedEntries);
+    }
+
+    const insertAfterIndex = clonedEntries.findIndex((entry) => entry.id === insertAfterEntryId);
+    if (insertAfterIndex === -1) {
+        return clonedEntries.concat(clonedInsertedEntries);
+    }
+
+    return [
+        ...clonedEntries.slice(0, insertAfterIndex + 1),
+        ...clonedInsertedEntries,
+        ...clonedEntries.slice(insertAfterIndex + 1),
+    ];
 }
 
 export class CommentManager {
@@ -155,7 +195,7 @@ export class CommentManager {
 
     getCommentsForFile(filePath: string, options: CommentQueryOptions = {}): Comment[] {
         return this.getThreadsForFile(filePath, options)
-            .map((thread) => threadToComment(thread));
+            .flatMap((thread) => thread.entries.map((entry) => threadEntryToComment(thread, entry)));
     }
 
     getCommentById(id: string): Comment | undefined {
@@ -302,6 +342,64 @@ export class CommentManager {
         }
 
         thread.entries = [parentEntry, ...reorderedChildEntries];
+        return true;
+    }
+
+    nestThreadUnderThread(
+        filePath: string,
+        sourceThreadId: string,
+        targetThreadId: string,
+        insertAfterEntryId?: string,
+    ): boolean {
+        const sourceThread = this.lookupIndexes.threadByThreadId.get(sourceThreadId);
+        const targetThread = this.findThreadById(targetThreadId);
+        if (
+            !sourceThread
+            || !targetThread
+            || sourceThread.id !== sourceThreadId
+            || sourceThread.id === targetThread.id
+            || sourceThread.filePath !== filePath
+            || targetThread.filePath !== filePath
+            || sourceThread.anchorKind === "page"
+            || !!sourceThread.deletedAt
+            || !!targetThread.deletedAt
+        ) {
+            return false;
+        }
+
+        const sourceAnchor = createThreadEntryAnchorFromThread(sourceThread);
+        const convertedEntries = sourceThread.entries.map((entry, index) => {
+            const clonedEntry = cloneCommentThreadEntry(entry);
+            if (index === 0) {
+                return {
+                    ...clonedEntry,
+                    anchor: sourceAnchor,
+                };
+            }
+            if (clonedEntry.anchor) {
+                return {
+                    ...clonedEntry,
+                    anchor: cloneCommentThreadEntryAnchor(clonedEntry.anchor),
+                };
+            }
+            return clonedEntry;
+        });
+        if (!convertedEntries.length) {
+            return false;
+        }
+        const convertedEntryIds = new Set(convertedEntries.map((entry) => entry.id));
+        if (targetThread.entries.some((entry) => convertedEntryIds.has(entry.id))) {
+            return false;
+        }
+
+        const nextTargetThread: CommentThread = {
+            ...targetThread,
+            entries: insertEntriesAfter(targetThread.entries, convertedEntries, insertAfterEntryId),
+            updatedAt: Math.max(targetThread.updatedAt, sourceThread.updatedAt),
+        };
+        this.setThreads(this.threads
+            .filter((thread) => thread.id !== sourceThread.id)
+            .map((thread) => thread.id === targetThread.id ? nextTargetThread : thread));
         return true;
     }
 

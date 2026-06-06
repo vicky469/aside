@@ -67,20 +67,21 @@ export function threadToComment(thread: CommentThread): Comment {
 export function threadEntryToComment(thread: CommentThread, entry: CommentThreadEntry): Comment {
     const normalized = normalizeCommentThread(thread);
     const deletedAt = normalizeDeletedAt(entry.deletedAt) ?? normalized.deletedAt;
+    const anchor = entry.anchor;
 
     return {
         id: entry.id,
-        filePath: normalized.filePath,
-        startLine: normalized.startLine,
-        startChar: normalized.startChar,
-        endLine: normalized.endLine,
-        endChar: normalized.endChar,
-        selectedText: normalized.selectedText,
-        selectedTextHash: normalized.selectedTextHash,
+        filePath: anchor?.filePath ?? normalized.filePath,
+        startLine: anchor?.startLine ?? normalized.startLine,
+        startChar: anchor?.startChar ?? normalized.startChar,
+        endLine: anchor?.endLine ?? normalized.endLine,
+        endChar: anchor?.endChar ?? normalized.endChar,
+        selectedText: anchor?.selectedText ?? normalized.selectedText,
+        selectedTextHash: anchor?.selectedTextHash ?? normalized.selectedTextHash,
         comment: entry.body,
         timestamp: entry.timestamp,
-        anchorKind: normalized.anchorKind,
-        orphaned: normalized.orphaned === true,
+        anchorKind: anchor ? "selection" : normalized.anchorKind,
+        orphaned: anchor ? anchor.orphaned === true : normalized.orphaned === true,
         ...(normalized.id === entry.id && normalized.isPinned === true ? { isPinned: true } : {}),
         ...(deletedAt !== undefined ? { deletedAt } : {}),
         entryCount: normalized.entries.length,

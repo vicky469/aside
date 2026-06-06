@@ -152,6 +152,108 @@ test("side-note sync diff emits compact mutation events", () => {
     assert.deepEqual(inputs.map((input) => input.op), ["appendEntry"]);
 });
 
+test("side-note sync reducer preserves child entry anchors on append", () => {
+    const previous = createThread("docs/note.md");
+    const append = createEvent({
+        eventId: "event-2",
+        logicalClock: 2,
+        op: "appendEntry",
+        payload: {
+            threadId: "thread-1",
+            entry: {
+                id: "entry-2",
+                body: "anchored reply",
+                timestamp: 1710000000100,
+                anchor: {
+                    filePath: "docs/note.md",
+                    startLine: 4,
+                    startChar: 2,
+                    endLine: 4,
+                    endChar: 16,
+                    selectedText: "anchored reply",
+                    selectedTextHash: "hash-anchored-reply",
+                    anchorKind: "selection",
+                },
+            },
+        },
+    });
+
+    const reduced = reduceSideNoteSyncEvents([previous], [append]);
+
+    assert.deepEqual(reduced.threads[0].entries[1]?.anchor, {
+        filePath: "docs/note.md",
+        startLine: 4,
+        startChar: 2,
+        endLine: 4,
+        endChar: 16,
+        selectedText: "anchored reply",
+        selectedTextHash: "hash-anchored-reply",
+        anchorKind: "selection",
+    });
+});
+
+test("side-note sync diff updates child entries when only anchors change", () => {
+    const previous = createThread("docs/note.md", {
+        entries: [
+            {
+                id: "thread-1",
+                body: "Parent",
+                timestamp: 1710000000000,
+            },
+            {
+                id: "entry-2",
+                body: "Point",
+                timestamp: 1710000000100,
+                anchor: {
+                    filePath: "docs/note.md",
+                    startLine: 3,
+                    startChar: 0,
+                    endLine: 3,
+                    endChar: 5,
+                    selectedText: "alpha",
+                    selectedTextHash: "hash-alpha",
+                    anchorKind: "selection",
+                },
+            },
+        ],
+        updatedAt: 1710000000100,
+    });
+    const next = createThread("docs/note.md", {
+        entries: [
+            previous.entries[0],
+            {
+                ...previous.entries[1],
+                anchor: {
+                    filePath: "docs/note.md",
+                    startLine: 5,
+                    startChar: 1,
+                    endLine: 5,
+                    endChar: 5,
+                    selectedText: "beta",
+                    selectedTextHash: "hash-beta",
+                    anchorKind: "selection",
+                },
+            },
+        ],
+        updatedAt: 1710000000200,
+    });
+
+    const inputs = buildSideNoteSyncEventInputsForThreadDiff([previous], [next]);
+    const update = inputs.find((input) => input.op === "updateEntry");
+
+    assert.deepEqual(inputs.map((input) => input.op), ["updateEntry"]);
+    assert.deepEqual((update?.payload as { entry?: { anchor?: unknown } }).entry?.anchor, {
+        filePath: "docs/note.md",
+        startLine: 5,
+        startChar: 1,
+        endLine: 5,
+        endChar: 5,
+        selectedText: "beta",
+        selectedTextHash: "hash-beta",
+        anchorKind: "selection",
+    });
+});
+
 test("side-note sync diff preserves child-targeted append entry order", () => {
     const previous = createThread("docs/note.md", {
         entries: [
@@ -200,6 +302,67 @@ test("side-note sync diff preserves child-targeted append entry order", () => {
     assert.deepEqual(
         reduced.threads[0].entries.map((entry) => entry.id),
         ["thread-1", "entry-2", "entry-4", "entry-3"],
+    );
+});
+
+test("side-note sync diff removes source thread after nesting it under another thread", () => {
+    const source = createThread("docs/note.md", {
+        id: "thread-source",
+        startLine: 3,
+        startChar: 0,
+        endLine: 3,
+        endChar: 12,
+        selectedText: "source point",
+        selectedTextHash: "hash-source",
+        entries: [{
+            id: "thread-source",
+            body: "source body",
+            timestamp: 1710000000100,
+            anchor: {
+                filePath: "docs/note.md",
+                startLine: 3,
+                startChar: 0,
+                endLine: 3,
+                endChar: 12,
+                selectedText: "source point",
+                selectedTextHash: "hash-source",
+                anchorKind: "selection",
+            },
+        }],
+        createdAt: 1710000000100,
+        updatedAt: 1710000000100,
+    });
+    const target = createThread("docs/note.md", {
+        id: "thread-target",
+        entries: [{
+            id: "thread-target",
+            body: "target body",
+            timestamp: 1710000000000,
+        }],
+    });
+    const nextTarget = {
+        ...target,
+        entries: [
+            target.entries[0],
+            source.entries[0],
+        ],
+        updatedAt: 1710000000200,
+    };
+
+    const inputs = buildSideNoteSyncEventInputsForThreadDiff([source, target], [nextTarget]);
+    const events = inputs.map((input, index) => createEvent({
+        eventId: `event-${index + 1}`,
+        logicalClock: index + 1,
+        op: input.op,
+        payload: input.payload,
+    }));
+    const reduced = reduceSideNoteSyncEvents([source, target], events);
+
+    assert.deepEqual(inputs.map((input) => input.op), ["appendEntry", "removeThread"]);
+    assert.deepEqual(reduced.threads.map((thread) => thread.id), ["thread-target"]);
+    assert.deepEqual(
+        reduced.threads[0].entries.map((entry) => entry.id),
+        ["thread-target", "thread-source"],
     );
 });
 

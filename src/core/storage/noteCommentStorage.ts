@@ -1,4 +1,4 @@
-import type { Comment, CommentThread, CommentThreadEntry } from "../../commentManager";
+import type { Comment, CommentThread, CommentThreadEntry, CommentThreadEntryAnchor } from "../../commentManager";
 import { cloneCommentThreads, threadToComment } from "../../commentManager";
 import { splitTrailingSideNoteReferenceSection } from "../text/commentReferences";
 import {
@@ -19,6 +19,7 @@ interface StoredNoteCommentThreadEntry {
     body: string;
     timestamp: number;
     deletedAt?: number;
+    anchor?: CommentThreadEntryAnchor;
 }
 
 interface StoredNoteCommentThread {
@@ -98,6 +99,37 @@ function normalizeCommentBody(body: string): string {
     return splitTrailingSideNoteReferenceSection(normalized).body;
 }
 
+function normalizeThreadEntryAnchor(candidate: unknown): CommentThreadEntryAnchor | undefined {
+    if (!isRecord(candidate)) {
+        return undefined;
+    }
+
+    if (
+        typeof candidate.filePath !== "string"
+        || typeof candidate.startLine !== "number"
+        || typeof candidate.startChar !== "number"
+        || typeof candidate.endLine !== "number"
+        || typeof candidate.endChar !== "number"
+        || typeof candidate.selectedText !== "string"
+        || typeof candidate.selectedTextHash !== "string"
+        || candidate.anchorKind !== "selection"
+    ) {
+        return undefined;
+    }
+
+    return {
+        filePath: candidate.filePath,
+        startLine: candidate.startLine,
+        startChar: candidate.startChar,
+        endLine: candidate.endLine,
+        endChar: candidate.endChar,
+        selectedText: candidate.selectedText,
+        selectedTextHash: candidate.selectedTextHash,
+        anchorKind: "selection",
+        ...(candidate.orphaned === true ? { orphaned: true } : {}),
+    };
+}
+
 function cloneThreadEntry(entry: CommentThreadEntry): CommentThreadEntry {
     const deletedAt = normalizeDeletedAt(entry.deletedAt);
     return {
@@ -105,6 +137,7 @@ function cloneThreadEntry(entry: CommentThreadEntry): CommentThreadEntry {
         body: normalizeCommentBody(entry.body),
         timestamp: entry.timestamp,
         ...(deletedAt !== undefined ? { deletedAt } : {}),
+        ...(entry.anchor ? { anchor: normalizeThreadEntryAnchor(entry.anchor) ?? entry.anchor } : {}),
     };
 }
 
@@ -155,6 +188,7 @@ function toStoredThreadEntry(entry: CommentThreadEntry): StoredNoteCommentThread
         body: normalizeCommentBody(entry.body),
         timestamp: entry.timestamp,
         ...(deletedAt !== undefined ? { deletedAt } : {}),
+        ...(entry.anchor ? { anchor: normalizeThreadEntryAnchor(entry.anchor) ?? entry.anchor } : {}),
     };
 }
 
@@ -212,6 +246,7 @@ function fromStoredThreadEntry(candidate: unknown): CommentThreadEntry | null {
         body: normalizeCommentBody(item.body),
         timestamp: item.timestamp,
         ...(deletedAt !== undefined ? { deletedAt } : {}),
+        ...(normalizeThreadEntryAnchor(item.anchor) ? { anchor: normalizeThreadEntryAnchor(item.anchor) } : {}),
     };
 }
 

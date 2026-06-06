@@ -247,6 +247,7 @@ type SidebarReorderDragState =
         kind: "thread";
         filePath: string;
         threadId: string;
+        isPageThread: boolean;
     }
     | {
         kind: "thread-entry";
@@ -902,19 +903,63 @@ export default class AsideView extends ItemView {
         return true;
     }
 
-    private async moveSidebarCommentEntryToThread(entryId: string, targetThreadId: string): Promise<boolean> {
+    private async nestSidebarCommentThreadUnderThread(
+        sourceThreadId: string,
+        targetThreadId: string,
+        insertAfterCommentId?: string,
+    ): Promise<boolean> {
+        const currentFilePath = this.getCurrentLocalNoteSidebarFilePath();
+        const nested = await this.plugin.nestCommentThreadUnderThread(
+            sourceThreadId,
+            targetThreadId,
+            currentFilePath
+                ? {
+                    insertAfterCommentId,
+                    deferAggregateRefresh: true,
+                    skipPersistedViewRefresh: true,
+                    refreshEditorDecorations: false,
+                    refreshMarkdownPreviews: false,
+                }
+                : { insertAfterCommentId },
+        );
+        if (!nested) {
+            return false;
+        }
+
+        await this.plugin.setShowNestedCommentsForThread(targetThreadId, true, currentFilePath
+            ? {
+                skipCommentViewRefresh: true,
+            }
+            : undefined);
+        if (currentFilePath && this.file?.path === currentFilePath) {
+            this.highlightComment(sourceThreadId, {
+                skipDataRefresh: true,
+            });
+            return true;
+        }
+
+        this.highlightComment(sourceThreadId);
+        return true;
+    }
+
+    private async moveSidebarCommentEntryToThread(
+        entryId: string,
+        targetThreadId: string,
+        insertAfterCommentId?: string,
+    ): Promise<boolean> {
         const currentFilePath = this.getCurrentLocalNoteSidebarFilePath();
         const moved = await this.plugin.moveCommentEntryToThread(
             entryId,
             targetThreadId,
             currentFilePath
                 ? {
+                    insertAfterCommentId,
                     deferAggregateRefresh: true,
                     skipPersistedViewRefresh: true,
                     refreshEditorDecorations: false,
                     refreshMarkdownPreviews: false,
                 }
-                : undefined,
+                : { insertAfterCommentId },
         );
         if (!moved) {
             return false;
@@ -4117,8 +4162,9 @@ export default class AsideView extends ItemView {
 
         commentsBody.addEventListener("dragover", (event: DragEvent) => {
             const threadDropTarget = this.resolvePageThreadDropTarget(event);
+            const threadNestDropTarget = this.resolveThreadNestDropTarget(event);
             const entryDropTarget = this.resolveChildEntryMoveDropTarget(event);
-            if (!threadDropTarget && !entryDropTarget) {
+            if (!threadDropTarget && !threadNestDropTarget && !entryDropTarget) {
                 this.clearReorderDropIndicator();
                 return;
             }
@@ -4131,17 +4177,22 @@ export default class AsideView extends ItemView {
                 this.setReorderDropIndicator(threadDropTarget.element, threadDropTarget.placement);
                 return;
             }
+            if (threadNestDropTarget) {
+                this.setReorderDropIndicator(threadNestDropTarget.element, "after");
+                return;
+            }
             if (entryDropTarget) {
-                this.setReorderDropIndicator(entryDropTarget.element, "after");
+                this.setReorderDropIndicator(entryDropTarget.element, entryDropTarget.placement);
             }
         });
 
         commentsBody.addEventListener("drop", (event: DragEvent) => {
             const dragState = this.reorderDragState;
             const threadDropTarget = this.resolvePageThreadDropTarget(event);
+            const threadNestDropTarget = this.resolveThreadNestDropTarget(event);
             const entryDropTarget = this.resolveChildEntryMoveDropTarget(event);
             this.clearReorderDropIndicator();
-            if (!dragState || (!threadDropTarget && !entryDropTarget)) {
+            if (!dragState || (!threadDropTarget && !threadNestDropTarget && !entryDropTarget)) {
                 return;
             }
 
@@ -4156,8 +4207,31 @@ export default class AsideView extends ItemView {
                 );
                 return;
             }
+            if (dragState.kind === "thread" && threadNestDropTarget) {
+                void this.nestSidebarCommentThreadUnderThread(
+                    dragState.threadId,
+                    threadNestDropTarget.targetThreadId,
+                    threadNestDropTarget.insertAfterEntryId,
+                );
+                return;
+            }
             if (dragState.kind === "thread-entry" && entryDropTarget) {
-                void this.moveSidebarCommentEntryToThread(dragState.entryId, entryDropTarget.targetThreadId);
+                if (entryDropTarget.targetThreadId === dragState.sourceThreadId && entryDropTarget.insertAfterEntryId) {
+                    void this.plugin.reorderThreadEntries(
+                        dragState.filePath,
+                        dragState.sourceThreadId,
+                        dragState.entryId,
+                        entryDropTarget.insertAfterEntryId,
+                        entryDropTarget.placement,
+                    );
+                    return;
+                }
+
+                void this.moveSidebarCommentEntryToThread(
+                    dragState.entryId,
+                    entryDropTarget.targetThreadId,
+                    entryDropTarget.insertAfterEntryId,
+                );
             }
         });
 
@@ -4191,11 +4265,16 @@ export default class AsideView extends ItemView {
             if (!threadId) {
                 return null;
             }
+            const sourceThread = this.plugin.getThreadById(threadId);
+            if (!sourceThread) {
+                return null;
+            }
 
             return {
                 kind: "thread",
-                filePath,
+                filePath: sourceThread.filePath,
                 threadId,
+                isPageThread: sourceThread.anchorKind === "page",
             };
         }
 
@@ -4227,7 +4306,7 @@ export default class AsideView extends ItemView {
         placement: ReorderPlacement;
     } | null {
         const dragState = this.reorderDragState;
-        if (!dragState || dragState.kind !== "thread" || !nodeInstanceOf(event.target, Element)) {
+        if (!dragState || dragState.kind !== "thread" || !dragState.isPageThread || !nodeInstanceOf(event.target, Element)) {
             return null;
         }
 
@@ -4252,9 +4331,64 @@ export default class AsideView extends ItemView {
         };
     }
 
+    private resolveThreadNestDropTarget(event: DragEvent): {
+        element: HTMLElement;
+        targetThreadId: string;
+        insertAfterEntryId?: string;
+    } | null {
+        const dragState = this.reorderDragState;
+        if (!dragState || dragState.kind !== "thread" || dragState.isPageThread || !nodeInstanceOf(event.target, Element)) {
+            return null;
+        }
+
+        const threadStackEl = event.target.closest(".aside-thread-stack");
+        if (!nodeInstanceOf(threadStackEl, HTMLElement)) {
+            return null;
+        }
+
+        const targetThreadId = threadStackEl.getAttribute("data-thread-id");
+        if (!targetThreadId || targetThreadId === dragState.threadId) {
+            return null;
+        }
+        const targetThread = this.plugin.getThreadById(targetThreadId);
+        if (
+            !targetThread
+            || targetThread.deletedAt
+            || targetThread.filePath !== dragState.filePath
+        ) {
+            return null;
+        }
+
+        const targetCommentEl = event.target.closest(".aside-comment-item");
+        const fallbackCommentEl = threadStackEl.firstElementChild;
+        const indicatorEl = nodeInstanceOf(targetCommentEl, HTMLElement)
+            ? targetCommentEl
+            : nodeInstanceOf(fallbackCommentEl, HTMLElement)
+                ? fallbackCommentEl
+                : null;
+        if (!indicatorEl) {
+            return null;
+        }
+
+        const targetEntryId = targetCommentEl?.getAttribute("data-comment-id") ?? null;
+        const insertAfterEntryId = nodeInstanceOf(targetCommentEl, HTMLElement)
+            && targetCommentEl.classList.contains("aside-thread-entry-item")
+            && targetEntryId
+            ? targetEntryId
+            : undefined;
+
+        return {
+            element: indicatorEl,
+            targetThreadId,
+            ...(insertAfterEntryId ? { insertAfterEntryId } : {}),
+        };
+    }
+
     private resolveChildEntryMoveDropTarget(event: DragEvent): {
         element: HTMLElement;
         targetThreadId: string;
+        insertAfterEntryId?: string;
+        placement: ReorderPlacement;
     } | null {
         const dragState = this.reorderDragState;
         if (!dragState || dragState.kind !== "thread-entry" || !nodeInstanceOf(event.target, Element)) {
@@ -4267,8 +4401,7 @@ export default class AsideView extends ItemView {
         }
 
         const targetThreadId = threadStackEl.getAttribute("data-thread-id");
-        const targetCommentEl = threadStackEl.firstElementChild;
-        if (!targetThreadId || targetThreadId === dragState.sourceThreadId) {
+        if (!targetThreadId) {
             return null;
         }
         const targetThread = this.plugin.getThreadById(targetThreadId);
@@ -4279,13 +4412,36 @@ export default class AsideView extends ItemView {
         ) {
             return null;
         }
-        if (!nodeInstanceOf(targetCommentEl, HTMLElement)) {
+
+        const targetCommentEl = event.target.closest(".aside-comment-item");
+        const fallbackCommentEl = threadStackEl.firstElementChild;
+        const indicatorEl = nodeInstanceOf(targetCommentEl, HTMLElement)
+            ? targetCommentEl
+            : nodeInstanceOf(fallbackCommentEl, HTMLElement)
+                ? fallbackCommentEl
+                : null;
+        if (!indicatorEl) {
             return null;
         }
 
+        const targetEntryId = targetCommentEl?.getAttribute("data-comment-id") ?? null;
+        const insertAfterEntryId = nodeInstanceOf(targetCommentEl, HTMLElement)
+            && targetCommentEl.classList.contains("aside-thread-entry-item")
+            && targetEntryId
+            ? targetEntryId
+            : undefined;
+        if (targetThreadId === dragState.sourceThreadId && (!insertAfterEntryId || insertAfterEntryId === dragState.entryId)) {
+            return null;
+        }
+        const placement = targetThreadId === dragState.sourceThreadId && nodeInstanceOf(targetCommentEl, HTMLElement)
+            ? this.resolveReorderPlacement(targetCommentEl, event.clientY)
+            : "after";
+
         return {
-            element: targetCommentEl,
+            element: indicatorEl,
             targetThreadId,
+            ...(insertAfterEntryId ? { insertAfterEntryId } : {}),
+            placement,
         };
     }
 

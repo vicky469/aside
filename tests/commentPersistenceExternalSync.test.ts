@@ -214,6 +214,102 @@ test("comment persistence controller syncs external managed-block updates into a
     }
 });
 
+test("comment persistence controller deduplicates duplicate child entries from sidecar on load", async () => {
+    const originalWindow = globalThis.window;
+    globalThis.window = {
+        setTimeout: () => 1,
+        clearTimeout: () => {},
+    } as unknown as typeof globalThis.window;
+
+    const file = createFile("docs/note.md");
+    const noteBody = "# Title\n\nAlpha target omega\n";
+    const duplicateAnchor = {
+        filePath: file.path,
+        startLine: 3,
+        startChar: 0,
+        endLine: 3,
+        endChar: 11,
+        selectedText: "child point",
+        selectedTextHash: "hash-child",
+        anchorKind: "selection" as const,
+    };
+    const storedThread = createThread(file.path);
+    storedThread.entries.push({
+        id: "entry-point",
+        body: "",
+        timestamp: 1710000001000,
+    });
+    storedThread.entries.push({
+        id: "entry-point",
+        body: "visible body",
+        timestamp: 1710000002000,
+        anchor: duplicateAnchor,
+    });
+    storedThread.updatedAt = 1710000002000;
+
+    const adapter = new FakeAdapter();
+    adapter.files.set(getSidecarStoragePath(file.path), serializeSidecarThreads(file.path, [storedThread]));
+
+    const commentManager = new CommentManager([]);
+    const aggregateCommentIndex = new AggregateCommentIndex();
+    let persistedData: PersistedPluginData = {};
+
+    const controller = new CommentPersistenceController({
+        app: {
+            vault: {
+                adapter: adapter as unknown as DataAdapter,
+                process: async () => {
+                    throw new Error("Should not rewrite the note while loading sidecar comments.");
+                },
+            },
+        } as never,
+        getAllCommentsNotePath: () => "Aside index.md",
+        getIndexHeaderImageUrl: () => "",
+        getIndexHeaderImageCaption: () => "",
+        getMarkdownViewForFile: () => ({}) as MarkdownView,
+        getMarkdownFileByPath: () => file,
+        getCurrentNoteContent: async () => noteBody,
+        getStoredNoteContent: async () => noteBody,
+        getParsedNoteComments: (filePath, noteContent) => parseNoteComments(noteContent, filePath),
+        getPluginDataDirPath: () => ".obsidian/plugins/aside",
+        getSideNoteSyncDeviceId: () => "device-a",
+        readPersistedPluginData: () => persistedData,
+        writePersistedPluginData: async (data) => {
+            persistedData = data;
+        },
+        isAllCommentsNotePath: () => false,
+        isCommentableFile: (candidate): candidate is TFile => !!candidate && candidate.extension === "md",
+        isMarkdownEditorFocused: () => false,
+        getCommentManager: () => commentManager,
+        getAggregateCommentIndex: () => aggregateCommentIndex,
+        createCommentId: () => "generated-id",
+        hashText: async (text) => `hash-${text.replace(/\//g, "_")}`,
+        syncDerivedCommentLinksForFile: () => {},
+        refreshCommentViews: async () => {},
+        refreshAllCommentsSidebarViews: async () => {},
+        refreshEditorDecorations: () => {},
+        refreshMarkdownPreviews: () => {},
+        getCommentMentionedPageLabels: () => [],
+        syncIndexNoteLeafMode: async () => {},
+        log: async () => {},
+    });
+
+    try {
+        await controller.loadCommentsForFile(file);
+
+        const loadedThread = commentManager.getThreadById("thread-1");
+        assert.deepEqual(
+            loadedThread?.entries.map((entry) => entry.id),
+            ["entry-1", "entry-point"],
+        );
+        assert.equal(loadedThread?.entries[1]?.body, "visible body");
+        assert.deepEqual(loadedThread?.entries[1]?.anchor, duplicateAnchor);
+        assert.equal(aggregateCommentIndex.getCommentById("entry-point")?.selectedText, "child point");
+    } finally {
+        globalThis.window = originalWindow;
+    }
+});
+
 test("comment persistence controller migrates inline note storage into a sidecar and strips the source note block", async () => {
     const file = createFile("docs/note.md");
     const noteBody = "# Title\n\nAlpha target omega\n";

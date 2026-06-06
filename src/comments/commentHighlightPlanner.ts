@@ -1,10 +1,23 @@
 import type { Comment } from "../commentManager";
-import { pickExactTextMatch, resolveAnchorRange } from "../core/anchors/anchorResolver";
+import { pickExactTextMatch, pickWhitespaceCollapsedTextMatch, resolveAnchorRange } from "../core/anchors/anchorResolver";
 
 export interface PreviewHighlightWrap {
     start: number;
     end: number;
     comment: Comment;
+}
+
+function stripInlineMarkdownTokens(text: string): string {
+    return text
+        .replace(/\*\*([\s\S]*?)\*\*/g, "$1")
+        .replace(/__([\s\S]*?)__/g, "$1")
+        .replace(/\*([\s\S]*?)\*/g, "$1")
+        .replace(/_([\s\S]*?)_/g, "$1")
+        .replace(/~~([\s\S]*?)~~/g, "$1")
+        .replace(/==([\s\S]*?)==/g, "$1")
+        .replace(/`([^`]*)`/g, "$1")
+        .replace(/\[\[([^\]]*?)\]\]/g, "$1")
+        .replace(/\[([^\]]*?)\]\([^)]*?\)/g, "$1");
 }
 
 export function buildPreviewHighlightWraps(
@@ -28,12 +41,15 @@ export function buildPreviewHighlightWraps(
             endChar: comment.endChar,
             selectedText: target,
         });
-        const renderedMatch = pickExactTextMatch(renderedText, target, {
+        const matchOptions = {
             occurrenceIndex: sourceMatch && sourceMatch.occurrenceIndex >= 0
                 ? sourceMatch.occurrenceIndex
                 : undefined,
             hintOffset: sourceMatch?.startOffset,
-        });
+        };
+        const renderedMatch = pickExactTextMatch(renderedText, target, matchOptions)
+            ?? pickExactTextMatch(renderedText, stripInlineMarkdownTokens(target), matchOptions)
+            ?? pickWhitespaceCollapsedTextMatch(renderedText, stripInlineMarkdownTokens(target), matchOptions);
         if (!renderedMatch) {
             continue;
         }

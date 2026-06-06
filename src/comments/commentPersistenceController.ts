@@ -1,6 +1,6 @@
 import type { CachedMetadata, MarkdownView, Plugin, TFile, WorkspaceLeaf } from "obsidian";
 import type { Comment, CommentManager, CommentThread, CommentThreadEntry } from "../commentManager";
-import { threadToComment } from "../commentManager";
+import { normalizeCommentThread, threadToComment } from "../commentManager";
 import { getPageCommentLabel } from "../core/anchors/commentAnchors";
 import {
     type AllCommentsNoteBuildOptions,
@@ -1447,7 +1447,7 @@ export class CommentPersistenceController {
             if (!thread.updatedAt) {
                 thread.updatedAt = thread.entries[thread.entries.length - 1].timestamp;
             }
-            normalizedThreads.push(thread);
+            normalizedThreads.push(normalizeCommentThread(thread));
         }
 
         return purgeExpiredDeletedThreads(normalizedThreads);

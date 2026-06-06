@@ -191,6 +191,48 @@ test("serializeNoteComments preserves pinned thread metadata", () => {
     assert.equal(parsed.threads[0].isPinned, true);
 });
 
+test("serializeNoteCommentThreads preserves child entry anchors", () => {
+    const thread = createThread({
+        entries: [
+            {
+                id: "thread-1",
+                body: "Main point",
+                timestamp: 1710000000000,
+            },
+            {
+                id: "entry-2",
+                body: "Nested point",
+                timestamp: 1710000001000,
+                anchor: {
+                    filePath: "note.md",
+                    startLine: 4,
+                    startChar: 2,
+                    endLine: 4,
+                    endChar: 13,
+                    selectedText: "child point",
+                    selectedTextHash: "hash-child",
+                    anchorKind: "selection",
+                },
+            },
+        ],
+        updatedAt: 1710000001000,
+    });
+
+    const serialized = serializeNoteCommentThreads("Body", [thread]);
+    const parsed = parseNoteComments(serialized, "note.md");
+
+    assert.deepEqual(parsed.threads[0].entries[1]?.anchor, {
+        filePath: "note.md",
+        startLine: 4,
+        startChar: 2,
+        endLine: 4,
+        endChar: 13,
+        selectedText: "child point",
+        selectedTextHash: "hash-child",
+        anchorKind: "selection",
+    });
+});
+
 test("parseNoteComments ignores legacy bookmark fields and drops them on rewrite", () => {
     const serialized = serializeNoteComments("Body", [
         createComment({
