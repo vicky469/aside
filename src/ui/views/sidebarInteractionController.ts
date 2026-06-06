@@ -62,7 +62,7 @@ export interface SidebarInteractionHost {
     revealComment(comment: Comment): Promise<void>;
     openCommentById?(filePath: string | null, commentId: string): Promise<void>;
     getPreferredFileLeaf(): WorkspaceLeaf | null;
-    openLinkText(href: string, sourcePath: string): Promise<void>;
+    openLinkText(href: string, sourcePath: string, openAsTab?: boolean): Promise<void>;
     shouldShowDeletedComments?(): boolean;
     setShowDeletedComments?(showDeleted: boolean): Promise<void> | void;
     log?(level: "info" | "warn" | "error", area: string, event: string, payload?: Record<string, unknown>): Promise<void>;
@@ -390,6 +390,7 @@ export class SidebarInteractionController {
         href: string,
         sourcePath: string,
         focusTarget: HTMLElement,
+        options: { openAsTab?: boolean } = {},
     ): Promise<void> {
         this.cancelPendingRevealedCommentSelectionClear();
         const sideNoteTarget = parseSideNoteReferenceUrl(href);
@@ -409,7 +410,7 @@ export class SidebarInteractionController {
             this.host.app.workspace.setActiveLeaf(targetLeaf, { focus: false });
         }
 
-        await this.host.openLinkText(href, sourcePath);
+        await this.host.openLinkText(href, sourcePath, options.openAsTab === true);
         this.claimSidebarInteractionOwnership(focusTarget);
     }
 

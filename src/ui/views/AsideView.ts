@@ -1171,7 +1171,8 @@ export default class AsideView extends ItemView {
             revealComment: (comment) => this.plugin.revealComment(comment),
             openCommentById: (filePath, commentId) => this.plugin.openCommentById(filePath, commentId),
             getPreferredFileLeaf: () => this.plugin.getPreferredFileLeaf(),
-            openLinkText: (href, sourcePath) => this.app.workspace.openLinkText(href, sourcePath, false),
+            openLinkText: (href, sourcePath, openAsTab = false) =>
+                this.app.workspace.openLinkText(href, sourcePath, openAsTab ? "tab" : false),
             shouldShowDeletedComments: () => this.plugin.shouldShowDeletedComments(),
             setShowDeletedComments: async (showDeleted) => {
                 await this.plugin.setShowDeletedComments(showDeleted);
@@ -4058,8 +4059,8 @@ export default class AsideView extends ItemView {
             renderMarkdown: async (markdown, container, sourcePath) => {
                 await MarkdownRenderer.render(this.app, markdown, container, sourcePath, this);
             },
-            openSidebarInternalLink: (href, sourcePath, focusTarget) =>
-                this.interactionController.openSidebarInternalLink(href, sourcePath, focusTarget),
+            openSidebarInternalLink: (href, sourcePath, focusTarget, options) =>
+                this.interactionController.openSidebarInternalLink(href, sourcePath, focusTarget, options),
             openCommentFromCard: async (persistedComment) => {
                 if (isIndexView && currentFilePath) {
                     this.interactionController.setActiveComment(persistedComment.id);

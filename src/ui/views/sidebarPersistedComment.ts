@@ -100,7 +100,12 @@ export interface SidebarPersistedCommentHost {
     claimSidebarInteractionOwnership(focusTarget?: HTMLElement | null): void;
     insertCommentMarkdownIntoFile(markdown: string): Promise<boolean>;
     renderMarkdown(markdown: string, container: HTMLElement, sourcePath: string): Promise<void>;
-    openSidebarInternalLink(href: string, sourcePath: string, focusTarget: HTMLElement): Promise<void>;
+    openSidebarInternalLink(
+        href: string,
+        sourcePath: string,
+        focusTarget: HTMLElement,
+        options?: { openAsTab?: boolean },
+    ): Promise<void>;
     openCommentFromCard(comment: Comment): Promise<void>;
     openCommentInEditor(comment: Comment): Promise<void>;
     shareComment(comment: Comment): Promise<void>;
@@ -438,6 +443,28 @@ function interceptSideNoteProtocolLinks(
     }
 }
 
+function getSidebarRenderedLinkTarget(link: HTMLAnchorElement): string {
+    return link.getAttribute("href") || link.getAttribute("data-href") || link.innerText;
+}
+
+function decodeSidebarLinkTarget(href: string): string {
+    try {
+        return decodeURIComponent(href);
+    } catch (_error) {
+        return href;
+    }
+}
+
+function isLocalHtmlFileLinkTarget(href: string): boolean {
+    const trimmed = href.trim();
+    if (!trimmed || trimmed.startsWith("//") || /^[a-z][a-z0-9+.-]*:/i.test(trimmed)) {
+        return false;
+    }
+
+    const pathPart = trimmed.split("#", 1)[0].split("?", 1)[0];
+    return /\.html?$/i.test(decodeSidebarLinkTarget(pathPart));
+}
+
 async function renderThreadEntryContent(
     container: HTMLDivElement,
     thread: CommentThread,
@@ -617,13 +644,23 @@ function attachSidebarCommentCardInteractions(
 
         if (link.classList.contains("internal-link")) {
             event.preventDefault();
-            const href = link.getAttribute("href") || link.getAttribute("data-href") || link.innerText;
+            const href = getSidebarRenderedLinkTarget(link);
             if (href) {
                 void host.openSidebarInternalLink(href, comment.filePath, contentWrapper);
             }
             return;
         }
 
+        const href = getSidebarRenderedLinkTarget(link);
+        if (isLocalHtmlFileLinkTarget(href)) {
+            event.preventDefault();
+            void host.openSidebarInternalLink(
+                decodeSidebarLinkTarget(href),
+                comment.filePath,
+                contentWrapper,
+                { openAsTab: true },
+            );
+        }
     });
 }
 
