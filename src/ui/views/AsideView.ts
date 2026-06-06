@@ -14,6 +14,7 @@ import {
 import type { Comment, CommentThread, ReorderPlacement } from "../../commentManager";
 import { buildCommentLocationUrl, parseIndexFileOpenUrl } from "../../core/derived/allCommentsNote";
 import {
+    buildTagGroupedRelatedFiles,
     buildThoughtTrailCommentTagsByFilePath,
     buildThoughtTrailLines,
     type ThoughtTrailFileTagLookup,
@@ -1510,7 +1511,11 @@ export default class AsideView extends ItemView {
                 isAllCommentsView
                 && selectedIndexFileFilterRootPath
                 && indexThoughtTrailTagLookup
-                && (indexThoughtTrailTagLookup(selectedIndexFileFilterRootPath) ?? []).length > 0
+                && buildTagGroupedRelatedFiles(
+                    selectedIndexFileFilterRootPath,
+                    this.getThoughtTrailVaultCandidateFilePaths(selectedIndexFileFilterRootPath),
+                    indexThoughtTrailTagLookup,
+                ).length > 0
             );
             const indexThoughtTrailUnavailableReason = isAllCommentsView
                 ? getThoughtTrailUnavailableReason(
