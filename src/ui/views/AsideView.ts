@@ -1214,7 +1214,7 @@ export default class AsideView extends ItemView {
         }
 
         const nextMode = normalizeIndexSidebarMode(state.indexSidebarMode);
-        if (nextMode && nextMode !== this.indexSidebarMode) {
+        if (nextMode && nextMode !== "list" && nextMode !== this.indexSidebarMode) {
             this.indexSidebarMode = nextMode;
             void this.plugin.logEvent("info", "index", "index.mode.changed", {
                 mode: nextMode,
