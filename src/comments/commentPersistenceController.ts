@@ -1,4 +1,4 @@
-import type { MarkdownView, Plugin, TFile, WorkspaceLeaf } from "obsidian";
+import type { CachedMetadata, MarkdownView, Plugin, TFile, WorkspaceLeaf } from "obsidian";
 import type { Comment, CommentManager, CommentThread, CommentThreadEntry } from "../commentManager";
 import { threadToComment } from "../commentManager";
 import { getPageCommentLabel } from "../core/anchors/commentAnchors";
@@ -111,6 +111,32 @@ function isTFileLike(value: unknown): value is TFile {
     return typeof candidate.path === "string"
         && typeof candidate.basename === "string"
         && typeof candidate.extension === "string";
+}
+
+function collectFrontmatterTagValues(value: unknown, tags: string[]): void {
+    if (typeof value === "string") {
+        tags.push(...value.split(/[,\s]+/u).filter(Boolean));
+        return;
+    }
+
+    if (Array.isArray(value)) {
+        for (const item of value) {
+            collectFrontmatterTagValues(item, tags);
+        }
+    }
+}
+
+function collectCachedMetadataTags(cache: CachedMetadata | null): string[] {
+    if (!cache) {
+        return [];
+    }
+
+    const tags = (cache.tags ?? [])
+        .map((tag) => tag.tag)
+        .filter(Boolean);
+    collectFrontmatterTagValues(cache.frontmatter?.tags, tags);
+    collectFrontmatterTagValues(cache.frontmatter?.tag, tags);
+    return tags;
 }
 
 function getPayloadRecord(event: SideNoteSyncEvent): Record<string, unknown> | null {
@@ -2105,6 +2131,17 @@ export class CommentPersistenceController {
                 headerImageCaption: this.host.getIndexHeaderImageCaption(),
                 showResolved: this.host.shouldShowResolvedComments(),
                 hasSourceFile: (filePath: string) => isTFileLike(this.host.app.vault.getAbstractFileByPath(filePath)),
+                getSourceFileTags: (filePath: string) => {
+                    const file = this.host.app.vault.getAbstractFileByPath(filePath);
+                    if (!isTFileLike(file)) {
+                        return [];
+                    }
+
+                    const metadataCache = this.host.app.metadataCache as {
+                        getFileCache?: (metadataFile: TFile) => CachedMetadata | null;
+                    } | undefined;
+                    return collectCachedMetadataTags(metadataCache?.getFileCache?.(file) ?? null);
+                },
                 getMentionedPageLabels: (comment: Comment) => this.host.getCommentMentionedPageLabels(comment),
                 resolveWikiLinkPath: (linkPath: string, sourceFilePath: string) => {
                     const linkedFile = this.host.app.metadataCache.getFirstLinkpathDest(linkPath, sourceFilePath);

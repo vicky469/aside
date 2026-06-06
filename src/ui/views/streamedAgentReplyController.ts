@@ -23,9 +23,19 @@ type StreamedAgentReplyControllerOptions = {
     onCancelRun?: (runId: string) => void;
 };
 
+export function formatAgentProcessLogText(
+    stream: Pick<AgentRunStreamState, "processLogLines">,
+): string {
+    return (stream.processLogLines ?? [])
+        .map((line) => line.replace(/\s+/gu, " ").trim())
+        .filter((line) => line.length > 0)
+        .join("\n");
+}
+
 export class StreamedAgentReplyController {
     private cardEl: HTMLDivElement | null = null;
     private metaValueEl: HTMLSpanElement | null = null;
+    private processLogEl: HTMLDivElement | null = null;
     private contentEl: HTMLDivElement | null = null;
     private labelEl: HTMLSpanElement | null = null;
     private statusEl: HTMLSpanElement | null = null;
@@ -97,10 +107,20 @@ export class StreamedAgentReplyController {
         this.syncBorrowedFooterMeta();
         this.syncActions(actionsEl, stream);
 
+        const processLogText = formatAgentProcessLogText(stream);
+        const processLogEl = this.ensureProcessLogElement(cardEl, contentEl);
+        if (processLogEl.textContent !== processLogText) {
+            processLogEl.textContent = processLogText;
+        }
+        processLogEl.hidden = processLogText.length === 0;
+
         if (contentEl.textContent !== stream.partialText) {
             contentEl.textContent = stream.partialText;
         }
-        cardEl.classList.toggle("is-empty", stream.partialText.trim().length === 0);
+        cardEl.classList.toggle(
+            "is-empty",
+            stream.partialText.trim().length === 0 && processLogText.length === 0,
+        );
 
         this.runId = stream.runId;
         cardEl.setAttribute("data-agent-run-id", stream.runId);
@@ -119,10 +139,12 @@ export class StreamedAgentReplyController {
             this.cardEl?.classList.remove("aside-agent-stream-active", "aside-agent-stream-item", "is-empty");
             this.cardEl?.removeAttribute("data-agent-run-id");
             this.cardEl?.removeAttribute("data-agent-output-entry-id");
+            this.processLogEl?.remove();
         }
 
         this.cardEl = null;
         this.metaValueEl = null;
+        this.processLogEl = null;
         this.contentEl = null;
         this.labelEl = null;
         this.statusEl = null;
@@ -244,12 +266,14 @@ export class StreamedAgentReplyController {
                 const labelEl = persisted.querySelector(".aside-comment-author-indicator");
                 const statusEl = persisted.querySelector(".aside-agent-run-status");
                 const footerMetaEl = persisted.querySelector(".aside-thread-footer-meta");
+                const processLogEl = persisted.querySelector(".aside-agent-process-log");
                 const contentEl = persisted.querySelector(".aside-comment-content");
                 const actionsEl = persisted.querySelector(".aside-comment-actions");
                 this.metaValueEl = nodeInstanceOf(metaValueEl, HTMLSpanElement) ? metaValueEl : null;
                 this.labelEl = nodeInstanceOf(labelEl, HTMLSpanElement) ? labelEl : null;
                 this.statusEl = nodeInstanceOf(statusEl, HTMLSpanElement) ? statusEl : null;
                 this.footerMetaEl = nodeInstanceOf(footerMetaEl, HTMLDivElement) ? footerMetaEl : null;
+                this.processLogEl = nodeInstanceOf(processLogEl, HTMLDivElement) ? processLogEl : null;
                 this.contentEl = nodeInstanceOf(contentEl, HTMLDivElement) ? contentEl : null;
                 this.actionsEl = nodeInstanceOf(actionsEl, HTMLDivElement) ? actionsEl : null;
                 this.captureBorrowedCardSnapshot();
@@ -267,12 +291,14 @@ export class StreamedAgentReplyController {
                 const labelEl = existing.querySelector(".aside-agent-stream-author");
                 const statusEl = existing.querySelector(".aside-agent-run-status");
                 const footerMetaEl = existing.querySelector(".aside-thread-footer-meta");
+                const processLogEl = existing.querySelector(".aside-agent-process-log");
                 const contentEl = existing.querySelector(".aside-agent-stream-content");
                 const actionsEl = existing.querySelector(".aside-comment-actions");
                 this.metaValueEl = nodeInstanceOf(metaValueEl, HTMLSpanElement) ? metaValueEl : null;
                 this.labelEl = nodeInstanceOf(labelEl, HTMLSpanElement) ? labelEl : null;
                 this.statusEl = nodeInstanceOf(statusEl, HTMLSpanElement) ? statusEl : null;
                 this.footerMetaEl = nodeInstanceOf(footerMetaEl, HTMLDivElement) ? footerMetaEl : null;
+                this.processLogEl = nodeInstanceOf(processLogEl, HTMLDivElement) ? processLogEl : null;
                 this.contentEl = nodeInstanceOf(contentEl, HTMLDivElement) ? contentEl : null;
                 this.actionsEl = nodeInstanceOf(actionsEl, HTMLDivElement) ? actionsEl : null;
                 return existing;
@@ -290,6 +316,8 @@ export class StreamedAgentReplyController {
         headerEl.appendChild(headerMainEl);
         const actionsEl = createElement(ownerDocument, "div", "aside-comment-actions aside-agent-stream-actions");
         headerEl.appendChild(actionsEl);
+        const processLogEl = createElement(ownerDocument, "div", "aside-agent-process-log");
+        processLogEl.hidden = true;
         const contentEl = createElement(ownerDocument, "div", "aside-comment-content aside-agent-stream-content");
         const footerEl = createElement(ownerDocument, "div", "aside-thread-footer");
         const footerMetaEl = createElement(ownerDocument, "div", "aside-thread-footer-meta");
@@ -303,6 +331,7 @@ export class StreamedAgentReplyController {
         footerMetaEl.appendChild(statusEl);
         footerEl.appendChild(footerMetaEl);
         cardEl.appendChild(headerEl);
+        cardEl.appendChild(processLogEl);
         cardEl.appendChild(contentEl);
         cardEl.appendChild(footerEl);
         repliesEl.appendChild(cardEl);
@@ -312,10 +341,29 @@ export class StreamedAgentReplyController {
         this.metaValueEl = metaValueEl;
         this.labelEl = labelEl;
         this.statusEl = statusEl;
+        this.processLogEl = processLogEl;
         this.contentEl = contentEl;
         this.actionsEl = actionsEl;
         this.footerMetaEl = footerMetaEl;
         return cardEl;
+    }
+
+    private ensureProcessLogElement(cardEl: HTMLDivElement, contentEl: HTMLDivElement): HTMLDivElement {
+        if (this.processLogEl?.isConnected) {
+            return this.processLogEl;
+        }
+
+        const existing = cardEl.querySelector(".aside-agent-process-log");
+        if (nodeInstanceOf(existing, HTMLDivElement)) {
+            this.processLogEl = existing;
+            return existing;
+        }
+
+        const processLogEl = createElement(cardEl.ownerDocument, "div", "aside-agent-process-log");
+        processLogEl.hidden = true;
+        cardEl.insertBefore(processLogEl, contentEl);
+        this.processLogEl = processLogEl;
+        return processLogEl;
     }
 
     private captureBorrowedCardSnapshot(): void {
@@ -385,6 +433,8 @@ export class StreamedAgentReplyController {
         if (this.contentEl) {
             this.contentEl.replaceChildren(...this.borrowedSnapshot.contentNodes);
         }
+        this.processLogEl?.remove();
+        this.processLogEl = null;
         if (this.actionsEl) {
             this.actionsEl.className = this.borrowedSnapshot.actionsClassName;
             this.actionsEl.replaceChildren(...this.borrowedSnapshot.actionsNodes);

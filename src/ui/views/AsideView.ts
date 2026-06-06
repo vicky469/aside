@@ -6,6 +6,7 @@ import {
     TFile,
     WorkspaceLeaf,
     Platform,
+    getAllTags,
     htmlToMarkdown,
     setIcon,
     type ViewStateResult,
@@ -13,7 +14,9 @@ import {
 import type { Comment, CommentThread, ReorderPlacement } from "../../commentManager";
 import { buildCommentLocationUrl, parseIndexFileOpenUrl } from "../../core/derived/allCommentsNote";
 import {
+    buildThoughtTrailCommentTagsByFilePath,
     buildThoughtTrailLines,
+    type ThoughtTrailFileTagLookup,
 } from "../../core/derived/thoughtTrail";
 import {
     getAgentRunsForCommentThread,
@@ -127,6 +130,10 @@ import {
     type SidebarThoughtTrailOptions,
 } from "./sidebarThoughtTrailRenderer";
 import {
+    getDefaultThoughtTrailSource,
+    type SidebarThoughtTrailSource,
+} from "./sidebarThoughtTrailSource";
+import {
     mergeCurrentFileThreadsForThoughtTrail,
     resolveModeWithThoughtTrailAvailability,
 } from "./sidebarThoughtTrailState";
@@ -172,15 +179,44 @@ const DEFAULT_BATCH_TAG_FLOW_STATE: BatchTagFlowState = {
     failures: [],
 };
 
+interface IndexFileFilterState {
+    options: IndexFileFilterOption[];
+    firstFilePath: string | null;
+}
+
+interface IndexDefaultSidebarCacheKey {
+    filePath: string;
+    mtime: number;
+    size: number;
+    aggregateVersion: number;
+}
+
+interface IndexDefaultSidebarCache {
+    key: IndexDefaultSidebarCacheKey;
+    indexFileFilterState: IndexFileFilterState;
+    indexedThreadCount: number;
+}
+
+function indexDefaultSidebarCacheKeysMatch(
+    left: IndexDefaultSidebarCacheKey,
+    right: IndexDefaultSidebarCacheKey,
+): boolean {
+    return left.filePath === right.filePath
+        && left.mtime === right.mtime
+        && left.size === right.size
+        && left.aggregateVersion === right.aggregateVersion;
+}
+
 function getThoughtTrailUnavailableReason(
     hasRootScope: boolean,
     lineCount: number,
+    hasTagSource: boolean = false,
 ): "no-root-scope" | "no-renderable-lines" | null {
     if (!hasRootScope) {
         return "no-root-scope";
     }
 
-    return lineCount > 0 ? null : "no-renderable-lines";
+    return lineCount > 0 || hasTagSource ? null : "no-renderable-lines";
 }
 
 function summarizeThoughtTrailPaths(paths: readonly string[]): {
@@ -350,8 +386,10 @@ export default class AsideView extends ItemView {
     private pinnedSidebarStateByFilePath: Record<string, PinnedSidebarFileState> = {};
     private pinnedSidebarFilePath: string | null = null;
     private selectedIndexFileFilterRootPath: string | null = null;
-    private indexFileFilterAutoSelectSuppressed = false;
+    private indexFileFilterAutoSelectSuppressed = true;
     private indexFileFilterGraph: IndexFileFilterGraph | null = null;
+    private indexDefaultSidebarCache: IndexDefaultSidebarCache | null = null;
+    private thoughtTrailSource: SidebarThoughtTrailSource = getDefaultThoughtTrailSource();
     private reorderDragState: SidebarReorderDragState | null = null;
     private reorderDragSourceEl: HTMLElement | null = null;
     private reorderDropIndicatorEl: HTMLElement | null = null;
@@ -470,6 +508,7 @@ export default class AsideView extends ItemView {
             this.noteSidebarSearchQuery = "";
             this.noteSidebarSearchInputValue = "";
             this.indexSidebarSearchQuery = "";
+            this.thoughtTrailSource = getDefaultThoughtTrailSource();
         }
         this.file = nextFile;
         if (currentFilePath !== nextFilePath) {
@@ -1237,6 +1276,7 @@ export default class AsideView extends ItemView {
         const nextRootPath = resolveIndexFileFilterRootPathFromState(state);
         if (nextRootPath !== undefined && nextRootPath !== this.selectedIndexFileFilterRootPath) {
             this.selectedIndexFileFilterRootPath = nextRootPath;
+            this.indexFileFilterAutoSelectSuppressed = nextRootPath === null;
             void this.plugin.logEvent("info", "index", "index.filter.changed", {
                 rootFilePath: nextRootPath,
                 source: "view-state",
@@ -1361,8 +1401,11 @@ export default class AsideView extends ItemView {
                     return;
                 }
             }
+            let indexDefaultSidebarCache: IndexDefaultSidebarCache | null = null;
             const indexFileFilterState = isAllCommentsView
-                ? await this.buildIndexFileFilterStateFromIndexNote(file)
+                ? this.selectedIndexFileFilterRootPath
+                    ? await this.buildIndexFileFilterStateFromIndexNote(file)
+                    : (indexDefaultSidebarCache = await this.getIndexDefaultSidebarCache(file)).indexFileFilterState
                 : {
                     options: [] as IndexFileFilterOption[],
                     firstFilePath: null,
@@ -1379,7 +1422,7 @@ export default class AsideView extends ItemView {
                 : null;
             let selectedIndexSourceFile: TFile | null = null;
             if (isAllCommentsView && selectedIndexFileFilterRootPath !== this.selectedIndexFileFilterRootPath) {
-                    this.selectedIndexFileFilterRootPath = selectedIndexFileFilterRootPath;
+                this.selectedIndexFileFilterRootPath = selectedIndexFileFilterRootPath;
                 this.plugin.syncIndexPreviewFileScope(file.path);
             }
 
@@ -1391,26 +1434,10 @@ export default class AsideView extends ItemView {
                         await this.plugin.loadCommentsForFile(sourceFile);
                     }
                 } else {
-                    selectedIndexFileFilterRootPath = resolveAutoIndexFileFilterRootPath({
-                        currentRootPath: null,
-                        firstIndexFilePath: indexFileFilterState.firstFilePath,
-                        autoSelectSuppressed: this.indexFileFilterAutoSelectSuppressed,
-                    });
-                            this.selectedIndexFileFilterRootPath = selectedIndexFileFilterRootPath;
+                    selectedIndexFileFilterRootPath = null;
+                    this.selectedIndexFileFilterRootPath = null;
+                    this.indexFileFilterAutoSelectSuppressed = true;
                     this.plugin.syncIndexPreviewFileScope(file.path);
-                    if (selectedIndexFileFilterRootPath) {
-                        const fallbackSourceFile = this.app.vault.getAbstractFileByPath(selectedIndexFileFilterRootPath);
-                        if (fallbackSourceFile instanceof TFile) {
-                            selectedIndexSourceFile = fallbackSourceFile;
-                            if (!options.skipDataRefresh) {
-                                await this.plugin.loadCommentsForFile(fallbackSourceFile);
-                            }
-                        } else {
-                                            this.selectedIndexFileFilterRootPath = null;
-                            selectedIndexFileFilterRootPath = null;
-                            this.plugin.syncIndexPreviewFileScope(file.path);
-                        }
-                    }
                 }
             }
 
@@ -1421,6 +1448,15 @@ export default class AsideView extends ItemView {
                 await this.plugin.loadCommentsForFile(file);
             }
             if (renderVersion !== this.renderVersion || this.file?.path !== file.path) {
+                return;
+            }
+
+            if (
+                isAllCommentsView
+                && indexDefaultSidebarCache
+                && this.canRenderCachedIndexDefaultSidebar(file, selectedIndexFileFilterRootPath)
+            ) {
+                this.renderCachedIndexDefaultSidebar(file, indexDefaultSidebarCache);
                 return;
             }
 
@@ -1509,8 +1545,22 @@ export default class AsideView extends ItemView {
                     resolveWikiLinkPath,
                 }).length
                 : 0;
+            const hasIndexThoughtTrailRootScope = isAllCommentsView && !!selectedIndexFileFilterRootPath;
+            const indexThoughtTrailTagLookup = isAllCommentsView
+                ? this.buildThoughtTrailTagLookup(null, persistedThreads)
+                : null;
+            const hasIndexThoughtTrailTagSource = !!(
+                isAllCommentsView
+                && selectedIndexFileFilterRootPath
+                && indexThoughtTrailTagLookup
+                && (indexThoughtTrailTagLookup(selectedIndexFileFilterRootPath) ?? []).length > 0
+            );
             const indexThoughtTrailUnavailableReason = isAllCommentsView
-                ? getThoughtTrailUnavailableReason(filteredIndexFilePaths.length > 0, indexThoughtTrailLineCount)
+                ? getThoughtTrailUnavailableReason(
+                    hasIndexThoughtTrailRootScope,
+                    indexThoughtTrailLineCount,
+                    hasIndexThoughtTrailTagSource,
+                )
                 : null;
             const isIndexThoughtTrailEnabled = isAllCommentsView && indexThoughtTrailUnavailableReason === null;
             if (isAllCommentsView) {
@@ -1713,9 +1763,12 @@ export default class AsideView extends ItemView {
                 });
                 await this.renderThoughtTrail(commentsContainer, trailComments, file, {
                     surface: "index",
-                    hasRootScope: filteredIndexFilePaths.length > 0,
+                    hasRootScope: hasIndexThoughtTrailRootScope,
                     rootFilePath: selectedIndexFileFilterRootPath,
-                    candidateFilePaths: filteredIndexFilePaths,
+                    candidateFilePaths: this.getThoughtTrailVaultCandidateFilePaths(selectedIndexFileFilterRootPath),
+                    source: this.resolveThoughtTrailSource(selectedIndexFileFilterRootPath, indexThoughtTrailTagLookup ?? (() => [])),
+                    onSourceChange: (source) => this.setThoughtTrailSource(source),
+                    getTagsForFilePath: indexThoughtTrailTagLookup ?? (() => []),
                 });
                 if (this.plugin.isLocalRuntime()) {
                     renderSupportButton(this.containerEl, this.plugin, {
@@ -2050,9 +2103,13 @@ export default class AsideView extends ItemView {
             allCommentsNotePath: this.plugin.getAllCommentsNotePath(),
             resolveWikiLinkPath: (linkPath, sourceFilePath) => this.resolveThoughtTrailWikiLinkPath(linkPath, sourceFilePath),
         }).length;
+        const thoughtTrailTagLookup = this.buildThoughtTrailTagLookup(file.path, persistedThreads);
+        const hasThoughtTrailTagSource = (thoughtTrailTagLookup(file.path) ?? []).length > 0;
+        const hasThoughtTrailRootScope = scopedFilePaths.length > 0 || hasThoughtTrailTagSource;
         const thoughtTrailUnavailableReason = getThoughtTrailUnavailableReason(
-            scopedFilePaths.length > 0,
+            hasThoughtTrailRootScope,
             thoughtTrailLineCount,
+            hasThoughtTrailTagSource,
         );
         const isThoughtTrailEnabled = thoughtTrailUnavailableReason === null;
         const scopedFileSummary = summarizeThoughtTrailPaths(scopedFilePaths);
@@ -2126,9 +2183,12 @@ export default class AsideView extends ItemView {
         });
         await this.renderThoughtTrail(shell.commentsBodyEl, scopedThreads, file, {
             surface: "note",
-            hasRootScope: scopedFilePaths.length > 0,
+            hasRootScope: hasThoughtTrailRootScope,
             rootFilePath: file.path,
-            candidateFilePaths: scopedFilePaths,
+            candidateFilePaths: this.getThoughtTrailVaultCandidateFilePaths(file.path),
+            source: this.resolveThoughtTrailSource(file.path, thoughtTrailTagLookup),
+            onSourceChange: (source) => this.setThoughtTrailSource(source),
+            getTagsForFilePath: thoughtTrailTagLookup,
         });
 
         shell.supportSlotEl.empty();
@@ -2164,6 +2224,85 @@ export default class AsideView extends ItemView {
         });
     }
 
+    private getThoughtTrailVaultCandidateFilePaths(rootFilePath: string | null): string[] {
+        const allCommentsNotePath = this.plugin.getAllCommentsNotePath();
+        return this.app.vault
+            .getMarkdownFiles()
+            .map((file) => file.path)
+            .filter((filePath) =>
+                filePath !== allCommentsNotePath
+                && (!rootFilePath || filePath !== rootFilePath)
+            )
+            .sort((left, right) => left.localeCompare(right));
+    }
+
+    private buildThoughtTrailTagLookup(
+        currentFilePath: string | null,
+        currentFileThreads: CommentThread[],
+    ): ThoughtTrailFileTagLookup {
+        const indexedThreads = currentFilePath
+            ? mergeCurrentFileThreadsForThoughtTrail(
+                this.plugin.getAllIndexedThreads(),
+                currentFilePath,
+                currentFileThreads,
+            )
+            : this.plugin.getAllIndexedThreads();
+        const sideNoteTagsByFilePath = buildThoughtTrailCommentTagsByFilePath(indexedThreads);
+
+        return (filePath: string): readonly string[] => {
+            const tagsByKey = new Map<string, string>();
+            const addTag = (rawTag: string): void => {
+                const tag = normalizeTagText(rawTag);
+                if (!tag) {
+                    return;
+                }
+
+                const key = tag.slice(1).toLowerCase();
+                if (key && !tagsByKey.has(key)) {
+                    tagsByKey.set(key, tag);
+                }
+            };
+
+            const file = this.app.vault.getAbstractFileByPath(filePath);
+            if (file instanceof TFile) {
+                const cache = this.app.metadataCache.getFileCache(file);
+                if (cache) {
+                    for (const rawTag of getAllTags(cache) ?? []) {
+                        addTag(rawTag);
+                    }
+                }
+            }
+
+            for (const rawTag of sideNoteTagsByFilePath.get(filePath) ?? []) {
+                addTag(rawTag);
+            }
+
+            return Array.from(tagsByKey.entries())
+                .sort(([left], [right]) => left.localeCompare(right))
+                .map(([, tag]) => tag);
+        };
+    }
+
+    private resolveThoughtTrailSource(
+        rootFilePath: string | null,
+        getTagsForFilePath: ThoughtTrailFileTagLookup,
+    ): SidebarThoughtTrailSource {
+        if (this.thoughtTrailSource === "tags" && (!rootFilePath || !(getTagsForFilePath(rootFilePath) ?? []).length)) {
+            this.thoughtTrailSource = getDefaultThoughtTrailSource();
+        }
+
+        return this.thoughtTrailSource;
+    }
+
+    private setThoughtTrailSource(source: SidebarThoughtTrailSource): void {
+        if (this.thoughtTrailSource === source) {
+            return;
+        }
+
+        this.thoughtTrailSource = source;
+        void this.renderComments({ skipDataRefresh: true });
+    }
+
     private buildNoteThoughtTrailAvailabilityFromLoadedThreads(
         file: TFile,
         currentFileThreads: CommentThread[],
@@ -2192,7 +2331,14 @@ export default class AsideView extends ItemView {
             allCommentsNotePath: this.plugin.getAllCommentsNotePath(),
             resolveWikiLinkPath: (linkPath, sourceFilePath) => this.resolveThoughtTrailWikiLinkPath(linkPath, sourceFilePath),
         }).length;
-        const unavailableReason = getThoughtTrailUnavailableReason(scope.scopedFilePaths.length > 0, lineCount);
+        const thoughtTrailTagLookup = this.buildThoughtTrailTagLookup(file.path, currentFileThreads);
+        const hasThoughtTrailTagSource = (thoughtTrailTagLookup(file.path) ?? []).length > 0;
+        const hasThoughtTrailRootScope = scope.scopedFilePaths.length > 0 || hasThoughtTrailTagSource;
+        const unavailableReason = getThoughtTrailUnavailableReason(
+            hasThoughtTrailRootScope,
+            lineCount,
+            hasThoughtTrailTagSource,
+        );
 
         return {
             currentVisibleThreadCount: currentFileThreads.length,
@@ -3155,6 +3301,7 @@ export default class AsideView extends ItemView {
             modeRow.addClass("is-note-primary-row");
             this.renderPrimarySidebarModeControl(modeRow, {
                 mode: this.indexSidebarMode,
+                surface: "index",
                 isTagsEnabled: options.isTagsEnabled,
                 isThoughtTrailEnabled: options.isThoughtTrailEnabled,
                 groupCounts: sidebarThreadGroupCounts,
@@ -3191,6 +3338,7 @@ export default class AsideView extends ItemView {
             modeRow.addClass("is-note-primary-row");
             this.renderPrimarySidebarModeControl(modeRow, {
                 mode: this.noteSidebarMode,
+                surface: "note",
                 isTagsEnabled: options.isTagsEnabled,
                 isThoughtTrailEnabled: options.isThoughtTrailEnabled,
                 groupCounts: sidebarThreadGroupCounts,
@@ -3540,6 +3688,7 @@ export default class AsideView extends ItemView {
         container: HTMLElement,
         options: {
             mode: SidebarPrimaryMode;
+            surface: SidebarModeControlOptions["surface"];
             isTagsEnabled: boolean;
             isThoughtTrailEnabled: boolean;
             groupCounts: SidebarThreadGroupCounts;
@@ -3554,6 +3703,7 @@ export default class AsideView extends ItemView {
         };
         this.renderSidebarModeControl(container, {
             mode: options.mode,
+            surface: options.surface,
             ...availability,
             pinnedSidebarFileAction: this.getPinnedSidebarFileAction(),
             onChange: (mode) => {
@@ -3590,10 +3740,90 @@ export default class AsideView extends ItemView {
         }, this.toolbarActionGuard);
     }
 
-    private async buildIndexFileFilterStateFromIndexNote(file: TFile): Promise<{
-        options: IndexFileFilterOption[];
-        firstFilePath: string | null;
-    }> {
+    private getIndexDefaultSidebarCacheKey(file: TFile): IndexDefaultSidebarCacheKey {
+        return {
+            filePath: file.path,
+            mtime: file.stat.mtime,
+            size: file.stat.size,
+            aggregateVersion: this.plugin.getIndexedCommentVersion(),
+        };
+    }
+
+    private async getIndexDefaultSidebarCache(file: TFile): Promise<IndexDefaultSidebarCache> {
+        const key = this.getIndexDefaultSidebarCacheKey(file);
+        if (this.indexDefaultSidebarCache && indexDefaultSidebarCacheKeysMatch(this.indexDefaultSidebarCache.key, key)) {
+            return this.indexDefaultSidebarCache;
+        }
+
+        const indexFileFilterState = await this.buildIndexFileFilterStateFromIndexNote(file);
+        const cache: IndexDefaultSidebarCache = {
+            key,
+            indexFileFilterState,
+            indexedThreadCount: this.plugin.getIndexedThreadCount(),
+        };
+        this.indexDefaultSidebarCache = cache;
+        return cache;
+    }
+
+    private canRenderCachedIndexDefaultSidebar(file: TFile, selectedRootFilePath: string | null): boolean {
+        return !selectedRootFilePath
+            && this.indexSidebarMode === "list"
+            && !this.indexSidebarSearchQuery.trim()
+            && !this.noteSidebarVisibleTagFilterKey
+            && !this.plugin.getDraftForView(file.path);
+    }
+
+    private renderCachedIndexDefaultSidebar(file: TFile, cache: IndexDefaultSidebarCache): void {
+        this.indexFileFilterGraph = null;
+        this.noteSidebarTagIndex = null;
+        this.containerEl.empty();
+        this.syncViewContainerClasses();
+
+        const commentsContainer = this.containerEl.createDiv("aside-comments-container");
+        this.renderSidebarToolbar(commentsContainer, {
+            isAllCommentsView: true,
+            resolvedCount: 0,
+            hasResolvedComments: false,
+            hasDeletedComments: false,
+            deletedCommentCount: 0,
+            showDeletedComments: false,
+            hasNestedComments: false,
+            isAgentMode: false,
+            agentOutcomeCounts: {
+                succeeded: 0,
+                failed: 0,
+            },
+            isTagsEnabled: false,
+            isThoughtTrailEnabled: false,
+            sidebarThreadGroupCounts: EMPTY_SIDEBAR_THREAD_GROUP_COUNTS,
+            noteSidebarContentFilter: "all",
+            noteSidebarMode: this.noteSidebarMode,
+            addPageCommentAction: null,
+            indexFileFilterOptions: cache.indexFileFilterState.options,
+            selectedIndexFileFilterRootPath: null,
+            filteredIndexFilePaths: [],
+        });
+
+        const commentsBody = this.renderCommentsList(commentsContainer);
+        this.renderIndexSidebarEmptyState(commentsBody, {
+            renderedItemCount: 0,
+            showResolved: this.plugin.shouldShowResolvedComments(),
+            totalScopedCount: 0,
+            resolvedCount: 0,
+            filteredIndexFilePaths: [],
+            searchQuery: "",
+        });
+
+        if (this.plugin.isLocalRuntime()) {
+            renderSupportButton(this.containerEl, this.plugin, {
+                filePath: file.path,
+                isAllCommentsView: true,
+                threadCount: cache.indexedThreadCount,
+            });
+        }
+    }
+
+    private async buildIndexFileFilterStateFromIndexNote(file: TFile): Promise<IndexFileFilterState> {
         const commentCounts = new Map<string, number>();
         let firstFilePath: string | null = null;
         const decodeHtmlAttributeValue = (value: string): string => {

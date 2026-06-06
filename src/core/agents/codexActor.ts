@@ -5,7 +5,7 @@ export const CODEX_AGENT_ACTOR: AgentActorDefinition = {
     label: "Codex",
     directive: "@codex",
     supported: true,
-    runtimeStrategy: "codex-app-server",
+    runtimeStrategy: "codex-cli",
     unsupportedNotice: null,
     settingsDescription: "Type @codex in a comment to have Codex read it and answer questions or do the task.",
 };

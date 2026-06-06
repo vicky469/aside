@@ -95,6 +95,7 @@ const AGENT_STATUS_CANCELLED = "Cancelled";
 const LOCAL_MAX_CONCURRENT_RUNS = 3;
 const BUILT_IN_ASIDE_SKILL_NAME = "aside";
 const BUILT_IN_ASIDE_SKILL_MODE = "write";
+const MAX_AGENT_PROCESS_LOG_LINES = 80;
 const UTF8_ENCODER = new TextEncoder();
 
 interface ActiveRunExecution {
@@ -114,6 +115,27 @@ function summarizeError(error: unknown): string {
 
 function getTimerWindow(): Window | null {
     return typeof window === "undefined" ? null : window;
+}
+
+function normalizeAgentProcessLogLine(value: string): string | null {
+    const normalized = value.replace(/\s+/gu, " ").trim();
+    return normalized || null;
+}
+
+function appendAgentProcessLogLine(
+    existingLines: readonly string[] | undefined,
+    value: string,
+): string[] {
+    const normalized = normalizeAgentProcessLogLine(value);
+    if (!normalized) {
+        return existingLines ? [...existingLines] : [];
+    }
+
+    const lines = existingLines ? [...existingLines] : [];
+    if (lines.at(-1) !== normalized) {
+        lines.push(normalized);
+    }
+    return lines.slice(-MAX_AGENT_PROCESS_LOG_LINES);
 }
 
 type AgentStreamListener = (update: AgentStreamUpdate) => void;
@@ -376,6 +398,7 @@ export class CommentAgentController {
             this.setRunStream(this.buildRunStreamState(cancelledRun, {
                 status: "cancelled",
                 statusText: AGENT_STATUS_CANCELLED,
+                processLogLines: existingStream?.processLogLines,
                 partialText,
                 startedAt: cancelledRun.startedAt ?? run.createdAt,
                 updatedAt: cancelledRun.endedAt ?? this.host.now(),
@@ -587,6 +610,7 @@ export class CommentAgentController {
         if (failedRun) {
             this.setRunStream(this.buildRunStreamState(failedRun, {
                 status: "failed",
+                processLogLines: existingStream?.processLogLines,
                 partialText: failureText,
                 startedAt: failedRun.startedAt ?? run.createdAt,
                 updatedAt: failedRun.endedAt ?? this.host.now(),
@@ -639,15 +663,21 @@ export class CommentAgentController {
                     return;
                 }
 
+                const currentStream = this.runStreams.get(options.run.id);
+                const processLogLines = appendAgentProcessLogLine(
+                    currentStream?.processLogLines,
+                    normalizedProgressText,
+                );
                 this.updateRunStream(
                     options.run.id,
                     this.buildRunStreamState({
                         ...options.run,
-                        ...mergeAgentRunMetadata(options.run, this.runStreams.get(options.run.id) ?? {}),
+                        ...mergeAgentRunMetadata(options.run, currentStream ?? {}),
                     }, {
                         status: "running",
                         statusHintText: normalizedProgressText,
-                        partialText: this.runStreams.get(options.run.id)?.partialText ?? "",
+                        processLogLines,
+                        partialText: currentStream?.partialText ?? "",
                         startedAt: options.startedAt,
                         updatedAt: this.host.now(),
                         outputEntryId: options.outputEntryId,
@@ -666,6 +696,7 @@ export class CommentAgentController {
                         ...mergeAgentRunMetadata(options.run, this.runStreams.get(options.run.id) ?? {}),
                     }, {
                         status: "running",
+                        processLogLines: this.runStreams.get(options.run.id)?.processLogLines,
                         partialText,
                         startedAt: options.startedAt,
                         updatedAt: this.host.now(),
@@ -688,6 +719,7 @@ export class CommentAgentController {
                     }, {
                         status: "running",
                         statusHintText: currentStream?.statusHintText,
+                        processLogLines: currentStream?.processLogLines,
                         partialText: currentStream?.partialText ?? "",
                         startedAt: options.startedAt,
                         updatedAt: this.host.now(),
@@ -736,6 +768,7 @@ export class CommentAgentController {
             ...mergeAgentRunMetadata(options.run, this.runStreams.get(options.run.id) ?? {}),
         }, {
             status: "running",
+            processLogLines: this.runStreams.get(options.run.id)?.processLogLines,
             partialText: replyText,
             startedAt: options.startedAt,
             updatedAt: timestamp,
@@ -766,6 +799,7 @@ export class CommentAgentController {
         }
         this.setRunStream(this.buildRunStreamState(completedRun, {
             status: "succeeded",
+            processLogLines: this.runStreams.get(options.run.id)?.processLogLines,
             partialText: replyText,
             startedAt: options.startedAt,
             updatedAt: timestamp,
@@ -927,6 +961,7 @@ export class CommentAgentController {
             status: AgentRunRecord["status"];
             statusText?: string;
             statusHintText?: string;
+            processLogLines?: string[];
             partialText: string;
             startedAt: number;
             updatedAt: number;
@@ -943,6 +978,7 @@ export class CommentAgentController {
             status: options.status,
             statusText: options.statusText,
             statusHintText: options.statusHintText,
+            processLogLines: options.processLogLines ? [...options.processLogLines] : undefined,
             partialText: options.partialText,
             startedAt: options.startedAt,
             updatedAt: options.updatedAt,
@@ -983,6 +1019,7 @@ export class CommentAgentController {
             && previous.status === nextStream.status
             && previous.statusText === nextStream.statusText
             && previous.statusHintText === nextStream.statusHintText
+            && JSON.stringify(previous.processLogLines ?? []) === JSON.stringify(nextStream.processLogLines ?? [])
             && previous.error === nextStream.error
             && previous.outputEntryId === nextStream.outputEntryId
             && JSON.stringify(previous.usedSkills ?? []) === JSON.stringify(nextStream.usedSkills ?? [])
@@ -994,6 +1031,7 @@ export class CommentAgentController {
                 updatedAt: nextStream.updatedAt,
                 statusText: nextStream.statusText,
                 statusHintText: nextStream.statusHintText,
+                processLogLines: nextStream.processLogLines ? [...nextStream.processLogLines] : undefined,
             });
             return;
         }

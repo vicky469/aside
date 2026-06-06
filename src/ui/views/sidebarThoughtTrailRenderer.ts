@@ -8,13 +8,17 @@ import {
 } from "obsidian";
 import type { Comment, CommentThread } from "../../commentManager";
 import {
+    buildTagGroupedRelatedFiles,
     buildThoughtTrailLines,
     extractThoughtTrailMermaidSource,
     getThoughtTrailMermaidRenderConfig,
+    type TagRelatedFileGroup,
+    type ThoughtTrailFileTagLookup,
 } from "../../core/derived/thoughtTrail";
 import { resolveMermaidRuntime } from "./mermaidRuntime";
 import { extractThoughtTrailClickTargets, parseThoughtTrailOpenFilePath, resolveThoughtTrailNodeId } from "./thoughtTrailNodeLinks";
 import { parseTrustedMermaidSvg } from "./thoughtTrailSvg";
+import type { SidebarThoughtTrailSource } from "./sidebarThoughtTrailSource";
 import { nodeInstanceOf } from "../domGuards";
 
 export interface SidebarThoughtTrailRenderContext {
@@ -30,6 +34,9 @@ export interface SidebarThoughtTrailOptions {
     hasRootScope: boolean;
     rootFilePath: string | null;
     candidateFilePaths: readonly string[];
+    source: SidebarThoughtTrailSource;
+    onSourceChange(source: SidebarThoughtTrailSource): void;
+    getTagsForFilePath: ThoughtTrailFileTagLookup;
 }
 
 function cloneMermaidConfig<T>(config: T): T {
@@ -47,16 +54,76 @@ function extractDirectRenderMermaidSource(lines: string[]): string {
         .join("\n");
 }
 
-function renderThoughtTrailSourceControl(container: HTMLElement): void {
+function renderThoughtTrailSourceControl(
+    container: HTMLElement,
+    options: {
+        source: SidebarThoughtTrailSource;
+        radioGroupName: string;
+        onSourceChange(source: SidebarThoughtTrailSource): void;
+    },
+): void {
     const controlEl = container.createDiv("aside-thought-trail-source-control");
     controlEl.createSpan({
         cls: "aside-thought-trail-source-label",
         text: "Related Files By",
     });
+    const sourceOptionsEl = controlEl.createDiv("aside-thought-trail-source-options");
+    for (const source of ["wikilinks", "tags"] as const) {
+        const labelEl = sourceOptionsEl.createEl("label", {
+            cls: "aside-thought-trail-source-option",
+        });
+        const inputEl = labelEl.createEl("input", {
+            type: "radio",
+            attr: {
+                name: options.radioGroupName,
+                value: source,
+            },
+        });
+        inputEl.checked = options.source === source;
+        inputEl.addEventListener("change", () => {
+            if (inputEl.checked) {
+                options.onSourceChange(source);
+            }
+        });
+        labelEl.createSpan({
+            text: source === "wikilinks" ? "Wikilinks" : "Tags",
+        });
+    }
     controlEl.createSpan({
-        cls: "aside-thought-trail-source-value",
-        text: "Wikilinks",
+        cls: "aside-thought-trail-scope-note",
+        text: "Scope: Vault",
     });
+}
+
+function renderTagRelatedFilesList(
+    container: HTMLDivElement,
+    groups: TagRelatedFileGroup[],
+    context: SidebarThoughtTrailRenderContext,
+): void {
+    const listEl = container.createDiv("aside-tag-related-files");
+    for (const group of groups) {
+        const groupEl = listEl.createDiv("aside-tag-related-files-group");
+        groupEl.createDiv({ cls: "aside-tag-related-files-tag-header", text: group.tagDisplay });
+        const filesEl = groupEl.createDiv("aside-tag-related-files-list");
+        for (const filePath of group.filePaths) {
+            const label = filePath.replace(/\.md$/i, "").split("/").pop() ?? filePath;
+            const btn = filesEl.createEl("button", { cls: "aside-tag-related-file-item", text: label });
+            btn.title = filePath;
+            btn.addEventListener("click", () => {
+                const url = `obsidian://open?vault=${encodeURIComponent(context.app.vault.getName())}&file=${encodeURIComponent(filePath)}`;
+                void openThoughtTrailTarget(url, context);
+            });
+        }
+    }
+}
+
+function getTagSourceEmptyState(options: SidebarThoughtTrailOptions): string[] {
+    const sourceTags = options.rootFilePath ? options.getTagsForFilePath(options.rootFilePath) ?? [] : [];
+    if (!sourceTags.length) {
+        return ["No tags found for this file yet."];
+    }
+
+    return ["No related files share this file's tags."];
 }
 
 export async function renderSidebarThoughtTrail(
@@ -79,14 +146,38 @@ export async function renderSidebarThoughtTrail(
     }
 
     const rootFilePath = options.rootFilePath;
-    renderThoughtTrailSourceControl(thoughtTrailEl);
+    renderThoughtTrailSourceControl(thoughtTrailEl, {
+        source: options.source,
+        radioGroupName: `aside-thought-trail-source-${context.renderVersion}-${options.surface}-${encodeURIComponent(rootFilePath)}`,
+        onSourceChange: (source) => {
+            options.onSourceChange(source);
+        },
+    });
+    if (options.source === "tags") {
+        const groups = buildTagGroupedRelatedFiles(
+            rootFilePath,
+            options.candidateFilePaths,
+            options.getTagsForFilePath,
+        );
+        const sectionEl = thoughtTrailEl.createDiv("aside-thought-trail-section");
+        if (!groups.length) {
+            const emptyStateEl = sectionEl.createDiv("aside-empty-state aside-section-empty-state");
+            for (const text of getTagSourceEmptyState(options)) {
+                emptyStateEl.createEl("p", { text });
+            }
+        } else {
+            renderTagRelatedFilesList(sectionEl, groups, context);
+        }
+        return;
+    }
+
     const relatedFileLines = buildThoughtTrailLines(context.app.vault.getName(), comments, {
-            allCommentsNotePath: context.allCommentsNotePath,
-            resolveWikiLinkPath: (linkPath, sourceFilePath) => {
-                const linkedFile = context.app.metadataCache.getFirstLinkpathDest(linkPath, sourceFilePath);
-                return linkedFile instanceof TFile ? linkedFile.path : null;
-            },
-        });
+        allCommentsNotePath: context.allCommentsNotePath,
+        resolveWikiLinkPath: (linkPath, sourceFilePath) => {
+            const linkedFile = context.app.metadataCache.getFirstLinkpathDest(linkPath, sourceFilePath);
+            return linkedFile instanceof TFile ? linkedFile.path : null;
+        },
+    });
     await renderThoughtTrailSection(thoughtTrailEl, {
         emptyStateText: options.surface === "note"
             ? [

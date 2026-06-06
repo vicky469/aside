@@ -1,6 +1,9 @@
 import * as assert from "node:assert/strict";
 import test from "node:test";
-import { StreamedAgentReplyController } from "../src/ui/views/streamedAgentReplyController";
+import {
+    formatAgentProcessLogText,
+    StreamedAgentReplyController,
+} from "../src/ui/views/streamedAgentReplyController";
 
 function createFakeNode(id: string) {
     return {
@@ -109,4 +112,17 @@ test("streamed agent reply controller hides borrowed footer actions while stream
     controller.syncBorrowedFooterMeta();
 
     assert.deepEqual(footerMetaEl.childNodes, [labelEl, statusEl]);
+});
+
+test("streamed agent reply controller formats process log separately from reply text", () => {
+    assert.equal(
+        formatAgentProcessLogText({
+            processLogLines: [
+                "Reading thread context",
+                "Running command: rg \"Codex\" src",
+            ],
+        }),
+        "Reading thread context\nRunning command: rg \"Codex\" src",
+    );
+    assert.equal(formatAgentProcessLogText({ processLogLines: [] }), "");
 });

@@ -258,6 +258,10 @@ function normalizeThoughtTrailTagKey(value: string): string | null {
     return normalized ? normalized.toLowerCase() : null;
 }
 
+function formatThoughtTrailTagDisplay(value: string): string {
+    return value.trim().replace(/^#+/, "");
+}
+
 function getNormalizedThoughtTrailTagKeys(tags: readonly string[] | null | undefined): Set<string> {
     const keys = new Set<string>();
     for (const tag of tags ?? []) {
@@ -278,6 +282,16 @@ function hasEveryTagKey(candidateKeys: Set<string>, requiredKeys: Set<string>): 
     }
 
     return true;
+}
+
+function hasAnyTagKey(candidateKeys: Set<string>, requiredKeys: Set<string>): boolean {
+    for (const requiredKey of requiredKeys) {
+        if (candidateKeys.has(requiredKey)) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 export function buildThoughtTrailCommentTagsByFilePath(
@@ -367,11 +381,70 @@ function getOrderedRoots(edgesBySourceFile: Map<string, ThoughtTrailEdge[]>): st
     return orderedRoots;
 }
 
+export interface TagRelatedFileGroup {
+    tagDisplay: string;
+    tagKey: string;
+    filePaths: string[];
+}
+
+export function buildTagGroupedRelatedFiles(
+    sourceFilePath: string,
+    candidateFilePaths: readonly string[],
+    getTagsForFilePath: ThoughtTrailFileTagLookup,
+): TagRelatedFileGroup[] {
+    const normalizedSourcePath = normalizeNotePath(sourceFilePath);
+    const sourceTagsByKey = new Map<string, string>();
+    for (const tag of getTagsForFilePath(normalizedSourcePath) ?? []) {
+        const key = normalizeThoughtTrailTagKey(tag);
+        if (key) {
+            sourceTagsByKey.set(key, tag);
+        }
+    }
+    if (!sourceTagsByKey.size) {
+        return [];
+    }
+
+    const filePathsByTagKey = new Map<string, string[]>();
+    const seenFilePaths = new Set<string>();
+
+    for (const candidateFilePath of candidateFilePaths) {
+        const normalizedCandidate = normalizeNotePath(candidateFilePath);
+        if (!normalizedCandidate || normalizedCandidate === normalizedSourcePath || seenFilePaths.has(normalizedCandidate)) {
+            continue;
+        }
+        seenFilePaths.add(normalizedCandidate);
+
+        const candidateTagKeys = getNormalizedThoughtTrailTagKeys(getTagsForFilePath(normalizedCandidate));
+        for (const tagKey of sourceTagsByKey.keys()) {
+            if (candidateTagKeys.has(tagKey)) {
+                const existing = filePathsByTagKey.get(tagKey);
+                if (existing) {
+                    existing.push(normalizedCandidate);
+                } else {
+                    filePathsByTagKey.set(tagKey, [normalizedCandidate]);
+                }
+            }
+        }
+    }
+
+    return Array.from(filePathsByTagKey.entries())
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([tagKey, filePaths]) => ({
+            tagDisplay: formatThoughtTrailTagDisplay(sourceTagsByKey.get(tagKey) ?? tagKey),
+            tagKey,
+            filePaths: filePaths.sort((a, b) => a.localeCompare(b)),
+        }));
+}
+
 export function buildTagRelatedFileLines(
     vaultName: string,
     sourceFilePath: string,
     candidateFilePaths: readonly string[],
     getTagsForFilePath: ThoughtTrailFileTagLookup,
+    options: {
+        layout?: "default" | "vertical";
+        matchMode?: "all" | "any";
+    } = {},
 ): string[] {
     const normalizedSourcePath = normalizeNotePath(sourceFilePath);
     const sourceTagKeys = getNormalizedThoughtTrailTagKeys(getTagsForFilePath(normalizedSourcePath));
@@ -393,7 +466,10 @@ export function buildTagRelatedFileLines(
 
         seenFilePaths.add(normalizedCandidatePath);
         const candidateTagKeys = getNormalizedThoughtTrailTagKeys(getTagsForFilePath(normalizedCandidatePath));
-        if (hasEveryTagKey(candidateTagKeys, sourceTagKeys)) {
+        const isMatch = options.matchMode === "any"
+            ? hasAnyTagKey(candidateTagKeys, sourceTagKeys)
+            : hasEveryTagKey(candidateTagKeys, sourceTagKeys);
+        if (isMatch) {
             matchedFilePaths.push(normalizedCandidatePath);
         }
     }
@@ -405,6 +481,7 @@ export function buildTagRelatedFileLines(
     const nodeLabelByFilePath = buildCompactNodeLabels([normalizedSourcePath, ...matchedFilePaths]);
     const nodeLines: string[] = [];
     const edgeLines: string[] = [];
+    const layoutHintLines: string[] = [];
     const clickLines: string[] = [];
     const nodeIds = new Map<string, string>();
 
@@ -425,9 +502,17 @@ export function buildTagRelatedFileLines(
     };
 
     const sourceId = ensureNode(normalizedSourcePath);
+    const targetIds: string[] = [];
     for (const matchedFilePath of matchedFilePaths) {
         const targetId = ensureNode(matchedFilePath);
+        targetIds.push(targetId);
         edgeLines.push(`    ${sourceId} --> ${targetId}`);
+    }
+    if (options.layout === "vertical" && targetIds.length > 1) {
+        // Invisible edges keep a one-level tag fanout stacked without changing the visible graph meaning.
+        for (let index = 0; index < targetIds.length - 1; index += 1) {
+            layoutHintLines.push(`    ${targetIds[index]} ~~~ ${targetIds[index + 1]}`);
+        }
     }
 
     return [
@@ -436,6 +521,7 @@ export function buildTagRelatedFileLines(
         "flowchart TD",
         ...nodeLines,
         ...edgeLines,
+        ...layoutHintLines,
         ...clickLines,
         "```",
     ];

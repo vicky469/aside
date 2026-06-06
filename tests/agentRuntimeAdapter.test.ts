@@ -1,6 +1,7 @@
 import * as assert from "node:assert/strict";
 import test from "node:test";
 import {
+    buildCodexCliArgs,
     buildClaudeCliArgs,
     extractClaudeProgressTextFromJsonEvent,
     extractClaudeReplyTextFromJsonEvent,
@@ -242,6 +243,23 @@ test("buildClaudeCliArgs includes verbose for print stream-json output", () => {
     );
 });
 
+test("buildCodexCliArgs uses one-shot exec instead of app-server", () => {
+    const args = buildCodexCliArgs({
+        cwd: "/vault/project",
+        vaultRootPath: "/vault",
+    });
+
+    assert.equal(args.includes("app-server"), false);
+    assert.equal(args.includes("--listen"), false);
+    assert.equal(args.includes("-a"), false);
+    assert.equal(args.includes("--ask-for-approval"), false);
+    assert.deepEqual(args.slice(0, 2), ["exec", "--json"]);
+    assert.equal(args.at(-1), "-");
+    const addDirIndex = args.indexOf("--add-dir");
+    assert.notEqual(addDirIndex, -1);
+    assert.equal(args[addDirIndex + 1], "/vault");
+});
+
 test("extractCodexTextDeltaFromJsonEvent reads assistant deltas from exec json events", () => {
     assert.equal(
         extractCodexTextDeltaFromJsonEvent({
@@ -440,6 +458,25 @@ test("extractCodexProgressTextFromJsonEvent reads reasoning summaries and plan u
             },
         }),
         "Draft the reply",
+    );
+    assert.equal(
+        extractCodexProgressTextFromJsonEvent({
+            type: "exec_command_begin",
+            cmd: "npm test",
+        }),
+        "Running command: npm test",
+    );
+    assert.equal(
+        extractCodexProgressTextFromJsonEvent({
+            method: "item/toolCall/begin",
+            params: {
+                item: {
+                    type: "mcpToolCall",
+                    tool: "browser-use.browser_navigate",
+                },
+            },
+        }),
+        "Using browser-use.browser_navigate",
     );
 });
 

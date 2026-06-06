@@ -658,7 +658,7 @@ export default class Aside extends Plugin {
         }
 
         switch (actor.runtimeStrategy) {
-            case "codex-app-server":
+            case "codex-cli":
                 return probeCodexRuntimeDiagnostics();
             case "claude-cli":
                 return probeClaudeRuntimeDiagnostics();
@@ -1406,6 +1406,14 @@ export default class Aside extends Plugin {
 
     public getAllIndexedThreads(): CommentThread[] {
         return this.aggregateCommentIndex.getAllThreads();
+    }
+
+    public getIndexedCommentVersion(): number {
+        return this.aggregateCommentIndex.getVersion();
+    }
+
+    public getIndexedThreadCount(): number {
+        return this.aggregateCommentIndex.getThreadCount();
     }
 
     public getThreadsForFile(filePath: string, options: { includeDeleted?: boolean } = {}): CommentThread[] {

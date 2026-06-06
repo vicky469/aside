@@ -25,6 +25,7 @@ export interface AgentRunStreamState {
     status: AgentRunStatus;
     statusText?: string;
     statusHintText?: string;
+    processLogLines?: string[];
     partialText: string;
     startedAt: number;
     updatedAt: number;
@@ -184,6 +185,7 @@ export function cloneAgentRunRecord(run: AgentRunRecord): AgentRunRecord {
 export function cloneAgentRunStreamState(stream: AgentRunStreamState): AgentRunStreamState {
     return {
         ...stream,
+        ...(stream.processLogLines ? { processLogLines: [...stream.processLogLines] } : {}),
         ...mergeAgentRunMetadata(stream, {}),
     };
 }

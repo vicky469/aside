@@ -116,6 +116,18 @@ export class AggregateCommentIndex {
     getVersion(): number {
         return this.version;
     }
+
+    getThreadCount(): number {
+        let count = 0;
+        for (const threads of this.threadsByFile.values()) {
+            for (const thread of threads) {
+                if (!isSoftDeleted(thread) && thread.entries.some((entry) => !isSoftDeleted(entry))) {
+                    count += 1;
+                }
+            }
+        }
+        return count;
+    }
 }
 
 function cloneThreadForVisibility(thread: CommentThread): CommentThread | null {

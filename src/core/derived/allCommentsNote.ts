@@ -58,6 +58,7 @@ export interface AllCommentsNoteBuildOptions {
     headerImageUrl?: string;
     headerImageCaption?: string | null;
     showResolved?: boolean;
+    getSourceFileTags?: (filePath: string) => readonly string[] | null | undefined;
     getMentionedPageLabels?: (comment: Comment) => string[];
     hasSourceFile?: (filePath: string) => boolean;
     resolveWikiLinkPath?: (linkPath: string, sourceFilePath: string) => string | null;
@@ -182,23 +183,28 @@ function getCommentTagBodies(comment: AllCommentsNoteSource): string[] {
 function buildTagsByFileKey(comments: readonly AllCommentsNoteSource[]): Map<string, string[]> {
     const tagsByFileKey = new Map<string, Map<string, string>>();
 
-    for (const comment of comments) {
-        const fileKey = normalizeNotePath(comment.filePath);
+    const addTag = (filePath: string, rawTag: string): void => {
+        const tagText = rawTag.trim();
+        const normalizedTagKey = tagText.replace(/^#+/, "").toLowerCase();
+        if (!normalizedTagKey) {
+            return;
+        }
+
+        const fileKey = normalizeNotePath(filePath);
         let tagsByKey = tagsByFileKey.get(fileKey);
+        if (!tagsByKey) {
+            tagsByKey = new Map<string, string>();
+            tagsByFileKey.set(fileKey, tagsByKey);
+        }
+        if (!tagsByKey.has(normalizedTagKey)) {
+            tagsByKey.set(normalizedTagKey, tagText.startsWith("#") ? tagText : `#${tagText}`);
+        }
+    };
+
+    for (const comment of comments) {
         for (const body of getCommentTagBodies(comment)) {
             for (const rawTag of extractTagsFromText(body)) {
-                const normalizedTagKey = rawTag.slice(1).toLowerCase();
-                if (!normalizedTagKey) {
-                    continue;
-                }
-
-                if (!tagsByKey) {
-                    tagsByKey = new Map<string, string>();
-                    tagsByFileKey.set(fileKey, tagsByKey);
-                }
-                if (!tagsByKey.has(normalizedTagKey)) {
-                    tagsByKey.set(normalizedTagKey, rawTag);
-                }
+                addTag(comment.filePath, rawTag);
             }
         }
     }
@@ -211,6 +217,66 @@ function buildTagsByFileKey(comments: readonly AllCommentsNoteSource[]): Map<str
                 .map(([, tagText]) => tagText),
         ]),
     );
+}
+
+function mergeTagsByFileKey(
+    left: ReadonlyMap<string, readonly string[]>,
+    right: ReadonlyMap<string, readonly string[]>,
+): Map<string, string[]> {
+    const merged = new Map<string, Map<string, string>>();
+    const addTags = (fileKey: string, tags: readonly string[]): void => {
+        const normalizedFileKey = normalizeNotePath(fileKey);
+        let tagsByKey = merged.get(normalizedFileKey);
+        if (!tagsByKey) {
+            tagsByKey = new Map<string, string>();
+            merged.set(normalizedFileKey, tagsByKey);
+        }
+
+        for (const rawTag of tags) {
+            const tagText = rawTag.trim();
+            const tagKey = tagText.replace(/^#+/, "").toLowerCase();
+            if (!tagKey || tagsByKey.has(tagKey)) {
+                continue;
+            }
+
+            tagsByKey.set(tagKey, tagText.startsWith("#") ? tagText : `#${tagText}`);
+        }
+    };
+
+    for (const [fileKey, tags] of left.entries()) {
+        addTags(fileKey, tags);
+    }
+    for (const [fileKey, tags] of right.entries()) {
+        addTags(fileKey, tags);
+    }
+
+    return new Map(
+        Array.from(merged.entries()).map(([fileKey, tagsByKey]) => [
+            fileKey,
+            Array.from(tagsByKey.entries())
+                .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey))
+                .map(([, tagText]) => tagText),
+        ]),
+    );
+}
+
+function buildSourceTagsByFileKey(
+    filePaths: readonly string[],
+    getSourceFileTags: AllCommentsNoteBuildOptions["getSourceFileTags"],
+): Map<string, string[]> {
+    const tagsByFileKey = new Map<string, string[]>();
+    if (!getSourceFileTags) {
+        return tagsByFileKey;
+    }
+
+    for (const filePath of filePaths) {
+        const tags = getSourceFileTags(filePath) ?? [];
+        if (tags.length) {
+            tagsByFileKey.set(normalizeNotePath(filePath), Array.from(tags));
+        }
+    }
+
+    return tagsByFileKey;
 }
 
 export function isAllCommentsNotePath(filePath: string, currentPath: string = ALL_COMMENTS_NOTE_PATH): boolean {
@@ -442,7 +508,10 @@ export function buildAllCommentsNoteContent(
         filePathsByKey.set(normalizeNotePath(comment.filePath), comment.filePath);
     }
     const filePaths = Array.from(filePathsByKey.values()).sort((left, right) => left.localeCompare(right));
-    const tagsByFileKey = buildTagsByFileKey(visibleComments);
+    const tagsByFileKey = mergeTagsByFileKey(
+        buildSourceTagsByFileKey(filePaths, options.getSourceFileTags),
+        buildTagsByFileKey(visibleComments),
+    );
     appendFileSections(lines, filePaths, vaultName, tagsByFileKey);
 
     return `${lines.join("\n").trimEnd()}\n`;

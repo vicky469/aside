@@ -916,6 +916,60 @@ test("comment agent controller shows real progress text while the runtime is sti
     unsubscribe();
 });
 
+test("comment agent controller keeps process log lines separate from streamed reply text", async () => {
+    let releaseRuntime: () => void = () => {
+        throw new Error("Expected runtime release callback to be set.");
+    };
+    const processLogUpdates: string[][] = [];
+    const harness = createHarness({
+        customRunAgentRuntime: async (invocation) => {
+            invocation.onProgressText?.("Reading thread context");
+            invocation.onProgressText?.("Running command: rg \"Codex\" src");
+            await new Promise<void>((resolve) => {
+                releaseRuntime = () => resolve();
+            });
+            invocation.onPartialText?.("Draft reply");
+            return {
+                runtime: "direct-cli",
+                replyText: "Draft reply",
+            };
+        },
+    });
+    const unsubscribe = harness.controller.subscribeToStreamUpdates((update) => {
+        processLogUpdates.push(update.stream?.processLogLines ?? []);
+    });
+
+    await harness.controller.handleSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "@codex show process",
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    assert.deepEqual(
+        harness.controller.getActiveAgentStreamForThread("thread-1")?.processLogLines,
+        [
+            "Reading thread context",
+            "Running command: rg \"Codex\" src",
+        ],
+    );
+    assert.equal(harness.controller.getActiveAgentStreamForThread("thread-1")?.partialText, "");
+    assert.deepEqual(
+        processLogUpdates.filter((lines) => lines.length > 0).at(-1),
+        [
+            "Reading thread context",
+            "Running command: rg \"Codex\" src",
+        ],
+    );
+
+    releaseRuntime();
+    await waitForAgentQueueToDrain(harness.controller);
+    unsubscribe();
+
+    assert.equal(harness.editedEntries.at(-1)?.body, "Draft reply");
+});
+
 test("comment agent controller cancels a running run without reviving the stream", async () => {
     let waitForAbort: Promise<void> | null = null;
     const harness = createHarness({

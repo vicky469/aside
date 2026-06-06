@@ -596,6 +596,13 @@
     box-shadow: none;
 }
 
+.aside-tab-scope-separator {
+    color: var(--text-faint);
+    font-size: var(--font-ui-smaller);
+    line-height: 1.2;
+    user-select: none;
+}
+
 button.aside-tab-button {
     box-sizing: border-box;
     display: inline-flex;
@@ -933,6 +940,14 @@ button.aside-sidebar-file-pin-button {
     color: var(--text-faint);
 }
 
+.aside-thought-trail-scope-note {
+    margin-left: auto;
+    color: var(--text-faint);
+    font-size: var(--font-ui-smaller);
+    line-height: 1.2;
+    white-space: nowrap;
+}
+
 .aside-thought-trail-source-options {
     display: inline-flex;
     align-items: center;
@@ -977,13 +992,6 @@ button.aside-sidebar-file-pin-button {
     gap: 6px;
 }
 
-.aside-thought-trail-section-title {
-    margin: 0;
-    color: var(--text-muted);
-    font-size: var(--font-ui-small);
-    font-weight: var(--font-medium);
-}
-
 .aside-thought-trail-section-graph {
     min-width: 0;
 }
@@ -1022,6 +1030,50 @@ button.aside-sidebar-file-pin-button {
 .aside-thought-trail a.external-link[href^="obsidian://aside-comment"] {
     background-image: none;
     padding-right: 0;
+}
+
+.aside-tag-related-files {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.aside-tag-related-files-group {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.aside-tag-related-files-tag-header {
+    font-size: var(--font-ui-smaller);
+    font-weight: var(--font-semibold);
+    color: var(--text-muted);
+    padding: 0 4px;
+}
+
+.aside-tag-related-files-list {
+    display: flex;
+    flex-direction: column;
+}
+
+.aside-tag-related-file-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 3px 8px;
+    border-radius: var(--radius-s);
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-normal);
+    font-size: var(--font-ui-small);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.aside-tag-related-file-item:hover {
+    background: var(--background-modifier-hover);
 }
 
 .aside-comment-section-add-button {
@@ -1481,6 +1533,25 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
 }
 
 .aside-agent-stream-content:empty {
+    display: none;
+}
+
+.aside-agent-process-log {
+    margin: 4px 0 6px;
+    padding: 6px 8px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 5px;
+    background: var(--background-secondary-alt, var(--background-secondary));
+    color: var(--text-muted);
+    font-family: var(--font-monospace);
+    font-size: var(--font-ui-smaller, 11px);
+    font-weight: 400;
+    line-height: 1.35;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.aside-agent-process-log[hidden] {
     display: none;
 }
 

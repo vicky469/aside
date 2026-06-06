@@ -1,9 +1,11 @@
 import { setIcon } from "obsidian";
 import { getActiveFileFilterPresentation } from "./sidebarActiveFileFilterDom";
 import {
+    getSidebarModeTabGroups,
     getSidebarModeTabs,
     isSidebarModeAvailable,
     type SidebarModeAvailability,
+    type SidebarModeTabSurface,
 } from "./sidebarModeTabs";
 import type { SidebarPrimaryMode } from "./viewState";
 
@@ -45,6 +47,7 @@ export interface SidebarSearchInputOptions {
 
 export interface SidebarModeControlOptions extends SidebarModeAvailability {
     mode: SidebarPrimaryMode;
+    surface: SidebarModeTabSurface;
     onChange(mode: SidebarPrimaryMode): void;
     pinnedSidebarFileAction?: {
         active: boolean;
@@ -183,15 +186,33 @@ export function renderSidebarModeControl(
     const modeGroup = container.createDiv("aside-sidebar-toolbar-group is-mode-group");
     const tabList = modeGroup.createDiv(`aside-tablist is-${options.mode}`);
     tabList.setAttribute("role", "tablist");
-    for (const tab of getSidebarModeTabs(options)) {
-        renderTabButton(tabList, {
-            label: tab.label,
-            active: options.mode === tab.mode,
-            disabled: !isSidebarModeAvailable(tab.mode, options),
-            onClick: () => {
-                options.onChange(tab.mode);
-            },
-        }, guard);
+    const tabGroups = getSidebarModeTabGroups(options, options.surface);
+    tabGroups.forEach((group, groupIndex) => {
+        if (groupIndex > 0) {
+            renderTabScopeSeparator(tabList);
+        }
+        for (const tab of group.tabs) {
+            renderTabButton(tabList, {
+                label: tab.label,
+                active: options.mode === tab.mode,
+                disabled: !isSidebarModeAvailable(tab.mode, options),
+                onClick: () => {
+                    options.onChange(tab.mode);
+                },
+            }, guard);
+        }
+    });
+    if (!tabGroups.length) {
+        for (const tab of getSidebarModeTabs(options)) {
+            renderTabButton(tabList, {
+                label: tab.label,
+                active: options.mode === tab.mode,
+                disabled: !isSidebarModeAvailable(tab.mode, options),
+                onClick: () => {
+                    options.onChange(tab.mode);
+                },
+            }, guard);
+        }
     }
     if (options.pinnedSidebarFileAction) {
         renderPinnedSidebarFileButton(modeGroup, options.pinnedSidebarFileAction, guard);
@@ -230,6 +251,15 @@ export function renderActiveFileFilters(
 
     const summaryEl = filterBar.createDiv("aside-active-file-filter-summary");
     summaryEl.setText(presentation.summary);
+}
+
+function renderTabScopeSeparator(container: HTMLElement): void {
+    const separator = container.createSpan({
+        cls: "aside-tab-scope-separator",
+        text: "|",
+    });
+    separator.setAttribute("aria-hidden", "true");
+    separator.setAttribute("role", "presentation");
 }
 
 function renderTabButton(

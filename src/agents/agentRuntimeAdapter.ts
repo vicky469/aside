@@ -102,26 +102,6 @@ export function isAgentRuntimeCancelledError(error: unknown): error is AgentRunt
         || (error instanceof Error && error.name === "AgentRuntimeCancelledError");
 }
 
-type JsonRpcRequestMessage = {
-    id: string;
-    method: string;
-    params?: unknown;
-    jsonrpc?: "2.0";
-};
-
-type JsonRpcNotificationMessage = {
-    method: string;
-    params?: unknown;
-    jsonrpc?: "2.0";
-};
-
-type JsonRpcResponseMessage = {
-    id: string;
-    result?: unknown;
-    error?: unknown;
-    jsonrpc?: "2.0";
-};
-
 let resolvedAgentExecEnvPromise: Promise<ExecEnv> | null = null;
 const activeAgentRuntimeProcesses = new Set<TrackedChildProcess>();
 
@@ -442,6 +422,65 @@ function extractPlanProgressText(params: unknown): string | null {
     return null;
 }
 
+function getCodexProgressItem(event: unknown): unknown {
+    return getNestedValue(event, ["params", "item"])
+        ?? getNestedValue(event, ["item"])
+        ?? getNestedValue(event, ["payload", "item"])
+        ?? getNestedValue(event, ["payload"]);
+}
+
+function extractCodexCommandProgressText(event: unknown, eventKey: string): string | null {
+    const command = firstStringAtPaths(event, [
+        ["params", "cmd"],
+        ["params", "command"],
+        ["params", "item", "cmd"],
+        ["params", "item", "command"],
+        ["item", "cmd"],
+        ["item", "command"],
+        ["payload", "cmd"],
+        ["payload", "command"],
+        ["cmd"],
+        ["command"],
+    ]);
+    if (!command) {
+        return null;
+    }
+
+    const item = getCodexProgressItem(event);
+    const itemType = isRecord(item) && typeof item.type === "string" ? item.type : "";
+    const looksLikeCommand = /command|exec|cmd|shell/iu.test(eventKey)
+        || /command|exec|cmd|shell/iu.test(itemType);
+    if (!looksLikeCommand) {
+        return null;
+    }
+
+    return normalizeProgressText(`Running command: ${command}`);
+}
+
+function extractCodexToolProgressText(event: unknown, eventKey: string): string | null {
+    const item = getCodexProgressItem(event);
+    const toolName = isRecord(item)
+        ? getCodexThreadItemToolName(item)
+        : firstStringAtPaths(event, [
+            ["params", "tool"],
+            ["params", "name"],
+            ["tool"],
+            ["name"],
+        ]);
+    if (!toolName || toolName === "shell") {
+        return null;
+    }
+
+    const itemType = isRecord(item) && typeof item.type === "string" ? item.type : "";
+    const looksLikeTool = /tool|mcp|web|search|file/i.test(eventKey)
+        || /tool|mcp|web|search|file/i.test(itemType);
+    if (!looksLikeTool) {
+        return null;
+    }
+
+    return normalizeProgressText(`Using ${toolName}`);
+}
+
 export function extractCodexProgressTextDeltaFromJsonEvent(event: unknown): string | null {
     const eventKey = firstStringAtPaths(event, [
         ["method"],
@@ -476,38 +515,8 @@ export function extractCodexProgressTextFromJsonEvent(event: unknown): string | 
         case "turn/plan/updated":
             return extractPlanProgressText(getNestedValue(event, ["params"]));
         default:
-            return null;
-    }
-}
-
-function extractCodexProgressTextFromThreadItem(item: unknown): string | null {
-    if (!isRecord(item) || typeof item.type !== "string") {
-        return null;
-    }
-
-    switch (item.type) {
-        case "commandExecution": {
-            const command = typeof item.command === "string" ? item.command : "";
-            return normalizeProgressText(command ? `Running ${command}` : "Running command");
-        }
-        case "fileChange": {
-            const changeCount = Array.isArray(item.changes) ? item.changes.length : 0;
-            return changeCount > 1 ? `Updating ${changeCount} files` : "Updating file";
-        }
-        case "mcpToolCall": {
-            const tool = typeof item.tool === "string" ? item.tool : "tool";
-            return normalizeProgressText(`Calling ${tool}`);
-        }
-        case "dynamicToolCall": {
-            const tool = typeof item.tool === "string" ? item.tool : "tool";
-            return normalizeProgressText(`Using ${tool}`);
-        }
-        case "webSearch": {
-            const query = typeof item.query === "string" ? item.query : "";
-            return normalizeProgressText(query ? `Searching ${query}` : "Searching");
-        }
-        default:
-            return null;
+            return extractCodexCommandProgressText(event, eventKey)
+                ?? extractCodexToolProgressText(event, eventKey);
     }
 }
 
@@ -755,34 +764,6 @@ async function spawnInteractiveAgentRuntimeProcess(
     return childProcess;
 }
 
-function isJsonRpcResponseMessage(value: unknown): value is JsonRpcResponseMessage {
-    return isRecord(value)
-        && typeof value.id === "string"
-        && ("result" in value || "error" in value);
-}
-
-function isJsonRpcNotificationMessage(value: unknown): value is JsonRpcNotificationMessage {
-    return isRecord(value)
-        && typeof value.method === "string"
-        && !("id" in value);
-}
-
-function extractJsonRpcErrorMessage(value: unknown): string | null {
-    if (typeof value === "string" && value.trim()) {
-        return value.trim();
-    }
-
-    if (!isRecord(value)) {
-        return null;
-    }
-
-    return firstStringAtPaths(value, [
-        ["message"],
-        ["error", "message"],
-        ["data", "message"],
-    ]);
-}
-
 export function createWorkspaceWriteSandboxPolicy(cwd: string, extraWritableRoots: string[] = []) {
     const writableRoots = [cwd, ...extraWritableRoots]
         .filter((value, index, values): value is string => typeof value === "string" && value.length > 0 && values.indexOf(value) === index);
@@ -795,20 +776,6 @@ export function createWorkspaceWriteSandboxPolicy(cwd: string, extraWritableRoot
         networkAccess: false,
         excludeTmpdirEnvVar: false,
         excludeSlashTmp: false,
-    };
-}
-
-function extractAgentMessageText(value: unknown): {
-    id: string | null;
-    text: string | null;
-} | null {
-    if (!isRecord(value) || value.type !== "agentMessage") {
-        return null;
-    }
-
-    return {
-        id: typeof value.id === "string" ? value.id : null,
-        text: typeof value.text === "string" ? value.text : null,
     };
 }
 
@@ -927,54 +894,6 @@ export function extractClaudeProgressTextFromJsonEvent(event: unknown): string |
         : normalizeProgressText(`Using ${toolName}`);
 }
 
-function extractCodexEventContext(value: unknown): {
-    threadId: string | null;
-    turnId: string | null;
-    itemId: string | null;
-} {
-    if (!isRecord(value)) {
-        return {
-            threadId: null,
-            turnId: null,
-            itemId: null,
-        };
-    }
-
-    return {
-        threadId: typeof value.threadId === "string" ? value.threadId : null,
-        turnId: typeof value.turnId === "string"
-            ? value.turnId
-            : firstStringAtPaths(value, [["turn", "id"]]),
-        itemId: typeof value.itemId === "string" ? value.itemId : null,
-    };
-}
-
-function matchesCodexThreadTurnContext(
-    activeThreadId: string | null,
-    activeTurnId: string | null,
-    value: unknown,
-): boolean {
-    const context = extractCodexEventContext(value);
-    return !(
-        (activeThreadId && context.threadId && context.threadId !== activeThreadId)
-        || (activeTurnId && context.turnId && context.turnId !== activeTurnId)
-    );
-}
-
-function matchesCodexAgentMessageContext(
-    activeThreadId: string | null,
-    activeTurnId: string | null,
-    activeAgentMessageItemId: string | null,
-    value: unknown,
-): boolean {
-    const context = extractCodexEventContext(value);
-    return !(
-        (activeThreadId && context.threadId && context.threadId !== activeThreadId)
-        || (activeTurnId && context.turnId && context.turnId !== activeTurnId)
-        || (activeAgentMessageItemId && context.itemId && context.itemId !== activeAgentMessageItemId)
-    );
-}
-
 async function runCodexDirect(
     modules: NodeModules,
     invocation: AgentRuntimeInvocation,
@@ -983,33 +902,36 @@ async function runCodexDirect(
         throw new AgentRuntimeCancelledError();
     }
 
-    const childProcess = await spawnInteractiveAgentRuntimeProcess(
-        modules,
-        "codex",
-        ["app-server", "--listen", "stdio://"],
-        {
-            cwd: invocation.cwd,
-        },
-    );
+    const tempDir = await modules.fsPromises.mkdtemp(modules.path.join(modules.os.tmpdir(), "aside-codex-"));
+    const outputLastMessagePath = modules.path.join(tempDir, "last-message.txt");
+    let childProcess: TrackedChildProcess;
+
+    try {
+        childProcess = await spawnInteractiveAgentRuntimeProcess(
+            modules,
+            "codex",
+            buildCodexCliArgs({
+                cwd: invocation.cwd,
+                vaultRootPath: invocation.vaultRootPath,
+                outputLastMessagePath,
+            }),
+            {
+                cwd: invocation.cwd,
+            },
+        );
+    } catch (error) {
+        await modules.fsPromises.rm(tempDir, { recursive: true, force: true });
+        throw error;
+    }
 
     return await new Promise<AgentRuntimeResult>((resolve, reject) => {
         let settled = false;
         let stdoutBuffer = "";
         let stderrBuffer = "";
-        let requestCounter = 0;
-        let activeThreadId: string | null = null;
-        let activeTurnId: string | null = null;
-        let activeAgentMessageItemId: string | null = null;
         let streamedText = "";
-        let finalText: string | null = null;
         const usedTools = new Set<string>();
         const usedUrls = new Set<string>();
-        const reasoningSummaryBuffers = new Map<string, string>();
         let abortHandler: (() => void) | null = null;
-        const pendingResponses = new Map<string, {
-            resolve: (value: unknown) => void;
-            reject: (error: Error) => void;
-        }>();
 
         const cleanup = () => {
             activeAgentRuntimeProcesses.delete(childProcess);
@@ -1017,6 +939,7 @@ async function runCodexDirect(
                 invocation.abortSignal.removeEventListener("abort", abortHandler);
                 abortHandler = null;
             }
+            void modules.fsPromises.rm(tempDir, { recursive: true, force: true });
         };
 
         const finalizeError = (error: unknown) => {
@@ -1026,10 +949,6 @@ async function runCodexDirect(
 
             settled = true;
             cleanup();
-            for (const pending of pendingResponses.values()) {
-                pending.reject(error instanceof Error ? error : new Error(String(error)));
-            }
-            pendingResponses.clear();
             try {
                 childProcess.kill("SIGTERM");
             } catch {
@@ -1045,10 +964,6 @@ async function runCodexDirect(
 
             settled = true;
             cleanup();
-            for (const pending of pendingResponses.values()) {
-                pending.reject(new Error("Codex finished before the pending request resolved."));
-            }
-            pendingResponses.clear();
             try {
                 childProcess.stdin?.end();
             } catch {
@@ -1062,7 +977,15 @@ async function runCodexDirect(
             });
         };
 
-        const handleRunMetadata = (item: unknown): void => {
+        const readOutputLastMessage = async (): Promise<string | null> => {
+            try {
+                return await modules.fsPromises.readFile(outputLastMessagePath, "utf8");
+            } catch {
+                return null;
+            }
+        };
+
+        const publishRunMetadata = (item: unknown): void => {
             const metadata = extractCodexRunMetadataFromThreadItem(item);
             let changed = false;
             for (const tool of metadata.usedTools) {
@@ -1086,181 +1009,21 @@ async function runCodexDirect(
             }
         };
 
-        const sendMessage = (message: JsonRpcRequestMessage | JsonRpcNotificationMessage) => {
-            const stdin = childProcess.stdin;
-            if (!stdin) {
-                throw new Error("Codex app-server did not expose stdin.");
-            }
-
-            stdin.write(`${JSON.stringify(message)}\n`);
-        };
-
-        const sendRequest = <T>(method: string, params?: unknown): Promise<T> => {
-            const id = `aside-${++requestCounter}`;
-            return new Promise<T>((resolveRequest, rejectRequest) => {
-                pendingResponses.set(id, {
-                    resolve: resolveRequest as (value: unknown) => void,
-                    reject: rejectRequest,
-                });
-
-                try {
-                    sendMessage({
-                        id,
-                        method,
-                        params,
-                    });
-                } catch (error) {
-                    pendingResponses.delete(id);
-                    rejectRequest(error instanceof Error ? error : new Error(String(error)));
-                }
-            });
-        };
-
-        const maybeFinalizeFromTurnCompletion = (status: string | null, errorMessage: string | null) => {
-            if (!status) {
-                return;
-            }
-
-            if (status !== "completed") {
-                finalizeError(new Error(errorMessage ?? `Codex turn ended with status ${status}.`));
-                return;
-            }
-
-            const replyText = sanitizeAgentReplyText(finalText ?? streamedText);
-            if (!replyText) {
-                finalizeError(new Error("Codex returned an empty response."));
-                return;
-            }
-
-            finalizeSuccess(replyText);
-        };
-
-        const handleItemMessage = (item: unknown): void => {
-            const agentMessage = extractAgentMessageText(item);
-            if (!agentMessage) {
-                return;
-            }
-
-            if (agentMessage.id) {
-                activeAgentMessageItemId = agentMessage.id;
-            }
-            if (agentMessage.text && agentMessage.text.trim()) {
-                finalText = agentMessage.text;
-            }
-        };
-
-        const handleNotification = (message: JsonRpcNotificationMessage) => {
-            const params = message.params;
-            switch (message.method) {
-                case "error": {
-                    const errorMessage = extractJsonRpcErrorMessage(params);
-                    finalizeError(new Error(errorMessage ?? "Codex app-server reported an error."));
-                    return;
-                }
-                case "item/started": {
-                    if (!matchesCodexThreadTurnContext(activeThreadId, activeTurnId, params)) {
-                        return;
-                    }
-
-                    const item = isRecord(params) ? params.item : undefined;
-                    handleRunMetadata(item);
-                    handleItemMessage(item);
-                    const progressText = extractCodexProgressTextFromThreadItem(item);
-                    if (progressText) {
-                        invocation.onProgressText?.(progressText);
-                    }
-                    return;
-                }
-                case "item/agentMessage/delta": {
-                    const delta = extractCodexTextDeltaFromJsonEvent(message);
-                    if (!delta || !matchesCodexAgentMessageContext(activeThreadId, activeTurnId, activeAgentMessageItemId, params)) {
-                        return;
-                    }
-
-                    streamedText += delta;
-                    invocation.onPartialText?.(sanitizeAgentReplyText(streamedText));
-                    return;
-                }
-                case "item/reasoning/summaryTextDelta": {
-                    if (!matchesCodexThreadTurnContext(activeThreadId, activeTurnId, params)) {
-                        return;
-                    }
-
-                    const delta = extractCodexProgressTextDeltaFromJsonEvent(message);
-                    if (!delta) {
-                        return;
-                    }
-
-                    const itemId = firstStringAtPaths(params, [["itemId"]]) ?? "reasoning";
-                    const summaryIndexValue = getNestedValue(params, ["summaryIndex"]);
-                    const summaryIndex = typeof summaryIndexValue === "string" || typeof summaryIndexValue === "number"
-                        ? String(summaryIndexValue)
-                        : "0";
-                    const bufferKey = `${itemId}:${summaryIndex}`;
-                    const nextText = `${reasoningSummaryBuffers.get(bufferKey) ?? ""}${delta}`;
-                    reasoningSummaryBuffers.set(bufferKey, nextText);
-                    const progressText = normalizeProgressText(nextText);
-                    if (progressText) {
-                        invocation.onProgressText?.(progressText);
-                    }
-                    return;
-                }
-                case "turn/plan/updated": {
-                    if (!matchesCodexThreadTurnContext(activeThreadId, activeTurnId, params)) {
-                        return;
-                    }
-
-                    const progressText = extractCodexProgressTextFromJsonEvent(message);
-                    if (progressText) {
-                        invocation.onProgressText?.(progressText);
-                    }
-                    return;
-                }
-                case "item/completed": {
-                    if (!matchesCodexThreadTurnContext(activeThreadId, activeTurnId, params)) {
-                        return;
-                    }
-
-                    const item = isRecord(params) ? params.item : undefined;
-                    handleRunMetadata(item);
-                    handleItemMessage(item);
-                    return;
-                }
-                case "turn/completed": {
-                    if (!matchesCodexThreadTurnContext(activeThreadId, activeTurnId, params)) {
-                        return;
-                    }
-
-                    maybeFinalizeFromTurnCompletion(
-                        firstStringAtPaths(params, [["turn", "status"]]),
-                        extractJsonRpcErrorMessage(getNestedValue(params, ["turn", "error"])),
-                    );
-                    return;
-                }
-                default:
-                    return;
-            }
-        };
-
         const handleStdoutMessage = (message: unknown) => {
-            if (isJsonRpcResponseMessage(message)) {
-                const pending = pendingResponses.get(message.id);
-                if (!pending) {
-                    return;
-                }
+            publishRunMetadata(getNestedValue(message, ["params", "item"]));
+            publishRunMetadata(getNestedValue(message, ["item"]));
+            publishRunMetadata(getNestedValue(message, ["payload"]));
+            publishRunMetadata(message);
 
-                pendingResponses.delete(message.id);
-                if ("error" in message && message.error !== undefined) {
-                    pending.reject(new Error(extractJsonRpcErrorMessage(message.error) ?? "Codex request failed."));
-                    return;
-                }
-
-                pending.resolve(message.result);
-                return;
+            const progressText = extractCodexProgressTextFromJsonEvent(message);
+            if (progressText) {
+                invocation.onProgressText?.(progressText);
             }
 
-            if (isJsonRpcNotificationMessage(message)) {
-                handleNotification(message);
+            const delta = extractCodexTextDeltaFromJsonEvent(message);
+            if (delta) {
+                streamedText += delta;
+                invocation.onPartialText?.(sanitizeAgentReplyText(streamedText));
             }
         };
 
@@ -1310,16 +1073,24 @@ async function runCodexDirect(
                 return;
             }
 
-            const replyText = sanitizeAgentReplyText(finalText ?? streamedText);
-            if (code === 0 && replyText) {
-                finalizeSuccess(replyText);
-                return;
-            }
+            void (async () => {
+                const outputLastMessage = await readOutputLastMessage();
+                const replyText = sanitizeAgentReplyText(outputLastMessage ?? streamedText);
+                if (code === 0 && replyText) {
+                    finalizeSuccess(replyText);
+                    return;
+                }
 
-            const stderrMessage = stderrBuffer.trim();
-            finalizeError(new Error(
-                stderrMessage || `spawn codex exited with code ${code ?? "null"}${signal ? ` signal ${signal}` : ""}`,
-            ));
+                if (code === 0) {
+                    finalizeError(new Error("Codex returned an empty response."));
+                    return;
+                }
+
+                const stderrMessage = stderrBuffer.trim();
+                finalizeError(new Error(
+                    stderrMessage || `spawn codex exec exited with code ${code ?? "null"}${signal ? ` signal ${signal}` : ""}`,
+                ));
+            })();
         });
 
         if (invocation.abortSignal) {
@@ -1333,81 +1104,45 @@ async function runCodexDirect(
             }
         }
 
-        void (async () => {
-            try {
-                await sendRequest("initialize", {
-                    clientInfo: {
-                        name: "aside",
-                        title: "Aside",
-                        version: "0.0.0",
-                    },
-                    capabilities: {
-                        experimentalApi: true,
-                        optOutNotificationMethods: [
-                            "account/rateLimits/updated",
-                            "command/exec/outputDelta",
-                            "item/commandExecution/outputDelta",
-                            "item/commandExecution/terminalInteraction",
-                            "item/fileChange/outputDelta",
-                            "item/plan/delta",
-                            "item/reasoning/summaryPartAdded",
-                            "item/reasoning/textDelta",
-                            "mcpServer/startupStatus/updated",
-                            "thread/started",
-                            "thread/status/changed",
-                            "thread/tokenUsage/updated",
-                            "turn/diff/updated",
-                        ],
-                    },
-                });
-                sendMessage({
-                    method: "initialized",
-                });
-
-                const threadStartResponse = await sendRequest<{ thread?: { id?: string } }>("thread/start", {
-                    approvalPolicy: "on-request",
-                    baseInstructions: "You generate end-user reply text for a Aside note thread.",
-                    cwd: invocation.cwd,
-                    developerInstructions: "Return only the final note reply. Answer directly. Never mention skills, searches, notes, files, prompts, tools, AGENTS instructions, context-loading, or your process.",
-                    ephemeral: true,
-                    personality: "none",
-                    sandbox: "workspace-write",
-                });
-                activeThreadId = typeof threadStartResponse?.thread?.id === "string"
-                    ? threadStartResponse.thread.id
-                    : null;
-                if (!activeThreadId) {
-                    throw new Error("Codex did not return a thread id.");
-                }
-
-                const turnStartResponse = await sendRequest<{ turn?: { id?: string } }>("turn/start", {
-                    approvalPolicy: "on-request",
-                    cwd: invocation.cwd,
-                    input: [
-                        {
-                            type: "text",
-                            text: buildSideNotePrompt({
-                                promptText: invocation.prompt,
-                                vaultRootPath: invocation.vaultRootPath,
-                            }),
-                            text_elements: [],
-                        },
-                    ],
-                    personality: "none",
-                    sandboxPolicy: createWorkspaceWriteSandboxPolicy(invocation.cwd),
-                    threadId: activeThreadId,
-                });
-                activeTurnId = typeof turnStartResponse?.turn?.id === "string"
-                    ? turnStartResponse.turn.id
-                    : null;
-                if (!activeTurnId) {
-                    throw new Error("Codex did not return a turn id.");
-                }
-            } catch (error) {
-                finalizeError(error);
+        try {
+            const stdin = childProcess.stdin;
+            if (!stdin) {
+                throw new Error("Codex CLI did not expose stdin.");
             }
-        })();
+            stdin.write(buildSideNotePrompt({
+                promptText: invocation.prompt,
+                vaultRootPath: invocation.vaultRootPath,
+            }));
+            stdin.end();
+        } catch (error) {
+            finalizeError(error);
+        }
     });
+}
+
+export function buildCodexCliArgs(options: {
+    cwd: string;
+    vaultRootPath?: string | null;
+    outputLastMessagePath?: string | null;
+}): string[] {
+    const args = [
+        "exec",
+        "--json",
+        "--ephemeral",
+        "--skip-git-repo-check",
+        "-C",
+        options.cwd,
+        "-s",
+        "workspace-write",
+    ];
+    if (options.outputLastMessagePath) {
+        args.push("--output-last-message", options.outputLastMessagePath);
+    }
+    if (options.vaultRootPath && options.vaultRootPath !== options.cwd) {
+        args.push("--add-dir", options.vaultRootPath);
+    }
+    args.push("-");
+    return args;
 }
 
 const CLAUDE_APPEND_SYSTEM_PROMPT = [
@@ -1649,7 +1384,7 @@ export async function runAgentRuntime(invocation: AgentRuntimeInvocation): Promi
     }
 
     switch (actor.runtimeStrategy) {
-        case "codex-app-server":
+        case "codex-cli":
             return runCodexDirect(modules, invocation);
         case "claude-cli":
             return runClaudeDirect(modules, invocation);
