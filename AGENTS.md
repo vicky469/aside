@@ -37,6 +37,14 @@ Switch to `skills/aside/SKILL.md` when the user:
 - The trailing `<!-- Aside comments -->` block is legacy import/migration data, not current canonical storage. Built-in plugin startup/storage flows migrate it automatically; helper scripts should use the same write path and strip the managed block when they encounter one.
 - `Aside index.md` is derived output. Use it for discovery only.
 
+## Searching Real Aside Data
+
+- `rg` skips hidden directories such as `.obsidian` by default. Do not treat a failed vault-wide `rg` search as proof that no Aside data exists.
+- When searching real Aside comments, plugin data, caches, or installed builds, include `--hidden` and prefer narrow `.obsidian/plugins/aside` paths.
+- Useful patterns:
+  - `rg --hidden "<comment-id>" "/path/to/vault/.obsidian/plugins/aside"`
+  - `rg --hidden "<comment-id>|<note path>" "/path/to/vault/.obsidian/plugins/aside" "/path/to/vault/<note>.md"`
+
 ## Write Path
 
 For Aside thread writes, prefer the helper scripts over hand-editing JSON:

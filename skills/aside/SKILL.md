@@ -22,11 +22,20 @@ No resolve/archive flow: resolve functionality was removed.
 
 ## Source of truth
 
-- Markdown note is canonical.
-- Comments live in one trailing `<!-- Aside comments -->` block.
-- Legacy `<!-- SideNote2 comments -->` blocks may exist for migration/read compatibility.
+- Markdown note path plus comment id identify the user-facing target.
+- Current persisted side note data lives in Aside plugin data and local sidecar JSON cache files.
+- The trailing `<!-- Aside comments -->` block is legacy import/migration data, not current canonical storage. Built-in plugin startup/storage flows migrate it automatically; helper scripts should use the same write path and strip the managed block when they encounter one.
+- Legacy `<!-- SideNote2 comments -->` blocks may exist for migration/read compatibility, but are not canonical.
 - `Aside index.md` is derived; use only for discovery.
 - `page note` / `anchored note` means an Aside thread in the current note unless user explicitly asks for a separate wiki page.
+
+## Searching real Aside data
+
+- `rg` skips hidden directories such as `.obsidian` by default. A failed vault-wide search without `--hidden` does not prove the Aside data is missing.
+- When searching real comments, plugin data, caches, or installed builds, include `--hidden` and prefer narrow `.obsidian/plugins/aside` paths.
+- Useful patterns:
+  - `rg --hidden "<comment-id>" "/path/to/vault/.obsidian/plugins/aside"`
+  - `rg --hidden "<comment-id>|<note path>" "/path/to/vault/.obsidian/plugins/aside" "/path/to/vault/<note>.md"`
 
 ## Default behavior
 
@@ -54,7 +63,7 @@ Keep `aside` responsible for thread location and final reply. Use related skills
 ## Write rules
 
 - URI/comment id is exact thread target; prefer it over rediscovery.
-- If no URI, locate real markdown note and read trailing Aside block.
+- If no URI, locate real markdown note, then search current Aside plugin data with `rg --hidden` before falling back to legacy trailing blocks.
 - Match by `commentId`; otherwise by `selectedText` plus nearby context.
 - If multiple threads match, ask for context or use URI/comment id.
 - Preserve existing entries unless user explicitly asks to replace one.
