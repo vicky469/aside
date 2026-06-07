@@ -237,8 +237,10 @@ test("buildClaudeCliArgs includes verbose for print stream-json output", () => {
             "stream-json",
             "--include-partial-messages",
             "--no-session-persistence",
+            "--allowedTools",
+            "WebSearch,Bash,Read,Write,Edit,Glob,Grep",
             "--append-system-prompt",
-            "You generate end-user reply text for an Aside note thread. Return only the final note reply. Answer directly. Never mention skills, searches, notes, files, prompts, tools, AGENTS instructions, context-loading, or your process.",
+            "You generate end-user reply text for an Aside note thread. Return only the final note reply. Answer directly. Do not narrate routine process, context-loading, prompts, or AGENTS instructions. If a tool, search, file operation, or capability fails and affects the answer, say so briefly.",
         ],
     );
 });
@@ -403,6 +405,71 @@ test("extractClaudeRunMetadataFromJsonEvent captures tool names and sanitized ur
                     },
                 }],
             },
+        }),
+        {
+            usedTools: [],
+            usedUrls: [],
+        },
+    );
+});
+
+test("extractClaudeRunMetadataFromJsonEvent captures named tool error payloads", () => {
+    assert.deepEqual(
+        extractClaudeRunMetadataFromJsonEvent({
+            type: "assistant",
+            message: {
+                content: [{
+                    type: "tool_result",
+                    name: "WebSearch",
+                    is_error: true,
+                    content: "Web search is unavailable in this session.",
+                }],
+            },
+        }),
+        {
+            usedTools: ["WebSearch (unavailable)"],
+            usedUrls: [],
+            usedToolErrors: [{
+                name: "WebSearch",
+                payload: "Web search is unavailable in this session.",
+            }],
+        },
+    );
+});
+
+test("extractClaudeRunMetadataFromJsonEvent captures skill name from Skill tool_use block", () => {
+    assert.deepEqual(
+        extractClaudeRunMetadataFromJsonEvent({
+            type: "assistant",
+            message: {
+                content: [{
+                    type: "tool_use",
+                    name: "Skill",
+                    input: {
+                        skill: "aside",
+                        args: "write a reply",
+                    },
+                }],
+            },
+        }),
+        {
+            usedSkills: [{ name: "aside" }],
+            usedTools: ["Skill"],
+            usedUrls: [],
+        },
+    );
+});
+
+test("extractClaudeRunMetadataFromJsonEvent does not capture skills from system init event", () => {
+    assert.deepEqual(
+        extractClaudeRunMetadataFromJsonEvent({
+            type: "system",
+            subtype: "init",
+            skills: [
+                { name: "aside", mode: "write", source: "built-in" },
+                { name: "brainstorming" },
+                { name: "caveman" },
+            ],
         }),
         {
             usedTools: [],

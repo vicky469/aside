@@ -1,7 +1,13 @@
 import {
+    formatUnavailableAgentRunToolName,
+    getAgentRunToolBaseName,
+    normalizeAgentRunSkillMetadata,
+    normalizeAgentRunToolErrors,
     normalizeAgentRunToolNames,
     normalizeAgentRunUrls,
     type AgentRunMetadata,
+    type AgentRunSkillMetadata,
+    type AgentRunToolErrorMetadata,
     type AgentRunRuntime,
 } from "../core/agents/agentRuns";
 import { getAgentActorById } from "../core/agents/agentActorRegistry";
@@ -551,6 +557,55 @@ function collectUrlStrings(value: unknown, urls: Set<string>, depth: number = 0)
     }
 }
 
+function pushSkillMetadataCandidate(value: unknown, candidates: unknown[]): void {
+    if (typeof value === "string") {
+        candidates.push({ name: value });
+        return;
+    }
+
+    if (Array.isArray(value)) {
+        for (const item of value) {
+            pushSkillMetadataCandidate(item, candidates);
+        }
+        return;
+    }
+
+    if (isRecord(value)) {
+        candidates.push(value);
+    }
+}
+
+function extractExplicitSkillMetadata(value: unknown): AgentRunSkillMetadata[] {
+    const candidates: unknown[] = [];
+    for (const path of [
+        ["usedSkills"],
+        ["skills"],
+        ["skill"],
+        ["metadata", "usedSkills"],
+        ["metadata", "skills"],
+        ["metadata", "skill"],
+        ["params", "usedSkills"],
+        ["params", "skills"],
+        ["params", "skill"],
+        ["params", "item", "usedSkills"],
+        ["params", "item", "skills"],
+        ["params", "item", "skill"],
+        ["item", "usedSkills"],
+        ["item", "skills"],
+        ["item", "skill"],
+        ["payload", "usedSkills"],
+        ["payload", "skills"],
+        ["payload", "skill"],
+    ]) {
+        const candidate = getNestedValue(value, path);
+        if (candidate !== undefined) {
+            pushSkillMetadataCandidate(candidate, candidates);
+        }
+    }
+
+    return normalizeAgentRunSkillMetadata(candidates);
+}
+
 function getCodexThreadItemToolName(item: Record<string, unknown>): string | null {
     if (typeof item.tool === "string") {
         return item.tool;
@@ -574,9 +629,18 @@ function getCodexThreadItemToolName(item: Record<string, unknown>): string | nul
     }
 }
 
-export function extractCodexRunMetadataFromThreadItem(item: unknown): Required<Pick<AgentRunMetadata, "usedTools" | "usedUrls">> {
-    if (!isRecord(item) || typeof item.type !== "string") {
+export function extractCodexRunMetadataFromThreadItem(item: unknown): Pick<AgentRunMetadata, "usedSkills" | "usedTools" | "usedUrls"> {
+    if (!isRecord(item)) {
         return {
+            usedTools: [],
+            usedUrls: [],
+        };
+    }
+
+    const usedSkills = extractExplicitSkillMetadata(item);
+    if (typeof item.type !== "string") {
+        return {
+            ...(usedSkills.length ? { usedSkills } : {}),
             usedTools: [],
             usedUrls: [],
         };
@@ -589,6 +653,7 @@ export function extractCodexRunMetadataFromThreadItem(item: unknown): Required<P
     collectUrlStrings(item, urlSet);
 
     return {
+        ...(usedSkills.length ? { usedSkills } : {}),
         usedTools,
         usedUrls: Array.from(urlSet),
     };
@@ -827,6 +892,109 @@ function getFirstClaudeToolName(event: unknown): string | null {
     return null;
 }
 
+function getClaudeToolUseId(block: Record<string, unknown>): string | null {
+    return firstStringAtPaths(block, [
+        ["id"],
+        ["tool_use_id"],
+    ]);
+}
+
+function getClaudeToolResultToolUseId(block: Record<string, unknown>): string | null {
+    return firstStringAtPaths(block, [
+        ["tool_use_id"],
+        ["id"],
+    ]);
+}
+
+function getClaudeToolResultName(block: Record<string, unknown>): string | null {
+    return normalizeClaudeToolName(firstStringAtPaths(block, [
+        ["name"],
+        ["tool_name"],
+        ["tool"],
+        ["metadata", "name"],
+        ["metadata", "tool_name"],
+    ]));
+}
+
+function stringifyToolErrorPayload(value: unknown): string | null {
+    if (typeof value === "string") {
+        const normalized = value.replace(/\r\n?/gu, "\n").trim();
+        return normalized || null;
+    }
+
+    const joinedText = joinTextContentItems(value);
+    if (joinedText) {
+        return joinedText.replace(/\r\n?/gu, "\n").trim() || null;
+    }
+
+    if (value == null) {
+        return null;
+    }
+
+    try {
+        return JSON.stringify(value, null, 2);
+    } catch {
+        return "[unserializable payload]";
+    }
+}
+
+function getClaudeToolResultPayload(block: Record<string, unknown>): string | null {
+    const errorPayload = typeof block.error === "boolean"
+        ? null
+        : stringifyToolErrorPayload(block.error);
+    return stringifyToolErrorPayload(block.content)
+        ?? errorPayload
+        ?? stringifyToolErrorPayload(block.message)
+        ?? stringifyToolErrorPayload(block);
+}
+
+function isClaudeToolResultFailure(block: Record<string, unknown>, payload: string | null): boolean {
+    if (block.is_error === true || block.error === true) {
+        return true;
+    }
+
+    const status = firstStringAtPaths(block, [
+        ["status"],
+        ["result", "status"],
+    ]);
+    if (status && /^(error|failed|failure|unavailable)$/iu.test(status)) {
+        return true;
+    }
+
+    return !!payload
+        && /\b(unavailable|not available|failed|failure|error|denied|disabled|not enabled|cannot|can't)\b/iu.test(payload);
+}
+
+type ClaudeToolErrorCandidate = {
+    toolUseId?: string;
+    name?: string;
+    payload: string;
+};
+
+function extractClaudeToolErrorCandidatesFromJsonEvent(event: unknown): ClaudeToolErrorCandidate[] {
+    const candidates: ClaudeToolErrorCandidate[] = [];
+    for (const block of getClaudeContentBlocks(event)) {
+        if (block.type !== "tool_result") {
+            continue;
+        }
+
+        const payload = getClaudeToolResultPayload(block);
+        if (!isClaudeToolResultFailure(block, payload) || !payload) {
+            continue;
+        }
+
+        const toolUseId = getClaudeToolResultToolUseId(block) ?? undefined;
+        const name = getClaudeToolResultName(block) ?? undefined;
+        candidates.push({
+            ...(toolUseId ? { toolUseId } : {}),
+            ...(name ? { name } : {}),
+            payload,
+        });
+    }
+
+    return candidates;
+}
+
 export function extractClaudeTextDeltaFromJsonEvent(event: unknown): string | null {
     const eventType = getClaudeEventType(event);
     if (eventType === "content_block_delta") {
@@ -861,7 +1029,7 @@ export function extractClaudeReplyTextFromJsonEvent(event: unknown): string | nu
     ]);
 }
 
-export function extractClaudeRunMetadataFromJsonEvent(event: unknown): Required<Pick<AgentRunMetadata, "usedTools" | "usedUrls">> {
+export function extractClaudeRunMetadataFromJsonEvent(event: unknown): Pick<AgentRunMetadata, "usedSkills" | "usedTools" | "usedUrls" | "usedToolErrors"> {
     const toolBlocks = getClaudeContentBlocks(event)
         .filter((block) => block.type === "tool_use");
     const toolNames = toolBlocks
@@ -872,9 +1040,32 @@ export function extractClaudeRunMetadataFromJsonEvent(event: unknown): Required<
         collectUrlStrings(block.input ?? block, urlSet);
     }
 
+    const usedSkills = normalizeAgentRunSkillMetadata(
+        toolBlocks
+            .filter((block) => normalizeClaudeToolName(block.name) === "Skill")
+            .map((block) => {
+                const input = block.input as Record<string, unknown> | undefined;
+                const skillName = typeof input?.skill === "string" ? input.skill : undefined;
+                return skillName ? { name: skillName } : null;
+            })
+            .filter((s): s is AgentRunSkillMetadata => s !== null),
+    );
+    const usedToolErrors = normalizeAgentRunToolErrors(
+        extractClaudeToolErrorCandidatesFromJsonEvent(event)
+            .filter((candidate) => candidate.name)
+            .map((candidate) => ({
+                name: candidate.name,
+                payload: candidate.payload,
+            })),
+    );
     return {
-        usedTools: normalizeAgentRunToolNames(toolNames),
+        ...(usedSkills.length ? { usedSkills } : {}),
+        usedTools: normalizeAgentRunToolNames([
+            ...toolNames,
+            ...usedToolErrors.map((error) => formatUnavailableAgentRunToolName(error.name)),
+        ]),
         usedUrls: Array.from(urlSet),
+        ...(usedToolErrors.length ? { usedToolErrors } : {}),
     };
 }
 
@@ -929,6 +1120,7 @@ async function runCodexDirect(
         let stdoutBuffer = "";
         let stderrBuffer = "";
         let streamedText = "";
+        const usedSkills = new Map<string, AgentRunSkillMetadata>();
         const usedTools = new Set<string>();
         const usedUrls = new Set<string>();
         let abortHandler: (() => void) | null = null;
@@ -972,6 +1164,7 @@ async function runCodexDirect(
             resolve({
                 runtime: "direct-cli",
                 replyText,
+                usedSkills: Array.from(usedSkills.values()),
                 usedTools: Array.from(usedTools),
                 usedUrls: Array.from(usedUrls),
             });
@@ -988,13 +1181,20 @@ async function runCodexDirect(
         const publishRunMetadata = (item: unknown): void => {
             const metadata = extractCodexRunMetadataFromThreadItem(item);
             let changed = false;
-            for (const tool of metadata.usedTools) {
+            for (const skill of metadata.usedSkills ?? []) {
+                const key = [skill.name, skill.mode ?? "", skill.source ?? ""].join("\u0000");
+                if (!usedSkills.has(key)) {
+                    usedSkills.set(key, skill);
+                    changed = true;
+                }
+            }
+            for (const tool of metadata.usedTools ?? []) {
                 if (!usedTools.has(tool)) {
                     usedTools.add(tool);
                     changed = true;
                 }
             }
-            for (const url of metadata.usedUrls) {
+            for (const url of metadata.usedUrls ?? []) {
                 if (!usedUrls.has(url)) {
                     usedUrls.add(url);
                     changed = true;
@@ -1003,6 +1203,7 @@ async function runCodexDirect(
 
             if (changed) {
                 invocation.onRunMetadata?.({
+                    usedSkills: Array.from(usedSkills.values()),
                     usedTools: Array.from(usedTools),
                     usedUrls: Array.from(usedUrls),
                 });
@@ -1148,7 +1349,8 @@ export function buildCodexCliArgs(options: {
 const CLAUDE_APPEND_SYSTEM_PROMPT = [
     "You generate end-user reply text for an Aside note thread.",
     "Return only the final note reply. Answer directly.",
-    "Never mention skills, searches, notes, files, prompts, tools, AGENTS instructions, context-loading, or your process.",
+    "Do not narrate routine process, context-loading, prompts, or AGENTS instructions.",
+    "If a tool, search, file operation, or capability fails and affects the answer, say so briefly.",
 ].join(" ");
 
 export function buildClaudeCliArgs(): string[] {
@@ -1159,6 +1361,8 @@ export function buildClaudeCliArgs(): string[] {
         "stream-json",
         "--include-partial-messages",
         "--no-session-persistence",
+        "--allowedTools",
+        "WebSearch,Bash,Read,Write,Edit,Glob,Grep",
         "--append-system-prompt",
         CLAUDE_APPEND_SYSTEM_PROMPT,
     ];
@@ -1187,8 +1391,11 @@ async function runClaudeDirect(
         let stderrBuffer = "";
         let streamedText = "";
         let finalText: string | null = null;
+        const usedSkills = new Map<string, AgentRunSkillMetadata>();
         const usedTools = new Set<string>();
         const usedUrls = new Set<string>();
+        const usedToolErrors = new Map<string, AgentRunToolErrorMetadata>();
+        const claudeToolNamesById = new Map<string, string>();
         let abortHandler: (() => void) | null = null;
 
         const cleanup = () => {
@@ -1229,31 +1436,94 @@ async function runClaudeDirect(
             resolve({
                 runtime: "direct-cli",
                 replyText,
+                usedSkills: Array.from(usedSkills.values()),
                 usedTools: Array.from(usedTools),
                 usedUrls: Array.from(usedUrls),
+                usedToolErrors: Array.from(usedToolErrors.values()),
             });
         };
 
         const publishMetadata = (event: unknown): void => {
+            for (const block of getClaudeContentBlocks(event)) {
+                if (block.type !== "tool_use") {
+                    continue;
+                }
+
+                const toolUseId = getClaudeToolUseId(block);
+                const toolName = normalizeClaudeToolName(block.name);
+                if (toolUseId && toolName) {
+                    claudeToolNamesById.set(toolUseId, toolName);
+                }
+            }
+
             const metadata = extractClaudeRunMetadataFromJsonEvent(event);
             let changed = false;
-            for (const tool of metadata.usedTools) {
-                if (!usedTools.has(tool)) {
-                    usedTools.add(tool);
+            for (const skill of metadata.usedSkills ?? []) {
+                const key = [skill.name, skill.mode ?? "", skill.source ?? ""].join("\u0000");
+                if (!usedSkills.has(key)) {
+                    usedSkills.set(key, skill);
                     changed = true;
                 }
             }
-            for (const url of metadata.usedUrls) {
+            const recordToolError = (error: AgentRunToolErrorMetadata): void => {
+                const key = [error.name, error.payload].join("\u0000");
+                if (!usedToolErrors.has(key)) {
+                    usedToolErrors.set(key, error);
+                    changed = true;
+                }
+
+                const unavailableToolName = formatUnavailableAgentRunToolName(error.name);
+                const plainToolName = getAgentRunToolBaseName(error.name);
+                if (usedTools.delete(plainToolName)) {
+                    changed = true;
+                }
+                if (!usedTools.has(unavailableToolName)) {
+                    usedTools.add(unavailableToolName);
+                    changed = true;
+                }
+            };
+            for (const tool of metadata.usedTools ?? []) {
+                const baseToolName = getAgentRunToolBaseName(tool);
+                const hasToolError = Array.from(usedToolErrors.values())
+                    .some((error) => error.name === baseToolName);
+                const toolLabel = hasToolError
+                    ? formatUnavailableAgentRunToolName(baseToolName)
+                    : tool;
+                if (!usedTools.has(toolLabel)) {
+                    usedTools.add(toolLabel);
+                    changed = true;
+                }
+            }
+            for (const url of metadata.usedUrls ?? []) {
                 if (!usedUrls.has(url)) {
                     usedUrls.add(url);
                     changed = true;
                 }
             }
+            for (const error of metadata.usedToolErrors ?? []) {
+                recordToolError(error);
+            }
+            for (const candidate of extractClaudeToolErrorCandidatesFromJsonEvent(event)) {
+                const name = candidate.name
+                    ?? (candidate.toolUseId ? claudeToolNamesById.get(candidate.toolUseId) : undefined);
+                if (!name) {
+                    continue;
+                }
+
+                for (const error of normalizeAgentRunToolErrors([{
+                    name,
+                    payload: candidate.payload,
+                }])) {
+                    recordToolError(error);
+                }
+            }
 
             if (changed) {
                 invocation.onRunMetadata?.({
+                    usedSkills: Array.from(usedSkills.values()),
                     usedTools: Array.from(usedTools),
                     usedUrls: Array.from(usedUrls),
+                    usedToolErrors: Array.from(usedToolErrors.values()),
                 });
             }
         };
