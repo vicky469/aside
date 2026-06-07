@@ -430,6 +430,7 @@ export default class Aside extends Plugin {
             this.commentEntryController.getEditorSelectionAction(editor as unknown as Editor, file),
         highlightCommentById: (filePath, commentId) => this.highlightCommentById(filePath, commentId),
         openCommentById: (filePath, commentId) => this.openCommentById(filePath, commentId),
+        openAsideView: () => this.activateView(),
         openIndexNote: () => this.openIndexNote(),
     });
     private readonly workspaceContextController = new WorkspaceContextController({

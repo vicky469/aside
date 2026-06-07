@@ -54,6 +54,7 @@ export interface PluginRegistrationHost {
     getEditorSelectionAction(editor: EditorSelectionLike, file: TFile | null): EditorSelectionCommentAction;
     highlightCommentById(filePath: string | null, commentId: string): Promise<void>;
     openCommentById(filePath: string | null, commentId: string): Promise<void>;
+    openAsideView(): Promise<void> | void;
     openIndexNote(): Promise<void> | void;
 }
 
@@ -88,6 +89,15 @@ export class PluginRegistrationController {
         this.host.removeCommand(`${this.host.manifestId}:activate-view`);
 
         this.host.addCommand({
+            id: "activate-view",
+            name: "Open sidebar",
+            icon: this.host.iconId,
+            callback: async () => {
+                await this.host.openAsideView();
+            },
+        });
+
+        this.host.addCommand({
             id: "add-comment-to-selection",
             name: "Add comment to selection",
             icon: this.host.iconId,
@@ -111,8 +121,8 @@ export class PluginRegistrationController {
             });
         });
 
-        this.host.addRibbonIcon(this.host.iconId, "Open index", () => {
-            void this.host.openIndexNote();
+        this.host.addRibbonIcon(this.host.iconId, "Open Aside", () => {
+            void this.host.openAsideView();
         });
     }
 }

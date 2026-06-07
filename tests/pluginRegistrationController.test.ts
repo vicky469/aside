@@ -77,6 +77,7 @@ function createHarness(options: { selectionAction?: "add-comment" | "orphan-anch
     const selectionActionCalls: Array<{ selected: boolean; filePath: string | null }> = [];
     const highlightedCommentTargets: Array<{ filePath: string | null; commentId: string }> = [];
     const openedCommentTargets: Array<{ filePath: string | null; commentId: string }> = [];
+    let openAsideViewCount = 0;
     let openIndexNoteCount = 0;
 
     const controller = new PluginRegistrationController({
@@ -123,6 +124,9 @@ function createHarness(options: { selectionAction?: "add-comment" | "orphan-anch
         openCommentById: async (filePath, commentId) => {
             openedCommentTargets.push({ filePath, commentId });
         },
+        openAsideView: async () => {
+            openAsideViewCount += 1;
+        },
         openIndexNote: async () => {
             openIndexNoteCount += 1;
         },
@@ -141,6 +145,7 @@ function createHarness(options: { selectionAction?: "add-comment" | "orphan-anch
         selectionActionCalls,
         highlightedCommentTargets,
         openedCommentTargets,
+        getOpenAsideViewCount: () => openAsideViewCount,
         getOpenIndexNoteCount: () => openIndexNoteCount,
     };
 }
@@ -156,10 +161,14 @@ test("plugin registration controller registers the view, protocol handler, comma
     assert.deepEqual(harness.createdSidebarLeaves, [{ id: "leaf-1" }]);
     assert.deepEqual(Array.from(harness.protocolHandlers.keys()).sort(), ["aside-comment", "side-note2-comment"]);
     assert.deepEqual(harness.removedCommandIds, ["aside:activate-view"]);
-    assert.deepEqual(harness.commands.map((command) => command.id), ["add-comment-to-selection"]);
-    assert.deepEqual(harness.ribbonActions.map((action) => action.title), ["Open index"]);
+    assert.deepEqual(harness.commands.map((command) => command.id), ["activate-view", "add-comment-to-selection"]);
+    assert.deepEqual(harness.commands.map((command) => command.name), ["Open sidebar", "Add comment to selection"]);
+    assert.deepEqual(harness.ribbonActions.map((action) => action.title), ["Open Aside"]);
 
-    await harness.commands[0].editorCallback?.(
+    await harness.commands[0].callback?.();
+    assert.equal(harness.getOpenAsideViewCount(), 1);
+
+    await harness.commands[1].editorCallback?.(
         { somethingSelected: () => true },
         { file: editorFile },
     );
@@ -192,7 +201,8 @@ test("plugin registration controller registers the view, protocol handler, comma
 
     harness.ribbonActions[0].callback();
     await Promise.resolve();
-    assert.equal(harness.getOpenIndexNoteCount(), 1);
+    assert.equal(harness.getOpenAsideViewCount(), 2);
+    assert.equal(harness.getOpenIndexNoteCount(), 0);
 });
 
 test("plugin registration controller only adds the editor menu item for active selections", async () => {
