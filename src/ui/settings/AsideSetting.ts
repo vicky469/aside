@@ -1,6 +1,5 @@
 import {
     App,
-    ButtonComponent,
     PluginSettingTab,
     Setting,
 } from "obsidian";
@@ -54,7 +53,6 @@ export default class AsideSetting extends PluginSettingTab {
         const localDiagnosticsByTarget = new Map<AsideAgentTarget, AgentRuntimeDiagnostics>(
             supportedActors.map((actor) => [actor.id, createCheckingAgentRuntimeDiagnostics(actor.id)]),
         );
-        let recheckRuntimeButton: ButtonComponent | null = null;
 
         const getStatusBadge = (diagnostics: AgentRuntimeDiagnostics): string => {
             switch (diagnostics.status) {
@@ -69,13 +67,7 @@ export default class AsideSetting extends PluginSettingTab {
                 supportedActors
                     .map((actor) => `${actor.directive} ${getStatusBadge(createCheckingAgentRuntimeDiagnostics(actor.id))}`)
                     .join("  "),
-            )
-            .addButton((button) => {
-                recheckRuntimeButton = button;
-                button.setButtonText("Re-check").onClick(() => {
-                    void refreshRuntimeSetting();
-                });
-            });
+            );
 
         const renderRuntimeSetting = (): void => {
             runtimeStatusSetting.setDesc(
@@ -90,7 +82,6 @@ export default class AsideSetting extends PluginSettingTab {
         };
         const refreshRuntimeSetting = async () => {
             const refreshToken = ++this.agentStatusRefreshToken;
-            recheckRuntimeButton?.setDisabled(true);
             for (const actor of supportedActors) {
                 localDiagnosticsByTarget.set(actor.id, createCheckingAgentRuntimeDiagnostics(actor.id));
             }
@@ -122,7 +113,6 @@ export default class AsideSetting extends PluginSettingTab {
                 // Each provider probe handles its own failure above.
             }
             renderRuntimeSetting();
-            recheckRuntimeButton?.setDisabled(false);
         };
         void refreshRuntimeSetting();
 
