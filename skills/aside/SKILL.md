@@ -1,6 +1,6 @@
 ---
 name: aside
-description: Use when working with Aside comments in real Obsidian notes: `obsidian://aside-comment?...` URIs, page notes, anchored notes, replies, stored comment updates, or `commentId` thread context.
+description: "Use when working with Aside comments in real Obsidian notes: `obsidian://aside-comment?...` URIs, page notes, anchored notes, replies, stored comment updates, or `commentId` thread context."
 ---
 
 # Aside
