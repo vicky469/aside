@@ -201,8 +201,8 @@ test("plugin registration controller registers the view, protocol handler, comma
 
     harness.ribbonActions[0].callback();
     await Promise.resolve();
-    assert.equal(harness.getOpenAsideViewCount(), 2);
-    assert.equal(harness.getOpenIndexNoteCount(), 0);
+    assert.equal(harness.getOpenAsideViewCount(), 1);
+    assert.equal(harness.getOpenIndexNoteCount(), 1);
 });
 
 test("plugin registration controller only adds the editor menu item for active selections", async () => {

@@ -17,6 +17,7 @@ import {
     getRenderableThreadEntries,
     getAgentRunStatusPresentation,
     formatAgentRunMetadataFrontmatter,
+    formatAgentRunVisibleMetadataLabels,
     renderPersistedCommentCard,
     resolveSidebarCommentAuthor,
     shouldShowRetryActionForSidebarComment,
@@ -78,6 +79,7 @@ function createAgentRun(overrides: Partial<AgentRunRecord> = {}): AgentRunRecord
         usedSkills: overrides.usedSkills,
         usedTools: overrides.usedTools,
         usedUrls: overrides.usedUrls,
+        usedToolErrors: overrides.usedToolErrors,
     };
 }
 
@@ -1131,6 +1133,25 @@ test("formatAgentRunMetadataFrontmatter renders compact run metadata", () => {
             usedTools: ["shell"],
         })),
         null,
+    );
+});
+
+test("formatAgentRunVisibleMetadataLabels keeps metadata terse", () => {
+    assert.deepEqual(
+        formatAgentRunVisibleMetadataLabels(createAgentRun({
+            usedSkills: [{ name: "aside", mode: "write", source: "built-in" }],
+            usedTools: ["WebSearch"],
+            usedUrls: ["https://example.com/page"],
+            usedToolErrors: [{
+                name: "WebSearch",
+                payload: "Web search is unavailable.",
+            }],
+        })),
+        [
+            "Skills: aside",
+            "Tools: WebSearch (unavailable)",
+            "URLs:\nhttps://example.com/page",
+        ],
     );
 });
 

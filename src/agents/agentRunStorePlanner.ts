@@ -1,6 +1,7 @@
 import {
     cloneAgentRunRecords,
     normalizeAgentRunSkillMetadata,
+    normalizeAgentRunToolErrors,
     normalizeAgentRunToolNames,
     normalizeAgentRunUrls,
     type AgentRunRecord,
@@ -60,6 +61,7 @@ function normalizeAgentRunRecord(value: unknown): AgentRunRecord | null {
     const usedSkills = normalizeAgentRunSkillMetadata(value.usedSkills);
     const usedTools = normalizeAgentRunToolNames(value.usedTools);
     const usedUrls = normalizeAgentRunUrls(value.usedUrls);
+    const usedToolErrors = normalizeAgentRunToolErrors(value.usedToolErrors);
 
     return {
         id,
@@ -82,6 +84,7 @@ function normalizeAgentRunRecord(value: unknown): AgentRunRecord | null {
         ...(usedSkills.length ? { usedSkills } : {}),
         ...(usedTools.length ? { usedTools } : {}),
         ...(usedUrls.length ? { usedUrls } : {}),
+        ...(usedToolErrors.length ? { usedToolErrors } : {}),
     };
 }
 

@@ -206,6 +206,51 @@ export function renderAgentRunMetadataFrontmatter(
     metaEl.insertBefore(frontmatterEl, metaEl.firstChild);
 }
 
+export function formatAgentRunVisibleMetadataLabels(metadata: AgentRunMetadata): string[] {
+    const normalizedMetadata = mergeAgentRunMetadata(metadata, {});
+    const labels: string[] = [];
+    const skills = Array.from(new Set(
+        normalizedMetadata.usedSkills?.map((skill) => skill.name) ?? [],
+    )).join(", ");
+    if (skills) {
+        labels.push(`Skills: ${skills}`);
+    }
+
+    const tools = normalizedMetadata.usedTools?.join(", ");
+    if (tools) {
+        labels.push(`Tools: ${tools}`);
+    }
+
+    const urls = normalizedMetadata.usedUrls?.join(", ");
+    if (urls) {
+        labels.push(`URLs:\n${urls}`);
+    }
+
+    return labels;
+}
+
+export function renderAgentRunVisibleMetadata(
+    metaEl: HTMLElement,
+    metadata: AgentRunMetadata,
+): void {
+    const existing = metaEl.querySelectorAll(".aside-agent-run-visible-metadata");
+    existing.forEach((element) => element.remove());
+
+    const labels = formatAgentRunVisibleMetadataLabels(metadata);
+    metaEl.classList.toggle("has-agent-run-metadata", labels.length > 0);
+    if (!labels.length) {
+        return;
+    }
+
+    for (const label of labels) {
+        const metadataEl = metaEl.createEl("span", {
+            cls: "aside-agent-run-visible-metadata",
+            text: label,
+        });
+        metaEl.appendChild(metadataEl);
+    }
+}
+
 function buildSidebarCommentAuthorPresentation(
     currentUserLabel: string,
     run: AgentRunRecord | null,
@@ -824,6 +869,7 @@ function renderThreadFooterActions(
     }
     if (agentRun) {
         renderAgentRunMetadataFrontmatter(footerMetaEl, agentRun);
+        renderAgentRunVisibleMetadata(footerMetaEl, agentRun);
     }
 
     if (!(options.showShareAction || options.showAddEntryAction || options.showRetryAction || options.moveAction)) {

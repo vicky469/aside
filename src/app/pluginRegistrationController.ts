@@ -122,7 +122,7 @@ export class PluginRegistrationController {
         });
 
         this.host.addRibbonIcon(this.host.iconId, "Open Aside", () => {
-            void this.host.openAsideView();
+            void this.host.openIndexNote();
         });
     }
 }

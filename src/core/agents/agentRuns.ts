@@ -11,10 +11,16 @@ export interface AgentRunSkillMetadata {
     source?: string;
 }
 
+export interface AgentRunToolErrorMetadata {
+    name: string;
+    payload: string;
+}
+
 export interface AgentRunMetadata {
     usedSkills?: AgentRunSkillMetadata[];
     usedTools?: string[];
     usedUrls?: string[];
+    usedToolErrors?: AgentRunToolErrorMetadata[];
 }
 
 export interface AgentRunStreamState {
@@ -34,6 +40,7 @@ export interface AgentRunStreamState {
     usedSkills?: AgentRunSkillMetadata[];
     usedTools?: string[];
     usedUrls?: string[];
+    usedToolErrors?: AgentRunToolErrorMetadata[];
 }
 
 export interface AgentRunRecord extends AgentRunMetadata {
@@ -61,6 +68,32 @@ function normalizeMetadataToken(value: unknown): string | null {
 
     const normalized = value.replace(/\s+/gu, " ").trim();
     return normalized || null;
+}
+
+function normalizeMetadataPayload(value: unknown): string | null {
+    if (typeof value === "string") {
+        const normalized = value.replace(/\r\n?/gu, "\n").trim();
+        return normalized || null;
+    }
+
+    if (value == null) {
+        return null;
+    }
+
+    try {
+        return JSON.stringify(value, null, 2);
+    } catch {
+        return "[unserializable payload]";
+    }
+}
+
+export function getAgentRunToolBaseName(value: string): string {
+    return value.replace(/\s+\(unavailable\)$/iu, "").trim();
+}
+
+export function formatUnavailableAgentRunToolName(value: string): string {
+    const baseName = getAgentRunToolBaseName(value);
+    return baseName ? `${baseName} (unavailable)` : value;
 }
 
 export function sanitizeAgentRunUrl(value: unknown): string | null {
@@ -124,15 +157,28 @@ export function normalizeAgentRunToolNames(value: unknown): string[] {
         return [];
     }
 
-    const tools = new Set<string>();
+    const tools = new Map<string, string>();
     for (const item of value) {
         const tool = normalizeMetadataToken(item);
-        if (tool && tool !== "shell") {
-            tools.add(tool);
+        if (!tool) {
+            continue;
+        }
+
+        const baseName = getAgentRunToolBaseName(tool);
+        if (!baseName || baseName === "shell") {
+            continue;
+        }
+
+        const label = /\(unavailable\)$/iu.test(tool)
+            ? formatUnavailableAgentRunToolName(baseName)
+            : tool;
+        const currentLabel = tools.get(baseName);
+        if (!currentLabel || /\(unavailable\)$/iu.test(label)) {
+            tools.set(baseName, label);
         }
     }
 
-    return Array.from(tools);
+    return Array.from(tools.values());
 }
 
 export function normalizeAgentRunUrls(value: unknown): string[] {
@@ -151,6 +197,38 @@ export function normalizeAgentRunUrls(value: unknown): string[] {
     return Array.from(urls);
 }
 
+export function normalizeAgentRunToolErrors(value: unknown): AgentRunToolErrorMetadata[] {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+
+    const seen = new Set<string>();
+    const errors: AgentRunToolErrorMetadata[] = [];
+    for (const item of value) {
+        if (!item || typeof item !== "object" || Array.isArray(item)) {
+            continue;
+        }
+
+        const rawError = item as Record<string, unknown>;
+        const rawName = normalizeMetadataToken(rawError.name);
+        const name = rawName ? getAgentRunToolBaseName(rawName) : null;
+        const payload = normalizeMetadataPayload(rawError.payload);
+        if (!name || name === "shell" || !payload) {
+            continue;
+        }
+
+        const key = [name, payload].join("\u0000");
+        if (seen.has(key)) {
+            continue;
+        }
+
+        seen.add(key);
+        errors.push({ name, payload });
+    }
+
+    return errors;
+}
+
 export function mergeAgentRunMetadata(
     base: AgentRunMetadata,
     next: AgentRunMetadata,
@@ -167,11 +245,32 @@ export function mergeAgentRunMetadata(
         ...(base.usedUrls ?? []),
         ...(next.usedUrls ?? []),
     ]);
+    const usedToolErrors = normalizeAgentRunToolErrors([
+        ...(base.usedToolErrors ?? []),
+        ...(next.usedToolErrors ?? []),
+    ]);
+    const unavailableToolNames = new Set(usedToolErrors.map((error) => error.name));
+    const displayToolsByBaseName = new Map<string, string>();
+    for (const tool of usedTools) {
+        const baseName = getAgentRunToolBaseName(tool);
+        displayToolsByBaseName.set(
+            baseName,
+            unavailableToolNames.has(baseName)
+                ? formatUnavailableAgentRunToolName(baseName)
+                : tool,
+        );
+    }
+    for (const toolName of unavailableToolNames) {
+        if (!displayToolsByBaseName.has(toolName)) {
+            displayToolsByBaseName.set(toolName, formatUnavailableAgentRunToolName(toolName));
+        }
+    }
 
     return {
         ...(usedSkills.length ? { usedSkills } : {}),
-        ...(usedTools.length ? { usedTools } : {}),
+        ...(displayToolsByBaseName.size ? { usedTools: Array.from(displayToolsByBaseName.values()) } : {}),
         ...(usedUrls.length ? { usedUrls } : {}),
+        ...(usedToolErrors.length ? { usedToolErrors } : {}),
     };
 }
 

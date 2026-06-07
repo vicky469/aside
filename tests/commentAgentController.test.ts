@@ -71,6 +71,7 @@ function createHarness(options: {
         replyText: string;
         usedTools?: string[];
         usedUrls?: string[];
+        usedToolErrors?: Array<{ name: string; payload: string }>;
     }>;
 } = {}) {
     let persistedData: PersistedPluginData = options.initialPersistedData ?? {};
@@ -327,6 +328,10 @@ test("comment agent controller persists runtime tool and url metadata", async ()
             replyText: "Ship it.",
             usedTools: ["browser-use.browser_navigate"],
             usedUrls: ["http://localhost:3000/dashboard?token=secret#debug"],
+            usedToolErrors: [{
+                name: "WebSearch",
+                payload: "unavailable",
+            }],
         }),
     });
 
@@ -340,8 +345,12 @@ test("comment agent controller persists runtime tool and url metadata", async ()
 
     const latestRun = harness.controller.getLatestAgentRunForThread("thread-1");
     assert.equal(latestRun?.status, "succeeded");
-    assert.deepEqual(latestRun?.usedTools, ["browser-use.browser_navigate"]);
+    assert.deepEqual(latestRun?.usedTools, ["browser-use.browser_navigate", "WebSearch (unavailable)"]);
     assert.deepEqual(latestRun?.usedUrls, ["http://localhost:3000/dashboard"]);
+    assert.deepEqual(latestRun?.usedToolErrors, [{
+        name: "WebSearch",
+        payload: "unavailable",
+    }]);
 });
 
 test("comment agent controller blocks a run when runtime selection is unavailable", async () => {

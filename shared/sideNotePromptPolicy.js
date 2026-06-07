@@ -48,8 +48,8 @@ function buildSideNotePrompt(options) {
         `If you create an image or video asset, place it under \`${SIDE_NOTE_ATTACHMENT_FOLDER}/\` at the active ${rootLabel}, create that folder if needed, and reference the asset from the reply with normal Obsidian markdown or a wiki link.`,
         "Only use ASCII diagrams when a compact text-only sketch is clearly the best fit.",
         "If the best useful answer would exceed 250 words, create or update a short linked wiki note with the full detail and return a concise side note that points to it.",
-        "Do not mention skills, prompts, searches, files, tools, AGENTS instructions, or your process.",
-        "Do not narrate what you are doing.",
+        "Do not narrate routine process, context-loading, prompts, or AGENTS instructions.",
+        "If a tool, search, file operation, or capability fails and affects the answer, say so briefly.",
         "Do not include thinking steps or tool logs.",
         "Do not mention reading notes, locating threads, loading context, or using the workspace.",
     ];

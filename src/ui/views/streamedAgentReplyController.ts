@@ -1,9 +1,6 @@
 import type { AgentRunStreamState } from "../../core/agents/agentRuns";
 import { getAgentActorLabel } from "../../core/agents/agentActorRegistry";
-import {
-    getAgentRunStatusPresentation,
-    renderAgentRunMetadataFrontmatter,
-} from "./sidebarPersistedComment";
+import { getAgentRunStatusPresentation } from "./sidebarPersistedComment";
 import { formatSidebarCommentMeta } from "./sidebarCommentSections";
 import { nodeInstanceOf } from "../domGuards";
 
@@ -111,8 +108,8 @@ export class StreamedAgentReplyController {
         labelEl.hidden = hideAgentLabel;
         labelEl.style.display = hideAgentLabel ? "none" : "";
 
-        this.syncStatus(statusEl, label, stream);
         this.syncBorrowedFooterMeta();
+        this.syncStatus(statusEl, label, stream);
         this.syncActions(actionsEl, stream);
 
         const processLogText = formatAgentProcessLogText(stream);
@@ -191,9 +188,6 @@ export class StreamedAgentReplyController {
 
         const accessibleStatus = [statusHintText, statusText ?? stream.status].filter(Boolean).join(". ");
         statusEl.setAttribute("aria-label", `${label} ${accessibleStatus}`);
-        if (statusEl.parentElement) {
-            renderAgentRunMetadataFrontmatter(statusEl.parentElement, stream);
-        }
         if (stream.error) {
             statusEl.setAttribute("title", stream.error);
             return;

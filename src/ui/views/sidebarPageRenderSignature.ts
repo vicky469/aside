@@ -86,6 +86,7 @@ function getAgentRunsIdentity(runs: readonly AgentRunRecord[]): string {
         run.usedSkills?.map((skill) => [skill.name, skill.mode ?? "", skill.source ?? ""].join("/")).join(",") ?? "",
         run.usedTools?.join(",") ?? "",
         run.usedUrls?.join(",") ?? "",
+        run.usedToolErrors?.map((error) => [error.name, getCachedStringHash(error.payload)].join("/")).join(",") ?? "",
     ].join(":")));
 }
 

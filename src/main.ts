@@ -1582,6 +1582,7 @@ export default class Aside extends Plugin {
 
     async openIndexNote() {
         const indexFilePath = this.getAllCommentsNotePath();
+        await this.refreshAggregateNoteNow();
         if (!this.workspaceViewController.getMarkdownFileByPath(indexFilePath)) {
             this.showNotice(`Unable to open ${indexFilePath}.`, "index", "index.open.error", {
                 filePath: indexFilePath,

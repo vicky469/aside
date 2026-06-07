@@ -1025,6 +1025,7 @@ export class CommentAgentController {
             && JSON.stringify(previous.usedSkills ?? []) === JSON.stringify(nextStream.usedSkills ?? [])
             && JSON.stringify(previous.usedTools ?? []) === JSON.stringify(nextStream.usedTools ?? [])
             && JSON.stringify(previous.usedUrls ?? []) === JSON.stringify(nextStream.usedUrls ?? [])
+            && JSON.stringify(previous.usedToolErrors ?? []) === JSON.stringify(nextStream.usedToolErrors ?? [])
         ) {
             this.runStreams.set(runId, {
                 ...previous,

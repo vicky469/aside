@@ -1714,7 +1714,7 @@ button.aside-thread-footer-meta-action:focus-visible {
 }
 
 .aside-agent-run-metadata-frontmatter {
-    display: block;
+    display: none;
     flex: 1 0 100%;
     min-width: 0;
     margin-top: 1px;
@@ -1724,6 +1724,19 @@ button.aside-thread-footer-meta-action:focus-visible {
     font-weight: 400;
     line-height: 1.25;
     opacity: 0.86;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.aside-agent-run-visible-metadata {
+    display: block;
+    flex: 1 0 100%;
+    min-width: 0;
+    margin-top: 1px;
+    color: var(--text-faint, var(--text-muted));
+    font-size: var(--font-ui-smaller, 11px);
+    font-weight: 400;
+    line-height: 1.25;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
 }

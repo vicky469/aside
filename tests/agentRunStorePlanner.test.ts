@@ -25,6 +25,10 @@ test("normalizePersistedAgentRuns keeps valid records, normalizes legacy remote 
                 "https://example.com/path?token=secret#frag",
                 "not a url",
             ],
+            usedToolErrors: [
+                { name: " WebSearch (unavailable) ", payload: " unavailable " },
+                { name: "", payload: "ignored" },
+            ],
         },
         {
             id: "bad-run",
@@ -53,5 +57,9 @@ test("normalizePersistedAgentRuns keeps valid records, normalizes legacy remote 
         }],
         usedTools: ["browser-use.browser_navigate"],
         usedUrls: ["https://example.com/path"],
+        usedToolErrors: [{
+            name: "WebSearch",
+            payload: "unavailable",
+        }],
     }]);
 });
