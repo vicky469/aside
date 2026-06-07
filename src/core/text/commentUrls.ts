@@ -1,3 +1,5 @@
+import { compactEmbeddedCommentPayloads } from "./commentPayloads";
+
 const URL_PATTERN = /https?:\/\/[^\s<]+/g;
 const FENCE_LINE = /^ {0,3}(`{3,}|~{3,})/;
 const LINK_DEFINITION_LINE = /^ {0,3}\[[^\]]+]:\s*https?:\/\//i;
@@ -253,7 +255,8 @@ export function shortenBareUrlsInMarkdown(markdown: string): string {
         return markdown;
     }
 
-    const lines = markdown.split("\n");
+    const compactedMarkdown = compactEmbeddedCommentPayloads(markdown);
+    const lines = compactedMarkdown.split("\n");
     const normalized: string[] = [];
     let activeFence: FenceState | null = null;
 

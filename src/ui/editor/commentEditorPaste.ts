@@ -1,3 +1,4 @@
+import { createCompactClipboardPayloadText } from "../../core/text/commentPayloads";
 import type { TextEditResult } from "./commentEditorFormatting";
 
 export interface ClipboardDataReader {
@@ -33,6 +34,19 @@ export function createDraftPasteEdit(
     clipboardData: ClipboardDataReader | null,
     htmlToMarkdown: HtmlToMarkdownConverter,
 ): TextEditResult | null {
+    const plainText = clipboardData?.getData("text/plain") ?? "";
+    const compactPlainText = plainText ? createCompactClipboardPayloadText(plainText) : null;
+    if (compactPlainText) {
+        const [start, end] = clampSelection(value, selectionStart, selectionEnd);
+        const nextValue = `${value.slice(0, start)}${compactPlainText}${value.slice(end)}`;
+        const nextSelection = start + compactPlainText.length;
+        return {
+            value: nextValue,
+            selectionStart: nextSelection,
+            selectionEnd: nextSelection,
+        };
+    }
+
     const html = clipboardData?.getData("text/html") ?? "";
     if (!html.trim()) {
         return null;
@@ -49,7 +63,6 @@ export function createDraftPasteEdit(
         return null;
     }
 
-    const plainText = clipboardData?.getData("text/plain") ?? "";
     if (plainText && normalizeForComparison(markdown) === normalizeForComparison(plainText)) {
         return null;
     }
