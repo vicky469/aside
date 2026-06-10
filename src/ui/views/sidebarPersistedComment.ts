@@ -74,7 +74,12 @@ export interface PersistedCommentPresentation extends BasePersistedCommentPresen
     };
 }
 
-export type PersistedThreadEntryPresentation = BasePersistedCommentPresentation;
+export interface PersistedThreadEntryPresentation extends BasePersistedCommentPresentation {
+    redirectHint: {
+        ariaLabel: string;
+        icon: string;
+    };
+}
 
 export interface SidebarCommentAuthorPresentation {
     kind: "user" | AsideAgentTarget;
@@ -161,6 +166,28 @@ function formatSkillMetadataLabel(skill: { name: string; mode?: string }): strin
     return skill.mode ? `${skill.name} (${skill.mode})` : skill.name;
 }
 
+function formatAgentRunUrlLines(urls: readonly string[] | undefined): string[] {
+    const seen = new Set<string>();
+    const lines: string[] = [];
+    for (const url of urls ?? []) {
+        const normalizedUrlText = url
+            .replace(/(^|\s)\\n\s*-\s*/g, "$1\n")
+            .replace(/(^|\s)\/n\s*-\s*/g, "$1\n")
+            .replace(/\\n/g, "\n");
+        for (const line of normalizedUrlText.split(/\n+/)) {
+            const normalizedLine = line.trim().replace(/^-\s*/, "").trim();
+            if (!normalizedLine || seen.has(normalizedLine)) {
+                continue;
+            }
+
+            seen.add(normalizedLine);
+            lines.push(normalizedLine);
+        }
+    }
+
+    return lines;
+}
+
 export function formatAgentRunMetadataFrontmatter(metadata: AgentRunMetadata): string | null {
     const normalizedMetadata = mergeAgentRunMetadata(metadata, {});
     const lines: string[] = [];
@@ -221,9 +248,9 @@ export function formatAgentRunVisibleMetadataLabels(metadata: AgentRunMetadata):
         labels.push(`Tools: ${tools}`);
     }
 
-    const urls = normalizedMetadata.usedUrls?.join(", ");
-    if (urls) {
-        labels.push(`URLs:\n${urls}`);
+    const urls = formatAgentRunUrlLines(normalizedMetadata.usedUrls);
+    if (urls.length) {
+        labels.push(["URLs:", ...urls].join("\n"));
     }
 
     return labels;
@@ -461,6 +488,10 @@ export function buildPersistedThreadEntryPresentation(
     return {
         ...presentation,
         metaPreviewText: entry.anchor ? presentation.metaPreviewText : null,
+        redirectHint: {
+            ariaLabel: "Open source note",
+            icon: "obsidian-external-link",
+        },
     };
 }
 
@@ -1020,6 +1051,15 @@ function renderStoredThreadEntry(
             renderRestoreButton(entryActionsEl, entryComment.id, host, "Restore deleted side note entry");
             renderPermanentDeleteButton(entryActionsEl, entryComment.id, host, "Permanently delete side note entry");
         } else {
+            if (host.showSourceRedirectAction && !entryComment.deletedAt && !thread.deletedAt) {
+                renderSourceRedirectButton(
+                    entryActionsEl,
+                    entryComment,
+                    entryPresentation.redirectHint.ariaLabel,
+                    entryPresentation.redirectHint.icon,
+                    host,
+                );
+            }
             if (!host.showSourceRedirectAction) {
                 renderEditButton(entryActionsEl, entryComment.id, host, "Edit side note");
             }

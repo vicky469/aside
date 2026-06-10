@@ -116,6 +116,19 @@ export function sanitizeAgentRunUrl(value: unknown): string | null {
     }
 }
 
+function splitAgentRunUrlCandidates(value: unknown): string[] {
+    if (typeof value !== "string") {
+        return [];
+    }
+
+    return value
+        .replace(/\r\n?/gu, "\n")
+        .replace(/(?:\\n|\/n|\n)\s*-\s*/gu, "\n")
+        .split(/\n+/u)
+        .map((candidate) => candidate.trim().replace(/^-\s*/u, "").trim())
+        .filter((candidate) => candidate.length > 0);
+}
+
 export function normalizeAgentRunSkillMetadata(value: unknown): AgentRunSkillMetadata[] {
     if (!Array.isArray(value)) {
         return [];
@@ -188,9 +201,11 @@ export function normalizeAgentRunUrls(value: unknown): string[] {
 
     const urls = new Set<string>();
     for (const item of value) {
-        const url = sanitizeAgentRunUrl(item);
-        if (url) {
-            urls.add(url);
+        for (const candidate of splitAgentRunUrlCandidates(item)) {
+            const url = sanitizeAgentRunUrl(candidate);
+            if (url) {
+                urls.add(url);
+            }
         }
     }
 

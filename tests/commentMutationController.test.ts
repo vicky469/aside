@@ -566,6 +566,33 @@ test("comment mutation controller inserts appended thread entries after the targ
     );
 });
 
+test("comment mutation controller treats repeated appended thread entry ids as idempotent", async () => {
+    const existing = createComment({ id: "thread-1", comment: "Original" });
+    const host = createHost({
+        knownComments: [existing],
+        loadedComments: [existing],
+    });
+
+    const firstAppend = await host.controller.appendThreadEntry(existing.id, {
+        id: "entry-2",
+        body: "",
+        timestamp: 200,
+    });
+    const secondAppend = await host.controller.appendThreadEntry(existing.id, {
+        id: "entry-2",
+        body: "",
+        timestamp: 200,
+    });
+
+    assert.equal(firstAppend, true);
+    assert.equal(secondAppend, true);
+    assert.deepEqual(
+        host.manager.getThreadById(existing.id)?.entries.map((entry) => entry.id),
+        ["thread-1", "entry-2"],
+    );
+    assert.equal(host.persistedFiles.length, 1);
+});
+
 test("comment mutation controller can insert appended thread entries immediately after the thread root", async () => {
     const existing = createComment({ id: "thread-1", comment: "Original" });
     const host = createHost({

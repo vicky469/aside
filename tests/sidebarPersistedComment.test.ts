@@ -123,7 +123,10 @@ class FakeElement {
     public onclick: unknown = null;
     public readonly style = { display: "" };
     public readonly classList = new FakeClassList(this);
-    public readonly ownerDocument = { defaultView: null };
+    public readonly ownerDocument = {
+        defaultView: null,
+        createElementNS: (_namespace: string, tagName: string) => new FakeElement(tagName),
+    };
     private readonly attributes = new Map<string, string>();
 
     constructor(
@@ -1141,7 +1144,11 @@ test("formatAgentRunVisibleMetadataLabels keeps metadata terse", () => {
         formatAgentRunVisibleMetadataLabels(createAgentRun({
             usedSkills: [{ name: "aside", mode: "write", source: "built-in" }],
             usedTools: ["WebSearch"],
-            usedUrls: ["https://example.com/page"],
+            usedUrls: [
+                "https://example.com/page",
+                "https://example.com/other",
+                "\\n- https://example.com/imported",
+            ],
             usedToolErrors: [{
                 name: "WebSearch",
                 payload: "Web search is unavailable.",
@@ -1150,7 +1157,7 @@ test("formatAgentRunVisibleMetadataLabels keeps metadata terse", () => {
         [
             "Skills: aside",
             "Tools: WebSearch (unavailable)",
-            "URLs:\nhttps://example.com/page",
+            "URLs:\nhttps://example.com/page\nhttps://example.com/other\nhttps://example.com/imported",
         ],
     );
 });
@@ -1243,6 +1250,34 @@ test("renderPersistedCommentCard puts agent metadata above status and Add to fil
     assert.equal(childClasses.some((className) =>
         className.includes("aside-thread-footer-meta-separator")
     ), false);
+});
+
+test("renderPersistedCommentCard renders source redirects for nested index entries", async () => {
+    const thread = createThreadWithEntries({
+        entries: [
+            { id: "comment-1", body: "Parent side note", timestamp: 100 },
+            { id: "entry-2", body: "Nested side note", timestamp: 110 },
+        ],
+    });
+    const openedCommentIds: string[] = [];
+    const host = createRenderHost({
+        showSourceRedirectAction: true,
+        openCommentInEditor: async (comment) => {
+            openedCommentIds.push(comment.id);
+        },
+    });
+    const root = new FakeElement("div");
+
+    await renderPersistedCommentCard(root as unknown as HTMLDivElement, thread, host);
+
+    const redirectButtons = root.findAllByClass("aside-comment-action-redirect");
+    assert.equal(redirectButtons.length, 2);
+    const childRedirectButton = redirectButtons[1];
+    assert.ok(childRedirectButton);
+    await (childRedirectButton.onclick as (event: { stopPropagation(): void }) => Promise<void>)({
+        stopPropagation() {},
+    });
+    assert.deepEqual(openedCommentIds, ["entry-2"]);
 });
 
 test("renderPersistedCommentCard reuses toolbar pin styling for page note pins", async () => {

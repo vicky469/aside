@@ -277,6 +277,39 @@ test("comment agent controller appends a reply and marks the run succeeded", asy
     );
 });
 
+test("comment agent controller removes orphan duplicate replies created during completion", async () => {
+    let harness: ReturnType<typeof createHarness>;
+    harness = createHarness({
+        customRunAgentRuntime: async () => {
+            const activeStream = harness.controller.getActiveAgentStreamForThread("thread-1");
+            harness.commentManager.appendEntry("thread-1", {
+                id: "orphan-duplicate",
+                body: "Ship it.",
+                timestamp: activeStream?.startedAt ?? 0,
+            });
+            return {
+                runtime: "direct-cli",
+                replyText: "Ship it.",
+            };
+        },
+    });
+
+    await harness.controller.handleSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "@codex review this",
+    });
+    await waitForAgentQueueToDrain(harness.controller);
+
+    const entries = harness.commentManager.getAllThreads({ includeDeleted: true })
+        .find((thread) => thread.id === "thread-1")?.entries ?? [];
+    const visibleDuplicateBodies = entries
+        .filter((entry) => !entry.deletedAt && entry.body === "Ship it.")
+        .map((entry) => entry.id);
+    assert.deepEqual(visibleDuplicateBodies, ["generated-2"]);
+});
+
 test("comment agent controller dispatches claude as a peer provider", async () => {
     const harness = createHarness({
         runtimeReplyText: "Claude reply.",
@@ -1064,7 +1097,7 @@ test("comment agent controller marks thread runs cancelled before delete flow co
     assert.equal(harness.controller.getLatestAgentRunForThread("thread-1")?.status, "cancelled");
 });
 
-test("comment agent controller refreshes views only after the stream targets the persisted reply entry", async () => {
+test("comment agent controller refreshes views after clearing the completed stream", async () => {
     const refreshSnapshots: Array<{
         status: string | null;
         outputEntryId: string | null;
@@ -1088,9 +1121,13 @@ test("comment agent controller refreshes views only after the stream targets the
     });
     await waitForAgentQueueToDrain(harness.controller);
 
+    assert.ok(refreshSnapshots.some((snapshot) =>
+        snapshot.status === "running"
+        && snapshot.outputEntryId === "generated-2"
+    ));
     assert.deepEqual(refreshSnapshots.at(-1), {
-        status: "succeeded",
-        outputEntryId: "generated-2",
+        status: null,
+        outputEntryId: null,
     });
 });
 

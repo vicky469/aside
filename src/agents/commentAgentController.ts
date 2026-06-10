@@ -98,6 +98,10 @@ const BUILT_IN_ASIDE_SKILL_MODE = "write";
 const MAX_AGENT_PROCESS_LOG_LINES = 80;
 const UTF8_ENCODER = new TextEncoder();
 
+function normalizeAgentReplyDuplicateText(text: string): string {
+    return text.replace(/\r\n?/g, "\n").trim();
+}
+
 interface ActiveRunExecution {
     runId: string;
     threadId: string;
@@ -554,14 +558,16 @@ export class CommentAgentController {
             cancelRequested: false,
         };
         this.activeRunExecutions.set(runId, execution);
-        await this.refreshStatusViews();
-        this.setRunStream(this.buildRunStreamState(runningRun, {
+        const initialStream = this.buildRunStreamState(runningRun, {
             status: "running",
             partialText: "",
             startedAt: runningRun.startedAt ?? startedAt,
             updatedAt: runningRun.startedAt ?? startedAt,
             outputEntryId,
-        }));
+        });
+        this.setRunStreamState(initialStream);
+        await this.refreshStatusViews();
+        this.emitStreamUpdate(runningRun.threadId, initialStream);
 
         void this.host.log?.("info", "agents", "agents.run.started", {
             runId,
@@ -797,16 +803,20 @@ export class CommentAgentController {
         if (!completedRun) {
             throw new Error("Unable to finalize the agent run.");
         }
-        this.setRunStream(this.buildRunStreamState(completedRun, {
-            status: "succeeded",
-            processLogLines: this.runStreams.get(options.run.id)?.processLogLines,
-            partialText: replyText,
-            startedAt: options.startedAt,
-            updatedAt: timestamp,
+        const hadActiveStream = this.clearRunStreamState(options.run.id);
+        await this.deleteDuplicateCompletedAgentReplies({
+            threadId: options.run.threadId,
+            triggerEntryId: options.run.triggerEntryId,
             outputEntryId: options.outputEntryId,
-        }));
+            replyText,
+            startedAt: options.startedAt,
+            completedAt: timestamp,
+            runId: options.run.id,
+        });
         await this.refreshStatusViews();
-        this.clearRunStream(options.run.id, options.run.threadId);
+        if (hadActiveStream) {
+            this.emitStreamUpdate(options.run.threadId, null);
+        }
         void this.host.log?.("info", "agents", "agents.reply.appended", {
             runId: options.run.id,
             threadId: options.run.threadId,
@@ -818,6 +828,65 @@ export class CommentAgentController {
             runtime: options.runtime,
             outputEntryId: options.outputEntryId,
         });
+    }
+
+    private async deleteDuplicateCompletedAgentReplies(options: {
+        threadId: string;
+        triggerEntryId: string;
+        outputEntryId: string;
+        replyText: string;
+        startedAt: number;
+        completedAt: number;
+        runId: string;
+    }): Promise<void> {
+        const thread = this.host.getCommentManager().getThreadById(options.threadId);
+        if (!thread) {
+            return;
+        }
+
+        const normalizedReplyText = normalizeAgentReplyDuplicateText(options.replyText);
+        if (!normalizedReplyText) {
+            return;
+        }
+
+        const triggerIndex = thread.entries.findIndex((entry) => entry.id === options.triggerEntryId);
+        const protectedOutputEntryIds = new Set(
+            this.store.getRuns()
+                .map((run) => run.outputEntryId)
+                .filter((outputEntryId): outputEntryId is string => !!outputEntryId),
+        );
+        const duplicateEntryIds = thread.entries
+            .map((entry, index) => ({ entry, index }))
+            .filter(({ entry, index }) =>
+                entry.id !== options.outputEntryId
+                && entry.id !== options.triggerEntryId
+                && !entry.deletedAt
+                && !protectedOutputEntryIds.has(entry.id)
+                && (triggerIndex === -1 || index > triggerIndex)
+                && entry.timestamp >= options.startedAt
+                && entry.timestamp <= options.completedAt
+                && normalizeAgentReplyDuplicateText(entry.body) === normalizedReplyText)
+            .map(({ entry }) => entry.id);
+
+        for (const duplicateEntryId of duplicateEntryIds) {
+            try {
+                await this.host.deleteComment(duplicateEntryId, { skipCommentViewRefresh: true });
+                void this.host.log?.("info", "agents", "agents.reply.duplicate_removed", {
+                    runId: options.runId,
+                    threadId: options.threadId,
+                    outputEntryId: options.outputEntryId,
+                    duplicateEntryId,
+                });
+            } catch (error) {
+                void this.host.log?.("warn", "agents", "agents.reply.duplicate_remove_failed", {
+                    runId: options.runId,
+                    threadId: options.threadId,
+                    outputEntryId: options.outputEntryId,
+                    duplicateEntryId,
+                    error,
+                });
+            }
+        }
     }
 
     private async buildRuntimePromptContext(
@@ -1041,22 +1110,34 @@ export class CommentAgentController {
     }
 
     private setRunStream(stream: AgentRunStreamState): void {
+        this.setRunStreamState(stream);
+        this.emitStreamUpdate(stream.threadId, stream);
+    }
+
+    private setRunStreamState(stream: AgentRunStreamState): void {
         this.clearRunStreamPruneTimer(stream.runId);
         this.runStreams.set(stream.runId, cloneAgentRunStreamState(stream));
         if (stream.status === "succeeded" || stream.status === "failed" || stream.status === "cancelled") {
             this.scheduleSilentRunStreamPrune(stream.runId);
         }
-        this.emitStreamUpdate(stream.threadId, stream);
     }
 
     private clearRunStream(runId: string, threadId: string): void {
-        if (!this.runStreams.has(runId)) {
+        if (!this.clearRunStreamState(runId)) {
             return;
+        }
+
+        this.emitStreamUpdate(threadId, null);
+    }
+
+    private clearRunStreamState(runId: string): boolean {
+        if (!this.runStreams.has(runId)) {
+            return false;
         }
 
         this.clearRunStreamPruneTimer(runId);
         this.runStreams.delete(runId);
-        this.emitStreamUpdate(threadId, null);
+        return true;
     }
 
     private scheduleSilentRunStreamPrune(runId: string): void {

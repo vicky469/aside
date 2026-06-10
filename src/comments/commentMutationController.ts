@@ -453,6 +453,16 @@ export class CommentMutationController {
         if (!latestTarget) {
             return false;
         }
+        const existingEntry = this.host.getCommentManager().getThreadById(threadId)?.entries.find((candidate) => (
+            candidate.id === entry.id
+        ));
+        if (existingEntry) {
+            void this.host.log?.("info", "draft", "thread.entry.append.skipped_duplicate", {
+                threadId,
+                commentId: entry.id,
+            });
+            return true;
+        }
 
         this.host.getCommentManager().appendEntry(threadId, {
             id: entry.id,
