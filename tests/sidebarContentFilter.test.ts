@@ -12,6 +12,7 @@ import {
     matchesSidebarDraftSearchQuery,
     matchesSidebarContentFilter,
     matchesSidebarThreadSearchQuery,
+    resolveSidebarSearchShowNestedComments,
     toggleDeletedSidebarViewState,
     toggleSidebarContentFilterState,
     unlockSidebarContentFilterForDraft,
@@ -193,6 +194,13 @@ test("sidebar search keeps the original thread order when scores tie", () => {
         filterThreadsBySidebarSearchQuery([secondThread, firstThread], "alpha").map((thread) => thread.id),
         ["thread-second", "thread-first"],
     );
+});
+
+test("sidebar search renders full matching threads without changing saved nested preference", () => {
+    assert.equal(resolveSidebarSearchShowNestedComments("api cleanup", false), true);
+    assert.equal(resolveSidebarSearchShowNestedComments("  api cleanup  ", false), true);
+    assert.equal(resolveSidebarSearchShowNestedComments("", false), false);
+    assert.equal(resolveSidebarSearchShowNestedComments("   ", true), true);
 });
 
 test("sidebar search also matches draft text", () => {

@@ -738,6 +738,34 @@ test("shouldRenderNestedThreadEntries hides deleted child entries when nested co
     }), false);
 });
 
+test("renderPersistedCommentCard renders the full thread when search shows nested comments", async () => {
+    const root = new FakeElement("div");
+    const thread = createThreadWithEntries({
+        id: "thread-search",
+        entries: [
+            { id: "thread-search", body: "Parent entry without the term", timestamp: 100 },
+            { id: "entry-api", body: "API cleanup is ready", timestamp: 200 },
+            { id: "entry-other", body: "Different follow-up", timestamp: 300 },
+            { id: "entry-later-api", body: "Later API cleanup note", timestamp: 400 },
+        ],
+        createdAt: 100,
+        updatedAt: 400,
+    });
+
+    await renderPersistedCommentCard(
+        root as unknown as HTMLDivElement,
+        thread,
+        createRenderHost({
+            showNestedComments: true,
+        }),
+    );
+
+    assert.deepEqual(
+        root.findAllByClass("aside-comment-item").map((element) => element.getAttribute("data-comment-id")),
+        ["thread-search", "entry-api", "entry-other", "entry-later-api"],
+    );
+});
+
 test("shouldRenderThreadNestedToggle hides the toggle only while visible drafts are open", () => {
     assert.equal(shouldRenderThreadNestedToggle({
         hasStoredChildEntries: true,

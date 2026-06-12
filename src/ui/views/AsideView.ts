@@ -63,6 +63,7 @@ import {
     filterThreadsByPinnedSidebarViewState,
     filterThreadsBySidebarContentFilter,
     rankThreadsBySidebarSearchQuery,
+    resolveSidebarSearchShowNestedComments,
     toggleDeletedSidebarViewState,
     unlockSidebarContentFilterForDraft,
     type SidebarContentFilter,
@@ -1805,6 +1806,7 @@ export default class AsideView extends ItemView {
                     nestedAppendDraftThreadId === item.thread.id && visibleDraftComment?.mode === "append"
                         ? visibleDraftComment
                         : null,
+                    isAllCommentsView ? this.indexSidebarSearchQuery : this.noteSidebarSearchQuery,
                 );
             });
             await Promise.all(renderPromises);
@@ -2037,6 +2039,7 @@ export default class AsideView extends ItemView {
             nestedAppendDraftThreadId,
             visibleDraftComment,
             enableTagSelection: this.noteSidebarMode === "tags",
+            searchQuery: this.noteSidebarSearchQuery,
         });
         await this.reconcileNoteSidebarItems(shell.commentsBodyEl, renderDescriptors);
         this.refreshSidebarSearchHighlights(shell.commentsBodyEl, this.noteSidebarSearchQuery);
@@ -2373,6 +2376,7 @@ export default class AsideView extends ItemView {
             nestedAppendDraftThreadId: string | null;
             visibleDraftComment: DraftComment | null;
             enableTagSelection: boolean;
+            searchQuery: string;
         },
     ): NoteSidebarRenderDescriptor[] {
         return renderableItems.map((item) => {
@@ -2403,7 +2407,10 @@ export default class AsideView extends ItemView {
                 ? options.visibleDraftComment
                 : null;
             const threadAgentRuns = getAgentRunsForCommentThread(options.allAgentRuns, item.thread);
-            const showNestedComments = this.plugin.shouldShowNestedCommentsForThread(item.thread.id);
+            const showNestedComments = resolveSidebarSearchShowNestedComments(
+                options.searchQuery,
+                this.plugin.shouldShowNestedCommentsForThread(item.thread.id),
+            );
             return {
                 key: `thread:${item.thread.id}`,
                 signature: buildPageSidebarThreadRenderSignature({
@@ -2431,6 +2438,7 @@ export default class AsideView extends ItemView {
                         threadAgentRuns,
                         editDraftComment,
                         appendDraftComment,
+                        options.searchQuery,
                     );
                     const nextNode = stagingEl.firstElementChild;
                     if (!nodeInstanceOf(nextNode, HTMLElement)) {
@@ -4007,9 +4015,14 @@ export default class AsideView extends ItemView {
         threadAgentRuns: AgentRunRecord[],
         editDraftComment: DraftComment | null = null,
         appendDraftComment: DraftComment | null = null,
+        searchQuery: string = "",
     ) {
         const currentFilePath = this.file?.path ?? null;
         const isIndexView = !!currentFilePath && this.plugin.isAllCommentsNotePath(currentFilePath);
+        const showNestedComments = resolveSidebarSearchShowNestedComments(
+            searchQuery,
+            this.plugin.shouldShowNestedCommentsForThread(thread.id),
+        );
 
         await renderPersistedCommentCard(commentsContainer, thread, {
             activeCommentId: this.interactionController.getActiveCommentId(),
@@ -4021,7 +4034,7 @@ export default class AsideView extends ItemView {
             enablePageThreadReorder,
             enableChildEntryMove: true,
             enableSoftDeleteActions: true,
-            showNestedComments: this.plugin.shouldShowNestedCommentsForThread(thread.id),
+            showNestedComments,
             showNestedCommentsByDefault: this.plugin.shouldShowNestedComments(),
             getKnownCommentById: (commentId) => this.plugin.getCommentById(commentId),
             editDraftComment,

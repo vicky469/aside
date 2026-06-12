@@ -267,6 +267,15 @@ export function matchesSidebarThreadSearchQuery<T extends Pick<CommentThread, "s
     return getSidebarThreadSearchScore(thread, normalizedQuery) > 0;
 }
 
+export function resolveSidebarSearchShowNestedComments(
+    searchQuery: string,
+    configuredShowNestedComments: boolean,
+): boolean {
+    return normalizeSidebarSearchText(searchQuery)
+        ? true
+        : configuredShowNestedComments;
+}
+
 export function rankThreadsBySidebarSearchQuery<T extends Pick<CommentThread, "selectedText" | "entries">>(
     threads: readonly T[],
     query: string,

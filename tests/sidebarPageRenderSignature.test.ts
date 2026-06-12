@@ -280,6 +280,33 @@ test("buildPageSidebarThreadRenderSignature ignores sidebar search query changes
     assert.equal(withoutSearch, withSearch);
 });
 
+test("buildPageSidebarThreadRenderSignature changes when search forces nested entries visible", () => {
+    const thread = createThread();
+    const baseOptions: Parameters<typeof buildPageSidebarThreadRenderSignature>[0] = {
+        thread,
+        activeCommentId: null,
+        isPinned: false,
+        showNestedComments: false,
+        showNestedCommentsByDefault: false,
+        isSelectedForTagBatch: false,
+        enableTagSelection: false,
+        enablePageThreadReorder: true,
+        editDraftComment: null,
+        appendDraftComment: null,
+        threadAgentRuns: [],
+    };
+    const collapsed = buildPageSidebarThreadRenderSignature({
+        ...baseOptions,
+        showNestedComments: false,
+    });
+    const expanded = buildPageSidebarThreadRenderSignature({
+        ...baseOptions,
+        showNestedComments: true,
+    });
+
+    assert.notEqual(collapsed, expanded);
+});
+
 test("buildPageSidebarDraftRenderSignature changes only for the matching active draft", () => {
     const draft = createDraft({ id: "draft-1", mode: "edit", threadId: undefined });
     const inactive = buildPageSidebarDraftRenderSignature(draft, null);
