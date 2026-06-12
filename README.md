@@ -40,6 +40,7 @@ Aside
   </tr>
 </table>
 Aside is a tool for thought. It helps you capture, connect, and go deeper into your knowledge. Optionally, AI agents can assist you along the journey.
+For durable storage and sync across devices, use Aside with [Obsidian Sync](https://obsidian.md/sync).
 
 ## Features
 

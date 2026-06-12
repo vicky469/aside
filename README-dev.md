@@ -23,11 +23,7 @@ See [feature-map.canvas](./docs/feature-map.canvas) for the feature-first overvi
 
 ## Storage
 
-Side notes sync through Aside plugin data when Obsidian Sync is syncing plugin data. Local sidecar JSON files under `.obsidian/plugins/aside/sidenotes/` are the runtime cache and helper-script write surface.
-
-Legacy trailing hidden `<!-- Aside comments -->` blocks are still parsed so old notes and source-mode workflows can be migrated automatically. During startup or the next storage touch for a note, Aside writes the data into plugin data plus sidecar cache files and strips the managed block from the source note.
-
-The canonical storage precedence is encoded in `src/core/storage/canonicalCommentStorage.ts`: use an existing sidecar/source record first, migrate inline legacy threads only when no sidecar exists, and strip empty legacy blocks while checking source-rename recovery. `Aside index.md` is generated output, not separate storage.
+[[storage]]
 
 ## Dependencies
 
