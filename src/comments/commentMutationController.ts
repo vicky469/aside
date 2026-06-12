@@ -5,7 +5,7 @@ import { lineChToOffset, offsetToLineCh } from "../core/anchors/anchorResolver";
 import { shortenBareUrlsInMarkdown } from "../core/text/commentUrls";
 import { MAX_SIDENOTE_WORDS, countCommentWords, exceedsCommentWordLimit } from "../core/text/commentWordLimit";
 import { resolveAnchorRange } from "../core/anchors/anchorResolver";
-import { getManagedSectionRange, getVisibleNoteContent } from "../core/storage/noteCommentStorage";
+import { getVisibleNoteContent } from "../core/storage/noteCommentStorage";
 import { canSaveDraftWithoutComment, type DraftComment, type DraftSelection } from "../domain/drafts";
 import type { SavedUserEntryEvent } from "../agents/commentAgentController";
 import type { SetDraftCommentOptions } from "./commentSessionController";
@@ -952,30 +952,15 @@ export class CommentMutationController {
             return null;
         }
 
-        const managedRange = getManagedSectionRange(normalizedNoteContent);
-        if (managedRange && rawStartOffset < managedRange.toOffset && rawEndOffset > managedRange.fromOffset) {
-            this.host.showNotice("Select text outside the Aside comments block to re-anchor this side note.");
-            return null;
-        }
-
-        const managedSectionLength = managedRange
-            ? managedRange.toOffset - managedRange.fromOffset
-            : 0;
-        const adjustedStartOffset = managedRange && rawStartOffset >= managedRange.toOffset
-            ? rawStartOffset - managedSectionLength
-            : rawStartOffset;
-        const adjustedEndOffset = managedRange && rawEndOffset >= managedRange.toOffset
-            ? rawEndOffset - managedSectionLength
-            : rawEndOffset;
         const visibleNoteContent = getVisibleNoteContent(normalizedNoteContent);
-        const selectedText = visibleNoteContent.slice(adjustedStartOffset, adjustedEndOffset);
+        const selectedText = visibleNoteContent.slice(rawStartOffset, rawEndOffset);
         if (!selectedText.trim()) {
             this.host.showNotice("Select text in the source note to re-anchor this side note.");
             return null;
         }
 
-        const start = offsetToLineCh(visibleNoteContent, adjustedStartOffset);
-        const end = offsetToLineCh(visibleNoteContent, adjustedEndOffset);
+        const start = offsetToLineCh(visibleNoteContent, rawStartOffset);
+        const end = offsetToLineCh(visibleNoteContent, rawEndOffset);
         return {
             startLine: start.line,
             startChar: start.ch,

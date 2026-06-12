@@ -20,7 +20,6 @@ export interface RemovedSidecarComments {
 export interface SidecarCommentStorageOptions {
     adapter: DataAdapter;
     pluginDirPath: string;
-    legacyPluginDirPaths?: string[];
     hashText(text: string): Promise<string>;
 }
 
@@ -107,19 +106,10 @@ function cloneThreadsForNote(notePath: string, threads: unknown[]): CommentThrea
 export class SidecarCommentStorage {
     private readonly baseDirPath: string;
     private readonly sourceBaseDirPath: string;
-    private readonly legacyBaseDirPaths: string[];
-    private readonly legacySourceBaseDirPaths: string[];
 
     constructor(private readonly options: SidecarCommentStorageOptions) {
         this.baseDirPath = normalizeStoragePath(`${options.pluginDirPath}/sidenotes/by-note`);
         this.sourceBaseDirPath = normalizeStoragePath(`${options.pluginDirPath}/sidenotes/by-source`);
-        const legacyPluginDirPaths = options.legacyPluginDirPaths ?? [];
-        this.legacyBaseDirPaths = legacyPluginDirPaths
-            .map((pluginDirPath) => normalizeStoragePath(`${pluginDirPath}/sidenotes/by-note`))
-            .filter((path) => path !== this.baseDirPath);
-        this.legacySourceBaseDirPaths = legacyPluginDirPaths
-            .map((pluginDirPath) => normalizeStoragePath(`${pluginDirPath}/sidenotes/by-source`))
-            .filter((path) => path !== this.sourceBaseDirPath);
     }
 
     public getBaseDirPath(): string {
@@ -131,40 +121,19 @@ export class SidecarCommentStorage {
     }
 
     public async exists(notePath: string): Promise<boolean> {
-        for (const storagePath of await this.getNoteStoragePaths(notePath)) {
-            if (await this.options.adapter.exists(storagePath)) {
-                return true;
-            }
-        }
-        return false;
+        return this.options.adapter.exists(await this.getNoteStoragePath(notePath));
     }
 
     public async read(notePath: string): Promise<CommentThread[] | null> {
-        return this.readFirstStoragePath(await this.getNoteStoragePaths(notePath), notePath);
+        return this.readStoragePath(await this.getNoteStoragePath(notePath), notePath);
     }
 
     public async existsForSource(sourceId: string): Promise<boolean> {
-        for (const storagePath of await this.getSourceStoragePaths(sourceId)) {
-            if (await this.options.adapter.exists(storagePath)) {
-                return true;
-            }
-        }
-        return false;
+        return this.options.adapter.exists(await this.getSourceStoragePath(sourceId));
     }
 
     public async readForSource(sourceId: string, notePath: string): Promise<CommentThread[] | null> {
-        return this.readFirstStoragePath(await this.getSourceStoragePaths(sourceId), notePath);
-    }
-
-    private async readFirstStoragePath(storagePaths: string[], notePath: string): Promise<CommentThread[] | null> {
-        for (const storagePath of storagePaths) {
-            const threads = await this.readStoragePath(storagePath, notePath);
-            if (threads) {
-                return threads;
-            }
-        }
-
-        return null;
+        return this.readStoragePath(await this.getSourceStoragePath(sourceId), notePath);
     }
 
     private async readStoragePath(storagePath: string, notePath: string): Promise<CommentThread[] | null> {
@@ -253,24 +222,15 @@ export class SidecarCommentStorage {
             filePath: nextNotePath,
         })));
 
-        const nextStoragePath = await this.getNoteStoragePath(nextNotePath);
-        for (const oldStoragePath of await this.getNoteStoragePaths(previousNotePath)) {
-            if (oldStoragePath !== nextStoragePath) {
-                await this.removeStoragePath(oldStoragePath);
-            }
-        }
+        await this.removeStoragePath(await this.getNoteStoragePath(previousNotePath));
     }
 
     public async remove(notePath: string): Promise<void> {
-        for (const storagePath of await this.getNoteStoragePaths(notePath)) {
-            await this.removeStoragePath(storagePath);
-        }
+        await this.removeStoragePath(await this.getNoteStoragePath(notePath));
     }
 
     public async removeForSource(sourceId: string): Promise<void> {
-        for (const storagePath of await this.getSourceStoragePaths(sourceId)) {
-            await this.removeStoragePath(storagePath);
-        }
+        await this.removeStoragePath(await this.getSourceStoragePath(sourceId));
     }
 
     public async listStoredComments(): Promise<RemovedSidecarComments[]> {
@@ -345,8 +305,6 @@ export class SidecarCommentStorage {
         return this.listStorageFiles([
             this.baseDirPath,
             this.sourceBaseDirPath,
-            ...this.legacyBaseDirPaths,
-            ...this.legacySourceBaseDirPaths,
         ]);
     }
 
@@ -387,23 +345,10 @@ export class SidecarCommentStorage {
         return normalizeStoragePath(`${this.baseDirPath}/${shard}/${noteHash}.json`);
     }
 
-    private async getNoteStoragePaths(notePath: string): Promise<string[]> {
-        const noteHash = await this.options.hashText(notePath);
-        const shard = noteHash.slice(0, 2) || "00";
-        return [this.baseDirPath, ...this.legacyBaseDirPaths]
-            .map((baseDirPath) => normalizeStoragePath(`${baseDirPath}/${shard}/${noteHash}.json`));
-    }
-
     public async getSourceStoragePath(sourceId: string): Promise<string> {
         const sourceHash = await this.options.hashText(sourceId);
         const shard = sourceHash.slice(0, 2) || "00";
         return normalizeStoragePath(`${this.sourceBaseDirPath}/${shard}/${sourceHash}.json`);
     }
 
-    private async getSourceStoragePaths(sourceId: string): Promise<string[]> {
-        const sourceHash = await this.options.hashText(sourceId);
-        const shard = sourceHash.slice(0, 2) || "00";
-        return [this.sourceBaseDirPath, ...this.legacySourceBaseDirPaths]
-            .map((baseDirPath) => normalizeStoragePath(`${baseDirPath}/${shard}/${sourceHash}.json`));
-    }
 }

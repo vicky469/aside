@@ -6,7 +6,7 @@ import { CommentManager, type CommentThread } from "../src/commentManager";
 import { CommentPersistenceController } from "../src/comments/commentPersistenceController";
 import type { PersistedPluginData } from "../src/settings/indexNoteSettingsPlanner";
 import { SideNoteSyncEventStore, type SideNoteSyncEventState } from "../src/sync/sideNoteSyncEventStore";
-import { serializeNoteCommentThreads, parseNoteComments } from "../src/core/storage/noteCommentStorage";
+import { parseNoteComments } from "../src/core/storage/noteCommentStorage";
 import { AggregateCommentIndex } from "../src/index/AggregateCommentIndex";
 
 class FakeAdapter implements Pick<DataAdapter, "exists" | "mkdir" | "write" | "read" | "remove" | "rename" | "list"> {
@@ -117,7 +117,7 @@ function serializeSidecarThreads(filePath: string, threads: CommentThread[]): st
     })}\n`;
 }
 
-test("comment persistence controller syncs external managed-block updates into an open note without rewriting the file", async () => {
+test("comment persistence controller syncs external sidecar updates into an open note without rewriting the file", async () => {
     const originalWindow = globalThis.window;
     globalThis.window = {
         setTimeout: () => 1,
@@ -128,8 +128,8 @@ test("comment persistence controller syncs external managed-block updates into a
     const noteBody = "# Title\n\nAlpha target omega\n";
     const storedThread = createThread(file.path);
     const currentContent = noteBody;
-    const storedContent = serializeNoteCommentThreads(noteBody, [storedThread]);
     const adapter = new FakeAdapter();
+    adapter.files.set(getSidecarStoragePath(file.path), serializeSidecarThreads(file.path, [storedThread]));
 
     const commentManager = new CommentManager([]);
     const aggregateCommentIndex = new AggregateCommentIndex();
@@ -146,7 +146,7 @@ test("comment persistence controller syncs external managed-block updates into a
                 adapter: adapter as unknown as DataAdapter,
                 process: async () => {
                     processCount += 1;
-                    throw new Error("Should not rewrite the file for external managed-block sync.");
+                    throw new Error("Should not rewrite the file for external sidecar sync.");
                 },
             },
         } as never,
@@ -156,7 +156,7 @@ test("comment persistence controller syncs external managed-block updates into a
         getMarkdownViewForFile: () => ({}) as MarkdownView,
         getMarkdownFileByPath: () => file,
         getCurrentNoteContent: async () => currentContent,
-        getStoredNoteContent: async () => storedContent,
+        getStoredNoteContent: async () => noteBody,
         getParsedNoteComments: (filePath, noteContent) => parseNoteComments(noteContent, filePath),
         getPluginDataDirPath: () => ".obsidian/plugins/aside",
         getSideNoteSyncDeviceId: () => "device-a",
@@ -308,71 +308,6 @@ test("comment persistence controller deduplicates duplicate child entries from s
     } finally {
         globalThis.window = originalWindow;
     }
-});
-
-test("comment persistence controller migrates inline note storage into a sidecar and strips the source note block", async () => {
-    const file = createFile("docs/note.md");
-    const noteBody = "# Title\n\nAlpha target omega\n";
-    const legacyContent = serializeNoteCommentThreads(noteBody, [createThread(file.path)]);
-    const adapter = new FakeAdapter();
-
-    const commentManager = new CommentManager([]);
-    const aggregateCommentIndex = new AggregateCommentIndex();
-    let processCount = 0;
-    let rewrittenNoteContent = "";
-    let persistedData: PersistedPluginData = {};
-
-    const controller = new CommentPersistenceController({
-        app: {
-            vault: {
-                adapter: adapter as unknown as DataAdapter,
-                process: async (_file: TFile, updater: (currentContent: string) => string) => {
-                    processCount += 1;
-                    rewrittenNoteContent = updater(legacyContent);
-                    return rewrittenNoteContent;
-                },
-            },
-        } as never,
-        getAllCommentsNotePath: () => "Aside index.md",
-        getIndexHeaderImageUrl: () => "",
-        getIndexHeaderImageCaption: () => "",
-        getMarkdownViewForFile: () => null,
-        getMarkdownFileByPath: () => file,
-        getCurrentNoteContent: async () => legacyContent,
-        getStoredNoteContent: async () => legacyContent,
-        getParsedNoteComments: (filePath, noteContent) => parseNoteComments(noteContent, filePath),
-        getPluginDataDirPath: () => ".obsidian/plugins/aside",
-        getSideNoteSyncDeviceId: () => "device-a",
-        readPersistedPluginData: () => persistedData,
-        writePersistedPluginData: async (data) => {
-            persistedData = data;
-        },
-        isAllCommentsNotePath: () => false,
-        isCommentableFile: (candidate): candidate is TFile => !!candidate && candidate.extension === "md",
-        isMarkdownEditorFocused: () => false,
-        getCommentManager: () => commentManager,
-        getAggregateCommentIndex: () => aggregateCommentIndex,
-        createCommentId: () => "generated-id",
-        hashText: async (text) => `hash-${text.replace(/\//g, "_")}`,
-        syncDerivedCommentLinksForFile: () => {},
-        refreshCommentViews: async () => {},
-        refreshAllCommentsSidebarViews: async () => {},
-        refreshEditorDecorations: () => {},
-        refreshMarkdownPreviews: () => {},
-        getCommentMentionedPageLabels: () => [],
-        syncIndexNoteLeafMode: async () => {},
-        log: async () => {},
-    });
-
-    const comments = await controller.loadCommentsForFile(file);
-
-    assert.equal(processCount, 1);
-    assert.equal(rewrittenNoteContent, noteBody);
-    assert.equal(adapter.files.size, 2);
-    assert.ok(persistedData.sideNoteSyncEventState);
-    assert.equal(comments.length, 1);
-    assert.equal(commentManager.getCommentById("thread-1")?.comment, "external body");
-    assert.equal(aggregateCommentIndex.getCommentById("thread-1")?.comment, "external body");
 });
 
 test("comment persistence controller replays synced plugin-data events into the local sidecar cache", async () => {

@@ -175,7 +175,7 @@ test("workspace view controller reads full note data from reading view instead o
     const previewMarkdownView = createMarkdownView(noteFile, {
         mode: "preview",
         value: "",
-        viewData: "# Title\n\nBody\n\n<!-- Aside comments\n[]\n-->",
+        viewData: "# Title\n\nBody\n\nRendered preview text",
     });
     const harness = createHarness({
         activeLeaf: { view: previewMarkdownView },
@@ -188,7 +188,7 @@ test("workspace view controller reads full note data from reading view instead o
 
     assert.equal(
         await harness.controller.getCurrentNoteContent(noteFile),
-        "# Title\n\nBody\n\n<!-- Aside comments\n[]\n-->",
+        "# Title\n\nBody\n\nRendered preview text",
     );
 });
 

@@ -2,8 +2,6 @@ import {
     normalizeAgentRuntimeModePreference,
 } from "../core/agents/agentRuntimePreferences";
 import {
-    ALL_COMMENTS_NOTE_PATH,
-    LEGACY_ALL_COMMENTS_NOTE_PATHS,
     isAllCommentsNotePath,
     normalizeAllCommentsNoteImageCaption,
     normalizeAllCommentsNoteImageUrl,
@@ -48,18 +46,11 @@ function hasOwn(target: object, key: string): boolean {
     return Boolean(Object.prototype.hasOwnProperty.call(target, key));
 }
 
-function isLegacyDefaultIndexNotePath(filePath: string): boolean {
-    return LEGACY_ALL_COMMENTS_NOTE_PATHS.includes(filePath as typeof LEGACY_ALL_COMMENTS_NOTE_PATHS[number]);
-}
-
 export function resolveLoadedSettings(
     loaded: PersistedPluginData | null,
     defaults: AsideSettings,
 ): LoadedSettingsResolution {
-    const loadedIndexNotePath = normalizeAllCommentsNotePath(loaded?.indexNotePath);
-    const indexNotePath = isLegacyDefaultIndexNotePath(loadedIndexNotePath)
-        ? ALL_COMMENTS_NOTE_PATH
-        : loadedIndexNotePath;
+    const indexNotePath = normalizeAllCommentsNotePath(loaded?.indexNotePath);
 
     return {
         settings: {
@@ -77,8 +68,7 @@ export function resolveLoadedSettings(
             || hasOwn(loaded ?? {}, "enableDebugMode")
             || hasOwn(loaded ?? {}, "remoteRuntimeBaseUrl")
             || (hasOwn(loaded ?? {}, "agentRuntimeMode")
-                && normalizeAgentRuntimeModePreference(loaded?.agentRuntimeMode) !== loaded?.agentRuntimeMode)
-            || indexNotePath !== loadedIndexNotePath,
+                && normalizeAgentRuntimeModePreference(loaded?.agentRuntimeMode) !== loaded?.agentRuntimeMode),
     };
 }
 

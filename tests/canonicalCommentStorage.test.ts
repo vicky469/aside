@@ -4,59 +4,26 @@ import {
     planCanonicalCommentStorage,
 } from "../src/core/storage/canonicalCommentStorage";
 
-test("canonical comment storage planner prefers sidecar records over legacy inline blocks", () => {
+test("canonical comment storage planner uses current sidecar records when present", () => {
     const plan = planCanonicalCommentStorage({
         sidecarRecordFound: true,
-        inlineThreadCount: 2,
-        hasThreadedInlineBlock: true,
     });
 
     assert.deepEqual(plan, {
         action: "use-sidecar",
         source: "sidecar",
         shouldRecoverRenamedSource: false,
-        shouldStripInlineBlock: true,
     });
 });
 
-test("canonical comment storage planner treats an empty sidecar record as canonical", () => {
-    const plan = planCanonicalCommentStorage({
-        sidecarRecordFound: true,
-        inlineThreadCount: 0,
-        hasThreadedInlineBlock: false,
-    });
-
-    assert.equal(plan.action, "use-sidecar");
-    assert.equal(plan.source, "sidecar");
-    assert.equal(plan.shouldRecoverRenamedSource, false);
-});
-
-test("canonical comment storage planner migrates legacy inline threads only when no sidecar exists", () => {
+test("canonical comment storage planner checks current rename recovery when no sidecar exists", () => {
     const plan = planCanonicalCommentStorage({
         sidecarRecordFound: false,
-        inlineThreadCount: 1,
-        hasThreadedInlineBlock: true,
-    });
-
-    assert.deepEqual(plan, {
-        action: "migrate-inline",
-        source: "legacy-inline",
-        shouldRecoverRenamedSource: false,
-        shouldStripInlineBlock: true,
-    });
-});
-
-test("canonical comment storage planner strips empty legacy blocks while checking rename recovery", () => {
-    const plan = planCanonicalCommentStorage({
-        sidecarRecordFound: false,
-        inlineThreadCount: 0,
-        hasThreadedInlineBlock: true,
     });
 
     assert.deepEqual(plan, {
         action: "check-renamed-source",
         source: "none",
         shouldRecoverRenamedSource: true,
-        shouldStripInlineBlock: true,
     });
 });

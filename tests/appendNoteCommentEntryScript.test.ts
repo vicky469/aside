@@ -6,8 +6,11 @@ import { tmpdir } from "node:os";
 import * as path from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
-import { serializeNoteComments } from "../src/core/storage/noteCommentStorage";
-import type { Comment } from "../src/commentManager";
+import {
+    commentToThread,
+    type Comment,
+    type CommentThread,
+} from "../src/commentManager";
 
 const execFile = promisify(execFileCallback);
 
@@ -21,7 +24,7 @@ function getSidecarPath(vaultRoot: string, noteRelativePath: string): string {
     return path.join(vaultRoot, ".obsidian", "plugins", "aside", "sidenotes", "by-note", shard, `${hash}.json`);
 }
 
-async function readSidecar(vaultRoot: string, noteRelativePath: string): Promise<{ version: number; notePath: string; threads: Array<{ id: string; entries: Array<{ id: string; body: string; timestamp: number }> }> } | null> {
+async function readSidecar(vaultRoot: string, noteRelativePath: string): Promise<{ version: number; notePath: string; threads: CommentThread[] } | null> {
     const sidecarPath = getSidecarPath(vaultRoot, noteRelativePath);
     try {
         const raw = await readFile(sidecarPath, "utf8");
@@ -33,6 +36,16 @@ async function readSidecar(vaultRoot: string, noteRelativePath: string): Promise
     } catch {
         return null;
     }
+}
+
+async function writeSidecar(vaultRoot: string, noteRelativePath: string, threads: CommentThread[]): Promise<void> {
+    const sidecarPath = getSidecarPath(vaultRoot, noteRelativePath);
+    await mkdir(path.dirname(sidecarPath), { recursive: true });
+    await writeFile(sidecarPath, `${JSON.stringify({
+        version: 1,
+        notePath: noteRelativePath,
+        threads,
+    })}\n`, "utf8");
 }
 
 async function createVaultDir(tempDir: string): Promise<void> {
@@ -71,41 +84,15 @@ function createComment(overrides: Partial<Comment> = {}): Comment {
     };
 }
 
-function buildLegacyNote(overrides: Partial<Comment> = {}): string {
-    const comment = createComment(overrides);
-    return [
-        "# Title",
-        "",
-        "Body text.",
-        "",
-        "<!-- Aside comments",
-        "[",
-        "  {",
-        `    "id": ${JSON.stringify(comment.id)},`,
-        `    "startLine": ${comment.startLine},`,
-        `    "startChar": ${comment.startChar},`,
-        `    "endLine": ${comment.endLine},`,
-        `    "endChar": ${comment.endChar},`,
-        `    "selectedText": ${JSON.stringify(comment.selectedText)},`,
-        `    "selectedTextHash": ${JSON.stringify(comment.selectedTextHash)},`,
-        `    "comment": ${JSON.stringify(comment.comment)},`,
-        `    "timestamp": ${comment.timestamp}`,
-        "  }",
-        "]",
-        "-->",
-        "",
-    ].join("\n");
-}
-
 test("append-note-comment-entry script appends a new entry to the targeted thread", async () => {
     const tempDir = await mkdtemp(path.join(tmpdir(), "aside-comment-append-script-"));
     const notePath = path.join(tempDir, "note.md");
     const commentPath = path.join(tempDir, "reply.md");
     const scriptPath = path.resolve(process.cwd(), "scripts/append-note-comment-entry.mjs");
-    const original = serializeNoteComments("# Title\n\nBody text.\n", [createComment()]);
 
     await createVaultDir(tempDir);
-    await writeFile(notePath, original, "utf8");
+    await writeFile(notePath, "# Title\n\nBody text.\n", "utf8");
+    await writeSidecar(tempDir, "note.md", [commentToThread(createComment())]);
     await writeFile(commentPath, "Reply body\nSecond line\n", "utf8");
 
     const { stdout } = await execFile("node", [
@@ -133,7 +120,7 @@ test("append-note-comment-entry script appends a new entry to the targeted threa
     assert.equal(noteContent, "# Title\n\nBody text.\n");
 });
 
-test("append-note-comment-entry script can target a thread by obsidian side-note URI", async () => {
+test("append-note-comment-entry script can target a thread by obsidian Aside URI", async () => {
     const tempDir = await mkdtemp(path.join(tmpdir(), "aside-comment-uri-append-script-"));
     const homeDir = path.join(tempDir, "home");
     const vaultRoot = path.join(tempDir, "Public Vault");
@@ -141,14 +128,14 @@ test("append-note-comment-entry script can target a thread by obsidian side-note
     const commentPath = path.join(tempDir, "reply.md");
     const scriptPath = path.resolve(process.cwd(), "scripts/append-note-comment-entry.mjs");
     const noteFilePath = "Folder/Note.md";
-    const original = serializeNoteComments("# Title\n\nBody text.\n", [createComment({
-        filePath: noteFilePath,
-    })]);
 
     await mkdir(path.dirname(notePath), { recursive: true });
     await createVaultDir(vaultRoot);
     await writeObsidianVaultConfig(homeDir, vaultRoot);
-    await writeFile(notePath, original, "utf8");
+    await writeFile(notePath, "# Title\n\nBody text.\n", "utf8");
+    await writeSidecar(vaultRoot, noteFilePath, [commentToThread(createComment({
+        filePath: noteFilePath,
+    }))]);
     await writeFile(commentPath, "Reply from URI\nSecond line\n", "utf8");
 
     const { stdout } = await execFile("node", [
@@ -171,33 +158,4 @@ test("append-note-comment-entry script can target a thread by obsidian side-note
     assert.ok(sidecar);
     assert.equal(sidecar!.threads[0].entries.length, 2);
     assert.equal(sidecar!.threads[0].entries[1].body, "Reply from URI\nSecond line");
-});
-
-test("append-note-comment-entry script rejects unsupported legacy flat payloads", async () => {
-    const tempDir = await mkdtemp(path.join(tmpdir(), "aside-comment-append-legacy-"));
-    const notePath = path.join(tempDir, "note.md");
-    const scriptPath = path.resolve(process.cwd(), "scripts/append-note-comment-entry.mjs");
-
-    await createVaultDir(tempDir);
-    await writeFile(notePath, buildLegacyNote(), "utf8");
-
-    let failure: { stderr: string } | null = null;
-    try {
-        await execFile("node", [
-            scriptPath,
-            "--file",
-            notePath,
-            "--id",
-            "comment-1",
-            "--comment",
-            "Reply body",
-        ], {
-            cwd: process.cwd(),
-        });
-    } catch (error) {
-        failure = error as { stderr: string };
-    }
-
-    assert.ok(failure);
-    assert.match(failure.stderr, /not a supported threaded entries\[\] payload/);
 });

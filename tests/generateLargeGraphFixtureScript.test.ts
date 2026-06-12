@@ -7,7 +7,6 @@ import * as path from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
 import { commentToThread, type Comment } from "../src/commentManager";
-import { serializeNoteCommentThreads } from "../src/core/storage/noteCommentStorage";
 
 const execFile = promisify(execFileCallback);
 
@@ -33,6 +32,16 @@ async function readSidecar(vaultRoot: string, noteRelativePath: string): Promise
     } catch {
         return null;
     }
+}
+
+async function writeSidecar(vaultRoot: string, noteRelativePath: string, threads: Array<{ id: string; entries: Array<{ id: string; body: string; timestamp: number }> }>): Promise<void> {
+    const sidecarPath = getSidecarPath(vaultRoot, noteRelativePath);
+    await mkdir(path.dirname(sidecarPath), { recursive: true });
+    await writeFile(sidecarPath, `${JSON.stringify({
+        version: 1,
+        notePath: noteRelativePath,
+        threads,
+    })}\n`, "utf8");
 }
 
 async function createVaultDir(tempDir: string): Promise<void> {
@@ -89,11 +98,8 @@ test("generate-large-graph-fixture preserves existing Aside threads in fixture n
         timestamp: 1710000002000,
     }));
 
-    await writeFile(
-        notePath,
-        serializeNoteCommentThreads("Old fixture body\n", [syntheticThread, manualThread]),
-        "utf8",
-    );
+    await writeFile(notePath, "Old fixture body\n", "utf8");
+    await writeSidecar(tempDir, noteRelativePath, [syntheticThread, manualThread]);
 
     await execFile("node", [
         scriptPath,
@@ -107,7 +113,6 @@ test("generate-large-graph-fixture preserves existing Aside threads in fixture n
 
     const updatedNote = await readFile(notePath, "utf8");
     assert.match(updatedNote, /^# g30-chain-c01-n01/m);
-    assert.doesNotMatch(updatedNote, /<!-- Aside comments/);
 
     const sidecar = await readSidecar(tempDir, noteRelativePath);
     assert.ok(sidecar);

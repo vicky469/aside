@@ -88,7 +88,7 @@ test("buildAgentPromptContext uses anchor scope for selection threads and includ
     assert.equal(context.byteLength, Buffer.byteLength(context.promptText, "utf8"));
 });
 
-test("buildAgentPromptContext uses page scope for page threads and strips hidden comment blocks", () => {
+test("buildAgentPromptContext uses page scope for page threads", () => {
     const context = buildAgentPromptContext({
         filePath: "Folder/Note.md",
         noteContent: [
@@ -104,10 +104,6 @@ test("buildAgentPromptContext uses page scope for page threads and strips hidden
             "## Later",
             "",
             "Gamma detail",
-            "",
-            "<!-- Aside comments",
-            "[]",
-            "-->",
         ].join("\n"),
         thread: createThread({
             anchorKind: "page",

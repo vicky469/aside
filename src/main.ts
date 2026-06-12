@@ -76,12 +76,9 @@ import {
 } from "./logs/logService";
 import bundledAsideSkillContent from "../skills/aside/SKILL.md";
 
-const LEGACY_PLUGIN_ID = "side-note2";
-const SIDECAR_STORAGE_MIGRATION_VERSION = 2;
 const SIDE_NOTE_SYNC_EVENT_MIGRATION_VERSION = 2;
 const SOURCE_IDENTITY_MIGRATION_VERSION = 1;
 const SIDE_NOTE_SYNC_DEVICE_ID_STORAGE_PREFIX = "aside.sync-device-id.v1";
-const LEGACY_SIDE_NOTE_SYNC_DEVICE_ID_STORAGE_PREFIX = "sidenote2.sync-device-id.v1";
 
 // Helper function to generate SHA256 hash using Web Crypto API (works on mobile)
 async function generateHash(text: string): Promise<string> {
@@ -277,10 +274,9 @@ export default class Aside extends Plugin {
         getStoredNoteContent: (file) => this.workspaceViewController.getStoredNoteContent(file),
         getParsedNoteComments: (filePath, noteContent) => this.getParsedNoteComments(filePath, noteContent),
         getPluginDataDirPath: () => this.getPluginDataDirPath(),
-        getLegacyPluginDataDirPaths: () => this.getLegacyPluginDataDirPaths(),
         getSideNoteSyncDeviceId: () => this.getSideNoteSyncDeviceId(),
         readPersistedPluginData: () => this.indexNoteSettingsController.readPersistedPluginData(),
-        loadPersistedPluginData: () => this.loadDataWithLegacyFallback(),
+        loadPersistedPluginData: () => this.loadCurrentData(),
         writePersistedPluginData: (data) => this.indexNoteSettingsController.writePersistedPluginData(data),
         isAllCommentsNotePath: (filePath) => this.isAllCommentsNotePath(filePath),
         isCommentableFile: (file): file is TFile => this.isCommentableFile(file),
@@ -316,7 +312,7 @@ export default class Aside extends Plugin {
         getSidebarTargetFile: () => this.getSidebarTargetFile(),
         updateSidebarViews: (file) => this.updateSidebarViews(file),
         refreshAggregateNoteNow: () => this.refreshAggregateNoteNow(),
-        loadData: () => this.loadDataWithLegacyFallback(),
+        loadData: () => this.loadCurrentData(),
         saveData: (data) => this.saveData(data),
         showNotice: (message) => {
             this.showNotice(message, "index", "index.notice");
@@ -515,7 +511,6 @@ export default class Aside extends Plugin {
         await this.loadSettings();
         this.pluginRegistrationController.register();
         this.registerEditorExtension([
-            this.commentHighlightController.createLivePreviewManagedBlockPlugin(),
             this.commentHighlightController.createEditorHighlightPlugin(),
             this.commentHighlightController.createAllCommentsLivePreviewLinkPlugin(),
         ]);
@@ -550,10 +545,6 @@ export default class Aside extends Plugin {
 
     private async runStartupPersistenceMaintenance(): Promise<void> {
         try {
-            await this.ensureSidecarStorageMigrated();
-            if (this.unloaded) {
-                return;
-            }
             await this.ensureSideNoteSyncEventsMigrated();
             if (this.unloaded) {
                 return;
@@ -735,43 +726,9 @@ export default class Aside extends Plugin {
         return this.manifest.dir ?? normalizePath(`${this.app.vault.configDir}/plugins/${this.manifest.id}`);
     }
 
-    private getLegacyPluginDataDirPaths(): string[] {
-        const legacyDirPath = normalizePath(`${this.app.vault.configDir}/plugins/${LEGACY_PLUGIN_ID}`);
-        const currentDirPath = this.getPluginDataDirPath();
-        return legacyDirPath === currentDirPath ? [] : [legacyDirPath];
-    }
-
-    private async loadDataWithLegacyFallback(): Promise<PersistedPluginData | null> {
+    private async loadCurrentData(): Promise<PersistedPluginData | null> {
         const currentData: unknown = await this.loadData();
-        if (isPersistedPluginData(currentData)) {
-            return currentData;
-        }
-
-        for (const legacyDirPath of this.getLegacyPluginDataDirPaths()) {
-            const legacyDataPath = normalizePath(`${legacyDirPath}/data.json`);
-            try {
-                if (!(await this.app.vault.adapter.exists(legacyDataPath))) {
-                    continue;
-                }
-
-                const legacyData: unknown = JSON.parse(await this.app.vault.adapter.read(legacyDataPath));
-                if (!isPersistedPluginData(legacyData)) {
-                    continue;
-                }
-
-                await this.saveData(legacyData);
-                return legacyData;
-            } catch (error) {
-                this.warn(
-                    "Failed to migrate legacy SideNote2 plugin data into Aside.",
-                    error,
-                    "persistence",
-                    "storage.plugin-data.legacy-migrate.warn",
-                );
-            }
-        }
-
-        return null;
+        return isPersistedPluginData(currentData) ? currentData : null;
     }
 
     private getSideNoteSyncDeviceId(): string {
@@ -787,61 +744,10 @@ export default class Aside extends Plugin {
             return storedDeviceId;
         }
 
-        const legacyStorageKey = `${LEGACY_SIDE_NOTE_SYNC_DEVICE_ID_STORAGE_PREFIX}.${LEGACY_PLUGIN_ID}.${this.app.vault.getName()}`;
-        const legacyStoredDeviceId = storage?.getItem(legacyStorageKey);
-        if (legacyStoredDeviceId && legacyStoredDeviceId.trim()) {
-            storage?.setItem(storageKey, legacyStoredDeviceId);
-            this.sideNoteSyncDeviceId = legacyStoredDeviceId;
-            return legacyStoredDeviceId;
-        }
-
         const nextDeviceId = generateCommentId();
         storage?.setItem(storageKey, nextDeviceId);
         this.sideNoteSyncDeviceId = nextDeviceId;
         return nextDeviceId;
-    }
-
-    private getSidecarStorageMigrationVersion(): number | null {
-        const persistedData = this.indexNoteSettingsController.readPersistedPluginData();
-        return typeof persistedData.sidecarStorageMigrationVersion === "number"
-            ? persistedData.sidecarStorageMigrationVersion
-            : null;
-    }
-
-    private async setSidecarStorageMigrationVersion(version: number): Promise<void> {
-        const persistedData = this.indexNoteSettingsController.readPersistedPluginData();
-        if (persistedData.sidecarStorageMigrationVersion === version) {
-            return;
-        }
-
-        await this.indexNoteSettingsController.writePersistedPluginData({
-            ...persistedData,
-            sidecarStorageMigrationVersion: version,
-        });
-    }
-
-    private async ensureSidecarStorageMigrated(): Promise<void> {
-        if (this.getSidecarStorageMigrationVersion() === SIDECAR_STORAGE_MIGRATION_VERSION) {
-            return;
-        }
-
-        try {
-            await this.logEvent("info", "persistence", "storage.note.migrate.startup.begin", {
-                version: SIDECAR_STORAGE_MIGRATION_VERSION,
-            });
-            await this.commentPersistenceController.migrateLegacyInlineCommentsOnStartup();
-            await this.setSidecarStorageMigrationVersion(SIDECAR_STORAGE_MIGRATION_VERSION);
-            await this.logEvent("info", "persistence", "storage.note.migrate.startup.success", {
-                version: SIDECAR_STORAGE_MIGRATION_VERSION,
-            });
-        } catch (error) {
-            this.warn(
-                "Failed to migrate legacy Aside note storage into sidecar files.",
-                error,
-                "persistence",
-                "storage.note.migrate.startup.warn",
-            );
-        }
     }
 
     private getSideNoteSyncEventMigrationVersion(): number | null {

@@ -1,5 +1,4 @@
 export const SIDE_NOTE_REFERENCE_PROTOCOL = "aside-comment";
-export const LEGACY_SIDE_NOTE_REFERENCE_PROTOCOL = "side-note2-comment";
 
 export interface SideNoteReferenceTarget {
     vaultName: string | null;
@@ -36,13 +35,12 @@ export interface SideNoteReferenceTextEdit {
 // Stored note content still uses the legacy header for backward compatibility.
 export const SIDE_NOTE_REFERENCE_SECTION_HEADER = "Mentioned:";
 
-const SIDE_NOTE_REFERENCE_PROTOCOL_PATTERN = `(?:${SIDE_NOTE_REFERENCE_PROTOCOL}|${LEGACY_SIDE_NOTE_REFERENCE_PROTOCOL})`;
 const MARKDOWN_LINK_PATTERN = new RegExp(
-    String.raw`\[([^\]]*)\]\((obsidian:\/\/${SIDE_NOTE_REFERENCE_PROTOCOL_PATTERN}\?[^)\s]+)\)`,
+    String.raw`\[([^\]]*)\]\((obsidian:\/\/${SIDE_NOTE_REFERENCE_PROTOCOL}\?[^)\s]+)\)`,
     "g",
 );
 const RAW_URL_PATTERN = new RegExp(
-    String.raw`obsidian:\/\/${SIDE_NOTE_REFERENCE_PROTOCOL_PATTERN}\?[^)\]\s]+`,
+    String.raw`obsidian:\/\/${SIDE_NOTE_REFERENCE_PROTOCOL}\?[^)\]\s]+`,
     "g",
 );
 
@@ -51,10 +49,7 @@ export function parseSideNoteReferenceUrl(url: string): SideNoteReferenceTarget 
         const parsed = new URL(url);
         if (
             parsed.protocol !== "obsidian:"
-            || (
-                parsed.hostname !== SIDE_NOTE_REFERENCE_PROTOCOL
-                && parsed.hostname !== LEGACY_SIDE_NOTE_REFERENCE_PROTOCOL
-            )
+            || parsed.hostname !== SIDE_NOTE_REFERENCE_PROTOCOL
         ) {
             return null;
         }

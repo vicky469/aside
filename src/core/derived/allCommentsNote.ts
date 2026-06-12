@@ -1,26 +1,18 @@
 import type { Comment, CommentThread } from "../../commentManager";
 import {
     buildSideNoteReferenceUrl,
-    LEGACY_SIDE_NOTE_REFERENCE_PROTOCOL,
     parseSideNoteReferenceUrl,
     SIDE_NOTE_REFERENCE_PROTOCOL,
 } from "../text/commentReferences";
 import { extractTagsFromText } from "../text/commentTags";
 
 export const ALL_COMMENTS_NOTE_PATH = "Aside index.md";
-export const LEGACY_ALL_COMMENTS_NOTE_PATH = "SideNote2 comments.md";
-export const LEGACY_ALL_COMMENTS_NOTE_PATHS = [
-    "SideNote2 index.md",
-    LEGACY_ALL_COMMENTS_NOTE_PATH,
-    "Aside comments.md",
-] as const;
 export const COMMENT_LOCATION_PROTOCOL = SIDE_NOTE_REFERENCE_PROTOCOL;
 export const ALL_COMMENTS_NOTE_IMAGE_URL = "https://ichef.bbci.co.uk/images/ic/1920xn/p02vhq1v.jpg.webp";
 export const ALL_COMMENTS_NOTE_IMAGE_CAPTION = "Relativity (Credit: 2015 The M.C. Escher Company - Baarn, The Netherlands)";
 export const ALL_COMMENTS_NOTE_IMAGE_ALT = "Aside index header image";
 export const ALL_COMMENTS_NOTE_IMAGE_CAPTION_STYLE = "display: block; color: #8a8a8a; font-size: 12px; line-height: 1.2; text-align: center;";
 export const INDEX_FILE_FILTER_PROTOCOL = "aside-index-file";
-export const LEGACY_INDEX_FILE_FILTER_PROTOCOL = "side-note2-index-file";
 export const INDEX_FILE_FILTER_LINK_CLASS = "aside-index-file-filter-link";
 export const INDEX_FILE_FILTER_DATA_ATTRIBUTE = "data-aside-file-path";
 
@@ -142,7 +134,6 @@ export function parseIndexFileOpenUrl(url: string): string | null {
         || (
             parsedUrl.hostname !== "open"
             && parsedUrl.hostname !== INDEX_FILE_FILTER_PROTOCOL
-            && parsedUrl.hostname !== LEGACY_INDEX_FILE_FILTER_PROTOCOL
         )
     ) {
         return null;
@@ -278,8 +269,7 @@ function buildSourceTagsByFileKey(
 }
 
 export function isAllCommentsNotePath(filePath: string, currentPath: string = ALL_COMMENTS_NOTE_PATH): boolean {
-    return filePath === normalizeAllCommentsNotePath(currentPath)
-        || LEGACY_ALL_COMMENTS_NOTE_PATHS.includes(filePath as typeof LEGACY_ALL_COMMENTS_NOTE_PATHS[number]);
+    return filePath === normalizeAllCommentsNotePath(currentPath);
 }
 
 export function buildCommentLocationUrl(vaultName: string, comment: Pick<Comment, "filePath" | "id">): string {
@@ -313,7 +303,7 @@ export function parseCommentLocationUrl(url: string): CommentLocationTarget | nu
 
 export function findCommentLocationTargetInMarkdownLine(line: string): CommentLocationTarget | null {
     const markdownLinkPattern = new RegExp(
-        String.raw`\[[^\]]*]\((obsidian:\/\/(?:${SIDE_NOTE_REFERENCE_PROTOCOL}|${LEGACY_SIDE_NOTE_REFERENCE_PROTOCOL})\?[^)\s]+)\)`,
+        String.raw`\[[^\]]*]\((obsidian:\/\/${SIDE_NOTE_REFERENCE_PROTOCOL}\?[^)\s]+)\)`,
         "g",
     );
     for (const match of line.matchAll(markdownLinkPattern)) {
@@ -352,18 +342,18 @@ export function findCommentLocationLineNumber(noteContent: string, commentId: st
 }
 
 export function findFileHeadingPathInMarkdownLine(line: string): string | null {
-    const elementMatch = line.match(/<(?:span|strong|a)\b[^>]*class="[^"]*\b(?:aside|sidenote2)-index-heading-label\b[^"]*"[^>]*>/);
+    const elementMatch = line.match(/<(?:span|strong|a)\b[^>]*class="[^"]*\baside-index-heading-label\b[^"]*"[^>]*>/);
     const titleMatch = elementMatch?.[0]?.match(/\btitle="([^"]+)"/);
     if (titleMatch?.[1]) {
         return unescapeHtmlText(titleMatch[1]);
     }
 
-    const htmlFileLinkMatch = line.match(/\bdata-(?:aside|sidenote2)-file-path="([^"]+)"/);
+    const htmlFileLinkMatch = line.match(/\bdata-aside-file-path="([^"]+)"/);
     if (htmlFileLinkMatch?.[1]) {
         return unescapeHtmlText(htmlFileLinkMatch[1]);
     }
 
-    const markdownLinkPattern = /\[[^\]]*]\((obsidian:\/\/(?:open|aside-index-file|side-note2-index-file)\?[^)\s]+)\)/g;
+    const markdownLinkPattern = /\[[^\]]*]\((obsidian:\/\/(?:open|aside-index-file)\?[^)\s]+)\)/g;
     for (const match of line.matchAll(markdownLinkPattern)) {
         const url = match[1];
         if (!url) {

@@ -850,7 +850,7 @@ test("comment mutation controller re-resolves a moved anchor before saving a new
     assert.deepEqual(host.notices, []);
 });
 
-test("comment mutation controller preserves visible whitespace around a hidden block when saving a new draft", async () => {
+test("comment mutation controller preserves visible whitespace when saving a new draft", async () => {
     const selectedText = "reason for having both ZohoBooks and QuickBooks before digging deeper.\n\n\nTrailing text";
     const draft = toDraft(createComment({
         id: "draft-1",
@@ -858,7 +858,7 @@ test("comment mutation controller preserves visible whitespace around a hidden b
         selectedText,
         startLine: 0,
         startChar: 0,
-        endLine: 2,
+        endLine: 3,
         endChar: 13,
     }));
     const host = createHost({
@@ -869,9 +869,7 @@ test("comment mutation controller preserves visible whitespace around a hidden b
             [draft.filePath]: [
                 "We can start prototyping stuff right now. But I want to find out reason for having both ZohoBooks and QuickBooks before digging deeper.",
                 "",
-                "<!-- Aside comments",
-                "[]",
-                "-->",
+                "",
                 "Trailing text",
                 "",
             ].join("\n"),
@@ -1389,15 +1387,15 @@ test("comment mutation controller re-anchors an orphaned thread to the current s
         knownComments: [comment],
         loadedComments: [comment],
         currentNoteContentByPath: {
-            [comment.filePath]: "# Title\nBefore\n<!-- Aside comments\n[]\n-->\nAfter\n",
+            [comment.filePath]: "# Title\nBefore\n\nAfter\n",
         },
         currentSelectionByPath: {
             [comment.filePath]: {
                 file: createFile(comment.filePath),
                 selectedText: "After",
-                startLine: 5,
+                startLine: 3,
                 startChar: 0,
-                endLine: 5,
+                endLine: 3,
                 endChar: 5,
             },
         },
@@ -1418,39 +1416,6 @@ test("comment mutation controller re-anchors an orphaned thread to the current s
     assert.equal(host.manager.getCommentById(comment.id)?.endLine, 3);
     assert.equal(host.manager.getCommentById(comment.id)?.endChar, 5);
     assert.deepEqual(host.notices, []);
-});
-
-test("comment mutation controller rejects re-anchoring inside the managed comment block", async () => {
-    const comment = createComment({
-        id: "comment-1",
-        orphaned: true,
-    });
-    const host = createHost({
-        knownComments: [comment],
-        loadedComments: [comment],
-        currentNoteContentByPath: {
-            [comment.filePath]: "# Title\nBefore\n<!-- Aside comments\n[]\n-->\nAfter\n",
-        },
-        currentSelectionByPath: {
-            [comment.filePath]: {
-                file: createFile(comment.filePath),
-                selectedText: "<!-- Aside comments",
-                startLine: 2,
-                startChar: 0,
-                endLine: 2,
-                endChar: 19,
-            },
-        },
-    });
-
-    const reanchored = await host.controller.reanchorCommentThreadToCurrentSelection(comment.id);
-
-    assert.equal(reanchored, false);
-    assert.deepEqual(host.persistedFiles, []);
-    assert.equal(host.manager.getCommentById(comment.id)?.orphaned, true);
-    assert.deepEqual(host.notices, [
-        "Select text outside the Aside comments block to re-anchor this side note.",
-    ]);
 });
 
 test("comment mutation controller marks a selected thread orphaned without deleting the note", async () => {

@@ -1,4 +1,3 @@
-import * as esbuild from "esbuild";
 import { createHash, randomUUID } from "node:crypto";
 import { access, copyFile, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -553,44 +552,22 @@ export function getSidecarPath(vaultRoot, noteRelativePath) {
     return path.join(vaultRoot, ".obsidian", "plugins", "aside", "sidenotes", "by-note", shard, `${noteHash}.json`);
 }
 
-function getLegacySidecarPath(vaultRoot, noteRelativePath) {
-    const normalized = normalizeStoragePath(noteRelativePath);
-    const noteHash = hashText(normalized);
-    const shard = noteHash.slice(0, 2) || "00";
-    return path.join(vaultRoot, ".obsidian", "plugins", "side-note2", "sidenotes", "by-note", shard, `${noteHash}.json`);
-}
-
 export function getSourceSidecarPath(vaultRoot, sourceId) {
     const sourceHash = hashText(sourceId);
     const shard = sourceHash.slice(0, 2) || "00";
     return path.join(vaultRoot, ".obsidian", "plugins", "aside", "sidenotes", "by-source", shard, `${sourceHash}.json`);
 }
 
-function getLegacySourceSidecarPath(vaultRoot, sourceId) {
-    const sourceHash = hashText(sourceId);
-    const shard = sourceHash.slice(0, 2) || "00";
-    return path.join(vaultRoot, ".obsidian", "plugins", "side-note2", "sidenotes", "by-source", shard, `${sourceHash}.json`);
-}
-
 async function readSourceIdForPath(vaultRoot, noteRelativePath) {
-    const dataPaths = [
-        path.join(vaultRoot, ".obsidian", "plugins", "aside", "data.json"),
-        path.join(vaultRoot, ".obsidian", "plugins", "side-note2", "data.json"),
-    ];
+    const dataPath = path.join(vaultRoot, ".obsidian", "plugins", "aside", "data.json");
     let parsed;
-    for (const dataPath of dataPaths) {
-        try {
-            parsed = JSON.parse(await readFile(dataPath, "utf8"));
-            break;
-        } catch (error) {
-            if (error && error.code === "ENOENT") {
-                continue;
-            }
-            throw error;
+    try {
+        parsed = JSON.parse(await readFile(dataPath, "utf8"));
+    } catch (error) {
+        if (error && error.code === "ENOENT") {
+            return null;
         }
-    }
-    if (!parsed) {
-        return null;
+        throw error;
     }
 
     const state = parsed?.sourceIdentityState;
@@ -649,40 +626,31 @@ export function getVaultRelativePath(vaultRoot, absolutePath) {
 }
 
 export async function readSidecar(vaultRoot, noteRelativePath) {
-    const sidecarPaths = [
-        getSidecarPath(vaultRoot, noteRelativePath),
-        getLegacySidecarPath(vaultRoot, noteRelativePath),
-    ];
-    for (const sidecarPath of sidecarPaths) {
-        try {
-            const raw = await readFile(sidecarPath, "utf8");
-            const parsed = JSON.parse(raw);
-            if (!parsed || typeof parsed !== "object" || parsed.version !== 1 || !Array.isArray(parsed.threads)) {
-                return null;
-            }
-            return parsed.threads.map((thread) => ({
-                ...thread,
-                filePath: noteRelativePath,
-                entries: Array.isArray(thread.entries) ? thread.entries.map((entry) => ({ ...entry })) : [],
-            }));
-        } catch (error) {
-            if (error && error.code === "ENOENT") {
-                continue;
-            }
-            throw error;
+    try {
+        const raw = await readFile(getSidecarPath(vaultRoot, noteRelativePath), "utf8");
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== "object" || parsed.version !== 1 || !Array.isArray(parsed.threads)) {
+            return null;
         }
+        return parsed.threads.map((thread) => ({
+            ...thread,
+            filePath: noteRelativePath,
+            entries: Array.isArray(thread.entries) ? thread.entries.map((entry) => ({ ...entry })) : [],
+        }));
+    } catch (error) {
+        if (error && error.code === "ENOENT") {
+            return null;
+        }
+        throw error;
     }
-    return null;
 }
 
 export async function writeSidecar(vaultRoot, noteRelativePath, threads) {
     const sidecarPath = getSidecarPath(vaultRoot, noteRelativePath);
-    const legacySidecarPath = getLegacySidecarPath(vaultRoot, noteRelativePath);
     const sourceId = await readSourceIdForPath(vaultRoot, noteRelativePath);
     const sourceSidecarPath = sourceId ? getSourceSidecarPath(vaultRoot, sourceId) : null;
-    const legacySourceSidecarPath = sourceId ? getLegacySourceSidecarPath(vaultRoot, sourceId) : null;
     if (threads.length === 0) {
-        for (const targetPath of [sidecarPath, legacySidecarPath, sourceSidecarPath, legacySourceSidecarPath].filter(Boolean)) {
+        for (const targetPath of [sidecarPath, sourceSidecarPath].filter(Boolean)) {
             if (await pathExists(targetPath)) {
                 await rm(targetPath, { force: true });
             }
@@ -703,11 +671,6 @@ export async function writeSidecar(vaultRoot, noteRelativePath, threads) {
             ...payload,
             sourceId,
         });
-    }
-    for (const stalePath of [legacySidecarPath, legacySourceSidecarPath].filter(Boolean)) {
-        if (await pathExists(stalePath)) {
-            await rm(stalePath, { force: true });
-        }
     }
 }
 
@@ -760,44 +723,18 @@ function removeExistingThreadsForTarget(threads, target) {
 
 export async function loadThreadsWithFallback(vaultRoot, notePath, noteRelativePath) {
     const sidecarThreads = await readSidecar(vaultRoot, noteRelativePath);
-    if (sidecarThreads) {
-        const noteContent = await readFile(notePath, "utf8");
-        const storageModule = await loadStorageModule();
-        const managedSectionKind = storageModule.getManagedSectionKind(noteContent);
-        return {
-            threads: sidecarThreads,
-            noteContent,
-            hadLegacyBlock: managedSectionKind === "threaded",
-        };
-    }
-    const noteContent = await readFile(notePath, "utf8");
-    const storageModule = await loadStorageModule();
-    const managedSectionKind = storageModule.getManagedSectionKind(noteContent);
-    if (managedSectionKind === "unsupported") {
-        throw new Error(getManagedSectionErrorMessage(storageModule, noteContent, notePath));
-    }
-    const parsed = storageModule.parseNoteComments(noteContent, notePath);
-    return { threads: parsed.threads, noteContent, hadLegacyBlock: managedSectionKind === "threaded" };
-}
-
-export async function stripLegacyBlockIfNeeded(vaultRoot, notePath, noteRelativePath, noteContent, hadLegacyBlock, settleMs) {
-    if (!hadLegacyBlock || !noteContent) {
-        return { kind: "written" };
-    }
-    const storageModule = await loadStorageModule();
-    const stripped = storageModule.serializeNoteCommentThreads(noteContent, []);
-    return writeObservedNoteSafely(notePath, createContentFingerprint(noteContent), stripped, { settleMs });
+    await readFile(notePath, "utf8");
+    return { threads: sidecarThreads ?? [] };
 }
 
 const COMMENT_LOCATION_PROTOCOL = "aside-comment";
-const LEGACY_COMMENT_LOCATION_PROTOCOL = "side-note2-comment";
 
 function parseCommentProtocolUri(uri) {
     try {
         const parsed = new URL(uri);
         if (
             parsed.protocol !== "obsidian:"
-            || (parsed.hostname !== COMMENT_LOCATION_PROTOCOL && parsed.hostname !== LEGACY_COMMENT_LOCATION_PROTOCOL)
+            || parsed.hostname !== COMMENT_LOCATION_PROTOCOL
         ) {
             return null;
         }
@@ -941,40 +878,6 @@ async function getBundledSkills() {
     return { skillDirectories };
 }
 
-async function loadStorageModule() {
-    const repoRoot = getRepoRoot(import.meta.url);
-    const entryPoint = path.resolve(repoRoot, "src/core/storage/noteCommentStorage.ts");
-    const result = await esbuild.build({
-        entryPoints: [entryPoint],
-        bundle: true,
-        format: "esm",
-        platform: "node",
-        target: ["node18"],
-        write: false,
-        logLevel: "silent",
-    });
-
-    const output = result.outputFiles?.[0]?.text;
-    if (!output) {
-        throw new Error("Failed to bundle noteCommentStorage.ts");
-    }
-
-    const moduleUrl = `data:text/javascript;base64,${Buffer.from(output).toString("base64")}`;
-    return import(moduleUrl);
-}
-
-function getManagedSectionErrorMessage(storageModule, noteContent, notePath) {
-    const problem = typeof storageModule.getManagedSectionProblem === "function"
-        ? storageModule.getManagedSectionProblem(noteContent)
-        : null;
-
-    if (problem === "multiple") {
-        return `Found multiple Aside or legacy SideNote2 comments blocks in ${notePath}. Collapse them to exactly one managed block before writing.\n`;
-    }
-
-    return `Found an Aside or legacy SideNote2 comments block in ${notePath}, but it is not a supported threaded entries[] payload.\n`;
-}
-
 export async function runCreateNoteCommentThread(argv, io = { stdout: process.stdout, stderr: process.stderr }) {
     let options;
     try {
@@ -1003,10 +906,8 @@ export async function runCreateNoteCommentThread(argv, io = { stdout: process.st
 
     const nextCommentBody = await loadCommentBody(options);
     let threads;
-    let noteContent;
-    let hadLegacyBlock;
     try {
-        ({ threads, noteContent, hadLegacyBlock } = await loadThreadsWithFallback(vaultRoot, notePath, noteRelativePath));
+        ({ threads } = await loadThreadsWithFallback(vaultRoot, notePath, noteRelativePath));
     } catch (error) {
         io.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
         return 1;
@@ -1040,14 +941,6 @@ export async function runCreateNoteCommentThread(argv, io = { stdout: process.st
     threads.push(nextThread);
 
     await writeSidecar(vaultRoot, noteRelativePath, threads);
-
-    const migrationResult = await stripLegacyBlockIfNeeded(vaultRoot, notePath, noteRelativePath, noteContent, hadLegacyBlock, options.settleMs);
-    if (migrationResult.kind === "changed") {
-        io.stderr.write(
-            `Note content changed during sidecar migration; legacy block may still exist in ${notePath}. `
-            + "Rerun after Obsidian Sync or other local edits settle.\n",
-        );
-    }
 
     const anchorLabel = options.page ? "page note" : "anchored note";
     io.stdout.write(`Created ${anchorLabel} thread ${threadId} in ${notePath}\n`);
@@ -1096,10 +989,8 @@ export async function runCreateNoteCommentThreadWithChildren(argv, io = { stdout
     }
 
     let threads;
-    let noteContent;
-    let hadLegacyBlock;
     try {
-        ({ threads, noteContent, hadLegacyBlock } = await loadThreadsWithFallback(vaultRoot, notePath, noteRelativePath));
+        ({ threads } = await loadThreadsWithFallback(vaultRoot, notePath, noteRelativePath));
     } catch (error) {
         io.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
         return 1;
@@ -1155,14 +1046,6 @@ export async function runCreateNoteCommentThreadWithChildren(argv, io = { stdout
     ];
     await writeSidecar(vaultRoot, noteRelativePath, nextThreads);
 
-    const migrationResult = await stripLegacyBlockIfNeeded(vaultRoot, notePath, noteRelativePath, noteContent, hadLegacyBlock, options.settleMs);
-    if (migrationResult.kind === "changed") {
-        io.stderr.write(
-            `Note content changed during sidecar migration; legacy block may still exist in ${notePath}. `
-            + "Rerun after Obsidian Sync or other local edits settle.\n",
-        );
-    }
-
     const anchorLabel = options.page ? "page note" : "anchored note";
     io.stdout.write(
         `Created ${anchorLabel} thread ${threadId} with ${childBodies.length} child `
@@ -1198,10 +1081,8 @@ export async function runAppendNoteCommentEntry(argv, io = { stdout: process.std
     const nextCommentBody = await loadCommentBody(options);
 
     let threads;
-    let noteContent;
-    let hadLegacyBlock;
     try {
-        ({ threads, noteContent, hadLegacyBlock } = await loadThreadsWithFallback(vaultRoot, notePath, noteRelativePath));
+        ({ threads } = await loadThreadsWithFallback(vaultRoot, notePath, noteRelativePath));
     } catch (error) {
         io.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
         return 1;
@@ -1228,14 +1109,6 @@ export async function runAppendNoteCommentEntry(argv, io = { stdout: process.std
     }
 
     await writeSidecar(vaultRoot, noteRelativePath, updatedThreads);
-
-    const migrationResult = await stripLegacyBlockIfNeeded(vaultRoot, notePath, noteRelativePath, noteContent, hadLegacyBlock, options.settleMs);
-    if (migrationResult.kind === "changed") {
-        io.stderr.write(
-            `Note content changed during sidecar migration; legacy block may still exist in ${notePath}. `
-            + "Rerun after Obsidian Sync or other local edits settle.\n",
-        );
-    }
 
     io.stdout.write(`Appended a new entry to comment ${commentId} in ${notePath}\n`);
     return 0;
@@ -1269,10 +1142,8 @@ export async function runUpdateNoteComment(argv, io = { stdout: process.stdout, 
     const normalizedBody = normalizeCommentBody(nextCommentBody);
 
     let threads;
-    let noteContent;
-    let hadLegacyBlock;
     try {
-        ({ threads, noteContent, hadLegacyBlock } = await loadThreadsWithFallback(vaultRoot, notePath, noteRelativePath));
+        ({ threads } = await loadThreadsWithFallback(vaultRoot, notePath, noteRelativePath));
     } catch (error) {
         io.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
         return 1;
@@ -1305,14 +1176,6 @@ export async function runUpdateNoteComment(argv, io = { stdout: process.stdout, 
     }
 
     await writeSidecar(vaultRoot, noteRelativePath, updatedThreads);
-
-    const migrationResult = await stripLegacyBlockIfNeeded(vaultRoot, notePath, noteRelativePath, noteContent, hadLegacyBlock, options.settleMs);
-    if (migrationResult.kind === "changed") {
-        io.stderr.write(
-            `Note content changed during sidecar migration; legacy block may still exist in ${notePath}. `
-            + "Rerun after Obsidian Sync or other local edits settle.\n",
-        );
-    }
 
     io.stdout.write(`Updated comment ${commentId} in ${notePath}\n`);
     return 0;

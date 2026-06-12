@@ -27,16 +27,14 @@ class MockSidebarView {
     }
 }
 
-test("old sidebar interaction can leak the managed JSON block through editor copy", () => {
+test("old sidebar interaction can leak the editor selection through editor copy", () => {
     const workspace = new MockWorkspace();
     const view = new MockSidebarView(workspace);
     const sidebarSelection = "Copied from sidebar";
     const editorSelection = [
         "Copied from sidebar",
         "",
-        "<!-- Aside comments",
-        "[{\"id\":\"comment-1\",\"comment\":\"Copied from sidebar\"}]",
-        "-->",
+        "Copied from the active editor instead of the sidebar.",
     ].join("\n");
 
     view.interactInsideRenderedCommentOld();
@@ -51,9 +49,7 @@ test("fixed sidebar interaction claims copy ownership before copy runs", () => {
     const editorSelection = [
         "Copied from sidebar",
         "",
-        "<!-- Aside comments",
-        "[{\"id\":\"comment-1\",\"comment\":\"Copied from sidebar\"}]",
-        "-->",
+        "Copied from the active editor instead of the sidebar.",
     ].join("\n");
 
     view.interactInsideRenderedCommentFixed();

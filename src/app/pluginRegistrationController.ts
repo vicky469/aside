@@ -74,18 +74,14 @@ export class PluginRegistrationController {
 
     public register(): void {
         this.host.registerView("aside-view", (leaf) => this.host.createSidebarView(leaf));
-        const registerCommentProtocol = (action: string) => {
-            this.host.registerObsidianProtocolHandler(action, (params) => {
-                const target = resolveCommentProtocolTarget(params);
-                if (!target) {
-                    return;
-                }
+        this.host.registerObsidianProtocolHandler("aside-comment", (params) => {
+            const target = resolveCommentProtocolTarget(params);
+            if (!target) {
+                return;
+            }
 
-                void this.host.openCommentById(target.filePath, target.commentId);
-            });
-        };
-        registerCommentProtocol("aside-comment");
-        registerCommentProtocol("side-note2-comment");
+            void this.host.openCommentById(target.filePath, target.commentId);
+        });
         this.host.removeCommand(`${this.host.manifestId}:activate-view`);
 
         this.host.addCommand({

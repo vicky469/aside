@@ -1,4 +1,4 @@
-import { EditorSelection, Range, StateEffect, StateField } from "@codemirror/state";
+import { Range, StateEffect } from "@codemirror/state";
 import { Decoration, DecorationSet, EditorView, ViewPlugin, ViewUpdate } from "@codemirror/view";
 import { MarkdownView, Plugin, TFile } from "obsidian";
 import type { MarkdownPostProcessorContext } from "obsidian";
@@ -31,88 +31,13 @@ import {
     estimateIndexPreviewScrollTop,
     type IndexPreviewRenderedLineSample,
 } from "./indexPreviewScrollPlanner";
-import {
-    getManagedSectionRange,
-    getManagedSectionStartLine,
-    type ParsedNoteComments,
-} from "../core/storage/noteCommentStorage";
-import { clampOffsetBeforeManagedSection } from "../core/text/editOffsets";
+import type { ParsedNoteComments } from "../core/storage/noteCommentStorage";
 
 const forceHighlightRefreshEffect = StateEffect.define<null>();
-const setManagedBlockHiddenEffect = StateEffect.define<boolean>();
 
 function getActiveDocument(): Document {
     return (window as Window & { activeDocument: Document }).activeDocument;
 }
-
-interface ManagedBlockDecorationState {
-    hidden: boolean;
-    decorations: DecorationSet;
-}
-
-function buildManagedBlockDecorations(noteContent: string, hidden: boolean): DecorationSet {
-    if (!hidden) {
-        return Decoration.none;
-    }
-
-    const range = getManagedSectionRange(noteContent);
-    if (!range || range.toOffset <= range.fromOffset) {
-        return Decoration.none;
-    }
-
-    return Decoration.set([
-        Decoration.replace({}).range(range.fromOffset, range.toOffset),
-    ], true);
-}
-
-function clampSelectionBeforeManagedSection(
-    selection: EditorSelection,
-    managedSectionStartOffset: number,
-): EditorSelection | null {
-    let changed = false;
-    const ranges = selection.ranges.map((range) => {
-        const anchor = clampOffsetBeforeManagedSection(range.anchor, managedSectionStartOffset);
-        const head = clampOffsetBeforeManagedSection(range.head, managedSectionStartOffset);
-        if (anchor === range.anchor && head === range.head) {
-            return range;
-        }
-
-        changed = true;
-        return EditorSelection.range(anchor, head);
-    });
-
-    return changed
-        ? EditorSelection.create(ranges, selection.mainIndex)
-        : null;
-}
-
-const managedBlockField = StateField.define<ManagedBlockDecorationState>({
-    create(state) {
-        return {
-            hidden: false,
-            decorations: buildManagedBlockDecorations(state.doc.toString(), false),
-        };
-    },
-    update(value, transaction) {
-        let hidden = value.hidden;
-
-        for (const effect of transaction.effects) {
-            if (effect.is(setManagedBlockHiddenEffect)) {
-                hidden = effect.value;
-            }
-        }
-
-        if (!transaction.docChanged && hidden === value.hidden) {
-            return value;
-        }
-
-        return {
-            hidden,
-            decorations: buildManagedBlockDecorations(transaction.state.doc.toString(), hidden),
-        };
-    },
-    provide: (field) => EditorView.decorations.from(field, (value) => value.decorations),
-});
 
 export interface CommentHighlightHost {
     app: Plugin["app"];
@@ -132,56 +57,11 @@ export interface CommentHighlightHost {
     log?(level: "info" | "warn" | "error", area: string, event: string, payload?: Record<string, unknown>): Promise<void>;
 }
 
-interface PreviewManagedSectionStartLineCacheEntry {
-    fileMtime: number;
-    value: number | null;
-    pending: Promise<number | null> | null;
-}
-
 export class CommentHighlightController {
     constructor(private readonly host: CommentHighlightHost) {}
 
     private readonly indexPreviewLinkSelector = "a.aside-index-comment-link[data-aside-comment-url]";
     private readonly indexPreviewFileHeadingSelector = ".aside-index-heading-label[title], a[data-aside-file-path], a[href^=\"obsidian://open\"], a[href^=\"obsidian://aside-index-file\"]";
-    private readonly previewManagedSectionStartLineCache =
-        new Map<string, PreviewManagedSectionStartLineCacheEntry>();
-
-    private async getPreviewManagedSectionStartLine(file: TFile): Promise<number | null> {
-        const cached = this.previewManagedSectionStartLineCache.get(file.path);
-        const fileMtime = file.stat.mtime;
-        if (cached?.fileMtime === fileMtime) {
-            return cached.pending ?? cached.value;
-        }
-
-        const pending = this.host.getCurrentNoteContent(file)
-            .then((noteContent) => getManagedSectionStartLine(noteContent))
-            .then((value) => {
-                const current = this.previewManagedSectionStartLineCache.get(file.path);
-                if (current?.pending === pending) {
-                    this.previewManagedSectionStartLineCache.set(file.path, {
-                        fileMtime,
-                        value,
-                        pending: null,
-                    });
-                }
-                return value;
-            })
-            .catch((error) => {
-                const current = this.previewManagedSectionStartLineCache.get(file.path);
-                if (current?.pending === pending) {
-                    this.previewManagedSectionStartLineCache.delete(file.path);
-                }
-                throw error;
-            });
-
-        this.previewManagedSectionStartLineCache.set(file.path, {
-            fileMtime,
-            value: null,
-            pending,
-        });
-        return pending;
-    }
-
     private findIndexMarkdownViewForEventTarget(target: EventTarget | null): MarkdownView | null {
         if (!(target instanceof Node)) {
             return null;
@@ -819,8 +699,8 @@ export class CommentHighlightController {
     }
 
     public registerMarkdownPreviewHighlights(plugin: Plugin) {
-        plugin.registerMarkdownPostProcessor(async (element, context) => {
-            await this.applyPreviewHighlights(element, context);
+        plugin.registerMarkdownPostProcessor((element, context) => {
+            this.applyPreviewHighlights(element, context);
         });
         const eventDocument = getActiveDocument();
         plugin.registerDomEvent(eventDocument, "mousedown", (event) => {
@@ -881,81 +761,6 @@ export class CommentHighlightController {
             event.stopImmediatePropagation();
             this.activateIndexInteraction(context);
         }, true);
-    }
-
-    public createLivePreviewManagedBlockPlugin() {
-        const host = this.host;
-
-        return [
-            managedBlockField,
-            ViewPlugin.fromClass(class {
-                private hidden = false;
-                private destroyed = false;
-                private syncScheduled = false;
-
-                constructor(private readonly view: EditorView) {
-                    this.scheduleManagedBlockSync();
-                }
-
-                destroy() {
-                    this.destroyed = true;
-                    this.syncScheduled = false;
-                }
-
-                update(update: ViewUpdate) {
-                    if (
-                        !update.docChanged
-                        && !update.selectionSet
-                        && update.transactions.length === 0
-                    ) {
-                        return;
-                    }
-
-                    this.scheduleManagedBlockSync();
-                }
-
-                private scheduleManagedBlockSync() {
-                    if (this.syncScheduled || this.destroyed) {
-                        return;
-                    }
-
-                    this.syncScheduled = true;
-                    queueMicrotask(() => {
-                        this.syncScheduled = false;
-                        if (this.destroyed) {
-                            return;
-                        }
-
-                        this.syncManagedBlockVisibility();
-                    });
-                }
-
-                private syncManagedBlockVisibility() {
-                    const markdownView = host.getMarkdownViewForEditorView(this.view);
-                    const nextHidden = !!markdownView
-                        && markdownView.getMode() === "source"
-                        && markdownView.getState().source !== true
-                        && !!getManagedSectionRange(this.view.state.doc.toString());
-                    const managedSectionRange = nextHidden
-                        ? getManagedSectionRange(this.view.state.doc.toString())
-                        : null;
-                    const selection = managedSectionRange
-                        ? clampSelectionBeforeManagedSection(this.view.state.selection, managedSectionRange.fromOffset)
-                        : null;
-                    const didHiddenChange = nextHidden !== this.hidden;
-
-                    if (!didHiddenChange && !selection) {
-                        return;
-                    }
-
-                    this.hidden = nextHidden;
-                    this.view.dispatch({
-                        effects: didHiddenChange ? [setManagedBlockHiddenEffect.of(nextHidden)] : [],
-                        selection: selection ?? undefined,
-                    });
-                }
-            }),
-        ];
     }
 
     public createEditorHighlightPlugin() {
@@ -1222,10 +1027,10 @@ export class CommentHighlightController {
         });
     }
 
-    private async applyPreviewHighlights(
+    private applyPreviewHighlights(
         element: HTMLElement,
         context: MarkdownPostProcessorContext,
-    ): Promise<void> {
+    ): void {
         if (this.host.isAllCommentsNotePath(context.sourcePath)) {
             this.prepareIndexPreviewLinks(element);
             this.syncIndexPreviewLinkStates(element, context.sourcePath);
@@ -1241,15 +1046,6 @@ export class CommentHighlightController {
         const sectionInfo = context.getSectionInfo(element);
         if (!sectionInfo) {
             return;
-        }
-
-        const file = this.host.getMarkdownFileByPath(context.sourcePath);
-        if (file) {
-            const managedSectionStartLine = await this.getPreviewManagedSectionStartLine(file);
-            if (managedSectionStartLine !== null && sectionInfo.lineStart >= managedSectionStartLine) {
-                element.remove();
-                return;
-            }
         }
 
         const comments = this.host

@@ -2,11 +2,6 @@ import type { Comment, CommentThread } from "../../commentManager";
 import { extractWikiLinks } from "../text/commentMentions";
 
 const ALL_COMMENTS_NOTE_PATH = "Aside index.md";
-const LEGACY_ALL_COMMENTS_NOTE_PATHS = new Set([
-    "Aside comments.md",
-    "SideNote2 index.md",
-    "SideNote2 comments.md",
-]);
 
 export interface IndexFileFilterGraphBuildOptions {
     allCommentsNotePath?: string;
@@ -57,7 +52,7 @@ function normalizeNotePath(filePath: string): string {
 
 function isAllCommentsNotePath(filePath: string, currentPath: string = ALL_COMMENTS_NOTE_PATH): boolean {
     const normalizedPath = normalizeNotePath(filePath);
-    return normalizedPath === normalizeNotePath(currentPath) || LEGACY_ALL_COMMENTS_NOTE_PATHS.has(normalizedPath);
+    return normalizedPath === normalizeNotePath(currentPath);
 }
 
 function toSortedPaths(paths: Iterable<string>): string[] {

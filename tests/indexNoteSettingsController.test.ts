@@ -255,7 +255,7 @@ test("index note path planner distinguishes noop, missing parent, conflict, and 
         conflictingFilePath: null,
         currentIndexFilePath: "Aside index.md",
         activeSidebarFilePath: "Aside index.md",
-        draftHostFilePath: "Aside comments.md",
+        draftHostFilePath: "Aside index.md",
     }), {
         kind: "apply",
         nextPath: "docs/new-index.md",
@@ -305,88 +305,6 @@ test("index note settings controller rewrites legacy settings", async () => {
     assert.equal("enableDebugMode" in harness.savedPayloads[0], false);
 });
 
-test("index note settings controller migrates legacy generated index notes to Aside index", async () => {
-    const harness = createControllerHarness({
-        files: ["SideNote2 index.md"],
-        loadedData: {
-            indexNotePath: "SideNote2 index.md",
-        },
-    });
-
-    await harness.controller.loadSettings();
-
-    assert.equal(harness.getSettings().indexNotePath, "Aside index.md");
-    assert.deepEqual(harness.renamedFiles, [{
-        from: "SideNote2 index.md",
-        to: "Aside index.md",
-    }]);
-    assert.equal(harness.savedPayloads.length, 1);
-    assert.equal(harness.savedPayloads[0].indexNotePath, "Aside index.md");
-});
-
-test("index note settings controller migrates adapter-visible legacy generated index notes", async () => {
-    const harness = createControllerHarness({
-        adapterFiles: ["SideNote2 index.md"],
-        loadedData: {
-            indexNotePath: "Aside index.md",
-        },
-    });
-
-    await harness.controller.loadSettings();
-
-    assert.equal(harness.getSettings().indexNotePath, "Aside index.md");
-    assert.deepEqual(harness.renamedFiles, []);
-    assert.deepEqual(harness.adapterRenamedFiles, [{
-        from: "SideNote2 index.md",
-        to: "Aside index.md",
-    }]);
-    assert.equal(harness.adapterOnlyFilePaths.has("SideNote2 index.md"), false);
-    assert.equal(harness.adapterOnlyFilePaths.has("Aside index.md"), true);
-});
-
-test("index note settings controller removes stale generated legacy index notes", async () => {
-    const harness = createControllerHarness({
-        files: ["Aside index.md", "SideNote2 index.md"],
-        fileContents: {
-            "Aside index.md": "![Aside index header image](https://example.com/aside.webp)\n",
-            "SideNote2 index.md": [
-                "![SideNote2 index header image](https://example.com/legacy.webp)",
-                "<div class=\"sidenote2-index-header-caption\"></div>",
-            ].join("\n"),
-        },
-        loadedData: {
-            indexNotePath: "Aside index.md",
-        },
-    });
-
-    await harness.controller.loadSettings();
-
-    assert.equal(harness.hasFile("Aside index.md"), true);
-    assert.equal(harness.hasFile("SideNote2 index.md"), false);
-    assert.deepEqual(harness.deletedFiles, ["SideNote2 index.md"]);
-    assert.deepEqual(harness.renamedFiles, []);
-});
-
-test("index note settings controller keeps non-generated legacy-named notes", async () => {
-    const harness = createControllerHarness({
-        files: ["Aside index.md", "SideNote2 index.md"],
-        fileContents: {
-            "Aside index.md": "![Aside index header image](https://example.com/aside.webp)\n",
-            "SideNote2 index.md": "Personal note, not generated output.",
-        },
-        loadedData: {
-            indexNotePath: "Aside index.md",
-        },
-    });
-
-    await harness.controller.loadSettings();
-
-    assert.equal(harness.hasFile("Aside index.md"), true);
-    assert.equal(harness.hasFile("SideNote2 index.md"), true);
-    assert.deepEqual(harness.deletedFiles, []);
-    assert.deepEqual(harness.adapterRemovedFiles, []);
-});
-
 test("loaded settings resolution drops legacy remote runtime settings", () => {
     const resolved = resolveLoadedSettings({
         agentRuntimeMode: " remote " as unknown as AsideSettings["agentRuntimeMode"],
@@ -427,7 +345,7 @@ test("index note settings controller renames the index note and retargets sideba
         settings: createSettings({ indexNotePath: "Aside index.md" }),
         files: ["Aside index.md", "docs/source.md"],
         activeSidebarFilePath: "Aside index.md",
-        draftHostFilePath: "Aside comments.md",
+        draftHostFilePath: "Aside index.md",
     });
 
     await harness.controller.setIndexNotePath("docs/renamed-index");

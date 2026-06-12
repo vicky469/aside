@@ -7,7 +7,6 @@ import { fileURLToPath } from "node:url";
 import {
     loadThreadsWithFallback,
     readSidecar,
-    stripLegacyBlockIfNeeded,
     writeSidecar,
 } from "./lib/asideRepoScripts.mjs";
 
@@ -328,13 +327,9 @@ async function main() {
             });
 
             let existingThreads = [];
-            let noteContent = null;
-            let hadLegacyBlock = false;
             try {
                 const fallback = await loadThreadsWithFallback(vaultRoot, absoluteFilePath, vaultRelativePath);
                 existingThreads = fallback.threads;
-                noteContent = fallback.noteContent;
-                hadLegacyBlock = fallback.hadLegacyBlock;
             } catch (error) {
                 if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
                     existingThreads = [];
@@ -346,10 +341,6 @@ async function main() {
             const mergedThreads = mergeSyntheticThread(existingThreads, syntheticThread);
             await writeFile(absoluteFilePath, noteBody, "utf8");
             await writeSidecar(vaultRoot, vaultRelativePath, mergedThreads);
-
-            if (hadLegacyBlock && noteContent) {
-                await stripLegacyBlockIfNeeded(vaultRoot, absoluteFilePath, vaultRelativePath, noteContent, hadLegacyBlock, 0);
-            }
 
             generatedNoteCount += 1;
             timestamp += 1000;

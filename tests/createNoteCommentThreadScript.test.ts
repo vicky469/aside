@@ -6,7 +6,6 @@ import { tmpdir } from "node:os";
 import * as path from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
-import { serializeNoteCommentThreads } from "../src/core/storage/noteCommentStorage";
 import type { CommentThread } from "../src/commentManager";
 
 const execFile = promisify(execFileCallback);
@@ -39,6 +38,16 @@ async function readSidecar(vaultRoot: string, noteRelativePath: string): Promise
     } catch {
         return null;
     }
+}
+
+async function writeSidecar(vaultRoot: string, noteRelativePath: string, threads: CommentThread[]): Promise<void> {
+    const sidecarPath = getSidecarPath(vaultRoot, noteRelativePath);
+    await mkdir(path.dirname(sidecarPath), { recursive: true });
+    await writeFile(sidecarPath, `${JSON.stringify({
+        version: 1,
+        notePath: noteRelativePath,
+        threads,
+    })}\n`, "utf8");
 }
 
 async function readSourceSidecar(vaultRoot: string, sourceId: string): Promise<{ version: number; notePath: string; sourceId: string; threads: CommentThread[] } | null> {
@@ -202,10 +211,10 @@ test("create-note-comment-thread script creates an anchored thread without flatt
     const notePath = path.join(tempDir, "note.md");
     const commentPath = path.join(tempDir, "comment.md");
     const scriptPath = path.resolve(process.cwd(), "scripts/create-note-comment-thread.mjs");
-    const original = serializeNoteCommentThreads("# Title\n\nBody text.\n", [createThread()]);
 
     await createVaultDir(tempDir);
-    await writeFile(notePath, original, "utf8");
+    await writeFile(notePath, "# Title\n\nBody text.\n", "utf8");
+    await writeSidecar(tempDir, "note.md", [createThread()]);
     await writeFile(commentPath, "New anchored note\nSecond line\n", "utf8");
 
     const { stdout } = await execFile("node", [
@@ -250,98 +259,4 @@ test("create-note-comment-thread script creates an anchored thread without flatt
 
     const noteContent = await readFile(notePath, "utf8");
     assert.equal(noteContent, "# Title\n\nBody text.\n");
-});
-
-test("create-note-comment-thread script rejects unsupported legacy flat payloads", async () => {
-    const tempDir = await mkdtemp(path.join(tmpdir(), "aside-comment-create-legacy-"));
-    const notePath = path.join(tempDir, "note.md");
-    const scriptPath = path.resolve(process.cwd(), "scripts/create-note-comment-thread.mjs");
-
-    await createVaultDir(tempDir);
-    await writeFile(notePath, [
-        "# Title",
-        "",
-        "Body text.",
-        "",
-        "<!-- Aside comments",
-        "[",
-        "  {",
-        "    \"id\": \"comment-1\",",
-        "    \"startLine\": 1,",
-        "    \"startChar\": 2,",
-        "    \"endLine\": 1,",
-        "    \"endChar\": 7,",
-        "    \"selectedText\": \"hello\",",
-        "    \"selectedTextHash\": \"hash-1\",",
-        "    \"comment\": \"Original body\",",
-        "    \"timestamp\": 1710000000000",
-        "  }",
-        "]",
-        "-->",
-        "",
-    ].join("\n"), "utf8");
-
-    let failure: { stderr: string } | null = null;
-    try {
-        await execFile("node", [
-            scriptPath,
-            "--file",
-            notePath,
-            "--page",
-            "--comment",
-            "New page note",
-        ], {
-            cwd: process.cwd(),
-        });
-    } catch (error) {
-        failure = error as { stderr: string };
-    }
-
-    assert.ok(failure);
-    assert.match(failure.stderr, /not a supported threaded entries\[\] payload/);
-});
-
-test("create-note-comment-thread script rejects notes with two Aside managed blocks", async () => {
-    const tempDir = await mkdtemp(path.join(tmpdir(), "aside-comment-create-duplicate-"));
-    const notePath = path.join(tempDir, "note.md");
-    const scriptPath = path.resolve(process.cwd(), "scripts/create-note-comment-thread.mjs");
-    const first = serializeNoteCommentThreads("# Title\n\nBody text.\n", [createThread()]);
-    const second = serializeNoteCommentThreads("# Title\n\nBody text.\n", [createThread({
-        id: "thread-2",
-        selectedText: "next",
-        selectedTextHash: hashText("next"),
-        entries: [{
-            id: "entry-3",
-            body: "Different thread",
-            timestamp: 1710000002000,
-        }],
-        createdAt: 1710000002000,
-        updatedAt: 1710000002000,
-    })]);
-
-    await createVaultDir(tempDir);
-    await writeFile(
-        notePath,
-        `${first.trimEnd()}\n\n${second.slice(second.indexOf("<!-- Aside comments"))}\n`,
-        "utf8",
-    );
-
-    let failure: { stderr: string } | null = null;
-    try {
-        await execFile("node", [
-            scriptPath,
-            "--file",
-            notePath,
-            "--page",
-            "--comment",
-            "New page note",
-        ], {
-            cwd: process.cwd(),
-        });
-    } catch (error) {
-        failure = error as { stderr: string };
-    }
-
-    assert.ok(failure);
-    assert.match(failure.stderr, /multiple Aside or legacy SideNote2 comments blocks/);
 });

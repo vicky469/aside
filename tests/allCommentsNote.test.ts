@@ -15,7 +15,6 @@ import {
     findFileHeadingPathInMarkdownLine,
     findIndexMarkdownLineTarget,
     isAllCommentsNotePath,
-    LEGACY_ALL_COMMENTS_NOTE_PATH,
     normalizeAllCommentsNoteImageCaption,
     normalizeAllCommentsNoteImageUrl,
     normalizeAllCommentsNotePath,
@@ -380,7 +379,6 @@ test("buildAllCommentsNoteContent groups multiple files under the same path head
 
 test("isAllCommentsNotePath matches the generated note path", () => {
     assert.equal(isAllCommentsNotePath(ALL_COMMENTS_NOTE_PATH), true);
-    assert.equal(isAllCommentsNotePath(LEGACY_ALL_COMMENTS_NOTE_PATH), true);
     assert.equal(isAllCommentsNotePath("notes/custom index.md", "notes/custom index.md"), true);
     assert.equal(isAllCommentsNotePath("Random.md"), false);
 });

@@ -4,11 +4,6 @@ import { extractWikiLinks } from "../text/commentMentions";
 import { extractTagsFromText } from "../text/commentTags";
 
 const ALL_COMMENTS_NOTE_PATH = "Aside index.md";
-const LEGACY_ALL_COMMENTS_NOTE_PATHS = new Set([
-    "Aside comments.md",
-    "SideNote2 index.md",
-    "SideNote2 comments.md",
-]);
 const MAX_EDGE_LABEL_WORDS = 4;
 const THOUGHT_TRAIL_MERMAID_RENDER_CONFIG = {
     fontFamily: "var(--font-interface-theme)",
@@ -93,7 +88,7 @@ function normalizeNotePath(filePath: string): string {
 }
 
 function isAllCommentsNotePath(filePath: string, currentPath: string = ALL_COMMENTS_NOTE_PATH): boolean {
-    return filePath === normalizeNotePath(currentPath) || LEGACY_ALL_COMMENTS_NOTE_PATHS.has(filePath);
+    return filePath === normalizeNotePath(currentPath);
 }
 
 function toInlineWordPreview(value: string, maxWords: number): string {

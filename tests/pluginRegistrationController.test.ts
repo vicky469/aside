@@ -159,7 +159,7 @@ test("plugin registration controller registers the view, protocol handler, comma
     assert.deepEqual(harness.registerViewCalls.map((call) => call.viewType), ["aside-view"]);
     assert.equal(harness.registerViewCalls[0].creator({ id: "leaf-1" }) instanceof Object, true);
     assert.deepEqual(harness.createdSidebarLeaves, [{ id: "leaf-1" }]);
-    assert.deepEqual(Array.from(harness.protocolHandlers.keys()).sort(), ["aside-comment", "side-note2-comment"]);
+    assert.deepEqual(Array.from(harness.protocolHandlers.keys()), ["aside-comment"]);
     assert.deepEqual(harness.removedCommandIds, ["aside:activate-view"]);
     assert.deepEqual(harness.commands.map((command) => command.id), ["activate-view", "add-comment-to-selection"]);
     assert.deepEqual(harness.commands.map((command) => command.name), ["Open sidebar", "Add comment to selection"]);
@@ -188,16 +188,6 @@ test("plugin registration controller registers the view, protocol handler, comma
         filePath: "docs/file.md",
         commentId: "comment-1",
     }]);
-
-    harness.protocolHandlers.get("side-note2-comment")?.({
-        file: "docs/legacy.md",
-        commentId: "comment-legacy",
-    });
-    await Promise.resolve();
-    assert.deepEqual(harness.openedCommentTargets.at(-1), {
-        filePath: "docs/legacy.md",
-        commentId: "comment-legacy",
-    });
 
     harness.ribbonActions[0].callback();
     await Promise.resolve();

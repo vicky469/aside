@@ -20,17 +20,6 @@ test("parseSideNoteReferenceUrl extracts the vault, file, and comment id", () =>
     assert.equal(parseSideNoteReferenceUrl("obsidian://open?vault=Dev&file=docs%2Falpha.md"), null);
 });
 
-test("parseSideNoteReferenceUrl accepts legacy SideNote2 comment links", () => {
-    assert.deepEqual(
-        parseSideNoteReferenceUrl("obsidian://side-note2-comment?vault=Dev%20Vault&file=docs%2Falpha.md&commentId=comment-1"),
-        {
-            vaultName: "Dev Vault",
-            filePath: "docs/alpha.md",
-            commentId: "comment-1",
-        },
-    );
-});
-
 test("extractSideNoteReferences keeps only local-vault markdown links when requested", () => {
     const markdown = [
         "[Local](obsidian://aside-comment?vault=Dev%20Vault&file=docs%2Falpha.md&commentId=comment-1)",

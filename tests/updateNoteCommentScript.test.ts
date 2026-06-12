@@ -6,8 +6,11 @@ import { tmpdir } from "node:os";
 import * as path from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
-import { serializeNoteComments } from "../src/core/storage/noteCommentStorage";
-import type { Comment } from "../src/commentManager";
+import {
+    commentToThread,
+    type Comment,
+    type CommentThread,
+} from "../src/commentManager";
 
 const execFile = promisify(execFileCallback);
 
@@ -21,7 +24,7 @@ function getSidecarPath(vaultRoot: string, noteRelativePath: string): string {
     return path.join(vaultRoot, ".obsidian", "plugins", "aside", "sidenotes", "by-note", shard, `${hash}.json`);
 }
 
-async function readSidecar(vaultRoot: string, noteRelativePath: string): Promise<{ version: number; notePath: string; threads: Array<{ id: string; entries: Array<{ id: string; body: string; timestamp: number }> }> } | null> {
+async function readSidecar(vaultRoot: string, noteRelativePath: string): Promise<{ version: number; notePath: string; threads: CommentThread[] } | null> {
     const sidecarPath = getSidecarPath(vaultRoot, noteRelativePath);
     try {
         const raw = await readFile(sidecarPath, "utf8");
@@ -33,6 +36,16 @@ async function readSidecar(vaultRoot: string, noteRelativePath: string): Promise
     } catch {
         return null;
     }
+}
+
+async function writeSidecar(vaultRoot: string, noteRelativePath: string, threads: CommentThread[]): Promise<void> {
+    const sidecarPath = getSidecarPath(vaultRoot, noteRelativePath);
+    await mkdir(path.dirname(sidecarPath), { recursive: true });
+    await writeFile(sidecarPath, `${JSON.stringify({
+        version: 1,
+        notePath: noteRelativePath,
+        threads,
+    })}\n`, "utf8");
 }
 
 async function createVaultDir(tempDir: string): Promise<void> {
@@ -76,10 +89,10 @@ test("update-note-comment script replaces the targeted comment body", async () =
     const notePath = path.join(tempDir, "note.md");
     const commentPath = path.join(tempDir, "comment.md");
     const scriptPath = path.resolve(process.cwd(), "scripts/update-note-comment.mjs");
-    const original = serializeNoteComments("# Title\n\nBody text.\n", [createComment()]);
 
     await createVaultDir(tempDir);
-    await writeFile(notePath, original, "utf8");
+    await writeFile(notePath, "# Title\n\nBody text.\n", "utf8");
+    await writeSidecar(tempDir, "note.md", [commentToThread(createComment())]);
     await writeFile(commentPath, "Updated body\nSecond line\n", "utf8");
 
     const { stdout } = await execFile("node", [
@@ -106,7 +119,7 @@ test("update-note-comment script replaces the targeted comment body", async () =
     assert.equal(noteContent, "# Title\n\nBody text.\n");
 });
 
-test("update-note-comment script can target a stored comment by obsidian side-note URI", async () => {
+test("update-note-comment script can target a stored comment by obsidian Aside URI", async () => {
     const tempDir = await mkdtemp(path.join(tmpdir(), "aside-comment-uri-script-"));
     const homeDir = path.join(tempDir, "home");
     const vaultRoot = path.join(tempDir, "Public Vault");
@@ -114,14 +127,14 @@ test("update-note-comment script can target a stored comment by obsidian side-no
     const commentPath = path.join(tempDir, "comment.md");
     const scriptPath = path.resolve(process.cwd(), "scripts/update-note-comment.mjs");
     const noteFilePath = "Folder/Note.md";
-    const original = serializeNoteComments("# Title\n\nBody text.\n", [createComment({
-        filePath: noteFilePath,
-    })]);
 
     await mkdir(path.dirname(notePath), { recursive: true });
     await createVaultDir(vaultRoot);
     await writeObsidianVaultConfig(homeDir, vaultRoot);
-    await writeFile(notePath, original, "utf8");
+    await writeFile(notePath, "# Title\n\nBody text.\n", "utf8");
+    await writeSidecar(vaultRoot, noteFilePath, [commentToThread(createComment({
+        filePath: noteFilePath,
+    }))]);
     await writeFile(commentPath, "Updated from URI\nSecond line\n", "utf8");
 
     const { stdout } = await execFile("node", [

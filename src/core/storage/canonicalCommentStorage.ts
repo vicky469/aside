@@ -1,21 +1,17 @@
-export type CanonicalCommentStorageSource = "none" | "legacy-inline" | "sidecar";
+export type CanonicalCommentStorageSource = "none" | "sidecar";
 
 export type CanonicalCommentStorageAction =
     | "use-sidecar"
-    | "migrate-inline"
     | "check-renamed-source";
 
 export interface CanonicalCommentStoragePlan {
     action: CanonicalCommentStorageAction;
     source: CanonicalCommentStorageSource;
     shouldRecoverRenamedSource: boolean;
-    shouldStripInlineBlock: boolean;
 }
 
 export interface CanonicalCommentStorageInput {
     sidecarRecordFound: boolean;
-    inlineThreadCount: number;
-    hasThreadedInlineBlock: boolean;
 }
 
 export function planCanonicalCommentStorage(input: CanonicalCommentStorageInput): CanonicalCommentStoragePlan {
@@ -24,16 +20,6 @@ export function planCanonicalCommentStorage(input: CanonicalCommentStorageInput)
             action: "use-sidecar",
             source: "sidecar",
             shouldRecoverRenamedSource: false,
-            shouldStripInlineBlock: input.hasThreadedInlineBlock,
-        };
-    }
-
-    if (input.inlineThreadCount > 0) {
-        return {
-            action: "migrate-inline",
-            source: "legacy-inline",
-            shouldRecoverRenamedSource: false,
-            shouldStripInlineBlock: true,
         };
     }
 
@@ -41,6 +27,5 @@ export function planCanonicalCommentStorage(input: CanonicalCommentStorageInput)
         action: "check-renamed-source",
         source: "none",
         shouldRecoverRenamedSource: true,
-        shouldStripInlineBlock: input.hasThreadedInlineBlock,
     };
 }
