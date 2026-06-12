@@ -130,7 +130,7 @@ Open a GitHub issue using the bug report template:
 
 https://github.com/vicky469/aside/issues/new?template=bug_report.yml
 
-For suspected vulnerabilities or other sensitive security issues, do not file a public issue. Email dev@databun.xyz instead.
+For suspected vulnerabilities or other sensitive security issues, do not file a public issue. Email vickyli819@proton.me instead.
 
 ## License
 
