@@ -1,6 +1,6 @@
 {
 	"name": "aside",
-	"version": "2.0.78",
+	"version": "2.0.79",
 	"description": "Side comments for humans and agents.",
 	"main": "main.js",
 	"scripts": {
