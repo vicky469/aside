@@ -15,9 +15,12 @@ import { buildCommentLocationUrl, parseIndexFileOpenUrl } from "../../core/deriv
 import {
     buildTagGroupedRelatedFiles,
     buildThoughtTrailCommentTagsByFilePath,
-    buildThoughtTrailLines,
     type ThoughtTrailFileTagLookup,
 } from "../../core/derived/thoughtTrail";
+import {
+    buildThoughtTrailNoteLinkLines,
+    type ThoughtTrailNoteLinkGraph,
+} from "../../core/derived/thoughtTrailNoteLinkGraph";
 import {
     getAgentRunsForCommentThread,
     type AgentRunRecord,
@@ -128,6 +131,12 @@ import {
     renderSidebarThoughtTrail,
     type SidebarThoughtTrailOptions,
 } from "./sidebarThoughtTrailRenderer";
+import {
+    buildSidebarThoughtTrailNoteLinkGraph,
+    getCachedSourceMarkdownEmbeds,
+    getCachedSourceMarkdownLinks,
+    resolveMarkdownNoteLinkPath,
+} from "./sidebarThoughtTrailGraph";
 import {
     getDefaultThoughtTrailSource,
     type SidebarThoughtTrailSource,
@@ -1544,13 +1553,17 @@ export default class AsideView extends ItemView {
             const indexSidebarThreadGroupCounts = isAllCommentsView
                 ? getSidebarThreadGroupCounts(pinnedScopedAllThreads)
                 : EMPTY_SIDEBAR_THREAD_GROUP_COUNTS;
-            const indexThoughtTrailLineCount = isAllCommentsView
-                ? buildThoughtTrailLines(this.app.vault.getName(), pinnedScopedVisibleThreads, {
-                    allCommentsNotePath: this.plugin.getAllCommentsNotePath(),
-                    resolveWikiLinkPath,
-                }).length
-                : 0;
             const hasIndexThoughtTrailRootScope = isAllCommentsView && !!selectedIndexFileFilterRootPath;
+            const indexThoughtTrailGraph = hasIndexThoughtTrailRootScope
+                ? this.buildThoughtTrailNoteLinkGraph(visiblePersistedThreads)
+                : null;
+            const indexThoughtTrailLineCount = indexThoughtTrailGraph && selectedIndexFileFilterRootPath
+                ? buildThoughtTrailNoteLinkLines(
+                    this.app.vault.getName(),
+                    indexThoughtTrailGraph,
+                    selectedIndexFileFilterRootPath,
+                ).length
+                : 0;
             const indexThoughtTrailTagLookup = isAllCommentsView
                 ? this.buildThoughtTrailTagLookup(null, persistedThreads)
                 : null;
@@ -1756,7 +1769,7 @@ export default class AsideView extends ItemView {
             }
 
             if (isAllCommentsView && effectiveIndexSidebarMode === "thought-trail") {
-                const trailComments = pinnedScopedVisibleThreads;
+                const trailComments = visiblePersistedThreads;
                 void this.plugin.logEvent("info", "thoughttrail", "thoughttrail.index.render", {
                     filePath: file.path,
                     selectedRootFilePath: selectedIndexFileFilterRootPath,
@@ -2081,11 +2094,12 @@ export default class AsideView extends ItemView {
             this.filterNoteSidebarThreadsByContentFilter(file.path, persistedThreads),
         );
 
-        const { scopedFilePaths, scopedThreads } = this.buildNoteThoughtTrailScope(file);
-        const thoughtTrailLineCount = buildThoughtTrailLines(this.app.vault.getName(), scopedThreads, {
-            allCommentsNotePath: this.plugin.getAllCommentsNotePath(),
-            resolveWikiLinkPath: (linkPath, sourceFilePath) => this.resolveThoughtTrailWikiLinkPath(linkPath, sourceFilePath),
-        }).length;
+        const { scopedFilePaths, scopedThreads, thoughtTrailGraph } = this.buildNoteThoughtTrailScope(file);
+        const thoughtTrailLineCount = buildThoughtTrailNoteLinkLines(
+            this.app.vault.getName(),
+            thoughtTrailGraph,
+            file.path,
+        ).length;
         const thoughtTrailTagLookup = this.buildThoughtTrailTagLookup(file.path, persistedThreads);
         const hasThoughtTrailTagSource = (thoughtTrailTagLookup(file.path) ?? []).length > 0;
         const hasThoughtTrailRootScope = scopedFilePaths.length > 0 || hasThoughtTrailTagSource;
@@ -2186,6 +2200,7 @@ export default class AsideView extends ItemView {
     ): {
         scopedFilePaths: string[];
         scopedThreads: CommentThread[];
+        thoughtTrailGraph: ThoughtTrailNoteLinkGraph;
     } {
         const hasExistingSourceFile = (filePath: string): boolean => {
             const sourceFile = this.app.vault.getAbstractFileByPath(filePath);
@@ -2199,19 +2214,20 @@ export default class AsideView extends ItemView {
         return buildRootedThoughtTrailScope(visibleTrailThreads, {
             rootFilePath: file.path,
             allCommentsNotePath: this.plugin.getAllCommentsNotePath(),
-            resolveWikiLinkPath: (linkPath, sourceFilePath) => this.resolveThoughtTrailWikiLinkPath(linkPath, sourceFilePath),
+            resolveWikiLinkPath: (linkPath, sourceFilePath) => resolveMarkdownNoteLinkPath(this.app, linkPath, sourceFilePath),
+            sourceMarkdownFilePaths: this.getThoughtTrailVaultCandidateFilePaths(file.path),
+            getSourceMarkdownLinks: (sourceFilePath) => getCachedSourceMarkdownLinks(this.app, sourceFilePath),
+            getSourceMarkdownEmbeds: (sourceFilePath) => getCachedSourceMarkdownEmbeds(this.app, sourceFilePath),
+            resolveSourceMarkdownLinkPath: (linkPath, sourceFilePath) => resolveMarkdownNoteLinkPath(this.app, linkPath, sourceFilePath),
         });
     }
 
-    private getThoughtTrailVaultCandidateFilePaths(rootFilePath: string | null): string[] {
+    private getThoughtTrailVaultCandidateFilePaths(_rootFilePath: string | null): string[] {
         const allCommentsNotePath = this.plugin.getAllCommentsNotePath();
         return this.app.vault
             .getMarkdownFiles()
             .map((file) => file.path)
-            .filter((filePath) =>
-                filePath !== allCommentsNotePath
-                && (!rootFilePath || filePath !== rootFilePath)
-            )
+            .filter((filePath) => filePath !== allCommentsNotePath)
             .sort((left, right) => left.localeCompare(right));
     }
 
@@ -2304,12 +2320,17 @@ export default class AsideView extends ItemView {
         const scope = buildRootedThoughtTrailScope(mergedThreads, {
             rootFilePath: file.path,
             allCommentsNotePath: this.plugin.getAllCommentsNotePath(),
-            resolveWikiLinkPath: (linkPath, sourceFilePath) => this.resolveThoughtTrailWikiLinkPath(linkPath, sourceFilePath),
+            resolveWikiLinkPath: (linkPath, sourceFilePath) => resolveMarkdownNoteLinkPath(this.app, linkPath, sourceFilePath),
+            sourceMarkdownFilePaths: this.getThoughtTrailVaultCandidateFilePaths(file.path),
+            getSourceMarkdownLinks: (sourceFilePath) => getCachedSourceMarkdownLinks(this.app, sourceFilePath),
+            getSourceMarkdownEmbeds: (sourceFilePath) => getCachedSourceMarkdownEmbeds(this.app, sourceFilePath),
+            resolveSourceMarkdownLinkPath: (linkPath, sourceFilePath) => resolveMarkdownNoteLinkPath(this.app, linkPath, sourceFilePath),
         });
-        const lineCount = buildThoughtTrailLines(this.app.vault.getName(), scope.scopedThreads, {
-            allCommentsNotePath: this.plugin.getAllCommentsNotePath(),
-            resolveWikiLinkPath: (linkPath, sourceFilePath) => this.resolveThoughtTrailWikiLinkPath(linkPath, sourceFilePath),
-        }).length;
+        const lineCount = buildThoughtTrailNoteLinkLines(
+            this.app.vault.getName(),
+            scope.thoughtTrailGraph,
+            file.path,
+        ).length;
         const thoughtTrailTagLookup = this.buildThoughtTrailTagLookup(file.path, currentFileThreads);
         const hasThoughtTrailTagSource = (thoughtTrailTagLookup(file.path) ?? []).length > 0;
         const hasThoughtTrailRootScope = scope.scopedFilePaths.length > 0 || hasThoughtTrailTagSource;
@@ -2329,6 +2350,15 @@ export default class AsideView extends ItemView {
             unavailableReason,
             isEnabled: unavailableReason === null,
         };
+    }
+
+    private buildThoughtTrailNoteLinkGraph(
+        comments: Array<Comment | CommentThread>,
+    ): ThoughtTrailNoteLinkGraph {
+        return buildSidebarThoughtTrailNoteLinkGraph(this.app, comments, {
+            allCommentsNotePath: this.plugin.getAllCommentsNotePath(),
+            sourceMarkdownFilePaths: this.getThoughtTrailVaultCandidateFilePaths(null),
+        });
     }
 
     private resolveThoughtTrailWikiLinkPath(linkPath: string, sourceFilePath: string): string | null {

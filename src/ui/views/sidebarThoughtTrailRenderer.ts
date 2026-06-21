@@ -9,17 +9,18 @@ import {
 import type { Comment, CommentThread } from "../../commentManager";
 import {
     buildTagGroupedRelatedFiles,
-    buildThoughtTrailLines,
     extractThoughtTrailMermaidSource,
     getThoughtTrailMermaidRenderConfig,
     type TagRelatedFileGroup,
     type ThoughtTrailFileTagLookup,
 } from "../../core/derived/thoughtTrail";
+import { buildThoughtTrailNoteLinkLines } from "../../core/derived/thoughtTrailNoteLinkGraph";
 import { resolveMermaidRuntime } from "./mermaidRuntime";
 import { extractThoughtTrailClickTargets, parseThoughtTrailOpenFilePath, resolveThoughtTrailNodeId } from "./thoughtTrailNodeLinks";
 import { parseTrustedMermaidSvg } from "./thoughtTrailSvg";
 import type { SidebarThoughtTrailSource } from "./sidebarThoughtTrailSource";
 import { nodeInstanceOf } from "../domGuards";
+import { buildSidebarThoughtTrailNoteLinkGraph } from "./sidebarThoughtTrailGraph";
 
 export interface SidebarThoughtTrailRenderContext {
     app: App;
@@ -160,22 +161,24 @@ export async function renderSidebarThoughtTrail(
         return;
     }
 
-    const relatedFileLines = buildThoughtTrailLines(context.app.vault.getName(), comments, {
+    const thoughtTrailGraph = buildSidebarThoughtTrailNoteLinkGraph(context.app, comments, {
         allCommentsNotePath: context.allCommentsNotePath,
-        resolveWikiLinkPath: (linkPath, sourceFilePath) => {
-            const linkedFile = context.app.metadataCache.getFirstLinkpathDest(linkPath, sourceFilePath);
-            return linkedFile instanceof TFile ? linkedFile.path : null;
-        },
+        sourceMarkdownFilePaths: options.candidateFilePaths,
     });
+    const relatedFileLines = buildThoughtTrailNoteLinkLines(
+        context.app.vault.getName(),
+        thoughtTrailGraph,
+        rootFilePath,
+    );
     await renderThoughtTrailSection(thoughtTrailEl, {
         emptyStateText: options.surface === "note"
             ? [
                 "No related files for this file yet.",
-                "Add wiki links in side notes for this file.",
+                "Add wiki links in the source note or in side notes.",
             ]
             : [
                 "No related files for the selected file.",
-                "Add links in those notes or choose a different file.",
+                "Add wiki links in that source note, related source notes, or side notes.",
             ],
         sourcePath: rootFilePath || file.path,
         thoughtTrailLines: relatedFileLines,
