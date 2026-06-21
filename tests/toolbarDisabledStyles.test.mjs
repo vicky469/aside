@@ -3,6 +3,11 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const css = readFileSync(new URL("../styles.css", import.meta.url), "utf8");
+const importantOverridePattern = new RegExp("!" + "important");
+
+test("stylesheet avoids important overrides", () => {
+    assert.doesNotMatch(css, importantOverridePattern);
+});
 
 test("disabled toolbar icon buttons are visibly unavailable and non-interactive", () => {
     const disabledRule = css.match(
@@ -68,6 +73,31 @@ test("empty states stay muted without promoted heading text", () => {
     assert.match(emptyStateRule.groups.body, /color:\s*var\(--text-muted\)\s*;/);
     assert.match(emptyStateRule.groups.body, /font-size:\s*var\(--font-ui-small\)\s*;/);
     assert.doesNotMatch(css, /\.aside-empty-state p:first-child\s*\{[\s\S]*?font-weight:\s*var\(--font-semibold\)/);
+});
+
+test("tag selection wrapper uses flexible layout without overlay", () => {
+    const wrapperRule = css.match(
+        /\.aside-comment-thread-select-wrapper\s*\{(?<body>[\s\S]*?)\}/,
+    );
+    const checkboxRowRule = css.match(
+        /\.aside-comment-thread-select-row\s*\{(?<body>[\s\S]*?)\}/,
+    );
+    const wrappedCardRule = css.match(
+        /\.aside-comment-thread-select-wrapper\s*>\s*\.aside-comment-item\s*\{(?<body>[\s\S]*?)\}/,
+    );
+
+    assert.ok(wrapperRule?.groups?.body, "missing tag selection wrapper rule");
+    assert.match(wrapperRule.groups.body, /display:\s*flex\s*;/);
+    assert.doesNotMatch(wrapperRule.groups.body, /display:\s*block\s*;/);
+    assert.doesNotMatch(wrapperRule.groups.body, /position:\s*relative\s*;/);
+
+    assert.ok(checkboxRowRule?.groups?.body, "missing tag selection checkbox row rule");
+    assert.match(checkboxRowRule.groups.body, /flex:\s*0 0 auto\s*;/);
+    assert.doesNotMatch(checkboxRowRule.groups.body, /position:\s*absolute\s*;/);
+
+    assert.ok(wrappedCardRule?.groups?.body, "missing wrapped tag card flex rule");
+    assert.match(wrappedCardRule.groups.body, /flex:\s*1 1 0\s*;/);
+    assert.match(wrappedCardRule.groups.body, /min-width:\s*0\s*;/);
 });
 
 test("index note file names are larger than metadata text", () => {
@@ -150,13 +180,13 @@ test("thread footer meta action uses a minimal muted text action", () => {
 
     assert.ok(buttonResetRule?.groups?.body, "missing native button reset for thread footer meta action");
     assert.match(buttonResetRule.groups.body, /-webkit-appearance:\s*none\s*;/);
-    assert.match(buttonResetRule.groups.body, /color:\s*var\(--text-muted\)\s*!important\s*;/);
-    assert.match(buttonResetRule.groups.body, /background:\s*transparent\s*!important\s*;/);
-    assert.match(buttonResetRule.groups.body, /background-image:\s*none\s*!important\s*;/);
-    assert.match(buttonResetRule.groups.body, /box-shadow:\s*none\s*!important\s*;/);
-    assert.match(buttonResetRule.groups.body, /filter:\s*none\s*!important\s*;/);
-    assert.match(buttonResetRule.groups.body, /text-shadow:\s*none\s*!important\s*;/);
+    assert.match(buttonResetRule.groups.body, /color:\s*var\(--text-muted\)\s*;/);
+    assert.match(buttonResetRule.groups.body, /background:\s*transparent\s*;/);
+    assert.match(buttonResetRule.groups.body, /background-image:\s*none\s*;/);
+    assert.match(buttonResetRule.groups.body, /box-shadow:\s*none\s*;/);
+    assert.match(buttonResetRule.groups.body, /filter:\s*none\s*;/);
+    assert.match(buttonResetRule.groups.body, /text-shadow:\s*none\s*;/);
 
     assert.ok(buttonHoverFocusRule?.groups?.body, "missing native button hover/focus color override");
-    assert.match(buttonHoverFocusRule.groups.body, /color:\s*var\(--text-normal\)\s*!important\s*;/);
+    assert.match(buttonHoverFocusRule.groups.body, /color:\s*var\(--text-normal\)\s*;/);
 });

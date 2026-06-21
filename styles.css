@@ -543,7 +543,17 @@
 .aside-comment-thread-select-wrapper {
     display: flex;
     align-items: flex-start;
-    gap: 8px;
+    gap: 6px;
+}
+
+.aside-comment-thread-select-wrapper > .aside-comment-item {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+.aside-comment-thread-select-wrapper > .aside-thread-stack {
+    flex: 1 1 0;
+    min-width: 0;
 }
 
 .aside-comment-thread-select-row {
@@ -551,9 +561,9 @@
     align-items: center;
     flex-wrap: nowrap;
     gap: 4px;
-    margin: 0;
-    width: fit-content;
-    height: 22px;
+    flex: 0 0 auto;
+    align-self: flex-start;
+    margin: 9px 0 0;
     padding: 0;
     color: var(--text-faint, var(--text-muted));
     white-space: nowrap;
@@ -561,8 +571,7 @@
 
 .aside-comment-thread-select-row input[type="checkbox"] {
     margin: 0;
-    width: 14px;
-    height: 14px;
+    flex-shrink: 0;
     accent-color: var(--interactive-accent);
 }
 
@@ -742,6 +751,10 @@ button.aside-sidebar-file-pin-button {
     text-decoration: none;
     box-shadow: none;
     transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+button.aside-filter-chip {
+    box-shadow: none;
 }
 
 .aside-filter-chip:hover {
@@ -1578,19 +1591,19 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
     appearance: none;
 }
 
-button.aside-thread-footer-meta-action {
+.aside-thread-footer-meta button.aside-thread-footer-meta-action {
     -webkit-appearance: none;
-    color: var(--text-muted) !important;
-    background: transparent !important;
-    background-image: none !important;
-    box-shadow: none !important;
-    filter: none !important;
-    text-shadow: none !important;
+    color: var(--text-muted);
+    background: transparent;
+    background-image: none;
+    box-shadow: none;
+    filter: none;
+    text-shadow: none;
 }
 
-button.aside-thread-footer-meta-action:hover,
-button.aside-thread-footer-meta-action:focus-visible {
-    color: var(--text-normal) !important;
+.aside-thread-footer-meta button.aside-thread-footer-meta-action:hover,
+.aside-thread-footer-meta button.aside-thread-footer-meta-action:focus-visible {
+    color: var(--text-normal);
 }
 
 .aside-agent-run-status + .aside-thread-footer-meta-action {
