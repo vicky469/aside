@@ -80,6 +80,27 @@ test("hasAvailableThoughtTrail is true when scoped comments produce trail lines"
     );
 });
 
+test("hasAvailableThoughtTrail is true when source markdown links produce trail lines without side-note links", () => {
+    assert.equal(
+        hasAvailableThoughtTrail({
+            allCommentsNotePath: "Aside index.md",
+            comments: [],
+            hasRootScope: true,
+            rootFilePath: "docs/current.md",
+            sourceMarkdownFilePaths: ["docs/current.md", "docs/linked.md"],
+            getSourceMarkdownLinks: (sourceFilePath: string) =>
+                sourceFilePath === "docs/current.md"
+                    ? ["Linked"]
+                    : [],
+            resolveWikiLinkPath: () => null,
+            resolveSourceMarkdownLinkPath: (linkPath: string) =>
+                linkPath === "Linked" ? "docs/linked.md" : null,
+            vaultName: "dev",
+        }),
+        true,
+    );
+});
+
 test("resolveModeWithThoughtTrailAvailability falls back from unavailable thought trail to list", () => {
     assert.equal(resolveModeWithThoughtTrailAvailability("thought-trail", false), "list");
     assert.equal(resolveModeWithThoughtTrailAvailability("thought-trail", true), "thought-trail");

@@ -12,23 +12,23 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Add a Thought Trail note-link graph builder that can consume both side-note links and source markdown note links.
-- [ ] Read source markdown normal links and embeds from Obsidian metadata cache without reading source files directly.
-- [ ] Count source markdown embeds only when they resolve to markdown notes.
-- [ ] Use the richer Thought Trail graph for normal note Thought Trail scope, index Thought Trail rendering, and Thought Trail availability.
-- [ ] Keep the index Files filter and index comment list comment-index scoped; do not let source-markdown-only links expand comment-list membership.
-- [ ] Render side-note edges with existing labels and source-markdown edges without labels, suppressing unlabeled duplicates when a labeled side-note edge exists for the same source-target pair.
-- [ ] Update Thought Trail empty-state copy so `Wikilinks` mentions source markdown links as well as side-note links.
+- [x] Add a Thought Trail note-link graph builder that can consume both side-note links and source markdown note links.
+- [x] Read source markdown normal links and embeds from Obsidian metadata cache without reading source files directly.
+- [x] Count source markdown embeds only when they resolve to markdown notes.
+- [x] Use the richer Thought Trail graph for normal note Thought Trail scope, index Thought Trail rendering, and Thought Trail availability.
+- [x] Keep the index Files filter and index comment list comment-index scoped; do not let source-markdown-only links expand comment-list membership.
+- [x] Render side-note edges with existing labels and source-markdown edges without labels, suppressing unlabeled duplicates when a labeled side-note edge exists for the same source-target pair.
+- [x] Update Thought Trail empty-state copy so `Wikilinks` mentions source markdown links as well as side-note links.
 
 ### Verification
 
-- [ ] Unit tests cover source markdown links creating Thought Trail nodes and edges.
-- [ ] Unit tests cover source markdown embeds counting only when they resolve to markdown notes.
-- [ ] Unit tests cover commentless related markdown notes appearing in Thought Trail but not affecting index Files filter membership.
-- [ ] Unit tests cover side-note duplicate edges winning over source-markdown duplicate edges.
-- [ ] Unit tests cover exclusion of `Aside index.md`, self-links, unresolved links, and non-markdown targets.
-- [ ] Existing side-note-only Thought Trail tests still pass.
-- [ ] Existing index Files filter tests still pass without source-markdown-only expansion.
+- [x] Unit tests cover source markdown links creating Thought Trail nodes and edges.
+- [x] Unit tests cover source markdown embeds counting only when they resolve to markdown notes.
+- [x] Unit tests cover commentless related markdown notes appearing in Thought Trail but not affecting index Files filter membership.
+- [x] Unit tests cover side-note duplicate edges winning over source-markdown duplicate edges.
+- [x] Unit tests cover exclusion of `Aside index.md`, self-links, unresolved links, and non-markdown targets.
+- [x] Existing side-note-only Thought Trail tests still pass.
+- [x] Existing index Files filter tests still pass without source-markdown-only expansion.
 
 ## Context
 

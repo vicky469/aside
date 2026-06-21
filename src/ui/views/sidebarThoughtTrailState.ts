@@ -1,25 +1,38 @@
 import type { Comment, CommentThread } from "../../commentManager";
 import {
-    buildThoughtTrailLines,
     type ThoughtTrailBuildOptions,
 } from "../../core/derived/thoughtTrail";
+import {
+    buildThoughtTrailNoteLinkGraph,
+    buildThoughtTrailNoteLinkLines,
+} from "../../core/derived/thoughtTrailNoteLinkGraph";
 import type { SidebarPrimaryMode } from "./viewState";
 
 export function hasAvailableThoughtTrail(options: {
     allCommentsNotePath: string;
     comments: Array<Comment | CommentThread>;
     hasRootScope: boolean;
+    rootFilePath?: string | null;
     resolveWikiLinkPath: ThoughtTrailBuildOptions["resolveWikiLinkPath"];
+    sourceMarkdownFilePaths?: readonly string[];
+    getSourceMarkdownLinks?: (sourceFilePath: string) => readonly string[];
+    getSourceMarkdownEmbeds?: (sourceFilePath: string) => readonly string[];
+    resolveSourceMarkdownLinkPath?: (linkPath: string, sourceFilePath: string) => string | null;
     vaultName: string;
 }): boolean {
     if (!options.hasRootScope) {
         return false;
     }
 
-    return buildThoughtTrailLines(options.vaultName, options.comments, {
+    const graph = buildThoughtTrailNoteLinkGraph(options.comments, {
         allCommentsNotePath: options.allCommentsNotePath,
-        resolveWikiLinkPath: options.resolveWikiLinkPath,
-    }).length > 0;
+        sourceMarkdownFilePaths: options.sourceMarkdownFilePaths,
+        getSourceMarkdownLinks: options.getSourceMarkdownLinks,
+        getSourceMarkdownEmbeds: options.getSourceMarkdownEmbeds,
+        resolveSideNoteWikiLinkPath: options.resolveWikiLinkPath,
+        resolveSourceMarkdownLinkPath: options.resolveSourceMarkdownLinkPath,
+    });
+    return buildThoughtTrailNoteLinkLines(options.vaultName, graph, options.rootFilePath).length > 0;
 }
 
 export function mergeCurrentFileThreadsForThoughtTrail(

@@ -105,3 +105,24 @@ test("buildRootedThoughtTrailScope includes incoming links when the root has no 
     assert.deepEqual(scoped.scopedFilePaths, ["docs/source.md", "docs/target.md"]);
     assert.deepEqual(scoped.scopedThreads.map((thread) => thread.id), ["source-thread"]);
 });
+
+test("buildRootedThoughtTrailScope includes source markdown links even when the linked note has no side comments", () => {
+    const scoped = buildRootedThoughtTrailScope(
+        [],
+        {
+            rootFilePath: "docs/current.md",
+            allCommentsNotePath: "Aside index.md",
+            sourceMarkdownFilePaths: ["docs/current.md", "docs/commentless.md"],
+            getSourceMarkdownLinks: (sourceFilePath: string) =>
+                sourceFilePath === "docs/current.md"
+                    ? ["Commentless"]
+                    : [],
+            resolveWikiLinkPath: () => null,
+            resolveSourceMarkdownLinkPath: (linkPath: string) =>
+                linkPath === "Commentless" ? "docs/commentless.md" : null,
+        },
+    );
+
+    assert.deepEqual(scoped.scopedFilePaths, ["docs/commentless.md", "docs/current.md"]);
+    assert.deepEqual(scoped.scopedThreads, []);
+});

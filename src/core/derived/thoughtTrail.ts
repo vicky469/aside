@@ -28,6 +28,12 @@ export interface ThoughtTrailBuildOptions {
     resolveWikiLinkPath?: (linkPath: string, sourceFilePath: string) => string | null;
 }
 
+export interface ThoughtTrailRenderableEdge {
+    sourceFilePath: string;
+    targetFilePath: string;
+    comment?: Comment | CommentThread;
+}
+
 export type ThoughtTrailFileTagLookup = (filePath: string) => readonly string[] | null | undefined;
 
 interface ThoughtTrailEdge {
@@ -321,7 +327,7 @@ export function buildThoughtTrailCommentTagsByFilePath(
     );
 }
 
-function getOrderedRoots(edgesBySourceFile: Map<string, ThoughtTrailEdge[]>): string[] {
+function getOrderedRoots(edgesBySourceFile: Map<string, Array<{ targetFilePath: string }>>): string[] {
     const sourceFilePaths = Array.from(edgesBySourceFile.keys()).sort((left, right) => left.localeCompare(right));
     const incomingCounts = new Map<string, number>();
     for (const edges of edgesBySourceFile.values()) {
@@ -543,6 +549,42 @@ export function buildThoughtTrailLines(
         return [];
     }
 
+    const renderableEdges: ThoughtTrailRenderableEdge[] = [];
+    for (const [sourceFilePath, edges] of edgesBySourceFile.entries()) {
+        for (const edge of edges) {
+            renderableEdges.push({
+                sourceFilePath,
+                targetFilePath: edge.targetFilePath,
+                comment: edge.comment,
+            });
+        }
+    }
+
+    return buildThoughtTrailLinesFromEdges(vaultName, renderableEdges);
+}
+
+export function buildThoughtTrailLinesFromEdges(
+    vaultName: string,
+    edges: readonly ThoughtTrailRenderableEdge[],
+): string[] {
+    if (!edges.length) {
+        return [];
+    }
+
+    const edgesBySourceFile = new Map<string, ThoughtTrailRenderableEdge[]>();
+    for (const edge of edges) {
+        const existing = edgesBySourceFile.get(edge.sourceFilePath);
+        if (existing) {
+            existing.push(edge);
+        } else {
+            edgesBySourceFile.set(edge.sourceFilePath, [edge]);
+        }
+    }
+
+    if (!edgesBySourceFile.size) {
+        return [];
+    }
+
     const nodeLabelByFilePath = buildCompactNodeLabels([
         ...edgesBySourceFile.keys(),
         ...Array.from(edgesBySourceFile.values()).flatMap((edges) => edges.map((edge) => edge.targetFilePath)),
@@ -576,7 +618,7 @@ export function buildThoughtTrailLines(
         const sourceId = ensureNode(sourceFilePath);
         for (const edge of edgesBySourceFile.get(sourceFilePath) ?? []) {
             const targetId = ensureNode(edge.targetFilePath);
-            const label = formatEdgeLabel(edge.comment);
+            const label = edge.comment ? formatEdgeLabel(edge.comment) : null;
             edgeLines.push(label
                 ? `    ${sourceId} -->|${JSON.stringify(label)}| ${targetId}`
                 : `    ${sourceId} --> ${targetId}`);
