@@ -60,6 +60,7 @@ export interface SidebarModeControlOptions extends SidebarModeAvailability {
 export interface ActiveFileFiltersOptions {
     rootFilePath: string;
     filteredIndexFilePaths: string[];
+    showSummary?: boolean;
     onClear(): void;
 }
 
@@ -249,8 +250,10 @@ export function renderActiveFileFilters(
         options.onClear();
     };
 
-    const summaryEl = filterBar.createDiv("aside-active-file-filter-summary");
-    summaryEl.setText(presentation.summary);
+    if (presentation.summary !== null) {
+        const summaryEl = filterBar.createDiv("aside-active-file-filter-summary");
+        summaryEl.setText(presentation.summary);
+    }
 }
 
 function renderTabScopeSeparator(container: HTMLElement): void {

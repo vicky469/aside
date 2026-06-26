@@ -86,6 +86,7 @@ import {
 import { buildRootedThoughtTrailScope } from "./sidebarThoughtTrailScope";
 import { clearSidebarSearchHighlights, highlightSidebarSearchMatches } from "./sidebarSearchHighlight";
 import {
+    deriveIndexSidebarListFilePaths,
     filterIndexThreadsByExistingSourceFiles,
     GENERIC_INDEX_EMPTY_STATE_TEXTS,
     scopeIndexThreadsByFilePaths,
@@ -1522,6 +1523,12 @@ export default class AsideView extends ItemView {
             const filteredIndexFilePaths = isAllCommentsView
                 ? deriveIndexSidebarScopedFilePaths(indexFileFilterGraph, selectedIndexFileFilterRootPath)
                 : [];
+            const indexSidebarListFilePaths = isAllCommentsView
+                ? deriveIndexSidebarListFilePaths(selectedIndexFileFilterRootPath)
+                : [];
+            const activeIndexFileFilterPaths = filteredIndexFilePaths.length
+                ? filteredIndexFilePaths
+                : indexSidebarListFilePaths;
             const indexFileFilterOptions = indexFileFilterState.options;
             this.syncPinnedSidebarThreadIds(persistedThreads);
             const pinnedSidebarThreadIds = isAllCommentsView ? EMPTY_PINNED_SIDEBAR_THREAD_IDS : this.pinnedSidebarThreadIds;
@@ -1531,7 +1538,7 @@ export default class AsideView extends ItemView {
                 scopedAllThreads,
             } = isAllCommentsView
                 ? selectedIndexFileFilterRootPath
-                    ? scopeIndexThreadsByFilePaths(visiblePersistedThreads, persistedThreads, filteredIndexFilePaths)
+                    ? scopeIndexThreadsByFilePaths(visiblePersistedThreads, persistedThreads, indexSidebarListFilePaths)
                     : {
                         scopedVisibleThreads: visiblePersistedThreads,
                         scopedAllThreads: persistedThreads,
@@ -1663,7 +1670,7 @@ export default class AsideView extends ItemView {
                     draftComment,
                     showPinnedThreadsOnly ? pinnedSidebarThreadIds : EMPTY_PINNED_SIDEBAR_THREAD_IDS,
                 )
-                && (!filteredIndexFilePaths.length || filteredIndexFilePaths.includes(draftComment.filePath))
+                && (!indexSidebarListFilePaths.length || indexSidebarListFilePaths.includes(draftComment.filePath))
                 ? draftComment
                 : null;
             const activeDraftHostThreadId = (visibleDraftComment?.mode === "edit" || visibleDraftComment?.mode === "append")
@@ -1757,14 +1764,15 @@ export default class AsideView extends ItemView {
                     : null,
                 indexFileFilterOptions,
                 selectedIndexFileFilterRootPath,
-                filteredIndexFilePaths,
+                filteredIndexFilePaths: activeIndexFileFilterPaths,
             });
 
-            if (isAllCommentsView && selectedIndexFileFilterRootPath && filteredIndexFilePaths.length) {
+            if (isAllCommentsView && selectedIndexFileFilterRootPath && activeIndexFileFilterPaths.length) {
                 this.renderActiveFileFilters(
                     commentsContainer,
                     selectedIndexFileFilterRootPath,
-                    filteredIndexFilePaths,
+                    activeIndexFileFilterPaths,
+                    effectiveIndexSidebarMode === "thought-trail",
                 );
             }
 
@@ -1844,7 +1852,7 @@ export default class AsideView extends ItemView {
                     this.renderIndexSidebarEmptyState(commentsBody, {
                         renderedItemCount: renderedItems.length,
                         totalScopedCount,
-                        filteredIndexFilePaths,
+                        filteredIndexFilePaths: indexSidebarListFilePaths,
                         searchQuery: this.indexSidebarSearchQuery,
                     });
                 }
@@ -3600,10 +3608,12 @@ export default class AsideView extends ItemView {
         container: HTMLElement,
         rootFilePath: string,
         filteredIndexFilePaths: string[],
+        showSummary: boolean,
     ): void {
         renderActiveFileFilters(container, {
             rootFilePath,
             filteredIndexFilePaths,
+            showSummary,
             onClear: () => {
                 void this.setIndexFileFilterRootPath(null);
             },
@@ -3745,13 +3755,16 @@ export default class AsideView extends ItemView {
     }
 
     private openIndexFileFilterModal(indexFileFilterOptions: IndexFileFilterOption[]): void {
+        const selectedFilePaths = deriveIndexSidebarScopedFilePaths(
+            this.indexFileFilterGraph,
+            this.selectedIndexFileFilterRootPath,
+        );
         new SideNoteFileFilterModal(this.app, {
             availableOptions: indexFileFilterOptions,
             selectedRootFilePath: this.selectedIndexFileFilterRootPath,
-            selectedFilePaths: deriveIndexSidebarScopedFilePaths(
-                this.indexFileFilterGraph,
-                this.selectedIndexFileFilterRootPath,
-            ),
+            selectedFilePaths: selectedFilePaths.length
+                ? selectedFilePaths
+                : deriveIndexSidebarListFilePaths(this.selectedIndexFileFilterRootPath),
             onChooseRoot: async (rootFilePath) => {
                 await this.setIndexFileFilterRootPath(rootFilePath);
             },
@@ -3781,6 +3794,7 @@ export default class AsideView extends ItemView {
             filteredIndexFilePaths: filteredIndexFilePaths.length
                 ? filteredIndexFilePaths
                 : [rootFilePath],
+            showSummary: this.indexSidebarMode === "thought-trail",
         });
     }
 

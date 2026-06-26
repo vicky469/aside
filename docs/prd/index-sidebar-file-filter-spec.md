@@ -6,6 +6,8 @@ Draft implementation spec based on:
 
 - [index-sidebar-file-filter-plan.md](index-sidebar-file-filter-plan.md)
 
+Current implementation note: the shared-membership rule in this draft has been superseded. The index sidebar `List` is scoped to the selected root file only, while `Thought Trail` uses that same root to show related files.
+
 ## Problem Statement
 
 The current `Files` filter in the index sidebar is modeled as a user-managed array of file paths.

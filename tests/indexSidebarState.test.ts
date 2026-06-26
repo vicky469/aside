@@ -2,6 +2,7 @@ import * as assert from "node:assert/strict";
 import test from "node:test";
 import { commentToThread, type Comment } from "../src/commentManager";
 import {
+    deriveIndexSidebarListFilePaths,
     GENERIC_INDEX_EMPTY_STATE_TEXTS,
     filterIndexThreadsByExistingSourceFiles,
     scopeIndexThreadsByFilePaths,
@@ -55,6 +56,23 @@ test("scopeIndexThreadsByFilePaths filters both visible and total threads by the
 
     assert.deepEqual(scoped.scopedVisibleThreads.map((thread) => thread.id), ["b"]);
     assert.deepEqual(scoped.scopedAllThreads.map((thread) => thread.id), ["b", "c"]);
+});
+
+test("deriveIndexSidebarListFilePaths scopes index list cards to the selected root only", () => {
+    const visibleThreads = [
+        commentToThread(createComment({ id: "a", filePath: "docs/a.md" })),
+        commentToThread(createComment({ id: "b", filePath: "docs/b.md" })),
+    ];
+    const allThreads = visibleThreads.concat([
+        commentToThread(createComment({ id: "c", filePath: "docs/c.md" })),
+    ]);
+
+    const selectedListFilePaths = deriveIndexSidebarListFilePaths(" docs\\b.md ");
+    const scoped = scopeIndexThreadsByFilePaths(visibleThreads, allThreads, selectedListFilePaths);
+
+    assert.deepEqual(selectedListFilePaths, ["docs/b.md"]);
+    assert.deepEqual(scoped.scopedVisibleThreads.map((thread) => thread.id), ["b"]);
+    assert.deepEqual(scoped.scopedAllThreads.map((thread) => thread.id), ["b"]);
 });
 
 test("filterIndexThreadsByExistingSourceFiles drops threads whose source file no longer exists", () => {

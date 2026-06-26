@@ -13,7 +13,7 @@ import {
     resolveAutoIndexFileFilterRootPath,
     shouldLimitIndexSidebarList,
 } from "../src/ui/views/indexFileFilter";
-import { updateRenderedActiveFileFilters } from "../src/ui/views/sidebarActiveFileFilterDom";
+import { getActiveFileFilterPresentation, updateRenderedActiveFileFilters } from "../src/ui/views/sidebarActiveFileFilterDom";
 import { showIndexSidebarListLoadingState } from "../src/ui/views/sidebarIndexLoadingState";
 
 class FakeElement {
@@ -281,6 +281,24 @@ test("updateRenderedActiveFileFilters replaces the visible filter chip immediate
     assert.equal(labelEl.textContent, "test");
     assert.equal(summaryEl.textContent, "1 file");
     assert.equal(clearButton.attributes.get("aria-label"), "Clear file filter for test.md");
+});
+
+test("getActiveFileFilterPresentation can suppress linked-file summary", () => {
+    const presentation = getActiveFileFilterPresentation({
+        rootFilePath: "docs/a.md",
+        filteredIndexFilePaths: [
+            "docs/a.md",
+            "docs/b.md",
+            "docs/c.md",
+            "docs/d.md",
+            "docs/e.md",
+        ],
+        showSummary: false,
+    });
+
+    assert.equal(presentation.label, "a");
+    assert.equal(presentation.summary, null);
+    assert.equal(presentation.clearAriaLabel, "Clear file filter for docs/a.md");
 });
 
 test("showIndexSidebarListLoadingState clears stale comments and inserts typed ripple loader", () => {

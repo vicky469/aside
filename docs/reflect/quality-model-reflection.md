@@ -156,7 +156,7 @@ State:
 Key invariants:
 
 - index note rows preserve exact comment identity
-- list and thought trail use the same file-scope semantics
+- index list cards stay selected-root scoped, while thought trail uses the selected root to derive related files
 - active comment must be representable in the current visible scope
 - index highlight owner must be singular
 - derived views must never silently point to missing source files

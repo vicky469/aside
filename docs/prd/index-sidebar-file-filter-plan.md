@@ -4,6 +4,8 @@
 
 Redesign the `Files` filter in the index sidebar so it behaves like a single-root graph filter instead of a manual multi-select list.
 
+Current implementation note: the original shared-membership goal below has been superseded. The index sidebar `List` shows cards only for the selected root file; `Thought Trail` still uses the selected root to derive and render related files.
+
 Required behavior:
 
 1. Selecting one file auto-selects all wiki-linked files connected to it.

@@ -95,7 +95,7 @@ indexFileFilterRootPath: string | null
 Meaning:
 
 - `null` => default sampled list
-- `some-file.md` => connected-component scoped list
+- `some-file.md` => selected-root scoped list
 
 No extra source variable is needed.
 
@@ -111,9 +111,11 @@ applyListLimit = true
 ### Root selected
 
 ```ts
-filteredIndexFilePaths = getIndexFileFilterConnectedComponent(graph, rootFilePath)
+filteredIndexFilePaths = [rootFilePath]
 applyListLimit = false
 ```
+
+Related connected files are reserved for the index sidebar `Thought Trail`; selecting a root must not pull those files' comment cards into `List`.
 
 ## Implementation Notes
 

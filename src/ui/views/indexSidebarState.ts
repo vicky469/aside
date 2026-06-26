@@ -1,5 +1,5 @@
 import type { CommentThread } from "../../commentManager";
-import { filterCommentsByFilePaths } from "./indexFileFilter";
+import { filterCommentsByFilePaths, getNormalizedFilterPath } from "./indexFileFilter";
 import { isSidebarListLikeMode } from "./sidebarModeTabs";
 import type { IndexSidebarMode } from "./viewState";
 
@@ -19,6 +19,11 @@ export function scopeIndexThreadsByFilePaths(
         scopedVisibleThreads: filterCommentsByFilePaths(visibleThreads, selectedFilePaths),
         scopedAllThreads: filterCommentsByFilePaths(allThreads, selectedFilePaths),
     };
+}
+
+export function deriveIndexSidebarListFilePaths(rootFilePath: string | null | undefined): string[] {
+    const normalizedRootPath = getNormalizedFilterPath(rootFilePath ?? "");
+    return normalizedRootPath ? [normalizedRootPath] : [];
 }
 
 export function filterIndexThreadsByExistingSourceFiles(
