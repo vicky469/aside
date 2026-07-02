@@ -71,7 +71,7 @@ export function buildDraftCommentPresentation(
         saveLabel: comment.mode === "edit" ? "Save" : "Add",
         placeholder: comment.mode === "append"
             ? "Add another entry to this thread."
-            : "Write a side note. Use B or H for styling, or type @codex.",
+            : "Write a side note. Use B or H for styling, or type @todo, @codex, or @claude.",
     };
 }
 

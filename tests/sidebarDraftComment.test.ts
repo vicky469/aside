@@ -67,6 +67,17 @@ test("buildDraftCommentPresentation keeps append drafts distinct from new drafts
     assert.equal(appendPresentation.placeholder, "Add another entry to this thread.");
 });
 
+test("buildDraftCommentPresentation mentions todo and agent directives in new draft placeholder", () => {
+    const presentation = buildDraftCommentPresentation(createDraft({
+        mode: "new",
+    }), null);
+
+    assert.equal(
+        presentation.placeholder,
+        "Write a side note. Use B or H for styling, or type @todo, @codex, or @claude.",
+    );
+});
+
 test("isDraftSaveActionDisabled allows empty new anchored notes but blocks other empty drafts", () => {
     assert.equal(isDraftSaveActionDisabled(createDraft({
         anchorKind: "selection",
