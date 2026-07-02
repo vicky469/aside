@@ -28,3 +28,22 @@ test("note sidebar search row reserves default sidebar width for page-note actio
     assert.match(searchRow, /flex-wrap:\s*nowrap\s*;/);
     assert.match(searchFilterGroup, /flex:\s*1\s+1\s+0\s*;/);
 });
+
+test("narrow note sidebar collapses search before hiding action buttons", () => {
+    const noteToolbar = cssRuleBody(".aside-sidebar-toolbar.is-note-toolbar");
+    const searchRow = cssRuleBody(".aside-sidebar-toolbar-row.is-note-search-row");
+
+    assert.match(noteToolbar, /container-type:\s*inline-size\s*;/);
+    assert.match(searchRow, /width:\s*100%\s*;/);
+    assert.match(searchRow, /min-width:\s*0\s*;/);
+    assert.match(searchRow, /max-width:\s*100%\s*;/);
+    assert.match(searchRow, /box-sizing:\s*border-box\s*;/);
+    assert.match(
+        styles,
+        /@container\s+\(max-width:\s*180px\)\s*\{[\s\S]*\.aside-sidebar-toolbar-row\.is-note-search-row\s+\.aside-sidebar-toolbar-group\.is-search-group\s*\{[\s\S]*display:\s*none\s*;/,
+    );
+    assert.match(
+        styles,
+        /@container\s+\(max-width:\s*112px\)\s*\{[\s\S]*\.aside-sidebar-toolbar-row\.is-note-search-row\s+\.aside-toolbar-icon-button\s*\{[\s\S]*flex:\s*0\s+0\s+22px\s*;/,
+    );
+});
