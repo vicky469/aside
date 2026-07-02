@@ -339,7 +339,12 @@
 
 .aside-sidebar-toolbar-row.is-note-search-row {
     align-items: center;
+    flex-wrap: nowrap;
     padding: 2px 4px;
+}
+
+.aside-sidebar-toolbar-row.is-note-search-row .aside-sidebar-toolbar-group.is-filter-group {
+    flex: 1 1 0;
 }
 
 .aside-sidebar-toolbar-row.is-note-tag-filter-row {
@@ -356,6 +361,13 @@
     gap: 6px;
     padding: 0 2px;
     align-items: center;
+}
+
+.aside-sidebar-deleted-retention-notice {
+    padding: 0 4px 4px;
+    color: var(--text-muted);
+    font-size: var(--font-ui-smaller);
+    line-height: 1.3;
 }
 
 .aside-sidebar-toolbar-group {
@@ -375,10 +387,11 @@
 }
 
 .aside-sidebar-toolbar-group.is-action-group {
+    flex: 0 0 auto;
     flex-wrap: nowrap;
     justify-content: flex-end;
     gap: 6px;
-    min-width: 0;
+    min-width: max-content;
 }
 
 .aside-sidebar-toolbar-group.is-primary-action-group {
@@ -714,8 +727,13 @@ button.aside-sidebar-file-pin-button {
 }
 
 .aside-sidebar-toolbar-row.is-note-secondary-row .aside-toolbar-icon-button {
+    flex: 0 0 26px;
     width: 26px;
+    min-width: 26px;
+    max-width: 26px;
     height: 26px;
+    min-height: 26px;
+    max-height: 26px;
     border-radius: var(--aside-note-toolbar-radius);
     background: transparent;
     box-shadow: none;

@@ -97,6 +97,7 @@ import {
 import { StreamedAgentReplyController } from "./streamedAgentReplyController";
 import {
     countDeletedComments,
+    getSoftDeleteRetentionMessage,
     hasDeletedComments,
     isSoftDeleted,
 } from "../../core/rules/deletedCommentVisibility";
@@ -170,6 +171,7 @@ import {
     type ToolbarChipOptions,
     type ToolbarIconButtonOptions,
 } from "./sidebarToolbarRenderer";
+import { resolveNoteToolbarActionState } from "./sidebarToolbarState";
 import { updateRenderedActiveFileFilters } from "./sidebarActiveFileFilterDom";
 
 const EMPTY_PINNED_SIDEBAR_THREAD_IDS: ReadonlySet<string> = new Set<string>();
@@ -3148,6 +3150,12 @@ export default class AsideView extends ItemView {
         const showDeletedComments = options.showDeletedComments;
         const showPinnedThreadsOnly = this.showPinnedSidebarThreadsOnly;
         const hasPinnedThreads = this.pinnedSidebarThreadIds.size > 0;
+        const noteToolbarActionState = resolveNoteToolbarActionState({
+            hasDeletedComments: options.hasDeletedComments,
+            hasPinnedThreads,
+            showDeletedComments,
+            showPinnedThreadsOnly,
+        });
         const resolvedIndexSidebarMode = options.effectiveIndexSidebarMode ?? this.indexSidebarMode;
         const activePrimaryMode = options.isAllCommentsView
             ? resolvedIndexSidebarMode
@@ -3281,7 +3289,7 @@ export default class AsideView extends ItemView {
                 icon: "pin",
                 active: showPinnedThreadsOnly,
                 ariaLabel: showPinnedThreadsOnly ? "Show all side notes" : "Show pinned side notes",
-                disabled: !hasPinnedThreads && !showPinnedThreadsOnly,
+                disabled: noteToolbarActionState.pinnedDisabled,
                 onClick: () => {
                     void this.togglePinnedSidebarMode();
                 },
@@ -3304,7 +3312,7 @@ export default class AsideView extends ItemView {
                 icon: "trash-2",
                 ariaLabel: showDeletedComments ? "Hide deleted notes" : "Show deleted notes",
                 active: showDeletedComments,
-                disabled: !options.hasDeletedComments && !showDeletedComments,
+                disabled: noteToolbarActionState.deletedDisabled,
                 onClick: () => {
                     void this.toggleDeletedSidebarMode({
                         showDeleted: showDeletedComments,
@@ -3319,7 +3327,15 @@ export default class AsideView extends ItemView {
             this.renderToolbarIconButton(actionGroup, {
                 icon: options.addPageCommentAction.icon,
                 ariaLabel: options.addPageCommentAction.ariaLabel,
+                disabled: !options.isAllCommentsView && noteToolbarActionState.addPageCommentDisabled,
                 onClick: options.addPageCommentAction.onClick,
+            });
+        }
+
+        if (isDeletedToolbarMode) {
+            toolbarEl.createDiv({
+                cls: "aside-sidebar-deleted-retention-notice",
+                text: getSoftDeleteRetentionMessage(),
             });
         }
 

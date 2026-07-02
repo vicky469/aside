@@ -1,6 +1,7 @@
 import type { CommentThread, CommentThreadEntry } from "../../domain/comments/commentThread";
 
-export const SOFT_DELETE_RETENTION_MS = 1 * 24 * 60 * 60 * 1000;
+export const SOFT_DELETE_RETENTION_DAYS = 7;
+export const SOFT_DELETE_RETENTION_MS = SOFT_DELETE_RETENTION_DAYS * 24 * 60 * 60 * 1000;
 
 export interface DeletedCommentLike {
     deletedAt?: number;
@@ -22,6 +23,10 @@ export function isSoftDeletedExpired(
 ): boolean {
     return typeof deletedAt === "number"
         && deletedAt + SOFT_DELETE_RETENTION_MS <= now;
+}
+
+export function getSoftDeleteRetentionMessage(): string {
+    return `Deleted notes are kept for ${SOFT_DELETE_RETENTION_DAYS} days, then permanently deleted.`;
 }
 
 export function hasDeletedComments(thread: Pick<CommentThread, "deletedAt" | "entries">): boolean {
