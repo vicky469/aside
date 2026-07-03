@@ -4,7 +4,10 @@ export interface WorkspaceFileTargets<T> {
     activeMarkdownFile: T | null;
     activeSidebarFile: T | null;
     sidebarFile: T | null;
+    sidebarUnavailableReason: SidebarUnavailableReason | null;
 }
+
+export type SidebarUnavailableReason = "unsupported-file";
 
 export type WorkspaceLeafFileResolver<T> = (path: string) => T | null;
 
@@ -139,20 +142,29 @@ export function resolveWorkspaceFileTargets<T>(
     isMarkdownCommentableFile: (file: T | null) => file is T,
     isSidebarSupportedFile: (file: T | null) => file is T,
 ): WorkspaceFileTargets<T> {
+    const hasConcreteFile = file !== null;
+    const supportsSidebar = isSidebarSupportedFile(file);
     const nextActiveMarkdownFile = isMarkdownCommentableFile(file)
         ? file
         : activeMarkdownFile;
-    const nextActiveSidebarFile = isSidebarSupportedFile(file)
+    const nextActiveSidebarFile = supportsSidebar
         ? file
+        : hasConcreteFile
+            ? null
         : activeSidebarFile;
-    const sidebarFile = isSidebarSupportedFile(file)
+    const sidebarFile = supportsSidebar
         ? file
+        : hasConcreteFile
+            ? null
         : activeSidebarFile;
 
     return {
         activeMarkdownFile: nextActiveMarkdownFile,
         activeSidebarFile: nextActiveSidebarFile,
         sidebarFile,
+        sidebarUnavailableReason: hasConcreteFile && !supportsSidebar
+            ? "unsupported-file"
+            : null,
     };
 }
 

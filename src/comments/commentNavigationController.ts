@@ -15,11 +15,17 @@ import {
     type PreferredFileLeafCandidate,
 } from "./commentNavigationPlanner";
 import { resolveIndexLeafMode } from "../app/workspaceContextPlanner";
+import type { SidebarUnavailableReason } from "../app/workspaceContextPlanner";
+
+export interface SidebarUpdateOptions {
+    skipDataRefresh?: boolean;
+    unavailableReason?: SidebarUnavailableReason | null;
+}
 
 interface SidebarViewLike {
     getViewType(): string;
     getCurrentFile(): TFile | null;
-    updateActiveFile(file: TFile | null, options?: { skipDataRefresh?: boolean }): Promise<void>;
+    updateActiveFile(file: TFile | null, options?: SidebarUpdateOptions): Promise<void>;
     highlightComment(commentId: string): void;
     highlightAndFocusDraft(commentId: string): Promise<void>;
     setIndexFileFilterRootPath?(filePath: string | null): Promise<void>;
@@ -240,7 +246,7 @@ export class CommentNavigationController {
         }
     }
 
-    public async updateSidebarViews(file: TFile | null, options: { skipDataRefresh?: boolean } = {}): Promise<void> {
+    public async updateSidebarViews(file: TFile | null, options: SidebarUpdateOptions = {}): Promise<void> {
         const leaves = this.host.app.workspace.getLeavesOfType("aside-view");
         for (const leaf of leaves) {
             if (isSidebarViewLike(leaf.view)) {

@@ -54,6 +54,10 @@ export function pickSidebarTargetFile<T>(
         return activeFile;
     }
 
+    if (activeFile !== null) {
+        return null;
+    }
+
     return activeSidebarFile;
 }
 

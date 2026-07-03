@@ -189,7 +189,7 @@ test("fixed sidebar target uses Aside index when it is the active note", () => {
     assert.deepEqual(target, { path: ALL_COMMENTS_NOTE_PATH, extension: "md" });
 });
 
-test("fixed sidebar target keeps the last supported file when the active file is unsupported", () => {
+test("fixed sidebar target clears when the active file is unsupported", () => {
     const plugin = new MockPlugin();
     plugin.activeSidebarFile = { path: "docs/note.md", extension: "md" };
 
@@ -198,7 +198,7 @@ test("fixed sidebar target keeps the last supported file when the active file is
         extension: "pdf",
     });
 
-    assert.deepEqual(target, { path: "docs/note.md", extension: "md" });
+    assert.equal(target, null);
 });
 
 test("pinned commentable file falls back from an unsupported active file to the sidebar target", () => {
@@ -251,7 +251,7 @@ test("workspace file targets preserve the current sidebar file when leaf changes
     assert.deepEqual(target.sidebarFile, { path: ALL_COMMENTS_NOTE_PATH, extension: "md" });
 });
 
-test("workspace file targets preserve the current sidebar file when the active file is unsupported", () => {
+test("workspace file targets clear the sidebar file when the active file is unsupported", () => {
     const target = resolveWorkspaceFileTargets(
         { path: "docs/board.canvas", extension: "canvas" },
         { path: "last-note.md", extension: "md" },
@@ -261,8 +261,8 @@ test("workspace file targets preserve the current sidebar file when the active f
     );
 
     assert.deepEqual(target.activeMarkdownFile, { path: "last-note.md", extension: "md" });
-    assert.deepEqual(target.activeSidebarFile, { path: "docs/note.md", extension: "md" });
-    assert.deepEqual(target.sidebarFile, { path: "docs/note.md", extension: "md" });
+    assert.equal(target.activeSidebarFile, null);
+    assert.equal(target.sidebarFile, null);
 });
 
 test("workspace target input prefers the real active file when the event file is missing", () => {

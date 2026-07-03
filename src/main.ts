@@ -29,6 +29,7 @@ import { PluginLifecycleController } from "./app/pluginLifecycleController";
 import { PluginRegistrationController } from "./app/pluginRegistrationController";
 import { RefreshCoordinator } from "./app/refreshCoordinator";
 import { WorkspaceContextController } from "./app/workspaceContextController";
+import type { SidebarUpdateOptions } from "./comments/commentNavigationController";
 import { WorkspaceViewController } from "./app/workspaceViewController";
 import { AgentRunStore } from "./agents/agentRunStore";
 import {
@@ -1173,7 +1174,7 @@ export default class Aside extends Plugin {
         await this.commentPersistenceController.ensureIndexedCommentsLoaded();
     }
 
-    private async updateSidebarViews(file: TFile | null, options: { skipDataRefresh?: boolean } = {}): Promise<void> {
+    private async updateSidebarViews(file: TFile | null, options: SidebarUpdateOptions = {}): Promise<void> {
         await this.commentNavigationController.updateSidebarViews(file, options);
     }
 

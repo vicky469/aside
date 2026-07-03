@@ -128,6 +128,7 @@ import {
 import {
     NOTE_SIDEBAR_EMPTY_CREATE_HINT_TEXT,
     renderNoSidebarFileEmptyState,
+    type SidebarEmptyStateReason,
 } from "./sidebarEmptyState";
 import {
     renderSidebarThoughtTrail,
@@ -359,6 +360,7 @@ async function ensureEditableMarkdownLeafForInsert(leaf: WorkspaceLeaf): Promise
 export default class AsideView extends ItemView {
     private static readonly NOTE_SIDEBAR_SEARCH_DEBOUNCE_MS = 120;
     private file: TFile | null = null;
+    private sidebarEmptyStateReason: SidebarEmptyStateReason | null = null;
     private plugin: Aside;
     private renderVersion = 0;
     private readonly draftEditorController: SidebarDraftEditorController;
@@ -411,6 +413,13 @@ export default class AsideView extends ItemView {
     private syncViewContainerClasses(): void {
         this.containerEl.addClass("aside-view-container");
         this.containerEl.classList.toggle("is-non-desktop", this.isNonDesktopClient());
+    }
+
+    private getActiveWorkspaceSidebarEmptyStateReason(): SidebarEmptyStateReason | null {
+        const activeFile = this.app.workspace.getActiveFile();
+        return activeFile && !this.plugin.isSidebarSupportedFile(activeFile)
+            ? "unsupported-file"
+            : null;
     }
 
     private getNormalizedPinnedSidebarStateFilePath(filePath: string | null | undefined): string | null {
@@ -1225,6 +1234,9 @@ export default class AsideView extends ItemView {
         await Promise.resolve();
         if (!this.file) {
             this.file = this.plugin.getSidebarTargetFile();
+            this.sidebarEmptyStateReason = this.file
+                ? null
+                : this.getActiveWorkspaceSidebarEmptyStateReason();
         }
         this.unsubscribeFromAgentStreamUpdates = this.plugin.subscribeToAgentStreamUpdates((update) => {
             this.handleAgentStreamUpdate(update);
@@ -1329,7 +1341,10 @@ export default class AsideView extends ItemView {
         }
     }
 
-    public async updateActiveFile(file: TFile | null, options: { skipDataRefresh?: boolean } = {}) {
+    public async updateActiveFile(file: TFile | null, options: {
+        skipDataRefresh?: boolean;
+        unavailableReason?: SidebarEmptyStateReason | null;
+    } = {}) {
         const nextFile = normalizeSidebarViewFile(file, (candidate): candidate is TFile => this.plugin.isSidebarSupportedFile(candidate));
         if (shouldIgnorePinnedSidebarActiveFileUpdate({
             pinnedSidebarFilePath: this.pinnedSidebarFilePath,
@@ -1338,6 +1353,10 @@ export default class AsideView extends ItemView {
             return;
         }
 
+        this.sidebarEmptyStateReason = nextFile
+            ? null
+            : options.unavailableReason
+                ?? (file ? "unsupported-file" : this.getActiveWorkspaceSidebarEmptyStateReason());
         this.setCurrentFile(nextFile);
         await this.renderComments(options);
     }
@@ -1396,6 +1415,9 @@ export default class AsideView extends ItemView {
             this.setCurrentFile(normalizedFile);
         }
         const file = normalizedFile;
+        if (file) {
+            this.sidebarEmptyStateReason = null;
+        }
         const isAllCommentsView = !!file && this.plugin.isAllCommentsNotePath(file.path);
         this.clearReorderDragState();
         if (file && !isAllCommentsView) {
@@ -1862,7 +1884,10 @@ export default class AsideView extends ItemView {
         } else {
             this.resetStreamedReplyControllers();
             this.syncViewContainerClasses();
-            renderNoSidebarFileEmptyState(this.containerEl);
+            renderNoSidebarFileEmptyState(
+                this.containerEl,
+                this.sidebarEmptyStateReason ?? this.getActiveWorkspaceSidebarEmptyStateReason(),
+            );
         }
 
         if (this.plugin.isLocalRuntime()) {

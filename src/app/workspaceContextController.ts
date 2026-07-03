@@ -8,6 +8,7 @@ import {
     resolveWorkspaceLeafTargetInput,
     shouldIgnoreWorkspaceFileOpen,
     shouldIgnoreWorkspaceLeafChange,
+    type SidebarUnavailableReason,
 } from "./workspaceContextPlanner";
 
 export interface WorkspaceContextHost {
@@ -19,7 +20,10 @@ export interface WorkspaceContextHost {
     isMarkdownCommentableFile(file: TFile | null): file is TFile;
     isSidebarSupportedFile(file: TFile | null): file is TFile;
     syncSidebarFile(file: TFile | null): Promise<void>;
-    updateSidebarViews(file: TFile | null, options?: { skipDataRefresh?: boolean }): Promise<void>;
+    updateSidebarViews(file: TFile | null, options?: {
+        skipDataRefresh?: boolean;
+        unavailableReason?: SidebarUnavailableReason | null;
+    }): Promise<void>;
     refreshEditorDecorations(): void;
 }
 
@@ -116,13 +120,19 @@ export class WorkspaceContextController {
         );
         this.host.setWorkspaceFiles(nextState.activeMarkdownFile, nextState.activeSidebarFile);
 
-        void this.host.updateSidebarViews(nextState.sidebarFile, { skipDataRefresh: true });
+        void this.host.updateSidebarViews(nextState.sidebarFile, {
+            skipDataRefresh: true,
+            unavailableReason: nextState.sidebarUnavailableReason,
+        });
         const syncPromise = this.host.syncSidebarFile(nextState.sidebarFile);
         void syncPromise.finally(async () => {
             if (targetVersion !== this.workspaceTargetVersion) {
                 return;
             }
-            await this.host.updateSidebarViews(nextState.sidebarFile, { skipDataRefresh: true });
+            await this.host.updateSidebarViews(nextState.sidebarFile, {
+                skipDataRefresh: true,
+                unavailableReason: nextState.sidebarUnavailableReason,
+            });
             this.host.refreshEditorDecorations();
         });
     }

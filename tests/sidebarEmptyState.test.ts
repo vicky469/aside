@@ -47,6 +47,21 @@ test("no-sidebar-file empty state clears stale note sidebar content and stays si
     ]);
 });
 
+test("unsupported-file empty state tells the user the active file type is unsupported", () => {
+    const root = new FakeElement("div");
+    const staleSidebar = root.createDiv("aside-comments-container is-note-sidebar");
+    staleSidebar.createDiv("aside-comments-list");
+
+    renderNoSidebarFileEmptyState(root, "unsupported-file");
+
+    assert.equal(root.children.length, 1);
+    assert.equal(root.children[0].className, "aside-empty-state");
+    assert.deepEqual(root.children[0].children.map((child) => child.text), [
+        "Unsupported file type",
+        "Open a markdown note to see its side notes.",
+    ]);
+});
+
 test("note sidebar empty create hint includes page and anchored note paths", () => {
     assert.equal(
         NOTE_SIDEBAR_EMPTY_CREATE_HINT_TEXT,
