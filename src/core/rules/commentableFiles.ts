@@ -5,13 +5,26 @@ export function isMarkdownCommentablePath(filePath: string, allCommentsNotePath?
     return /\.md$/i.test(filePath) && !isAllCommentsNotePath(filePath, allCommentsNotePath);
 }
 
+export function isPdfPageNotePath(filePath: string, allCommentsNotePath?: string): boolean {
+    return /\.pdf$/i.test(filePath) && !isAllCommentsNotePath(filePath, allCommentsNotePath);
+}
+
+export function isPageNoteCapablePath(filePath: string, allCommentsNotePath?: string): boolean {
+    return isMarkdownCommentablePath(filePath, allCommentsNotePath)
+        || isPdfPageNotePath(filePath, allCommentsNotePath);
+}
+
 export function isSidebarSupportedPath(filePath: string, allCommentsNotePath?: string): boolean {
     return isAllCommentsNotePath(filePath, allCommentsNotePath)
-        || isMarkdownCommentablePath(filePath, allCommentsNotePath);
+        || isPageNoteCapablePath(filePath, allCommentsNotePath);
 }
 
 export function isMarkdownCommentableFile(file: TFile | null, allCommentsNotePath?: string): file is TFile {
     return !!file && isMarkdownCommentablePath(file.path, allCommentsNotePath);
+}
+
+export function isPageNoteCapableFile(file: TFile | null, allCommentsNotePath?: string): file is TFile {
+    return !!file && isPageNoteCapablePath(file.path, allCommentsNotePath);
 }
 
 export function isSidebarSupportedFile(file: TFile | null, allCommentsNotePath?: string): file is TFile {

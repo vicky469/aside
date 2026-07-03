@@ -145,6 +145,7 @@ function createHost(options: {
             : options.currentNoteContentByPath?.[file.path] ?? "",
         getCurrentSelectionForFile: (file) => options.currentSelectionByPath?.[file.path] ?? null,
         isCommentableFile: (file): file is TFile => !!file && file.extension === "md",
+        isPageNoteCapableFile: (file): file is TFile => !!file && (file.extension === "md" || file.extension === "pdf"),
         loadCommentsForFile: async (file) => {
             loadedFiles.push(file.path);
         },
@@ -342,6 +343,42 @@ test("comment mutation controller rejects empty page note drafts", async () => {
     assert.equal(host.manager.getAllComments().length, 0);
     assert.equal(host.getDraftComment()?.id, draft.id);
     assert.deepEqual(host.persistedFiles, []);
+    assert.deepEqual(host.notices, []);
+});
+
+test("comment mutation controller saves a PDF page-note draft without reading PDF content", async () => {
+    const draft = toDraft(createComment({
+        id: "pdf-draft",
+        filePath: "docs/diagram.pdf",
+        selectedText: "diagram",
+        selectedTextHash: "",
+        comment: "  PDF note  ",
+        anchorKind: "page",
+    }));
+    const host = createHost({
+        draftComment: draft,
+        knownComments: [draft],
+        loadedComments: [],
+        extraFiles: [draft.filePath],
+        getCurrentNoteContent: async () => {
+            throw new Error("PDF content must not be read");
+        },
+    });
+
+    await host.controller.saveDraft(draft.id);
+
+    assert.equal(host.manager.getCommentsForFile(draft.filePath)[0]?.comment, "PDF note");
+    assert.deepEqual(host.persistedFiles, [{
+        path: draft.filePath,
+        immediateAggregateRefresh: false,
+        skipCommentViewRefresh: true,
+        refreshEditorDecorations: false,
+        refreshMarkdownPreviews: false,
+    }]);
+    assert.equal(host.getDraftComment(), null);
+    assert.equal(host.getSavingDraftCommentId(), null);
+    assert.equal(host.getRefreshCommentViewsCount(), 1);
+    assert.equal(host.getRefreshEditorDecorationsCount(), 1);
     assert.deepEqual(host.notices, []);
 });
 
@@ -699,6 +736,71 @@ test("comment mutation controller can persist thread pin state with lightweight 
     }]);
 });
 
+test("comment mutation controller edits, deletes, and pins PDF page-note threads", async () => {
+    const comment = createComment({
+        id: "pdf-thread",
+        filePath: "docs/diagram.pdf",
+        selectedText: "diagram",
+        selectedTextHash: "hash:diagram",
+        comment: "Original PDF note",
+        anchorKind: "page",
+    });
+    const deletedAt = Date.now();
+    const host = createHost({
+        knownComments: [comment],
+        loadedComments: [comment],
+        extraFiles: [comment.filePath],
+        getCurrentNoteContent: async () => {
+            throw new Error("PDF content must not be read");
+        },
+        now: deletedAt,
+    });
+
+    const edited = await host.controller.editComment(comment.id, "Updated PDF note", {
+        refreshEditorDecorations: false,
+    });
+    const pinned = await host.controller.setCommentPinnedState(comment.id, true, {
+        refreshEditorDecorations: false,
+        refreshMarkdownPreviews: false,
+    });
+    const deleted = await host.controller.deleteComment(comment.id, {
+        refreshEditorDecorations: false,
+        refreshMarkdownPreviews: false,
+    });
+
+    assert.equal(edited, true);
+    assert.equal(pinned, true);
+    assert.equal(deleted, true);
+    const deletedThread = host.manager.getAllThreads({ includeDeleted: true })
+        .find((thread) => thread.id === comment.id);
+    assert.ok(deletedThread);
+    assert.equal(deletedThread.entries[0].body, "Updated PDF note");
+    assert.equal(deletedThread.isPinned, true);
+    assert.equal(deletedThread.deletedAt, deletedAt);
+    assert.deepEqual(host.loadedFiles, []);
+    assert.deepEqual(host.persistedFiles, [
+        {
+            path: comment.filePath,
+            immediateAggregateRefresh: true,
+            refreshEditorDecorations: false,
+            refreshMarkdownPreviews: false,
+        },
+        {
+            path: comment.filePath,
+            immediateAggregateRefresh: true,
+            refreshEditorDecorations: false,
+            refreshMarkdownPreviews: false,
+        },
+        {
+            path: comment.filePath,
+            immediateAggregateRefresh: true,
+            refreshEditorDecorations: false,
+            refreshMarkdownPreviews: false,
+        },
+    ]);
+    assert.deepEqual(host.notices, []);
+});
+
 test("comment mutation controller keeps child edit drafts attached to their parent thread", async () => {
     const parent = createComment({ id: "thread-1", comment: "@codex parent" });
     const host = createHost({
@@ -949,6 +1051,8 @@ test("comment mutation controller moves a thread into another file as a page not
         {
             path: "Folder/Other.md",
             immediateAggregateRefresh: true,
+            refreshEditorDecorations: false,
+            refreshMarkdownPreviews: false,
         },
     ]);
     assert.deepEqual(host.manager.getThreadsForFile("Folder/Source.md", { includeDeleted: true }), []);
@@ -1014,6 +1118,8 @@ test("comment mutation controller can defer move-thread refresh work for lightwe
             path: "Folder/Other.md",
             immediateAggregateRefresh: false,
             skipCommentViewRefresh: true,
+            refreshEditorDecorations: false,
+            refreshMarkdownPreviews: false,
         },
     ]);
 });

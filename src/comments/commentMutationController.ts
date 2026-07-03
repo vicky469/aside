@@ -121,6 +121,7 @@ export interface CommentMutationHost {
     getCurrentNoteContent(file: TFile): Promise<string>;
     getCurrentSelectionForFile(file: TFile): DraftSelection | null;
     isCommentableFile(file: TFile | null): file is TFile;
+    isPageNoteCapableFile(file: TFile | null): file is TFile;
     loadCommentsForFile(file: TFile): Promise<unknown>;
     persistCommentsForFile(file: TFile, options?: PersistOptions): Promise<void>;
     getCommentManager(): CommentManager;
@@ -306,7 +307,7 @@ export class CommentMutationController {
         }
 
         const file = this.host.getFileByPath(newComment.filePath);
-        if (!this.host.isCommentableFile(file)) {
+        if (!this.isValidSourceFileForComment(file, newComment)) {
             this.host.showNotice("Unable to find the note for this side note.");
             return false;
         }
@@ -324,10 +325,10 @@ export class CommentMutationController {
 
         this.lastAddFingerprint = { key: fingerprint, at: now };
         this.host.getCommentManager().addComment(newComment);
-        await this.host.persistCommentsForFile(file, {
+        await this.host.persistCommentsForFile(file, this.buildPersistOptionsForComment(newComment, {
             immediateAggregateRefresh: options.immediateAggregateRefresh ?? true,
             ...(options.skipCommentViewRefresh === true ? { skipCommentViewRefresh: true } : {}),
-        });
+        }));
         return true;
     }
 
@@ -346,11 +347,11 @@ export class CommentMutationController {
         }
 
         this.host.getCommentManager().editComment(commentId, newCommentText);
-        await this.host.persistCommentsForFile(latestTarget.file, {
+        await this.host.persistCommentsForFile(latestTarget.file, this.buildPersistOptionsForComment(latestTarget.latestComment, {
             immediateAggregateRefresh: options.deferAggregateRefresh !== true,
             skipCommentViewRefresh: options.skipCommentViewRefresh,
             refreshEditorDecorations: options.refreshEditorDecorations,
-        });
+        }));
         return true;
     }
 
@@ -436,7 +437,10 @@ export class CommentMutationController {
                 "after",
             );
         }
-        await this.host.persistCommentsForFile(latestTarget.file, { immediateAggregateRefresh: true });
+        await this.host.persistCommentsForFile(
+            latestTarget.file,
+            this.buildPersistOptionsForComment(latestTarget.latestComment, { immediateAggregateRefresh: true }),
+        );
         return true;
     }
 
@@ -480,10 +484,10 @@ export class CommentMutationController {
                 "after",
             );
         }
-        await this.host.persistCommentsForFile(latestTarget.file, {
+        await this.host.persistCommentsForFile(latestTarget.file, this.buildPersistOptionsForComment(latestTarget.latestComment, {
             immediateAggregateRefresh: true,
             skipCommentViewRefresh: options.skipCommentViewRefresh,
-        });
+        }));
         return true;
     }
 
@@ -498,7 +502,10 @@ export class CommentMutationController {
         }
 
         this.host.getCommentManager().deleteComment(commentId, this.host.now());
-        await this.host.persistCommentsForFile(latestTarget.file, this.buildPersistOptions(options));
+        await this.host.persistCommentsForFile(
+            latestTarget.file,
+            this.buildPersistOptionsForComment(latestTarget.latestComment, this.buildPersistOptions(options)),
+        );
         return true;
     }
 
@@ -514,14 +521,17 @@ export class CommentMutationController {
         }
 
         this.host.getCommentManager().restoreComment(commentId, this.host.now());
-        await this.host.persistCommentsForFile(latestTarget.file, { immediateAggregateRefresh: true });
+        await this.host.persistCommentsForFile(
+            latestTarget.file,
+            this.buildPersistOptionsForComment(latestTarget.latestComment, { immediateAggregateRefresh: true }),
+        );
         return true;
     }
 
     public async clearDeletedCommentsForFile(filePath: string): Promise<boolean> {
         void this.host.log?.("info", "draft", "thread.delete.clear", { filePath });
         const file = this.host.getFileByPath(filePath);
-        if (!this.host.isCommentableFile(file)) {
+        if (!this.host.isPageNoteCapableFile(file)) {
             return false;
         }
 
@@ -531,7 +541,9 @@ export class CommentMutationController {
             return false;
         }
 
-        await this.host.persistCommentsForFile(file, { immediateAggregateRefresh: true });
+        await this.host.persistCommentsForFile(file, this.buildPersistOptionsForFile(file, {
+            immediateAggregateRefresh: true,
+        }));
         return true;
     }
 
@@ -547,7 +559,10 @@ export class CommentMutationController {
             return false;
         }
 
-        await this.host.persistCommentsForFile(latestTarget.file, { immediateAggregateRefresh: true });
+        await this.host.persistCommentsForFile(
+            latestTarget.file,
+            this.buildPersistOptionsForComment(latestTarget.latestComment, { immediateAggregateRefresh: true }),
+        );
         return true;
     }
 
@@ -567,7 +582,10 @@ export class CommentMutationController {
         }
 
         this.host.getCommentManager().setCommentPinnedState(commentId, isPinned);
-        await this.host.persistCommentsForFile(latestTarget.file, this.buildPersistOptions(options));
+        await this.host.persistCommentsForFile(
+            latestTarget.file,
+            this.buildPersistOptionsForComment(latestTarget.latestComment, this.buildPersistOptions(options)),
+        );
         return true;
     }
 
@@ -653,7 +671,7 @@ export class CommentMutationController {
         }
 
         const targetFile = this.host.getFileByPath(targetFilePath);
-        if (!this.host.isCommentableFile(targetFile)) {
+        if (!this.isValidSourceFileForComment(targetFile, latestTarget.latestComment)) {
             this.host.showNotice("Unable to find that destination note.");
             return false;
         }
@@ -676,12 +694,18 @@ export class CommentMutationController {
         this.host.getCommentManager().replaceThreadsForFile(targetFile.path, [movedThread, ...targetThreads]);
         await this.host.persistCommentsForFile(
             latestTarget.file,
-            this.buildPersistOptions(options, {
-                immediateAggregateRefresh: false,
-                skipCommentViewRefresh: true,
-            }),
+            this.buildPersistOptionsForComment(
+                latestTarget.latestComment,
+                this.buildPersistOptions(options, {
+                    immediateAggregateRefresh: false,
+                    skipCommentViewRefresh: true,
+                }),
+            ),
         );
-        await this.host.persistCommentsForFile(targetFile, this.buildPersistOptions(options));
+        await this.host.persistCommentsForFile(
+            targetFile,
+            this.buildPersistOptionsForComment(movedThread, this.buildPersistOptions(options)),
+        );
         try {
             await this.host.openMoveTargetFile(targetFile);
         } catch (error) {
@@ -837,7 +861,7 @@ export class CommentMutationController {
     ): Promise<{ file: TFile; latestComment: Comment } | null> {
         const existingComment = this.host.getKnownCommentById(commentId);
         const file = existingComment ? this.host.getFileByPath(existingComment.filePath) : null;
-        if (!existingComment || !this.host.isCommentableFile(file)) {
+        if (!existingComment || !this.isValidSourceFileForComment(file, existingComment)) {
             this.host.showNotice("Unable to find that side note.");
             return null;
         }
@@ -857,6 +881,15 @@ export class CommentMutationController {
         return { file, latestComment };
     }
 
+    private isValidSourceFileForComment(
+        file: TFile | null,
+        comment: Pick<Comment | DraftComment, "anchorKind">,
+    ): file is TFile {
+        return comment.anchorKind === "page"
+            ? this.host.isPageNoteCapableFile(file)
+            : this.host.isCommentableFile(file);
+    }
+
     private buildPersistOptions(
         options: CommentMutationPersistBehaviorOptions = {},
         defaults: {
@@ -872,6 +905,31 @@ export class CommentMutationController {
             ...(options.refreshEditorDecorations === false ? { refreshEditorDecorations: false } : {}),
             ...(options.refreshMarkdownPreviews === false ? { refreshMarkdownPreviews: false } : {}),
         };
+    }
+
+    private buildPersistOptionsForComment(
+        comment: Pick<Comment | DraftComment, "anchorKind">,
+        options: PersistOptions,
+    ): PersistOptions {
+        if (comment.anchorKind !== "page") {
+            return options;
+        }
+
+        return {
+            ...options,
+            refreshEditorDecorations: false,
+            refreshMarkdownPreviews: false,
+        };
+    }
+
+    private buildPersistOptionsForFile(file: TFile, options: PersistOptions): PersistOptions {
+        return this.host.isCommentableFile(file)
+            ? options
+            : {
+                ...options,
+                refreshEditorDecorations: false,
+                refreshMarkdownPreviews: false,
+            };
     }
 
     private async buildMovedPageThread(
@@ -901,7 +959,13 @@ export class CommentMutationController {
         draftComment: DraftComment,
         options: SaveDraftOptions = {},
     ): Promise<DraftComment | null> {
+        const file = this.host.getFileByPath(draftComment.filePath);
         if (draftComment.anchorKind === "page") {
+            if (!this.isValidSourceFileForComment(file, draftComment)) {
+                this.host.showNotice("Unable to find the note for this side note.");
+                return null;
+            }
+
             return this.withSelectedTextHash(draftComment, draftComment.selectedText);
         }
 
@@ -909,8 +973,7 @@ export class CommentMutationController {
             return this.withSelectedTextHash(draftComment, draftComment.selectedText);
         }
 
-        const file = this.host.getFileByPath(draftComment.filePath);
-        if (!this.host.isCommentableFile(file)) {
+        if (!this.isValidSourceFileForComment(file, draftComment)) {
             this.host.showNotice("Unable to find the note for this side note.");
             return null;
         }

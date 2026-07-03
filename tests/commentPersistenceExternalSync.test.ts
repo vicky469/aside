@@ -310,6 +310,191 @@ test("comment persistence controller deduplicates duplicate child entries from s
     }
 });
 
+test("comment persistence controller loads PDF page-note sidecars without reading PDF content", async () => {
+    const file = createFile("docs/diagram.pdf");
+    const storedThread: CommentThread = {
+        ...createThread(file.path),
+        startLine: 0,
+        startChar: 0,
+        endLine: 0,
+        endChar: 0,
+        selectedText: "diagram",
+        selectedTextHash: "hash-diagram",
+        anchorKind: "page",
+        orphaned: false,
+        entries: [{
+            id: "entry-1",
+            body: "PDF body",
+            timestamp: 1710000000000,
+        }],
+    };
+    const adapter = new FakeAdapter();
+    adapter.files.set(getSidecarStoragePath(file.path), serializeSidecarThreads(file.path, [storedThread]));
+
+    const commentManager = new CommentManager([]);
+    const aggregateCommentIndex = new AggregateCommentIndex();
+    let persistedData: PersistedPluginData = {};
+    let contentReadCount = 0;
+
+    const controller = new CommentPersistenceController({
+        app: {
+            vault: {
+                adapter: adapter as unknown as DataAdapter,
+                getAbstractFileByPath: (filePath: string) => filePath === file.path ? file : null,
+            },
+        } as never,
+        getAllCommentsNotePath: () => "Aside index.md",
+        getIndexHeaderImageUrl: () => "",
+        getIndexHeaderImageCaption: () => "",
+        getMarkdownViewForFile: () => null,
+        getMarkdownFileByPath: () => null,
+        getCurrentNoteContent: async () => {
+            contentReadCount += 1;
+            throw new Error("PDF content must not be read.");
+        },
+        getStoredNoteContent: async () => "",
+        getParsedNoteComments: (filePath, noteContent) => parseNoteComments(noteContent, filePath),
+        getPluginDataDirPath: () => ".obsidian/plugins/aside",
+        getSideNoteSyncDeviceId: () => "device-a",
+        readPersistedPluginData: () => persistedData,
+        writePersistedPluginData: async (data) => {
+            persistedData = data;
+        },
+        isAllCommentsNotePath: () => false,
+        isCommentableFile: (candidate): candidate is TFile => !!candidate && candidate.extension === "md",
+        isPageNoteCapableFile: (candidate): candidate is TFile =>
+            !!candidate && (candidate.extension === "md" || candidate.extension === "pdf"),
+        isMarkdownEditorFocused: () => false,
+        getCommentManager: () => commentManager,
+        getAggregateCommentIndex: () => aggregateCommentIndex,
+        createCommentId: () => "generated-id",
+        hashText: async (text) => `hash-${text.replace(/\//g, "_")}`,
+        syncDerivedCommentLinksForFile: () => {},
+        refreshCommentViews: async () => {},
+        refreshAllCommentsSidebarViews: async () => {},
+        refreshEditorDecorations: () => {},
+        refreshMarkdownPreviews: () => {},
+        getCommentMentionedPageLabels: () => [],
+        syncIndexNoteLeafMode: async () => {},
+        log: async () => {},
+    });
+
+    const comments = await controller.loadCommentsForFile(file);
+
+    assert.equal(contentReadCount, 0);
+    assert.equal(comments.length, 1);
+    assert.equal(comments[0].filePath, file.path);
+    assert.equal(comments[0].anchorKind, "page");
+    assert.equal(comments[0].comment, "PDF body");
+    assert.equal(commentManager.getCommentById("thread-1")?.comment, "PDF body");
+    assert.equal(aggregateCommentIndex.getCommentById("thread-1")?.comment, "PDF body");
+});
+
+test("comment persistence controller persists PDF page notes without reading PDF content", async () => {
+    const originalWindow = globalThis.window;
+    globalThis.window = {
+        setTimeout: () => 1,
+        clearTimeout: () => {},
+    } as unknown as typeof globalThis.window;
+
+    const file = createFile("docs/diagram.pdf");
+    const storedThread: CommentThread = {
+        ...createThread(file.path),
+        startLine: 0,
+        startChar: 0,
+        endLine: 0,
+        endChar: 0,
+        selectedText: "diagram",
+        selectedTextHash: "hash-diagram",
+        anchorKind: "page",
+        orphaned: false,
+        entries: [{
+            id: "entry-1",
+            body: "PDF body",
+            timestamp: 1710000000000,
+        }],
+    };
+    const adapter = new FakeAdapter();
+    const commentManager = new CommentManager([storedThread]);
+    const aggregateCommentIndex = new AggregateCommentIndex();
+    let persistedData: PersistedPluginData = {};
+    let contentReadCount = 0;
+    let refreshCommentViewsCount = 0;
+    let refreshEditorDecorationsCount = 0;
+    let refreshMarkdownPreviewsCount = 0;
+
+    const controller = new CommentPersistenceController({
+        app: {
+            vault: {
+                adapter: adapter as unknown as DataAdapter,
+                getAbstractFileByPath: (filePath: string) => filePath === file.path ? file : null,
+            },
+        } as never,
+        getAllCommentsNotePath: () => "Aside index.md",
+        getIndexHeaderImageUrl: () => "",
+        getIndexHeaderImageCaption: () => "",
+        getMarkdownViewForFile: () => null,
+        getMarkdownFileByPath: () => null,
+        getCurrentNoteContent: async () => {
+            contentReadCount += 1;
+            throw new Error("PDF content must not be read.");
+        },
+        getStoredNoteContent: async () => "",
+        getParsedNoteComments: (filePath, noteContent) => parseNoteComments(noteContent, filePath),
+        getPluginDataDirPath: () => ".obsidian/plugins/aside",
+        getSideNoteSyncDeviceId: () => "device-a",
+        readPersistedPluginData: () => persistedData,
+        writePersistedPluginData: async (data) => {
+            persistedData = data;
+        },
+        isAllCommentsNotePath: () => false,
+        isCommentableFile: (candidate): candidate is TFile => !!candidate && candidate.extension === "md",
+        isPageNoteCapableFile: (candidate): candidate is TFile =>
+            !!candidate && (candidate.extension === "md" || candidate.extension === "pdf"),
+        isMarkdownEditorFocused: () => false,
+        getCommentManager: () => commentManager,
+        getAggregateCommentIndex: () => aggregateCommentIndex,
+        createCommentId: () => "generated-id",
+        hashText: async (text) => `hash-${text.replace(/\//g, "_")}`,
+        syncDerivedCommentLinksForFile: () => {},
+        refreshCommentViews: async () => {
+            refreshCommentViewsCount += 1;
+        },
+        refreshAllCommentsSidebarViews: async () => {},
+        refreshEditorDecorations: () => {
+            refreshEditorDecorationsCount += 1;
+        },
+        refreshMarkdownPreviews: () => {
+            refreshMarkdownPreviewsCount += 1;
+        },
+        getCommentMentionedPageLabels: () => [],
+        syncIndexNoteLeafMode: async () => {},
+        log: async () => {},
+    });
+
+    try {
+        await controller.persistCommentsForFile(file, {
+            refreshEditorDecorations: false,
+            refreshMarkdownPreviews: false,
+        });
+
+        const sidecar = JSON.parse(adapter.files.get(getSidecarStoragePath(file.path)) ?? "{}") as {
+            threads?: CommentThread[];
+        };
+        assert.equal(contentReadCount, 0);
+        assert.equal(sidecar.threads?.length, 1);
+        assert.equal(sidecar.threads?.[0]?.filePath, file.path);
+        assert.equal(sidecar.threads?.[0]?.anchorKind, "page");
+        assert.equal(sidecar.threads?.[0]?.entries[0]?.body, "PDF body");
+        assert.equal(aggregateCommentIndex.getCommentById("thread-1")?.comment, "PDF body");
+        assert.equal(refreshCommentViewsCount, 1);
+        assert.equal(refreshEditorDecorationsCount, 0);
+        assert.equal(refreshMarkdownPreviewsCount, 0);
+    } finally {
+        globalThis.window = originalWindow;
+    }
+});
+
 test("comment persistence controller replays synced plugin-data events into the local sidecar cache", async () => {
     const originalWindow = globalThis.window;
     globalThis.window = {

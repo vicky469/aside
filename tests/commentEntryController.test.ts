@@ -35,6 +35,14 @@ function isCommentableFilePath(path: string): boolean {
     return path.endsWith(".md");
 }
 
+function isPageNoteCapableFilePath(path: string): boolean {
+    if (path === ALL_COMMENTS_NOTE_PATH) {
+        return false;
+    }
+
+    return path.endsWith(".md") || path.endsWith(".pdf");
+}
+
 function createHost(options: { knownComments?: Comment[]; threadIdsByCommentId?: Record<string, string> } = {}) {
     const draftCalls: Array<{
         draft: DraftComment | null;
@@ -53,6 +61,7 @@ function createHost(options: { knownComments?: Comment[]; threadIdsByCommentId?:
         getAllCommentsNotePath: () => ALL_COMMENTS_NOTE_PATH,
         getFileByPath: (filePath) => createFile(filePath),
         isCommentableFile: (file): file is TFile => !!file && isCommentableFilePath(file.path),
+        isPageNoteCapableFile: (file): file is TFile => !!file && isPageNoteCapableFilePath(file.path),
         loadCommentsForFile: async (file) => {
             loadedFiles.push(file.path);
         },
@@ -182,15 +191,26 @@ test("comment entry controller rejects text-anchored drafts for non-markdown fil
     assert.deepEqual(host.notices, ["Text-anchored side notes are only supported in markdown files."]);
 });
 
-test("comment entry controller rejects page drafts for non-markdown files", async () => {
+test("comment entry controller starts page drafts for PDF files", async () => {
     const host = createHost();
     const file = createFile("docs/diagram.pdf");
 
     const started = await host.controller.startPageCommentDraft(file);
 
-    assert.equal(started, false);
+    assert.equal(started, true);
     assert.deepEqual(host.loadedFiles, []);
-    assert.equal(host.draftCalls.length, 0);
+    assert.deepEqual(host.markedFiles, [file.path]);
+    assert.equal(host.draftCalls.length, 1);
+    assert.deepEqual(host.highlightedCommentIds, ["comment-1"]);
+
+    const draft = host.draftCalls[0].draft;
+    assert.ok(draft);
+    assert.equal(draft.anchorKind, "page");
+    assert.equal(draft.filePath, file.path);
+    assert.equal(draft.selectedText, getPageCommentLabel(file.path));
+    assert.equal(draft.selectedTextHash, "");
+    assert.equal(host.draftCalls[0].skipCommentViewRefresh, true);
+    assert.equal(host.draftCalls[0].refreshEditorDecorations, false);
     assert.deepEqual(host.notices, []);
 });
 

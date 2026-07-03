@@ -78,6 +78,7 @@ export interface CommentPersistenceHost {
     writePersistedPluginData(data: PersistedPluginData): Promise<void>;
     isAllCommentsNotePath(filePath: string): boolean;
     isCommentableFile(file: TFile | null): file is TFile;
+    isPageNoteCapableFile?(file: TFile | null): file is TFile;
     isMarkdownEditorFocused(file: TFile): boolean;
     getCommentManager(): CommentManager;
     getAggregateCommentIndex(): AggregateCommentIndex;
@@ -574,6 +575,23 @@ export class CommentPersistenceController {
             : this;
     }
 
+    private isPageNoteCapableFile(file: TFile | null): file is TFile {
+        return this.host.isPageNoteCapableFile?.(file) ?? this.host.isCommentableFile(file);
+    }
+
+    private getPageNoteCapableFileByPath(filePath: string): TFile | null {
+        const markdownFile = this.host.getMarkdownFileByPath(filePath);
+        if (this.isPageNoteCapableFile(markdownFile)) {
+            return markdownFile;
+        }
+
+        const vault = this.host.app.vault as Plugin["app"]["vault"] & {
+            getAbstractFileByPath?: (path: string) => unknown;
+        };
+        const file = vault.getAbstractFileByPath?.(filePath);
+        return isTFileLike(file) && this.isPageNoteCapableFile(file) ? file : null;
+    }
+
     private async getSourceContentFingerprint(noteContent: string): Promise<string | null> {
         const normalizedContent = normalizeSourceContentForFingerprint(noteContent);
         return normalizedContent.length > 0
@@ -593,7 +611,7 @@ export class CommentPersistenceController {
         if (
             existingRecord
             && existingRecord.currentPath !== filePath
-            && !!this.host.getMarkdownFileByPath(existingRecord.currentPath)
+            && !!this.getPageNoteCapableFileByPath(existingRecord.currentPath)
         ) {
             return this.sourceIdentityStore.createSourceForPath(filePath, fingerprint);
         }
@@ -871,7 +889,7 @@ export class CommentPersistenceController {
             );
             const targetThreads = retargetThreads(reduced.threads, targetNotePath);
             const noteWasDeleted = hasDeleteNoteEvent(noteEvents);
-            const targetFile = this.host.getMarkdownFileByPath(targetNotePath);
+            const targetFile = this.getPageNoteCapableFileByPath(targetNotePath);
             const targetNoteContent = targetFile && this.host.isCommentableFile(targetFile)
                 ? await this.host.getCurrentNoteContent(targetFile)
                 : null;
@@ -986,13 +1004,15 @@ export class CommentPersistenceController {
             if (this.disposed) {
                 break;
             }
-            const file = this.host.getMarkdownFileByPath(record.notePath);
-            if (!this.host.isCommentableFile(file)) {
+            const file = this.getPageNoteCapableFileByPath(record.notePath);
+            if (!this.isPageNoteCapableFile(file)) {
                 continue;
             }
 
             const normalizedThreads = await this.normalizeThreadsForFile(file.path, record.threads);
-            const noteContent = await this.host.getCurrentNoteContent(file);
+            const noteContent = this.host.isCommentableFile(file)
+                ? await this.host.getCurrentNoteContent(file)
+                : undefined;
             if (this.disposed) {
                 break;
             }
@@ -1030,11 +1050,13 @@ export class CommentPersistenceController {
             if (this.disposed) {
                 break;
             }
-            const file = this.host.getMarkdownFileByPath(filePath);
-            if (!this.host.isCommentableFile(file)) {
+            const file = this.getPageNoteCapableFileByPath(filePath);
+            if (!this.isPageNoteCapableFile(file)) {
                 continue;
             }
-            const noteContent = await this.host.getCurrentNoteContent(file);
+            const noteContent = this.host.isCommentableFile(file)
+                ? await this.host.getCurrentNoteContent(file)
+                : undefined;
             if (this.disposed) {
                 break;
             }
@@ -1057,7 +1079,10 @@ export class CommentPersistenceController {
             const snapshot = snapshotsByPath.get(file.path);
             if (snapshot && snapshot.threads.length > 0) {
                 const normalizedThreads = await this.normalizeThreadsForFile(file.path, snapshot.threads);
-                if (!areSnapshotThreadsCompatibleWithFile(normalizedThreads, noteContent)) {
+                if (
+                    noteContent !== undefined
+                    && !areSnapshotThreadsCompatibleWithFile(normalizedThreads, noteContent)
+                ) {
                     void this.host.log?.("warn", "persistence", "source-identity.snapshot.skip-incompatible", {
                         targetNotePath: file.path,
                         threadCount: normalizedThreads.length,
@@ -1131,7 +1156,7 @@ export class CommentPersistenceController {
     }
 
     public async loadCommentsForFile(file: TFile | null): Promise<Comment[]> {
-        if (this.disposed || !file || this.host.isAllCommentsNotePath(file.path) || !this.host.isCommentableFile(file)) {
+        if (this.disposed || !file || this.host.isAllCommentsNotePath(file.path) || !this.isPageNoteCapableFile(file)) {
             return [];
         }
 
@@ -1139,12 +1164,27 @@ export class CommentPersistenceController {
         if (this.disposed) {
             return [];
         }
+        if (!this.host.isCommentableFile(file)) {
+            return this.loadStoredPageNoteCommentsForFile(file);
+        }
         const noteContent = await this.host.getCurrentNoteContent(file);
         if (this.disposed) {
             return [];
         }
         const parsed = await this.syncFileCommentsFromContent(file, noteContent);
         return parsed.comments;
+    }
+
+    private async loadStoredPageNoteCommentsForFile(file: TFile): Promise<Comment[]> {
+        const sourceRecord = await this.ensureSourceIdentityForFilePath(file.path);
+        if (this.disposed) {
+            return [];
+        }
+        const sidecarResult = await this.readSourceOrPathSidecar(sourceRecord, file.path);
+        const threads = await this.normalizeThreadsForFile(file.path, sidecarResult?.threads ?? []);
+        this.host.getCommentManager().replaceThreadsForFile(file.path, threads);
+        this.host.getAggregateCommentIndex().updateFile(file.path, threads);
+        return threads.map((thread) => threadToComment(thread));
     }
 
     public async ensureIndexedCommentsLoaded(): Promise<void> {
@@ -1259,8 +1299,8 @@ export class CommentPersistenceController {
                     if (this.disposed) {
                         break;
                     }
-                    const file = this.host.getMarkdownFileByPath(record.notePath);
-                    if (!this.host.isCommentableFile(file)) {
+                    const file = this.getPageNoteCapableFileByPath(record.notePath);
+                    if (!this.isPageNoteCapableFile(file)) {
                         this.host.getAggregateCommentIndex().deleteFile(record.notePath);
                         continue;
                     }
@@ -1315,7 +1355,7 @@ export class CommentPersistenceController {
             return false;
         }
 
-        return !this.host.isCommentableFile(this.host.getMarkdownFileByPath(filePath));
+        return !this.isPageNoteCapableFile(this.getPageNoteCapableFileByPath(filePath));
     }
 
     private async getPersistedCommentSourcePaths(): Promise<string[]> {
@@ -1521,15 +1561,17 @@ export class CommentPersistenceController {
             if (snapshot.threads.length === 0 && !(await this.hasKnownCommentsForSnapshot(snapshot.notePath))) {
                 continue;
             }
-            const file = this.host.getMarkdownFileByPath(snapshot.notePath);
-            if (!this.host.isCommentableFile(file)) {
+            const file = this.getPageNoteCapableFileByPath(snapshot.notePath);
+            if (!this.isPageNoteCapableFile(file)) {
                 await this.deleteStoredComments(snapshot.notePath);
                 this.host.getCommentManager().replaceCommentsForFile(snapshot.notePath, []);
                 this.host.getAggregateCommentIndex().deleteFile(snapshot.notePath);
                 continue;
             }
 
-            const noteContent = await this.host.getCurrentNoteContent(file);
+            const noteContent = this.host.isCommentableFile(file)
+                ? await this.host.getCurrentNoteContent(file)
+                : undefined;
             if (this.disposed) {
                 return hydratedCount;
             }
@@ -1547,6 +1589,8 @@ export class CommentPersistenceController {
                 ? await this.normalizeThreadsForFile(snapshot.notePath, existingSidecarThreads)
                 : null;
             if (
+                noteContent !== undefined
+                &&
                 normalizedSnapshotThreads.length > 0
                 && !areSnapshotThreadsCompatibleWithFile(normalizedSnapshotThreads, noteContent)
             ) {
@@ -1567,8 +1611,13 @@ export class CommentPersistenceController {
             }
 
             await this.writeSourceAndPathSidecars(sourceRecord.sourceId, snapshot.notePath, normalizedThreads);
-            const parsed = await this.parseAndNormalizeFileComments(snapshot.notePath, noteContent);
-            await this.syncThreadsIntoVisibleNoteContent(file, parsed.mainContent, normalizedThreads);
+            if (noteContent !== undefined) {
+                const parsed = await this.parseAndNormalizeFileComments(snapshot.notePath, noteContent);
+                await this.syncThreadsIntoVisibleNoteContent(file, parsed.mainContent, normalizedThreads);
+            } else {
+                this.host.getCommentManager().replaceThreadsForFile(snapshot.notePath, normalizedThreads);
+                this.host.getAggregateCommentIndex().updateFile(snapshot.notePath, normalizedThreads);
+            }
             this.clearPendingCommentPersistTimer(snapshot.notePath);
             await this.afterCommentsChanged(snapshot.notePath);
             hydratedCount += 1;
@@ -1675,7 +1724,7 @@ export class CommentPersistenceController {
             .filter((candidate) =>
                 candidate.notePath !== filePath
                 && candidate.threads.length > 0
-                && !this.host.getMarkdownFileByPath(candidate.notePath)
+                && !this.getPageNoteCapableFileByPath(candidate.notePath)
                 && this.canRecoverLegacyCandidateForFile(candidate.notePath, filePath)
                 && isStrongLegacySourceMatch(candidate, filePath, noteContent))
             .map((candidate) => ({
@@ -1718,7 +1767,7 @@ export class CommentPersistenceController {
             return true;
         }
 
-        return !this.host.getMarkdownFileByPath(claimedSourceRecord.currentPath);
+        return !this.getPageNoteCapableFileByPath(claimedSourceRecord.currentPath);
     }
 
     private async recoverRenamedSourceThreadsForFile(
@@ -1769,6 +1818,14 @@ export class CommentPersistenceController {
     private async writeCommentsForFile(file: TFile, options: PersistOptions = {}): Promise<string> {
         this.clearPendingCommentPersistTimer(file.path);
         this.host.getCommentManager().purgeExpiredDeletedComments();
+        if (!this.host.isCommentableFile(file)) {
+            return this.writePageNoteCommentsForFile(file, options);
+        }
+
+        return this.writeMarkdownCommentsForFile(file, options);
+    }
+
+    private async writeMarkdownCommentsForFile(file: TFile, options: PersistOptions = {}): Promise<string> {
         const threads = this.host.getCommentManager().getThreadsForFile(file.path, { includeDeleted: true });
         void this.host.log?.("info", "persistence", "storage.note.write.begin", {
             filePath: file.path,
@@ -1797,6 +1854,41 @@ export class CommentPersistenceController {
             threadCount: synced.threads.length,
         });
         return currentContent;
+    }
+
+    private async writePageNoteCommentsForFile(file: TFile, options: PersistOptions = {}): Promise<string> {
+        if (!this.isPageNoteCapableFile(file)) {
+            return "";
+        }
+
+        const threads = await this.normalizeThreadsForFile(
+            file.path,
+            this.host.getCommentManager().getThreadsForFile(file.path, { includeDeleted: true }),
+        );
+        void this.host.log?.("info", "persistence", "storage.page.write.begin", {
+            filePath: file.path,
+            threadCount: threads.length,
+        });
+        const sourceRecord = await this.ensureSourceIdentityForFilePath(file.path);
+        const previousThreads = (await this.readSourceOrPathSidecar(sourceRecord, file.path))?.threads ?? [];
+        const eventInputs = buildSideNoteSyncEventInputsForThreadDiff(
+            await this.normalizeThreadsForFile(file.path, previousThreads),
+            threads,
+        );
+        await this.syncEventStore.appendLocalEvents(file.path, eventInputs);
+        await this.writeSourceAndPathSidecars(sourceRecord.sourceId, file.path, threads);
+        await this.compactSyncedSideNoteEventsForSnapshots([{
+            notePath: file.path,
+            threads,
+        }]);
+        this.host.getCommentManager().replaceThreadsForFile(file.path, threads);
+        this.host.getAggregateCommentIndex().updateFile(file.path, threads);
+        await this.afterCommentsChanged(file.path, options);
+        void this.host.log?.("info", "persistence", "storage.page.write.success", {
+            filePath: file.path,
+            threadCount: threads.length,
+        });
+        return "";
     }
 
     private async getCanonicalThreadState(file: TFile, noteContent: string): Promise<{

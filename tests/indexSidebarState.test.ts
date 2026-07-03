@@ -79,7 +79,13 @@ test("filterIndexThreadsByExistingSourceFiles drops threads whose source file no
     const threads = [
         commentToThread(createComment({ id: "a", filePath: "docs/a.md" })),
         commentToThread(createComment({ id: "b", filePath: "docs/missing.md" })),
-        commentToThread(createComment({ id: "c", filePath: "docs/c.pdf" })),
+        commentToThread(createComment({
+            id: "c",
+            filePath: "docs/c.pdf",
+            anchorKind: "page",
+            selectedText: "c",
+            selectedTextHash: "hash:c",
+        })),
     ];
 
     const filtered = filterIndexThreadsByExistingSourceFiles(

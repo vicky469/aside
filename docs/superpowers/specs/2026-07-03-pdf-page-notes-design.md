@@ -13,27 +13,27 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Add an explicit page-note-capability helper that supports markdown files and PDF files while keeping text-anchor capability markdown-only.
-- [ ] Make PDFs sidebar-supported so opening a PDF shows its own Aside sidebar context instead of the unsupported-file empty state.
-- [ ] Allow creating page-note drafts for PDF files through the existing Add page note action.
-- [ ] Keep selected-text anchored drafts, editor highlights, re-anchor, and anchor-orphan actions disabled for PDFs.
-- [ ] Add a PDF page-note persistence path that reads and writes current sidecar and sync-event storage without reading or parsing PDF file contents.
-- [ ] Allow replies, edits, deletes, pinning, page-note reordering, and index reveal actions for PDF page-note threads where those actions do not require markdown anchors.
-- [ ] Make file rename and delete lifecycle handling update or clear PDF page-note storage and aggregate index state.
-- [ ] Refresh `Aside index.md` when PDF page notes are created, changed, renamed, or deleted.
-- [ ] Preserve the unsupported-file empty state for non-PDF unsupported files such as images, audio, video, canvas, and Office documents.
+- [x] Add an explicit page-note-capability helper that supports markdown files and PDF files while keeping text-anchor capability markdown-only.
+- [x] Make PDFs sidebar-supported so opening a PDF shows its own Aside sidebar context instead of the unsupported-file empty state.
+- [x] Allow creating page-note drafts for PDF files through the existing Add page note action.
+- [x] Keep selected-text anchored drafts, editor highlights, re-anchor, and anchor-orphan actions disabled for PDFs.
+- [x] Add a PDF page-note persistence path that reads and writes current sidecar and sync-event storage without reading or parsing PDF file contents.
+- [x] Allow replies, edits, deletes, pinning, page-note reordering, and index reveal actions for PDF page-note threads where those actions do not require markdown anchors.
+- [x] Make file rename and delete lifecycle handling update or clear PDF page-note storage and aggregate index state.
+- [x] Refresh `Aside index.md` when PDF page notes are created, changed, renamed, or deleted.
+- [x] Preserve the unsupported-file empty state for non-PDF unsupported files such as images, audio, video, canvas, and Office documents.
 
 ### Verification
 
-- [ ] Unit tests cover capability helpers for markdown, PDF, Aside index, and still-unsupported file types.
-- [ ] Unit tests cover workspace/sidebar target planning when the active file is a PDF.
-- [ ] Unit tests cover PDF page-note draft creation and rejection of PDF selected-text drafts.
-- [ ] Unit tests cover PDF page-note load and persist through current sidecar/sync storage without reading PDF file content.
-- [ ] Unit tests cover PDF page-note edit, append, delete, pin, reorder, and index reveal actions where applicable.
-- [ ] Unit tests cover PDF rename and delete lifecycle behavior.
-- [ ] Unit tests cover aggregate index refresh and filtering for PDF page-note threads.
-- [ ] Existing markdown anchored-note and markdown page-note tests still pass.
-- [ ] `npm run build` passes.
+- [x] Unit tests cover capability helpers for markdown, PDF, Aside index, and still-unsupported file types.
+- [x] Unit tests cover workspace/sidebar target planning when the active file is a PDF.
+- [x] Unit tests cover PDF page-note draft creation and rejection of PDF selected-text drafts.
+- [x] Unit tests cover PDF page-note load and persist through current sidecar/sync storage without reading PDF file content.
+- [x] Unit tests cover PDF page-note edit, append, delete, pin, reorder, and index reveal actions where applicable.
+- [x] Unit tests cover PDF rename and delete lifecycle behavior.
+- [x] Unit tests cover aggregate index refresh and filtering for PDF page-note threads.
+- [x] Existing markdown anchored-note and markdown page-note tests still pass.
+- [x] `npm run build` passes.
 
 ## Context
 

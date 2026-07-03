@@ -13,6 +13,7 @@ export interface CommentEntryHost {
     getAllCommentsNotePath(): string;
     getFileByPath(filePath: string): TFile | null;
     isCommentableFile(file: TFile | null): file is TFile;
+    isPageNoteCapableFile(file: TFile | null): file is TFile;
     loadCommentsForFile(file: TFile): Promise<unknown>;
     getKnownCommentById(commentId: string): Comment | null;
     getKnownThreadIdByCommentId(commentId: string): string | null;
@@ -53,7 +54,7 @@ export class CommentEntryController {
     }
 
     public async startPageCommentDraft(file: TFile | null): Promise<boolean> {
-        if (!isMarkdownCommentableFile(file, this.host.getAllCommentsNotePath())) {
+        if (!this.host.isPageNoteCapableFile(file)) {
             return false;
         }
 
@@ -76,7 +77,7 @@ export class CommentEntryController {
         const normalizedThreadId = this.host.getKnownThreadIdByCommentId(commentId) ?? commentId;
         const commentFile = comment ? this.host.getFileByPath(comment.filePath) : null;
 
-        if (!(comment && commentFile && this.host.isCommentableFile(commentFile))) {
+        if (!(comment && commentFile && this.isSourceFileValidForComment(commentFile, comment))) {
             this.host.showNotice("Unable to find that side note thread.");
             return false;
         }
@@ -106,7 +107,7 @@ export class CommentEntryController {
     }
 
     private async startNewCommentDraft(selection: DraftSelection): Promise<boolean> {
-        if (!isMarkdownCommentableFile(selection.file, this.host.getAllCommentsNotePath())) {
+        if (!this.isSourceFileValidForSelection(selection)) {
             if (selection.anchorKind !== "page") {
                 this.host.showNotice("Text-anchored side notes are only supported in markdown files.");
             }
@@ -129,6 +130,18 @@ export class CommentEntryController {
         });
         await this.host.activateViewAndHighlightComment(draft.id);
         return true;
+    }
+
+    private isSourceFileValidForComment(file: TFile | null, comment: Pick<Comment, "anchorKind">): file is TFile {
+        return comment.anchorKind === "page"
+            ? this.host.isPageNoteCapableFile(file)
+            : this.host.isCommentableFile(file);
+    }
+
+    private isSourceFileValidForSelection(selection: DraftSelection): boolean {
+        return selection.anchorKind === "page"
+            ? this.host.isPageNoteCapableFile(selection.file)
+            : isMarkdownCommentableFile(selection.file, this.host.getAllCommentsNotePath());
     }
 
     private readEditorSelection(editor: Editor, file: TFile | null): DraftSelection | null {

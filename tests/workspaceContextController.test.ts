@@ -37,7 +37,7 @@ test("workspace leaf file resolution keeps unsupported file-like views visible t
     assert.equal(resolved, pdfFile);
 });
 
-test("workspace leaf target does not fall back to the last markdown file for unsupported file views", () => {
+test("workspace leaf target resolves supported PDF file views", () => {
     const markdownFile = createFile("docs/note.md");
     const pdfFile = createFile("docs/paper.pdf");
 
@@ -46,6 +46,24 @@ test("workspace leaf target does not fall back to the last markdown file for uns
             view: {
                 file: pdfFile,
                 getViewType: () => "pdf",
+            },
+        },
+        markdownFile,
+        (value): value is MockFile => value === markdownFile || value === pdfFile,
+    );
+
+    assert.equal(resolved, pdfFile);
+});
+
+test("workspace leaf target does not fall back to the last markdown file for unsupported file views", () => {
+    const markdownFile = createFile("docs/note.md");
+    const canvasFile = createFile("docs/board.canvas");
+
+    const resolved = resolveWorkspaceLeafTargetInput(
+        {
+            view: {
+                file: canvasFile,
+                getViewType: () => "canvas",
             },
         },
         markdownFile,

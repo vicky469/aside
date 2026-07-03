@@ -52,7 +52,11 @@ import { getAgentActorById } from "./core/agents/agentActorRegistry";
 import { DraftComment, DraftSelection } from "./domain/drafts";
 import { parsePromptDeleteSetting } from "./core/config/appConfig";
 import { DerivedCommentMetadataManager } from "./core/derived/derivedCommentMetadata";
-import { isMarkdownCommentableFile, isSidebarSupportedFile } from "./core/rules/commentableFiles";
+import {
+    isMarkdownCommentableFile,
+    isPageNoteCapableFile as isPageNoteCapableSourceFile,
+    isSidebarSupportedFile,
+} from "./core/rules/commentableFiles";
 import { extractWikiLinkPaths } from "./core/text/commentMentions";
 import { syncInstalledCodexSkill, type CodexSkillSyncModules } from "./core/codexSkillSync";
 import { AggregateCommentIndex } from "./index/AggregateCommentIndex";
@@ -175,6 +179,7 @@ export default class Aside extends Plugin {
         getAllCommentsNotePath: () => this.getAllCommentsNotePath(),
         getFileByPath: (filePath) => this.workspaceViewController.getFileByPath(filePath),
         isCommentableFile: (file): file is TFile => this.isCommentableFile(file),
+        isPageNoteCapableFile: (file): file is TFile => this.isPageNoteCapableFile(file),
         loadCommentsForFile: (file) => this.loadCommentsForFile(file),
         getKnownCommentById: (commentId) => this.getKnownCommentById(commentId),
         getKnownThreadIdByCommentId: (commentId) => this.getKnownThreadById(commentId)?.id ?? null,
@@ -228,6 +233,7 @@ export default class Aside extends Plugin {
         getCurrentNoteContent: (file) => this.workspaceViewController.getCurrentNoteContent(file),
         getCurrentSelectionForFile: (file) => this.getCurrentSelectionForFile(file),
         isCommentableFile: (file): file is TFile => this.isCommentableFile(file),
+        isPageNoteCapableFile: (file): file is TFile => this.isPageNoteCapableFile(file),
         loadCommentsForFile: (file) => this.loadCommentsForFile(file),
         persistCommentsForFile: (file, options) => this.persistCommentsForFile(file, options),
         getCommentManager: () => this.commentManager,
@@ -281,6 +287,7 @@ export default class Aside extends Plugin {
         writePersistedPluginData: (data) => this.indexNoteSettingsController.writePersistedPluginData(data),
         isAllCommentsNotePath: (filePath) => this.isAllCommentsNotePath(filePath),
         isCommentableFile: (file): file is TFile => this.isCommentableFile(file),
+        isPageNoteCapableFile: (file): file is TFile => this.isPageNoteCapableFile(file),
         isMarkdownEditorFocused: (file) => this.workspaceViewController.isMarkdownEditorFocused(file),
         getCommentManager: () => this.commentManager,
         getAggregateCommentIndex: () => this.aggregateCommentIndex,
@@ -376,6 +383,7 @@ export default class Aside extends Plugin {
         clearParsedNoteCache: (filePath) => this.clearParsedNoteCache(filePath),
         clearDerivedCommentLinksForFile: (filePath) => this.derivedCommentMetadataManager.clearDerivedCommentLinksForFile(filePath),
         isCommentableFile: (file): file is TFile => file instanceof TFile && this.isCommentableFile(file),
+        isPageNoteCapableFile: (file): file is TFile => file instanceof TFile && this.isPageNoteCapableFile(file),
         loadCommentsForFile: (file) => this.loadCommentsForFile(file),
         refreshCommentViews: () => this.workspaceViewController.refreshCommentViews(),
         refreshEditorDecorations: () => this.refreshEditorDecorations(),
@@ -1126,7 +1134,7 @@ export default class Aside extends Plugin {
             this.app.workspace.getActiveFile(),
             this.activeSidebarFile,
             this.activeMarkdownFile,
-            (file): file is TFile => this.isCommentableFile(file),
+            (file): file is TFile => this.isPageNoteCapableFile(file),
         );
     }
 
@@ -1156,6 +1164,10 @@ export default class Aside extends Plugin {
 
     private isCommentableFile(file: TFile | null): file is TFile {
         return isMarkdownCommentableFile(file, this.getAllCommentsNotePath());
+    }
+
+    private isPageNoteCapableFile(file: TFile | null): file is TFile {
+        return isPageNoteCapableSourceFile(file, this.getAllCommentsNotePath());
     }
 
     private getParsedNoteComments(filePath: string, noteContent: string): ParsedNoteComments {

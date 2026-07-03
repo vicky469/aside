@@ -12,6 +12,7 @@ export interface PluginLifecycleHost {
     clearParsedNoteCache(filePath: string): void;
     clearDerivedCommentLinksForFile(filePath: string): void;
     isCommentableFile(file: TAbstractFile | null): file is TFile;
+    isPageNoteCapableFile(file: TAbstractFile | null): file is TFile;
     loadCommentsForFile(file: TFile | null): Promise<unknown>;
     refreshCommentViews(): Promise<void>;
     refreshEditorDecorations(): void;
@@ -46,13 +47,13 @@ export class PluginLifecycleController {
         return "extension" in file;
     }
 
-    private collectCommentableFiles(file: TAbstractFile): TFile[] {
-        if (this.isFile(file) && this.host.isCommentableFile(file)) {
+    private collectPageNoteCapableFiles(file: TAbstractFile): TFile[] {
+        if (this.isFile(file) && this.host.isPageNoteCapableFile(file)) {
             return [file];
         }
 
         return this.getFolderChildren(file)
-            .flatMap((child) => this.collectCommentableFiles(child));
+            .flatMap((child) => this.collectPageNoteCapableFiles(child));
     }
 
     private async clearDeletedCommentFile(filePath: string): Promise<void> {
@@ -79,7 +80,7 @@ export class PluginLifecycleController {
     }
 
     public async handleFileRename(file: TFile | null, oldPath: string): Promise<void> {
-        if (!file) {
+        if (!file || !this.host.isPageNoteCapableFile(file)) {
             return;
         }
 
@@ -101,7 +102,7 @@ export class PluginLifecycleController {
         }
 
         if (this.isFile(file)) {
-            if (!this.host.isCommentableFile(file)) {
+            if (!this.host.isPageNoteCapableFile(file)) {
                 return;
             }
 
@@ -110,7 +111,7 @@ export class PluginLifecycleController {
             return;
         }
 
-        const deletedFiles = this.collectCommentableFiles(file);
+        const deletedFiles = this.collectPageNoteCapableFiles(file);
         await this.host.deleteStoredCommentsInFolder(file.path);
         for (const deletedFile of deletedFiles) {
             this.clearDeletedCommentFileCache(deletedFile.path);

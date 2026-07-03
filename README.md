@@ -45,8 +45,10 @@ For durable storage and sync across devices, use Aside with [Obsidian Sync](http
 ## Features
 
 - Uses a dedicated sidebar for drafting, editing, resolving, reopening, and deleting comments.
+- Adds page notes to markdown and PDF files. Text-anchored notes stay markdown-only.
 - Supports Obsidian-style `[[wikilinks]]` inside side comments to link existing notes or create new markdown notes.
 - Type `#` in a side note to search existing tags or add a new one.
+- Type `@todo` to mark follow-ups that appear in the Todo index tab.
 - Browse, filter, and batch-apply local side-note tags from the active note sidebar.
 - Keeps resolved comments archived instead of removing them.
 - Generates `Aside index.md` as a vault-wide comment index.
@@ -68,11 +70,11 @@ For durable storage and sync across devices, use Aside with [Obsidian Sync](http
 
 ## Workflow
 
-1. Open a markdown file.
+1. Open a markdown or PDF file.
 2. Add a side note.
-   You can select text and right-click `Add comment to selection`, or use the sidebar for a page note.
+   In markdown, select text and right-click `Add comment to selection`, or use the sidebar for a page note. In PDFs, use the sidebar to add a page note for the whole PDF.
 3. Write your comment in the sidebar.
-   Type `@codex` if you want Codex to take the task, or `@claude` if you want Claude to take it.
+   Type `@todo` for follow-ups, `@codex` if you want Codex to take the task, or `@claude` if you want Claude to take it.
 4. Save the note.
 5. Aside runs the selected local agent and appends the reply back into the same thread.
 
@@ -85,10 +87,10 @@ For durable storage and sync across devices, use Aside with [Obsidian Sync](http
   One message inside a thread. The first saved entry creates the thread. Later child entries are replies in the same thread.
 
 - **`page note`**  
-  A thread attached to the whole file, not to a text selection.
+  A thread attached to the whole file, not to a text selection. Page notes work on markdown files and PDFs.
 
 - **`anchored note`**  
-  A thread attached to a specific text selection in a markdown note.
+  A thread attached to a specific text selection in a markdown note. PDFs support page notes only.
 
 - **`orphaned note`**  
   An anchored thread whose original text can no longer be matched in the file. The thread still exists; its anchor is just currently missing.
@@ -108,6 +110,7 @@ For durable storage and sync across devices, use Aside with [Obsidian Sync](http
 | --- | --- |
 | Save draft | Click `Save`. |
 | Insert a newline | Press `Enter`. |
+| Mark a todo | Type `@todo` in the note. |
 | Ask a local agent from a side note | Type `@codex` or `@claude` in the note, then save it. |
 | Link a note | Type `[[` to open note suggestions and insert an Obsidian wikilink. |
 | Add a tag | Type `#` to open tag suggestions and insert a tag. |
