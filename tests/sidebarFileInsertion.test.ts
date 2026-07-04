@@ -24,7 +24,7 @@ test("buildSidebarFileInsertEdit inserts on the next line after the cursor line"
         },
         text: "\nInserted",
     });
-    assert.equal(applyEdit(content, edit!), "Alpha\nBeta\nInserted\nGamma");
+    assert.equal(applyEdit(content, edit), "Alpha\nBeta\nInserted\nGamma");
 });
 
 test("buildSidebarFileInsertEdit appends to the end when no cursor line exists", () => {
@@ -38,7 +38,7 @@ test("buildSidebarFileInsertEdit appends to the end when no cursor line exists",
         },
         text: "\n\nInserted",
     });
-    assert.equal(applyEdit(content, edit!), "Alpha\nBeta\n\nInserted");
+    assert.equal(applyEdit(content, edit), "Alpha\nBeta\n\nInserted");
 });
 
 test("buildSidebarFileInsertEdit appends cleanly when the file already ends with blank space", () => {
@@ -52,7 +52,7 @@ test("buildSidebarFileInsertEdit appends cleanly when the file already ends with
         },
         text: "Inserted",
     });
-    assert.equal(applyEdit(content, edit!), "Alpha\n\nInserted");
+    assert.equal(applyEdit(content, edit), "Alpha\n\nInserted");
 });
 
 test("buildSidebarFileInsertEdit appends to empty files", () => {
@@ -65,7 +65,7 @@ test("buildSidebarFileInsertEdit appends to empty files", () => {
         },
         text: "Inserted",
     });
-    assert.equal(applyEdit("", edit!), "Inserted");
+    assert.equal(applyEdit("", edit), "Inserted");
 });
 
 test("buildSidebarFileInsertEdit falls back to file end for stale cursor lines", () => {

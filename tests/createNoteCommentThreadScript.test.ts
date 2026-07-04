@@ -123,13 +123,13 @@ test("create-note-comment-thread script creates a page note thread", async () =>
 
     const sidecar = await readSidecar(tempDir, "My Note.md");
     assert.ok(sidecar);
-    assert.equal(sidecar!.threads.length, 1);
-    assert.equal(sidecar!.threads[0].anchorKind, "page");
-    assert.equal(sidecar!.threads[0].selectedText, "My Note");
-    assert.equal(sidecar!.threads[0].selectedTextHash, hashText("My Note"));
-    assert.equal(sidecar!.threads[0].startLine, 0);
-    assert.equal(sidecar!.threads[0].entries.length, 1);
-    assert.equal(sidecar!.threads[0].entries[0].body, "New page note\nSecond line");
+    assert.equal(sidecar.threads.length, 1);
+    assert.equal(sidecar.threads[0].anchorKind, "page");
+    assert.equal(sidecar.threads[0].selectedText, "My Note");
+    assert.equal(sidecar.threads[0].selectedTextHash, hashText("My Note"));
+    assert.equal(sidecar.threads[0].startLine, 0);
+    assert.equal(sidecar.threads[0].entries.length, 1);
+    assert.equal(sidecar.threads[0].entries[0].body, "New page note\nSecond line");
 
     const noteContent = await readFile(notePath, "utf8");
     assert.equal(noteContent, "# Title\n\nBody text.\n");
@@ -184,8 +184,8 @@ test("create-note-comment-thread-with-children script creates one page thread wi
 
     const sidecar = await readSidecar(tempDir, "Thread Note.md");
     assert.ok(sidecar);
-    assert.equal(sidecar!.threads.length, 1);
-    const thread = sidecar!.threads[0];
+    assert.equal(sidecar.threads.length, 1);
+    const thread = sidecar.threads[0];
     assert.equal(thread.anchorKind, "page");
     assert.equal(thread.selectedText, "Thread Note");
     assert.equal(thread.selectedTextHash, hashText("Thread Note"));
@@ -198,9 +198,9 @@ test("create-note-comment-thread-with-children script creates one page thread wi
 
     const sourceSidecar = await readSourceSidecar(tempDir, "src-test");
     assert.ok(sourceSidecar);
-    assert.equal(sourceSidecar!.notePath, "Thread Note.md");
-    assert.equal(sourceSidecar!.threads.length, 1);
-    assert.equal(sourceSidecar!.threads[0].entries.length, 3);
+    assert.equal(sourceSidecar.notePath, "Thread Note.md");
+    assert.equal(sourceSidecar.threads.length, 1);
+    assert.equal(sourceSidecar.threads[0].entries.length, 3);
 
     const noteContent = await readFile(notePath, "utf8");
     assert.equal(noteContent, "# Thread Note\n\nBody text.\n");
@@ -241,12 +241,12 @@ test("create-note-comment-thread script creates an anchored thread without flatt
 
     const sidecar = await readSidecar(tempDir, "note.md");
     assert.ok(sidecar);
-    assert.equal(sidecar!.threads.length, 2);
-    assert.equal(sidecar!.threads[0].entries.length, 2);
-    assert.equal(sidecar!.threads[0].entries[0].body, "Original body");
-    assert.equal(sidecar!.threads[0].entries[1].body, "Follow-up reply");
+    assert.equal(sidecar.threads.length, 2);
+    assert.equal(sidecar.threads[0].entries.length, 2);
+    assert.equal(sidecar.threads[0].entries[0].body, "Original body");
+    assert.equal(sidecar.threads[0].entries[1].body, "Follow-up reply");
 
-    const nextThread = sidecar!.threads[1];
+    const nextThread = sidecar.threads[1];
     assert.equal(nextThread.anchorKind, "selection");
     assert.equal(nextThread.selectedText, "Priority conflicts");
     assert.equal(nextThread.selectedTextHash, hashText("Priority conflicts"));

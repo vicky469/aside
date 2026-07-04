@@ -111,9 +111,9 @@ test("update-note-comment script replaces the targeted comment body", async () =
 
     const sidecar = await readSidecar(tempDir, "note.md");
     assert.ok(sidecar);
-    assert.equal(sidecar!.threads.length, 1);
-    assert.equal(sidecar!.threads[0].entries.length, 1);
-    assert.equal(sidecar!.threads[0].entries[0].body, "Updated body\nSecond line");
+    assert.equal(sidecar.threads.length, 1);
+    assert.equal(sidecar.threads[0].entries.length, 1);
+    assert.equal(sidecar.threads[0].entries[0].body, "Updated body\nSecond line");
 
     const noteContent = await readFile(notePath, "utf8");
     assert.equal(noteContent, "# Title\n\nBody text.\n");
@@ -155,6 +155,6 @@ test("update-note-comment script can target a stored comment by obsidian Aside U
 
     const sidecar = await readSidecar(vaultRoot, noteFilePath);
     assert.ok(sidecar);
-    assert.equal(sidecar!.threads[0].entries.length, 1);
-    assert.equal(sidecar!.threads[0].entries[0].body, "Updated from URI\nSecond line");
+    assert.equal(sidecar.threads[0].entries.length, 1);
+    assert.equal(sidecar.threads[0].entries[0].body, "Updated from URI\nSecond line");
 });

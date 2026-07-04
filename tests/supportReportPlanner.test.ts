@@ -131,7 +131,7 @@ test("support planner falls back to raw text when log lines are not parseable js
     assert.equal(preview.summary.invalidLines, 2);
     assert.equal(preview.rows.length, 0);
     assert.ok(preview.rawFallbackContent);
-    assert.match(preview.rawFallbackContent!, /hello/);
+    assert.match(preview.rawFallbackContent, /hello/);
 });
 
 test("support planner filters the preview by recent minutes and kind", () => {

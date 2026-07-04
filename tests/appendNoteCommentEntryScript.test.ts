@@ -111,10 +111,10 @@ test("append-note-comment-entry script appends a new entry to the targeted threa
 
     const sidecar = await readSidecar(tempDir, "note.md");
     assert.ok(sidecar);
-    assert.equal(sidecar!.threads.length, 1);
-    assert.equal(sidecar!.threads[0].entries.length, 2);
-    assert.equal(sidecar!.threads[0].entries[0].body, "Original body");
-    assert.equal(sidecar!.threads[0].entries[1].body, "Reply body\nSecond line");
+    assert.equal(sidecar.threads.length, 1);
+    assert.equal(sidecar.threads[0].entries.length, 2);
+    assert.equal(sidecar.threads[0].entries[0].body, "Original body");
+    assert.equal(sidecar.threads[0].entries[1].body, "Reply body\nSecond line");
 
     const noteContent = await readFile(notePath, "utf8");
     assert.equal(noteContent, "# Title\n\nBody text.\n");
@@ -156,6 +156,6 @@ test("append-note-comment-entry script can target a thread by obsidian Aside URI
 
     const sidecar = await readSidecar(vaultRoot, noteFilePath);
     assert.ok(sidecar);
-    assert.equal(sidecar!.threads[0].entries.length, 2);
-    assert.equal(sidecar!.threads[0].entries[1].body, "Reply from URI\nSecond line");
+    assert.equal(sidecar.threads[0].entries.length, 2);
+    assert.equal(sidecar.threads[0].entries[1].body, "Reply from URI\nSecond line");
 });

@@ -116,16 +116,16 @@ test("generate-large-graph-fixture preserves existing Aside threads in fixture n
 
     const sidecar = await readSidecar(tempDir, noteRelativePath);
     assert.ok(sidecar);
-    assert.equal(sidecar!.threads.length, 2);
+    assert.equal(sidecar.threads.length, 2);
 
-    const updatedSyntheticThread = sidecar!.threads.find((thread) => thread.id === "lg-g30-chain-c01-n01");
+    const updatedSyntheticThread = sidecar.threads.find((thread) => thread.id === "lg-g30-chain-c01-n01");
     assert.ok(updatedSyntheticThread);
     assert.equal(updatedSyntheticThread.entries.length, 2);
     assert.match(updatedSyntheticThread.entries[0].body, /Synthetic graph fixture for chain-size-30-component-01\./);
     assert.match(updatedSyntheticThread.entries[0].body, /\[\[g30-chain-c01-n02\]\]/);
     assert.equal(updatedSyntheticThread.entries[1].body, "Keep this reply");
 
-    const preservedManualThread = sidecar!.threads.find((thread) => thread.id === "manual-1");
+    const preservedManualThread = sidecar.threads.find((thread) => thread.id === "manual-1");
     assert.ok(preservedManualThread);
     assert.equal(preservedManualThread.entries[0].body, "Manual extra note");
 });

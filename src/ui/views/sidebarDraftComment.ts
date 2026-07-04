@@ -360,7 +360,7 @@ function renderDraftEditor(
         syncPreview();
         syncActionState();
 
-        if (!(event instanceof InputEvent) || event.inputType !== "insertText" || !event.data) {
+        if (!nodeInstanceOf(event, InputEvent) || event.inputType !== "insertText" || !event.data) {
             return;
         }
 

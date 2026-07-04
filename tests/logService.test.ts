@@ -92,7 +92,7 @@ test("AsideLogService prunes expired daily files and appends deterministic jsonl
     assert.equal(adapter.files.has(".obsidian/plugins/aside/logs/2026-04-09.jsonl"), false);
     assert.ok(content);
 
-    const lines = content!.trim().split("\n").map((line) => JSON.parse(line) as { event: string; payload?: Record<string, unknown> });
+    const lines = content.trim().split("\n").map((line) => JSON.parse(line) as { event: string; payload?: Record<string, unknown> });
     assert.deepEqual(lines.map((line) => line.event), [
         "startup.load.begin",
         "index.refresh.begin",
