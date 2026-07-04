@@ -3178,6 +3178,7 @@ export default class AsideView extends ItemView {
         const noteToolbarActionState = resolveNoteToolbarActionState({
             hasDeletedComments: options.hasDeletedComments,
             hasPinnedThreads,
+            noteSidebarMode: options.noteSidebarMode,
             showDeletedComments,
             showPinnedThreadsOnly,
         });
@@ -3191,8 +3192,10 @@ export default class AsideView extends ItemView {
             : isSidebarListLikeMode(activePrimaryMode);
         const shouldShowNoteSearchInput = !options.isAllCommentsView
             && isSidebarListLikeMode(activePrimaryMode);
+        const shouldShowNoteFileActions = !options.isAllCommentsView
+            && noteToolbarActionState.fileActionsVisible;
         const shouldShowAddPageCommentAction = !!options.addPageCommentAction
-            && (options.isAllCommentsView || isSidebarListLikeMode(activePrimaryMode));
+            && (options.isAllCommentsView || shouldShowNoteFileActions);
         const shouldShowNestedChip = showListOrTagToolbarChips && shouldShowNestedToolbarChip({
             hasNestedComments: options.hasNestedComments,
             isAllCommentsView: options.isAllCommentsView,
@@ -3203,6 +3206,7 @@ export default class AsideView extends ItemView {
             && showListOrTagToolbarChips
             && showDeletedComments;
         const shouldRenderToolbar = options.isAllCommentsView
+            || (!options.isAllCommentsView && isSidebarListLikeMode(activePrimaryMode))
             || (!options.isAllCommentsView && options.noteSidebarMode === "thought-trail")
             || shouldShowNestedChip
             || shouldShowAddPageCommentAction
@@ -3290,7 +3294,9 @@ export default class AsideView extends ItemView {
                 }
                 actionsRow.addClass("is-note-secondary-row");
                 noteFilterGroup = actionsRow.createDiv("aside-sidebar-toolbar-group is-filter-group");
-                noteActionGroup = actionsRow.createDiv("aside-sidebar-toolbar-group is-action-group");
+                if (shouldShowNoteFileActions || shouldShowNestedChip) {
+                    noteActionGroup = actionsRow.createDiv("aside-sidebar-toolbar-group is-action-group");
+                }
             }
         }
 
@@ -3309,7 +3315,7 @@ export default class AsideView extends ItemView {
         if (shouldShowNoteSearchInput) {
             this.renderNoteSearchInput(filterGroup);
         }
-        if (!options.isAllCommentsView && showListOrTagToolbarChips) {
+        if (shouldShowNoteFileActions) {
             this.renderToolbarIconButton(actionGroup, {
                 icon: "pin",
                 active: showPinnedThreadsOnly,
@@ -3332,7 +3338,7 @@ export default class AsideView extends ItemView {
             });
         }
 
-        if (!options.isAllCommentsView && showListOrTagToolbarChips) {
+        if (shouldShowNoteFileActions) {
             this.renderToolbarIconButton(actionGroup, {
                 icon: "trash-2",
                 ariaLabel: showDeletedComments ? "Hide deleted notes" : "Show deleted notes",
