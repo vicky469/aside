@@ -17,6 +17,7 @@ Use for:
 - reply, answer, continue, add another note under this
 - update, edit, rewrite, replace a stored comment
 - put each point into one comment
+- add annotations, add side comments to passages, comment on this article/note/text, 加批注, 给这篇加批注
 
 No resolve/archive flow: resolve functionality was removed.
 
@@ -48,6 +49,7 @@ Aside is reply-based, not capability-limited. When invoked by `@codex` or `@clau
 | add / insert / apply / modify / replace / update / overwrite source note | edit source, then reply with concise summary |
 | create markdown / `.canvas` / `.excalidraw` / other artifact | create artifact, then reply with path/result |
 | inspect repo / run command / modify project files | do normal agent work, then reply with concise result |
+| add annotations / comment on this article or note / 加批注 | create selection-anchored Aside notes on relevant source text spans, then reply with concise status |
 | update existing Aside comment | update stored comment only if explicit |
 | ambiguous source edit | reply with proposed edit; do not mutate source |
 
@@ -69,7 +71,8 @@ Keep `aside` responsible for thread location and final reply. Use related skills
 - Preserve existing entries unless user explicitly asks to replace one.
 - Keep each Aside comment body <=250 words.
 - If more detail is needed, keep reply concise and create/update a linked wiki page.
-- One-point-per-note requests: create one parent thread and append each point as child entry; do not create many page-note threads.
+- Annotation requests: create top-level selection-anchored threads for the relevant source spans unless the user explicitly asks for one parent thread, page notes, or plain replies. Do not satisfy these requests with only a summary or critique in the current thread. If the runtime cannot create anchored notes, say that plainly instead of providing the critique as a substitute.
+- One-point-per-note requests that are not annotation/review requests: create one parent thread and append each point as child entry; do not create many page-note threads.
 - Use repo-local Node entrypoints or shared helpers. Do not hand-edit Aside JSON.
 - Do not create, preserve, or normalize a second Aside/legacy managed block.
 - If multiple managed blocks already exist, stop and repair/escalate before writing.

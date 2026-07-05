@@ -261,9 +261,10 @@ export class CommentAgentController {
             return false;
         }
 
+        const latestTriggerComment = this.host.getCommentManager().getCommentById(previousRun.triggerEntryId);
         return this.retryPromptForCommentInternal({
             triggerEntryId: previousRun.triggerEntryId,
-            filePath: previousRun.filePath,
+            filePath: latestTriggerComment?.filePath ?? previousRun.filePath,
             retryOfRunId: previousRun.id,
             missingFileNotice: "Unable to reload that side note reply.",
             missingCommentNotice: "Unable to find the latest saved side note entry.",
@@ -318,8 +319,12 @@ export class CommentAgentController {
 
         const retryOfRunId = options.retryOfRunId
             ?? getLatestAgentRunForTriggerEntry(this.store.getRuns(), latestComment.id)?.id;
-        const retryOutputEntryId = retryOfRunId
+        const storedRetryOutputEntryId = retryOfRunId
             ? this.store.getRunById(retryOfRunId)?.outputEntryId
+            : undefined;
+        const retryOutputEntryId = storedRetryOutputEntryId
+            && this.host.getCommentManager().getCommentById(storedRetryOutputEntryId)
+            ? storedRetryOutputEntryId
             : undefined;
         const run = this.buildQueuedRun({
             threadId: thread.id,
@@ -510,7 +515,10 @@ export class CommentAgentController {
         const previousRun = queuedRun.retryOfRunId
             ? this.store.getRunById(queuedRun.retryOfRunId)
             : null;
-        const replaceOutputEntryId = previousRun?.outputEntryId ?? undefined;
+        const replaceOutputEntryId = previousRun?.outputEntryId
+            && this.host.getCommentManager().getCommentById(previousRun.outputEntryId)
+            ? previousRun.outputEntryId
+            : undefined;
         const outputEntryId = queuedRun.outputEntryId ?? replaceOutputEntryId ?? this.host.createCommentId();
         const runtimeContext = await this.buildRuntimePromptContext(queuedRun);
         const latestQueuedRun = this.store.getRunById(runId);

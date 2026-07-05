@@ -10,7 +10,7 @@ interface ManagedCommentPersistDecisionOptions {
 interface LoadedCommentManager {
     replaceThreadsForFile(filePath: string, nextThreads: CommentThread[]): void;
     updateCommentCoordinatesForFile(fileContent: string, filePath: string): void | Promise<void>;
-    getThreadsForFile(filePath: string): CommentThread[];
+    getThreadsForFile(filePath: string, options?: { includeDeleted?: boolean }): CommentThread[];
 }
 
 interface LoadedCommentIndex {
@@ -44,7 +44,7 @@ export async function syncLoadedCommentsForCurrentNote(
     await commentManager.updateCommentCoordinatesForFile(mainContent, filePath);
 
     const syncedThreads = commentManager
-        .getThreadsForFile(filePath)
+        .getThreadsForFile(filePath, { includeDeleted: true })
         .map((thread) => ({
             ...thread,
             entries: thread.entries.map((entry) => ({ ...entry })),

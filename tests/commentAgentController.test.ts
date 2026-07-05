@@ -57,6 +57,7 @@ function createHarness(options: {
     nowIncrement?: number;
     onRefreshCommentViews?: (controller: CommentAgentController) => void;
     initialComments?: Comment[];
+    availableFilePaths?: string[];
     runtimeSelection?: AgentRuntimeSelection;
     customRunAgentRuntime?: (invocation: {
         target: "codex" | "claude";
@@ -76,7 +77,8 @@ function createHarness(options: {
 } = {}) {
     let persistedData: PersistedPluginData = options.initialPersistedData ?? {};
     const commentManager = new CommentManager(options.initialComments ?? [createComment()]);
-    const file = createFile((options.initialComments?.[0] ?? createComment()).filePath);
+    const defaultFilePath = (options.initialComments?.[0] ?? createComment()).filePath;
+    const availableFilePaths = new Set(options.availableFilePaths ?? [defaultFilePath]);
     const appendedEntries: Array<{ threadId: string; body: string; insertAfterCommentId?: string }> = [];
     const editedEntries: Array<{ commentId: string; body: string }> = [];
     const notices: string[] = [];
@@ -115,7 +117,7 @@ function createHarness(options: {
         },
         getRuntimeWorkingDirectory: () => options.runtimeWorkingDirectory === undefined ? "/vault" : options.runtimeWorkingDirectory,
         getCommentManager: () => commentManager,
-        getFileByPath: () => file,
+        getFileByPath: (filePath: string) => availableFilePaths.has(filePath) ? createFile(filePath) : null,
         isCommentableFile: (candidate): candidate is TFile => !!candidate,
         getCurrentNoteContent: async () => options.currentNoteContent ?? "",
         loadCommentsForFile: async () => undefined,
@@ -704,6 +706,50 @@ test("comment agent controller can retry a saved agent prompt when run metadata 
         insertAfterCommentId: "thread-1",
     }]);
     assert.equal(harness.commentManager.getCommentById("generated-2")?.comment, "Recovered from prompt");
+});
+
+test("comment agent controller retries a renamed thread when old run output is missing", async () => {
+    const harness = createHarness({
+        initialComments: [createComment({
+            id: "thread-1",
+            filePath: "Folder/Renamed.md",
+            comment: "@codex recover after rename",
+        })],
+        availableFilePaths: ["Folder/Renamed.md"],
+        initialPersistedData: {
+            agentRuns: [{
+                id: "run-old",
+                threadId: "thread-1",
+                triggerEntryId: "thread-1",
+                filePath: "Folder/Original.md",
+                requestedAgent: "codex",
+                runtime: "direct-cli",
+                status: "succeeded",
+                promptText: "@codex recover after rename",
+                createdAt: 10,
+                startedAt: 11,
+                endedAt: 12,
+                outputEntryId: "missing-output-entry",
+            }],
+        },
+        runtimeReplyText: "Recovered after rename",
+    });
+
+    const started = await harness.controller.retryRun("run-old");
+    await waitForAgentQueueToDrain(harness.controller);
+
+    assert.equal(started, true);
+    const latestRun = harness.controller.getLatestAgentRunForThread("thread-1");
+    assert.equal(latestRun?.retryOfRunId, "run-old");
+    assert.equal(latestRun?.filePath, "Folder/Renamed.md");
+    assert.notEqual(latestRun?.outputEntryId, "missing-output-entry");
+    assert.deepEqual(harness.appendedEntries, [{
+        threadId: "thread-1",
+        body: "",
+        insertAfterCommentId: "thread-1",
+    }]);
+    assert.equal(harness.commentManager.getCommentById(latestRun?.outputEntryId ?? "")?.comment, "Recovered after rename");
+    assert.deepEqual(harness.notices, []);
 });
 
 test("comment agent controller keeps failed runs retryable through the same output entry", async () => {

@@ -106,3 +106,33 @@ test("syncLoadedCommentsForCurrentNote re-resolves stale parsed coordinates befo
     assert.equal(indexedThreads.length, 1);
     assert.equal(threadToComment(indexedThreads[0]).startLine, 1);
 });
+
+test("syncLoadedCommentsForCurrentNote preserves soft-deleted threads for sidecar persistence", async () => {
+    const manager = new CommentManager([]);
+    let indexedThreads: CommentThread[] = [];
+    const deletedAt = Date.now();
+
+    const syncedState = await syncLoadedCommentsForCurrentNote(
+        "note.md",
+        "Alpha target omega\n",
+        [commentToThread(createComment({
+            selectedText: "target",
+            selectedTextHash: "hash-target",
+            deletedAt,
+        }))],
+        manager,
+        {
+            updateFile(_filePath, items) {
+                indexedThreads = (items as CommentThread[]).map((thread) => ({
+                    ...thread,
+                    entries: thread.entries.map((entry) => ({ ...entry })),
+                }));
+            },
+        },
+    );
+
+    assert.equal(syncedState.threads.length, 1);
+    assert.equal(syncedState.threads[0].deletedAt, deletedAt);
+    assert.equal(manager.getThreadsForFile("note.md", { includeDeleted: true })[0]?.deletedAt, deletedAt);
+    assert.equal(indexedThreads[0]?.deletedAt, deletedAt);
+});
