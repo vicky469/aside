@@ -18,6 +18,10 @@ import type { AsideAgentTarget } from "../core/config/agentTargets";
 import { parseAgentDirectives } from "../core/text/agentDirectives";
 import { AgentRunStore } from "./agentRunStore";
 import {
+    extractAgentAnnotationProposals,
+    resolveAgentAnnotationProposal,
+} from "./agentAnnotationProposals";
+import {
     type AgentRuntimeSelection,
 } from "./agentRuntimeSelection";
 import { isAgentRuntimeCancelledError } from "./agentRuntimeAdapter";
@@ -55,6 +59,13 @@ export interface CommentAgentHost {
     isCommentableFile(file: TFile | null): file is TFile;
     getCurrentNoteContent(file: TFile): Promise<string>;
     loadCommentsForFile(file: TFile): Promise<unknown>;
+    hashText(text: string): Promise<string>;
+    persistCommentsForFile(file: TFile, options?: {
+        immediateAggregateRefresh?: boolean;
+        skipCommentViewRefresh?: boolean;
+        refreshEditorDecorations?: boolean;
+        refreshMarkdownPreviews?: boolean;
+    }): Promise<void>;
     appendThreadEntry(
         threadId: string,
         entry: {
@@ -771,7 +782,8 @@ export class CommentAgentController {
             return;
         }
 
-        const replyText = options.replyText.trim();
+        const annotationResult = await this.applyAgentAnnotationProposals(options.run, options.replyText);
+        const replyText = annotationResult.replyText.trim();
         if (!replyText) {
             throw new Error("The agent returned an empty response.");
         }
@@ -836,6 +848,97 @@ export class CommentAgentController {
             runtime: options.runtime,
             outputEntryId: options.outputEntryId,
         });
+    }
+
+    private async applyAgentAnnotationProposals(
+        run: AgentRunRecord,
+        replyText: string,
+    ): Promise<{ replyText: string; createdCount: number; unmatchedCount: number }> {
+        const extracted = extractAgentAnnotationProposals(replyText);
+        if (!extracted.proposals.length) {
+            return {
+                replyText,
+                createdCount: 0,
+                unmatchedCount: 0,
+            };
+        }
+
+        const file = this.host.getFileByPath(run.filePath);
+        if (!file || !this.host.isCommentableFile(file)) {
+            return {
+                replyText: extracted.replyText
+                    || "I could not create anchored side notes because the source note is unavailable.",
+                createdCount: 0,
+                unmatchedCount: extracted.proposals.length,
+            };
+        }
+
+        let noteContent = "";
+        try {
+            noteContent = await this.host.getCurrentNoteContent(file);
+        } catch (error) {
+            void this.host.log?.("warn", "agents", "agents.annotations.note_read_failed", {
+                runId: run.id,
+                filePath: run.filePath,
+                error,
+            });
+            return {
+                replyText: extracted.replyText
+                    || "I could not create anchored side notes because the source note could not be read.",
+                createdCount: 0,
+                unmatchedCount: extracted.proposals.length,
+            };
+        }
+
+        let createdCount = 0;
+        let unmatchedCount = 0;
+        for (const proposal of extracted.proposals) {
+            const resolved = resolveAgentAnnotationProposal(run.filePath, noteContent, proposal);
+            if (!resolved) {
+                unmatchedCount += 1;
+                continue;
+            }
+
+            const timestamp = this.host.now();
+            this.host.getCommentManager().addComment({
+                ...resolved.comment,
+                id: this.host.createCommentId(),
+                timestamp,
+                selectedTextHash: await this.host.hashText(resolved.comment.selectedText),
+            });
+            createdCount += 1;
+        }
+
+        if (createdCount > 0) {
+            await this.host.persistCommentsForFile(file, {
+                immediateAggregateRefresh: true,
+                skipCommentViewRefresh: true,
+            });
+        }
+
+        void this.host.log?.("info", "agents", "agents.annotations.applied", {
+            runId: run.id,
+            filePath: run.filePath,
+            proposalCount: extracted.proposals.length,
+            createdCount,
+            unmatchedCount,
+        });
+
+        return {
+            replyText: extracted.replyText || this.buildAnnotationStatusReply(createdCount, unmatchedCount),
+            createdCount,
+            unmatchedCount,
+        };
+    }
+
+    private buildAnnotationStatusReply(createdCount: number, unmatchedCount: number): string {
+        if (createdCount > 0 && unmatchedCount > 0) {
+            return `Added ${createdCount} anchored side note${createdCount === 1 ? "" : "s"}; ${unmatchedCount} proposal${unmatchedCount === 1 ? "" : "s"} did not match the current note text.`;
+        }
+        if (createdCount > 0) {
+            return `Added ${createdCount} anchored side note${createdCount === 1 ? "" : "s"}.`;
+        }
+        return "I could not create anchored side notes because the proposed source snippets did not match the current note text.";
     }
 
     private async deleteDuplicateCompletedAgentReplies(options: {

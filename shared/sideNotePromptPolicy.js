@@ -33,6 +33,7 @@ function buildSideNotePrompt(options) {
         "In-note agent requests default to write mode: @codex, @claude, or future agent directives all mean the user is asking the selected local agent to answer in this Aside thread.",
         "When the user asks to create, append, update, or resolve Aside side notes, make that change before replying.",
         "When the user asks to add annotations, comment on this article/note/text, add side comments to specific passages, or says 加批注, create selection-anchored Aside notes on the relevant source text spans.",
+        "For annotation requests, return a fenced `aside-annotations` JSON block with an array of objects like {\"selectedText\":\"exact source text from the note\",\"comment\":\"anchored comment text\"}. Use only exact source text from the provided note context. Aside will create the anchored notes from that block.",
         "Do not satisfy annotation requests with only a summary, critique, or reply in the current page thread; create the anchored notes first, then return a concise status reply.",
         "If you cannot create those selection-anchored notes from this runtime, say that you could not create the anchored notes instead of providing the critique as a substitute.",
         "For non-annotation requests like \"one point a note/comment\", keep one parent thread and append each point as a child entry unless the user explicitly asks for separate page-note threads.",

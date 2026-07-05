@@ -51,3 +51,15 @@ test("buildSideNotePrompt maps annotation requests to selection-anchored notes",
     assert.match(prompt, /Do not satisfy annotation requests with only a summary/i);
     assert.match(prompt, /could not create the anchored notes/i);
 });
+
+test("buildSideNotePrompt tells annotation agents to return plugin-owned annotation proposals", () => {
+    const prompt = sideNotePromptPolicy.buildSideNotePrompt({
+        promptText: "@codex 给这篇加批注",
+        rootLabel: "vault root",
+        rootPath: "/vault",
+    });
+
+    assert.match(prompt, /aside-annotations/);
+    assert.match(prompt, /exact source text/i);
+    assert.match(prompt, /Aside will create the anchored notes/i);
+});

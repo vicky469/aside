@@ -81,6 +81,7 @@ function createHarness(options: {
     const availableFilePaths = new Set(options.availableFilePaths ?? [defaultFilePath]);
     const appendedEntries: Array<{ threadId: string; body: string; insertAfterCommentId?: string }> = [];
     const editedEntries: Array<{ commentId: string; body: string }> = [];
+    const persistedFiles: Array<{ path: string; skipCommentViewRefresh?: boolean }> = [];
     const notices: string[] = [];
     const logEntries: Array<{
         level: "info" | "warn" | "error";
@@ -121,6 +122,15 @@ function createHarness(options: {
         isCommentableFile: (candidate): candidate is TFile => !!candidate,
         getCurrentNoteContent: async () => options.currentNoteContent ?? "",
         loadCommentsForFile: async () => undefined,
+        hashText: async (text) => `hash:${text}`,
+        persistCommentsForFile: async (file, persistOptions) => {
+            persistedFiles.push({
+                path: file.path,
+                ...(persistOptions?.skipCommentViewRefresh !== undefined
+                    ? { skipCommentViewRefresh: persistOptions.skipCommentViewRefresh }
+                    : {}),
+            });
+        },
         appendThreadEntry: async (threadId, entry, appendOptions) => {
             appendedEntries.push({
                 threadId,
@@ -193,6 +203,7 @@ function createHarness(options: {
         commentManager,
         appendedEntries,
         editedEntries,
+        persistedFiles,
         notices,
         logEntries,
         runtimeCalls,
@@ -277,6 +288,50 @@ test("comment agent controller appends a reply and marks the run succeeded", asy
             source: "built-in",
         }],
     );
+});
+
+test("comment agent controller turns annotation proposals into anchored side notes", async () => {
+    const harness = createHarness({
+        currentNoteContent: "# Plan\n\nThis offer needs a sharper promise for factory buyers.\n",
+        runtimeReplyText: [
+            "```aside-annotations",
+            JSON.stringify([{
+                selectedText: "sharper promise",
+                comment: "这里可以更具体：承诺应该落到交付结果或试点范围，而不是抽象地说更锋利。",
+            }]),
+            "```",
+            "已添加 1 条 anchored 批注。",
+        ].join("\n"),
+    });
+
+    await harness.controller.handleSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "@codex 你看看这篇有哪里可以改进的。你可以加批注",
+    });
+    await waitForAgentQueueToDrain(harness.controller);
+
+    const anchoredThreads = harness.commentManager
+        .getThreadsForFile("Folder/Note.md", { includeDeleted: true })
+        .filter((thread) => thread.anchorKind === "selection");
+
+    assert.equal(anchoredThreads.length, 1);
+    assert.equal(anchoredThreads[0].selectedText, "sharper promise");
+    assert.equal(anchoredThreads[0].startLine, 2);
+    assert.equal(anchoredThreads[0].startChar, 19);
+    assert.equal(anchoredThreads[0].endLine, 2);
+    assert.equal(anchoredThreads[0].endChar, 34);
+    assert.equal(
+        anchoredThreads[0].entries[0].body,
+        "这里可以更具体：承诺应该落到交付结果或试点范围，而不是抽象地说更锋利。",
+    );
+    assert.equal(harness.commentManager.getCommentById("generated-2")?.comment, "已添加 1 条 anchored 批注。");
+    assert.doesNotMatch(harness.commentManager.getCommentById("generated-2")?.comment ?? "", /aside-annotations/);
+    assert.deepEqual(harness.persistedFiles, [{
+        path: "Folder/Note.md",
+        skipCommentViewRefresh: true,
+    }]);
 });
 
 test("comment agent controller removes orphan duplicate replies created during completion", async () => {

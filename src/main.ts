@@ -342,6 +342,8 @@ export default class Aside extends Plugin {
         isCommentableFile: (file): file is TFile => this.isCommentableFile(file),
         getCurrentNoteContent: (file) => this.workspaceViewController.getCurrentNoteContent(file),
         loadCommentsForFile: (file) => this.loadCommentsForFile(file),
+        hashText: (text) => generateHash(text),
+        persistCommentsForFile: (file, options) => this.persistCommentsForFile(file, options),
         appendThreadEntry: (
             threadId: string,
             entry: {
