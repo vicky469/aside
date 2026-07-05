@@ -1037,7 +1037,7 @@ function renderStoredThreadEntry(
         entryBody: entry.body || "",
         presentation: entryPresentation,
         host,
-        interactive: !entryComment.deletedAt && !thread.deletedAt,
+        interactive: !thread.deletedAt && (!entryComment.deletedAt || host.showDeletedComments),
         inlineEditDraft: options.inlineEditDraft ?? null,
     });
     const entryEl = renderedEntry.commentEl;
@@ -1047,7 +1047,7 @@ function renderStoredThreadEntry(
     if (!entryEditDraft) {
         if (thread.deletedAt) {
             // Parent restore controls the whole soft-deleted thread.
-        } else if (entryComment.deletedAt && host.enableSoftDeleteActions && !host.showSourceRedirectAction) {
+        } else if (entryComment.deletedAt && host.enableSoftDeleteActions) {
             renderRestoreButton(entryActionsEl, entryComment.id, host, "Restore deleted side note entry");
             renderPermanentDeleteButton(entryActionsEl, entryComment.id, host, "Permanently delete side note entry");
         } else {
@@ -1187,7 +1187,7 @@ export async function renderPersistedCommentCard(
         entryBody: entries[0]?.body || "",
         presentation,
         host,
-        interactive: !comment.deletedAt && !thread.deletedAt,
+        interactive: (!comment.deletedAt && !thread.deletedAt) || (host.showDeletedComments && !!comment.deletedAt),
         inlineEditDraft: parentEditDraft,
     });
     const commentEl = renderedParent.commentEl;
@@ -1201,7 +1201,7 @@ export async function renderPersistedCommentCard(
         const parentInsertMarkdown = !comment.deletedAt && !thread.deletedAt
             ? getInsertableSidebarCommentMarkdown(comment.id, entries[0]?.body || "", host.threadAgentRuns)
             : null;
-        if (comment.deletedAt && host.enableSoftDeleteActions && !host.showSourceRedirectAction) {
+        if (comment.deletedAt && host.enableSoftDeleteActions) {
             renderRestoreButton(actionsEl, comment.id, host, "Restore deleted side note");
             renderPermanentDeleteButton(actionsEl, comment.id, host, "Permanently delete side note");
         } else {

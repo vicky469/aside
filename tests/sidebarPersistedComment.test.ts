@@ -128,6 +128,7 @@ class FakeElement {
         createElementNS: (_namespace: string, tagName: string) => new FakeElement(tagName),
     };
     private readonly attributes = new Map<string, string>();
+    private readonly eventListeners = new Map<string, Array<(event: unknown) => void>>();
 
     constructor(
         public readonly tagName: string,
@@ -206,7 +207,18 @@ class FakeElement {
         return this.attributes.get(name) ?? null;
     }
 
-    public addEventListener(): void {}
+    public addEventListener(type: string, listener: (event: unknown) => void): void {
+        const listeners = this.eventListeners.get(type) ?? [];
+        listeners.push(listener);
+        this.eventListeners.set(type, listeners);
+    }
+
+    public dispatchEvent(event: { type: string }): boolean {
+        for (const listener of this.eventListeners.get(event.type) ?? []) {
+            listener(event);
+        }
+        return true;
+    }
 
     public querySelector(selector: string): FakeElement | null {
         return this.find((element) => matchesFakeSelector(element, selector));
@@ -914,6 +926,68 @@ test("getDeletedRenderableThreadEntries keeps the deleted root and children for 
         parentEntry: thread.entries[0],
         childEntries: [thread.entries[1]],
     });
+});
+
+test("renderPersistedCommentCard keeps soft-deleted cards clickable in deleted mode", async () => {
+    const originalWindow = globalThis.window;
+    globalThis.window = {
+        getSelection: () => null,
+    } as unknown as typeof globalThis.window;
+
+    try {
+        const root = new FakeElement("div");
+        const openedCommentIds: string[] = [];
+
+        await renderPersistedCommentCard(
+            root as unknown as HTMLDivElement,
+            createThread({
+                deletedAt: 250,
+            }),
+            createRenderHost({
+                showDeletedComments: true,
+                enableSoftDeleteActions: true,
+                openCommentFromCard: async (comment) => {
+                    openedCommentIds.push(comment.id);
+                },
+            }),
+        );
+
+        const card = root.findAllByClass("aside-comment-item")[0];
+        assert.ok(card);
+        card.dispatchEvent({
+            type: "click",
+            target: card,
+            preventDefault() {},
+            stopPropagation() {},
+        } as unknown as Event);
+
+        assert.deepEqual(openedCommentIds, ["comment-1"]);
+    } finally {
+        globalThis.window = originalWindow;
+    }
+});
+
+test("renderPersistedCommentCard renders restore actions for deleted source cards", async () => {
+    for (const orphaned of [false, true]) {
+        const root = new FakeElement("div");
+
+        await renderPersistedCommentCard(
+            root as unknown as HTMLDivElement,
+            createThread({
+                deletedAt: 250,
+                orphaned,
+            }),
+            createRenderHost({
+                showDeletedComments: true,
+                showSourceRedirectAction: true,
+                enableSoftDeleteActions: true,
+            }),
+        );
+
+        assert.equal(root.findAllByClass("aside-comment-action-restore").length, 1);
+        assert.equal(root.findAllByClass("aside-comment-action-permanent-delete").length, 1);
+        assert.equal(root.findAllByClass("aside-comment-action-redirect").length, 0);
+    }
 });
 
 test("formatSidebarCommentSourceFileLabel keeps the basename without md, even for long paths", () => {
