@@ -10,7 +10,7 @@ import {
     pickExactFileLeafCandidate,
     pickPreferredFileLeafCandidate,
     resolveIndexSidebarScopeRootPath,
-    shouldScrollSourceForCommentReveal,
+    shouldRequireMarkdownViewForCommentReveal,
     shouldRevealSidebarLeaf,
     type PreferredFileLeafCandidate,
 } from "./commentNavigationPlanner";
@@ -380,6 +380,16 @@ export class CommentNavigationController {
 
         this.host.app.workspace.setActiveLeaf(targetLeaf, { focus: true });
 
+        if (!shouldRequireMarkdownViewForCommentReveal(comment)) {
+            void this.host.log?.("info", "navigation", "navigation.reveal.resolved", {
+                commentId: comment.id,
+                filePath: comment.filePath,
+                anchorKind: "page",
+            });
+            await this.activateViewAndHighlightComment(comment.id);
+            return;
+        }
+
         if (!(targetLeaf.view instanceof MarkdownView)) {
             await targetLeaf.openFile(file);
         }
@@ -387,16 +397,6 @@ export class CommentNavigationController {
         const markdownView = await this.ensureMarkdownLeafReadyForReveal(targetLeaf);
         if (!markdownView) {
             this.host.showNotice("Failed to jump to Markdown view.");
-            return;
-        }
-
-        if (!shouldScrollSourceForCommentReveal(comment)) {
-            void this.host.log?.("info", "navigation", "navigation.reveal.resolved", {
-                commentId: comment.id,
-                filePath: comment.filePath,
-                anchorKind: "page",
-            });
-            await this.activateViewAndHighlightComment(comment.id);
             return;
         }
 

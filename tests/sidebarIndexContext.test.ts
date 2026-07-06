@@ -7,6 +7,7 @@ import {
     pickPreferredFileLeafCandidate,
     pickSidebarTargetFile,
     resolveIndexSidebarScopeRootPath,
+    shouldRequireMarkdownViewForCommentReveal,
     shouldScrollSourceForCommentReveal,
     shouldRevealSidebarLeaf,
 } from "../src/comments/commentNavigationPlanner";
@@ -415,6 +416,12 @@ test("source scrolling is limited to anchored comment reveals", () => {
     assert.equal(shouldScrollSourceForCommentReveal({ anchorKind: "page" }), false);
     assert.equal(shouldScrollSourceForCommentReveal({ anchorKind: "selection" }), true);
     assert.equal(shouldScrollSourceForCommentReveal({}), true);
+});
+
+test("markdown view reveal is required only for anchored comment reveals", () => {
+    assert.equal(shouldRequireMarkdownViewForCommentReveal({ anchorKind: "page" }), false);
+    assert.equal(shouldRequireMarkdownViewForCommentReveal({ anchorKind: "selection" }), true);
+    assert.equal(shouldRequireMarkdownViewForCommentReveal({}), true);
 });
 
 test("sidebar reveal helper skips revealing an existing sidebar leaf for index-origin sync", () => {

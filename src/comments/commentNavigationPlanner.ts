@@ -28,6 +28,10 @@ export function shouldScrollSourceForCommentReveal(comment: { anchorKind?: "sele
     return comment.anchorKind !== "page";
 }
 
+export function shouldRequireMarkdownViewForCommentReveal(comment: { anchorKind?: "selection" | "page" }): boolean {
+    return shouldScrollSourceForCommentReveal(comment);
+}
+
 export function pickPinnedCommentableFile<T>(
     activeFile: T | null,
     activeSidebarFile: T | null,
