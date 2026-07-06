@@ -1590,6 +1590,10 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
     cursor: default;
 }
 
+.aside-agent-runtime-status-line {
+    white-space: pre-wrap;
+}
+
 .aside-agent-stream-content {
     white-space: pre-wrap;
 }

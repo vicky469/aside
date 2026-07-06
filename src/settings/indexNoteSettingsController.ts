@@ -184,6 +184,34 @@ export class IndexNoteSettingsController {
         await this.saveSettings();
     }
 
+    public async setShowTodoSidebarTab(visible: boolean): Promise<void> {
+        const settings = this.host.getSettings();
+        if (settings.showTodoSidebarTab === visible) {
+            return;
+        }
+
+        this.host.setSettings({
+            ...settings,
+            showTodoSidebarTab: visible,
+        });
+        await this.saveSettings();
+        await this.host.updateSidebarViews(this.host.getSidebarTargetFile());
+    }
+
+    public async setShowAgentSidebarTab(visible: boolean): Promise<void> {
+        const settings = this.host.getSettings();
+        if (settings.showAgentSidebarTab === visible) {
+            return;
+        }
+
+        this.host.setSettings({
+            ...settings,
+            showAgentSidebarTab: visible,
+        });
+        await this.saveSettings();
+        await this.host.updateSidebarViews(this.host.getSidebarTargetFile());
+    }
+
     public readPersistedPluginData(): PersistedPluginData {
         return {
             ...this.persistedPluginData,

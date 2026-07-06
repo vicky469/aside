@@ -151,7 +151,9 @@ import {
 import {
     isSidebarListLikeMode,
     isSidebarModeAvailable,
+    resolveModeWithSidebarModeVisibility,
     type SidebarModeAvailability,
+    type SidebarModeVisibility,
 } from "./sidebarModeTabs";
 import {
     EMPTY_SIDEBAR_THREAD_GROUP_COUNTS,
@@ -1285,8 +1287,15 @@ export default class AsideView extends ItemView {
             shouldRender = true;
         }
 
-        const nextMode = normalizeIndexSidebarMode(state.indexSidebarMode);
-        if (nextMode && nextMode !== "list" && nextMode !== this.indexSidebarMode) {
+        const nextModeFromState = normalizeIndexSidebarMode(state.indexSidebarMode);
+        const nextMode = nextModeFromState
+            ? resolveModeWithSidebarModeVisibility(nextModeFromState, this.getSidebarModeVisibility())
+            : null;
+        if (
+            nextMode
+            && (nextModeFromState !== "list" || nextMode !== nextModeFromState)
+            && nextMode !== this.indexSidebarMode
+        ) {
             this.indexSidebarMode = nextMode;
             void this.plugin.logEvent("info", "index", "index.mode.changed", {
                 mode: nextMode,
@@ -1295,7 +1304,10 @@ export default class AsideView extends ItemView {
             shouldRender = true;
         }
 
-        const nextNoteMode = parseSidebarPrimaryMode(state.noteSidebarMode);
+        const nextNoteModeFromState = parseSidebarPrimaryMode(state.noteSidebarMode);
+        const nextNoteMode = nextNoteModeFromState
+            ? resolveModeWithSidebarModeVisibility(nextNoteModeFromState, this.getSidebarModeVisibility())
+            : null;
         if (nextNoteMode && nextNoteMode !== this.noteSidebarMode) {
             this.noteSidebarMode = nextNoteMode;
             void this.plugin.logEvent("info", "note", "note.mode.changed", {
@@ -1638,6 +1650,10 @@ export default class AsideView extends ItemView {
                         ? indexFileFilterGraph?.fileCommentCounts.has(selectedIndexFileFilterRootPath) ?? false
                         : false,
                 });
+                effectiveIndexSidebarMode = resolveModeWithSidebarModeVisibility(
+                    effectiveIndexSidebarMode,
+                    this.getSidebarModeVisibility(),
+                );
                 effectiveIndexSidebarMode = resolveModeWithThoughtTrailAvailability(
                     effectiveIndexSidebarMode,
                     isIndexThoughtTrailEnabled,
@@ -1943,6 +1959,10 @@ export default class AsideView extends ItemView {
             scopedFileSample: scopedFileSummary.sample,
             scopedFileOmittedCount: scopedFileSummary.omittedCount,
         });
+        this.noteSidebarMode = resolveModeWithSidebarModeVisibility(
+            this.noteSidebarMode,
+            this.getSidebarModeVisibility(),
+        );
         this.noteSidebarMode = resolveModeWithThoughtTrailAvailability(
             this.noteSidebarMode,
             isThoughtTrailEnabled,
@@ -3142,6 +3162,13 @@ export default class AsideView extends ItemView {
         this.streamedReplyControllers.clear();
     }
 
+    private getSidebarModeVisibility(): SidebarModeVisibility {
+        return {
+            showTodoSidebarTab: this.plugin.settings.showTodoSidebarTab,
+            showAgentSidebarTab: this.plugin.settings.showAgentSidebarTab,
+        };
+    }
+
     private renderSidebarToolbar(
         container: HTMLElement,
         options: {
@@ -3175,17 +3202,25 @@ export default class AsideView extends ItemView {
         const showDeletedComments = options.showDeletedComments;
         const showPinnedThreadsOnly = this.showPinnedSidebarThreadsOnly;
         const hasPinnedThreads = this.pinnedSidebarThreadIds.size > 0;
+        const sidebarModeVisibility = this.getSidebarModeVisibility();
+        const resolvedNoteSidebarMode = resolveModeWithSidebarModeVisibility(
+            options.noteSidebarMode,
+            sidebarModeVisibility,
+        );
         const noteToolbarActionState = resolveNoteToolbarActionState({
             hasDeletedComments: options.hasDeletedComments,
             hasPinnedThreads,
-            noteSidebarMode: options.noteSidebarMode,
+            noteSidebarMode: resolvedNoteSidebarMode,
             showDeletedComments,
             showPinnedThreadsOnly,
         });
-        const resolvedIndexSidebarMode = options.effectiveIndexSidebarMode ?? this.indexSidebarMode;
+        const resolvedIndexSidebarMode = resolveModeWithSidebarModeVisibility(
+            options.effectiveIndexSidebarMode ?? this.indexSidebarMode,
+            sidebarModeVisibility,
+        );
         const activePrimaryMode = options.isAllCommentsView
             ? resolvedIndexSidebarMode
-            : options.noteSidebarMode;
+            : resolvedNoteSidebarMode;
         const sidebarThreadGroupCounts = options.sidebarThreadGroupCounts ?? EMPTY_SIDEBAR_THREAD_GROUP_COUNTS;
         const showListOrTagToolbarChips = options.isAllCommentsView
             ? shouldShowIndexListToolbarChips(options.isAllCommentsView, resolvedIndexSidebarMode)
@@ -3207,10 +3242,10 @@ export default class AsideView extends ItemView {
             && showDeletedComments;
         const shouldRenderToolbar = options.isAllCommentsView
             || (!options.isAllCommentsView && isSidebarListLikeMode(activePrimaryMode))
-            || (!options.isAllCommentsView && options.noteSidebarMode === "thought-trail")
+            || (!options.isAllCommentsView && resolvedNoteSidebarMode === "thought-trail")
             || shouldShowNestedChip
             || shouldShowAddPageCommentAction
-            || options.noteSidebarMode === "tags";
+            || resolvedNoteSidebarMode === "tags";
         if (!shouldRenderToolbar) {
             return;
         }
@@ -3264,7 +3299,7 @@ export default class AsideView extends ItemView {
             const modeRow = toolbarEl.createDiv("aside-sidebar-toolbar-row");
             modeRow.addClass("is-note-primary-row");
             this.renderPrimarySidebarModeControl(modeRow, {
-                mode: this.noteSidebarMode,
+                mode: resolvedNoteSidebarMode,
                 surface: "note",
                 isTagsEnabled: options.isTagsEnabled,
                 isThoughtTrailEnabled: options.isThoughtTrailEnabled,
@@ -3287,7 +3322,7 @@ export default class AsideView extends ItemView {
                 },
             });
 
-            if (shouldShowNoteSearchInput || showListOrTagToolbarChips || shouldShowAddPageCommentAction || options.noteSidebarMode === "tags") {
+            if (shouldShowNoteSearchInput || showListOrTagToolbarChips || shouldShowAddPageCommentAction || resolvedNoteSidebarMode === "tags") {
                 const actionsRow = toolbarEl.createDiv("aside-sidebar-toolbar-row");
                 if (shouldShowNoteSearchInput) {
                     actionsRow.addClass("is-note-search-row");
@@ -3620,11 +3655,12 @@ export default class AsideView extends ItemView {
             onChange(mode: SidebarPrimaryMode, previousMode: SidebarPrimaryMode): void;
         },
     ): void {
-        const availability: SidebarModeAvailability = {
+        const availability: SidebarModeAvailability & SidebarModeVisibility = {
             isTagsEnabled: options.isTagsEnabled,
             isTodoEnabled: options.groupCounts.todo > 0,
             isAgentEnabled: options.groupCounts.agent > 0,
             isThoughtTrailEnabled: options.isThoughtTrailEnabled,
+            ...this.getSidebarModeVisibility(),
         };
         this.renderSidebarModeControl(container, {
             mode: options.mode,
@@ -3693,8 +3729,12 @@ export default class AsideView extends ItemView {
     }
 
     private canRenderCachedIndexDefaultSidebar(file: TFile, selectedRootFilePath: string | null): boolean {
+        const effectiveIndexSidebarMode = resolveModeWithSidebarModeVisibility(
+            this.indexSidebarMode,
+            this.getSidebarModeVisibility(),
+        );
         return !selectedRootFilePath
-            && this.indexSidebarMode === "list"
+            && effectiveIndexSidebarMode === "list"
             && !this.indexSidebarSearchQuery.trim()
             && !this.noteSidebarVisibleTagFilterKey
             && !this.plugin.getDraftForView(file.path);

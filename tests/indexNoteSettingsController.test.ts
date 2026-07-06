@@ -24,6 +24,8 @@ function createSettings(overrides: Partial<AsideSettings> = {}): AsideSettings {
         indexHeaderImageUrl: overrides.indexHeaderImageUrl ?? "https://example.com/default.webp",
         indexHeaderImageCaption: overrides.indexHeaderImageCaption ?? "Default caption",
         agentRuntimeMode: overrides.agentRuntimeMode ?? "auto",
+        showTodoSidebarTab: overrides.showTodoSidebarTab ?? true,
+        showAgentSidebarTab: overrides.showAgentSidebarTab ?? true,
     };
 }
 
@@ -193,6 +195,25 @@ test("loaded settings resolution normalizes persisted values and marks legacy co
         indexHeaderImageUrl: "https://example.com/header.webp",
         indexHeaderImageCaption: "Custom caption",
         agentRuntimeMode: "auto",
+        showTodoSidebarTab: true,
+        showAgentSidebarTab: true,
+    });
+    assert.equal(resolved.shouldRewriteLegacySettings, true);
+});
+
+test("loaded settings resolution defaults sidebar tab toggles on and rewrites invalid toggle values", () => {
+    const resolved = resolveLoadedSettings({
+        showTodoSidebarTab: false,
+        showAgentSidebarTab: "no" as unknown as boolean,
+    }, createSettings());
+
+    assert.deepEqual(resolved.settings, {
+        indexNotePath: "Aside index.md",
+        indexHeaderImageUrl: "https://ichef.bbci.co.uk/images/ic/1920xn/p02vhq1v.jpg.webp",
+        indexHeaderImageCaption: "Default caption",
+        agentRuntimeMode: "auto",
+        showTodoSidebarTab: false,
+        showAgentSidebarTab: true,
     });
     assert.equal(resolved.shouldRewriteLegacySettings, true);
 });
@@ -298,6 +319,8 @@ test("index note settings controller rewrites legacy settings", async () => {
         indexHeaderImageUrl: "https://example.com/header.webp",
         indexHeaderImageCaption: "Header",
         agentRuntimeMode: "auto",
+        showTodoSidebarTab: true,
+        showAgentSidebarTab: true,
     });
     assert.equal(harness.savedPayloads.length, 1);
     assert.equal("preferredAgentTarget" in harness.savedPayloads[0], false);
@@ -316,6 +339,8 @@ test("loaded settings resolution drops legacy remote runtime settings", () => {
         indexHeaderImageUrl: "https://ichef.bbci.co.uk/images/ic/1920xn/p02vhq1v.jpg.webp",
         indexHeaderImageCaption: "Default caption",
         agentRuntimeMode: "auto",
+        showTodoSidebarTab: true,
+        showAgentSidebarTab: true,
     });
     assert.equal(resolved.shouldRewriteLegacySettings, true);
 });
@@ -330,6 +355,8 @@ test("index note settings controller saves local runtime setting without aggrega
         indexHeaderImageUrl: "https://example.com/default.webp",
         indexHeaderImageCaption: "Default caption",
         agentRuntimeMode: "local",
+        showTodoSidebarTab: true,
+        showAgentSidebarTab: true,
     });
     assert.equal(harness.getRefreshAggregateNoteCount(), 0);
     assert.deepEqual(harness.savedPayloads.at(-1), {
@@ -337,6 +364,36 @@ test("index note settings controller saves local runtime setting without aggrega
         indexHeaderImageUrl: "https://example.com/default.webp",
         indexHeaderImageCaption: "Default caption",
         agentRuntimeMode: "local",
+        showTodoSidebarTab: true,
+        showAgentSidebarTab: true,
+    });
+});
+
+test("index note settings controller saves sidebar tab toggles and refreshes open sidebars", async () => {
+    const harness = createControllerHarness({
+        activeSidebarFilePath: "docs/source.md",
+        files: ["docs/source.md"],
+    });
+
+    await harness.controller.setShowTodoSidebarTab(false);
+    await harness.controller.setShowAgentSidebarTab(false);
+
+    assert.deepEqual(harness.getSettings(), {
+        indexNotePath: "Aside index.md",
+        indexHeaderImageUrl: "https://example.com/default.webp",
+        indexHeaderImageCaption: "Default caption",
+        agentRuntimeMode: "auto",
+        showTodoSidebarTab: false,
+        showAgentSidebarTab: false,
+    });
+    assert.deepEqual(harness.refreshedTargets, ["docs/source.md", "docs/source.md"]);
+    assert.deepEqual(harness.savedPayloads.at(-1), {
+        indexNotePath: "Aside index.md",
+        indexHeaderImageUrl: "https://example.com/default.webp",
+        indexHeaderImageCaption: "Default caption",
+        agentRuntimeMode: "auto",
+        showTodoSidebarTab: false,
+        showAgentSidebarTab: false,
     });
 });
 

@@ -17,6 +17,13 @@ export interface SidebarModeAvailability {
     isThoughtTrailEnabled: boolean;
 }
 
+export interface SidebarModeVisibility {
+    showTodoSidebarTab: boolean;
+    showAgentSidebarTab: boolean;
+}
+
+type SidebarModeTabOptions = SidebarModeAvailability & Partial<SidebarModeVisibility>;
+
 export type SidebarModeTabSurface = "note" | "index";
 
 export const SHARED_SIDEBAR_MODE_TABS: readonly SidebarModeTabDefinition[] = [
@@ -28,16 +35,28 @@ export const SHARED_SIDEBAR_MODE_TABS: readonly SidebarModeTabDefinition[] = [
 
 export const TAGS_SIDEBAR_MODE_TAB: SidebarModeTabDefinition = { mode: "tags", label: "Tags" };
 
-export function getSidebarModeTabs(availability: SidebarModeAvailability): SidebarModeTabDefinition[] {
+export function getSidebarModeTabs(options: SidebarModeTabOptions): SidebarModeTabDefinition[] {
+    const showTodoSidebarTab = options.showTodoSidebarTab ?? true;
+    const showAgentSidebarTab = options.showAgentSidebarTab ?? true;
+    const optionalTabs = SHARED_SIDEBAR_MODE_TABS.slice(1).filter((tab) => {
+        if (tab.mode === "todo") {
+            return showTodoSidebarTab;
+        }
+        if (tab.mode === "agent") {
+            return showAgentSidebarTab;
+        }
+        return true;
+    });
+
     return [
         SHARED_SIDEBAR_MODE_TABS[0],
-        ...(availability.isTagsEnabled ? [TAGS_SIDEBAR_MODE_TAB] : []),
-        ...SHARED_SIDEBAR_MODE_TABS.slice(1),
+        ...(options.isTagsEnabled ? [TAGS_SIDEBAR_MODE_TAB] : []),
+        ...optionalTabs,
     ];
 }
 
 export function getSidebarModeTabGroups(
-    availability: SidebarModeAvailability,
+    availability: SidebarModeTabOptions,
     surface: SidebarModeTabSurface,
 ): SidebarModeTabGroup[] {
     const tabByMode = new Map(getSidebarModeTabs(availability).map((tab) => [tab.mode, tab]));
@@ -47,7 +66,7 @@ export function getSidebarModeTabGroups(
     }> = surface === "index"
         ? [
             { scope: "local", modes: ["list"] },
-            { scope: "global", modes: ["todo", "thought-trail"] },
+            { scope: "global", modes: ["todo", "agent", "thought-trail"] },
         ]
         : [
             { scope: "local", modes: ["list", "tags", "todo", "agent"] },
@@ -81,6 +100,20 @@ export function isSidebarModeAvailable(
         default:
             return true;
     }
+}
+
+export function resolveModeWithSidebarModeVisibility(
+    mode: SidebarPrimaryMode,
+    visibility: SidebarModeVisibility,
+): SidebarPrimaryMode {
+    if (mode === "todo" && !visibility.showTodoSidebarTab) {
+        return "list";
+    }
+    if (mode === "agent" && !visibility.showAgentSidebarTab) {
+        return "list";
+    }
+
+    return mode;
 }
 
 export function isSidebarListLikeMode(mode: SidebarPrimaryMode): boolean {

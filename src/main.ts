@@ -615,6 +615,14 @@ export default class Aside extends Plugin {
         await this.indexNoteSettingsController.setAgentRuntimeMode(nextMode);
     }
 
+    public async setShowTodoSidebarTab(visible: boolean): Promise<void> {
+        await this.indexNoteSettingsController.setShowTodoSidebarTab(visible);
+    }
+
+    public async setShowAgentSidebarTab(visible: boolean): Promise<void> {
+        await this.indexNoteSettingsController.setShowAgentSidebarTab(visible);
+    }
+
     public getAgentRuns(): AgentRunRecord[] {
         return this.commentAgentController.getAgentRuns();
     }

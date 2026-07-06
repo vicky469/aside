@@ -46,11 +46,23 @@ function hasOwn(target: object, key: string): boolean {
     return Boolean(Object.prototype.hasOwnProperty.call(target, key));
 }
 
+function normalizeSidebarTabToggle(value: unknown): boolean {
+    return typeof value === "boolean" ? value : true;
+}
+
 export function resolveLoadedSettings(
     loaded: PersistedPluginData | null,
     defaults: AsideSettings,
 ): LoadedSettingsResolution {
     const indexNotePath = normalizeAllCommentsNotePath(loaded?.indexNotePath);
+    const hasTodoSidebarTabSetting = hasOwn(loaded ?? {}, "showTodoSidebarTab");
+    const hasAgentSidebarTabSetting = hasOwn(loaded ?? {}, "showAgentSidebarTab");
+    const showTodoSidebarTab = hasTodoSidebarTabSetting
+        ? normalizeSidebarTabToggle(loaded?.showTodoSidebarTab)
+        : true;
+    const showAgentSidebarTab = hasAgentSidebarTabSetting
+        ? normalizeSidebarTabToggle(loaded?.showAgentSidebarTab)
+        : true;
 
     return {
         settings: {
@@ -62,11 +74,17 @@ export function resolveLoadedSettings(
             agentRuntimeMode: hasOwn(loaded ?? {}, "agentRuntimeMode")
                 ? normalizeAgentRuntimeModePreference(loaded?.agentRuntimeMode)
                 : defaults.agentRuntimeMode,
+            showTodoSidebarTab,
+            showAgentSidebarTab,
         },
         shouldRewriteLegacySettings: hasOwn(loaded ?? {}, "confirmDelete")
             || hasOwn(loaded ?? {}, "preferredAgentTarget")
             || hasOwn(loaded ?? {}, "enableDebugMode")
             || hasOwn(loaded ?? {}, "remoteRuntimeBaseUrl")
+            || !hasTodoSidebarTabSetting
+            || !hasAgentSidebarTabSetting
+            || (hasTodoSidebarTabSetting && typeof loaded?.showTodoSidebarTab !== "boolean")
+            || (hasAgentSidebarTabSetting && typeof loaded?.showAgentSidebarTab !== "boolean")
             || (hasOwn(loaded ?? {}, "agentRuntimeMode")
                 && normalizeAgentRuntimeModePreference(loaded?.agentRuntimeMode) !== loaded?.agentRuntimeMode),
     };

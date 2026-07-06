@@ -6,6 +6,7 @@ import {
     isSidebarModeAvailable,
     type SidebarModeAvailability,
     type SidebarModeTabSurface,
+    type SidebarModeVisibility,
 } from "./sidebarModeTabs";
 import type { SidebarPrimaryMode } from "./viewState";
 
@@ -45,7 +46,7 @@ export interface SidebarSearchInputOptions {
     onInput(value: string, selection: { selectionStart: number | null; selectionEnd: number | null }): void;
 }
 
-export interface SidebarModeControlOptions extends SidebarModeAvailability {
+export interface SidebarModeControlOptions extends SidebarModeAvailability, SidebarModeVisibility {
     mode: SidebarPrimaryMode;
     surface: SidebarModeTabSurface;
     onChange(mode: SidebarPrimaryMode): void;
