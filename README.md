@@ -62,7 +62,7 @@ For durable storage and sync across devices, use Aside with [Obsidian Sync](http
 2. Install and sign in to the local agent CLI you want to use on the same machine.
    - For `@codex`, open Terminal in your vault or project folder and run `codex`.
    - For `@claude`, open Terminal in your vault or project folder and run `claude`.
-3. Install the public Aside skill for external agent workflows.
+3. Install the Aside skill for better assisting agent workflows.
    ```
    $skill-installer install https://github.com/vicky469/aside/tree/main/skills/aside
    ```
