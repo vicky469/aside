@@ -1,12 +1,12 @@
 # vscode
-.vscode 
+.vscode/
 
 # Intellij
 *.iml
-.idea
+.idea/
 
 # npm
-node_modules
+node_modules/
 .npmrc
 .env
 .env.*
@@ -18,15 +18,33 @@ main.js
 
 # Exclude sourcemaps
 *.map
+*.tsbuildinfo
+dist/
+coverage/
 
-# obsidian
+# obsidian runtime state
 data.json
+/.obsidian/
 
 # Exclude macOS Finder (System Explorer) View States
 .DS_Store
 
-# Local Codex marker
-.codex
+# Local agent/dev notes and planning docs
+.codex/
+/AGENTS.md
+/CLAUDE.md
+/CONTEXT.md
+/README-dev.md
+/docs/*
+!/docs/releases/
+/docs/releases/*
+!/docs/releases/_template.md
+!/docs/releases/*.md
+
+# Bundled public skill surface
+/skills/*
+!/skills/aside/
+!/skills/aside/SKILL.md
 
 # Test build output
 .test-dist
@@ -44,5 +62,3 @@ data.json
 
 # Dev-only Obsidian skill references stay on the dedicated skills-dev branch
 /skills/dev
-
-.env

@@ -2,7 +2,18 @@
 	"name": "aside",
 	"version": "2.0.86",
 	"description": "Side comments for humans and agents.",
+	"private": true,
 	"main": "main.js",
+	"files": [
+		"main.js",
+		"manifest.json",
+		"styles.css",
+		"versions.json",
+		"README.md",
+		"LICENSE",
+		"assets/",
+		"skills/aside/SKILL.md"
+	],
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
 		"dev:install-built": "node scripts/install-built-plugin.mjs",

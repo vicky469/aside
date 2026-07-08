@@ -8,12 +8,11 @@ import { promisify } from "node:util";
 
 const execFile = promisify(execFileCallback);
 
-test("install-bundled-skill script copies all bundled repo skills into the target Codex skills directory by default", async () => {
+test("install-bundled-skill script copies public bundled repo skills into the target Codex skills directory by default", async () => {
     const tempDir = await mkdtemp(path.join(tmpdir(), "aside-skill-install-"));
     const skillsRoot = path.join(tempDir, "skills");
     const scriptPath = path.resolve(process.cwd(), "scripts/install-bundled-skill.mjs");
     const sourceSidenoteSkillDir = path.resolve(process.cwd(), "skills/aside");
-    const sourceCanvasSkillDir = path.resolve(process.cwd(), "skills/canvas-design");
 
     const { stdout } = await execFile("node", [
         scriptPath,
@@ -24,7 +23,7 @@ test("install-bundled-skill script copies all bundled repo skills into the targe
     });
 
     assert.match(stdout, /Installed skill aside/);
-    assert.match(stdout, /Installed skill canvas-design/);
+    assert.doesNotMatch(stdout, /Installed skill canvas-design/);
     assert.match(stdout, /Restart Codex to pick up new skills/);
 
     const installedSidenoteSkillDir = path.join(skillsRoot, "aside");
@@ -32,11 +31,7 @@ test("install-bundled-skill script copies all bundled repo skills into the targe
     const sourceSidenoteSkill = await readFile(path.join(sourceSidenoteSkillDir, "SKILL.md"), "utf8");
     assert.equal(installedSidenoteSkill, sourceSidenoteSkill);
 
-    const installedCanvasSkillDir = path.join(skillsRoot, "canvas-design");
-    const installedCanvasSkill = await readFile(path.join(installedCanvasSkillDir, "SKILL.md"), "utf8");
-    const sourceCanvasSkill = await readFile(path.join(sourceCanvasSkillDir, "SKILL.md"), "utf8");
-    assert.equal(installedCanvasSkill, sourceCanvasSkill);
-    await assert.rejects(access(path.join(installedCanvasSkillDir, "canvas-fonts")));
+    await assert.rejects(access(path.join(skillsRoot, "canvas-design", "SKILL.md")));
 
     const installedDirStat = await lstat(installedSidenoteSkillDir);
     assert.equal(installedDirStat.isSymbolicLink(), false);

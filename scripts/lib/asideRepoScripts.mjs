@@ -8,6 +8,8 @@ function getRepoRoot(metaUrl) {
     return path.resolve(path.dirname(fileURLToPath(metaUrl)), "../..");
 }
 
+const PUBLIC_BUNDLED_SKILL_NAMES = ["aside"];
+
 function parseNonNegativeIntegerOption(rawValue, flagName) {
     const parsed = Number(rawValue);
     if (!Number.isInteger(parsed) || parsed < 0) {
@@ -62,7 +64,7 @@ function printInstallBundledSkillUsage(stream = process.stderr) {
             "  node scripts/install-bundled-skill.mjs [--name <skill-name>]... [--dest <skills-root>]",
             "",
             "Defaults:",
-            "  installs all bundled skills when --name is omitted",
+            "  installs all public bundled skills when --name is omitted",
             "  --dest defaults to $CODEX_HOME/skills or ~/.codex/skills",
         ].join("\n") + "\n",
     );
@@ -851,28 +853,15 @@ async function resolveCommentWriteTarget(options) {
 async function getBundledSkills() {
     const repoRoot = getRepoRoot(import.meta.url);
     const skillsRoot = path.join(repoRoot, "skills");
-    const entries = await readdir(skillsRoot, { withFileTypes: true });
-    const skillNames = entries
-        .filter((entry) => entry.isDirectory())
-        .map((entry) => entry.name)
-        .sort((left, right) => left.localeCompare(right));
-
-    if (skillNames.length === 0) {
-        throw new Error(`No bundled skills found in ${skillsRoot}`);
-    }
-
     const skillDirectories = new Map();
-    for (const skillName of skillNames) {
+    for (const skillName of PUBLIC_BUNDLED_SKILL_NAMES) {
         const sourceDir = path.join(skillsRoot, skillName);
         const skillFile = path.join(sourceDir, "SKILL.md");
-        if (!(await pathExists(skillFile))) {
-            continue;
+        if (await pathExists(skillFile)) {
+            skillDirectories.set(skillName, sourceDir);
+        } else {
+            throw new Error(`Missing public bundled skill: ${skillFile}`);
         }
-        skillDirectories.set(skillName, sourceDir);
-    }
-
-    if (skillDirectories.size === 0) {
-        throw new Error(`No bundled skills with SKILL.md found in ${skillsRoot}`);
     }
 
     return { skillDirectories };
