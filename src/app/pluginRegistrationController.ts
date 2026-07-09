@@ -3,6 +3,10 @@ import {
     EDITOR_SELECTION_COMMENT_ACTION_LABELS,
     type EditorSelectionCommentAction,
 } from "../comments/editorSelectionCommentAction";
+import {
+    PUBLIC_HTML_FILE_EXTENSIONS,
+    PUBLIC_HTML_VIEW_TYPE,
+} from "../publish/publicHtmlViewTypes";
 
 export interface EditorMenuItemLike {
     setTitle(title: string): EditorMenuItemLike;
@@ -26,11 +30,11 @@ export interface PluginRegistrationHost {
     manifestId: string;
     iconId: string;
     registerView(viewType: string, creator: (leaf: unknown) => unknown): void;
+    registerExtensions(extensions: string[], viewType: string): void;
     registerObsidianProtocolHandler(
         action: string,
         handler: (params: Record<string, unknown>) => void,
     ): void;
-    removeCommand(commandId: string): void;
     addCommand(command: {
         id: string;
         name: string;
@@ -50,11 +54,10 @@ export interface PluginRegistrationHost {
     ): void;
     addRibbonIcon(icon: string, title: string, callback: () => void): void;
     createSidebarView(leaf: unknown): unknown;
+    createPublicHtmlView(leaf: unknown): unknown;
     startDraftFromEditorSelection(editor: EditorSelectionLike, file: TFile | null): Promise<unknown>;
     getEditorSelectionAction(editor: EditorSelectionLike, file: TFile | null): EditorSelectionCommentAction;
-    highlightCommentById(filePath: string | null, commentId: string): Promise<void>;
     openCommentById(filePath: string | null, commentId: string): Promise<void>;
-    openAsideView(): Promise<void> | void;
     openIndexNote(): Promise<void> | void;
 }
 
@@ -74,6 +77,8 @@ export class PluginRegistrationController {
 
     public register(): void {
         this.host.registerView("aside-view", (leaf) => this.host.createSidebarView(leaf));
+        this.host.registerView(PUBLIC_HTML_VIEW_TYPE, (leaf) => this.host.createPublicHtmlView(leaf));
+        this.host.registerExtensions([...PUBLIC_HTML_FILE_EXTENSIONS], PUBLIC_HTML_VIEW_TYPE);
         this.host.registerObsidianProtocolHandler("aside-comment", (params) => {
             const target = resolveCommentProtocolTarget(params);
             if (!target) {
@@ -81,16 +86,6 @@ export class PluginRegistrationController {
             }
 
             void this.host.openCommentById(target.filePath, target.commentId);
-        });
-        this.host.removeCommand(`${this.host.manifestId}:activate-view`);
-
-        this.host.addCommand({
-            id: "activate-view",
-            name: "Open sidebar",
-            icon: this.host.iconId,
-            callback: async () => {
-                await this.host.openAsideView();
-            },
         });
 
         this.host.addCommand({

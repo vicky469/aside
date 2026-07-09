@@ -128,6 +128,28 @@ test("CommentManager reorders root threads within the same file", () => {
     assert.equal(manager.reorderThreadsForFile("note.md", "thread-3", "thread-3", "before"), false);
 });
 
+test("CommentManager can read threads across paired public markdown and html paths", () => {
+    const manager = new CommentManager([
+        {
+            ...createComment("markdown-thread", 1710000000000, "markdown"),
+            filePath: "public/page.md",
+        },
+        {
+            ...createComment("html-thread", 1710000001000, "html"),
+            filePath: "public/page.html",
+        },
+        {
+            ...createComment("other-thread", 1710000002000, "other"),
+            filePath: "public/other.md",
+        },
+    ]);
+
+    assert.deepEqual(
+        manager.getThreadsForFiles(["public/page.md", "public/page.html"]).map((thread) => thread.id),
+        ["markdown-thread", "html-thread"],
+    );
+});
+
 test("CommentManager reorders child entries only within their parent thread", () => {
     const thread = commentToThread(createComment("thread-1", 1710000000000, "parent"));
     thread.entries.push({

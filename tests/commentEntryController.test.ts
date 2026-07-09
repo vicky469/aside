@@ -4,7 +4,7 @@ import type { Editor, TFile } from "obsidian";
 import type { Comment } from "../src/commentManager";
 import { getPageCommentLabel } from "../src/core/anchors/commentAnchors";
 import { CommentEntryController, type CommentEntryHost } from "../src/comments/commentEntryController";
-import type { DraftComment } from "../src/domain/drafts";
+import type { DraftComment, DraftSelection } from "../src/domain/drafts";
 
 const ALL_COMMENTS_NOTE_PATH = "Aside/index.md";
 
@@ -40,7 +40,7 @@ function isPageNoteCapableFilePath(path: string): boolean {
         return false;
     }
 
-    return path.endsWith(".md") || path.endsWith(".pdf");
+    return path.endsWith(".md") || path.endsWith(".pdf") || path.endsWith(".html");
 }
 
 function createHost(options: { knownComments?: Comment[]; threadIdsByCommentId?: Record<string, string> } = {}) {
@@ -188,7 +188,28 @@ test("comment entry controller rejects text-anchored drafts for non-markdown fil
     assert.equal(started, false);
     assert.deepEqual(host.loadedFiles, []);
     assert.equal(host.draftCalls.length, 0);
-    assert.deepEqual(host.notices, ["Text-anchored side notes are only supported in markdown files."]);
+    assert.deepEqual(host.notices, ["Text-anchored side notes are only supported in Markdown files."]);
+});
+
+test("comment entry controller rejects text-anchored drafts for rendered HTML selections", async () => {
+    const host = createHost();
+    const file = createFile("public/page.html");
+    const selection: DraftSelection = {
+        file,
+        selectedText: "Revenue growth",
+        startLine: 3,
+        startChar: 5,
+        endLine: 3,
+        endChar: 19,
+    };
+
+    const started = await host.controller.startDraftFromResolvedSelection(selection);
+
+    assert.equal(started, false);
+    assert.deepEqual(host.markedFiles, []);
+    assert.equal(host.draftCalls.length, 0);
+    assert.deepEqual(host.highlightedCommentIds, []);
+    assert.deepEqual(host.notices, ["Text-anchored side notes are only supported in Markdown files."]);
 });
 
 test("comment entry controller starts page drafts for PDF files", async () => {
@@ -271,7 +292,34 @@ test("comment entry controller starts an append-entry draft using the resolved v
     assert.equal(draft.comment, "");
     assert.equal(host.draftCalls[0].hostFilePath, "docs/host.md");
     assert.equal(host.draftCalls[0].skipCommentViewRefresh, true);
-    assert.deepEqual(host.notices, []);
+	assert.deepEqual(host.notices, []);
+});
+
+test("comment entry controller rejects append-entry drafts for rendered HTML selection comments", async () => {
+	const existingComment: Comment = {
+		id: "thread-1",
+		filePath: "public/page.html",
+		startLine: 4,
+		startChar: 2,
+		endLine: 4,
+		endChar: 8,
+		selectedText: "system",
+		selectedTextHash: "hash:system",
+		comment: "existing body",
+		timestamp: 123,
+		anchorKind: "selection",
+		orphaned: false,
+	};
+	const host = createHost({ knownComments: [existingComment] });
+
+	const started = await host.controller.startAppendEntryDraft("thread-1", "public/page.html");
+
+	assert.equal(started, false);
+	assert.deepEqual(host.loadedFiles, []);
+	assert.deepEqual(host.markedFiles, []);
+	assert.deepEqual(host.highlightedCommentIds, []);
+	assert.equal(host.draftCalls.length, 0);
+	assert.deepEqual(host.notices, ["Unable to find that side note thread."]);
 });
 
 test("comment entry controller can start an append-entry draft from a child entry id", async () => {

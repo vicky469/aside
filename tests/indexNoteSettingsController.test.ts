@@ -3,6 +3,9 @@ import test from "node:test";
 import type { TFile } from "obsidian";
 import { IndexNoteSettingsController } from "../src/settings/indexNoteSettingsController";
 import {
+    DEFAULT_PUBLISH_SETTINGS,
+} from "../src/core/publish/publishSettings";
+import {
     resolveIndexNotePathChange,
     resolveLoadedSettings,
     shouldApplyNormalizedSettingChange,
@@ -26,6 +29,21 @@ function createSettings(overrides: Partial<AsideSettings> = {}): AsideSettings {
         agentRuntimeMode: overrides.agentRuntimeMode ?? "auto",
         showTodoSidebarTab: overrides.showTodoSidebarTab ?? true,
         showAgentSidebarTab: overrides.showAgentSidebarTab ?? true,
+        publishedPublicArtifactPaths: overrides.publishedPublicArtifactPaths ?? [],
+        publishEnabled: overrides.publishEnabled ?? DEFAULT_PUBLISH_SETTINGS.publishEnabled,
+        publishPagesProjectName: overrides.publishPagesProjectName ?? DEFAULT_PUBLISH_SETTINGS.publishPagesProjectName,
+        publishBaseUrl: overrides.publishBaseUrl ?? DEFAULT_PUBLISH_SETTINGS.publishBaseUrl,
+        publishAllowedRoot: overrides.publishAllowedRoot ?? DEFAULT_PUBLISH_SETTINGS.publishAllowedRoot,
+    };
+}
+
+function withPublishDefaults(
+    settings: Omit<AsideSettings, keyof typeof DEFAULT_PUBLISH_SETTINGS | "publishedPublicArtifactPaths">,
+): AsideSettings {
+    return {
+        ...settings,
+        publishedPublicArtifactPaths: [],
+        ...DEFAULT_PUBLISH_SETTINGS,
     };
 }
 
@@ -49,6 +67,7 @@ function createControllerHarness(options: {
     const adapterRenamedFiles: Array<{ from: string; to: string }> = [];
     const deletedFiles: string[] = [];
     const adapterRemovedFiles: string[] = [];
+    const createdFolders: string[] = [];
 
     const folderPaths = new Set<string>();
     const filesByPath = new Map<string, TFile>();
@@ -74,6 +93,14 @@ function createControllerHarness(options: {
     const app = {
         vault: {
             getAbstractFileByPath: (path: string) => filesByPath.get(path) ?? (folderPaths.has(path) ? { path } : null),
+            createFolder: async (path: string) => {
+                if (filesByPath.has(path)) {
+                    throw new Error(`File exists at folder path: ${path}`);
+                }
+                folderPaths.add(path);
+                createdFolders.push(path);
+                return { path };
+            },
             adapter: {
                 exists: async (path: string) => filesByPath.has(path) || adapterOnlyFilePaths.has(path),
                 read: async (path: string) => {
@@ -157,6 +184,20 @@ function createControllerHarness(options: {
         saveData: async (data: PersistedPluginData) => {
             savedPayloads.push(data);
         },
+        ensureFolder: async (folderPath: string) => {
+            if (filesByPath.has(folderPath)) {
+                return {
+                    ok: false as const,
+                    notice: `Cannot enable Publishing because ${folderPath} is a file.`,
+                };
+            }
+            if (folderPaths.has(folderPath)) {
+                return { ok: true as const };
+            }
+            folderPaths.add(folderPath);
+            createdFolders.push(folderPath);
+            return { ok: true as const };
+        },
         showNotice: (message: string) => {
             notices.push(message);
         },
@@ -175,8 +216,10 @@ function createControllerHarness(options: {
         adapterRenamedFiles,
         deletedFiles,
         adapterRemovedFiles,
+        createdFolders,
         adapterOnlyFilePaths,
         hasFile: (filePath: string) => filesByPath.has(filePath) || adapterOnlyFilePaths.has(filePath),
+        hasFolder: (folderPath: string) => folderPaths.has(folderPath),
     };
 }
 
@@ -190,14 +233,14 @@ test("loaded settings resolution normalizes persisted values and marks legacy co
         confirmDelete: true,
     }, createSettings());
 
-    assert.deepEqual(resolved.settings, {
+    assert.deepEqual(resolved.settings, withPublishDefaults({
         indexNotePath: "notes/index.md",
         indexHeaderImageUrl: "https://example.com/header.webp",
         indexHeaderImageCaption: "Custom caption",
         agentRuntimeMode: "auto",
         showTodoSidebarTab: true,
         showAgentSidebarTab: true,
-    });
+    }));
     assert.equal(resolved.shouldRewriteLegacySettings, true);
 });
 
@@ -207,14 +250,14 @@ test("loaded settings resolution defaults sidebar tab toggles on and rewrites in
         showAgentSidebarTab: "no" as unknown as boolean,
     }, createSettings());
 
-    assert.deepEqual(resolved.settings, {
+    assert.deepEqual(resolved.settings, withPublishDefaults({
         indexNotePath: "Aside index.md",
         indexHeaderImageUrl: "https://ichef.bbci.co.uk/images/ic/1920xn/p02vhq1v.jpg.webp",
         indexHeaderImageCaption: "Default caption",
         agentRuntimeMode: "auto",
         showTodoSidebarTab: false,
         showAgentSidebarTab: true,
-    });
+    }));
     assert.equal(resolved.shouldRewriteLegacySettings, true);
 });
 
@@ -314,14 +357,14 @@ test("index note settings controller rewrites legacy settings", async () => {
 
     await harness.controller.loadSettings();
 
-    assert.deepEqual(harness.getSettings(), {
+    assert.deepEqual(harness.getSettings(), withPublishDefaults({
         indexNotePath: "docs/index.md",
         indexHeaderImageUrl: "https://example.com/header.webp",
         indexHeaderImageCaption: "Header",
         agentRuntimeMode: "auto",
         showTodoSidebarTab: true,
         showAgentSidebarTab: true,
-    });
+    }));
     assert.equal(harness.savedPayloads.length, 1);
     assert.equal("preferredAgentTarget" in harness.savedPayloads[0], false);
     assert.equal("confirmDelete" in harness.savedPayloads[0], false);
@@ -334,14 +377,14 @@ test("loaded settings resolution drops legacy remote runtime settings", () => {
         remoteRuntimeBaseUrl: " https://remote.example.com/api/ ",
     }, createSettings());
 
-    assert.deepEqual(resolved.settings, {
+    assert.deepEqual(resolved.settings, withPublishDefaults({
         indexNotePath: "Aside index.md",
         indexHeaderImageUrl: "https://ichef.bbci.co.uk/images/ic/1920xn/p02vhq1v.jpg.webp",
         indexHeaderImageCaption: "Default caption",
         agentRuntimeMode: "auto",
         showTodoSidebarTab: true,
         showAgentSidebarTab: true,
-    });
+    }));
     assert.equal(resolved.shouldRewriteLegacySettings, true);
 });
 
@@ -350,23 +393,23 @@ test("index note settings controller saves local runtime setting without aggrega
 
     await harness.controller.setAgentRuntimeMode("local");
 
-    assert.deepEqual(harness.getSettings(), {
+    assert.deepEqual(harness.getSettings(), withPublishDefaults({
         indexNotePath: "Aside index.md",
         indexHeaderImageUrl: "https://example.com/default.webp",
         indexHeaderImageCaption: "Default caption",
         agentRuntimeMode: "local",
         showTodoSidebarTab: true,
         showAgentSidebarTab: true,
-    });
+    }));
     assert.equal(harness.getRefreshAggregateNoteCount(), 0);
-    assert.deepEqual(harness.savedPayloads.at(-1), {
+    assert.deepEqual(harness.savedPayloads.at(-1), withPublishDefaults({
         indexNotePath: "Aside index.md",
         indexHeaderImageUrl: "https://example.com/default.webp",
         indexHeaderImageCaption: "Default caption",
         agentRuntimeMode: "local",
         showTodoSidebarTab: true,
         showAgentSidebarTab: true,
-    });
+    }));
 });
 
 test("index note settings controller saves sidebar tab toggles and refreshes open sidebars", async () => {
@@ -378,23 +421,117 @@ test("index note settings controller saves sidebar tab toggles and refreshes ope
     await harness.controller.setShowTodoSidebarTab(false);
     await harness.controller.setShowAgentSidebarTab(false);
 
-    assert.deepEqual(harness.getSettings(), {
+    assert.deepEqual(harness.getSettings(), withPublishDefaults({
         indexNotePath: "Aside index.md",
         indexHeaderImageUrl: "https://example.com/default.webp",
         indexHeaderImageCaption: "Default caption",
         agentRuntimeMode: "auto",
         showTodoSidebarTab: false,
         showAgentSidebarTab: false,
-    });
+    }));
     assert.deepEqual(harness.refreshedTargets, ["docs/source.md", "docs/source.md"]);
-    assert.deepEqual(harness.savedPayloads.at(-1), {
+    assert.deepEqual(harness.savedPayloads.at(-1), withPublishDefaults({
         indexNotePath: "Aside index.md",
         indexHeaderImageUrl: "https://example.com/default.webp",
         indexHeaderImageCaption: "Default caption",
         agentRuntimeMode: "auto",
         showTodoSidebarTab: false,
         showAgentSidebarTab: false,
+    }));
+});
+
+test("loaded settings resolution normalizes publish settings and rewrites changed values", () => {
+    const resolved = resolveLoadedSettings({
+        publishEnabled: true,
+        publishPagesProjectName: " Publish-Site ",
+        publishBaseUrl: " https://lean-startup.pages.dev/ ",
+        publishAllowedRoot: " share ",
+        publishWranglerCommand: " wrangler ",
+    } as PersistedPluginData, createSettings());
+
+    assert.equal(resolved.settings.publishPagesProjectName, "lean-startup");
+    assert.equal(resolved.settings.publishBaseUrl, "https://lean-startup.pages.dev");
+    assert.equal(resolved.settings.publishAllowedRoot, "public/");
+    assert.equal(resolved.settings.publishEnabled, true);
+    assert.equal("publishWranglerCommand" in resolved.settings, false);
+    assert.equal(resolved.shouldRewriteLegacySettings, true);
+});
+
+test("loaded settings resolution defaults publishing off and public root for new settings", () => {
+    const resolved = resolveLoadedSettings({}, createSettings());
+
+    assert.equal(resolved.settings.publishEnabled, false);
+    assert.equal(resolved.settings.publishAllowedRoot, "public/");
+});
+
+test("index note settings controller saves publish settings without aggregate refreshes", async () => {
+    const harness = createControllerHarness();
+
+    await harness.controller.setPublishBaseUrl(" https://lean-startup.pages.dev/ ");
+    await harness.controller.setPublishAllowedRoot(" share ");
+
+    assert.equal(harness.getSettings().publishPagesProjectName, "lean-startup");
+    assert.equal(harness.getSettings().publishBaseUrl, "https://lean-startup.pages.dev");
+    assert.equal(harness.getSettings().publishAllowedRoot, "public/");
+    assert.equal(harness.getSettings().publishEnabled, false);
+    assert.equal("publishWranglerCommand" in harness.getSettings(), false);
+    assert.equal(harness.getRefreshAggregateNoteCount(), 0);
+    assert.deepEqual(harness.savedPayloads.at(-1), createSettings({
+        publishPagesProjectName: "lean-startup",
+        publishBaseUrl: "https://lean-startup.pages.dev",
+        publishAllowedRoot: "public/",
+    }));
+});
+
+test("index note settings controller moves generated pages.dev URL when project name changes", async () => {
+    const harness = createControllerHarness({
+        settings: createSettings({
+            publishPagesProjectName: "old-project",
+            publishBaseUrl: "https://old-project.pages.dev",
+        }),
     });
+
+    await harness.controller.setPublishPagesProjectName("new-project");
+
+    assert.equal(harness.getSettings().publishPagesProjectName, "new-project");
+    assert.equal(harness.getSettings().publishBaseUrl, "https://new-project.pages.dev");
+});
+
+test("index note settings controller keeps custom publish URL when project name changes", async () => {
+    const harness = createControllerHarness({
+        settings: createSettings({
+            publishPagesProjectName: "old-project",
+            publishBaseUrl: "https://publish.example.com",
+        }),
+    });
+
+    await harness.controller.setPublishPagesProjectName("new-project");
+
+    assert.equal(harness.getSettings().publishPagesProjectName, "new-project");
+    assert.equal(harness.getSettings().publishBaseUrl, "https://publish.example.com");
+});
+
+test("index note settings controller creates public folder when publishing is enabled", async () => {
+    const harness = createControllerHarness();
+
+    await harness.controller.setPublishEnabled(true);
+
+    assert.equal(harness.getSettings().publishEnabled, true);
+    assert.deepEqual(harness.createdFolders, ["public"]);
+    assert.equal(harness.hasFolder("public"), true);
+    assert.equal(harness.savedPayloads.at(-1)?.publishEnabled, true);
+});
+
+test("index note settings controller preserves existing public folder when publishing is enabled", async () => {
+    const harness = createControllerHarness({
+        files: ["public/example.md"],
+    });
+
+    await harness.controller.setPublishEnabled(true);
+
+    assert.equal(harness.getSettings().publishEnabled, true);
+    assert.deepEqual(harness.createdFolders, []);
+    assert.equal(harness.hasFolder("public"), true);
 });
 
 test("index note settings controller renames the index note and retargets sidebar and draft hosts", async () => {

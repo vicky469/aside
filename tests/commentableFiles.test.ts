@@ -3,6 +3,7 @@ import test from "node:test";
 import { ALL_COMMENTS_NOTE_PATH } from "../src/core/derived/allCommentsNote";
 import {
     isMarkdownCommentablePath,
+    isHtmlPageNotePath,
     isPageNoteCapablePath,
     isPdfPageNotePath,
     isSidebarSupportedPath,
@@ -21,14 +22,20 @@ test("commentable file helpers distinguish markdown and index files", () => {
     assert.equal(isPdfPageNotePath("docs/paper.pdf"), true);
     assert.equal(isPdfPageNotePath("docs/report.docx"), false);
 
+    assert.equal(isHtmlPageNotePath("share/page.html"), true);
+    assert.equal(isHtmlPageNotePath("share/page.htm"), true);
+    assert.equal(isHtmlPageNotePath("docs/report.docx"), false);
+
     assert.equal(isPageNoteCapablePath("notes/tmp.md"), true);
     assert.equal(isPageNoteCapablePath("docs/paper.pdf"), true);
+    assert.equal(isPageNoteCapablePath("share/page.html"), true);
     assert.equal(isPageNoteCapablePath(ALL_COMMENTS_NOTE_PATH), false);
     assert.equal(isPageNoteCapablePath("Aside custom.md", "Aside custom.md"), false);
     assert.equal(isPageNoteCapablePath("docs/report.docx"), false);
 
     assert.equal(isSidebarSupportedPath("notes/tmp.md"), true);
     assert.equal(isSidebarSupportedPath("docs/paper.pdf"), true);
+    assert.equal(isSidebarSupportedPath("share/page.html"), true);
     assert.equal(isSidebarSupportedPath(ALL_COMMENTS_NOTE_PATH), true);
     assert.equal(isSidebarSupportedPath("Aside custom.md", "Aside custom.md"), true);
     assert.equal(isSidebarSupportedPath("docs/report.docx"), false);

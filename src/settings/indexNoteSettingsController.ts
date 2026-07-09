@@ -4,6 +4,13 @@ import {
     type AgentRuntimeModePreference,
 } from "../core/agents/agentRuntimePreferences";
 import {
+    derivePublishBaseUrlFromProjectName,
+    isDefaultPagesPublishBaseUrl,
+    normalizePublishProjectName,
+    normalizePublishSettings,
+    type PublishSettings,
+} from "../core/publish/publishSettings";
+import {
     isAllCommentsNotePath,
     normalizeAllCommentsNoteImageCaption,
     normalizeAllCommentsNoteImageUrl,
@@ -35,6 +42,7 @@ export interface IndexNoteSettingsHost {
     refreshAggregateNoteNow(): Promise<void>;
     loadData(): Promise<PersistedPluginData | null>;
     saveData(data: PersistedPluginData): Promise<void>;
+    ensureFolder(folderPath: string): Promise<{ ok: true } | { ok: false; notice: string }>;
     showNotice(message: string): void;
 }
 
@@ -212,6 +220,45 @@ export class IndexNoteSettingsController {
         await this.host.updateSidebarViews(this.host.getSidebarTargetFile());
     }
 
+    public async setPublishPagesProjectName(projectName: string): Promise<void> {
+        const settings = this.host.getSettings();
+        const normalizedProjectName = normalizePublishProjectName(projectName);
+        const patch: Partial<PublishSettings> = {
+            publishPagesProjectName: projectName,
+        };
+        if (normalizedProjectName && isDefaultPagesPublishBaseUrl(settings.publishBaseUrl)) {
+            patch.publishBaseUrl = derivePublishBaseUrlFromProjectName(normalizedProjectName);
+        }
+
+        await this.setPublishSettings(patch);
+    }
+
+    public async setPublishEnabled(enabled: boolean): Promise<void> {
+        if (enabled) {
+            const folderResult = await this.host.ensureFolder("public");
+            if (!folderResult.ok) {
+                this.host.showNotice(folderResult.notice);
+                return;
+            }
+        }
+
+        await this.setPublishSettings({
+            publishEnabled: enabled,
+        });
+    }
+
+    public async setPublishBaseUrl(baseUrl: string): Promise<void> {
+        await this.setPublishSettings({
+            publishBaseUrl: baseUrl,
+        });
+    }
+
+    public async setPublishAllowedRoot(allowedRoot: string): Promise<void> {
+        await this.setPublishSettings({
+            publishAllowedRoot: allowedRoot,
+        });
+    }
+
     public readPersistedPluginData(): PersistedPluginData {
         return {
             ...this.persistedPluginData,
@@ -226,10 +273,32 @@ export class IndexNoteSettingsController {
         delete persistedData.enableDebugMode;
         delete persistedData.preferredAgentTarget;
         delete persistedData.remoteRuntimeBaseUrl;
+        delete (persistedData as Record<string, unknown>).publishWranglerCommand;
         this.persistedPluginData = {
             ...persistedData,
         };
         await this.host.saveData(this.persistedPluginData);
+    }
+
+    private async setPublishSettings(patch: Partial<PublishSettings>): Promise<void> {
+        const settings = this.host.getSettings();
+        const nextPublishSettings = normalizePublishSettings({
+            ...settings,
+            ...patch,
+        });
+        const nextSettings = {
+            ...settings,
+            ...nextPublishSettings,
+        };
+        const changed = (Object.keys(nextPublishSettings) as Array<keyof PublishSettings>).some((key) =>
+            settings[key] !== nextSettings[key]
+        );
+        if (!changed) {
+            return;
+        }
+
+        this.host.setSettings(nextSettings);
+        await this.saveSettings();
     }
 
 }

@@ -180,6 +180,21 @@ export class CommentManager {
             .filter((thread): thread is CommentThread => thread !== null);
     }
 
+    getThreadsForFiles(filePaths: readonly string[], options: CommentQueryOptions = {}): CommentThread[] {
+        const seenThreadIds = new Set<string>();
+        const threads: CommentThread[] = [];
+        for (const filePath of filePaths) {
+            for (const thread of this.getThreadsForFile(filePath, options)) {
+                if (seenThreadIds.has(thread.id)) {
+                    continue;
+                }
+                seenThreadIds.add(thread.id);
+                threads.push(thread);
+            }
+        }
+        return threads;
+    }
+
     getThreadById(id: string): CommentThread | undefined {
         this.purgeExpiredDeletedComments();
         const thread = this.findThreadById(id);

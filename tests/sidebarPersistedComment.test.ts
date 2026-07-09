@@ -18,6 +18,7 @@ import {
     getAgentRunStatusPresentation,
     formatAgentRunMetadataFrontmatter,
     formatAgentRunVisibleMetadataLabels,
+    getSidebarCommentRegenerateAction,
     renderPersistedCommentCard,
     resolveSidebarCommentAuthor,
     shouldShowRetryActionForSidebarComment,

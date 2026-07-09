@@ -10,6 +10,7 @@ import {
     extractCodexProgressTextDeltaFromJsonEvent,
     buildSideNotePrompt,
     createWorkspaceWriteSandboxPolicy,
+    extractCodexErrorTextFromJsonEvent,
     extractCodexProgressTextFromJsonEvent,
     extractCodexRunMetadataFromThreadItem,
     extractCodexTextDeltaFromJsonEvent,
@@ -563,6 +564,34 @@ test("extractCodexProgressTextDeltaFromJsonEvent preserves chunk spacing for buf
             params: {
                 explanation: "ignore",
             },
+        }),
+        null,
+    );
+});
+
+test("extractCodexErrorTextFromJsonEvent reads structured Codex failure messages", () => {
+    assert.equal(
+        extractCodexErrorTextFromJsonEvent({
+            type: "error",
+            message: "Authentication failed. Run codex login.",
+        }),
+        "Authentication failed. Run codex login.",
+    );
+    assert.equal(
+        extractCodexErrorTextFromJsonEvent({
+            method: "turn/error",
+            params: {
+                error: {
+                    message: "Network is unavailable.",
+                },
+            },
+        }),
+        "Network is unavailable.",
+    );
+    assert.equal(
+        extractCodexErrorTextFromJsonEvent({
+            msg: "agent_message_content_delta",
+            delta: "normal reply",
         }),
         null,
     );

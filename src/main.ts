@@ -1,4 +1,4 @@
-import { addIcon, WorkspaceLeaf, TFile, Notice, Plugin, normalizePath, MarkdownView, FileSystemAdapter, FileView, Platform, type Editor } from "obsidian";
+import { addIcon, WorkspaceLeaf, TFile, Notice, Plugin, normalizePath, MarkdownView, FileSystemAdapter, FileView, Platform, type Editor, type View } from "obsidian";
 import { Comment, CommentManager, CommentThread, type ReorderPlacement } from "./commentManager";
 import { CommentEntryController } from "./comments/commentEntryController";
 import {
@@ -43,6 +43,35 @@ import {
     resolveAgentRuntimeSelection as resolveAgentRuntimeSelectionPlan,
     type AgentRuntimeSelection,
 } from "./agents/agentRuntimeSelection";
+import {
+    PublicHtmlPublishController,
+    type PublicHtmlPublishActionState,
+    type PublicHtmlPublishSnapshotFile,
+    type PublicHtmlDeploySnapshotResult,
+} from "./publish/publicHtmlPublishController";
+import {
+    runWranglerPagesDeploy,
+    type WranglerRuntimeModules,
+} from "./publish/wranglerPagesPublisher";
+import {
+	normalizeVaultRelativePublishPath,
+} from "./core/publish/publishPath";
+import {
+	normalizePublishAllowedRoot,
+	normalizePublishProjectName,
+	derivePublishBaseUrlFromProjectName,
+} from "./core/publish/publishSettings";
+import {
+	removePublishedPublicArtifactPath,
+	removePublishedPublicArtifactPathsInFolder,
+	renamePublishedPublicArtifactPath as renamePublishedPublicArtifactPathInList,
+} from "./core/publish/publishedPublicArtifacts";
+import {
+    resolvePublicHtmlPairContext,
+} from "./core/publish/publishPair";
+import type {
+    PublicHtmlPairContext,
+} from "./core/publish/publishPair";
 import type { AgentRunRecord, AgentRunStreamState } from "./core/agents/agentRuns";
 import {
     type AgentRuntimeModePreference,
@@ -74,12 +103,33 @@ import {
 } from "./ui/asideIcon";
 import SupportLogInspectorModal from "./ui/modals/SupportLogInspectorModal";
 import AsideView from "./ui/views/AsideView";
+import PublicHtmlView from "./ui/views/PublicHtmlView";
+import {
+    PublicFilePublishActionController,
+    type PublicFilePublishActionView,
+} from "./ui/views/publicFilePublishActions";
 import { shouldShowTransientNotice } from "./ui/notices/noticePolicy";
 import {
     AsideLogService,
     type AsideLogLevel,
 } from "./logs/logService";
 import bundledAsideSkillContent from "../skills/aside/SKILL.md";
+
+interface PublishRuntimeModules extends WranglerRuntimeModules {
+    fsPromises: {
+        mkdtemp(prefix: string): Promise<string>;
+        mkdir(path: string, options: { recursive?: boolean }): Promise<void>;
+        writeFile(path: string, contents: string | Uint8Array, encoding?: "utf8"): Promise<void>;
+        rm(path: string, options: { recursive?: boolean; force?: boolean }): Promise<void>;
+    };
+    os: {
+        tmpdir(): string;
+    };
+    path: {
+        dirname(path: string): string;
+        join(...paths: string[]): string;
+    };
+}
 
 const SIDE_NOTE_SYNC_EVENT_MIGRATION_VERSION = 2;
 const SOURCE_IDENTITY_MIGRATION_VERSION = 1;
@@ -106,6 +156,27 @@ function getParentPath(filePath: string): string {
     }
 
     return normalized.slice(0, slashIndex);
+}
+
+function getAsidePublishHtmlFromMetadata(frontmatter: unknown): string | null {
+    if (!isRecord(frontmatter)) {
+        return null;
+    }
+    const asidePublish = frontmatter.asidePublish;
+    if (!isRecord(asidePublish)) {
+        return null;
+    }
+    return typeof asidePublish.html === "string" && asidePublish.html.trim()
+        ? asidePublish.html.trim()
+        : null;
+}
+
+function isMarkdownPublishPath(path: string): boolean {
+    return /\.md$/iu.test(path);
+}
+
+function isHtmlPublishPath(path: string): boolean {
+    return /\.html?$/iu.test(path);
 }
 
 function getSafeLocalStorage(): Storage | null {
@@ -139,6 +210,30 @@ function getNodeRequire(): ((moduleName: string) => unknown) | null {
     return typeof electronRequire === "function"
         ? electronRequire
         : null;
+}
+
+function openExternalUrl(url: string): void {
+    const electronRequire = getNodeRequire();
+    if (electronRequire) {
+        try {
+            const electronModule = electronRequire("electron") as {
+                shell?: {
+                    openExternal?: (targetUrl: string) => Promise<void> | void;
+                };
+            };
+            const shell = electronModule.shell;
+            if (typeof shell?.openExternal === "function") {
+                void Promise.resolve(shell.openExternal(url)).catch(() => {
+                    window.open(url, "_blank", "noopener");
+                });
+                return;
+            }
+        } catch {
+            // Fall back to the browser opener below.
+        }
+    }
+
+    window.open(url, "_blank", "noopener");
 }
 
 function getProcessEnv(): Record<string, string | undefined> {
@@ -251,7 +346,7 @@ export default class Aside extends Plugin {
             this.showNotice(message, "draft", "draft.notice");
         },
         now: () => Date.now(),
-        handleSavedUserEntry: (event: SavedUserEntryEvent): Promise<void> => this.commentAgentController.handleSavedUserEntry(event),
+        handleSavedUserEntry: (event: SavedUserEntryEvent): Promise<void> => this.handleSavedUserEntry(event),
         log: (level, area, event, payload) => this.logEvent(level, area, event, payload),
     });
     private readonly derivedCommentMetadataManager = new DerivedCommentMetadataManager(this.app);
@@ -322,6 +417,7 @@ export default class Aside extends Plugin {
         refreshAggregateNoteNow: () => this.refreshAggregateNoteNow(),
         loadData: () => this.loadCurrentData(),
         saveData: (data) => this.saveData(data),
+        ensureFolder: (folderPath) => this.ensureVaultFolder(folderPath),
         showNotice: (message) => {
             this.showNotice(message, "index", "index.notice");
         },
@@ -373,6 +469,48 @@ export default class Aside extends Plugin {
         },
         log: (level, area, event, payload) => this.logEvent(level, area, event, payload),
     }, this.agentRunStore);
+    private readonly publicHtmlPublishController = new PublicHtmlPublishController({
+        getSettings: () => this.settings,
+        getVaultConfigDir: () => this.app.vault.configDir,
+        listMarkdownFiles: (rootPath) => Promise.resolve(
+            this.app.vault.getMarkdownFiles()
+                .map((file) => file.path)
+                .filter((path) => path.startsWith(rootPath)),
+        ),
+        fileExists: (filePath) => Promise.resolve(this.getVaultFileByPath(filePath) !== null),
+        readVaultFile: async (filePath) => {
+            const file = this.getVaultFileByPath(filePath);
+            if (!file) {
+                throw new Error(`Missing vault file: ${filePath}`);
+            }
+            return this.app.vault.cachedRead(file);
+        },
+        readVaultBinaryFile: async (filePath) => {
+            const file = this.getVaultFileByPath(filePath);
+            if (!file) {
+                throw new Error(`Missing vault file: ${filePath}`);
+            }
+            return this.app.vault.readBinary(file);
+        },
+        writeVaultFile: async (filePath, contents) => {
+            const file = this.getVaultFileByPath(filePath);
+            if (!file) {
+                throw new Error(`Missing vault file: ${filePath}`);
+            }
+            await this.app.vault.modify(file, contents);
+        },
+        getPublishedArtifactPaths: () => this.settings.publishedPublicArtifactPaths,
+        setPublishedArtifactPaths: (paths) => this.setPublishedPublicArtifactPaths(paths),
+        deploySnapshot: (files) => this.publishSnapshotArtifacts(files),
+    });
+    private readonly publicFilePublishActionController = new PublicFilePublishActionController({
+        getAllowedRoot: () => this.settings.publishAllowedRoot,
+        getPublishActionStates: (file) => this.publicHtmlPublishController.getFileActionStates(file.path),
+        runPublishAction: (file, actionKind) => this.runPublicHtmlPublishAction(file, actionKind),
+        showNotice: (message) => {
+            this.showNotice(message, "publish", "publish.notice");
+        },
+    });
     private readonly pluginLifecycleController = new PluginLifecycleController({
         app: this.app,
         getCommentManager: () => this.commentManager,
@@ -382,6 +520,11 @@ export default class Aside extends Plugin {
         deleteStoredComments: (filePath) => this.commentPersistenceController.deleteStoredComments(filePath),
         deleteStoredCommentsInFolder: (folderPath) =>
             this.commentPersistenceController.deleteStoredCommentsInFolder(folderPath),
+        renamePublishedPublicArtifactPath: (previousFilePath, nextFilePath) =>
+            this.renamePublishedPublicArtifactPath(previousFilePath, nextFilePath),
+        deletePublishedPublicArtifactPath: (filePath) => this.deletePublishedPublicArtifactPath(filePath),
+        deletePublishedPublicArtifactPathsInFolder: (folderPath) =>
+            this.deletePublishedPublicArtifactPathsInFolder(folderPath),
         clearParsedNoteCache: (filePath) => this.clearParsedNoteCache(filePath),
         clearDerivedCommentLinksForFile: (filePath) => this.derivedCommentMetadataManager.clearDerivedCommentLinksForFile(filePath),
         isCommentableFile: (file): file is TFile => file instanceof TFile && this.isCommentableFile(file),
@@ -413,13 +556,13 @@ export default class Aside extends Plugin {
         manifestId: this.manifest.id,
         iconId: ASIDE_ICON_ID,
         registerView: (viewType, creator) => {
-            this.registerView(viewType, (leaf) => creator(leaf) as AsideView);
+            this.registerView(viewType, (leaf) => creator(leaf) as View);
+        },
+        registerExtensions: (extensions, viewType) => {
+            this.registerExtensions(extensions, viewType);
         },
         registerObsidianProtocolHandler: (action, handler) => {
             this.registerObsidianProtocolHandler(action, handler);
-        },
-        removeCommand: (commandId) => {
-            this.removeCommand(commandId);
         },
         addCommand: (command) => {
             this.addCommand(command);
@@ -431,13 +574,14 @@ export default class Aside extends Plugin {
             this.addRibbonIcon(icon, title, callback);
         },
         createSidebarView: (leaf) => new AsideView(leaf as WorkspaceLeaf, this),
+        createPublicHtmlView: (leaf) => new PublicHtmlView(leaf as WorkspaceLeaf, {
+            getResourcePath: (file) => this.app.vault.getResourcePath(file),
+        }),
         startDraftFromEditorSelection: (editor, file) =>
             this.commentEntryController.startDraftFromEditorSelection(editor as unknown as Editor, file),
         getEditorSelectionAction: (editor, file) =>
             this.commentEntryController.getEditorSelectionAction(editor as unknown as Editor, file),
-        highlightCommentById: (filePath, commentId) => this.highlightCommentById(filePath, commentId),
         openCommentById: (filePath, commentId) => this.openCommentById(filePath, commentId),
-        openAsideView: () => this.activateView(),
         openIndexNote: () => this.openIndexNote(),
     });
     private readonly workspaceContextController = new WorkspaceContextController({
@@ -451,6 +595,7 @@ export default class Aside extends Plugin {
         isAllCommentsNotePath: (path) => this.isAllCommentsNotePath(path),
         isMarkdownCommentableFile: (file): file is TFile => isMarkdownCommentableFile(file, this.getAllCommentsNotePath()),
         isSidebarSupportedFile: (file): file is TFile => isSidebarSupportedFile(file, this.getAllCommentsNotePath()),
+        getPublicMarkdownPropertiesHiddenRoot: () => this.settings.publishAllowedRoot,
         syncSidebarFile: (file) => this.workspaceViewController.syncSidebarFile(file),
         updateSidebarViews: (file, options) => this.updateSidebarViews(file, options),
         refreshEditorDecorations: () => this.refreshEditorDecorations(),
@@ -464,13 +609,26 @@ export default class Aside extends Plugin {
         handleLayoutReady: () => this.pluginLifecycleController.handleLayoutReady(),
         handleFileOpen: (file) => {
             this.workspaceContextController.handleFileOpen(file);
+            this.syncPublicFilePublishActions();
         },
         handleActiveLeafChange: (leaf) => {
             this.workspaceContextController.handleActiveLeafChange(leaf);
+            this.syncPublicFilePublishActions();
         },
-        handleFileRename: (file, oldPath) => this.pluginLifecycleController.handleFileRename(file, oldPath),
-        handleFileDelete: (file) => this.pluginLifecycleController.handleFileDelete(file),
-        handleFileModify: (file) => this.pluginLifecycleController.handleFileModify(file),
+        handleFileRename: async (file, oldPath) => {
+            await this.pluginLifecycleController.handleFileRename(file, oldPath);
+            this.syncIndexNoteViewClasses();
+            this.syncPublicFilePublishActions();
+        },
+        handleFileDelete: async (file) => {
+            await this.pluginLifecycleController.handleFileDelete(file);
+            this.syncIndexNoteViewClasses();
+            this.syncPublicFilePublishActions();
+        },
+        handleFileModify: async (file) => {
+            await this.pluginLifecycleController.handleFileModify(file);
+            this.syncPublicFilePublishActions();
+        },
         handleEditorChange: (filePath) => {
             this.pluginLifecycleController.handleEditorChange(filePath);
         },
@@ -538,6 +696,7 @@ export default class Aside extends Plugin {
         const activeFile = this.app.workspace.getActiveFile();
         this.workspaceContextController.initializeActiveFiles(activeFile);
         await this.pluginEventRouter.register();
+        this.syncPublicFilePublishActions();
         this.addSettingTab(new AsideSetting(this.app, this));
         void this.runStartupPersistenceMaintenance();
     }
@@ -549,6 +708,7 @@ export default class Aside extends Plugin {
         this.commentAgentController.dispose();
         this.commentPersistenceController.dispose();
         this.pluginLifecycleController.handleUnload();
+        this.publicFilePublishActionController.clear();
         this.derivedCommentMetadataManager.restoreMetadataCacheAugmentation();
         this.derivedCommentMetadataManager.clearAllDerivedCommentLinks();
         void this.logService?.flush();
@@ -621,6 +781,240 @@ export default class Aside extends Plugin {
 
     public async setShowAgentSidebarTab(visible: boolean): Promise<void> {
         await this.indexNoteSettingsController.setShowAgentSidebarTab(visible);
+    }
+
+    public async setPublishEnabled(enabled: boolean): Promise<void> {
+		if (enabled) {
+			const configuredProjectName = normalizePublishProjectName(this.settings.publishPagesProjectName);
+			const nextProjectName = configuredProjectName || normalizePublishProjectName(this.app.vault.getName());
+			if (nextProjectName && this.settings.publishPagesProjectName !== nextProjectName) {
+				await this.setPublishPagesProjectName(nextProjectName);
+			}
+
+			if (!this.settings.publishBaseUrl) {
+				await this.setPublishBaseUrl(derivePublishBaseUrlFromProjectName(
+					nextProjectName,
+				));
+			}
+		}
+        await this.indexNoteSettingsController.setPublishEnabled(enabled);
+        this.syncPublicFilePublishActions();
+    }
+
+    public async setPublishPagesProjectName(projectName: string): Promise<void> {
+        await this.indexNoteSettingsController.setPublishPagesProjectName(projectName);
+    }
+
+    public async setPublishBaseUrl(baseUrl: string): Promise<void> {
+        await this.indexNoteSettingsController.setPublishBaseUrl(baseUrl);
+        this.syncPublicFilePublishActions();
+    }
+
+    public async setPublishAllowedRoot(allowedRoot: string): Promise<void> {
+        await this.indexNoteSettingsController.setPublishAllowedRoot(allowedRoot);
+        this.syncIndexNoteViewClasses();
+        this.syncPublicFilePublishActions();
+    }
+
+    private async storeResolvedPublishPagesProjectName(projectName: string): Promise<void> {
+        const normalizedProjectName = normalizePublishProjectName(projectName);
+        if (!normalizedProjectName || this.settings.publishPagesProjectName === normalizedProjectName) {
+            return;
+        }
+
+        await this.setPublishPagesProjectName(normalizedProjectName);
+    }
+
+    private async setPublishedPublicArtifactPaths(paths: string[]): Promise<void> {
+        this.settings = {
+            ...this.settings,
+            publishedPublicArtifactPaths: [...paths],
+        };
+        await this.saveSettings();
+        this.syncPublicFilePublishActions();
+    }
+
+    private arePublishedPublicArtifactPathsEqual(nextPaths: string[]): boolean {
+        const currentPaths = this.settings.publishedPublicArtifactPaths;
+        return currentPaths.length === nextPaths.length
+            && currentPaths.every((path, index) => path === nextPaths[index]);
+    }
+
+    private async updatePublishedPublicArtifactPaths(nextPaths: string[]): Promise<void> {
+        if (this.arePublishedPublicArtifactPathsEqual(nextPaths)) {
+            return;
+        }
+
+        await this.setPublishedPublicArtifactPaths(nextPaths);
+    }
+
+    private async renamePublishedPublicArtifactPath(previousFilePath: string, nextFilePath: string): Promise<void> {
+        await this.updatePublishedPublicArtifactPaths(renamePublishedPublicArtifactPathInList(
+            this.settings.publishedPublicArtifactPaths,
+            previousFilePath,
+            nextFilePath,
+            this.settings.publishAllowedRoot,
+        ));
+    }
+
+    private async deletePublishedPublicArtifactPath(filePath: string): Promise<void> {
+        await this.updatePublishedPublicArtifactPaths(removePublishedPublicArtifactPath(
+            this.settings.publishedPublicArtifactPaths,
+            filePath,
+        ));
+    }
+
+    private async deletePublishedPublicArtifactPathsInFolder(folderPath: string): Promise<void> {
+        await this.updatePublishedPublicArtifactPaths(removePublishedPublicArtifactPathsInFolder(
+            this.settings.publishedPublicArtifactPaths,
+            folderPath,
+        ));
+    }
+
+    private isPublicFilePublishActionView(value: unknown): value is PublicFilePublishActionView {
+        if (!value || typeof value !== "object") {
+            return false;
+        }
+        const candidate = value as {
+            file?: unknown;
+            addAction?: unknown;
+        };
+        return (candidate.file === null || candidate.file instanceof TFile)
+            && typeof candidate.addAction === "function";
+    }
+
+    private syncPublicFilePublishActions(): void {
+        const views: PublicFilePublishActionView[] = [];
+        this.app.workspace.iterateAllLeaves((leaf) => {
+            if (this.isPublicFilePublishActionView(leaf.view)) {
+                views.push(leaf.view);
+            }
+        });
+        void this.publicFilePublishActionController.refreshViews(views);
+    }
+
+    private getPublicHtmlPairContext(filePath: string): PublicHtmlPairContext | null {
+        const normalizedPathResult = normalizeVaultRelativePublishPath(filePath);
+        if (!normalizedPathResult.ok) {
+            return null;
+        }
+        const normalizedPath = normalizedPathResult.path;
+        const allowedRoot = normalizePublishAllowedRoot(this.settings.publishAllowedRoot);
+        if (!normalizedPath.startsWith(allowedRoot)) {
+            return null;
+        }
+
+        if (isMarkdownPublishPath(normalizedPath)) {
+            const file = this.getVaultFileByPath(normalizedPath);
+            const htmlPath = file
+                ? getAsidePublishHtmlFromMetadata(this.app.metadataCache.getFileCache(file)?.frontmatter)
+                : null;
+            const normalizedHtmlPath = htmlPath ? normalizeVaultRelativePublishPath(htmlPath) : null;
+            if (normalizedHtmlPath?.ok && normalizedHtmlPath.path.startsWith(allowedRoot) && isHtmlPublishPath(normalizedHtmlPath.path)) {
+                return {
+                    sourcePath: normalizedPath,
+                    htmlPath: normalizedHtmlPath.path,
+                    displayPath: normalizedHtmlPath.path,
+                    paths: [normalizedPath, normalizedHtmlPath.path],
+                };
+            }
+        }
+
+        if (isHtmlPublishPath(normalizedPath)) {
+            for (const markdownFile of this.app.vault.getMarkdownFiles()) {
+                if (!markdownFile.path.startsWith(allowedRoot)) {
+                    continue;
+                }
+                const htmlPath = getAsidePublishHtmlFromMetadata(
+                    this.app.metadataCache.getFileCache(markdownFile)?.frontmatter,
+                );
+                const normalizedHtmlPath = htmlPath ? normalizeVaultRelativePublishPath(htmlPath) : null;
+                if (normalizedHtmlPath?.ok && normalizedHtmlPath.path === normalizedPath) {
+                    return {
+                        sourcePath: markdownFile.path,
+                        htmlPath: normalizedPath,
+                        displayPath: normalizedPath,
+                        paths: [markdownFile.path, normalizedPath],
+                    };
+                }
+            }
+        }
+
+        return resolvePublicHtmlPairContext({
+            filePath,
+            allowedRoot,
+        });
+    }
+
+    private async runPublicHtmlPublishAction(
+        file: TFile,
+        actionKind: PublicHtmlPublishActionState["kind"],
+    ): Promise<void> {
+        if (actionKind === "disabled") {
+            return;
+        }
+
+        const actionStates = await this.publicHtmlPublishController.getFileActionStates(file.path);
+        const actionState = actionStates.find((state) => state.kind === actionKind) ?? actionStates[0];
+        if (!actionState) {
+            this.showNotice("Unable to inspect publish state.", "publish", "publish.html.action.missing", {
+                vaultRelativePath: file.path,
+            });
+            return;
+        }
+        if (actionState.disabled) {
+            this.showNotice(actionState.notice, "publish", "publish.html.action.disabled", {
+                vaultRelativePath: file.path,
+            });
+            return;
+        }
+
+        if (actionKind === "open-published") {
+            if (!actionState.url) {
+                this.showNotice("Published link is unavailable. Publish this file first.", "publish", "publish.html.open.missing-url", {
+                    vaultRelativePath: file.path,
+                });
+                return;
+            }
+            openExternalUrl(actionState.url);
+            this.showNotice("Opened published link.", "publish", "publish.html.opened", {
+                vaultRelativePath: file.path,
+                url: actionState.url,
+            });
+            return;
+        }
+
+        const result = actionKind === "unpublish"
+            ? await this.publicHtmlPublishController.unpublishFile(file.path)
+            : actionKind === "update-publish"
+                ? await this.publicHtmlPublishController.updatePublishedFile(file.path)
+                : await this.publicHtmlPublishController.publishFile(file.path);
+        if (!result.ok) {
+            this.showNotice(result.notice, "publish", "publish.html.action.failed", {
+                vaultRelativePath: file.path,
+            });
+            return;
+        }
+
+        const actionLabel = actionKind === "unpublish"
+            ? "Unpublished"
+            : actionKind === "update-publish"
+                ? "Updated"
+                : "Published";
+        this.showNotice(
+            `${actionLabel}: ${result.url}`,
+            "publish",
+            actionKind === "unpublish"
+                ? "publish.html.unpublished"
+                : actionKind === "update-publish"
+                    ? "publish.html.updated"
+                    : "publish.html.published",
+            {
+                vaultRelativePath: file.path,
+                url: result.url,
+            },
+        );
+        this.syncPublicFilePublishActions();
     }
 
     public getAgentRuns(): AgentRunRecord[] {
@@ -913,6 +1307,24 @@ export default class Aside extends Plugin {
         }
     }
 
+    private getPublishRuntimeModules(): PublishRuntimeModules | null {
+        const nodeRequire = getNodeRequire();
+        if (!nodeRequire || !(this.app.vault.adapter instanceof FileSystemAdapter)) {
+            return null;
+        }
+
+        try {
+            return {
+                childProcess: nodeRequire("node:child_process") as PublishRuntimeModules["childProcess"],
+                fsPromises: nodeRequire("node:fs/promises") as PublishRuntimeModules["fsPromises"],
+                os: nodeRequire("node:os") as PublishRuntimeModules["os"],
+                path: nodeRequire("node:path") as PublishRuntimeModules["path"],
+            };
+        } catch {
+            return null;
+        }
+    }
+
     private async syncInstalledSidenoteSkill(): Promise<void> {
         if (this.runtime !== "release" || !(this.app.vault.adapter instanceof FileSystemAdapter)) {
             return;
@@ -972,6 +1384,134 @@ export default class Aside extends Plugin {
                 "startup",
                 "startup.codex-skill.warn",
             );
+        }
+    }
+
+    private async ensureVaultFolder(folderPath: string): Promise<{ ok: true } | { ok: false; notice: string }> {
+        const existing = this.app.vault.getAbstractFileByPath(folderPath);
+        if (existing) {
+            if (existing instanceof TFile) {
+                return {
+                    ok: false,
+                    notice: `Cannot enable Publishing because ${folderPath} is a file.`,
+                };
+            }
+            return { ok: true };
+        }
+
+        try {
+            await this.app.vault.createFolder(folderPath);
+            return { ok: true };
+        } catch (error) {
+            const message = error instanceof Error && error.message.trim()
+                ? error.message.trim()
+                : `Unable to create folder: ${folderPath}`;
+            return {
+                ok: false,
+                notice: `Unable to create ${folderPath}: ${message}`,
+            };
+        }
+    }
+
+    private getVaultFileByPath(filePath: string): TFile | null {
+        const abstractFile = this.app.vault.getAbstractFileByPath(normalizePath(filePath));
+        return abstractFile instanceof TFile ? abstractFile : null;
+    }
+
+    private async handleSavedUserEntry(event: SavedUserEntryEvent): Promise<void> {
+        await this.commentAgentController.handleSavedUserEntry(event);
+    }
+
+    private async publishSnapshotArtifacts(files: PublicHtmlPublishSnapshotFile[]): Promise<PublicHtmlDeploySnapshotResult> {
+        const modules = this.getPublishRuntimeModules();
+        const vaultRootPath = this.getVaultRootPath();
+        if (!modules || !vaultRootPath) {
+            return {
+                ok: false,
+                notice: "Publishing requires desktop Obsidian with a filesystem-backed vault.",
+            };
+        }
+
+        const stagedFiles: PublicHtmlPublishSnapshotFile[] = [];
+        for (const file of files) {
+            const normalizedPath = normalizeVaultRelativePublishPath(file.vaultRelativePath);
+            if (!normalizedPath.ok) {
+                return {
+                    ok: false,
+                    notice: "Selected publish path must stay inside the current vault.",
+                };
+            }
+            stagedFiles.push({
+                vaultRelativePath: normalizedPath.path,
+                contents: file.contents,
+            });
+        }
+
+        let stagingDirPath: string | null = null;
+        try {
+            stagingDirPath = await modules.fsPromises.mkdtemp(
+                modules.path.join(modules.os.tmpdir(), "aside-public-publish-"),
+            );
+            for (const file of stagedFiles) {
+                const stagedFilePath = modules.path.join(
+                    stagingDirPath,
+                    ...file.vaultRelativePath.split("/").filter(Boolean),
+                );
+                await modules.fsPromises.mkdir(modules.path.dirname(stagedFilePath), { recursive: true });
+                if (typeof file.contents === "string") {
+                    await modules.fsPromises.writeFile(stagedFilePath, file.contents, "utf8");
+                } else {
+                    await modules.fsPromises.writeFile(stagedFilePath, new Uint8Array(file.contents));
+                }
+            }
+
+            const deployResult = await runWranglerPagesDeploy(modules, {
+                stagingDirPath,
+                projectName: this.settings.publishPagesProjectName,
+                publishBaseUrl: this.settings.publishBaseUrl,
+                cwd: vaultRootPath,
+                env: getProcessEnv(),
+            });
+            await this.storeResolvedPublishPagesProjectName(deployResult.projectName);
+            if (!deployResult.ok) {
+                void this.logEvent("warn", "publish", "publish.public-html.wrangler.failed", {
+                    fileCount: stagedFiles.length,
+                    vaultRelativePaths: stagedFiles.map((file) => file.vaultRelativePath),
+                    notice: deployResult.notice,
+                });
+                return {
+                    ok: false,
+                    notice: deployResult.notice,
+                };
+            }
+
+            return { ok: true };
+        } catch (error) {
+            const message = error instanceof Error && error.message.trim()
+                ? error.message.trim()
+                : "Unable to stage or deploy the publish snapshot.";
+            void this.logEvent("error", "publish", "publish.public-html.runtime.error", {
+                fileCount: stagedFiles.length,
+                vaultRelativePaths: stagedFiles.map((file) => file.vaultRelativePath),
+                error: message,
+            });
+            return {
+                ok: false,
+                notice: message,
+            };
+        } finally {
+            if (stagingDirPath) {
+                try {
+                    await modules.fsPromises.rm(stagingDirPath, { recursive: true, force: true });
+                } catch (error) {
+                    this.warn(
+                        "Failed to remove Aside public publish staging directory.",
+                        error,
+                        "publish",
+                        "publish.public-html.cleanup.warn",
+                    );
+                }
+            }
         }
     }
 
@@ -1189,7 +1729,26 @@ export default class Aside extends Plugin {
     }
 
     async loadCommentsForFile(file: TFile | null): Promise<Comment[]> {
-        return this.commentPersistenceController.loadCommentsForFile(file);
+        if (!file) {
+            return [];
+        }
+
+        const pairContext = this.getPublicHtmlPairContext(file.path);
+        if (!pairContext) {
+            return this.commentPersistenceController.loadCommentsForFile(file);
+        }
+
+        const comments = await this.commentPersistenceController.loadCommentsForFile(file);
+        for (const pairedPath of pairContext.paths) {
+            if (pairedPath === file.path) {
+                continue;
+            }
+            const pairedFile = this.getVaultFileByPath(pairedPath);
+            if (pairedFile && this.isPageNoteCapableFile(pairedFile)) {
+                await this.commentPersistenceController.loadCommentsForFile(pairedFile);
+            }
+        }
+        return comments;
     }
 
     public async ensureIndexedCommentsLoaded(): Promise<void> {
@@ -1284,11 +1843,6 @@ export default class Aside extends Plugin {
         this.commentSessionController.clearRevealedCommentSelection();
     }
 
-    private async highlightCommentById(filePath: string | null, commentId: string) {
-        await this.ensureCommentSelectionVisible(commentId, filePath);
-        await this.commentNavigationController.highlightCommentById(filePath, commentId);
-    }
-
     public async openCommentById(filePath: string | null, commentId: string) {
         await this.ensureCommentSelectionVisible(commentId, filePath);
         await this.commentNavigationController.openCommentById(filePath, commentId);
@@ -1319,7 +1873,10 @@ export default class Aside extends Plugin {
     }
 
     public getThreadsForFile(filePath: string, options: { includeDeleted?: boolean } = {}): CommentThread[] {
-        return this.commentManager.getThreadsForFile(filePath, options);
+        const pairContext = this.getPublicHtmlPairContext(filePath);
+        return pairContext
+            ? this.commentManager.getThreadsForFiles(pairContext.paths, options)
+            : this.commentManager.getThreadsForFile(filePath, options);
     }
 
     public getCommentById(commentId: string): Comment | null {

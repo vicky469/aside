@@ -61,8 +61,8 @@ function createMenuHarness() {
 
 function createHarness(options: { selectionAction?: "add-comment" | "orphan-anchor" } = {}) {
     const registerViewCalls: Array<{ viewType: string; creator: (leaf: unknown) => unknown }> = [];
+    const registerExtensionsCalls: Array<{ extensions: string[]; viewType: string }> = [];
     const protocolHandlers = new Map<string, (params: Record<string, unknown>) => void>();
-    const removedCommandIds: string[] = [];
     const commands: Array<{
         id: string;
         name: string;
@@ -73,11 +73,10 @@ function createHarness(options: { selectionAction?: "add-comment" | "orphan-anch
     let editorMenuHandler: ((menu: EditorMenuLike, editor: { somethingSelected(): boolean }, view: { file: TFile | null }) => void) | null = null;
     const ribbonActions: Array<{ icon: string; title: string; callback: () => void }> = [];
     const createdSidebarLeaves: unknown[] = [];
+    const createdPublicHtmlLeaves: unknown[] = [];
     const draftCalls: Array<{ selected: boolean; filePath: string | null }> = [];
     const selectionActionCalls: Array<{ selected: boolean; filePath: string | null }> = [];
-    const highlightedCommentTargets: Array<{ filePath: string | null; commentId: string }> = [];
     const openedCommentTargets: Array<{ filePath: string | null; commentId: string }> = [];
-    let openAsideViewCount = 0;
     let openIndexNoteCount = 0;
 
     const controller = new PluginRegistrationController({
@@ -86,11 +85,11 @@ function createHarness(options: { selectionAction?: "add-comment" | "orphan-anch
         registerView: (viewType, creator) => {
             registerViewCalls.push({ viewType, creator });
         },
+        registerExtensions: (extensions, viewType) => {
+            registerExtensionsCalls.push({ extensions, viewType });
+        },
         registerObsidianProtocolHandler: (action, handler) => {
             protocolHandlers.set(action, handler);
-        },
-        removeCommand: (commandId) => {
-            removedCommandIds.push(commandId);
         },
         addCommand: (command) => {
             commands.push(command);
@@ -105,6 +104,10 @@ function createHarness(options: { selectionAction?: "add-comment" | "orphan-anch
             createdSidebarLeaves.push(leaf);
             return { leaf };
         },
+        createPublicHtmlView: (leaf) => {
+            createdPublicHtmlLeaves.push(leaf);
+            return { leaf, publicHtml: true };
+        },
         startDraftFromEditorSelection: async (editor, file) => {
             draftCalls.push({
                 selected: editor.somethingSelected(),
@@ -118,14 +121,8 @@ function createHarness(options: { selectionAction?: "add-comment" | "orphan-anch
             });
             return options.selectionAction ?? "add-comment";
         },
-        highlightCommentById: async (filePath, commentId) => {
-            highlightedCommentTargets.push({ filePath, commentId });
-        },
         openCommentById: async (filePath, commentId) => {
             openedCommentTargets.push({ filePath, commentId });
-        },
-        openAsideView: async () => {
-            openAsideViewCount += 1;
         },
         openIndexNote: async () => {
             openIndexNoteCount += 1;
@@ -135,40 +132,45 @@ function createHarness(options: { selectionAction?: "add-comment" | "orphan-anch
     return {
         controller,
         registerViewCalls,
+        registerExtensionsCalls,
         protocolHandlers,
-        removedCommandIds,
         commands,
         getEditorMenuHandler: () => editorMenuHandler,
         ribbonActions,
         createdSidebarLeaves,
+        createdPublicHtmlLeaves,
         draftCalls,
         selectionActionCalls,
-        highlightedCommentTargets,
         openedCommentTargets,
-        getOpenAsideViewCount: () => openAsideViewCount,
         getOpenIndexNoteCount: () => openIndexNoteCount,
     };
 }
 
-test("plugin registration controller registers the view, protocol handler, command, and ribbon action", async () => {
+test("plugin registration controller registers views, protocol handler, selection command, and ribbon action", async () => {
     const harness = createHarness();
     const editorFile = createFile("docs/file.md");
 
     harness.controller.register();
 
-    assert.deepEqual(harness.registerViewCalls.map((call) => call.viewType), ["aside-view"]);
+    assert.deepEqual(harness.registerViewCalls.map((call) => call.viewType), [
+        "aside-view",
+        "aside-public-html-view",
+    ]);
     assert.equal(harness.registerViewCalls[0].creator({ id: "leaf-1" }) instanceof Object, true);
     assert.deepEqual(harness.createdSidebarLeaves, [{ id: "leaf-1" }]);
+    assert.equal(harness.registerViewCalls[1].creator({ id: "leaf-2" }) instanceof Object, true);
+    assert.deepEqual(harness.createdPublicHtmlLeaves, [{ id: "leaf-2" }]);
+    assert.deepEqual(harness.registerExtensionsCalls, [{
+        extensions: ["html", "htm"],
+        viewType: "aside-public-html-view",
+    }]);
     assert.deepEqual(Array.from(harness.protocolHandlers.keys()), ["aside-comment"]);
-    assert.deepEqual(harness.removedCommandIds, ["aside:activate-view"]);
-    assert.deepEqual(harness.commands.map((command) => command.id), ["activate-view", "add-comment-to-selection"]);
-    assert.deepEqual(harness.commands.map((command) => command.name), ["Open sidebar", "Add comment to selection"]);
+    assert.deepEqual(harness.commands.map((command) => command.id), ["add-comment-to-selection"]);
+    assert.deepEqual(harness.commands.map((command) => command.name), ["Add comment to selection"]);
     assert.deepEqual(harness.ribbonActions.map((action) => action.title), ["Open Aside"]);
 
     await harness.commands[0].callback?.();
-    assert.equal(harness.getOpenAsideViewCount(), 1);
-
-    await harness.commands[1].editorCallback?.(
+    await harness.commands[0].editorCallback?.(
         { somethingSelected: () => true },
         { file: editorFile },
     );
@@ -183,7 +185,6 @@ test("plugin registration controller registers the view, protocol handler, comma
         commentId: "comment-1",
     });
     await Promise.resolve();
-    assert.deepEqual(harness.highlightedCommentTargets, []);
     assert.deepEqual(harness.openedCommentTargets, [{
         filePath: "docs/file.md",
         commentId: "comment-1",
@@ -191,7 +192,6 @@ test("plugin registration controller registers the view, protocol handler, comma
 
     harness.ribbonActions[0].callback();
     await Promise.resolve();
-    assert.equal(harness.getOpenAsideViewCount(), 1);
     assert.equal(harness.getOpenIndexNoteCount(), 1);
 });
 

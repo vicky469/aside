@@ -6,6 +6,7 @@ import { shortenBareUrlsInMarkdown } from "../core/text/commentUrls";
 import { MAX_SIDENOTE_WORDS, countCommentWords, exceedsCommentWordLimit } from "../core/text/commentWordLimit";
 import { resolveAnchorRange } from "../core/anchors/anchorResolver";
 import { getVisibleNoteContent } from "../core/storage/noteCommentStorage";
+import { isHtmlPageNotePath } from "../core/rules/commentableFiles";
 import { canSaveDraftWithoutComment, type DraftComment, type DraftSelection } from "../domain/drafts";
 import type { SavedUserEntryEvent } from "../agents/commentAgentController";
 import type { SetDraftCommentOptions } from "./commentSessionController";
@@ -908,10 +909,13 @@ export class CommentMutationController {
     }
 
     private buildPersistOptionsForComment(
-        comment: Pick<Comment | DraftComment, "anchorKind">,
+        comment: Pick<Comment | DraftComment, "anchorKind" | "filePath">,
         options: PersistOptions,
     ): PersistOptions {
-        if (comment.anchorKind !== "page") {
+        if (
+            comment.anchorKind !== "page"
+            && !isHtmlPageNotePath(comment.filePath, this.host.getAllCommentsNotePath())
+        ) {
             return options;
         }
 
@@ -969,13 +973,13 @@ export class CommentMutationController {
             return this.withSelectedTextHash(draftComment, draftComment.selectedText);
         }
 
-        if (options.skipAnchorRevalidation) {
-            return this.withSelectedTextHash(draftComment, draftComment.selectedText);
-        }
-
         if (!this.isValidSourceFileForComment(file, draftComment)) {
             this.host.showNotice("Unable to find the note for this side note.");
             return null;
+        }
+
+        if (options.skipAnchorRevalidation) {
+            return this.withSelectedTextHash(draftComment, draftComment.selectedText);
         }
 
         const currentNoteContent = await this.host.getCurrentNoteContent(file);

@@ -6,6 +6,7 @@ import {
     resolveIndexLeafMode,
     resolveWorkspaceFileTargets,
     resolveWorkspaceLeafTargetInput,
+    shouldHidePublicMarkdownProperties,
     shouldIgnoreWorkspaceFileOpen,
     shouldIgnoreWorkspaceLeafChange,
     type SidebarUnavailableReason,
@@ -19,6 +20,7 @@ export interface WorkspaceContextHost {
     isAllCommentsNotePath(path: string): boolean;
     isMarkdownCommentableFile(file: TFile | null): file is TFile;
     isSidebarSupportedFile(file: TFile | null): file is TFile;
+    getPublicMarkdownPropertiesHiddenRoot(): string;
     syncSidebarFile(file: TFile | null): Promise<void>;
     updateSidebarViews(file: TFile | null, options?: {
         skipDataRefresh?: boolean;
@@ -105,6 +107,14 @@ export class WorkspaceContextController {
             leaf.view.containerEl.classList.toggle(
                 "aside-index-note-view",
                 this.host.isAllCommentsNotePath(leaf.view.file?.path ?? ""),
+            );
+            leaf.view.containerEl.classList.toggle(
+                "aside-public-markdown-hide-properties",
+                shouldHidePublicMarkdownProperties({
+                    filePath: leaf.view.file?.path,
+                    extension: leaf.view.file?.extension,
+                    allowedRoot: this.host.getPublicMarkdownPropertiesHiddenRoot(),
+                }),
             );
         });
     }

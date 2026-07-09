@@ -183,10 +183,10 @@ test("toggleMarkdownBold wraps multiline list selections per content line", () =
 });
 
 test("renderStyledDraftCommentHtml keeps bold markers and highlights mentions", () => {
-    assert.equal(
-        renderStyledDraftCommentHtml("Hi **@blue** and @green"),
-        "Hi **<span class=\"aside-editor-token-bold\"><span class=\"aside-editor-token-mention\">@blue</span></span>** and <span class=\"aside-editor-token-mention\">@green</span>",
-    );
+	assert.equal(
+		renderStyledDraftCommentHtml("Hi **@todo** and @idea"),
+		"Hi **<span class=\"aside-editor-token-bold\"><span class=\"aside-editor-token-mention\">@todo</span></span>** and <span class=\"aside-editor-token-mention\">@idea</span>",
+	);
 });
 
 test("renderStyledDraftCommentHtml does not treat emails as mentions", () => {

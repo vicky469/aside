@@ -2,11 +2,16 @@ import {
     App,
     PluginSettingTab,
     Setting,
+    TextComponent,
 } from "obsidian";
 import {
     normalizeAgentRuntimeModePreference,
     type AgentRuntimeModePreference,
 } from "../../core/agents/agentRuntimePreferences";
+import {
+    DEFAULT_PUBLISH_SETTINGS,
+    type PublishSettings,
+} from "../../core/publish/publishSettings";
 import { getSupportedAgentActors } from "../../core/agents/agentActorRegistry";
 import type { AsideAgentTarget } from "../../core/config/agentTargets";
 import {
@@ -22,13 +27,14 @@ import {
 } from "./agentRuntimeSettings";
 import type Aside from "../../main";
 
-export interface AsideSettings {
+export interface AsideSettings extends PublishSettings {
     indexNotePath: string;
     indexHeaderImageUrl: string;
     indexHeaderImageCaption: string;
     agentRuntimeMode: AgentRuntimeModePreference;
     showTodoSidebarTab: boolean;
     showAgentSidebarTab: boolean;
+    publishedPublicArtifactPaths: string[];
 }
 
 export const DEFAULT_SETTINGS: AsideSettings = {
@@ -38,7 +44,11 @@ export const DEFAULT_SETTINGS: AsideSettings = {
     agentRuntimeMode: normalizeAgentRuntimeModePreference("auto"),
     showTodoSidebarTab: true,
     showAgentSidebarTab: true,
+    publishedPublicArtifactPaths: [],
+    ...DEFAULT_PUBLISH_SETTINGS,
 };
+
+const PUBLISH_PROJECT_NAME_PLACEHOLDER = "publish-site";
 
 export default class AsideSetting extends PluginSettingTab {
     plugin: Aside;
@@ -102,6 +112,55 @@ export default class AsideSetting extends PluginSettingTab {
 
         if (shouldRenderAgentRuntimeStatus(this.plugin.settings)) {
             this.renderAgentRuntimeStatus(agentTabSetting, getAgentTabDescription);
+        }
+
+        new Setting(containerEl)
+            .setName("Publishing (experimental)")
+            .setHeading();
+
+        new Setting(containerEl)
+            .setName("Enable publishing")
+            .setDesc("Show experimental publish controls for supported files in the public folder.")
+            .addToggle((toggle) =>
+                toggle
+                    .setValue(this.plugin.settings.publishEnabled)
+                    .onChange(async (value) => {
+                        await this.plugin.setPublishEnabled(value);
+                        toggle.setValue(this.plugin.settings.publishEnabled);
+                        this.display();
+                    })
+            );
+
+        if (this.plugin.settings.publishEnabled) {
+            let projectNameText: TextComponent | null = null;
+
+            new Setting(containerEl)
+                .setName("Publishing URL")
+                .setDesc("Canonical public address for published files. Prefer your custom domain.")
+                .addText((text) =>
+                    text
+                        .setPlaceholder("https://publish.example.com")
+                        .setValue(this.plugin.settings.publishBaseUrl)
+                        .onChange(async (value) => {
+                            await this.plugin.setPublishBaseUrl(value);
+                            text.setValue(this.plugin.settings.publishBaseUrl);
+                            projectNameText?.setValue(this.plugin.settings.publishPagesProjectName);
+                        })
+                );
+
+            new Setting(containerEl)
+                .setName("Project name")
+                .setDesc("Change to your preferred name or keep the default.")
+                .addText((text) => {
+                    projectNameText = text;
+                    text
+                        .setPlaceholder(PUBLISH_PROJECT_NAME_PLACEHOLDER)
+                        .setValue(this.plugin.settings.publishPagesProjectName)
+                        .onChange(async (value) => {
+                            await this.plugin.setPublishPagesProjectName(value);
+                            text.setValue(this.plugin.settings.publishPagesProjectName);
+                        });
+                });
         }
 
         new Setting(containerEl)

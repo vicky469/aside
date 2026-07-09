@@ -39,13 +39,13 @@ Aside
     </td>
   </tr>
 </table>
-Aside is a tool for thought. It helps you capture, connect, and go deeper into your knowledge. Optionally, AI agents can assist you along the journey.
+Aside is a tool for thought. It helps you capture, connect, and go deeper into your knowledge. Optionally, local AI agents can assist you along the journey.
 For durable storage and sync across devices, use Aside with [Obsidian Sync](https://obsidian.md/sync).
 
 ## Features
 
 - Uses a dedicated sidebar for drafting, editing, resolving, reopening, and deleting comments.
-- Adds page notes to markdown and PDF files. Text-anchored notes stay markdown-only.
+- Adds page notes to markdown, PDF, and HTML files. Text-anchored notes work in markdown files only.
 - Supports Obsidian-style `[[wikilinks]]` inside side comments to link existing notes or create new markdown notes.
 - Type `#` in a side note to search existing tags or add a new one.
 - Type `@todo` to mark follow-ups that appear in the Todo index tab.
@@ -53,30 +53,47 @@ For durable storage and sync across devices, use Aside with [Obsidian Sync](http
 - Keeps resolved comments archived instead of removing them.
 - Generates `Aside index.md` as a vault-wide comment index.
 - Lets the index sidebar switch between the comment list and a thought-trail graph built from side-note wiki links. The graph follows those links across connected markdown files, so it can show multi-step trails instead of only direct one-hop links.
-- Built-in local agent replies on desktop Obsidian. Type `@codex` or `@claude` in a thread, watch the reply stream in the sidebar, and keep the final answer in the same thread.
+- Built-in agent help on desktop Obsidian. Type `@codex` or `@claude` in a thread to get a reply, create anchored side notes, or apply explicit edits to the source note.
+- Experimental Cloudflare Pages publishing for testers on desktop Obsidian.
 
 ## How to Get Started
 
-1. Install Aside
-   settings -> install community plugins -> type aside
-2. Install and sign in to the local agent CLI you want to use on the same machine.
+1. Install Aside from Obsidian's Community plugins browser.
+2. Optional: install and sign in to the local agent CLI you want to use on the same machine.
    - For `@codex`, open Terminal in your vault or project folder and run `codex`.
    - For `@claude`, open Terminal in your vault or project folder and run `claude`.
-3. Install the Aside skill for better assisting agent workflows.
+3. Optional: install the Aside skill for better agent workflows.
    ```
    $skill-installer install https://github.com/vicky469/aside/tree/main/skills/aside
    ```
-   
+4. Experimental, for testers only: configure Cloudflare Pages publishing.
+   - Install Wrangler so `wrangler --version` works in Terminal.
+   - Run `wrangler login` with the Cloudflare account that owns the Pages project.
+   - Create or choose a Cloudflare Pages project.
+   - If you use a custom domain, attach it to the Pages project in Cloudflare first.
+   - In Aside settings, turn on Publishing and set the Publishing URL to your public Pages URL, for example `https://publish.example.com`.
+   - Put publishable Markdown, HTML, and PDF files under `public/`. Aside creates `public/` when Publishing is enabled if it does not already exist.
+   - Do not put Cloudflare API tokens in Aside settings.
 
 ## Workflow
 
-1. Open a markdown or PDF file.
+1. Open a markdown, PDF, or HTML file.
 2. Add a side note.
-   In markdown, select text and right-click `Add comment to selection`, or use the sidebar for a page note. In PDFs, use the sidebar to add a page note for the whole PDF.
+   In markdown, select text and right-click `Add comment to selection`, or use the sidebar for a page note. In HTML and PDF files, use the sidebar to add a page note for the whole file.
 3. Write your comment in the sidebar.
    Type `@todo` for follow-ups, `@codex` if you want Codex to take the task, or `@claude` if you want Claude to take it.
-4. Save the note.
-5. Aside runs the selected local agent and appends the reply back into the same thread.
+
+## Publishing
+
+Publishing is an experimental desktop-only Cloudflare Pages workflow for testers. It is not an out-of-the-box hosted service: Aside does not create Cloudflare projects, attach domains, store tokens, or log Wrangler in for you.
+
+After setup, publish supported files under `public/` from the pane header.
+
+- Markdown files publish as Markdown when you open the `.md` file and click `Publish Markdown`.
+- HTML files publish as HTML when you open the `.html` file and click `Publish HTML`. If the HTML is generated from Markdown, keep the source `.md` file under `public/` too so Aside can track the pair.
+- PDF files publish as PDFs when you open the `.pdf` file and click `Publish PDF`.
+- After publishing, the pane header shows matching `Open published`, `Republish`, and `Unpublish` actions.
+- Aside refuses obvious private or unsafe artifacts, including Obsidian config files, `.env*`, `.npmrc`, private keys, certificates, source maps, source-map references, log files, and unsupported file types.
 
 ## Glossary
 
@@ -87,10 +104,10 @@ For durable storage and sync across devices, use Aside with [Obsidian Sync](http
   One message inside a thread. The first saved entry creates the thread. Later child entries are replies in the same thread.
 
 - **`page note`**  
-  A thread attached to the whole file, not to a text selection. Page notes work on markdown files and PDFs.
+  A thread attached to the whole file, not to a text selection. Page notes work on markdown files, PDFs, and HTML files.
 
 - **`anchored note`**  
-  A thread attached to a specific text selection in a markdown note. PDFs support page notes only.
+  A thread attached to a specific text selection in a markdown note. HTML files and PDFs support page notes only.
 
 - **`orphaned note`**  
   An anchored thread whose original text can no longer be matched in the file. The thread still exists; its anchor is just currently missing.
@@ -111,6 +128,12 @@ For durable storage and sync across devices, use Aside with [Obsidian Sync](http
 | Save draft | Click `Save`. |
 | Insert a newline | Press `Enter`. |
 | Mark a todo | Type `@todo` in the note. |
+| Publish public Markdown | Put the `.md` file under `public/`, open it, then click `Publish Markdown` in the pane header. |
+| Publish public HTML | Put the `.html` file under `public/`, open it, then click `Publish HTML` in the pane header. If it is generated from Markdown, keep the source `.md` under `public/` too. |
+| Publish a public PDF | Put the `.pdf` file under `public/`, open it, then click `Publish PDF` in the pane header. |
+| Republish public content | Open the published file under `public/`, then click the matching `Republish Markdown`, `Republish HTML`, or `Republish PDF` action. |
+| Unpublish public content | Open the published file under `public/`, then click the matching `Unpublish Markdown`, `Unpublish HTML`, or `Unpublish PDF` action. |
+| Open published content | Open the published file under `public/`, then click the matching `Open published Markdown`, `Open published HTML`, or `Open published PDF` action. |
 | Ask a local agent from a side note | Type `@codex` or `@claude` in the note, then save it. |
 | Link a note | Type `[[` to open note suggestions and insert an Obsidian wikilink. |
 | Add a tag | Type `#` to open tag suggestions and insert a tag. |
@@ -122,11 +145,14 @@ For durable storage and sync across devices, use Aside with [Obsidian Sync](http
 
 - `Index header image URL`
 - `Index header image caption`
+- `Publishing (experimental)`
+- `Enable publishing`
+- `Publishing URL`
+- `Project name`
 
-## Command
+## Commands
 
 - `Aside: Add comment to selection`
-
 
 ## Reporting Bugs
 

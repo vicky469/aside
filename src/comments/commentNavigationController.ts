@@ -16,6 +16,7 @@ import {
 } from "./commentNavigationPlanner";
 import { resolveIndexLeafMode } from "../app/workspaceContextPlanner";
 import type { SidebarUnavailableReason } from "../app/workspaceContextPlanner";
+import { isMarkdownCommentablePath } from "../core/rules/commentableFiles";
 
 export interface SidebarUpdateOptions {
     skipDataRefresh?: boolean;
@@ -380,11 +381,14 @@ export class CommentNavigationController {
 
         this.host.app.workspace.setActiveLeaf(targetLeaf, { focus: true });
 
-        if (!shouldRequireMarkdownViewForCommentReveal(comment)) {
+        if (
+            !shouldRequireMarkdownViewForCommentReveal(comment)
+            || !isMarkdownCommentablePath(file.path, this.host.isAllCommentsNotePath(file.path) ? file.path : undefined)
+        ) {
             void this.host.log?.("info", "navigation", "navigation.reveal.resolved", {
                 commentId: comment.id,
                 filePath: comment.filePath,
-                anchorKind: "page",
+                anchorKind: comment.anchorKind ?? "selection",
             });
             await this.activateViewAndHighlightComment(comment.id);
             return;
@@ -426,21 +430,6 @@ export class CommentNavigationController {
 
         editor.focus();
         await this.activateViewAndHighlightComment(comment.id);
-    }
-
-    public async highlightCommentById(filePath: string | null, commentId: string): Promise<void> {
-        const comment = await this.resolveCommentById(commentId, filePath);
-        if (!comment) {
-            if (filePath && !this.host.getFileByPath(filePath)) {
-                this.host.showNotice("Unable to find that file.");
-                return;
-            }
-
-            this.host.showNotice("Unable to find that side comment.");
-            return;
-        }
-
-        await this.activateViewAndHighlightComment(commentId);
     }
 
     public async openCommentById(filePath: string | null, commentId: string): Promise<void> {

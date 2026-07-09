@@ -9,6 +9,9 @@ export interface PluginLifecycleHost {
     renameStoredComments(previousFilePath: string, nextFilePath: string): Promise<void>;
     deleteStoredComments(filePath: string): Promise<void>;
     deleteStoredCommentsInFolder(folderPath: string): Promise<void>;
+    renamePublishedPublicArtifactPath(previousFilePath: string, nextFilePath: string): Promise<void>;
+    deletePublishedPublicArtifactPath(filePath: string): Promise<void>;
+    deletePublishedPublicArtifactPathsInFolder(folderPath: string): Promise<void>;
     clearParsedNoteCache(filePath: string): void;
     clearDerivedCommentLinksForFile(filePath: string): void;
     isCommentableFile(file: TAbstractFile | null): file is TFile;
@@ -80,7 +83,13 @@ export class PluginLifecycleController {
     }
 
     public async handleFileRename(file: TFile | null, oldPath: string): Promise<void> {
-        if (!file || !this.host.isPageNoteCapableFile(file)) {
+        if (!file) {
+            return;
+        }
+
+        await this.host.renamePublishedPublicArtifactPath(oldPath, file.path);
+
+        if (!this.host.isPageNoteCapableFile(file)) {
             return;
         }
 
@@ -102,6 +111,8 @@ export class PluginLifecycleController {
         }
 
         if (this.isFile(file)) {
+            await this.host.deletePublishedPublicArtifactPath(file.path);
+
             if (!this.host.isPageNoteCapableFile(file)) {
                 return;
             }
@@ -110,6 +121,8 @@ export class PluginLifecycleController {
             this.refreshAfterCommentDelete();
             return;
         }
+
+        await this.host.deletePublishedPublicArtifactPathsInFolder(file.path);
 
         const deletedFiles = this.collectPageNoteCapableFiles(file);
         await this.host.deleteStoredCommentsInFolder(file.path);

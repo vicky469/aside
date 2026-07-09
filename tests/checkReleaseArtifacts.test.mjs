@@ -50,7 +50,7 @@ test("inspectReleaseArtifacts fails when main.js.map exists", () => {
 test("inspectReleaseArtifacts fails on source map markers and local paths", () => {
     withTempDir((tempDir) => {
         writeReleaseFiles(tempDir, {
-            "main.js": "//# sourceMappingURL=main.js.map\nconsole.log('/Users/wenqingli/secret');",
+            "main.js": "//# sourceMappingURL=main.js.map\nconsole.log('/Users/example/secret');",
         });
         const output = inspectReleaseArtifacts(tempDir).join("\n");
         assert.match(output, /sourceMappingURL marker/);

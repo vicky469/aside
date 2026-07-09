@@ -2,6 +2,13 @@ import {
     normalizeAgentRuntimeModePreference,
 } from "../core/agents/agentRuntimePreferences";
 import {
+    DEFAULT_PUBLISH_SETTINGS,
+    normalizePublishSettings,
+} from "../core/publish/publishSettings";
+import {
+    normalizePublishedPublicArtifactPaths,
+} from "../core/publish/publishedPublicArtifacts";
+import {
     isAllCommentsNotePath,
     normalizeAllCommentsNoteImageCaption,
     normalizeAllCommentsNoteImageUrl,
@@ -50,6 +57,13 @@ function normalizeSidebarTabToggle(value: unknown): boolean {
     return typeof value === "boolean" ? value : true;
 }
 
+function shouldRewriteNormalizedPublishSettings(loaded: PersistedPluginData | null, normalized: typeof DEFAULT_PUBLISH_SETTINGS): boolean {
+    const source = loaded ?? {};
+    return (Object.keys(DEFAULT_PUBLISH_SETTINGS) as Array<keyof typeof DEFAULT_PUBLISH_SETTINGS>).some((key) =>
+        hasOwn(source, key) && source[key] !== normalized[key]
+    );
+}
+
 export function resolveLoadedSettings(
     loaded: PersistedPluginData | null,
     defaults: AsideSettings,
@@ -63,6 +77,7 @@ export function resolveLoadedSettings(
     const showAgentSidebarTab = hasAgentSidebarTabSetting
         ? normalizeSidebarTabToggle(loaded?.showAgentSidebarTab)
         : true;
+    const publishSettings = normalizePublishSettings(loaded ?? defaults);
 
     return {
         settings: {
@@ -76,17 +91,23 @@ export function resolveLoadedSettings(
                 : defaults.agentRuntimeMode,
             showTodoSidebarTab,
             showAgentSidebarTab,
+            publishedPublicArtifactPaths: normalizePublishedPublicArtifactPaths(
+                loaded?.publishedPublicArtifactPaths ?? defaults.publishedPublicArtifactPaths,
+            ),
+            ...publishSettings,
         },
         shouldRewriteLegacySettings: hasOwn(loaded ?? {}, "confirmDelete")
             || hasOwn(loaded ?? {}, "preferredAgentTarget")
             || hasOwn(loaded ?? {}, "enableDebugMode")
             || hasOwn(loaded ?? {}, "remoteRuntimeBaseUrl")
+            || hasOwn(loaded ?? {}, "publishWranglerCommand")
             || !hasTodoSidebarTabSetting
             || !hasAgentSidebarTabSetting
             || (hasTodoSidebarTabSetting && typeof loaded?.showTodoSidebarTab !== "boolean")
             || (hasAgentSidebarTabSetting && typeof loaded?.showAgentSidebarTab !== "boolean")
             || (hasOwn(loaded ?? {}, "agentRuntimeMode")
-                && normalizeAgentRuntimeModePreference(loaded?.agentRuntimeMode) !== loaded?.agentRuntimeMode),
+                && normalizeAgentRuntimeModePreference(loaded?.agentRuntimeMode) !== loaded?.agentRuntimeMode)
+            || shouldRewriteNormalizedPublishSettings(loaded, publishSettings),
     };
 }
 

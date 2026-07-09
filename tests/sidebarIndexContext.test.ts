@@ -15,6 +15,7 @@ import {
     resolveWorkspaceTargetInput,
     resolveIndexLeafMode,
     resolveWorkspaceFileTargets,
+    shouldHidePublicMarkdownProperties,
 } from "../src/app/workspaceContextPlanner";
 import { shouldSkipAggregateViewRefresh } from "../src/comments/commentPersistencePlanner";
 import { ALL_COMMENTS_NOTE_PATH } from "../src/core/derived/allCommentsNote";
@@ -212,6 +213,34 @@ test("fixed sidebar target clears when the active file is unsupported", () => {
     });
 
     assert.equal(target, null);
+});
+
+test("public markdown properties are hidden only for markdown files under the publish root", () => {
+    assert.equal(shouldHidePublicMarkdownProperties({
+        filePath: "public/page.md",
+        extension: "md",
+        allowedRoot: "public/",
+    }), true);
+    assert.equal(shouldHidePublicMarkdownProperties({
+        filePath: "public/folder/page.md",
+        extension: "MD",
+        allowedRoot: " public ",
+    }), true);
+    assert.equal(shouldHidePublicMarkdownProperties({
+        filePath: "public/page.html",
+        extension: "html",
+        allowedRoot: "public/",
+    }), false);
+    assert.equal(shouldHidePublicMarkdownProperties({
+        filePath: "publicity/page.md",
+        extension: "md",
+        allowedRoot: "public/",
+    }), false);
+    assert.equal(shouldHidePublicMarkdownProperties({
+        filePath: "docs/page.md",
+        extension: "md",
+        allowedRoot: "public/",
+    }), false);
 });
 
 test("pinned commentable file falls back from an unsupported active file to the sidebar target", () => {

@@ -1,7 +1,9 @@
 import type { Editor, TFile } from "obsidian";
 import type { Comment } from "../commentManager";
 import { getPageCommentLabel } from "../core/anchors/commentAnchors";
-import { isMarkdownCommentableFile } from "../core/rules/commentableFiles";
+import {
+    isMarkdownCommentableFile,
+} from "../core/rules/commentableFiles";
 import type { DraftComment, DraftSelection } from "../domain/drafts";
 import type { SetDraftCommentOptions } from "./commentSessionController";
 import {
@@ -41,6 +43,20 @@ export class CommentEntryController {
     public async startDraftFromEditorSelection(editor: Editor, file: TFile | null): Promise<boolean> {
         const selection = this.readEditorSelection(editor, file);
         if (!selection) {
+            this.host.showNotice("Please select some text to add a comment.");
+            return false;
+        }
+
+        const existingAnchor = this.findMatchingSelectionAnchorForSelection(selection);
+        if (existingAnchor) {
+            return this.host.orphanCommentThreadAnchor(existingAnchor.id);
+        }
+
+        return this.startNewCommentDraft(selection);
+    }
+
+    public async startDraftFromResolvedSelection(selection: DraftSelection | null): Promise<boolean> {
+        if (!selection || selection.selectedText.trim().length === 0) {
             this.host.showNotice("Please select some text to add a comment.");
             return false;
         }
@@ -109,7 +125,7 @@ export class CommentEntryController {
     private async startNewCommentDraft(selection: DraftSelection): Promise<boolean> {
         if (!this.isSourceFileValidForSelection(selection)) {
             if (selection.anchorKind !== "page") {
-                this.host.showNotice("Text-anchored side notes are only supported in markdown files.");
+                this.host.showNotice("Text-anchored side notes are only supported in Markdown files.");
             }
             return false;
         }
@@ -132,11 +148,13 @@ export class CommentEntryController {
         return true;
     }
 
-    private isSourceFileValidForComment(file: TFile | null, comment: Pick<Comment, "anchorKind">): file is TFile {
-        return comment.anchorKind === "page"
-            ? this.host.isPageNoteCapableFile(file)
-            : this.host.isCommentableFile(file);
-    }
+	private isSourceFileValidForComment(file: TFile | null, comment: Pick<Comment, "anchorKind">): file is TFile {
+		if (comment.anchorKind === "page") {
+			return this.host.isPageNoteCapableFile(file);
+		}
+
+		return isMarkdownCommentableFile(file, this.host.getAllCommentsNotePath());
+	}
 
     private isSourceFileValidForSelection(selection: DraftSelection): boolean {
         return selection.anchorKind === "page"

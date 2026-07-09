@@ -21,6 +21,18 @@ test("disabled toolbar icon buttons are visibly unavailable and non-interactive"
     assert.match(disabledRule.groups.body, /pointer-events:\s*none;/);
 });
 
+test("public markdown view hides rendered properties without source-mode hacks", () => {
+    const publicMarkdownPropertiesRule = css.match(
+        /\.aside-public-markdown-hide-properties \.metadata-container,[\s\S]*?\.aside-public-markdown-hide-properties \.markdown-preview-view\.show-properties \.metadata-container\s*\{(?<body>[\s\S]*?)\}/,
+    );
+
+    assert.ok(publicMarkdownPropertiesRule?.groups?.body, "missing public markdown properties rule");
+    assert.match(publicMarkdownPropertiesRule.groups.body, /display:\s*none\s*;/);
+    assert.match(css, /\.aside-public-markdown-hide-properties \.markdown-source-view\.is-live-preview\.show-properties \.metadata-container:not\(\.mod-error\)/);
+    assert.match(css, /\.aside-public-markdown-hide-properties \.markdown-preview-view\.show-properties \.metadata-container/);
+    assert.doesNotMatch(publicMarkdownPropertiesRule.groups.body, /cm-hmd-frontmatter|HyperMD-frontmatter|markdown-source-view/);
+});
+
 test("active sidebar tabs use theme text color instead of hardcoded black", () => {
     const activeRule = css.match(
         /button\.aside-tab-button\.aside-tab-button--active\s*\{(?<body>[\s\S]*?)\}/,

@@ -41,6 +41,7 @@ function createComment(overrides: Partial<Comment> = {}): Comment {
 function createHarness(options: {
     initialComments?: Comment[];
     refreshThrows?: boolean;
+    publishedArtifactPaths?: string[];
 } = {}) {
     const commentManager = new CommentManager(options.initialComments ?? []);
     const aggregateCommentIndex = new AggregateCommentIndex();
@@ -71,6 +72,9 @@ function createHarness(options: {
     const renamedStoredComments: Array<{ previousFilePath: string; nextFilePath: string }> = [];
     const deletedStoredComments: string[] = [];
     const deletedStoredCommentFolders: string[] = [];
+    const renamedPublishedArtifactPaths: Array<{ previousFilePath: string; nextFilePath: string }> = [];
+    const deletedPublishedArtifactPaths: string[] = [];
+    const deletedPublishedArtifactFolders: string[] = [];
 
     const controller = new PluginLifecycleController({
         app: {} as never,
@@ -84,6 +88,15 @@ function createHarness(options: {
         },
         deleteStoredCommentsInFolder: async (folderPath) => {
             deletedStoredCommentFolders.push(folderPath);
+        },
+        renamePublishedPublicArtifactPath: async (previousFilePath, nextFilePath) => {
+            renamedPublishedArtifactPaths.push({ previousFilePath, nextFilePath });
+        },
+        deletePublishedPublicArtifactPath: async (filePath) => {
+            deletedPublishedArtifactPaths.push(filePath);
+        },
+        deletePublishedPublicArtifactPathsInFolder: async (folderPath) => {
+            deletedPublishedArtifactFolders.push(folderPath);
         },
         clearParsedNoteCache: (filePath) => {
             clearedParsedPaths.push(filePath);
@@ -160,6 +173,9 @@ function createHarness(options: {
         renamedStoredComments,
         deletedStoredComments,
         deletedStoredCommentFolders,
+        renamedPublishedArtifactPaths,
+        deletedPublishedArtifactPaths,
+        deletedPublishedArtifactFolders,
     };
 }
 
@@ -227,6 +243,19 @@ test("plugin lifecycle controller keeps renamed PDF page-note files and indexes 
     assert.equal(harness.getScheduleAggregateNoteRefreshCount(), 1);
 });
 
+test("plugin lifecycle controller retargets published standalone artifacts on file rename", async () => {
+    const originalFile = createFile("public/page.html");
+    const renamedFile = createFile("public/renamed.html");
+    const harness = createHarness();
+
+    await harness.controller.handleFileRename(renamedFile, originalFile.path);
+
+    assert.deepEqual(harness.renamedPublishedArtifactPaths, [{
+        previousFilePath: originalFile.path,
+        nextFilePath: renamedFile.path,
+    }]);
+});
+
 test("plugin lifecycle controller clears deleted comment files only when commentable", async () => {
     const deletedFile = createFile("docs/file.md");
     const harness = createHarness({
@@ -280,6 +309,15 @@ test("plugin lifecycle controller clears deleted PDF page-note files", async () 
     assert.equal(harness.getScheduleAggregateNoteRefreshCount(), 0);
 });
 
+test("plugin lifecycle controller prunes published standalone artifacts on file delete", async () => {
+    const deletedFile = createFile("public/page.html");
+    const harness = createHarness();
+
+    await harness.controller.handleFileDelete(deletedFile);
+
+    assert.deepEqual(harness.deletedPublishedArtifactPaths, [deletedFile.path]);
+});
+
 test("plugin lifecycle controller clears cached comments under deleted folders", async () => {
     const harness = createHarness({
         initialComments: [
@@ -320,6 +358,16 @@ test("plugin lifecycle controller clears cached comments under deleted folders",
     assert.equal(harness.getRefreshCommentViewsCount(), 1);
     assert.equal(harness.getRefreshEditorDecorationsCount(), 1);
     assert.equal(harness.getRefreshAggregateNoteNowCount(), 1);
+});
+
+test("plugin lifecycle controller prunes published standalone artifacts under deleted folders", async () => {
+    const harness = createHarness();
+
+    await harness.controller.handleFileDelete(createFolder("public", [
+        createFile("public/page.html"),
+    ]));
+
+    assert.deepEqual(harness.deletedPublishedArtifactFolders, ["public"]);
 });
 
 test("plugin lifecycle controller only forwards markdown modify events", async () => {

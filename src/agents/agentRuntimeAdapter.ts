@@ -365,6 +365,88 @@ function parseJsonLine(line: string): unknown {
     }
 }
 
+function normalizeRuntimeDiagnosticText(value: string): string | null {
+    const normalized = value.replace(/\r\n?/gu, "\n").trim();
+    if (!normalized) {
+        return null;
+    }
+
+    if (normalized.length <= 4000) {
+        return normalized;
+    }
+
+    return `${normalized.slice(0, 3997).trimEnd()}...`;
+}
+
+function pushUniqueDiagnostic(messages: string[], value: string | null): void {
+    if (!value || messages.includes(value)) {
+        return;
+    }
+
+    messages.push(value);
+}
+
+function joinRuntimeDiagnostics(messages: Array<string | null | undefined>): string | null {
+    const uniqueMessages: string[] = [];
+    for (const message of messages) {
+        pushUniqueDiagnostic(uniqueMessages, normalizeRuntimeDiagnosticText(message ?? ""));
+    }
+
+    return uniqueMessages.length ? uniqueMessages.join("\n") : null;
+}
+
+export function extractCodexErrorTextFromJsonEvent(event: unknown): string | null {
+    if (!isRecord(event)) {
+        return null;
+    }
+
+    const eventKey = firstStringAtPaths(event, [
+        ["method"],
+        ["msg"],
+        ["event_type"],
+        ["type"],
+    ]);
+    const status = firstStringAtPaths(event, [
+        ["status"],
+        ["params", "status"],
+        ["payload", "status"],
+        ["result", "status"],
+    ]);
+    const errorValue = getNestedValue(event, ["error"])
+        ?? getNestedValue(event, ["params", "error"])
+        ?? getNestedValue(event, ["payload", "error"])
+        ?? getNestedValue(event, ["result", "error"]);
+    const hasErrorSignal = !!eventKey && /\b(error|failed|failure|fatal|panic|unavailable|denied)\b/iu.test(eventKey)
+        || !!status && /^(error|failed|failure|fatal|unavailable|denied)$/iu.test(status)
+        || (errorValue !== undefined && errorValue !== null && errorValue !== false);
+    if (!hasErrorSignal) {
+        return null;
+    }
+
+    const message = firstStringAtPaths(event, [
+        ["message"],
+        ["error"],
+        ["details"],
+        ["detail"],
+        ["params", "message"],
+        ["params", "error"],
+        ["params", "error", "message"],
+        ["params", "error", "details"],
+        ["params", "error", "detail"],
+        ["payload", "message"],
+        ["payload", "error"],
+        ["payload", "error", "message"],
+        ["payload", "error", "details"],
+        ["payload", "error", "detail"],
+        ["result", "message"],
+        ["result", "error"],
+        ["result", "error", "message"],
+        ["data", "message"],
+    ]) ?? stringifyToolErrorPayload(errorValue);
+
+    return normalizeRuntimeDiagnosticText(message ?? "");
+}
+
 export function extractCodexTextDeltaFromJsonEvent(event: unknown): string | null {
     const eventKey = firstStringAtPaths(event, [
         ["method"],
@@ -1120,6 +1202,8 @@ async function runCodexDirect(
         let stdoutBuffer = "";
         let stderrBuffer = "";
         let streamedText = "";
+        const stdoutDiagnosticLines: string[] = [];
+        const codexErrorMessages: string[] = [];
         const usedSkills = new Map<string, AgentRunSkillMetadata>();
         const usedTools = new Set<string>();
         const usedUrls = new Set<string>();
@@ -1211,6 +1295,8 @@ async function runCodexDirect(
         };
 
         const handleStdoutMessage = (message: unknown) => {
+            pushUniqueDiagnostic(codexErrorMessages, extractCodexErrorTextFromJsonEvent(message));
+
             publishRunMetadata(getNestedValue(message, ["params", "item"]));
             publishRunMetadata(getNestedValue(message, ["item"]));
             publishRunMetadata(getNestedValue(message, ["payload"]));
@@ -1228,17 +1314,19 @@ async function runCodexDirect(
             }
         };
 
-        const flushStdoutBuffer = () => {
-            if (!stdoutBuffer.trim()) {
-                stdoutBuffer = "";
+        const handleStdoutLine = (line: string) => {
+            const parsed = parseJsonLine(line);
+            if (parsed !== null) {
+                handleStdoutMessage(parsed);
                 return;
             }
 
-            const parsed = parseJsonLine(stdoutBuffer);
+            pushUniqueDiagnostic(stdoutDiagnosticLines, normalizeRuntimeDiagnosticText(line));
+        };
+
+        const flushStdoutBuffer = () => {
+            handleStdoutLine(stdoutBuffer);
             stdoutBuffer = "";
-            if (parsed !== null) {
-                handleStdoutMessage(parsed);
-            }
         };
 
         childProcess.stdout?.on("data", (chunk) => {
@@ -1252,10 +1340,7 @@ async function runCodexDirect(
 
                 const line = stdoutBuffer.slice(0, newlineIndex);
                 stdoutBuffer = stdoutBuffer.slice(newlineIndex + 1);
-                const parsed = parseJsonLine(line);
-                if (parsed !== null) {
-                    handleStdoutMessage(parsed);
-                }
+                handleStdoutLine(line);
             }
         });
 
@@ -1287,9 +1372,14 @@ async function runCodexDirect(
                     return;
                 }
 
-                const stderrMessage = stderrBuffer.trim();
+                const stderrMessage = normalizeRuntimeDiagnosticText(stderrBuffer);
+                const diagnosticMessage = joinRuntimeDiagnostics([
+                    stderrMessage,
+                    ...codexErrorMessages,
+                    ...stdoutDiagnosticLines,
+                ]);
                 finalizeError(new Error(
-                    stderrMessage || `spawn codex exec exited with code ${code ?? "null"}${signal ? ` signal ${signal}` : ""}`,
+                    diagnosticMessage || `spawn codex exec exited with code ${code ?? "null"}${signal ? ` signal ${signal}` : ""}`,
                 ));
             })();
         });

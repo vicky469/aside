@@ -9,9 +9,14 @@ export function isPdfPageNotePath(filePath: string, allCommentsNotePath?: string
     return /\.pdf$/i.test(filePath) && !isAllCommentsNotePath(filePath, allCommentsNotePath);
 }
 
+export function isHtmlPageNotePath(filePath: string, allCommentsNotePath?: string): boolean {
+    return /\.html?$/i.test(filePath) && !isAllCommentsNotePath(filePath, allCommentsNotePath);
+}
+
 export function isPageNoteCapablePath(filePath: string, allCommentsNotePath?: string): boolean {
     return isMarkdownCommentablePath(filePath, allCommentsNotePath)
-        || isPdfPageNotePath(filePath, allCommentsNotePath);
+        || isPdfPageNotePath(filePath, allCommentsNotePath)
+        || isHtmlPageNotePath(filePath, allCommentsNotePath);
 }
 
 export function isSidebarSupportedPath(filePath: string, allCommentsNotePath?: string): boolean {

@@ -141,6 +141,10 @@ export interface AgentRunStatusPresentation {
     markerKind: "text" | "spinner";
 }
 
+export type SidebarCommentRegenerateAction =
+    | { kind: "agent-run"; runId: string }
+    | { kind: "agent-prompt" };
+
 export function getAgentRunStatusPresentation(status: AgentRunRecord["status"]): AgentRunStatusPresentation {
     switch (status) {
         case "queued":
@@ -445,16 +449,32 @@ export function getRetryableAgentRunForSidebarComment(
     return getLatestAgentRunForTriggerEntry(threadAgentRuns, commentId);
 }
 
+export function getSidebarCommentRegenerateAction(
+    commentId: string,
+    commentBody: string,
+    threadAgentRuns: readonly AgentRunRecord[],
+): SidebarCommentRegenerateAction | null {
+    const retryableAgentRun = getRetryableAgentRunForSidebarComment(commentId, threadAgentRuns);
+    if (retryableAgentRun) {
+        return {
+            kind: "agent-run",
+            runId: retryableAgentRun.id,
+        };
+    }
+
+    if (parseAgentDirectives(commentBody).target !== null) {
+        return { kind: "agent-prompt" };
+    }
+
+    return null;
+}
+
 export function shouldShowRetryActionForSidebarComment(
     commentId: string,
     commentBody: string,
     threadAgentRuns: readonly AgentRunRecord[],
 ): boolean {
-    if (getRetryableAgentRunForSidebarComment(commentId, threadAgentRuns)) {
-        return true;
-    }
-
-    return parseAgentDirectives(commentBody).target !== null;
+    return getSidebarCommentRegenerateAction(commentId, commentBody, threadAgentRuns) !== null;
 }
 
 export function getInsertableSidebarCommentMarkdown(
@@ -841,7 +861,7 @@ function renderPersistedEntryCard(
 function renderThreadFooterActions(
     commentEl: HTMLDivElement,
     comment: Comment,
-    retryRunId: string | null,
+    regenerateAction: SidebarCommentRegenerateAction | null,
     author: SidebarCommentAuthorPresentation,
     agentRun: AgentRunRecord | null,
     options: {
@@ -940,7 +960,7 @@ function renderThreadFooterActions(
         });
     }
 
-    if (!options.showRetryAction) {
+    if (!options.showRetryAction || !regenerateAction) {
         return;
     }
 
@@ -962,8 +982,8 @@ function renderThreadFooterActions(
             retryButton.disabled = options.disableRetryAction === true;
             return;
         }
-        const started = retryRunId
-            ? await host.retryAgentRun(retryRunId)
+        const started = regenerateAction.kind === "agent-run"
+            ? await host.retryAgentRun(regenerateAction.runId)
             : await host.retryAgentPromptForComment(comment.id, comment.filePath);
         if (!started) {
             retryButton.disabled = options.disableRetryAction === true;
@@ -1078,23 +1098,24 @@ function renderStoredThreadEntry(
         const entryAuthor = resolveSidebarCommentAuthor(entryComment.id, host.threadAgentRuns, host.currentUserLabel);
         const entryAgentRun = getAgentRunByOutputEntryId(host.threadAgentRuns, entryComment.id);
         const entryRetryRun = getRetryableAgentRunForSidebarComment(entryComment.id, host.threadAgentRuns);
+        const entryRegenerateAction = getSidebarCommentRegenerateAction(
+            entryComment.id,
+            entryComment.comment,
+            host.threadAgentRuns,
+        );
         const entryInsertMarkdown = !entryComment.deletedAt && !thread.deletedAt
             ? getInsertableSidebarCommentMarkdown(entryComment.id, entry.body || "", host.threadAgentRuns)
             : null;
         renderThreadFooterActions(
             entryEl,
             entryComment,
-            entryRetryRun?.id ?? null,
+            entryRegenerateAction,
             entryAuthor,
             entryAgentRun,
             {
                 showShareAction: !host.showSourceRedirectAction && !entryComment.deletedAt && !thread.deletedAt,
                 showAddEntryAction: !host.showSourceRedirectAction && !entryComment.deletedAt && !thread.deletedAt,
-                showRetryAction: shouldShowRetryActionForSidebarComment(
-                    entryComment.id,
-                    entryComment.comment,
-                    host.threadAgentRuns,
-                ) && !host.showSourceRedirectAction && !entryComment.deletedAt && !thread.deletedAt,
+                showRetryAction: !!entryRegenerateAction && !host.showSourceRedirectAction && !entryComment.deletedAt && !thread.deletedAt,
                 disableRetryAction: isRetryableAgentRunBusy(entryRetryRun),
                 moveAction: null,
                 insertAction: entryInsertMarkdown && !host.showSourceRedirectAction
@@ -1198,6 +1219,11 @@ export async function renderPersistedCommentCard(
     }
     if (!parentEditDraft) {
         const parentRetryRun = getRetryableAgentRunForSidebarComment(comment.id, host.threadAgentRuns);
+        const parentRegenerateAction = getSidebarCommentRegenerateAction(
+            comment.id,
+            comment.comment,
+            host.threadAgentRuns,
+        );
         const parentInsertMarkdown = !comment.deletedAt && !thread.deletedAt
             ? getInsertableSidebarCommentMarkdown(comment.id, entries[0]?.body || "", host.threadAgentRuns)
             : null;
@@ -1229,14 +1255,10 @@ export async function renderPersistedCommentCard(
         if (presentation.reanchorAction && !comment.deletedAt) {
             renderThreadReanchorAction(commentEl, thread.id, presentation.reanchorAction.label, host);
         }
-        renderThreadFooterActions(commentEl, comment, parentRetryRun?.id ?? null, parentAuthor, null, {
+        renderThreadFooterActions(commentEl, comment, parentRegenerateAction, parentAuthor, null, {
             showShareAction: !host.showSourceRedirectAction && !comment.deletedAt,
             showAddEntryAction: !host.showSourceRedirectAction && !comment.deletedAt,
-            showRetryAction: shouldShowRetryActionForSidebarComment(
-                comment.id,
-                comment.comment,
-                host.threadAgentRuns,
-            ) && !host.showSourceRedirectAction && !comment.deletedAt && !thread.deletedAt,
+            showRetryAction: !!parentRegenerateAction && !host.showSourceRedirectAction && !comment.deletedAt && !thread.deletedAt,
             disableRetryAction: isRetryableAgentRunBusy(parentRetryRun),
             nestedToggleAction: shouldRenderDetailsToggle
                 ? {

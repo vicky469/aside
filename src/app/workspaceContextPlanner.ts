@@ -11,6 +11,37 @@ export type SidebarUnavailableReason = "unsupported-file";
 
 export type WorkspaceLeafFileResolver<T> = (path: string) => T | null;
 
+function normalizeWorkspacePath(value: string): string {
+    return value
+        .trim()
+        .replace(/\\/gu, "/")
+        .replace(/^\/+/gu, "")
+        .replace(/\/+/gu, "/");
+}
+
+function normalizeWorkspaceFolderPath(value: string): string {
+    const normalized = normalizeWorkspacePath(value);
+    return normalized && !normalized.endsWith("/") ? `${normalized}/` : normalized;
+}
+
+export function shouldHidePublicMarkdownProperties(options: {
+    filePath: string | null | undefined;
+    extension: string | null | undefined;
+    allowedRoot: string;
+}): boolean {
+    if ((options.extension ?? "").toLowerCase() !== "md") {
+        return false;
+    }
+
+    const allowedRoot = normalizeWorkspaceFolderPath(options.allowedRoot);
+    if (!allowedRoot) {
+        return false;
+    }
+
+    const filePath = normalizeWorkspacePath(options.filePath ?? "");
+    return filePath.length > allowedRoot.length && filePath.startsWith(allowedRoot);
+}
+
 export function resolveWorkspaceTargetInput<T>(
     eventFile: T | null,
     workspaceActiveFile: T | null,

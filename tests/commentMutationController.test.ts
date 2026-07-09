@@ -145,7 +145,7 @@ function createHost(options: {
             : options.currentNoteContentByPath?.[file.path] ?? "",
         getCurrentSelectionForFile: (file) => options.currentSelectionByPath?.[file.path] ?? null,
         isCommentableFile: (file): file is TFile => !!file && file.extension === "md",
-        isPageNoteCapableFile: (file): file is TFile => !!file && (file.extension === "md" || file.extension === "pdf"),
+        isPageNoteCapableFile: (file): file is TFile => !!file && (file.extension === "md" || file.extension === "pdf" || file.extension === "html"),
         loadCommentsForFile: async (file) => {
             loadedFiles.push(file.path);
         },
@@ -291,6 +291,35 @@ test("comment mutation controller hashes draft selections lazily during save", a
     assert.equal(host.manager.getAllComments().length, 1);
     assert.equal(host.manager.getAllComments()[0].selectedTextHash, "hash:beta");
     assert.deepEqual(host.notices, []);
+});
+
+test("comment mutation controller rejects rendered HTML selection drafts", async () => {
+    const draft = toDraft(createComment({
+        id: "draft-html-1",
+        filePath: "public/page.html",
+        selectedText: "Revenue growth",
+        selectedTextHash: "",
+        startLine: 3,
+        startChar: 5,
+        endLine: 3,
+        endChar: 19,
+        comment: "Important section",
+    }));
+    const host = createHost({
+        draftComment: draft,
+        extraFiles: ["public/page.html"],
+        getCurrentNoteContent: async () => {
+            throw new Error("HTML source should not be read for rejected rendered text anchors.");
+        },
+    });
+
+    await host.controller.saveDraft(draft.id);
+
+    assert.equal(host.manager.getAllComments().length, 0);
+    assert.deepEqual(host.loadedFiles, []);
+    assert.deepEqual(host.persistedFiles, []);
+    assert.equal(host.getDraftComment()?.id, draft.id);
+    assert.deepEqual(host.notices, ["Unable to find the note for this side note."]);
 });
 
 test("comment mutation controller saves a new anchored draft without a comment", async () => {
