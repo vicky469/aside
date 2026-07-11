@@ -9,6 +9,7 @@ import {
     normalizePublishedPublicArtifactPaths,
 } from "../core/publish/publishedPublicArtifacts";
 import {
+    LEGACY_ALL_COMMENTS_NOTE_PATH,
     isAllCommentsNotePath,
     normalizeAllCommentsNoteImageCaption,
     normalizeAllCommentsNoteImageUrl,
@@ -53,6 +54,10 @@ function hasOwn(target: object, key: string): boolean {
     return Boolean(Object.prototype.hasOwnProperty.call(target, key));
 }
 
+export function hasPersistedIndexNotePath(data: PersistedPluginData | null): boolean {
+    return typeof data?.indexNotePath === "string" && data.indexNotePath.trim().length > 0;
+}
+
 function normalizeSidebarTabToggle(value: unknown): boolean {
     return typeof value === "boolean" ? value : true;
 }
@@ -68,7 +73,12 @@ export function resolveLoadedSettings(
     loaded: PersistedPluginData | null,
     defaults: AsideSettings,
 ): LoadedSettingsResolution {
-    const indexNotePath = normalizeAllCommentsNotePath(loaded?.indexNotePath);
+    const hasIndexNotePathSetting = hasPersistedIndexNotePath(loaded);
+    const indexNotePath = normalizeAllCommentsNotePath(hasIndexNotePathSetting
+        ? loaded?.indexNotePath
+        : loaded === null
+            ? defaults.indexNotePath
+            : LEGACY_ALL_COMMENTS_NOTE_PATH);
     const hasTodoSidebarTabSetting = hasOwn(loaded ?? {}, "showTodoSidebarTab");
     const hasAgentSidebarTabSetting = hasOwn(loaded ?? {}, "showAgentSidebarTab");
     const showTodoSidebarTab = hasTodoSidebarTabSetting
@@ -101,6 +111,7 @@ export function resolveLoadedSettings(
             || hasOwn(loaded ?? {}, "enableDebugMode")
             || hasOwn(loaded ?? {}, "remoteRuntimeBaseUrl")
             || hasOwn(loaded ?? {}, "publishWranglerCommand")
+            || (loaded !== null && !hasIndexNotePathSetting)
             || !hasTodoSidebarTabSetting
             || !hasAgentSidebarTabSetting
             || (hasTodoSidebarTabSetting && typeof loaded?.showTodoSidebarTab !== "boolean")

@@ -1,11 +1,10 @@
 import type { Comment, CommentThread } from "../../commentManager";
 import { extractWikiLinks } from "../text/commentMentions";
+import { ALL_COMMENTS_NOTE_PATH } from "./allCommentsNote";
 import {
     buildThoughtTrailLinesFromEdges,
     type ThoughtTrailRenderableEdge,
 } from "./thoughtTrail";
-
-const ALL_COMMENTS_NOTE_PATH = "Aside index.md";
 
 export type ThoughtTrailNoteLinkEdgeSource = "side-note" | "source-markdown";
 

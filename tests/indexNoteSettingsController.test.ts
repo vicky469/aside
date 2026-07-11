@@ -3,6 +3,10 @@ import test from "node:test";
 import type { TFile } from "obsidian";
 import { IndexNoteSettingsController } from "../src/settings/indexNoteSettingsController";
 import {
+    ALL_COMMENTS_NOTE_PATH,
+    LEGACY_ALL_COMMENTS_NOTE_PATH,
+} from "../src/core/derived/allCommentsNote";
+import {
     DEFAULT_PUBLISH_SETTINGS,
 } from "../src/core/publish/publishSettings";
 import {
@@ -23,7 +27,7 @@ function createFile(path: string): TFile {
 
 function createSettings(overrides: Partial<AsideSettings> = {}): AsideSettings {
     return {
-        indexNotePath: overrides.indexNotePath ?? "Aside index.md",
+        indexNotePath: overrides.indexNotePath ?? ALL_COMMENTS_NOTE_PATH,
         indexHeaderImageUrl: overrides.indexHeaderImageUrl ?? "https://example.com/default.webp",
         indexHeaderImageCaption: overrides.indexHeaderImageCaption ?? "Default caption",
         agentRuntimeMode: overrides.agentRuntimeMode ?? "auto",
@@ -36,6 +40,36 @@ function createSettings(overrides: Partial<AsideSettings> = {}): AsideSettings {
         publishAllowedRoot: overrides.publishAllowedRoot ?? DEFAULT_PUBLISH_SETTINGS.publishAllowedRoot,
     };
 }
+
+test("loaded settings resolution uses the current index note path for a new install", () => {
+    const resolved = resolveLoadedSettings(null, createSettings());
+
+    assert.equal(resolved.settings.indexNotePath, ALL_COMMENTS_NOTE_PATH);
+});
+
+test("loaded settings resolution normalizes the configured default for a new install", () => {
+    const resolved = resolveLoadedSettings(null, createSettings({ indexNotePath: " rabbit index " }));
+
+    assert.equal(resolved.settings.indexNotePath, "rabbit index.md");
+});
+
+test("loaded settings resolution keeps old-schema data on the legacy index note path for migration", () => {
+    const resolved = resolveLoadedSettings({}, createSettings());
+
+    assert.equal(resolved.settings.indexNotePath, LEGACY_ALL_COMMENTS_NOTE_PATH);
+    assert.equal(resolved.shouldRewriteLegacySettings, true);
+});
+
+test("loaded settings resolution treats blank-like persisted index note paths as missing", () => {
+    for (const indexNotePath of ["   ", null, undefined]) {
+        const resolved = resolveLoadedSettings({
+            indexNotePath,
+        } as unknown as PersistedPluginData, createSettings());
+
+        assert.equal(resolved.settings.indexNotePath, LEGACY_ALL_COMMENTS_NOTE_PATH);
+        assert.equal(resolved.shouldRewriteLegacySettings, true);
+    }
+});
 
 function withPublishDefaults(
     settings: Omit<AsideSettings, keyof typeof DEFAULT_PUBLISH_SETTINGS | "publishedPublicArtifactPaths">,
@@ -55,6 +89,8 @@ function createControllerHarness(options: {
     activeSidebarFilePath?: string | null;
     draftHostFilePath?: string | null;
     loadedData?: PersistedPluginData | null;
+    renameFileError?: Error;
+    saveDataError?: Error;
 } = {}) {
     let settings = options.settings ?? createSettings();
     let activeSidebarFile = options.activeSidebarFilePath ? createFile(options.activeSidebarFilePath) : null;
@@ -138,6 +174,10 @@ function createControllerHarness(options: {
                 fileContents.delete(file.path);
             },
             renameFile: async (file: TFile, nextPath: string) => {
+                if (options.renameFileError) {
+                    throw options.renameFileError;
+                }
+
                 renamedFiles.push({ from: file.path, to: nextPath });
                 fileContents.set(nextPath, fileContents.get(file.path) ?? "");
                 fileContents.delete(file.path);
@@ -182,6 +222,10 @@ function createControllerHarness(options: {
         },
         loadData: async () => options.loadedData ?? null,
         saveData: async (data: PersistedPluginData) => {
+            if (options.saveDataError) {
+                throw options.saveDataError;
+            }
+
             savedPayloads.push(data);
         },
         ensureFolder: async (folderPath: string) => {
@@ -251,7 +295,7 @@ test("loaded settings resolution defaults sidebar tab toggles on and rewrites in
     }, createSettings());
 
     assert.deepEqual(resolved.settings, withPublishDefaults({
-        indexNotePath: "Aside index.md",
+        indexNotePath: LEGACY_ALL_COMMENTS_NOTE_PATH,
         indexHeaderImageUrl: "https://ichef.bbci.co.uk/images/ic/1920xn/p02vhq1v.jpg.webp",
         indexHeaderImageCaption: "Default caption",
         agentRuntimeMode: "auto",
@@ -263,28 +307,28 @@ test("loaded settings resolution defaults sidebar tab toggles on and rewrites in
 
 test("index note path planner distinguishes noop, missing parent, conflict, and apply cases", () => {
     assert.deepEqual(resolveIndexNotePathChange({
-        nextPathInput: "Aside index.md",
-        currentStoredPath: "Aside index.md",
-        previousPath: "Aside index.md",
+        nextPathInput: ALL_COMMENTS_NOTE_PATH,
+        currentStoredPath: ALL_COMMENTS_NOTE_PATH,
+        previousPath: ALL_COMMENTS_NOTE_PATH,
         parentPath: "",
         parentExists: true,
         conflictingFilePath: null,
-        currentIndexFilePath: "Aside index.md",
+        currentIndexFilePath: ALL_COMMENTS_NOTE_PATH,
         activeSidebarFilePath: null,
         draftHostFilePath: null,
     }), {
         kind: "noop",
-        nextPath: "Aside index.md",
+        nextPath: ALL_COMMENTS_NOTE_PATH,
     });
 
     assert.deepEqual(resolveIndexNotePathChange({
         nextPathInput: "docs/new-index",
-        currentStoredPath: "Aside index.md",
-        previousPath: "Aside index.md",
+        currentStoredPath: ALL_COMMENTS_NOTE_PATH,
+        previousPath: ALL_COMMENTS_NOTE_PATH,
         parentPath: "docs",
         parentExists: false,
         conflictingFilePath: null,
-        currentIndexFilePath: "Aside index.md",
+        currentIndexFilePath: ALL_COMMENTS_NOTE_PATH,
         activeSidebarFilePath: null,
         draftHostFilePath: null,
     }), {
@@ -296,12 +340,12 @@ test("index note path planner distinguishes noop, missing parent, conflict, and 
 
     assert.deepEqual(resolveIndexNotePathChange({
         nextPathInput: "docs/new-index",
-        currentStoredPath: "Aside index.md",
-        previousPath: "Aside index.md",
+        currentStoredPath: ALL_COMMENTS_NOTE_PATH,
+        previousPath: ALL_COMMENTS_NOTE_PATH,
         parentPath: "docs",
         parentExists: true,
         conflictingFilePath: "docs/new-index.md",
-        currentIndexFilePath: "Aside index.md",
+        currentIndexFilePath: ALL_COMMENTS_NOTE_PATH,
         activeSidebarFilePath: null,
         draftHostFilePath: null,
     }), {
@@ -312,14 +356,14 @@ test("index note path planner distinguishes noop, missing parent, conflict, and 
 
     assert.deepEqual(resolveIndexNotePathChange({
         nextPathInput: "docs/new-index",
-        currentStoredPath: "Aside index.md",
-        previousPath: "Aside index.md",
+        currentStoredPath: ALL_COMMENTS_NOTE_PATH,
+        previousPath: ALL_COMMENTS_NOTE_PATH,
         parentPath: "docs",
         parentExists: true,
         conflictingFilePath: null,
-        currentIndexFilePath: "Aside index.md",
-        activeSidebarFilePath: "Aside index.md",
-        draftHostFilePath: "Aside index.md",
+        currentIndexFilePath: ALL_COMMENTS_NOTE_PATH,
+        activeSidebarFilePath: ALL_COMMENTS_NOTE_PATH,
+        draftHostFilePath: ALL_COMMENTS_NOTE_PATH,
     }), {
         kind: "apply",
         nextPath: "docs/new-index.md",
@@ -371,6 +415,152 @@ test("index note settings controller rewrites legacy settings", async () => {
     assert.equal("enableDebugMode" in harness.savedPayloads[0], false);
 });
 
+test("index note settings controller migrates a persisted legacy index note on load", async () => {
+    const harness = createControllerHarness({
+        settings: createSettings({ indexNotePath: LEGACY_ALL_COMMENTS_NOTE_PATH }),
+        loadedData: createSettings({ indexNotePath: LEGACY_ALL_COMMENTS_NOTE_PATH }),
+        files: [LEGACY_ALL_COMMENTS_NOTE_PATH],
+        activeSidebarFilePath: LEGACY_ALL_COMMENTS_NOTE_PATH,
+        draftHostFilePath: LEGACY_ALL_COMMENTS_NOTE_PATH,
+    });
+
+    await harness.controller.loadSettings();
+
+    assert.equal(harness.getSettings().indexNotePath, ALL_COMMENTS_NOTE_PATH);
+    assert.deepEqual(harness.renamedFiles, [{
+        from: LEGACY_ALL_COMMENTS_NOTE_PATH,
+        to: ALL_COMMENTS_NOTE_PATH,
+    }]);
+    assert.equal(harness.savedPayloads.length, 1);
+    assert.equal(harness.savedPayloads[0].indexNotePath, ALL_COMMENTS_NOTE_PATH);
+    assert.equal(harness.getActiveSidebarFile()?.path, ALL_COMMENTS_NOTE_PATH);
+    assert.equal(harness.getDraftHostFilePath(), ALL_COMMENTS_NOTE_PATH);
+    assert.equal(harness.getRefreshAggregateNoteCount(), 1);
+    assert.deepEqual(harness.refreshedTargets, [ALL_COMMENTS_NOTE_PATH]);
+});
+
+test("index note settings controller recovers an unconfigured legacy index note on a new install", async () => {
+    const harness = createControllerHarness({
+        loadedData: null,
+        files: [LEGACY_ALL_COMMENTS_NOTE_PATH],
+    });
+
+    await harness.controller.loadSettings();
+
+    assert.equal(harness.getSettings().indexNotePath, ALL_COMMENTS_NOTE_PATH);
+    assert.deepEqual(harness.renamedFiles, [{
+        from: LEGACY_ALL_COMMENTS_NOTE_PATH,
+        to: ALL_COMMENTS_NOTE_PATH,
+    }]);
+    assert.equal(harness.savedPayloads.length, 1);
+    assert.equal(harness.savedPayloads[0].indexNotePath, ALL_COMMENTS_NOTE_PATH);
+    assert.equal(harness.getRefreshAggregateNoteCount(), 1);
+});
+
+test("index note settings controller recovers legacy notes from blank-like persisted paths", async () => {
+    for (const indexNotePath of ["   ", null, undefined]) {
+        const harness = createControllerHarness({
+            loadedData: {
+                ...createSettings(),
+                indexNotePath,
+            } as unknown as PersistedPluginData,
+            files: [LEGACY_ALL_COMMENTS_NOTE_PATH],
+        });
+
+        await harness.controller.loadSettings();
+
+        assert.equal(harness.getSettings().indexNotePath, ALL_COMMENTS_NOTE_PATH);
+        assert.deepEqual(harness.renamedFiles, [{
+            from: LEGACY_ALL_COMMENTS_NOTE_PATH,
+            to: ALL_COMMENTS_NOTE_PATH,
+        }]);
+        assert.equal(harness.savedPayloads.length, 1);
+        assert.equal(harness.savedPayloads[0].indexNotePath, ALL_COMMENTS_NOTE_PATH);
+    }
+});
+
+test("index note settings controller preserves legacy state when startup migration rename fails", async () => {
+    const harness = createControllerHarness({
+        settings: createSettings({ indexNotePath: LEGACY_ALL_COMMENTS_NOTE_PATH }),
+        loadedData: createSettings({ indexNotePath: LEGACY_ALL_COMMENTS_NOTE_PATH }),
+        files: [LEGACY_ALL_COMMENTS_NOTE_PATH],
+        activeSidebarFilePath: LEGACY_ALL_COMMENTS_NOTE_PATH,
+        draftHostFilePath: LEGACY_ALL_COMMENTS_NOTE_PATH,
+        renameFileError: new Error("rename failed"),
+    });
+
+    await assert.doesNotReject(() => harness.controller.loadSettings());
+
+    assert.equal(harness.getSettings().indexNotePath, LEGACY_ALL_COMMENTS_NOTE_PATH);
+    assert.deepEqual(harness.savedPayloads, []);
+    assert.deepEqual(harness.renamedFiles, []);
+    assert.equal(harness.hasFile(LEGACY_ALL_COMMENTS_NOTE_PATH), true);
+    assert.equal(harness.hasFile(ALL_COMMENTS_NOTE_PATH), false);
+    assert.equal(harness.getActiveSidebarFile()?.path, LEGACY_ALL_COMMENTS_NOTE_PATH);
+    assert.equal(harness.getDraftHostFilePath(), LEGACY_ALL_COMMENTS_NOTE_PATH);
+    assert.deepEqual(harness.notices, [
+        "Unable to rename Aside index.md to 🐰 Aside Index.md.",
+    ]);
+    assert.equal(harness.getRefreshAggregateNoteCount(), 0);
+    assert.deepEqual(harness.refreshedTargets, []);
+});
+
+test("index note settings controller rolls back startup migration when persistence fails", async () => {
+    const harness = createControllerHarness({
+        settings: createSettings({ indexNotePath: LEGACY_ALL_COMMENTS_NOTE_PATH }),
+        loadedData: createSettings({ indexNotePath: LEGACY_ALL_COMMENTS_NOTE_PATH }),
+        files: [LEGACY_ALL_COMMENTS_NOTE_PATH],
+        activeSidebarFilePath: LEGACY_ALL_COMMENTS_NOTE_PATH,
+        draftHostFilePath: LEGACY_ALL_COMMENTS_NOTE_PATH,
+        saveDataError: new Error("save failed"),
+    });
+
+    await assert.doesNotReject(() => harness.controller.loadSettings());
+
+    assert.equal(harness.getSettings().indexNotePath, LEGACY_ALL_COMMENTS_NOTE_PATH);
+    assert.equal(
+        harness.controller.readPersistedPluginData().indexNotePath,
+        LEGACY_ALL_COMMENTS_NOTE_PATH,
+    );
+    assert.equal(harness.hasFile(LEGACY_ALL_COMMENTS_NOTE_PATH), true);
+    assert.equal(harness.hasFile(ALL_COMMENTS_NOTE_PATH), false);
+    assert.deepEqual(harness.renamedFiles, [{
+        from: LEGACY_ALL_COMMENTS_NOTE_PATH,
+        to: ALL_COMMENTS_NOTE_PATH,
+    }, {
+        from: ALL_COMMENTS_NOTE_PATH,
+        to: LEGACY_ALL_COMMENTS_NOTE_PATH,
+    }]);
+    assert.equal(harness.getActiveSidebarFile()?.path, LEGACY_ALL_COMMENTS_NOTE_PATH);
+    assert.equal(harness.getDraftHostFilePath(), LEGACY_ALL_COMMENTS_NOTE_PATH);
+    assert.deepEqual(harness.savedPayloads, []);
+    assert.equal(harness.getRefreshAggregateNoteCount(), 0);
+    assert.deepEqual(harness.refreshedTargets, []);
+    assert.deepEqual(harness.notices, [
+        "Unable to rename Aside index.md to 🐰 Aside Index.md.",
+    ]);
+});
+
+test("index note settings controller keeps the legacy index active when the rabbit path already exists", async () => {
+    const harness = createControllerHarness({
+        settings: createSettings({ indexNotePath: LEGACY_ALL_COMMENTS_NOTE_PATH }),
+        loadedData: createSettings({ indexNotePath: LEGACY_ALL_COMMENTS_NOTE_PATH }),
+        files: [LEGACY_ALL_COMMENTS_NOTE_PATH, ALL_COMMENTS_NOTE_PATH],
+        activeSidebarFilePath: LEGACY_ALL_COMMENTS_NOTE_PATH,
+    });
+
+    await harness.controller.loadSettings();
+
+    assert.equal(harness.getSettings().indexNotePath, LEGACY_ALL_COMMENTS_NOTE_PATH);
+    assert.deepEqual(harness.renamedFiles, []);
+    assert.deepEqual(harness.notices, [
+        "Unable to rename Aside index.md because 🐰 Aside Index.md already exists.",
+    ]);
+    assert.equal(harness.getActiveSidebarFile()?.path, LEGACY_ALL_COMMENTS_NOTE_PATH);
+    assert.equal(harness.savedPayloads.length, 0);
+    assert.equal(harness.getRefreshAggregateNoteCount(), 0);
+});
+
 test("loaded settings resolution drops legacy remote runtime settings", () => {
     const resolved = resolveLoadedSettings({
         agentRuntimeMode: " remote " as unknown as AsideSettings["agentRuntimeMode"],
@@ -378,7 +568,7 @@ test("loaded settings resolution drops legacy remote runtime settings", () => {
     }, createSettings());
 
     assert.deepEqual(resolved.settings, withPublishDefaults({
-        indexNotePath: "Aside index.md",
+        indexNotePath: LEGACY_ALL_COMMENTS_NOTE_PATH,
         indexHeaderImageUrl: "https://ichef.bbci.co.uk/images/ic/1920xn/p02vhq1v.jpg.webp",
         indexHeaderImageCaption: "Default caption",
         agentRuntimeMode: "auto",
@@ -394,7 +584,7 @@ test("index note settings controller saves local runtime setting without aggrega
     await harness.controller.setAgentRuntimeMode("local");
 
     assert.deepEqual(harness.getSettings(), withPublishDefaults({
-        indexNotePath: "Aside index.md",
+        indexNotePath: ALL_COMMENTS_NOTE_PATH,
         indexHeaderImageUrl: "https://example.com/default.webp",
         indexHeaderImageCaption: "Default caption",
         agentRuntimeMode: "local",
@@ -403,7 +593,7 @@ test("index note settings controller saves local runtime setting without aggrega
     }));
     assert.equal(harness.getRefreshAggregateNoteCount(), 0);
     assert.deepEqual(harness.savedPayloads.at(-1), withPublishDefaults({
-        indexNotePath: "Aside index.md",
+        indexNotePath: ALL_COMMENTS_NOTE_PATH,
         indexHeaderImageUrl: "https://example.com/default.webp",
         indexHeaderImageCaption: "Default caption",
         agentRuntimeMode: "local",
@@ -422,7 +612,7 @@ test("index note settings controller saves sidebar tab toggles and refreshes ope
     await harness.controller.setShowAgentSidebarTab(false);
 
     assert.deepEqual(harness.getSettings(), withPublishDefaults({
-        indexNotePath: "Aside index.md",
+        indexNotePath: ALL_COMMENTS_NOTE_PATH,
         indexHeaderImageUrl: "https://example.com/default.webp",
         indexHeaderImageCaption: "Default caption",
         agentRuntimeMode: "auto",
@@ -431,7 +621,7 @@ test("index note settings controller saves sidebar tab toggles and refreshes ope
     }));
     assert.deepEqual(harness.refreshedTargets, ["docs/source.md", "docs/source.md"]);
     assert.deepEqual(harness.savedPayloads.at(-1), withPublishDefaults({
-        indexNotePath: "Aside index.md",
+        indexNotePath: ALL_COMMENTS_NOTE_PATH,
         indexHeaderImageUrl: "https://example.com/default.webp",
         indexHeaderImageCaption: "Default caption",
         agentRuntimeMode: "auto",
@@ -536,17 +726,17 @@ test("index note settings controller preserves existing public folder when publi
 
 test("index note settings controller renames the index note and retargets sidebar and draft hosts", async () => {
     const harness = createControllerHarness({
-        settings: createSettings({ indexNotePath: "Aside index.md" }),
-        files: ["Aside index.md", "docs/source.md"],
-        activeSidebarFilePath: "Aside index.md",
-        draftHostFilePath: "Aside index.md",
+        settings: createSettings(),
+        files: [ALL_COMMENTS_NOTE_PATH, "docs/source.md"],
+        activeSidebarFilePath: ALL_COMMENTS_NOTE_PATH,
+        draftHostFilePath: ALL_COMMENTS_NOTE_PATH,
     });
 
     await harness.controller.setIndexNotePath("docs/renamed-index");
 
     assert.equal(harness.getSettings().indexNotePath, "docs/renamed-index.md");
     assert.deepEqual(harness.renamedFiles, [{
-        from: "Aside index.md",
+        from: ALL_COMMENTS_NOTE_PATH,
         to: "docs/renamed-index.md",
     }]);
     assert.equal(harness.getActiveSidebarFile()?.path, "docs/renamed-index.md");
@@ -558,7 +748,7 @@ test("index note settings controller renames the index note and retargets sideba
 
 test("index note settings controller rejects invalid folder and file conflicts", async () => {
     const missingFolderHarness = createControllerHarness({
-        files: ["Aside index.md"],
+        files: [ALL_COMMENTS_NOTE_PATH],
     });
     await missingFolderHarness.controller.setIndexNotePath("missing/new-index");
 
@@ -566,7 +756,7 @@ test("index note settings controller rejects invalid folder and file conflicts",
     assert.equal(missingFolderHarness.savedPayloads.length, 0);
 
     const conflictHarness = createControllerHarness({
-        files: ["Aside index.md", "docs/index.md"],
+        files: [ALL_COMMENTS_NOTE_PATH, "docs/index.md"],
     });
     await conflictHarness.controller.setIndexNotePath("docs/index");
 

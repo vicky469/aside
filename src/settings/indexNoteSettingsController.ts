@@ -11,6 +11,8 @@ import {
     type PublishSettings,
 } from "../core/publish/publishSettings";
 import {
+    ALL_COMMENTS_NOTE_PATH,
+    LEGACY_ALL_COMMENTS_NOTE_PATH,
     isAllCommentsNotePath,
     normalizeAllCommentsNoteImageCaption,
     normalizeAllCommentsNoteImageUrl,
@@ -21,6 +23,7 @@ import {
 } from "../ui/settings/AsideSetting";
 import {
     getIndexNoteParentPath,
+    hasPersistedIndexNotePath,
     resolveIndexNotePathChange,
     resolveLoadedSettings,
     shouldApplyNormalizedSettingChange,
@@ -46,6 +49,18 @@ export interface IndexNoteSettingsHost {
     showNotice(message: string): void;
 }
 
+class IndexNotePathRollbackError extends Error {
+    public readonly cause: unknown;
+    public readonly rollbackError: unknown;
+
+    constructor(saveError: unknown, rollbackError: unknown) {
+        super("Unable to save the index note path, and rolling back the file rename also failed.");
+        this.name = "IndexNotePathRollbackError";
+        this.cause = saveError;
+        this.rollbackError = rollbackError;
+    }
+}
+
 export class IndexNoteSettingsController {
     private persistedPluginData: PersistedPluginData = {};
 
@@ -57,7 +72,8 @@ export class IndexNoteSettingsController {
         const resolved = resolveLoadedSettings(loaded, this.host.getSettings());
         this.host.setSettings(resolved.settings);
 
-        if (resolved.shouldRewriteLegacySettings) {
+        const migratedLegacyIndexNotePath = await this.migrateLegacyIndexNotePath(loaded);
+        if (!migratedLegacyIndexNotePath && resolved.shouldRewriteLegacySettings) {
             await this.saveSettings();
         }
 
@@ -118,14 +134,27 @@ export class IndexNoteSettingsController {
             return;
         }
 
+        const renamedCurrentIndexFile = plan.shouldRenameCurrentIndexFile && !!currentIndexFile;
+        if (renamedCurrentIndexFile && currentIndexFile) {
+            await this.host.app.fileManager.renameFile(currentIndexFile, plan.nextPath);
+        }
+
         this.host.setSettings({
             ...settings,
             indexNotePath: plan.nextPath,
         });
-        await this.saveSettings();
-
-        if (plan.shouldRenameCurrentIndexFile && currentIndexFile) {
-            await this.host.app.fileManager.renameFile(currentIndexFile, plan.nextPath);
+        try {
+            await this.saveSettings();
+        } catch (saveError) {
+            this.host.setSettings(settings);
+            if (renamedCurrentIndexFile && currentIndexFile) {
+                try {
+                    await this.host.app.fileManager.renameFile(currentIndexFile, previousPath);
+                } catch (rollbackError) {
+                    throw new IndexNotePathRollbackError(saveError, rollbackError);
+                }
+            }
+            throw saveError;
         }
 
         if (plan.shouldRetargetActiveSidebarFile) {
@@ -274,10 +303,56 @@ export class IndexNoteSettingsController {
         delete persistedData.preferredAgentTarget;
         delete persistedData.remoteRuntimeBaseUrl;
         delete (persistedData as Record<string, unknown>).publishWranglerCommand;
+        await this.host.saveData(persistedData);
         this.persistedPluginData = {
             ...persistedData,
         };
-        await this.host.saveData(this.persistedPluginData);
+    }
+
+    private async migrateLegacyIndexNotePath(loaded: PersistedPluginData | null): Promise<boolean> {
+        const legacyIndexFile = this.host.getMarkdownFileByPath(LEGACY_ALL_COMMENTS_NOTE_PATH);
+        const shouldRecoverLegacyIndexFile = !hasPersistedIndexNotePath(loaded) && !!legacyIndexFile;
+        if (
+            this.getAllCommentsNotePath() !== LEGACY_ALL_COMMENTS_NOTE_PATH
+            && !shouldRecoverLegacyIndexFile
+        ) {
+            return false;
+        }
+
+        if (shouldRecoverLegacyIndexFile && this.getAllCommentsNotePath() !== LEGACY_ALL_COMMENTS_NOTE_PATH) {
+            this.host.setSettings({
+                ...this.host.getSettings(),
+                indexNotePath: LEGACY_ALL_COMMENTS_NOTE_PATH,
+            });
+        }
+
+        if (this.host.getFileByPath(ALL_COMMENTS_NOTE_PATH)) {
+            this.host.showNotice(
+                `Unable to rename ${LEGACY_ALL_COMMENTS_NOTE_PATH} because ${ALL_COMMENTS_NOTE_PATH} already exists.`,
+            );
+            return false;
+        }
+
+        try {
+            await this.setIndexNotePath(ALL_COMMENTS_NOTE_PATH);
+        } catch (error) {
+            if (error instanceof IndexNotePathRollbackError) {
+                throw error;
+            }
+            if (!this.host.getMarkdownFileByPath(LEGACY_ALL_COMMENTS_NOTE_PATH)) {
+                throw error;
+            }
+
+            this.host.setSettings({
+                ...this.host.getSettings(),
+                indexNotePath: LEGACY_ALL_COMMENTS_NOTE_PATH,
+            });
+            this.host.showNotice(
+                `Unable to rename ${LEGACY_ALL_COMMENTS_NOTE_PATH} to ${ALL_COMMENTS_NOTE_PATH}.`,
+            );
+            return false;
+        }
+        return this.getAllCommentsNotePath() === ALL_COMMENTS_NOTE_PATH;
     }
 
     private async setPublishSettings(patch: Partial<PublishSettings>): Promise<void> {

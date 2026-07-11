@@ -2,8 +2,8 @@ import type { Comment, CommentThread } from "../../commentManager";
 import { getCommentSelectionLabel, getCommentStatusLabel, isAnchoredComment, isPageComment } from "../anchors/commentAnchors";
 import { extractWikiLinks } from "../text/commentMentions";
 import { extractTagsFromText } from "../text/commentTags";
+import { ALL_COMMENTS_NOTE_PATH } from "./allCommentsNote";
 
-const ALL_COMMENTS_NOTE_PATH = "Aside index.md";
 const MAX_EDGE_LABEL_WORDS = 4;
 const THOUGHT_TRAIL_MERMAID_RENDER_CONFIG = {
     fontFamily: "var(--font-interface-theme)",

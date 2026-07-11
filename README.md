@@ -51,7 +51,7 @@ For durable storage and sync across devices, use Aside with [Obsidian Sync](http
 - Type `@todo` to mark follow-ups that appear in the Todo index tab.
 - Browse, filter, and batch-apply local side-note tags from the active note sidebar.
 - Keeps resolved comments archived instead of removing them.
-- Generates `Aside index.md` as a vault-wide comment index.
+- Generates `🐰 Aside Index.md` as a vault-wide comment index.
 - Lets the index sidebar switch between the comment list and a thought-trail graph built from side-note wiki links. The graph follows those links across connected markdown files, so it can show multi-step trails instead of only direct one-hop links.
 - Built-in agent help on desktop Obsidian. Type `@codex` or `@claude` in a thread to get a reply, create anchored side notes, or apply explicit edits to the source note.
 - Experimental Cloudflare Pages publishing for testers on desktop Obsidian.
@@ -115,7 +115,7 @@ After setup, publish supported files under `public/` from the pane header.
 - **`resolved note`**  
   A thread that has been archived instead of deleted.
 
-- **`Aside index.md`**
+- **`🐰 Aside Index.md`**
   The generated vault-wide index note. It is derived output, not the source of truth.
 
 - **`thought trail`**  

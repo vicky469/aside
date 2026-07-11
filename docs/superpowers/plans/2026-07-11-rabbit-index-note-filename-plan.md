@@ -19,7 +19,7 @@
 - Modify: `src/core/derived/thoughtTrailNoteLinkGraph.ts:1-9`
 - Modify: `src/core/derived/indexFileFilterGraph.ts:1-5`
 
-- [ ] **Step 1: Write the failing shared-name test**
+- [x] **Step 1: Write the failing shared-name test**
 
 Add `LEGACY_ALL_COMMENTS_NOTE_PATH` to the existing import from `allCommentsNote` and extend the normalization test:
 
@@ -56,7 +56,7 @@ test("normalizeAllCommentsNotePath keeps the current default and legacy migratio
 });
 ```
 
-- [ ] **Step 2: Compile and run the focused test to verify it fails**
+- [x] **Step 2: Compile and run the focused test to verify it fails**
 
 Run:
 
@@ -68,7 +68,7 @@ node --test .test-dist/tests/allCommentsNote.test.js
 
 Expected: TypeScript fails because `LEGACY_ALL_COMMENTS_NOTE_PATH` is not exported, or the assertion fails because the current constant is still `Aside index.md`.
 
-- [ ] **Step 3: Define both names in the shared module**
+- [x] **Step 3: Define both names in the shared module**
 
 Replace the current constant declaration in `src/core/derived/allCommentsNote.ts` with:
 
@@ -79,7 +79,7 @@ export const LEGACY_ALL_COMMENTS_NOTE_PATH = "Aside index.md";
 
 Keep `normalizeAllCommentsNotePath("")` returning `ALL_COMMENTS_NOTE_PATH`; this makes the rabbit filename the default for new state.
 
-- [ ] **Step 4: Replace production fallback copies with imports**
+- [x] **Step 4: Replace production fallback copies with imports**
 
 In `src/core/derived/thoughtTrail.ts`, remove the local constant and add:
 
@@ -101,7 +101,7 @@ import { ALL_COMMENTS_NOTE_PATH } from "./allCommentsNote";
 
 Keep each module's existing path-normalization behavior unchanged; only the fallback owner changes.
 
-- [ ] **Step 5: Run the focused derived-note tests**
+- [x] **Step 5: Run the focused derived-note tests**
 
 Run:
 
@@ -113,7 +113,7 @@ node --test .test-dist/tests/allCommentsNote.test.js .test-dist/tests/thoughtTra
 
 Expected: all focused tests pass. Tests that explicitly inject `Aside index.md` continue to pass because an injected path is independent of the new default.
 
-- [ ] **Step 6: Commit the shared-name change**
+- [x] **Step 6: Commit the shared-name change**
 
 ```bash
 git add src/core/derived/allCommentsNote.ts src/core/derived/thoughtTrail.ts src/core/derived/thoughtTrailNoteLinkGraph.ts src/core/derived/indexFileFilterGraph.ts tests/allCommentsNote.test.ts
@@ -127,7 +127,7 @@ git commit -m "refactor(index): centralize index note names"
 - Modify: `src/settings/indexNoteSettingsPlanner.ts:11-16,67-111`
 - Modify: `src/settings/indexNoteSettingsController.ts:13-28,54-64,304`
 
-- [ ] **Step 1: Write failing first-install and legacy-resolution tests**
+- [x] **Step 1: Write failing first-install and legacy-resolution tests**
 
 Import the shared constants into `tests/indexNoteSettingsController.test.ts`:
 
@@ -180,7 +180,7 @@ Make these fixture updates in the same test file:
 - Controller tests for runtime mode, sidebar toggles, publishing, direct path rename, missing-folder rejection, and target conflict use `ALL_COMMENTS_NOTE_PATH` for their ordinary default settings and files.
 - Only the new startup migration and collision tests use `LEGACY_ALL_COMMENTS_NOTE_PATH` as the active generated index.
 
-- [ ] **Step 2: Write failing controller migration tests**
+- [x] **Step 2: Write failing controller migration tests**
 
 Add these tests beside the existing index-note rename tests:
 
@@ -242,7 +242,7 @@ test("loading keeps the legacy index when the rabbit filename is occupied", asyn
 });
 ```
 
-- [ ] **Step 3: Compile and run the focused settings test to verify failure**
+- [x] **Step 3: Compile and run the focused settings test to verify failure**
 
 Run:
 
@@ -254,7 +254,7 @@ node --test .test-dist/tests/indexNoteSettingsController.test.js
 
 Expected: the new resolution and migration tests fail because existing data without `indexNotePath` resolves to the new default and `loadSettings()` does not migrate the file.
 
-- [ ] **Step 4: Make settings resolution migration-aware**
+- [x] **Step 4: Make settings resolution migration-aware**
 
 Import the legacy constant in `src/settings/indexNoteSettingsPlanner.ts`:
 
@@ -287,7 +287,7 @@ Add this clause to `shouldRewriteLegacySettings` so legacy data receives an expl
 || (loaded !== null && !hasIndexNotePathSetting)
 ```
 
-- [ ] **Step 5: Add the collision-safe startup migration**
+- [x] **Step 5: Add the collision-safe startup migration**
 
 Import both filename constants in `src/settings/indexNoteSettingsController.ts`:
 
@@ -353,7 +353,7 @@ private async migrateLegacyIndexNotePath(loaded: PersistedPluginData | null): Pr
 
 This deliberately routes the successful operation through the existing rename controller, preserving persistence, conflict planning, sidebar retargeting, draft retargeting, aggregate refresh, and sidebar refresh behavior.
 
-- [ ] **Step 6: Run the focused settings tests**
+- [x] **Step 6: Run the focused settings tests**
 
 Run:
 
@@ -365,7 +365,7 @@ node --test .test-dist/tests/indexNoteSettingsController.test.js .test-dist/test
 
 Expected: all focused tests pass, including new-install, existing-install, no-persisted-data recovery, live-state retargeting, and collision cases.
 
-- [ ] **Step 7: Commit the startup migration**
+- [x] **Step 7: Commit the startup migration**
 
 ```bash
 git add src/settings/indexNoteSettingsPlanner.ts src/settings/indexNoteSettingsController.ts tests/indexNoteSettingsController.test.ts
@@ -377,9 +377,10 @@ git commit -m "feat(index): migrate to rabbit index filename"
 **Files:**
 - Modify: `README.md:54,118-119`
 - Modify: `skills/aside/SKILL.md:30`
-- Modify: `AGENTS.md:38`
 
-- [ ] **Step 1: Update current filename references**
+**Machine-local guidance:** The ignored root `AGENTS.md` was updated separately to use the rabbit filename. It is not a tracked worktree artifact and must not be staged or committed.
+
+- [x] **Step 1: Update current filename references**
 
 Apply these exact wording changes:
 
@@ -392,26 +393,26 @@ Apply these exact wording changes:
   The generated vault-wide index note. It is derived output, not the source of truth.
 ```
 
-In both `skills/aside/SKILL.md` and `AGENTS.md`, use:
+In `skills/aside/SKILL.md`, use:
 
 ```md
 - `🐰 Aside Index.md` is derived; use only for discovery.
 ```
 
-- [ ] **Step 2: Confirm active documentation no longer advertises the legacy filename**
+- [x] **Step 2: Confirm active documentation no longer advertises the legacy filename**
 
 Run:
 
 ```bash
-rg -n "Aside index\.md" README.md skills/aside/SKILL.md AGENTS.md
+rg -n "Aside index\.md" README.md skills/aside/SKILL.md
 ```
 
 Expected: no matches.
 
-- [ ] **Step 3: Commit the documentation update**
+- [x] **Step 3: Commit the documentation update**
 
 ```bash
-git add README.md skills/aside/SKILL.md AGENTS.md
+git add README.md skills/aside/SKILL.md
 git commit -m "docs(index): document rabbit index filename"
 ```
 
@@ -420,17 +421,17 @@ git commit -m "docs(index): document rabbit index filename"
 **Files:**
 - Modify: `docs/superpowers/specs/2026-07-11-index-note-name-design.md:6-28`
 
-- [ ] **Step 1: Audit production filename ownership**
+- [x] **Step 1: Audit production filename ownership**
 
 Run:
 
 ```bash
-rg -n 'Aside index\.md|🐰 Aside Index\.md|ALL_COMMENTS_NOTE_PATH|LEGACY_ALL_COMMENTS_NOTE_PATH' src tests scripts README.md skills/aside/SKILL.md AGENTS.md
+rg -n 'Aside index\.md|🐰 Aside Index\.md|ALL_COMMENTS_NOTE_PATH|LEGACY_ALL_COMMENTS_NOTE_PATH' src tests scripts README.md skills/aside/SKILL.md
 ```
 
 Expected: production filename literals exist only in `src/core/derived/allCommentsNote.ts`; other production modules import the constants or receive an injected configured path. Test literals are limited to explicit fixtures and migration assertions. Active documentation uses only the rabbit filename.
 
-- [ ] **Step 2: Run the full repository verification pipeline**
+- [x] **Step 2: Run the full repository verification pipeline**
 
 Run:
 
@@ -440,23 +441,23 @@ npm run build
 
 Expected: `npm run test`, ESLint, TypeScript `--noEmit`, and the production esbuild bundle all complete successfully.
 
-- [ ] **Step 3: Inspect the worktree for unintended changes**
+- [x] **Step 3: Inspect the worktree for unintended changes**
 
 Run:
 
 ```bash
 git status --short
 git diff --check
-git diff --stat HEAD~3..HEAD
+git diff --stat 832318a..HEAD
 ```
 
-Expected: no whitespace errors; only the planned source, tests, active documentation, and tracking documents changed.
+Expected: no whitespace errors; relative to the pre-feature base `832318a`, only the planned source, tests, README, Aside skill, and tracked implementation/spec documents changed. The ignored root `AGENTS.md` update is not part of the worktree diff.
 
-- [ ] **Step 4: Mark verified spec items complete**
+- [x] **Step 4: Mark verified spec items complete**
 
 After the focused tests, change-surface audit, and full build have passed, change every implemented and verified checkbox in `docs/superpowers/specs/2026-07-11-index-note-name-design.md` from `[ ]` to `[x]`. Do not mark any item whose command did not pass.
 
-- [ ] **Step 5: Commit verified tracking state**
+- [x] **Step 5: Commit verified tracking state**
 
 ```bash
 git add -f docs/superpowers/specs/2026-07-11-index-note-name-design.md

@@ -2,6 +2,7 @@ import * as assert from "node:assert/strict";
 import test from "node:test";
 import {
     ALL_COMMENTS_NOTE_PATH,
+    LEGACY_ALL_COMMENTS_NOTE_PATH,
     ALL_COMMENTS_NOTE_IMAGE_ALT,
     ALL_COMMENTS_NOTE_IMAGE_CAPTION,
     ALL_COMMENTS_NOTE_IMAGE_URL,
@@ -383,7 +384,9 @@ test("isAllCommentsNotePath matches the generated note path", () => {
     assert.equal(isAllCommentsNotePath("Random.md"), false);
 });
 
-test("normalizeAllCommentsNotePath keeps the default and adds md when needed", () => {
+test("normalizeAllCommentsNotePath keeps the current and legacy names and adds md when needed", () => {
+    assert.equal(ALL_COMMENTS_NOTE_PATH, "🐰 Aside Index.md");
+    assert.equal(LEGACY_ALL_COMMENTS_NOTE_PATH, "Aside index.md");
     assert.equal(normalizeAllCommentsNotePath(""), ALL_COMMENTS_NOTE_PATH);
     assert.equal(normalizeAllCommentsNotePath("notes/custom index"), "notes/custom index.md");
     assert.equal(normalizeAllCommentsNotePath("notes/custom index.md"), "notes/custom index.md");

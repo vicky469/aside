@@ -11,22 +11,22 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Change the generated index filename from `Aside index.md` to `🐰 Aside Index.md`.
-- [ ] Rename an existing `Aside index.md` automatically after the plugin update.
-- [ ] Use `🐰 Aside Index.md` for new installations.
-- [ ] Centralize the current filename and legacy filename in the shared index-note module.
-- [ ] Keep `Aside index.md` and show a notice if an unrelated `🐰 Aside Index.md` already exists.
-- [ ] Do not add an index-name setting.
+- [x] Change the generated index filename from `Aside index.md` to `🐰 Aside Index.md`.
+- [x] Rename an existing `Aside index.md` automatically after the plugin update.
+- [x] Use `🐰 Aside Index.md` for new installations.
+- [x] Centralize the current filename and legacy filename in the shared index-note module.
+- [x] Keep `Aside index.md` and show a notice if an unrelated `🐰 Aside Index.md` already exists.
+- [x] Do not add an index-name setting.
 
 ### Verification
 
-- [ ] Test a new installation using `🐰 Aside Index.md`.
-- [ ] Test an existing installation renaming `Aside index.md` to `🐰 Aside Index.md`.
-- [ ] Test that sidebar and draft references follow the renamed index note.
-- [ ] Test the target-file collision safeguard.
-- [ ] Re-run a repository search to confirm runtime filename ownership is centralized.
-- [ ] Run focused index settings and derived-note tests.
-- [ ] Run the full test, lint, type-check, and production build pipeline.
+- [x] Test a new installation using `🐰 Aside Index.md`.
+- [x] Test an existing installation renaming `Aside index.md` to `🐰 Aside Index.md`.
+- [x] Test that sidebar and draft references follow the renamed index note.
+- [x] Test the target-file collision safeguard.
+- [x] Re-run a repository search to confirm runtime filename ownership is centralized.
+- [x] Run focused index settings and derived-note tests.
+- [x] Run the full test, lint, type-check, and production build pipeline.
 
 ## Goal
 

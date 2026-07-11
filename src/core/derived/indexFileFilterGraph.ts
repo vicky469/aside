@@ -1,7 +1,6 @@
 import type { Comment, CommentThread } from "../../commentManager";
 import { extractWikiLinks } from "../text/commentMentions";
-
-const ALL_COMMENTS_NOTE_PATH = "Aside index.md";
+import { ALL_COMMENTS_NOTE_PATH } from "./allCommentsNote";
 
 export interface IndexFileFilterGraphBuildOptions {
     allCommentsNotePath?: string;

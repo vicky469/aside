@@ -27,7 +27,7 @@ No resolve/archive flow: resolve functionality was removed.
 - Current persisted side note data lives in Aside plugin data and local sidecar JSON cache files.
 - The trailing `<!-- Aside comments -->` block is legacy import/migration data, not current canonical storage. Built-in plugin startup/storage flows migrate it automatically; helper scripts should use the same write path and strip the managed block when they encounter one.
 - Legacy `<!-- SideNote2 comments -->` blocks may exist for migration/read compatibility, but are not canonical.
-- `Aside index.md` is derived; use only for discovery.
+- `🐰 Aside Index.md` is derived, but legacy `Aside index.md` may remain active when migration is blocked; use either only for discovery.
 - `page note` / `anchored note` means an Aside thread in the current note unless user explicitly asks for a separate wiki page.
 
 ## Searching real Aside data

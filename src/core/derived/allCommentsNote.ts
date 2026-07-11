@@ -6,7 +6,8 @@ import {
 } from "../text/commentReferences";
 import { extractTagsFromText } from "../text/commentTags";
 
-export const ALL_COMMENTS_NOTE_PATH = "Aside index.md";
+export const ALL_COMMENTS_NOTE_PATH = "🐰 Aside Index.md";
+export const LEGACY_ALL_COMMENTS_NOTE_PATH = "Aside index.md";
 export const COMMENT_LOCATION_PROTOCOL = SIDE_NOTE_REFERENCE_PROTOCOL;
 export const ALL_COMMENTS_NOTE_IMAGE_URL = "https://ichef.bbci.co.uk/images/ic/1920xn/p02vhq1v.jpg.webp";
 export const ALL_COMMENTS_NOTE_IMAGE_CAPTION = "Relativity (Credit: 2015 The M.C. Escher Company - Baarn, The Netherlands)";
