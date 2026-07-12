@@ -753,9 +753,26 @@ button.aside-sidebar-file-pin-button {
     --icon-size: 13px;
 }
 
-.aside-sidebar-toolbar-row.is-note-primary-row .aside-toolbar-icon-button {
+button.aside-sidebar-file-move-button {
+    flex: 0 0 26px;
     width: 26px;
+    min-width: 26px;
+    max-width: 26px;
     height: 26px;
+    min-height: 26px;
+    max-height: 26px;
+    padding: 0;
+    --icon-size: 13px;
+}
+
+.aside-sidebar-toolbar-row.is-note-primary-row .aside-toolbar-icon-button {
+    flex: 0 0 22px;
+    width: 22px;
+    min-width: 22px;
+    max-width: 22px;
+    height: 22px;
+    min-height: 22px;
+    max-height: 22px;
     border-radius: var(--aside-note-toolbar-radius);
     margin-bottom: -1px;
     color: color-mix(in srgb, var(--icon-color, var(--text-faint, var(--text-muted))) 82%, var(--text-muted) 18%);
@@ -764,13 +781,13 @@ button.aside-sidebar-file-pin-button {
 }
 
 .aside-sidebar-toolbar-row.is-note-secondary-row .aside-toolbar-icon-button {
-    flex: 0 0 26px;
-    width: 26px;
-    min-width: 26px;
-    max-width: 26px;
-    height: 26px;
-    min-height: 26px;
-    max-height: 26px;
+    flex: 0 0 22px;
+    width: 22px;
+    min-width: 22px;
+    max-width: 22px;
+    height: 22px;
+    min-height: 22px;
+    max-height: 22px;
     border-radius: var(--aside-note-toolbar-radius);
     background: transparent;
     box-shadow: none;
@@ -1253,8 +1270,8 @@ button.aside-filter-chip {
 }
 
 .aside-sidebar-toolbar.is-note-toolbar .aside-comment-section-add-button svg {
-    width: 15px;
-    height: 15px;
+    width: 12px;
+    height: 12px;
 }
 
 .aside-comment-section-add-button:hover,

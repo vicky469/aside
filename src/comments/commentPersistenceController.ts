@@ -1201,6 +1201,45 @@ export class CommentPersistenceController {
         }
     }
 
+    public async reloadIndexedCommentsFromStorage(): Promise<void> {
+        if (this.disposed) {
+            return;
+        }
+        await this.replaySyncedSideNoteEvents();
+        if (this.disposed) {
+            return;
+        }
+
+        const persistedSourceRecords = await this.getPersistedCommentSourceRecords();
+        const persistedFilePaths = new Set<string>();
+        for (const record of persistedSourceRecords) {
+            if (this.disposed) {
+                return;
+            }
+
+            const file = this.getPageNoteCapableFileByPath(record.notePath);
+            if (!this.isPageNoteCapableFile(file)) {
+                this.host.getCommentManager().replaceThreadsForFile(record.notePath, []);
+                this.host.getAggregateCommentIndex().deleteFile(record.notePath);
+                continue;
+            }
+
+            const threads = await this.normalizeThreadsForFile(file.path, record.threads);
+            this.host.getCommentManager().replaceThreadsForFile(file.path, threads);
+            this.host.getAggregateCommentIndex().updateFile(file.path, threads);
+            persistedFilePaths.add(file.path);
+        }
+
+        for (const thread of this.host.getAggregateCommentIndex().getAllThreads()) {
+            if (!persistedFilePaths.has(thread.filePath)) {
+                this.host.getCommentManager().replaceThreadsForFile(thread.filePath, []);
+                this.host.getAggregateCommentIndex().deleteFile(thread.filePath);
+            }
+        }
+
+        this.aggregateIndexInitialized = true;
+    }
+
     public async persistCommentsForFile(file: TFile, options: PersistOptions = {}): Promise<void> {
         if (this.disposed) {
             return;
@@ -1301,6 +1340,11 @@ export class CommentPersistenceController {
                     }
                     const file = this.getPageNoteCapableFileByPath(record.notePath);
                     if (!this.isPageNoteCapableFile(file)) {
+                        if (await this.doesVaultStorageContainPath(record.notePath)) {
+                            const threads = await this.normalizeThreadsForFile(record.notePath, record.threads);
+                            this.host.getAggregateCommentIndex().updateFile(record.notePath, threads);
+                            continue;
+                        }
                         this.host.getAggregateCommentIndex().deleteFile(record.notePath);
                         continue;
                     }
@@ -1350,12 +1394,39 @@ export class CommentPersistenceController {
             .sort((left, right) => left.notePath.localeCompare(right.notePath));
     }
 
-    private isMissingStoredCommentSource(filePath: string): boolean {
+    private async doesVaultStorageContainPath(filePath: string): Promise<boolean> {
+        try {
+            return await this.host.app.vault.adapter.exists(filePath);
+        } catch {
+            return false;
+        }
+    }
+
+    private async isMissingStoredCommentSource(filePath: string): Promise<boolean> {
         if (this.host.isAllCommentsNotePath(filePath)) {
             return false;
         }
 
-        return !this.isPageNoteCapableFile(this.getPageNoteCapableFileByPath(filePath));
+        if (this.isPageNoteCapableFile(this.getPageNoteCapableFileByPath(filePath))) {
+            return false;
+        }
+
+        return !(await this.doesVaultStorageContainPath(filePath));
+    }
+
+    private async getVaultStoragePresentCommentPaths(comments: CommentThread[]): Promise<Set<string>> {
+        const filePaths = Array.from(new Set(comments.map((comment) => comment.filePath)));
+        const presentPaths = new Set<string>();
+        await Promise.all(filePaths.map(async (filePath) => {
+            if (isTFileLike(this.host.app.vault.getAbstractFileByPath(filePath))) {
+                presentPaths.add(filePath);
+                return;
+            }
+            if (await this.doesVaultStorageContainPath(filePath)) {
+                presentPaths.add(filePath);
+            }
+        }));
+        return presentPaths;
     }
 
     private async getPersistedCommentSourcePaths(): Promise<string[]> {
@@ -1396,7 +1467,7 @@ export class CommentPersistenceController {
             if (this.disposed) {
                 return prunedCount;
             }
-            if (!this.isMissingStoredCommentSource(filePath)) {
+            if (!(await this.isMissingStoredCommentSource(filePath))) {
                 continue;
             }
 
@@ -2024,11 +2095,12 @@ export class CommentPersistenceController {
                 return;
             }
             const comments = this.host.getAggregateCommentIndex().getAllThreads();
+            const vaultStoragePresentCommentPaths = await this.getVaultStoragePresentCommentPaths(comments);
             const noteOptions: AllCommentsNoteBuildOptions = {
                 allCommentsNotePath: this.host.getAllCommentsNotePath(),
                 headerImageUrl: this.host.getIndexHeaderImageUrl(),
                 headerImageCaption: this.host.getIndexHeaderImageCaption(),
-                hasSourceFile: (filePath: string) => isTFileLike(this.host.app.vault.getAbstractFileByPath(filePath)),
+                hasSourceFile: (filePath: string) => vaultStoragePresentCommentPaths.has(filePath),
                 getSourceFileTags: (filePath: string) => {
                     const file = this.host.app.vault.getAbstractFileByPath(filePath);
                     if (!isTFileLike(file)) {

@@ -2,11 +2,13 @@ import {
     ItemView,
     MarkdownView,
     MarkdownRenderer,
+    Notice,
     TFile,
     WorkspaceLeaf,
     Platform,
     getAllTags,
     htmlToMarkdown,
+    normalizePath,
     setIcon,
     type ViewStateResult,
 } from "obsidian";
@@ -17,6 +19,7 @@ import {
     buildThoughtTrailCommentTagsByFilePath,
     type ThoughtTrailFileTagLookup,
 } from "../../core/derived/thoughtTrail";
+import { formatCrossVaultMoveSuccessNotice } from "../../core/move/crossVaultMove";
 import {
     buildThoughtTrailNoteLinkLines,
     type ThoughtTrailNoteLinkGraph,
@@ -443,6 +446,70 @@ export default class AsideView extends ItemView {
                 void this.togglePinnedSidebarFile();
             },
         };
+    }
+
+    private getMoveCurrentFileToVaultAction(): NonNullable<SidebarModeControlOptions["moveSidebarFileAction"]> {
+        const currentFilePath = this.getNormalizedSidebarFilePath(this.file);
+        const isCurrentFileMoveBlocked = !currentFilePath || this.plugin.isAllCommentsNotePath(currentFilePath);
+        return {
+            ariaLabel: "Move this file and its side notes to another vault",
+            disabled: isCurrentFileMoveBlocked,
+            onClick: () => {
+                void this.openMoveCurrentFileToVaultModal();
+            },
+        };
+    }
+
+    private async openMoveCurrentFileToVaultModal(): Promise<void> {
+        const currentFile = this.file;
+        if (!currentFile || this.plugin.isAllCommentsNotePath(currentFile.path)) {
+            return;
+        }
+
+        const knownVaults = await this.plugin.getKnownVaultsForMove();
+        const currentVaultPath = this.plugin.getVaultRootPath() ?? "";
+        const currentVaultHint = normalizePath(currentVaultPath);
+        const availableVaults = knownVaults
+            .map((vault) => ({
+                fileName: vault.name,
+                filePath: vault.path,
+                active: false,
+                recent: false,
+            }))
+            .filter((candidate) => {
+                const candidatePath = normalizePath(candidate.filePath);
+                return candidatePath && candidatePath !== currentVaultHint;
+            })
+            .sort((left, right) => left.fileName.localeCompare(right.fileName));
+
+        if (availableVaults.length === 0) {
+            new Notice("No other Obsidian vaults were detected.");
+            return;
+        }
+
+        new SideNoteOpenFileSuggestModal(this.app, {
+            availableFiles: availableVaults,
+            detailLabel: "vault",
+            emptyStateText: "No other Obsidian vaults found.",
+            onChooseFile: async (suggestion) => {
+                try {
+                    await this.plugin.moveFileAndSidenotesToVault(currentFile.path, suggestion.filePath, suggestion.fileName);
+                    this.setCurrentFile(null);
+                    await this.renderComments({
+                        skipDataRefresh: true,
+                    });
+                    new Notice(formatCrossVaultMoveSuccessNotice(currentFile.name, suggestion.fileName));
+                } catch (error) {
+                    const message = error instanceof Error && error.message.trim()
+                        ? error.message
+                        : "Unable to move this file.";
+                    new Notice(message);
+                }
+            },
+            onCloseModal: () => {},
+            placeholder: "Find a vault",
+            title: "Move file to another vault",
+        }).open();
     }
 
     private async togglePinnedSidebarFile(): Promise<void> {
@@ -3667,6 +3734,7 @@ export default class AsideView extends ItemView {
             surface: options.surface,
             ...availability,
             pinnedSidebarFileAction: this.getPinnedSidebarFileAction(),
+            moveSidebarFileAction: this.getMoveCurrentFileToVaultAction(),
             onChange: (mode) => {
                 if (!isSidebarModeAvailable(mode, availability)) {
                     return;

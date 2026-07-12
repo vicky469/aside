@@ -1,5 +1,11 @@
 import { addIcon, WorkspaceLeaf, TFile, Notice, Plugin, normalizePath, MarkdownView, FileSystemAdapter, FileView, Platform, type Editor, type View } from "obsidian";
-import { Comment, CommentManager, CommentThread, type ReorderPlacement } from "./commentManager";
+import {
+    Comment,
+    CommentManager,
+    CommentThread,
+    cloneCommentThreads,
+    type ReorderPlacement,
+} from "./commentManager";
 import { CommentEntryController } from "./comments/commentEntryController";
 import {
     CommentAgentController,
@@ -86,8 +92,21 @@ import {
     isPageNoteCapableFile as isPageNoteCapableSourceFile,
     isSidebarSupportedFile,
 } from "./core/rules/commentableFiles";
+import {
+    CROSS_VAULT_SIDE_NOTE_MOVE_MIN_TARGET_VERSION,
+    ensureCrossVaultTargetAsidePluginCompatible,
+    getObsidianConfigRootCandidatesForMove,
+    normalizeCrossVaultMovePath,
+    readCrossVaultMoveFileBytes,
+    selectCrossVaultMoveThreads,
+    formatCrossVaultMoveExistingFileNotice,
+    writeCrossVaultTargetSidecars,
+    writeCrossVaultTargetIndexFromSidecars,
+} from "./core/move/crossVaultMove";
+import { isExternalSidecarStoragePath } from "./core/storage/externalSidecarRefresh";
 import { extractWikiLinkPaths } from "./core/text/commentMentions";
 import { syncInstalledCodexSkill, type CodexSkillSyncModules } from "./core/codexSkillSync";
+import { normalizeSourceIdentityState } from "./sync/sourceIdentityStore";
 import { AggregateCommentIndex } from "./index/AggregateCommentIndex";
 import { ParsedNoteCache } from "./cache/ParsedNoteCache";
 import { parseNoteComments, ParsedNoteComments } from "./core/storage/noteCommentStorage";
@@ -129,6 +148,49 @@ interface PublishRuntimeModules extends WranglerRuntimeModules {
         dirname(path: string): string;
         join(...paths: string[]): string;
     };
+}
+
+interface CrossVaultNodeModules {
+    fsPromises: {
+        access(filePath: string): Promise<void>;
+        copyFile(sourcePath: string, targetPath: string): Promise<void>;
+        mkdir(path: string, options: { recursive?: boolean }): Promise<void>;
+        readFile(filePath: string, encoding: "utf8"): Promise<string>;
+        readdir(
+            filePath: string,
+            options: { withFileTypes: true },
+        ): Promise<Array<{
+            name: string;
+            isDirectory(): boolean;
+            isFile(): boolean;
+        }>>;
+        writeFile(filePath: string, contents: string | Uint8Array): Promise<void>;
+        rm(filePath: string, options?: { recursive?: boolean; force?: boolean }): Promise<void>;
+    };
+    path: {
+        basename(filePath: string): string;
+        dirname(filePath: string): string;
+        isAbsolute(filePath: string): boolean;
+        join(...paths: string[]): string;
+        normalize(filePath: string): string;
+        resolve(...paths: string[]): string;
+    };
+}
+
+interface ExternalSidecarWatchModules {
+    fs: {
+        watch(
+            filePath: string,
+            options: { recursive?: boolean },
+            listener: (eventType: string, filename: string | null) => void,
+        ): { close(): void };
+    };
+}
+
+interface KnownObsidianVault {
+    id: string;
+    name: string;
+    path: string;
 }
 
 const SIDE_NOTE_SYNC_EVENT_MIGRATION_VERSION = 2;
@@ -638,6 +700,8 @@ export default class Aside extends Plugin {
     private aggregateCommentIndex = new AggregateCommentIndex();
     private parsedNoteCache = new ParsedNoteCache(20);
     private sideNoteSyncDeviceId: string | null = null;
+    private externalSidecarWatcher: { close(): void } | null = null;
+    private externalSidecarRefreshTimer: number | null = null;
 
     private async detectRuntimeMode(): Promise<"local" | "release"> {
         const pluginRootRelativePath = normalizePath(`${this.app.vault.configDir}/plugins/${this.manifest.id}`);
@@ -696,6 +760,7 @@ export default class Aside extends Plugin {
         const activeFile = this.app.workspace.getActiveFile();
         this.workspaceContextController.initializeActiveFiles(activeFile);
         await this.pluginEventRouter.register();
+        this.registerExternalSidecarWatcher();
         this.syncPublicFilePublishActions();
         this.addSettingTab(new AsideSetting(this.app, this));
         void this.runStartupPersistenceMaintenance();
@@ -706,6 +771,7 @@ export default class Aside extends Plugin {
         void this.logEvent("info", "startup", "startup.unload");
         disposeAgentRuntimeProcesses();
         this.commentAgentController.dispose();
+        this.disposeExternalSidecarWatcher();
         this.commentPersistenceController.dispose();
         this.pluginLifecycleController.handleUnload();
         this.publicFilePublishActionController.clear();
@@ -1322,6 +1388,369 @@ export default class Aside extends Plugin {
             };
         } catch {
             return null;
+        }
+    }
+
+    private getExternalSidecarWatchModules(): ExternalSidecarWatchModules | null {
+        const nodeRequire = getNodeRequire();
+        if (!nodeRequire || !(this.app.vault.adapter instanceof FileSystemAdapter)) {
+            return null;
+        }
+
+        try {
+            return {
+                fs: nodeRequire("node:fs") as ExternalSidecarWatchModules["fs"],
+            };
+        } catch {
+            return null;
+        }
+    }
+
+    private registerExternalSidecarWatcher(): void {
+        const modules = this.getExternalSidecarWatchModules();
+        if (!modules || !(this.app.vault.adapter instanceof FileSystemAdapter)) {
+            return;
+        }
+
+        const pluginDirPath = this.app.vault.adapter.getFullPath(this.getPluginDataDirPath());
+        try {
+            this.externalSidecarWatcher = modules.fs.watch(
+                pluginDirPath,
+                { recursive: true },
+                (_eventType, filename) => {
+                    if (filename !== null && !isExternalSidecarStoragePath(filename)) {
+                        return;
+                    }
+                    this.scheduleExternalSidecarReload();
+                },
+            );
+            void this.logEvent("info", "persistence", "storage.sidecar-watch.started", {
+                pluginDirPath,
+            });
+        } catch (error) {
+            void this.logEvent("warn", "persistence", "storage.sidecar-watch.unavailable", {
+                pluginDirPath,
+                error,
+            });
+        }
+    }
+
+    private scheduleExternalSidecarReload(): void {
+        if (this.externalSidecarRefreshTimer !== null) {
+            window.clearTimeout(this.externalSidecarRefreshTimer);
+        }
+
+        this.externalSidecarRefreshTimer = window.setTimeout(() => {
+            this.externalSidecarRefreshTimer = null;
+            void this.reloadExternalSidecarChanges();
+        }, 250);
+    }
+
+    private async reloadExternalSidecarChanges(): Promise<void> {
+        if (this.unloaded) {
+            return;
+        }
+
+        try {
+            await this.commentPersistenceController.reloadIndexedCommentsFromStorage();
+            if (this.unloaded) {
+                return;
+            }
+            await this.refreshAggregateNoteNow();
+            await this.workspaceViewController.refreshCommentViews({ skipDataRefresh: true });
+            this.refreshEditorDecorations();
+            this.workspaceViewController.refreshMarkdownPreviews();
+            await this.logEvent("info", "persistence", "storage.sidecar-watch.reloaded");
+        } catch (error) {
+            void this.logEvent("warn", "persistence", "storage.sidecar-watch.reload.error", {
+                error,
+            });
+        }
+    }
+
+    private disposeExternalSidecarWatcher(): void {
+        if (this.externalSidecarRefreshTimer !== null) {
+            window.clearTimeout(this.externalSidecarRefreshTimer);
+            this.externalSidecarRefreshTimer = null;
+        }
+        this.externalSidecarWatcher?.close();
+        this.externalSidecarWatcher = null;
+    }
+
+    private getCrossVaultNodeModules(): CrossVaultNodeModules | null {
+        const nodeRequire = getNodeRequire();
+        if (!nodeRequire || !(this.app.vault.adapter instanceof FileSystemAdapter)) {
+            return null;
+        }
+
+        try {
+            return {
+                fsPromises: nodeRequire("node:fs/promises") as CrossVaultNodeModules["fsPromises"],
+                path: nodeRequire("node:path") as CrossVaultNodeModules["path"],
+            };
+        } catch {
+            return null;
+        }
+    }
+
+    private normalizeMovePath(pathUtil: CrossVaultNodeModules["path"], candidatePath: string): string | null {
+        return normalizeCrossVaultMovePath(pathUtil, candidatePath);
+    }
+
+    private async pathExists(fsPromises: CrossVaultNodeModules["fsPromises"], filePath: string): Promise<boolean> {
+        try {
+            await fsPromises.access(filePath);
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
+    private async deleteIfExists(
+        fsPromises: CrossVaultNodeModules["fsPromises"],
+        filePath: string | null,
+    ): Promise<void> {
+        if (!filePath) {
+            return;
+        }
+
+        try {
+            await fsPromises.rm(filePath, { force: true });
+        } catch {
+            // Ignore cleanup failures.
+        }
+    }
+
+    private getObsidianConfigRootCandidates(pathUtil: CrossVaultNodeModules["path"]): string[] {
+        return getObsidianConfigRootCandidatesForMove(pathUtil, getProcessEnv());
+    }
+
+    public async getKnownVaultsForMove(): Promise<KnownObsidianVault[]> {
+        const modules = this.getCrossVaultNodeModules();
+        if (!modules) {
+            return [];
+        }
+
+        const roots = this.getObsidianConfigRootCandidates(modules.path);
+        if (roots.length === 0) {
+            return [];
+        }
+
+        const vaultsByPath = new Map<string, KnownObsidianVault>();
+        for (const rootPath of roots) {
+            const configPath = modules.path.join(rootPath, "obsidian.json");
+            if (!(await this.pathExists(modules.fsPromises, configPath))) {
+                continue;
+            }
+
+            let rawConfig: unknown;
+            try {
+                rawConfig = JSON.parse(await modules.fsPromises.readFile(configPath, "utf8"));
+            } catch {
+                continue;
+            }
+
+            const vaults = isRecord(rawConfig) ? rawConfig.vaults : null;
+            if (!isRecord(vaults)) {
+                continue;
+            }
+
+            for (const [vaultId, candidate] of Object.entries(vaults)) {
+                if (!isRecord(candidate)) {
+                    continue;
+                }
+
+                const rawVaultPath = typeof candidate.path === "string" ? candidate.path : "";
+                const normalizedVaultPath = this.normalizeMovePath(modules.path, rawVaultPath);
+                if (!normalizedVaultPath) {
+                    continue;
+                }
+
+                if (!(await this.pathExists(modules.fsPromises, normalizedVaultPath))) {
+                    continue;
+                }
+
+                const existing = vaultsByPath.get(normalizedVaultPath);
+                if (existing) {
+                    continue;
+                }
+
+                const vaultName = typeof candidate.name === "string" && candidate.name.trim()
+                    ? candidate.name.trim()
+                    : modules.path.basename(normalizedVaultPath);
+                vaultsByPath.set(normalizedVaultPath, {
+                    id: vaultId,
+                    name: vaultName,
+                    path: normalizedVaultPath,
+                });
+            }
+        }
+
+        return Array.from(vaultsByPath.values())
+            .sort((left, right) => left.name.localeCompare(right.name));
+    }
+
+    private getMoveSourceIdForFilePath(filePath: string): string | null {
+        const state = normalizeSourceIdentityState(this.indexNoteSettingsController.readPersistedPluginData().sourceIdentityState);
+        return state.pathToSourceId[filePath] ?? null;
+    }
+
+    private async copyThreadsToVaultSidecar(
+        modules: CrossVaultNodeModules,
+        targetVaultPath: string,
+        sourceFilePath: string,
+        sourceId: string | null,
+        sourceThreads: CommentThread[],
+    ): Promise<string[]> {
+        if (sourceThreads.length === 0) {
+            return [];
+        }
+
+        const normalizedThreads = cloneCommentThreads(sourceThreads).map((thread) => ({
+            ...thread,
+            filePath: sourceFilePath,
+        }));
+        return writeCrossVaultTargetSidecars(modules, {
+            targetVaultPath,
+            configDir: this.app.vault.configDir,
+            pluginId: this.manifest.id,
+            notePath: sourceFilePath,
+            sourceId,
+            threads: normalizedThreads,
+        });
+    }
+
+    private async refreshTargetVaultIndexAfterMove(
+        modules: CrossVaultNodeModules,
+        targetVaultPath: string,
+    ): Promise<string> {
+        return writeCrossVaultTargetIndexFromSidecars(modules, {
+            targetVaultPath,
+            configDir: this.app.vault.configDir,
+            pluginId: this.manifest.id,
+            vaultName: modules.path.basename(targetVaultPath),
+        });
+    }
+
+    private async cleanupSourceVaultAfterCrossVaultMove(sourceFilePath: string): Promise<void> {
+        try {
+            await this.commentPersistenceController.deleteStoredComments(sourceFilePath);
+            this.commentManager.replaceThreadsForFile(sourceFilePath, []);
+            this.aggregateCommentIndex.deleteFile(sourceFilePath);
+            await this.refreshAggregateNoteNow();
+            await this.workspaceViewController.refreshCommentViews({ skipDataRefresh: true });
+        } catch (error) {
+            void this.logEvent("warn", "move", "cross_vault.source_index_refresh.error", {
+                sourceFilePath,
+                error,
+            });
+            this.showNotice("Moved file, but Aside could not refresh the source vault index.", "move", "cross_vault.source_index_refresh.notice");
+        }
+    }
+
+    public async moveFileAndSidenotesToVault(
+        sourceFilePath: string,
+        targetVaultPath: string,
+        targetVaultName?: string,
+    ): Promise<void> {
+        const modules = this.getCrossVaultNodeModules();
+        if (!modules) {
+            throw new Error("Vault-to-vault moves require desktop Obsidian.");
+        }
+
+        const sourceFile = this.app.vault.getAbstractFileByPath(sourceFilePath);
+        if (!(sourceFile instanceof TFile)) {
+            throw new Error(`Unable to find source file: ${sourceFilePath}.`);
+        }
+
+        if (this.isAllCommentsNotePath(sourceFile.path)) {
+            throw new Error("Cannot move the All comments note.");
+        }
+
+        const sourceVaultPathRaw = this.getVaultRootPath();
+        if (!sourceVaultPathRaw) {
+            throw new Error("Cannot move file: unable to determine the source vault path.");
+        }
+        const sourceVaultPath = this.normalizeMovePath(modules.path, sourceVaultPathRaw);
+        const normalizedTargetPath = this.normalizeMovePath(modules.path, targetVaultPath);
+        if (!sourceVaultPath || !normalizedTargetPath) {
+            throw new Error("Cannot move between unknown vault locations.");
+        }
+        if (sourceVaultPath === normalizedTargetPath) {
+            throw new Error("The selected vault is the same as the current vault.");
+        }
+
+        if (!(await this.pathExists(modules.fsPromises, normalizedTargetPath))) {
+            throw new Error(`Target vault is not available: ${targetVaultPath}`);
+        }
+
+        const indexedSourceThreadsBeforeLoad = this.aggregateCommentIndex.getThreadsForFile(sourceFile.path);
+        await this.loadCommentsForFile(sourceFile);
+        const sourceThreads = selectCrossVaultMoveThreads(
+            this.getThreadsForFile(sourceFile.path),
+            this.aggregateCommentIndex.getThreadsForFile(sourceFile.path),
+            indexedSourceThreadsBeforeLoad,
+        );
+        const sourceId = this.getMoveSourceIdForFilePath(sourceFile.path);
+        if (sourceThreads.length > 0) {
+            await ensureCrossVaultTargetAsidePluginCompatible(modules, {
+                targetVaultPath: normalizedTargetPath,
+                sourcePluginRoot: modules.path.join(
+                    sourceVaultPath,
+                    this.app.vault.configDir,
+                    "plugins",
+                    this.manifest.id,
+                ),
+                configDir: this.app.vault.configDir,
+                pluginId: this.manifest.id,
+                minimumVersion: CROSS_VAULT_SIDE_NOTE_MOVE_MIN_TARGET_VERSION,
+            });
+        }
+        const destinationFilePath = modules.path.join(normalizedTargetPath, sourceFile.path);
+
+        if (await this.pathExists(modules.fsPromises, destinationFilePath)) {
+            throw new Error(formatCrossVaultMoveExistingFileNotice(targetVaultName ?? modules.path.basename(normalizedTargetPath)));
+        }
+
+        const sourceContent = await readCrossVaultMoveFileBytes(this.app.vault, sourceFile);
+        let sidecarPaths: string[] = [];
+        let targetIndexWasWritten = false;
+
+        try {
+            await modules.fsPromises.mkdir(modules.path.dirname(destinationFilePath), { recursive: true });
+            await modules.fsPromises.writeFile(destinationFilePath, sourceContent);
+            sidecarPaths = await this.copyThreadsToVaultSidecar(
+                modules,
+                normalizedTargetPath,
+                sourceFile.path,
+                sourceId,
+                sourceThreads,
+            );
+            if (sidecarPaths.length > 0) {
+                await this.refreshTargetVaultIndexAfterMove(modules, normalizedTargetPath);
+                targetIndexWasWritten = true;
+            }
+            await this.app.fileManager.trashFile(sourceFile);
+        } catch (error) {
+            await this.deleteIfExists(modules.fsPromises, destinationFilePath);
+            await Promise.all(sidecarPaths.map((sidecarPath) =>
+                this.deleteIfExists(modules.fsPromises, sidecarPath)
+            ));
+            if (targetIndexWasWritten) {
+                try {
+                    await this.refreshTargetVaultIndexAfterMove(modules, normalizedTargetPath);
+                } catch {
+                    // Ignore cleanup refresh failures so the original move error is preserved.
+                }
+            }
+            if (error instanceof Error) {
+                throw error;
+            }
+            throw new Error("Failed to move file to target vault.");
+        }
+
+        if (sourceThreads.length > 0) {
+            await this.cleanupSourceVaultAfterCrossVaultMove(sourceFile.path);
         }
     }
 

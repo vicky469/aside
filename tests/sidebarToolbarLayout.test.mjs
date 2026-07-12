@@ -10,13 +10,16 @@ function cssRuleBody(selector) {
     return match?.groups?.body ?? "";
 }
 
-test("note sidebar toolbar keeps action icons from shrinking out of view", () => {
+test("note sidebar toolbar uses compact index-sized action icons", () => {
     const actionGroup = cssRuleBody(".aside-sidebar-toolbar-group.is-action-group");
     const noteIconButton = cssRuleBody(".aside-sidebar-toolbar-row.is-note-secondary-row .aside-toolbar-icon-button");
+    const noteToolbarIcon = cssRuleBody(".aside-sidebar-toolbar.is-note-toolbar .aside-comment-section-add-button svg");
 
     assert.match(actionGroup, /flex:\s*0\s+0\s+auto\s*;/);
-    assert.match(noteIconButton, /flex:\s*0\s+0\s+26px\s*;/);
-    assert.match(noteIconButton, /min-width:\s*26px\s*;/);
+    assert.match(noteIconButton, /flex:\s*0\s+0\s+22px\s*;/);
+    assert.match(noteIconButton, /min-width:\s*22px\s*;/);
+    assert.match(noteToolbarIcon, /width:\s*12px\s*;/);
+    assert.match(noteToolbarIcon, /height:\s*12px\s*;/);
 });
 
 test("note sidebar search row reserves default sidebar width for page-note actions", () => {

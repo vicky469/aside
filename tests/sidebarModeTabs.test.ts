@@ -4,6 +4,8 @@ import {
     getSidebarModeTabGroups,
     isSidebarListLikeMode,
     resolveModeWithSidebarModeVisibility,
+    shouldRenderSidebarFileMoveAction,
+    shouldRenderSidebarFilePinAction,
     SHARED_SIDEBAR_MODE_TABS,
 } from "../src/ui/views/sidebarModeTabs";
 
@@ -65,6 +67,16 @@ test("sidebar mode tab groups include todo and agent on note and index surfaces 
         getSidebarModeTabGroups(availability, "index").map((group) => group.tabs.map((tab) => tab.mode)),
         [["list"], ["todo", "agent", "thought-trail"]],
     );
+});
+
+test("sidebar file pin action renders only on note surfaces", () => {
+    assert.equal(shouldRenderSidebarFilePinAction("note"), true);
+    assert.equal(shouldRenderSidebarFilePinAction("index"), false);
+});
+
+test("sidebar file move action renders only on note surfaces", () => {
+    assert.equal(shouldRenderSidebarFileMoveAction("note"), true);
+    assert.equal(shouldRenderSidebarFileMoveAction("index"), false);
 });
 
 test("turned-off active todo and agent modes fall back to list", () => {

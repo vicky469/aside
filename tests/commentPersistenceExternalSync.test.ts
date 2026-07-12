@@ -214,6 +214,80 @@ test("comment persistence controller syncs external sidecar updates into an open
     }
 });
 
+test("comment persistence controller reloads initialized aggregate index from external sidecar changes", async () => {
+    const originalWindow = globalThis.window;
+    globalThis.window = {
+        setTimeout: () => 1,
+        clearTimeout: () => {},
+    } as unknown as typeof globalThis.window;
+
+    const file = createFile("docs/moved.md");
+    const staleFile = createFile("docs/stale.md");
+    const adapter = new FakeAdapter();
+    const storedThread = createThread(file.path);
+    adapter.directories.add(".obsidian/plugins/aside/sidenotes/by-note");
+    adapter.directories.add(".obsidian/plugins/aside/sidenotes/by-note/ha");
+    adapter.files.set(getSidecarStoragePath(file.path), serializeSidecarThreads(file.path, [storedThread]));
+
+    const commentManager = new CommentManager([]);
+    const aggregateCommentIndex = new AggregateCommentIndex();
+    aggregateCommentIndex.updateFile(staleFile.path, [{
+        ...createThread(staleFile.path),
+        id: "stale-thread",
+    }]);
+    let persistedData: PersistedPluginData = {};
+
+    const controller = new CommentPersistenceController({
+        app: {
+            vault: {
+                adapter: adapter as unknown as DataAdapter,
+                process: async () => {
+                    throw new Error("Should not rewrite notes while reloading external sidecars.");
+                },
+            },
+        } as never,
+        getAllCommentsNotePath: () => "Aside index.md",
+        getIndexHeaderImageUrl: () => "",
+        getIndexHeaderImageCaption: () => "",
+        getMarkdownViewForFile: () => null,
+        getMarkdownFileByPath: (filePath) => filePath === file.path ? file : null,
+        getCurrentNoteContent: async () => "",
+        getStoredNoteContent: async () => "",
+        getParsedNoteComments: (filePath, noteContent) => parseNoteComments(noteContent, filePath),
+        getPluginDataDirPath: () => ".obsidian/plugins/aside",
+        getSideNoteSyncDeviceId: () => "device-a",
+        readPersistedPluginData: () => persistedData,
+        writePersistedPluginData: async (data) => {
+            persistedData = data;
+        },
+        isAllCommentsNotePath: () => false,
+        isCommentableFile: (candidate): candidate is TFile => !!candidate && candidate.extension === "md",
+        isMarkdownEditorFocused: () => false,
+        getCommentManager: () => commentManager,
+        getAggregateCommentIndex: () => aggregateCommentIndex,
+        createCommentId: () => "generated-id",
+        hashText: async (text) => `hash-${text.replace(/\//g, "_")}`,
+        syncDerivedCommentLinksForFile: () => {},
+        refreshCommentViews: async () => {},
+        refreshAllCommentsSidebarViews: async () => {},
+        refreshEditorDecorations: () => {},
+        refreshMarkdownPreviews: () => {},
+        getCommentMentionedPageLabels: () => [],
+        syncIndexNoteLeafMode: async () => {},
+        log: async () => {},
+    });
+
+    try {
+        await controller.reloadIndexedCommentsFromStorage();
+
+        assert.equal(commentManager.getCommentById("thread-1")?.filePath, file.path);
+        assert.equal(aggregateCommentIndex.getCommentById("thread-1")?.filePath, file.path);
+        assert.equal(aggregateCommentIndex.getCommentById("stale-thread"), null);
+    } finally {
+        globalThis.window = originalWindow;
+    }
+});
+
 test("comment persistence controller deduplicates duplicate child entries from sidecar on load", async () => {
     const originalWindow = globalThis.window;
     globalThis.window = {
@@ -1858,6 +1932,135 @@ test("comment persistence controller prunes missing sidecar records before writi
     assert.equal(aggregateCommentIndex.getThreadById("thread-1"), null);
     assert.equal(sourceIdentityState.pathToSourceId?.[missingPath], undefined);
     assert.deepEqual(snapshot?.threads, []);
+});
+
+test("comment persistence controller preserves sidecar records when the source file is only missing from the vault cache", async () => {
+    const transientPath = "docs/cache-lag.md";
+    const indexFile = createFile("Aside index.md");
+    const transientThread = createThread(transientPath);
+    const adapter = new FakeAdapter();
+    const noteSidecarPath = getSidecarStoragePath(transientPath);
+    const sourceSidecarPath = getSourceSidecarStoragePath("src-cache-lag");
+    adapter.directories.add(".obsidian/plugins/aside/sidenotes/by-note");
+    adapter.directories.add(".obsidian/plugins/aside/sidenotes/by-note/ha");
+    adapter.directories.add(".obsidian/plugins/aside/sidenotes/by-source");
+    adapter.directories.add(".obsidian/plugins/aside/sidenotes/by-source/ha");
+    adapter.files.set(transientPath, "# Present on disk\n");
+    adapter.files.set(noteSidecarPath, serializeSidecarThreads(transientPath, [transientThread]));
+    adapter.files.set(sourceSidecarPath, `${JSON.stringify({
+        version: 1,
+        notePath: transientPath,
+        sourceId: "src-cache-lag",
+        threads: [transientThread],
+    })}\n`);
+
+    const aggregateCommentIndex = new AggregateCommentIndex();
+    aggregateCommentIndex.updateFile(transientPath, [transientThread]);
+    const commentManager = new CommentManager([transientThread]);
+    let persistedData: PersistedPluginData = {
+        sourceIdentityState: {
+            schemaVersion: 1,
+            sources: {
+                "src-cache-lag": {
+                    sourceId: "src-cache-lag",
+                    currentPath: transientPath,
+                    aliases: [],
+                    contentFingerprint: null,
+                    createdAt: 1710000000000,
+                    updatedAt: 1710000000000,
+                },
+            },
+            pathToSourceId: {
+                [transientPath]: "src-cache-lag",
+            },
+        },
+        sideNoteSyncEventState: {
+            schemaVersion: 1,
+            deviceLogs: {},
+            processedWatermarks: {},
+            compactedWatermarks: {},
+            noteSnapshots: {
+                "hash-docs_cache-lag.md": {
+                    notePath: transientPath,
+                    noteHash: "hash-docs_cache-lag.md",
+                    updatedAt: 1710000000000,
+                    coveredWatermarks: {},
+                    threads: [transientThread],
+                },
+            },
+        },
+    };
+    let indexContent = "";
+
+    const controller = new CommentPersistenceController({
+        app: {
+            vault: {
+                adapter: adapter as unknown as DataAdapter,
+                getName: () => "dev",
+                getMarkdownFiles: () => [indexFile],
+                getAbstractFileByPath: (filePath: string) =>
+                    filePath === indexFile.path ? indexFile : null,
+                create: async (_path: string, content: string) => {
+                    indexContent = content;
+                    return indexFile;
+                },
+                modify: async (_file: TFile, content: string) => {
+                    indexContent = content;
+                },
+                process: async () => "",
+            },
+            metadataCache: {
+                getFirstLinkpathDest: () => null,
+            },
+            fileManager: {
+                renameFile: async () => {},
+            },
+        } as never,
+        getAllCommentsNotePath: () => indexFile.path,
+        getIndexHeaderImageUrl: () => "",
+        getIndexHeaderImageCaption: () => "",
+        getMarkdownViewForFile: () => null,
+        getMarkdownFileByPath: (filePath) =>
+            filePath === indexFile.path ? indexFile : null,
+        getCurrentNoteContent: async () => "",
+        getStoredNoteContent: async () => "",
+        getParsedNoteComments: (filePath, noteContent) => parseNoteComments(noteContent, filePath),
+        getPluginDataDirPath: () => ".obsidian/plugins/aside",
+        getSideNoteSyncDeviceId: () => "device-a",
+        readPersistedPluginData: () => persistedData,
+        writePersistedPluginData: async (data) => {
+            persistedData = data;
+        },
+        isAllCommentsNotePath: (filePath) => filePath === indexFile.path,
+        isCommentableFile: (candidate): candidate is TFile =>
+            !!candidate && candidate.extension === "md" && candidate.path !== indexFile.path,
+        isMarkdownEditorFocused: () => false,
+        getCommentManager: () => commentManager,
+        getAggregateCommentIndex: () => aggregateCommentIndex,
+        createCommentId: () => "generated-id",
+        hashText: async (text) => `hash-${text.replace(/\//g, "_")}`,
+        syncDerivedCommentLinksForFile: () => {},
+        refreshCommentViews: async () => {},
+        refreshAllCommentsSidebarViews: async () => {},
+        refreshEditorDecorations: () => {},
+        refreshMarkdownPreviews: () => {},
+        getCommentMentionedPageLabels: () => [],
+        syncIndexNoteLeafMode: async () => {},
+        log: async () => {},
+    });
+
+    await controller.refreshAggregateNoteNow();
+
+    const state = persistedData.sideNoteSyncEventState as SideNoteSyncEventState;
+    const localDeleteEvents = state.deviceLogs["device-a"]?.events.filter((event) =>
+        event.op === "deleteNote"
+        && event.notePath === transientPath) ?? [];
+
+    assert.equal(adapter.files.has(noteSidecarPath), true);
+    assert.equal(adapter.files.has(sourceSidecarPath), true);
+    assert.equal(aggregateCommentIndex.getThreadById("thread-1")?.filePath, transientPath);
+    assert.equal(localDeleteEvents.length, 0);
+    assert.match(indexContent, /docs\/cache-lag\.md/);
 });
 
 test("comment persistence controller skips incompatible compacted snapshots for existing files", async () => {

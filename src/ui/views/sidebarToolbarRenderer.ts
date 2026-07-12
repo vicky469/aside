@@ -4,6 +4,8 @@ import {
     getSidebarModeTabGroups,
     getSidebarModeTabs,
     isSidebarModeAvailable,
+    shouldRenderSidebarFileMoveAction,
+    shouldRenderSidebarFilePinAction,
     type SidebarModeAvailability,
     type SidebarModeTabSurface,
     type SidebarModeVisibility,
@@ -52,6 +54,11 @@ export interface SidebarModeControlOptions extends SidebarModeAvailability, Side
     onChange(mode: SidebarPrimaryMode): void;
     pinnedSidebarFileAction?: {
         active: boolean;
+        ariaLabel: string;
+        disabled?: boolean;
+        onClick(): void;
+    };
+    moveSidebarFileAction?: {
         ariaLabel: string;
         disabled?: boolean;
         onClick(): void;
@@ -216,8 +223,11 @@ export function renderSidebarModeControl(
             }, guard);
         }
     }
-    if (options.pinnedSidebarFileAction) {
+    if (options.pinnedSidebarFileAction && shouldRenderSidebarFilePinAction(options.surface)) {
         renderPinnedSidebarFileButton(modeGroup, options.pinnedSidebarFileAction, guard);
+    }
+    if (options.moveSidebarFileAction && shouldRenderSidebarFileMoveAction(options.surface)) {
+        renderMoveCurrentFileButton(modeGroup, options.moveSidebarFileAction, guard);
     }
 }
 
@@ -312,6 +322,29 @@ function renderPinnedSidebarFileButton(
     button.setAttribute("aria-pressed", options.active ? "true" : "false");
     button.disabled = options.disabled ?? false;
     setIcon(button, "pin");
+    button.onclick = async () => {
+        if (button.disabled) {
+            return;
+        }
+        if (!(await guard.beforeAction())) {
+            return;
+        }
+        options.onClick();
+    };
+}
+
+function renderMoveCurrentFileButton(
+    container: HTMLElement,
+    options: NonNullable<SidebarModeControlOptions["moveSidebarFileAction"]>,
+    guard: ToolbarActionGuard,
+): void {
+    const button = container.createEl("button", {
+        cls: `clickable-icon aside-comment-section-add-button aside-toolbar-icon-button aside-sidebar-file-move-button`,
+    });
+    button.setAttribute("type", "button");
+    button.setAttribute("aria-label", options.ariaLabel);
+    button.disabled = options.disabled ?? false;
+    setIcon(button, "arrow-right-left");
     button.onclick = async () => {
         if (button.disabled) {
             return;

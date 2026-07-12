@@ -119,3 +119,11 @@ export function resolveModeWithSidebarModeVisibility(
 export function isSidebarListLikeMode(mode: SidebarPrimaryMode): boolean {
     return mode === "list" || mode === "tags" || mode === "todo" || mode === "agent";
 }
+
+export function shouldRenderSidebarFilePinAction(surface: SidebarModeTabSurface): boolean {
+    return surface === "note";
+}
+
+export function shouldRenderSidebarFileMoveAction(surface: SidebarModeTabSurface): boolean {
+    return surface === "note";
+}
