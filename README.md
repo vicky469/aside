@@ -60,8 +60,6 @@ For durable storage and sync across devices, use Aside with [Obsidian Sync](http
 
 1. Install Aside from Obsidian's Community plugins browser.
 2. Optional: install and sign in to the local agent CLI you want to use on the same machine.
-   - For `@codex`, open Terminal in your vault or project folder and run `codex`.
-   - For `@claude`, open Terminal in your vault or project folder and run `claude`.
 3. Optional: install the Aside skill for better agent workflows.
    ```
    $skill-installer install https://github.com/vicky469/aside/tree/main/skills/aside
@@ -73,7 +71,6 @@ For durable storage and sync across devices, use Aside with [Obsidian Sync](http
    - If you use a custom domain, attach it to the Pages project in Cloudflare first.
    - In Aside settings, turn on Publishing and set the Publishing URL to your public Pages URL, for example `https://publish.example.com`.
    - Put publishable Markdown, HTML, and PDF files under `public/`. Aside creates `public/` when Publishing is enabled if it does not already exist.
-   - Do not put Cloudflare API tokens in Aside settings.
 
 ## Workflow
 
@@ -82,18 +79,6 @@ For durable storage and sync across devices, use Aside with [Obsidian Sync](http
    In markdown, select text and right-click `Add comment to selection`, or use the sidebar for a page note. In HTML and PDF files, use the sidebar to add a page note for the whole file.
 3. Write your comment in the sidebar.
    Type `@todo` for follow-ups, `@codex` if you want Codex to take the task, or `@claude` if you want Claude to take it.
-
-## Publishing
-
-Publishing is an experimental desktop-only Cloudflare Pages workflow for testers. It is not an out-of-the-box hosted service: Aside does not create Cloudflare projects, attach domains, store tokens, or log Wrangler in for you.
-
-After setup, publish supported files under `public/` from the pane header.
-
-- Markdown files publish as Markdown when you open the `.md` file and click `Publish Markdown`.
-- HTML files publish as HTML when you open the `.html` file and click `Publish HTML`. If the HTML is generated from Markdown, keep the source `.md` file under `public/` too so Aside can track the pair.
-- PDF files publish as PDFs when you open the `.pdf` file and click `Publish PDF`.
-- After publishing, the pane header shows matching `Open published`, `Republish`, and `Unpublish` actions.
-- Aside refuses obvious private or unsafe artifacts, including Obsidian config files, `.env*`, `.npmrc`, private keys, certificates, source maps, source-map references, log files, and unsupported file types.
 
 ## Glossary
 
@@ -140,15 +125,6 @@ After setup, publish supported files under `public/` from the pane header.
 | Reopen link or tag suggestions | Press `Tab` while the cursor is inside an unfinished `[[...` or `#...` token. |
 | Bold or highlight text | Use the sidebar `B` and `H` buttons to wrap the current selection with `**bold**` or `==highlight==`. |
 | Cancel a draft or edit | Press `Esc`. |
-
-## Settings
-
-- `Index header image URL`
-- `Index header image caption`
-- `Publishing (experimental)`
-- `Enable publishing`
-- `Publishing URL`
-- `Project name`
 
 ## Commands
 
