@@ -7,7 +7,6 @@ import {
     resolveWorkspaceFileTargets,
     resolveWorkspaceLeafTargetInput,
     shouldHidePublicMarkdownProperties,
-    shouldIgnoreWorkspaceFileOpen,
     shouldIgnoreWorkspaceLeafChange,
     type SidebarUnavailableReason,
 } from "./workspaceContextPlanner";
@@ -37,6 +36,7 @@ export class WorkspaceContextController {
     public initializeActiveFiles(activeFile: TFile | null): void {
         const nextState = resolveWorkspaceFileTargets(
             activeFile,
+            activeFile,
             null,
             null,
             (file): file is TFile => this.host.isMarkdownCommentableFile(file),
@@ -47,16 +47,13 @@ export class WorkspaceContextController {
 
     public handleFileOpen(file: TFile | null): void {
         const activeFile = this.host.app.workspace.getActiveFile();
-        if (shouldIgnoreWorkspaceFileOpen(file, activeFile)) {
-            return;
-        }
 
         void this.syncIndexNoteLeafMode(this.host.app.workspace.getActiveViewOfType(MarkdownView)?.leaf ?? null);
         this.syncIndexNoteViewClasses();
         this.applyWorkspaceFileTargets(resolveWorkspaceTargetInput(
             file,
             activeFile,
-        ));
+        ), activeFile);
     }
 
     public handleActiveLeafChange(leaf: WorkspaceLeaf | null): void {
@@ -64,10 +61,11 @@ export class WorkspaceContextController {
         if (shouldIgnoreWorkspaceLeafChange(viewType)) {
             return;
         }
+        const workspaceActiveFile = this.host.app.workspace.getActiveFile();
 
         const file = resolveWorkspaceLeafTargetInput(
             leaf,
-            this.host.app.workspace.getActiveFile(),
+            workspaceActiveFile,
             (value): value is TFile => value instanceof TFile,
             (filePath) => {
                 const file = this.host.app.vault.getAbstractFileByPath(filePath);
@@ -76,7 +74,7 @@ export class WorkspaceContextController {
         );
         void this.syncIndexNoteLeafMode(leaf);
         this.syncIndexNoteViewClasses();
-        this.applyWorkspaceFileTargets(file);
+        this.applyWorkspaceFileTargets(file, workspaceActiveFile);
     }
 
     public async syncIndexNoteLeafMode(leaf: WorkspaceLeaf | null): Promise<void> {
@@ -119,10 +117,14 @@ export class WorkspaceContextController {
         });
     }
 
-    private applyWorkspaceFileTargets(file: TFile | null): void {
+    private applyWorkspaceFileTargets(
+        file: TFile | null,
+        workspaceActiveFile: TFile | null,
+    ): void {
         const targetVersion = ++this.workspaceTargetVersion;
         const nextState = resolveWorkspaceFileTargets(
             file,
+            workspaceActiveFile,
             this.host.getActiveMarkdownFile(),
             this.host.getActiveSidebarFile(),
             (candidate): candidate is TFile => this.host.isMarkdownCommentableFile(candidate),

@@ -168,6 +168,7 @@ function isMarkdownWorkspaceLeaf(leaf: unknown): boolean {
 
 export function resolveWorkspaceFileTargets<T>(
     file: T | null,
+    workspaceActiveFile: T | null,
     activeMarkdownFile: T | null,
     activeSidebarFile: T | null,
     isMarkdownCommentableFile: (file: T | null) => file is T,
@@ -175,19 +176,26 @@ export function resolveWorkspaceFileTargets<T>(
 ): WorkspaceFileTargets<T> {
     const hasConcreteFile = file !== null;
     const supportsSidebar = isSidebarSupportedFile(file);
+    const hasWorkspaceActiveFile = workspaceActiveFile !== null;
     const nextActiveMarkdownFile = isMarkdownCommentableFile(file)
         ? file
-        : activeMarkdownFile;
+        : hasWorkspaceActiveFile
+            ? activeMarkdownFile
+            : null;
     const nextActiveSidebarFile = supportsSidebar
         ? file
         : hasConcreteFile
             ? null
-        : activeSidebarFile;
+            : hasWorkspaceActiveFile
+                ? activeSidebarFile
+                : null;
     const sidebarFile = supportsSidebar
         ? file
         : hasConcreteFile
             ? null
-        : activeSidebarFile;
+            : hasWorkspaceActiveFile
+                ? activeSidebarFile
+                : null;
 
     return {
         activeMarkdownFile: nextActiveMarkdownFile,

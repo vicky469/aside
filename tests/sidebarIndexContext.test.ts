@@ -83,6 +83,7 @@ class MockPlugin {
         const nextState = resolveWorkspaceFileTargets(
             file,
             this.activeMarkdownFile,
+            this.activeMarkdownFile,
             this.activeSidebarFile,
             (candidate): candidate is MockFile => !!candidate && candidate.extension === "md" && candidate.path !== ALL_COMMENTS_NOTE_PATH,
             (candidate): candidate is MockFile => !!candidate && (candidate.extension === "md" || candidate.extension === "pdf"),
@@ -269,6 +270,7 @@ test("workspace file targets preserve the last markdown note while pointing the 
     const target = resolveWorkspaceFileTargets(
         { path: ALL_COMMENTS_NOTE_PATH, extension: "md" },
         { path: "last-note.md", extension: "md" },
+        { path: "last-note.md", extension: "md" },
         null,
         (file): file is MockFile => !!file && file.extension === "md" && file.path !== ALL_COMMENTS_NOTE_PATH,
         (file): file is MockFile => !!file && file.extension === "md",
@@ -282,6 +284,7 @@ test("workspace file targets preserve the last markdown note while pointing the 
 test("workspace file targets preserve the last markdown note while pointing the sidebar at PDF", () => {
     const target = resolveWorkspaceFileTargets(
         { path: "docs/file.pdf", extension: "pdf" },
+        { path: "last-note.md", extension: "md" },
         { path: "last-note.md", extension: "md" },
         { path: "docs/note.md", extension: "md" },
         (file): file is MockFile => !!file && file.extension === "md" && file.path !== ALL_COMMENTS_NOTE_PATH,
@@ -297,6 +300,7 @@ test("workspace file targets preserve the current sidebar file when leaf changes
     const target = resolveWorkspaceFileTargets(
         null,
         { path: "last-note.md", extension: "md" },
+        { path: "last-note.md", extension: "md" },
         { path: ALL_COMMENTS_NOTE_PATH, extension: "md" },
         (file): file is MockFile => !!file && file.extension === "md" && file.path !== ALL_COMMENTS_NOTE_PATH,
         (file): file is MockFile => !!file && file.extension === "md",
@@ -310,6 +314,7 @@ test("workspace file targets preserve the current sidebar file when leaf changes
 test("workspace file targets clear the sidebar file when the active file is unsupported", () => {
     const target = resolveWorkspaceFileTargets(
         { path: "docs/board.canvas", extension: "canvas" },
+        { path: "docs/file.pdf", extension: "pdf" },
         { path: "last-note.md", extension: "md" },
         { path: "docs/note.md", extension: "md" },
         (file): file is MockFile => !!file && file.extension === "md" && file.path !== ALL_COMMENTS_NOTE_PATH,
@@ -317,6 +322,21 @@ test("workspace file targets clear the sidebar file when the active file is unsu
     );
 
     assert.deepEqual(target.activeMarkdownFile, { path: "last-note.md", extension: "md" });
+    assert.equal(target.activeSidebarFile, null);
+    assert.equal(target.sidebarFile, null);
+});
+
+test("workspace file targets clear when there is no active workspace file", () => {
+    const target = resolveWorkspaceFileTargets(
+        null,
+        null,
+        { path: "last-note.md", extension: "md" },
+        { path: ALL_COMMENTS_NOTE_PATH, extension: "md" },
+        (file): file is MockFile => !!file && file.extension === "md" && file.path !== ALL_COMMENTS_NOTE_PATH,
+        (file): file is MockFile => !!file && file.extension === "md",
+    );
+
+    assert.equal(target.activeMarkdownFile, null);
     assert.equal(target.activeSidebarFile, null);
     assert.equal(target.sidebarFile, null);
 });
