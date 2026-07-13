@@ -53,7 +53,6 @@ function createHost(options: { knownComments?: Comment[]; threadIdsByCommentId?:
     const loadedFiles: string[] = [];
     const markedFiles: string[] = [];
     const highlightedCommentIds: string[] = [];
-    const orphanedCommentIds: string[] = [];
     const notices: string[] = [];
     const knownComments = new Map((options.knownComments ?? []).map((comment) => [comment.id, comment]));
 
@@ -81,20 +80,11 @@ function createHost(options: { knownComments?: Comment[]; threadIdsByCommentId?:
         activateViewAndHighlightComment: async (commentId) => {
             highlightedCommentIds.push(commentId);
         },
-        getCommentsForFile: (filePath) =>
-            (options.knownComments ?? []).filter((comment) => comment.filePath === filePath),
-        orphanCommentThreadAnchor: async (commentId) => {
-            orphanedCommentIds.push(commentId);
-            return true;
-        },
         createCommentId: () => "comment-1",
         showNotice: (message) => {
             notices.push(message);
         },
-    } as CommentEntryHost & {
-        getCommentsForFile(filePath: string): Comment[];
-        orphanCommentThreadAnchor(commentId: string): Promise<boolean>;
-    };
+    } as CommentEntryHost;
 
     return {
         controller: new CommentEntryController(host),
@@ -102,7 +92,6 @@ function createHost(options: { knownComments?: Comment[]; threadIdsByCommentId?:
         loadedFiles,
         markedFiles,
         highlightedCommentIds,
-        orphanedCommentIds,
         notices,
     };
 }
@@ -137,7 +126,7 @@ test("comment entry controller starts a draft from editor selection", async () =
     assert.deepEqual(host.notices, []);
 });
 
-test("comment entry controller orphans an existing anchor when the editor selection matches it", async () => {
+test("comment entry controller starts a separate draft when the editor selection matches an existing anchor", async () => {
     const file = createFile("docs/architecture.md");
     const existingComment: Comment = {
         id: "comment-existing",
@@ -161,9 +150,11 @@ test("comment entry controller orphans an existing anchor when the editor select
     );
 
     assert.equal(started, true);
-    assert.deepEqual(host.orphanedCommentIds, ["comment-existing"]);
-    assert.deepEqual(host.draftCalls, []);
-    assert.deepEqual(host.highlightedCommentIds, []);
+    assert.equal(host.draftCalls.length, 1);
+    assert.equal(host.draftCalls[0].draft?.id, "comment-1");
+    assert.equal(host.draftCalls[0].draft?.filePath, file.path);
+    assert.equal(host.draftCalls[0].draft?.selectedText, "beta");
+    assert.deepEqual(host.highlightedCommentIds, ["comment-1"]);
     assert.deepEqual(host.notices, []);
 });
 

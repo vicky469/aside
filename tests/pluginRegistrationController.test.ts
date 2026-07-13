@@ -59,7 +59,7 @@ function createMenuHarness() {
     return { menu, items };
 }
 
-function createHarness(options: { selectionAction?: "add-comment" | "orphan-anchor" } = {}) {
+function createHarness() {
     const registerViewCalls: Array<{ viewType: string; creator: (leaf: unknown) => unknown }> = [];
     const registerExtensionsCalls: Array<{ extensions: string[]; viewType: string }> = [];
     const protocolHandlers = new Map<string, (params: Record<string, unknown>) => void>();
@@ -75,7 +75,6 @@ function createHarness(options: { selectionAction?: "add-comment" | "orphan-anch
     const createdSidebarLeaves: unknown[] = [];
     const createdPublicHtmlLeaves: unknown[] = [];
     const draftCalls: Array<{ selected: boolean; filePath: string | null }> = [];
-    const selectionActionCalls: Array<{ selected: boolean; filePath: string | null }> = [];
     const openedCommentTargets: Array<{ filePath: string | null; commentId: string }> = [];
     let openIndexNoteCount = 0;
 
@@ -114,13 +113,6 @@ function createHarness(options: { selectionAction?: "add-comment" | "orphan-anch
                 filePath: file?.path ?? null,
             });
         },
-        getEditorSelectionAction: (editor, file) => {
-            selectionActionCalls.push({
-                selected: editor.somethingSelected(),
-                filePath: file?.path ?? null,
-            });
-            return options.selectionAction ?? "add-comment";
-        },
         openCommentById: async (filePath, commentId) => {
             openedCommentTargets.push({ filePath, commentId });
         },
@@ -140,7 +132,6 @@ function createHarness(options: { selectionAction?: "add-comment" | "orphan-anch
         createdSidebarLeaves,
         createdPublicHtmlLeaves,
         draftCalls,
-        selectionActionCalls,
         openedCommentTargets,
         getOpenIndexNoteCount: () => openIndexNoteCount,
     };
@@ -226,40 +217,6 @@ test("plugin registration controller only adds the editor menu item for active s
     })), [{
         title: "Add comment to selection",
         icon: "aside-icon",
-    }]);
-
-    await selectedMenuHarness.items[0].onClick?.();
-    assert.deepEqual(harness.draftCalls, [{
-        selected: true,
-        filePath: file.path,
-    }]);
-});
-
-test("plugin registration controller labels a matched anchor selection as anchor removal", async () => {
-    const harness = createHarness({ selectionAction: "orphan-anchor" });
-    const editorMenuHandler = (() => {
-        harness.controller.register();
-        return harness.getEditorMenuHandler();
-    })();
-    const file = createFile("docs/file.md");
-
-    const selectedMenuHarness = createMenuHarness();
-    editorMenuHandler?.(
-        selectedMenuHarness.menu,
-        { somethingSelected: () => true },
-        { file },
-    );
-
-    assert.deepEqual(selectedMenuHarness.items.map((item) => ({
-        title: item.title,
-        icon: item.icon,
-    })), [{
-        title: "Remove anchor from side note",
-        icon: "aside-icon",
-    }]);
-    assert.deepEqual(harness.selectionActionCalls, [{
-        selected: true,
-        filePath: file.path,
     }]);
 
     await selectedMenuHarness.items[0].onClick?.();

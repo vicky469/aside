@@ -1,12 +1,10 @@
 import type { TFile } from "obsidian";
 import {
-    EDITOR_SELECTION_COMMENT_ACTION_LABELS,
-    type EditorSelectionCommentAction,
-} from "../comments/editorSelectionCommentAction";
-import {
     PUBLIC_HTML_FILE_EXTENSIONS,
     PUBLIC_HTML_VIEW_TYPE,
 } from "../publish/publicHtmlViewTypes";
+
+const ADD_COMMENT_TO_SELECTION_LABEL = "Add comment to selection";
 
 export interface EditorMenuItemLike {
     setTitle(title: string): EditorMenuItemLike;
@@ -56,7 +54,6 @@ export interface PluginRegistrationHost {
     createSidebarView(leaf: unknown): unknown;
     createPublicHtmlView(leaf: unknown): unknown;
     startDraftFromEditorSelection(editor: EditorSelectionLike, file: TFile | null): Promise<unknown>;
-    getEditorSelectionAction(editor: EditorSelectionLike, file: TFile | null): EditorSelectionCommentAction;
     openCommentById(filePath: string | null, commentId: string): Promise<void>;
     openIndexNote(): Promise<void> | void;
 }
@@ -90,7 +87,7 @@ export class PluginRegistrationController {
 
         this.host.addCommand({
             id: "add-comment-to-selection",
-            name: "Add comment to selection",
+            name: ADD_COMMENT_TO_SELECTION_LABEL,
             icon: this.host.iconId,
             editorCallback: async (editor, view) => {
                 await this.host.startDraftFromEditorSelection(editor, view.file);
@@ -102,9 +99,8 @@ export class PluginRegistrationController {
                 return;
             }
 
-            const selectionAction = this.host.getEditorSelectionAction(editor, view.file);
             menu.addItem((item) => {
-                item.setTitle(EDITOR_SELECTION_COMMENT_ACTION_LABELS[selectionAction])
+                item.setTitle(ADD_COMMENT_TO_SELECTION_LABEL)
                     .setIcon(this.host.iconId)
                     .onClick(async () => {
                         await this.host.startDraftFromEditorSelection(editor, view.file);
