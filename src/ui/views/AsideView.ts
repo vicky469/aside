@@ -73,6 +73,7 @@ import {
 } from "./sidebarContentFilter";
 import { getSidebarCommentCardOpenAction } from "./sidebarCommentCardNavigation";
 import { renderPersistedCommentCard } from "./sidebarPersistedComment";
+import { restoreSidebarComment } from "./sidebarRestoreComment";
 import {
     buildStoredOrderSidebarItems,
     getNestedThreadIdForEditDraft,
@@ -4224,19 +4225,16 @@ export default class AsideView extends ItemView {
                 this.openMoveCommentThreadModal(threadId, sourceFilePath);
             },
             restoreComment: async (commentId) => {
-                const thread = this.plugin.getThreadById(commentId);
-                const restored = await this.plugin.restoreComment(commentId);
-                if (!restored) {
-                    return;
-                }
-
-                if (thread && thread.id !== commentId) {
-                    await this.plugin.setShowNestedCommentsForThread(thread.id, true);
-                }
-                if (this.plugin.shouldShowDeletedComments()) {
-                    await this.plugin.setShowDeletedComments(false);
-                }
-                this.highlightComment(commentId);
+                await restoreSidebarComment(commentId, {
+                    getThreadById: (id) => this.plugin.getThreadById(id),
+                    restoreComment: (id) => this.plugin.restoreComment(id),
+                    setShowNestedCommentsForThread: (threadId, show) =>
+                        this.plugin.setShowNestedCommentsForThread(threadId, show),
+                    shouldShowDeletedComments: () => this.plugin.shouldShowDeletedComments(),
+                    getThreadsForFile: (filePath, options) => this.plugin.getThreadsForFile(filePath, options),
+                    setShowDeletedComments: (show) => this.plugin.setShowDeletedComments(show),
+                    highlightComment: (id) => this.highlightComment(id),
+                });
             },
             clearDeletedComment: (commentId) => this.clearDeletedSidebarComment(commentId),
             startEditDraft: (commentId, hostFilePath) => {

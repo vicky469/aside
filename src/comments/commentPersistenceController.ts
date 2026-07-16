@@ -372,6 +372,7 @@ function cloneThreadEntry(entry: CommentThreadEntry): CommentThreadEntry {
         body: entry.body,
         timestamp: entry.timestamp,
         ...(deletedAt !== undefined ? { deletedAt } : {}),
+        ...(entry.anchor ? { anchor: { ...entry.anchor } } : {}),
     };
 }
 

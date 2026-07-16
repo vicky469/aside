@@ -619,6 +619,16 @@ test("comment persistence controller hydrates compacted snapshots over a stale s
                 id: "entry-2",
                 body: "mobile reply",
                 timestamp: 1710000000200,
+                anchor: {
+                    filePath: file.path,
+                    startLine: 2,
+                    startChar: 6,
+                    endLine: 2,
+                    endChar: 12,
+                    selectedText: "target",
+                    selectedTextHash: "hash-target",
+                    anchorKind: "selection",
+                },
             },
         ],
         updatedAt: 1710000000200,
@@ -690,6 +700,7 @@ test("comment persistence controller hydrates compacted snapshots over a stale s
 
         assert.equal(appliedEventCount, 0);
         assert.deepEqual(thread?.entries.map((entry) => entry.body), ["external body", "mobile reply"]);
+        assert.deepEqual(thread?.entries[1]?.anchor, remoteThread.entries[1]?.anchor);
         assert.equal(aggregateCommentIndex.getCommentById("entry-2")?.comment, "mobile reply");
     } finally {
         globalThis.window = originalWindow;
