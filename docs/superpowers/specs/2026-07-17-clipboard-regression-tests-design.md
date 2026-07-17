@@ -20,19 +20,19 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Expand paste-planner tests for selection replacement, cursor placement, CRLF and non-breaking-space normalization, equivalent HTML/plain fallback, and converter failure.
-- [ ] Expand clipboard-writer tests for async failure followed by fallback, `execCommand` false and exception paths, temporary textarea configuration, and guaranteed cleanup.
-- [ ] Expand sidebar-selection tests for empty selections and both cross-boundary directions.
-- [ ] Extract one narrow `copyCommentLocationToClipboard` adapter and use it from the sidebar share action.
-- [ ] Test that the share adapter sends the exact encoded Aside URI to the injected clipboard writer and propagates success or failure without reading the clipboard.
-- [ ] Add a maintained manual clipboard matrix for pop-out windows, Obsidian 1.12.7 and 1.13+, mobile, denied clipboard writes, and a background-access canary.
+- [x] Expand paste-planner tests for selection replacement, cursor placement, CRLF and non-breaking-space normalization, equivalent HTML/plain fallback, and converter failure.
+- [x] Expand clipboard-writer tests for async failure followed by fallback, `execCommand` false and exception paths, temporary textarea configuration, and guaranteed cleanup.
+- [x] Expand sidebar-selection tests for empty selections and both cross-boundary directions.
+- [x] Extract one narrow `copyCommentLocationToClipboard` adapter and use it from the sidebar share action.
+- [x] Test that the share adapter sends the exact encoded Aside URI to the injected clipboard writer and propagates success or failure without reading the clipboard.
+- [x] Add a maintained manual clipboard matrix for pop-out windows, Obsidian 1.12.7 and 1.13+, mobile, denied clipboard writes, and a background-access canary.
 
 ### Verification
 
-- [ ] Every newly introduced production seam is preceded by a failing test that demonstrates the missing behavior or wiring.
-- [ ] Clipboard-focused TypeScript tests pass with no runtime dependency on the Obsidian module.
-- [ ] The complete repository build passes, including plugin tests, script tests, Worker tests, zero-warning lint, type checking, compliance checks, bundling, and release-artifact inspection.
-- [ ] Manual-only scenarios are documented without being represented as automated guarantees.
+- [x] Every newly introduced production seam is preceded by a failing test that demonstrates the missing behavior or wiring.
+- [x] Clipboard-focused TypeScript tests pass with no runtime dependency on the Obsidian module.
+- [x] The complete repository build passes, including plugin tests, script tests, Worker tests, zero-warning lint, type checking, compliance checks, bundling, and release-artifact inspection.
+- [x] Manual-only scenarios are documented without being represented as automated guarantees.
 
 ## Scope
 
