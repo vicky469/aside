@@ -56,6 +56,27 @@ For durable storage and sync across devices, use Aside with [Obsidian Sync](http
 - Built-in agent help on desktop Obsidian. Type `@codex` or `@claude` in a thread to get a reply, create anchored side notes, or apply explicit edits to the source note.
 - Experimental Cloudflare Pages publishing for testers on desktop Obsidian.
 
+## Network access
+
+Aside does not send vault contents, note paths, tags, or clipboard contents to an Aside-operated analytics service. Network-capable actions are user initiated: opening an external link, sending a support report in a build where a support endpoint is configured, invoking a local agent CLI, or publishing through the user's local Wrangler installation. The generated Aside index uses the default remote image at `ichef.bbci.co.uk` unless the user replaces or clears that image URL; Obsidian may request that image when it renders the note.
+
+Declared plugin hosts: ichef.bbci.co.uk
+
+## Local vault indexing
+
+Aside indexes markdown note paths and cached tags locally so link suggestions, tag suggestions, move targets, Thought Trail, and the generated comment index stay current. The index is seeded once when the plugin loads and then updated from Obsidian vault and metadata events. Publishing traverses only the configured publishing folder. Aside does not transmit the local note or tag index.
+
+## Clipboard access
+
+Aside reads clipboard data only from a paste event initiated by the user. It writes clipboard text only after an explicit copy action and uses a temporary, detached textarea when the async clipboard API is unavailable. Aside does not poll, read, persist, or log clipboard contents in the background.
+
+## External services
+
+- Local `Codex` and `Claude` agent commands run only after the user saves a side note that explicitly mentions that agent. Those tools may use their own configured services and policies.
+- Experimental publishing runs the user's local Wrangler CLI against the Cloudflare Pages project selected by the user.
+- Support reports are sent only after the user reviews and submits the report, and only when that build has a support endpoint configured.
+- Aside has no hidden telemetry or self-update service.
+
 ## How to Get Started
 
 1. Install Aside from Obsidian's Community plugins browser.
