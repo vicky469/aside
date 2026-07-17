@@ -1,6 +1,6 @@
 {
 	"name": "aside",
-	"version": "2.0.92",
+	"version": "2.0.93",
 	"description": "Side comments for humans and agents.",
 	"private": true,
 	"main": "main.js",
@@ -48,6 +48,8 @@
 	},
 	"devDependencies": {
 		"@cloudflare/vitest-pool-workers": "^0.18.5",
+		"@emnapi/core": "1.11.2",
+		"@emnapi/runtime": "1.11.2",
 		"@eslint/js": "^9.39.4",
 		"@eslint/json": "^0.14.0",
 		"@types/node": "^22.20.1",
