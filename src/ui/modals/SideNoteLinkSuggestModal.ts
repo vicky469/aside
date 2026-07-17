@@ -1,6 +1,7 @@
 import {
     type App,
     SuggestModal,
+    type TFile,
 } from "obsidian";
 import {
     createSideNoteLinkNote,
@@ -9,6 +10,7 @@ import {
 } from "../editor/commentLinkSuggestions";
 
 interface SideNoteLinkSuggestModalOptions {
+    indexedMarkdownFiles: readonly TFile[];
     initialQuery: string;
     sourcePath: string;
     onChooseLink: (linkText: string) => void | Promise<void>;
@@ -17,6 +19,7 @@ interface SideNoteLinkSuggestModalOptions {
 
 export default class SideNoteLinkSuggestModal extends SuggestModal<SideNoteLinkSuggestion> {
     private readonly initialQuery: string;
+    private readonly indexedMarkdownFiles: readonly TFile[];
     private readonly sourcePath: string;
     private readonly onChooseLink: (linkText: string) => void | Promise<void>;
     private readonly onCloseModal: () => void;
@@ -24,6 +27,7 @@ export default class SideNoteLinkSuggestModal extends SuggestModal<SideNoteLinkS
     constructor(app: App, options: SideNoteLinkSuggestModalOptions) {
         super(app);
         this.initialQuery = options.initialQuery;
+        this.indexedMarkdownFiles = options.indexedMarkdownFiles;
         this.sourcePath = options.sourcePath;
         this.onChooseLink = options.onChooseLink;
         this.onCloseModal = options.onCloseModal;
@@ -52,7 +56,7 @@ export default class SideNoteLinkSuggestModal extends SuggestModal<SideNoteLinkS
     }
 
     getSuggestions(query: string): SideNoteLinkSuggestion[] {
-        return getSideNoteLinkSuggestions(this.app, query, this.sourcePath, 40);
+        return getSideNoteLinkSuggestions(this.app, this.indexedMarkdownFiles, query, this.sourcePath, 40);
     }
 
     renderSuggestion(suggestion: SideNoteLinkSuggestion, el: HTMLElement): void {

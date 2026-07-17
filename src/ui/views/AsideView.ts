@@ -1213,10 +1213,16 @@ export default class AsideView extends ItemView {
             renderComments: () => this.renderComments(),
             scheduleDraftFocus: (commentId) => this.interactionController.scheduleDraftFocus(commentId),
             openLinkSuggestModal: (options) => {
-                new SideNoteLinkSuggestModal(this.app, options).open();
+                new SideNoteLinkSuggestModal(this.app, {
+                    ...options,
+                    indexedMarkdownFiles: this.plugin.getIndexedMarkdownFiles(),
+                }).open();
             },
             openTagSuggestModal: (options) => {
-                new SideNoteTagSuggestModal(this.app, options).open();
+                new SideNoteTagSuggestModal(this.app, {
+                    ...options,
+                    vaultTags: this.plugin.getIndexedVaultTagUsage(),
+                }).open();
             },
         });
     }
@@ -2281,11 +2287,7 @@ export default class AsideView extends ItemView {
 
     private getThoughtTrailVaultCandidateFilePaths(_rootFilePath: string | null): string[] {
         const allCommentsNotePath = this.plugin.getAllCommentsNotePath();
-        return this.app.vault
-            .getMarkdownFiles()
-            .map((file) => file.path)
-            .filter((filePath) => filePath !== allCommentsNotePath)
-            .sort((left, right) => left.localeCompare(right));
+        return this.plugin.getIndexedMarkdownFilePaths(allCommentsNotePath);
     }
 
     private buildThoughtTrailTagLookup(
@@ -3966,8 +3968,8 @@ export default class AsideView extends ItemView {
     private openMoveCommentThreadModal(threadId: string, sourceFilePath: string): void {
         const openTargets = this.getOpenMarkdownFileInsertTargets();
         const openTargetsByPath = new Map(openTargets.map((target) => [target.file.path, target]));
-        const availableFiles = this.app.vault
-            .getMarkdownFiles()
+        const availableFiles = this.plugin
+            .getIndexedMarkdownFiles()
             .filter((file) =>
                 file.path !== sourceFilePath
                 && file.path !== this.plugin.getAllCommentsNotePath()
