@@ -107,3 +107,65 @@ test("createDraftPasteEdit compacts plain text Excalidraw clipboard data", () =>
         selectionEnd: 49,
     });
 });
+
+test("createDraftPasteEdit replaces the selected range with normalized rich Markdown", () => {
+    const edit = createDraftPasteEdit(
+        "Before OLD After",
+        7,
+        10,
+        clipboardData({
+            "text/html": "<p>New&nbsp;line</p>",
+            "text/plain": "Different plain text",
+        }),
+        () => "\r\nNew\u00a0line\r\n",
+    );
+
+    assert.deepEqual(edit, {
+        value: "Before New line After",
+        selectionStart: 15,
+        selectionEnd: 15,
+    });
+});
+
+test("createDraftPasteEdit lets native paste handle equivalent rich and plain text", () => {
+    assert.equal(createDraftPasteEdit(
+        "Draft",
+        5,
+        5,
+        clipboardData({
+            "text/html": "<p>Same&nbsp;text</p>",
+            "text/plain": "Same text",
+        }),
+        () => "Same\u00a0text",
+    ), null);
+});
+
+test("createDraftPasteEdit lets native paste continue when HTML conversion fails", () => {
+    assert.equal(createDraftPasteEdit(
+        "Draft",
+        5,
+        5,
+        clipboardData({ "text/html": "<strong>Text</strong>" }),
+        () => { throw new Error("conversion failed"); },
+    ), null);
+});
+
+test("createDraftPasteEdit replaces selected text with compact Excalidraw content", () => {
+    const excalidrawClipboard = JSON.stringify({
+        type: "excalidraw/clipboard",
+        elements: [{ id: "shape", type: "rectangle" }],
+        files: {},
+    });
+
+    assert.deepEqual(createDraftPasteEdit(
+        "Before OLD After",
+        7,
+        10,
+        clipboardData({ "text/plain": excalidrawClipboard }),
+        () => { throw new Error("should not convert without HTML"); },
+    ), {
+        value: "Before [Excalidraw clipboard: 1 element] After",
+        selectionStart: 40,
+        selectionEnd: 40,
+    });
+});

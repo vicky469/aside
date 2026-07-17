@@ -41,3 +41,21 @@ test("getSelectedSidebarClipboardText returns selected sidebar text", () => {
         "copied text",
     );
 });
+
+test("getSelectedSidebarClipboardText returns null for empty selected text", () => {
+    assert.equal(getSelectedSidebarClipboardText({
+        isCollapsed: false,
+        selectedText: "",
+        anchorInsideSidebar: true,
+        focusInsideSidebar: true,
+    }), null);
+});
+
+test("getSelectedSidebarClipboardText rejects a selection entering the sidebar", () => {
+    assert.equal(getSelectedSidebarClipboardText({
+        isCollapsed: false,
+        selectedText: "cross-boundary",
+        anchorInsideSidebar: false,
+        focusInsideSidebar: true,
+    }), null);
+});
