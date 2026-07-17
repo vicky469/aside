@@ -11,7 +11,7 @@ import {
     type ViewStateResult,
 } from "obsidian";
 import type { Comment, CommentThread, ReorderPlacement } from "../../commentManager";
-import { buildCommentLocationUrl, parseIndexFileOpenUrl } from "../../core/derived/allCommentsNote";
+import { parseIndexFileOpenUrl } from "../../core/derived/allCommentsNote";
 import {
     buildTagGroupedRelatedFiles,
     buildThoughtTrailCommentTagsByFilePath,
@@ -39,6 +39,7 @@ import SideNoteTagSuggestModal from "../modals/SideNoteTagSuggestModal";
 import { extractTagsFromText, normalizeTagText } from "../../core/text/commentTags";
 import { ASIDE_ICON_ID } from "../asideIcon";
 import { copyTextToClipboard } from "../copyTextToClipboard";
+import { copyCommentLocationToClipboard } from "../copyCommentLocationToClipboard";
 import { SidebarDraftEditorController } from "./sidebarDraftEditor";
 import {
     renderDraftCommentCard,
@@ -4217,8 +4218,11 @@ export default class AsideView extends ItemView {
             },
             openCommentInEditor: (persistedComment) => this.interactionController.openCommentInEditor(persistedComment),
             shareComment: async (persistedComment) => {
-                const commentUrl = buildCommentLocationUrl(this.app.vault.getName(), persistedComment);
-                await copyTextToClipboard(commentUrl);
+                await copyCommentLocationToClipboard(
+                    this.app.vault.getName(),
+                    persistedComment,
+                    copyTextToClipboard,
+                );
             },
             saveVisibleDraftIfPresent: () => this.saveVisibleDraftIfPresent(),
             setShowNestedCommentsForThread: (threadId, showNestedComments) => {
