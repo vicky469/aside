@@ -86,10 +86,10 @@ export default class AsideSetting extends PluginSettingTab {
                 return baseDescription;
             }
 
-            const fragment = document.createDocumentFragment();
+            const fragment = createFragment();
             fragment.append(baseDescription);
             for (const line of runtimeStatusLines) {
-                const lineEl = document.createElement("div");
+                const lineEl = createDiv();
                 lineEl.addClass("aside-agent-runtime-status-line");
                 lineEl.textContent = line;
                 fragment.append(lineEl);

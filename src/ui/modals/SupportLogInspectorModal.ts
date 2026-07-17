@@ -7,6 +7,7 @@ import {
     type SupportLogPreviewSource,
     formatSupportLogSummaryLine,
 } from "../views/supportReportPlanner";
+import { createDetachedObsidianFragment } from "../dom/createDetachedObsidianElement";
 
 interface SupportLogInspectorModalOptions {
     fileName: string;
@@ -154,7 +155,7 @@ export default class SupportLogInspectorModal extends Modal {
         devPanelHeaderEl.createEl("strong", {
             text: "Inspector input",
         });
-        devPanelHeaderEl.createEl("span", {
+        devPanelHeaderEl.createSpan({
             text: "Paste or drop log data to inspect it locally.",
         });
 
@@ -227,7 +228,7 @@ export default class SupportLogInspectorModal extends Modal {
         this.summaryCardEl = summaryCard;
         const summaryMeta = summaryCard.createDiv("aside-support-log-summary-meta");
         this.summaryHeadingEl = summaryMeta.createEl("strong");
-        this.summaryRangeEl = summaryMeta.createEl("span");
+        this.summaryRangeEl = summaryMeta.createSpan();
 
         const badges = summaryCard.createDiv("aside-support-log-summary-badges");
         this.infoBadgeEl = badges.createDiv("aside-support-log-summary-badge is-info");
@@ -244,7 +245,7 @@ export default class SupportLogInspectorModal extends Modal {
         this.controlsEl = controlsEl;
 
         const windowFilterBar = controlsEl.createDiv("aside-support-log-filter-bar");
-        windowFilterBar.createEl("span", {
+        windowFilterBar.createSpan({
             cls: "aside-support-log-filter-label",
             text: "Window",
         });
@@ -265,7 +266,7 @@ export default class SupportLogInspectorModal extends Modal {
         }
 
         const kindFilterBar = controlsEl.createDiv("aside-support-log-filter-bar");
-        kindFilterBar.createEl("span", {
+        kindFilterBar.createSpan({
             cls: "aside-support-log-filter-label",
             text: "Behavior",
         });
@@ -395,15 +396,15 @@ export default class SupportLogInspectorModal extends Modal {
 
     private renderTableRows(preview: SupportLogPreviewModel, tableBodyEl: HTMLTableSectionElement): void {
         const document = tableBodyEl.ownerDocument;
-        const fragment = document.createDocumentFragment();
+        const fragment = createDetachedObsidianFragment(document);
 
         for (const row of preview.rows) {
-            const rowEl = fragment.appendChild(document.createElement("tr"));
+            const rowEl = fragment.createEl("tr");
             rowEl.className = `is-${row.level}`;
 
             const appendCell = (className: string, text: string): void => {
-                const cellEl = rowEl.appendChild(document.createElement("td"));
-                const spanEl = cellEl.appendChild(document.createElement("span"));
+                const cellEl = rowEl.createEl("td");
+                const spanEl = cellEl.createSpan();
                 spanEl.className = className;
                 spanEl.textContent = text;
             };
@@ -414,15 +415,15 @@ export default class SupportLogInspectorModal extends Modal {
             appendCell("aside-support-log-row-area", row.area);
             appendCell("aside-support-log-row-event", row.event);
 
-            const detailsCellEl = rowEl.appendChild(document.createElement("td"));
+            const detailsCellEl = rowEl.createEl("td");
             detailsCellEl.className = "aside-support-log-row-details";
             if (row.payloadTokens.length === 0) {
-                const emptyEl = detailsCellEl.appendChild(document.createElement("span"));
+                const emptyEl = detailsCellEl.createSpan();
                 emptyEl.className = "aside-support-log-row-token is-empty";
                 emptyEl.textContent = "—";
             } else {
                 for (const token of row.payloadTokens) {
-                    const tokenEl = detailsCellEl.appendChild(document.createElement("span"));
+                    const tokenEl = detailsCellEl.createSpan();
                     tokenEl.className = "aside-support-log-row-token";
                     tokenEl.textContent = token;
                 }

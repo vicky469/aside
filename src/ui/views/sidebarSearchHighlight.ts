@@ -1,34 +1,12 @@
 import { nodeInstanceOf } from "../domGuards";
+import {
+    createDetachedObsidianElement,
+    createDetachedObsidianFragment,
+} from "../dom/createDetachedObsidianElement";
 
 export interface SidebarSearchHighlightRange {
     start: number;
     end: number;
-}
-
-const SIDEBAR_SEARCH_HIGHLIGHT_NAME_PREFIX = "aside-search-match-";
-const SIDEBAR_SEARCH_HIGHLIGHT_STYLE_ID_PREFIX = "aside-search-highlight-style-";
-
-let nextSidebarSearchHighlightId = 1;
-const sidebarSearchHighlightNameByContainer = new WeakMap<HTMLElement, string>();
-
-type HighlightRegistryLike = {
-    delete(name: string): void;
-    set(name: string, highlight: unknown): void;
-};
-
-type HighlightConstructor = new (...initialRanges: Range[]) => unknown;
-
-function isHighlightRegistry(value: unknown): value is HighlightRegistryLike {
-    return value !== null
-        && typeof value === "object"
-        && "set" in value
-        && typeof value.set === "function"
-        && "delete" in value
-        && typeof value.delete === "function";
-}
-
-function isHighlightConstructor(value: unknown): value is HighlightConstructor {
-    return typeof value === "function";
 }
 
 function normalizeSidebarSearchTerms(query: string): string[] {
@@ -92,49 +70,6 @@ export function getSidebarSearchHighlightRanges(
     return getSidebarSearchHighlightRangesForTerms(text, terms);
 }
 
-function getSidebarSearchHighlightName(container: HTMLElement): string {
-    const existingName = sidebarSearchHighlightNameByContainer.get(container);
-    if (existingName) {
-        return existingName;
-    }
-
-    const nextName = `${SIDEBAR_SEARCH_HIGHLIGHT_NAME_PREFIX}${nextSidebarSearchHighlightId++}`;
-    sidebarSearchHighlightNameByContainer.set(container, nextName);
-    return nextName;
-}
-
-function getSidebarSearchHighlightStyleId(highlightName: string): string {
-    return `${SIDEBAR_SEARCH_HIGHLIGHT_STYLE_ID_PREFIX}${highlightName}`;
-}
-
-function getSidebarSearchHighlightRegistry(ownerDocument: Document): HighlightRegistryLike | null {
-    const css: unknown = ownerDocument.defaultView?.CSS;
-    if (css === null || typeof css !== "object" || !("highlights" in css)) {
-        return null;
-    }
-    return isHighlightRegistry(css.highlights) ? css.highlights : null;
-}
-
-function getSidebarHighlightConstructor(ownerDocument: Document): HighlightConstructor | null {
-    const candidate: unknown = ownerDocument.defaultView?.Highlight;
-    return isHighlightConstructor(candidate) ? candidate : null;
-}
-
-function ensureSidebarSearchHighlightStyle(ownerDocument: Document, highlightName: string): void {
-    const styleId = getSidebarSearchHighlightStyleId(highlightName);
-    if (ownerDocument.getElementById(styleId)) {
-        return;
-    }
-
-    const styleEl = ownerDocument.createElement("style");
-    styleEl.id = styleId;
-    styleEl.textContent = `::highlight(${highlightName}) {
-    background-color: color-mix(in srgb, var(--text-highlight-bg, hsla(var(--interactive-accent-hsl), 0.18)) 88%, transparent);
-    color: inherit;
-}`;
-    ownerDocument.head?.append(styleEl);
-}
-
 function getSidebarSearchTextNodes(
     container: HTMLElement,
     options: {
@@ -183,30 +118,6 @@ function getSidebarSearchTextNodes(
     return textNodes;
 }
 
-function buildSidebarSearchHighlightRanges(
-    container: HTMLElement,
-    terms: readonly string[],
-    options: {
-        allowedSelectors?: readonly string[];
-    } = {},
-): Range[] {
-    const textNodes = getSidebarSearchTextNodes(container, options);
-    const ranges: Range[] = [];
-
-    for (const textNode of textNodes) {
-        const textContent = textNode.nodeValue ?? "";
-        const matchRanges = getSidebarSearchHighlightRangesForTerms(textContent, terms);
-        for (const matchRange of matchRanges) {
-            const range = container.ownerDocument.createRange();
-            range.setStart(textNode, matchRange.start);
-            range.setEnd(textNode, matchRange.end);
-            ranges.push(range);
-        }
-    }
-
-    return ranges;
-}
-
 function highlightSidebarSearchMatchesWithMarks(
     container: HTMLElement,
     terms: readonly string[],
@@ -224,14 +135,14 @@ function highlightSidebarSearchMatchesWithMarks(
             continue;
         }
 
-        const fragment = ownerDocument.createDocumentFragment();
+        const fragment = createDetachedObsidianFragment(ownerDocument);
         let cursor = 0;
         for (const range of ranges) {
             if (range.start > cursor) {
                 fragment.append(textContent.slice(cursor, range.start));
             }
 
-            const matchEl = ownerDocument.createElement("mark");
+            const matchEl = createDetachedObsidianElement(ownerDocument, "mark");
             matchEl.className = "aside-search-match";
             matchEl.textContent = textContent.slice(range.start, range.end);
             fragment.append(matchEl);
@@ -258,31 +169,10 @@ export function highlightSidebarSearchMatches(
         return;
     }
 
-    const ownerDocument = container.ownerDocument;
-    const registry = getSidebarSearchHighlightRegistry(ownerDocument);
-    const HighlightCtor = getSidebarHighlightConstructor(ownerDocument);
-    if (registry && HighlightCtor) {
-        const highlightName = getSidebarSearchHighlightName(container);
-        ensureSidebarSearchHighlightStyle(ownerDocument, highlightName);
-        const ranges = buildSidebarSearchHighlightRanges(container, terms, options);
-        if (ranges.length === 0) {
-            registry.delete(highlightName);
-            return;
-        }
-
-        registry.set(highlightName, new HighlightCtor(...ranges));
-        return;
-    }
-
     highlightSidebarSearchMatchesWithMarks(container, terms, options);
 }
 
 export function clearSidebarSearchHighlights(container: HTMLElement): void {
-    const registry = getSidebarSearchHighlightRegistry(container.ownerDocument);
-    if (registry) {
-        registry.delete(getSidebarSearchHighlightName(container));
-    }
-
     const marks = Array.from(container.querySelectorAll("mark.aside-search-match"));
     if (marks.length === 0) {
         return;

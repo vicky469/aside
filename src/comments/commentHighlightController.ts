@@ -27,6 +27,7 @@ import {
 } from "./commentIndexClickTarget";
 import { buildPreviewHighlightWraps } from "./commentHighlightPlanner";
 import { nodeInstanceOf } from "../ui/domGuards";
+import { createDetachedObsidianElement } from "../ui/dom/createDetachedObsidianElement";
 import {
     estimateIndexPreviewScrollTop,
     type IndexPreviewRenderedLineSample,
@@ -1126,7 +1127,7 @@ export class CommentHighlightController {
                 range.setStart(startPos.node, startPos.offsetInNode);
                 range.setEnd(endPos.node, endPos.offsetInNode);
 
-                const span = ownerDocument.createElement("span");
+                const span = createDetachedObsidianElement(ownerDocument, "span");
                 span.classList.add("aside-highlight", "aside-highlight-preview");
                 if (wrap.comment.id === activeCommentId) {
                     span.classList.add("aside-highlight-active");

@@ -59,6 +59,7 @@ import {
     buildPageSidebarThreadRenderSignature,
 } from "./sidebarPageRenderSignature";
 import { nodeInstanceOf } from "../domGuards";
+import { createDetachedObsidianElement } from "../dom/createDetachedObsidianElement";
 import {
     threadHasTag,
 } from "./sidebarBatchTagOperations";
@@ -2475,7 +2476,7 @@ export default class AsideView extends ItemView {
                     ),
                     threadId: null,
                     render: () => {
-                        const stagingEl = this.containerEl.ownerDocument.createElement("div");
+                        const stagingEl = createDetachedObsidianElement(this.containerEl.ownerDocument, "div");
                         this.renderDraftComment(stagingEl, item.draft);
                         const nextNode = stagingEl.firstElementChild;
                         if (!nodeInstanceOf(nextNode, HTMLElement)) {
@@ -2514,7 +2515,7 @@ export default class AsideView extends ItemView {
                 }),
                 threadId: item.thread.id,
                 render: async () => {
-                    const stagingEl = this.containerEl.ownerDocument.createElement("div");
+                    const stagingEl = createDetachedObsidianElement(this.containerEl.ownerDocument, "div");
                     await this.renderPersistedComment(
                         stagingEl,
                         item.thread,

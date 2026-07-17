@@ -3,13 +3,14 @@ import { getAgentActorLabel } from "../../core/agents/agentActorRegistry";
 import { getAgentRunStatusPresentation } from "./sidebarPersistedComment";
 import { formatSidebarCommentMeta } from "./sidebarCommentSections";
 import { nodeInstanceOf } from "../domGuards";
+import { createDetachedObsidianElement } from "../dom/createDetachedObsidianElement";
 
 function createElement<K extends keyof HTMLElementTagNameMap>(
     ownerDocument: Document,
     tagName: K,
     className?: string,
 ): HTMLElementTagNameMap[K] {
-    const element = ownerDocument.createElement(tagName);
+    const element = createDetachedObsidianElement(ownerDocument, tagName);
     if (className) {
         element.className = className;
     }
