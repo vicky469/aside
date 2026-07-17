@@ -3,6 +3,9 @@ export interface PublishSettings {
 	publishPagesProjectName: string;
 	publishBaseUrl: string;
 	publishAllowedRoot: string;
+	publishRemotePurgeEnabled: boolean;
+	publishPurgeBrokerUrl: string;
+	publishPurgeBrokerSecretName: string;
 }
 
 export type PublishSettingsValidation =
@@ -14,6 +17,9 @@ export const DEFAULT_PUBLISH_SETTINGS: PublishSettings = {
 	publishPagesProjectName: "",
 	publishBaseUrl: "",
 	publishAllowedRoot: "public/",
+	publishRemotePurgeEnabled: false,
+	publishPurgeBrokerUrl: "",
+	publishPurgeBrokerSecretName: "",
 };
 
 const PAGES_PROJECT_NAME_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/u;
@@ -107,7 +113,22 @@ export function normalizePublishSettings(value: Partial<PublishSettings> | null 
 		publishPagesProjectName,
 		publishBaseUrl,
 		publishAllowedRoot: DEFAULT_PUBLISH_SETTINGS.publishAllowedRoot,
+		publishRemotePurgeEnabled: normalizePublishEnabled(value?.publishRemotePurgeEnabled),
+		publishPurgeBrokerUrl: normalizeText(value?.publishPurgeBrokerUrl),
+		publishPurgeBrokerSecretName: normalizeText(value?.publishPurgeBrokerSecretName),
 	};
+}
+
+function isValidPurgeBrokerUrl(value: string): boolean {
+	try {
+		const url = new URL(value);
+		return url.protocol === "https:"
+			&& !url.username
+			&& !url.password
+			&& !url.hash;
+	} catch {
+		return false;
+	}
 }
 
 function isValidPublishBaseUrl(value: string): boolean {
@@ -148,6 +169,14 @@ export function validatePublishSettings(settings: PublishSettings): PublishSetti
 	}
 	if (!isValidAllowedRoot(settings.publishAllowedRoot)) {
 		issues.push("Allowed publish folder must be a vault-relative folder");
+	}
+	if (settings.publishRemotePurgeEnabled) {
+		if (!isValidPurgeBrokerUrl(settings.publishPurgeBrokerUrl)) {
+			issues.push("Purge broker URL must be an https:// URL");
+		}
+		if (!settings.publishPurgeBrokerSecretName) {
+			issues.push("Purge broker auth secret must be selected");
+		}
 	}
 
 	if (issues.length > 0) {

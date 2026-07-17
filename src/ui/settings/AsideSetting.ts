@@ -1,9 +1,11 @@
 import {
     App,
+	type BaseComponent,
     PluginSettingTab,
     Setting,
     TextComponent,
 } from "obsidian";
+import * as Obsidian from "obsidian";
 import {
     normalizeAgentRuntimeModePreference,
     type AgentRuntimeModePreference,
@@ -49,6 +51,42 @@ export const DEFAULT_SETTINGS: AsideSettings = {
 };
 
 const PUBLISH_PROJECT_NAME_PLACEHOLDER = "publish-site";
+
+interface SecretComponentLike extends BaseComponent {
+	setValue(value: string): this;
+	onChange(callback: (value: string | null) => void): this;
+}
+
+type SecretComponentConstructor = new (
+	app: App,
+	containerEl: HTMLElement,
+) => SecretComponentLike;
+
+function addSecretComponent(
+	setting: Setting,
+	app: App,
+	callback: (component: SecretComponentLike) => void,
+): void {
+	const SecretComponent = (Obsidian as unknown as {
+		SecretComponent: SecretComponentConstructor;
+	}).SecretComponent;
+	const settingWithComponent = setting as Setting & {
+		addComponent(factory: (containerEl: HTMLElement) => BaseComponent): Setting;
+	};
+	settingWithComponent.addComponent((containerEl) => {
+		const component = new SecretComponent(app, containerEl);
+		callback(component);
+		return component;
+	});
+}
+
+function getPublishHost(baseUrl: string): string {
+	try {
+		return new URL(baseUrl).hostname;
+	} catch {
+		return "Not configured";
+	}
+}
 
 export default class AsideSetting extends PluginSettingTab {
     plugin: Aside;
@@ -161,6 +199,51 @@ export default class AsideSetting extends PluginSettingTab {
                             text.setValue(this.plugin.settings.publishPagesProjectName);
                         });
                 });
+
+			new Setting(containerEl)
+				.setName("Remote cache purge")
+				.setDesc("Purge cached custom-domain pages after unpublish and republish.")
+				.addToggle((toggle) =>
+					toggle
+						.setValue(this.plugin.settings.publishRemotePurgeEnabled)
+						.onChange(async (value) => {
+							await this.plugin.setPublishRemotePurgeEnabled(value);
+							toggle.setValue(this.plugin.settings.publishRemotePurgeEnabled);
+							this.display();
+						})
+				);
+
+			if (this.plugin.settings.publishRemotePurgeEnabled) {
+				new Setting(containerEl)
+					.setName("Purge broker URL")
+					.setDesc("HTTPS endpoint for the deployed Aside cache purge broker.")
+					.addText((text) =>
+						text
+							.setPlaceholder("https://aside-cache-purge.example.workers.dev/purge")
+							.setValue(this.plugin.settings.publishPurgeBrokerUrl)
+							.onChange(async (value) => {
+								await this.plugin.setPublishPurgeBrokerUrl(value);
+								text.setValue(this.plugin.settings.publishPurgeBrokerUrl);
+							})
+					);
+
+				const secretSetting = new Setting(containerEl)
+					.setName("Purge broker auth secret")
+					.setDesc("Select or create the broker secret in Obsidian SecretStorage.");
+				addSecretComponent(secretSetting, this.app, (component) => {
+					component
+						.setValue(this.plugin.settings.publishPurgeBrokerSecretName)
+						.onChange((value) => {
+							void this.plugin.setPublishPurgeBrokerSecretName(value ?? "").then(() => {
+								component.setValue(this.plugin.settings.publishPurgeBrokerSecretName);
+							});
+						});
+				});
+
+				new Setting(containerEl)
+					.setName("Purge allowed host")
+					.setDesc(getPublishHost(this.plugin.settings.publishBaseUrl));
+			}
         }
 
         new Setting(containerEl)

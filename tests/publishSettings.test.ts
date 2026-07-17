@@ -10,6 +10,19 @@ test("normalizePublishSettings returns safe non-secret defaults", () => {
 	assert.deepEqual(normalizePublishSettings({}), DEFAULT_PUBLISH_SETTINGS);
 });
 
+test("normalizePublishSettings trims remote purge configuration without storing a secret value", () => {
+	const normalized = normalizePublishSettings({
+		publishRemotePurgeEnabled: true,
+		publishPurgeBrokerUrl: " https://purge.example.workers.dev/purge ",
+		publishPurgeBrokerSecretName: " aside-purge-broker ",
+	});
+
+	assert.equal(normalized.publishRemotePurgeEnabled, true);
+	assert.equal(normalized.publishPurgeBrokerUrl, "https://purge.example.workers.dev/purge");
+	assert.equal(normalized.publishPurgeBrokerSecretName, "aside-purge-broker");
+	assert.equal("publishPurgeBrokerSecret" in normalized, false);
+});
+
 test("normalizePublishSettings trims operational Cloudflare Pages settings", () => {
 	const normalized = normalizePublishSettings({
 		publishEnabled: true,
@@ -24,6 +37,9 @@ test("normalizePublishSettings trims operational Cloudflare Pages settings", () 
 		publishPagesProjectName: "publish-site",
 		publishBaseUrl: "https://publish.example.com",
 		publishAllowedRoot: "public/",
+		publishRemotePurgeEnabled: false,
+		publishPurgeBrokerUrl: "",
+		publishPurgeBrokerSecretName: "",
 	});
 	assert.equal("publishWranglerCommand" in normalized, false);
 });
@@ -50,6 +66,9 @@ test("normalizePublishSettings preserves configured Pages project for custom dom
 		publishPagesProjectName: "fdechina-publish",
 		publishBaseUrl: "https://publish.fdechina.com",
 		publishAllowedRoot: "public/",
+		publishRemotePurgeEnabled: false,
+		publishPurgeBrokerUrl: "",
+		publishPurgeBrokerSecretName: "",
 	});
 });
 
@@ -66,6 +85,9 @@ test("normalizePublishSettings derives Pages project from pages.dev publishing U
 		publishPagesProjectName: "lean-startup",
 		publishBaseUrl: "https://lean-startup.pages.dev",
 		publishAllowedRoot: "public/",
+		publishRemotePurgeEnabled: false,
+		publishPurgeBrokerUrl: "",
+		publishPurgeBrokerSecretName: "",
 	});
 });
 
@@ -81,6 +103,9 @@ test("normalizePublishSettings infers publish base URL from project name", () =>
 		publishPagesProjectName: "my-vault",
 		publishBaseUrl: "https://my-vault.pages.dev",
 		publishAllowedRoot: "public/",
+		publishRemotePurgeEnabled: false,
+		publishPurgeBrokerUrl: "",
+		publishPurgeBrokerSecretName: "",
 	});
 });
 
@@ -98,6 +123,18 @@ test("validatePublishSettings accepts complete non-secret Cloudflare Pages confi
 		publishAllowedRoot: "public/",
 	})), {
 		ok: true,
+	});
+});
+
+test("validatePublishSettings requires an HTTPS broker URL and secret reference when remote purge is enabled", () => {
+	assert.deepEqual(validatePublishSettings(normalizePublishSettings({
+		publishEnabled: true,
+		publishBaseUrl: "https://publish.example.com",
+		publishRemotePurgeEnabled: true,
+		publishPurgeBrokerUrl: "http://localhost:8787/purge",
+	})), {
+		ok: false,
+		notice: "Publish settings are invalid: Purge broker URL must be an https:// URL; Purge broker auth secret must be selected.",
 	});
 });
 

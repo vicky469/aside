@@ -288,6 +288,24 @@ export class IndexNoteSettingsController {
         });
     }
 
+	public async setPublishRemotePurgeEnabled(enabled: boolean): Promise<void> {
+		await this.setPublishSettings({
+			publishRemotePurgeEnabled: enabled,
+		});
+	}
+
+	public async setPublishPurgeBrokerUrl(url: string): Promise<void> {
+		await this.setPublishSettings({
+			publishPurgeBrokerUrl: url,
+		});
+	}
+
+	public async setPublishPurgeBrokerSecretName(secretName: string): Promise<void> {
+		await this.setPublishSettings({
+			publishPurgeBrokerSecretName: secretName,
+		});
+	}
+
     public readPersistedPluginData(): PersistedPluginData {
         return {
             ...this.persistedPluginData,

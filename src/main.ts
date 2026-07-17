@@ -1,4 +1,4 @@
-import { addIcon, WorkspaceLeaf, TFile, Notice, Plugin, normalizePath, MarkdownView, FileSystemAdapter, FileView, Platform, type Editor, type View } from "obsidian";
+import { addIcon, WorkspaceLeaf, TFile, Notice, Plugin, normalizePath, MarkdownView, FileSystemAdapter, FileView, Platform, requestUrl, type Editor, type View } from "obsidian";
 import { Comment, CommentManager, CommentThread, type ReorderPlacement } from "./commentManager";
 import { CommentEntryController } from "./comments/commentEntryController";
 import {
@@ -48,11 +48,17 @@ import {
     type PublicHtmlPublishActionState,
     type PublicHtmlPublishSnapshotFile,
     type PublicHtmlDeploySnapshotResult,
+	type PublicHtmlCachePurgeInput,
 } from "./publish/publicHtmlPublishController";
 import {
     runWranglerPagesDeploy,
     type WranglerRuntimeModules,
 } from "./publish/wranglerPagesPublisher";
+import {
+	purgeRemoteCache,
+	readRemoteCachePurgeAuthSecret,
+	type RemoteCachePurgeSecretStorage,
+} from "./publish/remoteCachePurgeBroker";
 import {
 	normalizeVaultRelativePublishPath,
 } from "./core/publish/publishPath";
@@ -499,6 +505,7 @@ export default class Aside extends Plugin {
         getPublishedArtifactPaths: () => this.settings.publishedPublicArtifactPaths,
         setPublishedArtifactPaths: (paths) => this.setPublishedPublicArtifactPaths(paths),
         deploySnapshot: (files) => this.publishSnapshotArtifacts(files),
+        purgePublicUrlFromCache: (url) => this.purgePublishedPublicUrlCache(url),
     });
     private readonly publicFilePublishActionController = new PublicFilePublishActionController({
         getAllowedRoot: () => this.settings.publishAllowedRoot,
@@ -811,6 +818,21 @@ export default class Aside extends Plugin {
         this.syncPublicFilePublishActions();
     }
 
+	public async setPublishRemotePurgeEnabled(enabled: boolean): Promise<void> {
+		await this.indexNoteSettingsController.setPublishRemotePurgeEnabled(enabled);
+		this.syncPublicFilePublishActions();
+	}
+
+	public async setPublishPurgeBrokerUrl(url: string): Promise<void> {
+		await this.indexNoteSettingsController.setPublishPurgeBrokerUrl(url);
+		this.syncPublicFilePublishActions();
+	}
+
+	public async setPublishPurgeBrokerSecretName(secretName: string): Promise<void> {
+		await this.indexNoteSettingsController.setPublishPurgeBrokerSecretName(secretName);
+		this.syncPublicFilePublishActions();
+	}
+
     private async storeResolvedPublishPagesProjectName(projectName: string): Promise<void> {
         const normalizedProjectName = normalizePublishProjectName(projectName);
         if (!normalizedProjectName || this.settings.publishPagesProjectName === normalizedProjectName) {
@@ -997,7 +1019,7 @@ export default class Aside extends Plugin {
                 ? "Updated"
                 : "Published";
         this.showNotice(
-            `${actionLabel}: ${result.url}`,
+            result.notice ?? `${actionLabel}: ${result.url}`,
             "publish",
             actionKind === "unpublish"
                 ? "publish.html.unpublished"
@@ -1508,6 +1530,43 @@ export default class Aside extends Plugin {
                 }
             }
         }
+    }
+
+	private async purgePublishedPublicUrlCache(input: PublicHtmlCachePurgeInput): Promise<{ ok: true } | { ok: false; notice: string }> {
+		const appWithSecretStorage = this.app as typeof this.app & {
+			secretStorage?: RemoteCachePurgeSecretStorage;
+		};
+		const authSecret = readRemoteCachePurgeAuthSecret(
+			appWithSecretStorage.secretStorage,
+			this.settings.publishPurgeBrokerSecretName,
+		);
+		const result = await purgeRemoteCache(
+			(options) => requestUrl(options),
+			{
+				brokerUrl: this.settings.publishPurgeBrokerUrl,
+				authSecret,
+				publicUrl: input.url,
+				sourcePath: input.sourcePath,
+				event: input.event,
+			},
+			{
+				now: () => new Date(),
+				createNonce: () => {
+					const bytes = new Uint8Array(16);
+					globalThis.crypto.getRandomValues(bytes);
+					return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+				},
+			},
+		);
+        if (!result.ok) {
+            void this.logEvent("warn", "publish", "publish.public-html.cache-purge.failed", {
+				url: input.url,
+				sourcePath: input.sourcePath,
+				event: input.event,
+                notice: result.notice,
+            });
+        }
+        return result;
     }
 
     public getRuntimeWorkingDirectory(filePath: string): string | null {

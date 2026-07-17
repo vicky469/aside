@@ -38,6 +38,9 @@ function createSettings(overrides: Partial<AsideSettings> = {}): AsideSettings {
         publishPagesProjectName: overrides.publishPagesProjectName ?? DEFAULT_PUBLISH_SETTINGS.publishPagesProjectName,
         publishBaseUrl: overrides.publishBaseUrl ?? DEFAULT_PUBLISH_SETTINGS.publishBaseUrl,
         publishAllowedRoot: overrides.publishAllowedRoot ?? DEFAULT_PUBLISH_SETTINGS.publishAllowedRoot,
+		publishRemotePurgeEnabled: overrides.publishRemotePurgeEnabled ?? DEFAULT_PUBLISH_SETTINGS.publishRemotePurgeEnabled,
+		publishPurgeBrokerUrl: overrides.publishPurgeBrokerUrl ?? DEFAULT_PUBLISH_SETTINGS.publishPurgeBrokerUrl,
+		publishPurgeBrokerSecretName: overrides.publishPurgeBrokerSecretName ?? DEFAULT_PUBLISH_SETTINGS.publishPurgeBrokerSecretName,
     };
 }
 

@@ -28,12 +28,22 @@ export interface PublicHtmlPublishSnapshotFile {
 }
 
 export type PublicHtmlPublishResult =
-	| { ok: true; url: string }
+	| { ok: true; url: string; notice?: string }
 	| { ok: false; notice: string };
 
 export type PublicHtmlDeploySnapshotResult =
 	| { ok: true }
 	| { ok: false; notice: string };
+
+export type PublicHtmlCachePurgeResult =
+	| { ok: true }
+	| { ok: false; notice: string };
+
+export interface PublicHtmlCachePurgeInput {
+	url: string;
+	sourcePath: string;
+	event: "unpublish" | "republish";
+}
 
 export type PublicHtmlPublishActionKind = "publish" | "unpublish" | "update-publish" | "open-published";
 
@@ -68,6 +78,7 @@ export interface PublicHtmlPublishHost {
 	getPublishedArtifactPaths(): string[];
 	setPublishedArtifactPaths(paths: string[]): Promise<void>;
 	deploySnapshot(files: PublicHtmlPublishSnapshotFile[]): Promise<PublicHtmlDeploySnapshotResult>;
+	purgePublicUrlFromCache(input: PublicHtmlCachePurgeInput): Promise<PublicHtmlCachePurgeResult>;
 }
 
 interface FileFrontmatterPatch {
@@ -489,13 +500,7 @@ export class PublicHtmlPublishController {
 				await this.host.writeVaultFile(pair.sourcePath, writeAsidePublishFrontmatter(sourceContents, nextFrontmatter));
 				await this.host.setPublishedArtifactPaths(nextArtifactPaths);
 
-				return {
-					ok: true,
-					url: buildPublishPublicUrl({
-						baseUrl: settings.publishBaseUrl,
-						vaultRelativePath: pair.htmlPath,
-					}),
-				};
+				return this.buildCachePurgeResult(settings, pair.htmlPath, pair.sourcePath, "unpublish");
 			}
 		}
 
@@ -525,13 +530,7 @@ export class PublicHtmlPublishController {
 		}
 		await this.host.setPublishedArtifactPaths(nextArtifactPaths);
 
-		return {
-			ok: true,
-			url: buildPublishPublicUrl({
-				baseUrl: settings.publishBaseUrl,
-				vaultRelativePath: htmlPath,
-			}),
-		};
+		return this.buildCachePurgeResult(settings, htmlPath, htmlPath, "unpublish");
 	}
 
 	private async unpublishMarkdownFile(sourcePath: string): Promise<PublicHtmlPublishResult> {
@@ -569,13 +568,7 @@ export class PublicHtmlPublishController {
 		}
 		await this.host.writeVaultFile(sourcePath, writeAsidePublishFrontmatter(sourceContents, nextFrontmatter));
 
-		return {
-			ok: true,
-			url: buildPublishPublicUrl({
-				baseUrl: settings.publishBaseUrl,
-				vaultRelativePath: sourcePath,
-			}),
-		};
+		return this.buildCachePurgeResult(settings, sourcePath, sourcePath, "unpublish");
 	}
 
 	public async unpublishFile(filePath: string): Promise<PublicHtmlPublishResult> {
@@ -623,13 +616,7 @@ export class PublicHtmlPublishController {
 		}
 		await this.host.setPublishedArtifactPaths(nextArtifactPaths);
 
-		return {
-			ok: true,
-			url: buildPublishPublicUrl({
-				baseUrl: settings.publishBaseUrl,
-				vaultRelativePath: artifact.artifactPath,
-			}),
-		};
+		return this.buildCachePurgeResult(settings, artifact.artifactPath, artifact.artifactPath, "unpublish");
 	}
 
 	public async updatePublishedHtmlFile(htmlPath: string): Promise<PublicHtmlPublishResult> {
@@ -671,13 +658,7 @@ export class PublicHtmlPublishController {
 				}
 				await this.host.setPublishedArtifactPaths(nextArtifactPaths);
 
-				return {
-					ok: true,
-					url: buildPublishPublicUrl({
-						baseUrl: settings.publishBaseUrl,
-						vaultRelativePath: pair.htmlPath,
-					}),
-				};
+				return this.buildCachePurgeResult(settings, pair.htmlPath, pair.sourcePath, "republish");
 			}
 		}
 
@@ -710,13 +691,7 @@ export class PublicHtmlPublishController {
 			return deployResult;
 		}
 
-		return {
-			ok: true,
-			url: buildPublishPublicUrl({
-				baseUrl: settings.publishBaseUrl,
-				vaultRelativePath: htmlPath,
-			}),
-		};
+		return this.buildCachePurgeResult(settings, htmlPath, htmlPath, "republish");
 	}
 
 	private async updatePublishedMarkdownFile(sourcePath: string): Promise<PublicHtmlPublishResult> {
@@ -749,13 +724,7 @@ export class PublicHtmlPublishController {
 			return deployResult;
 		}
 
-		return {
-			ok: true,
-			url: buildPublishPublicUrl({
-				baseUrl: settings.publishBaseUrl,
-				vaultRelativePath: sourcePath,
-			}),
-		};
+		return this.buildCachePurgeResult(settings, sourcePath, sourcePath, "republish");
 	}
 
 	public async updatePublishedFile(filePath: string): Promise<PublicHtmlPublishResult> {
@@ -811,13 +780,7 @@ export class PublicHtmlPublishController {
 			return deployResult;
 		}
 
-		return {
-			ok: true,
-			url: buildPublishPublicUrl({
-				baseUrl: settings.publishBaseUrl,
-				vaultRelativePath: artifact.artifactPath,
-			}),
-		};
+		return this.buildCachePurgeResult(settings, artifact.artifactPath, artifact.artifactPath, "republish");
 	}
 
 	private async validatePairExists(sourcePath: string, htmlPath: string): Promise<{ ok: true } | { ok: false; notice: string }> {
@@ -1047,6 +1010,36 @@ export class PublicHtmlPublishController {
 		return isPdfPath(artifactPath)
 			? this.host.readVaultBinaryFile(artifactPath)
 			: this.host.readVaultFile(artifactPath);
+	}
+
+	private async buildCachePurgeResult(
+		settings: PublishSettings,
+		vaultRelativePath: string,
+		sourcePath: string,
+		event: PublicHtmlCachePurgeInput["event"],
+	): Promise<{ ok: true; url: string; notice?: string }> {
+		const url = buildPublishPublicUrl({
+			baseUrl: settings.publishBaseUrl,
+			vaultRelativePath,
+		});
+		if (!settings.publishRemotePurgeEnabled) {
+			return { ok: true, url };
+		}
+
+		const purgeResult = await this.host.purgePublicUrlFromCache({
+			url,
+			sourcePath,
+			event,
+		});
+		if (purgeResult.ok) {
+			return { ok: true, url };
+		}
+
+		return {
+			ok: true,
+			url,
+			notice: `${event === "unpublish" ? "Unpublished" : "Republished"}, but remote cache purge failed: ${purgeResult.notice}`,
+		};
 	}
 
 	private disabledAction(
