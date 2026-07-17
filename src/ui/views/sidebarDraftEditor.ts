@@ -52,13 +52,13 @@ export function getSidebarComments(
         || (!selectedFileSet || selectedFileSet.has(draftComment.filePath))
         ? draftComment
         : null;
-    const mergedComments = visibleDraft
-        ? fileScopedComments.concat(visibleDraft)
-        : fileScopedComments;
+    const mergedComments: Array<Comment | DraftComment> = visibleDraft
+        ? [...fileScopedComments, visibleDraft]
+        : [...fileScopedComments];
 
     return mergedComments
         .slice()
-        .sort(compareCommentsForSidebarOrder) as Array<Comment | DraftComment>;
+        .sort(compareCommentsForSidebarOrder);
 }
 
 export function estimateDraftTextareaRows(commentText: string, isEditMode: boolean): number {

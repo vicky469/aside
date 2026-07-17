@@ -55,7 +55,7 @@ test("getSideNoteLinkSuggestions prepends a create suggestion for a new note", (
     ];
     const app = createApp(files);
 
-    const suggestions = getSideNoteLinkSuggestions(app, "Fresh idea", "Notes/Today.md");
+    const suggestions = getSideNoteLinkSuggestions(app, files, "Fresh idea", "Notes/Today.md");
     const createSuggestion = suggestions[0];
 
     assert.equal(createSuggestion?.type, "create");
@@ -70,7 +70,7 @@ test("getSideNoteLinkSuggestions omits create suggestion when the note already e
     ];
     const app = createApp(files);
 
-    const suggestions = getSideNoteLinkSuggestions(app, "Inbox/Fresh idea", "Notes/Today.md");
+    const suggestions = getSideNoteLinkSuggestions(app, files, "Inbox/Fresh idea", "Notes/Today.md");
 
     assert.equal(suggestions[0]?.type, "existing");
     assert.equal(suggestions.some((suggestion) => suggestion.type === "create"), false);
@@ -84,7 +84,7 @@ test("getSideNoteLinkSuggestions ranks closer basename matches first", () => {
     ];
     const app = createApp(files);
 
-    const suggestions = getSideNoteLinkSuggestions(app, "Alpha", "Notes/Today.md");
+    const suggestions = getSideNoteLinkSuggestions(app, files, "Alpha", "Notes/Today.md");
     const existingSuggestions = suggestions.filter((suggestion) => suggestion.type === "existing");
 
     assert.equal(existingSuggestions[0] && existingSuggestions[0].type === "existing" ? existingSuggestions[0].file.path : null, "Projects/Alpha.md");
@@ -94,7 +94,7 @@ test("getSideNoteLinkSuggestions ranks closer basename matches first", () => {
 test("getSideNoteLinkSuggestions sanitizes invalid path characters in create suggestions", () => {
     const app = createApp([]);
 
-    const suggestions = getSideNoteLinkSuggestions(app, "Research: bottleneck/Chapter: 1", "Notes/Today.md");
+    const suggestions = getSideNoteLinkSuggestions(app, [], "Research: bottleneck/Chapter: 1", "Notes/Today.md");
     const createSuggestion = suggestions[0];
 
     assert.equal(createSuggestion?.type, "create");

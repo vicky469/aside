@@ -38,18 +38,11 @@ class FakeTextarea implements CopyTextTextarea {
 
 function createFakeDocument(execCommandResult: boolean) {
     const appended: FakeTextarea[] = [];
-    const body = {
-        appendChild(node: FakeTextarea) {
-            appended.push(node);
-        },
-    };
-
     const doc: CopyTextDocument = {
-        body,
-        documentElement: body,
-        createElement(tagName: "textarea") {
-            assert.equal(tagName, "textarea");
-            return new FakeTextarea();
+        createAttachedTextarea() {
+            const textarea = new FakeTextarea();
+            appended.push(textarea);
+            return textarea;
         },
         execCommand(command: "copy") {
             assert.equal(command, "copy");

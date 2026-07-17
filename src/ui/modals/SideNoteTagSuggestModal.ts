@@ -1,5 +1,6 @@
-import { App, SuggestModal, getAllTags } from "obsidian";
+import { App, SuggestModal } from "obsidian";
 import { isTagCharacter, normalizeTagText } from "../../core/text/commentTags";
+import type { VaultTagUsage } from "../../core/vault/vaultCapabilityIndex";
 
 interface ExistingTagSuggestion {
     type: "existing";
@@ -17,6 +18,7 @@ type SideNoteTagSuggestion = ExistingTagSuggestion | CreateTagSuggestion;
 interface SideNoteTagSuggestModalOptions {
     extraTags?: string[];
     initialQuery: string;
+    vaultTags: readonly VaultTagUsage[];
     onChooseTag: (tagText: string) => void | Promise<void>;
     onCloseModal: () => void;
 }
@@ -36,32 +38,15 @@ function isValidTagQuery(query: string): boolean {
     return normalized.length > 0 && Array.from(normalized).every(isTagCharacter);
 }
 
-function collectVaultTags(app: App, extraTags: string[]): VaultTagRecord[] {
+function collectVaultTags(indexedTags: readonly VaultTagUsage[], extraTags: string[]): VaultTagRecord[] {
     const tagCounts = new Map<string, VaultTagRecord>();
 
-    for (const file of app.vault.getMarkdownFiles()) {
-        const cache = app.metadataCache.getFileCache(file);
-        if (!cache) {
-            continue;
-        }
-
-        const uniqueTags = new Set(
-            (getAllTags(cache) ?? [])
-                .map(normalizeTagText)
-                .filter(Boolean),
-        );
-
-        for (const tag of uniqueTags) {
-            const normalized = tag.slice(1).toLowerCase();
-            const existing = tagCounts.get(normalized);
-            if (existing) {
-                existing.usageCount += 1;
-                continue;
-            }
-
-            tagCounts.set(normalized, {
-                normalized,
-                usageCount: 1,
+    for (const indexedTag of indexedTags) {
+        const tag = normalizeTagText(indexedTag.tag);
+        if (tag) {
+            tagCounts.set(tag.slice(1).toLowerCase(), {
+                normalized: tag.slice(1).toLowerCase(),
+                usageCount: indexedTag.usageCount,
                 tag,
             });
         }
@@ -125,7 +110,7 @@ export default class SideNoteTagSuggestModal extends SuggestModal<SideNoteTagSug
         this.initialQuery = options.initialQuery;
         this.onChooseTag = options.onChooseTag;
         this.onCloseModal = options.onCloseModal;
-        this.vaultTags = collectVaultTags(app, options.extraTags ?? []);
+        this.vaultTags = collectVaultTags(options.vaultTags, options.extraTags ?? []);
 
         this.limit = 40;
         this.setPlaceholder("Search or create a tag");

@@ -1,4 +1,8 @@
 import { nodeInstanceOf } from "../domGuards";
+import {
+    createDetachedObsidianElement,
+    createDetachedObsidianFragment,
+} from "../dom/createDetachedObsidianElement";
 
 const COMMENT_MENTION_PATTERN = /(^|[^\w])(@[A-Za-z0-9_/-]+(?:\.[A-Za-z0-9_/-]+)*)/g;
 
@@ -20,7 +24,7 @@ function appendMentionNodes(
             parent.appendChild(document.createTextNode(prefix));
         }
 
-        const mentionEl = document.createElement("span");
+        const mentionEl = createDetachedObsidianElement(document, "span");
         mentionEl.className = className;
         mentionEl.textContent = mention;
         parent.appendChild(mentionEl);
@@ -33,7 +37,7 @@ function appendMentionNodes(
 }
 
 export function renderStyledDraftCommentFragment(document: Document, value: string): DocumentFragment {
-    const fragment = document.createDocumentFragment();
+    const fragment = createDetachedObsidianFragment(document);
     if (!value) {
         return fragment;
     }
@@ -55,7 +59,7 @@ export function renderStyledDraftCommentFragment(document: Document, value: stri
         appendMentionNodes(document, fragment, value.slice(cursor, boldStart), "aside-editor-token-mention");
         fragment.append(document.createTextNode(value.slice(boldStart, boldStart + 2)));
 
-        const boldEl = document.createElement("span");
+        const boldEl = createDetachedObsidianElement(document, "span");
         boldEl.className = "aside-editor-token-bold";
         appendMentionNodes(document, boldEl, value.slice(boldStart + 2, boldEnd), "aside-editor-token-mention");
         fragment.appendChild(boldEl);
@@ -131,7 +135,7 @@ function createMentionFragment(
     COMMENT_MENTION_PATTERN.lastIndex = 0;
     let lastIndex = 0;
     let foundMention = false;
-    const fragment = document.createDocumentFragment();
+    const fragment = createDetachedObsidianFragment(document);
 
     for (let match = COMMENT_MENTION_PATTERN.exec(value); match; match = COMMENT_MENTION_PATTERN.exec(value)) {
         const [fullMatch, prefix, mention] = match;
@@ -145,7 +149,7 @@ function createMentionFragment(
             fragment.append(prefix);
         }
 
-        const mentionEl = document.createElement("span");
+        const mentionEl = createDetachedObsidianElement(document, "span");
         mentionEl.className = "aside-comment-mention";
         mentionEl.textContent = mention;
         fragment.append(mentionEl);

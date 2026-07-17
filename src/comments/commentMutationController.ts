@@ -1064,7 +1064,10 @@ export class CommentMutationController {
             throw new Error("Draft selectedTextHash missing before persistence.");
         }
 
-        return draftComment as DraftComment & { selectedTextHash: string };
+        return {
+            ...draftComment,
+            selectedTextHash: draftComment.selectedTextHash,
+        };
     }
 
     private createAddFingerprint(comment: Comment): string {

@@ -4,7 +4,20 @@ import os from "node:os";
 import path from "node:path";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 
-import { inspectReleaseArtifacts } from "../scripts/check-release-artifacts.mjs";
+import { inspectReleaseArtifacts, RELEASE_ARTIFACTS } from "../scripts/check-release-artifacts.mjs";
+
+test("release artifact allowlist is exactly the three public plugin assets", () => {
+    assert.deepEqual(RELEASE_ARTIFACTS, ["main.js", "manifest.json", "styles.css"]);
+});
+
+test("release artifact guard rejects embedded source content", () => {
+    withTempDir((tempDir) => {
+        writeReleaseFiles(tempDir, {
+            "main.js": "const map = { sourcesContent: ['private source'] };",
+        });
+        assert.match(inspectReleaseArtifacts(tempDir).join("\n"), /embedded sourcesContent/u);
+    });
+});
 
 function withTempDir(callback) {
     const tempDir = mkdtempSync(path.join(os.tmpdir(), "aside-release-artifacts-"));

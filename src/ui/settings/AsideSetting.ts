@@ -1,11 +1,10 @@
 import {
     App,
-	type BaseComponent,
     PluginSettingTab,
+    SecretComponent,
     Setting,
-    TextComponent,
+    type SettingDefinitionItem,
 } from "obsidian";
-import * as Obsidian from "obsidian";
 import {
     normalizeAgentRuntimeModePreference,
     type AgentRuntimeModePreference,
@@ -27,6 +26,9 @@ import {
     formatAgentRuntimeStatusLines,
     shouldRenderAgentRuntimeStatus,
 } from "./agentRuntimeSettings";
+import { type AsideSettingCatalogContext } from "./asideSettingCatalog";
+import { getAsideSettingDefinitions } from "./asideSettingDefinitionsAdapter";
+import { renderLegacyAsideSettings } from "./asideSettingLegacyAdapter";
 import type Aside from "../../main";
 
 export interface AsideSettings extends PublishSettings {
@@ -50,44 +52,6 @@ export const DEFAULT_SETTINGS: AsideSettings = {
     ...DEFAULT_PUBLISH_SETTINGS,
 };
 
-const PUBLISH_PROJECT_NAME_PLACEHOLDER = "publish-site";
-
-interface SecretComponentLike extends BaseComponent {
-	setValue(value: string): this;
-	onChange(callback: (value: string | null) => void): this;
-}
-
-type SecretComponentConstructor = new (
-	app: App,
-	containerEl: HTMLElement,
-) => SecretComponentLike;
-
-function addSecretComponent(
-	setting: Setting,
-	app: App,
-	callback: (component: SecretComponentLike) => void,
-): void {
-	const SecretComponent = (Obsidian as unknown as {
-		SecretComponent: SecretComponentConstructor;
-	}).SecretComponent;
-	const settingWithComponent = setting as Setting & {
-		addComponent(factory: (containerEl: HTMLElement) => BaseComponent): Setting;
-	};
-	settingWithComponent.addComponent((containerEl) => {
-		const component = new SecretComponent(app, containerEl);
-		callback(component);
-		return component;
-	});
-}
-
-function getPublishHost(baseUrl: string): string {
-	try {
-		return new URL(baseUrl).hostname;
-	} catch {
-		return "Not configured";
-	}
-}
-
 export default class AsideSetting extends PluginSettingTab {
     plugin: Aside;
     private agentStatusRefreshToken = 0;
@@ -97,189 +61,81 @@ export default class AsideSetting extends PluginSettingTab {
         this.plugin = plugin;
     }
 
+    getSettingDefinitions(): SettingDefinitionItem[] {
+        return getAsideSettingDefinitions(this.getCatalogContext());
+    }
+
     display(): void {
-        const { containerEl } = this;
+        this.renderLegacySettings();
+    }
+
+    private renderLegacySettings(): void {
         this.agentStatusRefreshToken += 1;
-        containerEl.empty();
+        this.containerEl.empty();
+        renderLegacyAsideSettings(
+            this.containerEl,
+            this.getCatalogContext(),
+            (container) => new Setting(container),
+        );
+    }
 
-        new Setting(containerEl)
-            .setName("Sidebar tabs")
-            .setHeading();
-
-        new Setting(containerEl)
-            .setName("Show todo tab")
-            .setDesc("Show the todo sidebar tab for @todo side notes.")
-            .addToggle((toggle) =>
-                toggle
-                    .setValue(this.plugin.settings.showTodoSidebarTab)
-                    .onChange(async (value) => {
-                        await this.plugin.setShowTodoSidebarTab(value);
-                        toggle.setValue(this.plugin.settings.showTodoSidebarTab);
-                    })
-            );
-
-        const getAgentTabDescription = (runtimeStatusLines?: string[]): string | DocumentFragment => {
-            const baseDescription = "Show the agent sidebar tab for local agent replies.";
-            if (!runtimeStatusLines?.length) {
-                return baseDescription;
-            }
-
-            const fragment = document.createDocumentFragment();
-            fragment.append(baseDescription);
-            for (const line of runtimeStatusLines) {
-                const lineEl = document.createElement("div");
-                lineEl.addClass("aside-agent-runtime-status-line");
-                lineEl.textContent = line;
-                fragment.append(lineEl);
-            }
-            return fragment;
-        };
-
-        const agentTabSetting = new Setting(containerEl)
-            .setName("Show agent tab")
-            .setDesc(getAgentTabDescription())
-            .addToggle((toggle) =>
-                toggle
-                    .setValue(this.plugin.settings.showAgentSidebarTab)
-                    .onChange(async (value) => {
-                        await this.plugin.setShowAgentSidebarTab(value);
-                        toggle.setValue(this.plugin.settings.showAgentSidebarTab);
-                        this.display();
-                    })
-            );
-
-        if (shouldRenderAgentRuntimeStatus(this.plugin.settings)) {
-            this.renderAgentRuntimeStatus(agentTabSetting, getAgentTabDescription);
-        }
-
-        new Setting(containerEl)
-            .setName("Publishing (experimental)")
-            .setHeading();
-
-        new Setting(containerEl)
-            .setName("Enable publishing")
-            .setDesc("Show experimental publish controls for supported files in the public folder.")
-            .addToggle((toggle) =>
-                toggle
-                    .setValue(this.plugin.settings.publishEnabled)
-                    .onChange(async (value) => {
-                        await this.plugin.setPublishEnabled(value);
-                        toggle.setValue(this.plugin.settings.publishEnabled);
-                        this.display();
-                    })
-            );
-
-        if (this.plugin.settings.publishEnabled) {
-            let projectNameText: TextComponent | null = null;
-
-            new Setting(containerEl)
-                .setName("Publishing URL")
-                .setDesc("Canonical public address for published files. Prefer your custom domain.")
-                .addText((text) =>
-                    text
-                        .setPlaceholder("https://publish.example.com")
-                        .setValue(this.plugin.settings.publishBaseUrl)
-                        .onChange(async (value) => {
-                            await this.plugin.setPublishBaseUrl(value);
-                            text.setValue(this.plugin.settings.publishBaseUrl);
-                            projectNameText?.setValue(this.plugin.settings.publishPagesProjectName);
-                        })
-                );
-
-            new Setting(containerEl)
-                .setName("Project name")
-                .setDesc("Change to your preferred name or keep the default.")
-                .addText((text) => {
-                    projectNameText = text;
-                    text
-                        .setPlaceholder(PUBLISH_PROJECT_NAME_PLACEHOLDER)
-                        .setValue(this.plugin.settings.publishPagesProjectName)
-                        .onChange(async (value) => {
-                            await this.plugin.setPublishPagesProjectName(value);
-                            text.setValue(this.plugin.settings.publishPagesProjectName);
+    private getCatalogContext(): AsideSettingCatalogContext {
+        return {
+            plugin: this.plugin,
+            refresh: () => this.refreshSettings(),
+            renderAgentRuntimeStatus: (setting, baseDescription) => {
+                setting.setDesc(this.getAgentTabDescription(baseDescription));
+                if (shouldRenderAgentRuntimeStatus(this.plugin.settings)) {
+                    this.renderAgentRuntimeStatus(setting, baseDescription);
+                }
+            },
+            renderPurgeBrokerSecret: (setting) => {
+                setting.addComponent((containerEl) => {
+                    const component = new SecretComponent(this.app, containerEl);
+                    component
+                        .setValue(this.plugin.settings.publishPurgeBrokerSecretName)
+                        .onChange((value) => {
+                            void this.plugin.setPublishPurgeBrokerSecretName(value).then(() => {
+                                component.setValue(this.plugin.settings.publishPurgeBrokerSecretName);
+                            });
                         });
+                    return component;
                 });
+            },
+        };
+    }
 
-			new Setting(containerEl)
-				.setName("Remote cache purge")
-				.setDesc("Purge cached custom-domain pages after unpublish and republish.")
-				.addToggle((toggle) =>
-					toggle
-						.setValue(this.plugin.settings.publishRemotePurgeEnabled)
-						.onChange(async (value) => {
-							await this.plugin.setPublishRemotePurgeEnabled(value);
-							toggle.setValue(this.plugin.settings.publishRemotePurgeEnabled);
-							this.display();
-						})
-				);
+    private refreshSettings(): void {
+        const update: unknown = Reflect.get(this, "update");
+        if (typeof update === "function") {
+            Reflect.apply(update, this, []);
+            return;
+        }
+        this.renderLegacySettings();
+    }
 
-			if (this.plugin.settings.publishRemotePurgeEnabled) {
-				new Setting(containerEl)
-					.setName("Purge broker URL")
-					.setDesc("HTTPS endpoint for the deployed Aside cache purge broker.")
-					.addText((text) =>
-						text
-							.setPlaceholder("https://aside-cache-purge.example.workers.dev/purge")
-							.setValue(this.plugin.settings.publishPurgeBrokerUrl)
-							.onChange(async (value) => {
-								await this.plugin.setPublishPurgeBrokerUrl(value);
-								text.setValue(this.plugin.settings.publishPurgeBrokerUrl);
-							})
-					);
-
-				const secretSetting = new Setting(containerEl)
-					.setName("Purge broker auth secret")
-					.setDesc("Select or create the broker secret in Obsidian SecretStorage.");
-				addSecretComponent(secretSetting, this.app, (component) => {
-					component
-						.setValue(this.plugin.settings.publishPurgeBrokerSecretName)
-						.onChange((value) => {
-							void this.plugin.setPublishPurgeBrokerSecretName(value ?? "").then(() => {
-								component.setValue(this.plugin.settings.publishPurgeBrokerSecretName);
-							});
-						});
-				});
-
-				new Setting(containerEl)
-					.setName("Purge allowed host")
-					.setDesc(getPublishHost(this.plugin.settings.publishBaseUrl));
-			}
+    private getAgentTabDescription(
+        baseDescription: string,
+        runtimeStatusLines?: string[],
+    ): string | DocumentFragment {
+        if (!runtimeStatusLines?.length) {
+            return baseDescription;
         }
 
-        new Setting(containerEl)
-            .setName("Index note")
-            .setHeading();
-
-        new Setting(containerEl)
-            .setName("Index header image URL")
-            .setDesc("Remote image shown at the top of the generated index note.")
-            .addText((text) =>
-                text
-                    .setPlaceholder(DEFAULT_SETTINGS.indexHeaderImageUrl)
-                    .setValue(this.plugin.settings.indexHeaderImageUrl)
-                    .onChange(async (value) => {
-                        await this.plugin.setIndexHeaderImageUrl(value);
-                        text.setValue(this.plugin.settings.indexHeaderImageUrl);
-                    })
-            );
-
-        new Setting(containerEl)
-            .setName("Index header image caption")
-            .setDesc("Optional caption shown under the index header image. Leave blank to hide it.")
-            .addText((text) =>
-                text
-                    .setPlaceholder(DEFAULT_SETTINGS.indexHeaderImageCaption)
-                    .setValue(this.plugin.settings.indexHeaderImageCaption)
-                    .onChange(async (value) => {
-                        await this.plugin.setIndexHeaderImageCaption(value);
-                        text.setValue(this.plugin.settings.indexHeaderImageCaption);
-                    })
-            );
+        const fragment = createFragment();
+        fragment.append(baseDescription);
+        for (const line of runtimeStatusLines) {
+            const lineEl = createDiv();
+            lineEl.addClass("aside-agent-runtime-status-line");
+            lineEl.textContent = line;
+            fragment.append(lineEl);
+        }
+        return fragment;
     }
 
     private renderAgentRuntimeStatus(
         agentTabSetting: Setting,
-        getAgentTabDescription: (runtimeStatusLines?: string[]) => string | DocumentFragment,
+        baseDescription: string,
     ): void {
         const supportedActors = getSupportedAgentActors();
         const localDiagnosticsByTarget = new Map<AsideAgentTarget, AgentRuntimeDiagnostics>(
@@ -295,7 +151,8 @@ export default class AsideSetting extends PluginSettingTab {
         };
 
         const renderRuntimeSetting = (): void => {
-            agentTabSetting.setDesc(getAgentTabDescription(
+            agentTabSetting.setDesc(this.getAgentTabDescription(
+                baseDescription,
                 formatAgentRuntimeStatusLines(
                     supportedActors.map((actor) => {
                         const diagnostics = localDiagnosticsByTarget.get(actor.id)

@@ -1,4 +1,4 @@
-import { addIcon, WorkspaceLeaf, TFile, Notice, Plugin, normalizePath, MarkdownView, FileSystemAdapter, FileView, Platform, requestUrl, type Editor, type View } from "obsidian";
+import { addIcon, WorkspaceLeaf, TFile, TFolder, Notice, Plugin, normalizePath, MarkdownView, FileSystemAdapter, FileView, Platform, getAllTags, requestUrl, type Editor, type View } from "obsidian";
 import { Comment, CommentManager, CommentThread, type ReorderPlacement } from "./commentManager";
 import { CommentEntryController } from "./comments/commentEntryController";
 import {
@@ -96,6 +96,7 @@ import { extractWikiLinkPaths } from "./core/text/commentMentions";
 import { syncInstalledCodexSkill, type CodexSkillSyncModules } from "./core/codexSkillSync";
 import { AggregateCommentIndex } from "./index/AggregateCommentIndex";
 import { ParsedNoteCache } from "./cache/ParsedNoteCache";
+import { VaultCapabilityIndex, type VaultTagUsage } from "./core/vault/vaultCapabilityIndex";
 import { parseNoteComments, ParsedNoteComments } from "./core/storage/noteCommentStorage";
 import AsideSetting, {
     DEFAULT_SETTINGS,
@@ -261,6 +262,7 @@ export default class Aside extends Plugin {
     private supportLogLocationAvailable: boolean | null = null;
     private runtime: "local" | "release" = "release";
     private unloaded = false;
+    private readonly vaultCapabilityIndex = new VaultCapabilityIndex();
     private readonly workspaceViewController: WorkspaceViewController = new WorkspaceViewController({
         app: this.app,
         isSidebarSupportedFile: (file): file is TFile => isSidebarSupportedFile(file, this.getAllCommentsNotePath()),
@@ -475,11 +477,13 @@ export default class Aside extends Plugin {
     private readonly publicHtmlPublishController = new PublicHtmlPublishController({
         getSettings: () => this.settings,
         getVaultConfigDir: () => this.app.vault.configDir,
-        listMarkdownFiles: (rootPath) => Promise.resolve(
-            this.app.vault.getMarkdownFiles()
-                .map((file) => file.path)
-                .filter((path) => path.startsWith(rootPath)),
-        ),
+        listMarkdownFiles: (rootPath) => {
+            const folderPath = normalizePath(rootPath.replace(/\/+$/u, ""));
+            const folder = this.app.vault.getAbstractFileByPath(folderPath);
+            return Promise.resolve(folder instanceof TFolder
+                ? this.vaultCapabilityIndex.listMarkdownFilesInFolder(folder).map((file) => file.path)
+                : []);
+        },
         fileExists: (filePath) => Promise.resolve(this.getVaultFileByPath(filePath) !== null),
         readVaultFile: async (filePath) => {
             const file = this.getVaultFileByPath(filePath);
@@ -618,11 +622,19 @@ export default class Aside extends Plugin {
             this.syncPublicFilePublishActions();
         },
         handleFileRename: async (file, oldPath) => {
+            if (file) {
+                this.vaultCapabilityIndex.rename(file, oldPath, this.getVaultFileTags(file));
+            } else {
+                this.vaultCapabilityIndex.remove(oldPath);
+            }
             await this.pluginLifecycleController.handleFileRename(file, oldPath);
             this.syncIndexNoteViewClasses();
             this.syncPublicFilePublishActions();
         },
         handleFileDelete: async (file) => {
+            if (file) {
+                this.vaultCapabilityIndex.remove(file.path);
+            }
             await this.pluginLifecycleController.handleFileDelete(file);
             this.syncIndexNoteViewClasses();
             this.syncPublicFilePublishActions();
@@ -680,6 +692,18 @@ export default class Aside extends Plugin {
 
         this.commentManager = new CommentManager([]);
         await this.loadSettings();
+        this.vaultCapabilityIndex.seed(
+            this.app.vault.getMarkdownFiles(),
+            (file) => this.getVaultFileTags(file),
+        );
+        this.registerEvent(this.app.vault.on("create", (file) => {
+            if (file instanceof TFile) {
+                this.vaultCapabilityIndex.upsert(file, this.getVaultFileTags(file));
+            }
+        }));
+        this.registerEvent(this.app.metadataCache.on("changed", (file, _data, cache) => {
+            this.vaultCapabilityIndex.upsert(file, getAllTags(cache) ?? []);
+        }));
         this.pluginRegistrationController.register();
         this.registerEditorExtension([
             this.commentHighlightController.createEditorHighlightPlugin(),
@@ -938,7 +962,7 @@ export default class Aside extends Plugin {
         }
 
         if (isHtmlPublishPath(normalizedPath)) {
-            for (const markdownFile of this.app.vault.getMarkdownFiles()) {
+            for (const markdownFile of this.vaultCapabilityIndex.listMarkdownFiles()) {
                 if (!markdownFile.path.startsWith(allowedRoot)) {
                     continue;
                 }
@@ -1435,6 +1459,23 @@ export default class Aside extends Plugin {
         return abstractFile instanceof TFile ? abstractFile : null;
     }
 
+    private getVaultFileTags(file: TFile): readonly string[] {
+        const cache = this.app.metadataCache.getFileCache(file);
+        return cache ? getAllTags(cache) ?? [] : [];
+    }
+
+    public getIndexedMarkdownFiles(): TFile[] {
+        return this.vaultCapabilityIndex.listMarkdownFiles();
+    }
+
+    public getIndexedMarkdownFilePaths(excludedPath?: string): string[] {
+        return this.vaultCapabilityIndex.listMarkdownFilePaths(excludedPath);
+    }
+
+    public getIndexedVaultTagUsage(): VaultTagUsage[] {
+        return this.vaultCapabilityIndex.listTagUsage();
+    }
+
     private async handleSavedUserEntry(event: SavedUserEntryEvent): Promise<void> {
         await this.commentAgentController.handleSavedUserEntry(event);
     }
@@ -1553,7 +1594,7 @@ export default class Aside extends Plugin {
 				now: () => new Date(),
 				createNonce: () => {
 					const bytes = new Uint8Array(16);
-					globalThis.crypto.getRandomValues(bytes);
+					window.crypto.getRandomValues(bytes);
 					return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 				},
 			},

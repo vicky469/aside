@@ -11,10 +11,6 @@ export interface FriendlyLocalDateTimeOptions {
     timeZone?: string;
 }
 
-type DateTimeFormatOptionsWithFractionalSeconds = Intl.DateTimeFormatOptions & {
-    fractionalSecondDigits?: 0 | 1 | 2 | 3;
-};
-
 type FixedDateTimePart = "year" | "month" | "day" | "hour" | "minute" | "second" | "fractionalSecond";
 
 const fixedDateTimeFormatterCache = new Map<string, Intl.DateTimeFormat>();
@@ -50,18 +46,23 @@ function getFixedDateTimeFormatter(options: FixedLocalDateTimeOptions): Intl.Dat
         return cached;
     }
 
-    const formatterOptions: DateTimeFormatOptionsWithFractionalSeconds = {
+    const formatterOptions: Intl.DateTimeFormatOptions = {
         year: "numeric",
         month: "2-digit",
         day: "2-digit",
         hour: "2-digit",
         minute: "2-digit",
         second: "2-digit",
-        fractionalSecondDigits: options.includeMilliseconds ? 3 : undefined,
         hourCycle: "h23",
         timeZone: options.timeZone,
     };
-    const formatter = new Intl.DateTimeFormat("en-CA", formatterOptions as Intl.DateTimeFormatOptions);
+    if (options.includeMilliseconds) {
+        Object.defineProperty(formatterOptions, "fractionalSecondDigits", {
+            enumerable: true,
+            value: 3,
+        });
+    }
+    const formatter = new Intl.DateTimeFormat("en-CA", formatterOptions);
     fixedDateTimeFormatterCache.set(cacheKey, formatter);
     return formatter;
 }

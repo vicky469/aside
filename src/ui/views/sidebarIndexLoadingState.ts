@@ -7,12 +7,12 @@ const INDEX_SIDEBAR_PRESERVED_CHROME_SELECTOR = [
 ].join(", ");
 
 function createIndexSidebarListLoadingElement(ownerDocument: Document): HTMLDivElement {
-    const loadingEl = ownerDocument.createElement("div");
+    const loadingEl = createDetachedObsidianElement(ownerDocument, "div");
     loadingEl.className = "aside-index-list-loading";
     loadingEl.setAttribute("aria-label", INDEX_SIDEBAR_LIST_LOADING_LABEL);
 
     for (let dotIndex = 0; dotIndex < INDEX_SIDEBAR_LIST_LOADING_DOT_COUNT; dotIndex += 1) {
-        const dotEl = ownerDocument.createElement("span");
+        const dotEl = createDetachedObsidianElement(ownerDocument, "span");
         dotEl.className = "aside-index-list-loading-dot";
         dotEl.setAttribute("aria-hidden", "true");
         dotEl.textContent = ".";
@@ -34,7 +34,7 @@ export function showIndexSidebarListLoadingState(container: Pick<Element, "query
         return false;
     }
 
-    const loadingListEl = commentsContainerEl.ownerDocument.createElement("div");
+    const loadingListEl = createDetachedObsidianElement(commentsContainerEl.ownerDocument, "div");
     loadingListEl.className = "aside-comments-list";
     loadingListEl.replaceChildren(createIndexSidebarListLoadingElement(commentsContainerEl.ownerDocument));
 
@@ -43,3 +43,4 @@ export function showIndexSidebarListLoadingState(container: Pick<Element, "query
     commentsContainerEl.replaceChildren(...preservedChrome, loadingListEl);
     return true;
 }
+import { createDetachedObsidianElement } from "../dom/createDetachedObsidianElement";

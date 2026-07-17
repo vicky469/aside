@@ -8,6 +8,7 @@
     "moduleResolution": "node",
     "importHelpers": true,
     "isolatedModules": true,
+    "strictBindCallApply": true,
     "strictNullChecks": true,
     "types": [
       "node"

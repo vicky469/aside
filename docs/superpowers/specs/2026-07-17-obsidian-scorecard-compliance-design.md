@@ -20,22 +20,22 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Upgrade the Obsidian API and lint toolchain to the current official baseline and make scorecard warnings fail local and CI builds.
-- [ ] Add an official-style push/pull-request CI matrix for Node.js 20, 22, and 24.
-- [ ] Make release assets immutable and add tag-bound attestation verification before publishing a new release.
-- [ ] Remove every reported unnecessary TypeScript assertion through inference, explicit return construction, or a narrow typed boundary.
-- [ ] Replace reported `document.createElement` calls with Obsidian DOM helpers without breaking detached or cross-window rendering.
-- [ ] Add declarative settings search support for Obsidian 1.13 while preserving Aside's Obsidian 1.12.7 compatibility from one shared settings model.
-- [ ] Replace avoidable whole-vault enumeration with scoped indexes or folder traversal and document the remaining user-facing vault capabilities.
-- [ ] Restrict clipboard access to explicit paste, copy, and drag gestures and document those capabilities.
-- [ ] Add a maintained network/capability disclosure and automated checks for undeclared network hosts or background clipboard reads.
+- [x] Upgrade the Obsidian API and lint toolchain to the current official baseline and make scorecard warnings fail local and CI builds.
+- [x] Add an official-style push/pull-request CI matrix for Node.js 20, 22, and 24.
+- [x] Make release assets immutable and add tag-bound attestation verification before publishing a new release.
+- [x] Remove every reported unnecessary TypeScript assertion through inference, explicit return construction, or a narrow typed boundary.
+- [x] Replace reported `document.createElement` calls with Obsidian DOM helpers without breaking detached or cross-window rendering.
+- [x] Add declarative settings search support for Obsidian 1.13 while preserving Aside's Obsidian 1.12.7 compatibility from one shared settings model.
+- [x] Replace avoidable whole-vault enumeration with scoped indexes or folder traversal and document the remaining user-facing vault capabilities.
+- [x] Restrict clipboard access to explicit paste, copy, and drag gestures and document those capabilities.
+- [x] Add a maintained network/capability disclosure and automated checks for undeclared network hosts or background clipboard reads.
 
 ### Verification
 
-- [ ] `npm ci` and the full compliance build pass on Node.js 20, 22, and 24.
-- [ ] The current `eslint-plugin-obsidianmd` recommended configuration reports zero errors and zero warnings.
-- [ ] TypeScript compilation and all repository tests pass.
-- [ ] The release artifact guard passes for exactly `main.js`, `manifest.json`, and `styles.css`, with no source map, embedded source, secret, or local-path exposure.
+- [x] `npm ci` and the full compliance build pass on Node.js 20, 22, and 24.
+- [x] The current `eslint-plugin-obsidianmd` recommended configuration reports zero errors and zero warnings.
+- [x] TypeScript compilation and all repository tests pass.
+- [x] The release artifact guard passes for exactly `main.js`, `manifest.json`, and `styles.css`, with no source map, embedded source, secret, or local-path exposure.
 - [ ] A release-candidate attestation verifies against the repository, tag ref, tag commit, and release workflow before the release is created.
 - [ ] Obsidian 1.12.7 renders and persists the legacy settings UI.
 - [ ] Obsidian 1.13 or later indexes every Aside setting in global settings search and renders equivalent controls.

@@ -2,10 +2,6 @@ export interface ClipboardWriter {
     writeText(text: string): Promise<void>;
 }
 
-export interface CopyTextContainer {
-    appendChild(node: CopyTextTextarea): void;
-}
-
 export interface CopyTextTextarea {
     value: string;
     setAttribute(name: string, value: string): void;
@@ -17,9 +13,7 @@ export interface CopyTextTextarea {
 }
 
 export interface CopyTextDocument {
-    body?: CopyTextContainer | null;
-    documentElement?: CopyTextContainer | null;
-    createElement(tagName: "textarea"): CopyTextTextarea;
+    createAttachedTextarea(): CopyTextTextarea;
     execCommand(command: "copy"): boolean;
 }
 
@@ -41,8 +35,20 @@ function getDefaultDocument(): CopyTextDocument | null {
         return null;
     }
 
-    const doc = (window as Window & { activeDocument?: Document }).activeDocument;
-    return doc ? doc as unknown as CopyTextDocument : null;
+    const doc = window.activeDocument;
+    const container = doc.body ?? doc.documentElement;
+    const execCommand: unknown = Reflect.get(doc, "execCommand");
+    if (!container || typeof execCommand !== "function") {
+        return null;
+    }
+    return {
+        createAttachedTextarea: () => {
+            const textarea = createDetachedObsidianElement(doc, "textarea");
+            container.appendChild(textarea);
+            return textarea;
+        },
+        execCommand: (command) => Reflect.apply(execCommand, doc, [command]) === true,
+    };
 }
 
 export async function copyTextToClipboard(
@@ -64,12 +70,7 @@ export async function copyTextToClipboard(
         return false;
     }
 
-    const container = doc.body ?? doc.documentElement;
-    if (!container) {
-        return false;
-    }
-
-    const textarea = doc.createElement("textarea");
+    const textarea = doc.createAttachedTextarea();
     textarea.value = text;
     textarea.setAttribute("readonly", "true");
     textarea.setCssProps({
@@ -80,7 +81,6 @@ export async function copyTextToClipboard(
         top: "0",
     });
 
-    container.appendChild(textarea);
     textarea.focus();
     textarea.select();
     textarea.setSelectionRange(0, text.length);
@@ -93,3 +93,4 @@ export async function copyTextToClipboard(
         textarea.remove();
     }
 }
+import { createDetachedObsidianElement } from "./dom/createDetachedObsidianElement";

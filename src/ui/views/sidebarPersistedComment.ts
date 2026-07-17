@@ -230,7 +230,7 @@ export function renderAgentRunMetadataFrontmatter(
         return;
     }
 
-    const frontmatterEl = metaEl.createEl("span", {
+    const frontmatterEl = metaEl.createSpan({
         cls: "aside-agent-run-metadata-frontmatter",
         text: frontmatter,
     });
@@ -274,7 +274,7 @@ export function renderAgentRunVisibleMetadata(
     }
 
     for (const label of labels) {
-        const metadataEl = metaEl.createEl("span", {
+        const metadataEl = metaEl.createSpan({
             cls: "aside-agent-run-visible-metadata",
             text: label,
         });

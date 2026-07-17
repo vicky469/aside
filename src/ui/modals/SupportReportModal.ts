@@ -10,6 +10,7 @@ import {
     validateScreenshotSelection,
     validateSupportReportInput,
 } from "../views/supportReportPlanner";
+import { createDetachedObsidianElement } from "../dom/createDetachedObsidianElement";
 
 interface SupportReportModalHost {
     pluginVersion: string;
@@ -151,7 +152,7 @@ export default class SupportReportModal extends Modal {
             const row = this.attachmentsEl.createDiv("aside-support-attachment");
             const meta = row.createDiv("aside-support-attachment-meta");
             meta.createEl("strong", { text: logAttachment.fileName });
-            meta.createEl("span", {
+            meta.createSpan({
                 text: [
                     logAttachment.windowMinutes ? `last ${logAttachment.windowMinutes} min` : null,
                     formatSupportAttachmentSize(logAttachment.sizeBytes),
@@ -198,7 +199,7 @@ export default class SupportReportModal extends Modal {
             const row = this.attachmentsEl.createDiv("aside-support-attachment");
             const meta = row.createDiv("aside-support-attachment-meta");
             meta.createEl("strong", { text: attachment.file.name });
-            meta.createEl("span", {
+            meta.createSpan({
                 text: [
                     formatSupportAttachmentSize(attachment.file.size),
                     formatFriendlyLocalDateTime(attachment.file.lastModified) ?? "selected",
@@ -228,7 +229,7 @@ export default class SupportReportModal extends Modal {
     }
 
     private openScreenshotPicker(): void {
-        const inputEl = this.contentEl.ownerDocument.createElement("input");
+        const inputEl = createDetachedObsidianElement(this.contentEl.ownerDocument, "input");
         inputEl.type = "file";
         inputEl.accept = "image/png,image/jpeg,image/webp";
         inputEl.multiple = true;

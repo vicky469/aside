@@ -145,13 +145,13 @@ function getCreateSuggestion(app: App, sourcePath: string, query: string): Creat
 
 export function getSideNoteLinkSuggestions(
     app: App,
+    indexedMarkdownFiles: readonly TFile[],
     query: string,
     sourcePath: string,
     limit = 40,
 ): SideNoteLinkSuggestion[] {
     const linkPathQuery = extractLinkPath(query);
-    const files = app.vault
-        .getMarkdownFiles()
+    const files = indexedMarkdownFiles
         .map((file) => {
             const linkText = app.metadataCache.fileToLinktext(file, sourcePath, true);
             return {
