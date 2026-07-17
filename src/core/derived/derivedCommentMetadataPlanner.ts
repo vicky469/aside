@@ -11,8 +11,7 @@ export function mergeDerivedLinksIntoCache(
     baseCache: CachedMetadata | null,
     derivedLinks: DerivedCommentLinks | undefined,
 ): CachedMetadata | null {
-    const derivedCache = baseCache as DerivedMetadataCache | null;
-    if (!derivedLinks || derivedLinks.links.length === 0 || derivedCache?.[derivedMetadataCacheMarker]) {
+    if (!derivedLinks || derivedLinks.links.length === 0 || hasDerivedMetadataMarker(baseCache)) {
         return baseCache;
     }
 
@@ -26,6 +25,10 @@ export function mergeDerivedLinksIntoCache(
         value: true,
     });
     return mergedCache;
+}
+
+function hasDerivedMetadataMarker(cache: CachedMetadata | null): cache is DerivedMetadataCache {
+    return cache !== null && derivedMetadataCacheMarker in cache;
 }
 
 export function hasDerivedCommentLinks(derivedLinks: DerivedCommentLinks): boolean {

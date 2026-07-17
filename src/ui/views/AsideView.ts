@@ -1755,7 +1755,7 @@ export default class AsideView extends ItemView {
                 ? sortSidebarRenderableItems(
                     searchScopedVisibleThreads
                         .filter((thread) => thread.id !== replacedThreadId)
-                        .map((thread) => ({ kind: "thread", thread } as SidebarRenderableItem))
+                        .map<SidebarRenderableItem>((thread) => ({ kind: "thread", thread }))
                         .concat(topLevelDraftComment ? [{ kind: "draft", draft: topLevelDraftComment }] : []),
                 )
                 : buildStoredOrderSidebarItems(

@@ -7,6 +7,7 @@
     "outDir": ".test-dist",
     "rootDir": ".",
     "strict": true,
+    "strictBindCallApply": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "types": ["node"],

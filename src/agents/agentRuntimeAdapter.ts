@@ -272,7 +272,7 @@ export function sanitizeAgentReplyText(value: string): string {
 }
 
 function getBaseProcessEnv(): ExecEnv {
-    return ((typeof process !== "undefined" ? process.env : {}) as ExecEnv);
+    return typeof process !== "undefined" ? process.env : {};
 }
 
 function getShellCandidates(baseEnv: ExecEnv): string[] {

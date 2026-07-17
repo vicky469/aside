@@ -39,7 +39,7 @@ function getElementWindow(element: HTMLElement): Window | null {
 }
 
 function getElementDocument(element: HTMLElement): Document | null {
-    const elementWindow = getElementWindow(element) as (Window & { activeDocument?: Document }) | null;
+    const elementWindow = getElementWindow(element);
     return element.doc ?? element.ownerDocument ?? elementWindow?.activeDocument ?? null;
 }
 

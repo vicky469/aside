@@ -122,7 +122,7 @@ function sanitizePrimitive(
     context: LogSanitizerContext,
 ): string | number | boolean | null | undefined {
     if (value == null || typeof value === "boolean" || typeof value === "number") {
-        return value as boolean | number | null;
+        return value;
     }
 
     if (typeof value === "string") {

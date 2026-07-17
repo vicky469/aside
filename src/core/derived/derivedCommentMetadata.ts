@@ -1,4 +1,4 @@
-import type { CachedMetadata, Plugin, TFile } from "obsidian";
+import type { CachedMetadata, MetadataCache, Plugin, TFile } from "obsidian";
 import type { Comment, CommentThread } from "../../commentManager";
 import { buildDerivedCommentLinks, type DerivedCommentLinks } from "../text/commentMentions";
 import {
@@ -8,14 +8,16 @@ import {
     mergeDerivedLinksIntoCache,
 } from "./derivedCommentMetadataPlanner";
 
-type MutableMetadataCache = {
-    getCache(path: string): CachedMetadata | null;
-    getFileCache(file: TFile): CachedMetadata | null;
-    resolvedLinks: Record<string, Record<string, number>>;
-    unresolvedLinks: Record<string, Record<string, number>>;
-    trigger(name: string, ...data: unknown[]): void;
-    getFirstLinkpathDest(linkpath: string, sourcePath: string): TFile | null;
-};
+type MetadataGetCache = (this: MetadataCache, path: string) => CachedMetadata | null;
+type MetadataGetFileCache = (this: MetadataCache, file: TFile) => CachedMetadata | null;
+
+function isMetadataGetCache(value: unknown): value is MetadataGetCache {
+    return typeof value === "function";
+}
+
+function isMetadataGetFileCache(value: unknown): value is MetadataGetFileCache {
+    return typeof value === "function";
+}
 
 export class DerivedCommentMetadataManager {
     private readonly derivedCommentLinksByFilePath = new Map<string, DerivedCommentLinks>();
@@ -31,35 +33,36 @@ export class DerivedCommentMetadataManager {
         }
 
         const metadataCache = this.getMutableMetadataCache();
-        const originalGetCache = metadataCache.getCache.bind(metadataCache) as MutableMetadataCache["getCache"];
-        const originalGetFileCache = metadataCache.getFileCache.bind(metadataCache) as MutableMetadataCache["getFileCache"];
-        this.originalMetadataGetCache = (path) => originalGetCache(path);
-        this.originalMetadataGetFileCache = (file) => originalGetFileCache(file);
+        const originalGetCache: unknown = Reflect.get(metadataCache, "getCache");
+        const originalGetFileCache: unknown = Reflect.get(metadataCache, "getFileCache");
+        if (!isMetadataGetCache(originalGetCache) || !isMetadataGetFileCache(originalGetFileCache)) {
+            throw new Error("Metadata cache methods are unavailable.");
+        }
+        this.originalMetadataGetCache = (path) => originalGetCache.call(metadataCache, path);
+        this.originalMetadataGetFileCache = (file) => originalGetFileCache.call(metadataCache, file);
 
-        metadataCache.getCache = ((path: string) =>
+        metadataCache.getCache = (path: string) =>
             mergeDerivedLinksIntoCache(
                 this.originalMetadataGetCache?.(path) ?? null,
                 this.derivedCommentLinksByFilePath.get(path),
-            )
-        ) as MutableMetadataCache["getCache"];
+            );
 
-        metadataCache.getFileCache = ((file: TFile) =>
+        metadataCache.getFileCache = (file: TFile) =>
             mergeDerivedLinksIntoCache(
                 this.originalMetadataGetFileCache?.(file) ?? null,
                 this.derivedCommentLinksByFilePath.get(file.path),
-            )
-        ) as MutableMetadataCache["getFileCache"];
+            );
     }
 
     public restoreMetadataCacheAugmentation(): void {
         const metadataCache = this.getMutableMetadataCache();
         if (this.originalMetadataGetCache) {
-            metadataCache.getCache = this.originalMetadataGetCache as MutableMetadataCache["getCache"];
+            metadataCache.getCache = this.originalMetadataGetCache;
             this.originalMetadataGetCache = null;
         }
 
         if (this.originalMetadataGetFileCache) {
-            metadataCache.getFileCache = this.originalMetadataGetFileCache as MutableMetadataCache["getFileCache"];
+            metadataCache.getFileCache = this.originalMetadataGetFileCache;
             this.originalMetadataGetFileCache = null;
         }
     }
@@ -142,8 +145,8 @@ export class DerivedCommentMetadataManager {
         this.notifyDerivedLinksChanged(file.path);
     }
 
-    private getMutableMetadataCache(): MutableMetadataCache {
-        return this.app.metadataCache as unknown as MutableMetadataCache;
+    private getMutableMetadataCache(): MetadataCache {
+        return this.app.metadataCache;
     }
 
     private mergeDerivedLinkCounts(

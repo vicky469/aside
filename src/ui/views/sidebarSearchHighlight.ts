@@ -16,9 +16,20 @@ type HighlightRegistryLike = {
     set(name: string, highlight: unknown): void;
 };
 
-type CssWithHighlights = typeof CSS & {
-    highlights?: HighlightRegistryLike;
-};
+type HighlightConstructor = new (...initialRanges: Range[]) => unknown;
+
+function isHighlightRegistry(value: unknown): value is HighlightRegistryLike {
+    return value !== null
+        && typeof value === "object"
+        && "set" in value
+        && typeof value.set === "function"
+        && "delete" in value
+        && typeof value.delete === "function";
+}
+
+function isHighlightConstructor(value: unknown): value is HighlightConstructor {
+    return typeof value === "function";
+}
 
 function normalizeSidebarSearchTerms(query: string): string[] {
     const terms = query
@@ -97,21 +108,16 @@ function getSidebarSearchHighlightStyleId(highlightName: string): string {
 }
 
 function getSidebarSearchHighlightRegistry(ownerDocument: Document): HighlightRegistryLike | null {
-    const view = ownerDocument.defaultView;
-    const css = view?.CSS as CssWithHighlights | undefined;
-    const registry = css?.highlights;
-    return registry
-        && typeof registry.set === "function"
-        && typeof registry.delete === "function"
-        ? registry
-        : null;
+    const css: unknown = ownerDocument.defaultView?.CSS;
+    if (css === null || typeof css !== "object" || !("highlights" in css)) {
+        return null;
+    }
+    return isHighlightRegistry(css.highlights) ? css.highlights : null;
 }
 
-function getSidebarHighlightConstructor(ownerDocument: Document): (new (...initialRanges: Range[]) => unknown) | null {
-    const candidate = ownerDocument.defaultView?.Highlight;
-    return typeof candidate === "function"
-        ? candidate as new (...initialRanges: Range[]) => unknown
-        : null;
+function getSidebarHighlightConstructor(ownerDocument: Document): HighlightConstructor | null {
+    const candidate: unknown = ownerDocument.defaultView?.Highlight;
+    return isHighlightConstructor(candidate) ? candidate : null;
 }
 
 function ensureSidebarSearchHighlightStyle(ownerDocument: Document, highlightName: string): void {
