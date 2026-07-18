@@ -24,6 +24,7 @@ const REQUIRED_DISCLOSURES = [
     "## External services",
 ];
 const SOURCE_EXTENSIONS = new Set([".js", ".jsx", ".mjs", ".ts", ".tsx"]);
+const SUPPORTED_NODE_VERSIONS = new Set([22, 24]);
 const VERSION_PATTERN = /^\d+\.\d+\.\d+$/u;
 const REQUEST_LITERAL_HOST_PATTERN = /(?:fetch|request|WebSocket)\s*\(\s*["'`]https?:\/\/([a-z0-9.-]+)(?=[/:)'"`\s]|$)/giu;
 
@@ -60,13 +61,14 @@ function readDeclaredPluginHosts(readme) {
     return new Set(match[1].split(",").map((host) => host.trim().toLowerCase()).filter(Boolean));
 }
 
-function includesNodeMatrix(ciWorkflow) {
+function usesSupportedNodeMatrix(ciWorkflow) {
     const match = ciWorkflow.match(/node-version:\s*\[([^\]]+)\]/u);
     if (!match) {
         return false;
     }
     const versions = new Set(match[1].split(",").map((version) => Number.parseInt(version.trim().replaceAll(/["']/gu, ""), 10)));
-    return [20, 22, 24].every((version) => versions.has(version));
+    return versions.size === SUPPORTED_NODE_VERSIONS.size
+        && [...SUPPORTED_NODE_VERSIONS].every((version) => versions.has(version));
 }
 
 function releaseCreatesExactAssets(releaseWorkflow) {
@@ -131,8 +133,8 @@ export function checkObsidianCompliance(rootDir = process.cwd()) {
         }
     }
 
-    if (!includesNodeMatrix(ciWorkflow)) {
-        issues.push(".github/workflows/ci.yml must test Node.js 20, 22, and 24");
+    if (!usesSupportedNodeMatrix(ciWorkflow)) {
+        issues.push(".github/workflows/ci.yml must test supported Node.js LTS versions 22 and 24");
     }
     if (releaseWorkflow.includes("--clobber") || releaseWorkflow.includes("gh release edit")) {
         issues.push(".github/workflows/release.yml must not overwrite existing release assets");

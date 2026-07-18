@@ -1,12 +1,11 @@
 #!/usr/bin/env node
 
 import { createHash } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
     loadThreadsWithFallback,
-    readSidecar,
     writeSidecar,
 } from "./lib/asideRepoScripts.mjs";
 

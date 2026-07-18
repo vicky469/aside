@@ -35,7 +35,7 @@ function createFixture(overrides = {}) {
             "on: [push, pull_request]",
             "strategy:",
             "  matrix:",
-            "    node-version: [20, 22, 24]",
+            "    node-version: [22, 24]",
             "steps:",
             "  - run: npm ci",
             "  - run: npm run build",
@@ -127,10 +127,10 @@ test("compliance checker rejects background clipboard reads", () => {
 
 test("compliance checker requires the official Node build matrix", () => {
     withFixture({
-        ".github/workflows/ci.yml": "node-version: [20, 22]\nrun: npm ci\nrun: npm run build\n",
+        ".github/workflows/ci.yml": "node-version: [20, 22, 24]\nrun: npm ci\nrun: npm run build\n",
     }, (rootDir) => {
         assert.deepEqual(checkObsidianCompliance(rootDir), [
-            ".github/workflows/ci.yml must test Node.js 20, 22, and 24",
+            ".github/workflows/ci.yml must test supported Node.js LTS versions 22 and 24",
         ]);
     });
 });

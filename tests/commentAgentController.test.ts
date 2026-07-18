@@ -95,8 +95,6 @@ function createHarness(options: {
     let idCounter = 1;
     let now = 100;
     const nowIncrement = options.nowIncrement ?? 1;
-    let controller: CommentAgentController;
-
     const store = new AgentRunStore({
         readPersistedPluginData: () => persistedData,
         writePersistedPluginData: async (data) => {
@@ -104,7 +102,7 @@ function createHarness(options: {
         },
     });
 
-    controller = new CommentAgentController({
+    const controller = new CommentAgentController({
         createCommentId: () => `generated-${idCounter++}`,
         now: () => {
             now += nowIncrement;
@@ -335,8 +333,7 @@ test("comment agent controller turns annotation proposals into anchored side not
 });
 
 test("comment agent controller removes orphan duplicate replies created during completion", async () => {
-    let harness: ReturnType<typeof createHarness>;
-    harness = createHarness({
+    const harness = createHarness({
         customRunAgentRuntime: async () => {
             const activeStream = harness.controller.getActiveAgentStreamForThread("thread-1");
             harness.commentManager.appendEntry("thread-1", {
@@ -649,7 +646,7 @@ test("comment agent controller inserts child-triggered replies after the trigger
 test("comment agent controller regenerates a specific reply run using the current saved directive text", async () => {
     let replyCount = 0;
     const harness = createHarness({
-        customRunAgentRuntime: async (invocation) => ({
+        customRunAgentRuntime: async () => ({
             runtime: "direct-cli",
             replyText: replyCount++ === 0 ? "First reply" : "Second reply",
         }),

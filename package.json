@@ -19,7 +19,7 @@
 		"dev:install-built": "node scripts/install-built-plugin.mjs",
 		"dev:build-reload": "npm run build && npm run dev:install-built -- --vault .. && tmux new-session -d -s aside-reload-$(date +%s) 'obsidian plugin:reload id=aside vault=dev'",
 		"build": "npm run test && npm run verify:worker && npm run lint && npm run typecheck && npm run check:obsidian && npm run bundle && npm run release:artifacts:check",
-		"lint": "eslint src --max-warnings 0",
+		"lint": "eslint . --max-warnings 0",
 		"typecheck": "tsc -noEmit -skipLibCheck",
 		"check:obsidian": "node scripts/check-obsidian-compliance.mjs",
 		"bundle": "node esbuild.config.mjs production",

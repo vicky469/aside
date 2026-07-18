@@ -1,17 +1,14 @@
 #!/usr/bin/env node
 
-import { readdir, readFile, stat } from "node:fs/promises";
+import { readdir, stat } from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import {
-    createContentFingerprint,
     loadThreadsWithFallback,
     resolveVaultRootByPath,
     getVaultRelativePath,
     runScriptMain,
     stripLegacyBlockIfNeeded,
     writeSidecar,
-    writeObservedNoteSafely,
 } from "./lib/asideRepoScripts.mjs";
 
 function printUsage(stream = process.stderr) {

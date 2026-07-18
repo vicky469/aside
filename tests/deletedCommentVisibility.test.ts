@@ -1,12 +1,6 @@
 import * as assert from "node:assert/strict";
 import test from "node:test";
-
-const deletedCommentVisibility = require("../src/core/rules/deletedCommentVisibility") as {
-    SOFT_DELETE_RETENTION_DAYS?: number;
-    SOFT_DELETE_RETENTION_MS: number;
-    getSoftDeleteRetentionMessage?: () => string;
-    isSoftDeletedExpired(deletedAt: number | undefined, now?: number): boolean;
-};
+import * as deletedCommentVisibility from "../src/core/rules/deletedCommentVisibility";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 

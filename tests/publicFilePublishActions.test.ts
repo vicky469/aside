@@ -149,7 +149,6 @@ function withFakeDocument(
 	testFn: () => Promise<void> | void,
 ): Promise<void> | void {
 	const previousDocument = globalThis.document;
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	const fakeDocument = {
 		querySelectorAll: (selector: string): FakeActionElement[] => documentNodes.filter((node) =>
 			matchesLegacyPublishActionSelector(node, selector)),

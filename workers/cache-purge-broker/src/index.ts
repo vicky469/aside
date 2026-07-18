@@ -173,7 +173,7 @@ function sanitizeReason(value: unknown, secrets: string[]): string {
 
 async function readCloudflareFailure(response: Response, env: BrokerEnv): Promise<string> {
 	try {
-		const body = await response.json() as { errors?: Array<{ message?: unknown }> };
+		const body = await response.json<{ errors?: Array<{ message?: unknown }> }>();
 		const message = body.errors?.find((error) => typeof error.message === "string")?.message;
 		return sanitizeReason(message, [env.CLOUDFLARE_API_TOKEN, env.BROKER_AUTH_SECRET]);
 	} catch {
@@ -249,7 +249,7 @@ export async function handlePurgeRequest(
 
 	let success = false;
 	try {
-		const responseBody = await cloudflareResponse.clone().json() as { success?: unknown };
+		const responseBody = await cloudflareResponse.clone().json<{ success?: unknown }>();
 		success = cloudflareResponse.ok && responseBody.success === true;
 	} catch {
 		success = false;
@@ -270,7 +270,7 @@ async function reserveWithDurableObject(
 		method: "POST",
 		body: JSON.stringify(input),
 	});
-	return response.json() as Promise<GuardReservationResult>;
+	return response.json<GuardReservationResult>();
 }
 
 export class PurgeGuard extends DurableObject<BrokerEnv> {
@@ -278,7 +278,7 @@ export class PurgeGuard extends DurableObject<BrokerEnv> {
 		if (request.method !== "POST" || new URL(request.url).pathname !== "/reserve") {
 			return reject(404, "Not found.");
 		}
-		const input = await request.json() as GuardReservationInput;
+		const input = await request.json<GuardReservationInput>();
 		const result = await this.ctx.storage.transaction(async (transaction) => {
 			const nonceRecords = await transaction.list<number>({ prefix: "nonce:" });
 			const expiredNonceKeys = Array.from(nonceRecords)

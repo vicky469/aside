@@ -70,37 +70,6 @@ function printInstallBundledSkillUsage(stream = process.stderr) {
     );
 }
 
-function parseCommentTargetArgs(argv, options) {
-    for (let index = 0; index < argv.length; index += 1) {
-        const arg = argv[index];
-        switch (arg) {
-            case "--file":
-                options.file = argv[index + 1] ?? "";
-                index += 1;
-                break;
-            case "--id":
-                options.id = argv[index + 1] ?? "";
-                index += 1;
-                break;
-            case "--uri":
-                options.uri = argv[index + 1] ?? "";
-                index += 1;
-                break;
-            case "--settle-ms":
-                options.settleMs = parseNonNegativeIntegerOption(argv[index + 1] ?? "", "--settle-ms");
-                index += 1;
-                break;
-            case "--help":
-            case "-h":
-                return null;
-            default:
-                return arg;
-        }
-    }
-
-    return undefined;
-}
-
 function parseCreateNoteCommentThreadArgs(argv) {
     const options = {
         file: "",

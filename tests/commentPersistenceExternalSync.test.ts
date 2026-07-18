@@ -758,8 +758,7 @@ test("comment persistence controller stops hydrating snapshots after disposal", 
         },
     ]);
 
-    let controller: CommentPersistenceController;
-    controller = new CommentPersistenceController({
+    const controller = new CommentPersistenceController({
         app: {
             vault: {
                 adapter: adapter as unknown as DataAdapter,
