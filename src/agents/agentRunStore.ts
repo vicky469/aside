@@ -5,6 +5,7 @@ import {
     type AgentRunRecord,
 } from "../core/agents/agentRuns";
 import type { PersistedPluginData } from "../settings/indexNoteSettingsPlanner";
+import { resolveSourceIdentityCurrentPath } from "../sync/sourceIdentityStore";
 import { clonePersistedAgentRuns, normalizePersistedAgentRuns } from "./agentRunStorePlanner";
 
 export interface AgentRunStoreHost {
@@ -19,7 +20,13 @@ export class AgentRunStore {
 
     public load(): void {
         const persistedData = this.host.readPersistedPluginData();
-        this.runs = normalizePersistedAgentRuns(persistedData?.agentRuns);
+        this.runs = normalizePersistedAgentRuns(persistedData?.agentRuns).map((run) => ({
+            ...run,
+            filePath: resolveSourceIdentityCurrentPath(
+                persistedData?.sourceIdentityState,
+                run.filePath,
+            ) ?? run.filePath,
+        }));
     }
 
     public getRuns(): AgentRunRecord[] {
@@ -71,6 +78,32 @@ export class AgentRunStore {
                 status: "failed",
                 endedAt,
                 error: run.error ?? message,
+            };
+        });
+
+        if (!changed) {
+            return false;
+        }
+
+        await this.persist();
+        return true;
+    }
+
+    public async renameFile(previousFilePath: string, nextFilePath: string): Promise<boolean> {
+        if (previousFilePath === nextFilePath) {
+            return false;
+        }
+
+        let changed = false;
+        this.runs = this.runs.map((run) => {
+            if (run.filePath !== previousFilePath) {
+                return run;
+            }
+
+            changed = true;
+            return {
+                ...run,
+                filePath: nextFilePath,
             };
         });
 

@@ -523,6 +523,8 @@ export default class Aside extends Plugin {
         app: this.app,
         getCommentManager: () => this.commentManager,
         getAggregateCommentIndex: () => this.aggregateCommentIndex,
+        renameAgentRuns: (previousFilePath, nextFilePath) =>
+            this.agentRunStore.renameFile(previousFilePath, nextFilePath),
         renameStoredComments: (previousFilePath, nextFilePath) =>
             this.commentPersistenceController.renameStoredComments(previousFilePath, nextFilePath),
         deleteStoredComments: (filePath) => this.commentPersistenceController.deleteStoredComments(filePath),

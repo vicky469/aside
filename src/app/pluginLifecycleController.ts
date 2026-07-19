@@ -6,6 +6,7 @@ export interface PluginLifecycleHost {
     app: Plugin["app"];
     getCommentManager(): CommentManager;
     getAggregateCommentIndex(): AggregateCommentIndex;
+    renameAgentRuns(previousFilePath: string, nextFilePath: string): Promise<boolean>;
     renameStoredComments(previousFilePath: string, nextFilePath: string): Promise<void>;
     deleteStoredComments(filePath: string): Promise<void>;
     deleteStoredCommentsInFolder(folderPath: string): Promise<void>;
@@ -93,6 +94,7 @@ export class PluginLifecycleController {
             return;
         }
 
+        await this.host.renameAgentRuns(oldPath, file.path);
         await this.host.renameStoredComments(oldPath, file.path);
         this.host.getCommentManager().renameFile(oldPath, file.path);
         this.host.clearParsedNoteCache(oldPath);

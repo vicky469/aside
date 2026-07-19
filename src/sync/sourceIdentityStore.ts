@@ -183,6 +183,26 @@ export function normalizeSourceIdentityState(value: unknown): SourceIdentityStat
     };
 }
 
+function getSourceIdByPathIncludingAliases(state: SourceIdentityState, filePath: string): string | null {
+    const currentPathSourceId = state.pathToSourceId[filePath];
+    if (currentPathSourceId && state.sources[currentPathSourceId]) {
+        return currentPathSourceId;
+    }
+
+    const candidates = Object.values(state.sources).filter((record) =>
+        record.aliases.includes(filePath));
+    const [winner] = candidates.sort((left, right) =>
+        right.updatedAt - left.updatedAt
+        || right.sourceId.localeCompare(left.sourceId));
+    return winner?.sourceId ?? null;
+}
+
+export function resolveSourceIdentityCurrentPath(value: unknown, filePath: string): string | null {
+    const state = normalizeSourceIdentityState(value);
+    const sourceId = getSourceIdByPathIncludingAliases(state, filePath);
+    return sourceId ? state.sources[sourceId]?.currentPath ?? null : null;
+}
+
 export function mergeSourceIdentityStates(
     left: SourceIdentityState,
     right: SourceIdentityState,
@@ -223,7 +243,7 @@ export class SourceIdentityStore {
 
     public getRecordByPathIncludingAliases(filePath: string): SourceIdentityRecord | null {
         const state = this.readState();
-        const sourceId = this.getSourceIdByPathIncludingAliases(state, filePath);
+        const sourceId = getSourceIdByPathIncludingAliases(state, filePath);
         return sourceId ? cloneRecord(state.sources[sourceId]) : null;
     }
 
@@ -341,8 +361,8 @@ export class SourceIdentityStore {
         contentFingerprint: string | null = null,
     ): Promise<SourceIdentityRecord> {
         const state = this.readState();
-        const sourceId = this.getSourceIdByPathIncludingAliases(state, previousPath)
-            ?? this.getSourceIdByPathIncludingAliases(state, nextPath);
+        const sourceId = getSourceIdByPathIncludingAliases(state, previousPath)
+            ?? getSourceIdByPathIncludingAliases(state, nextPath);
         if (sourceId && state.sources[sourceId]) {
             const record = state.sources[sourceId];
             const nextRecord = this.buildUpdatedRecord(record, {
@@ -458,19 +478,6 @@ export class SourceIdentityStore {
         });
     }
 
-    private getSourceIdByPathIncludingAliases(state: SourceIdentityState, filePath: string): string | null {
-        const currentPathSourceId = state.pathToSourceId[filePath];
-        if (currentPathSourceId && state.sources[currentPathSourceId]) {
-            return currentPathSourceId;
-        }
-
-        const candidates = Object.values(state.sources).filter((record) =>
-            record.aliases.includes(filePath));
-        const [winner] = candidates.sort((left, right) =>
-            right.updatedAt - left.updatedAt
-            || right.sourceId.localeCompare(left.sourceId));
-        return winner?.sourceId ?? null;
-    }
 }
 
 function areRecordsEqual(left: SourceIdentityRecord, right: SourceIdentityRecord): boolean {
