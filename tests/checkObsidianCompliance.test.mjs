@@ -31,6 +31,7 @@ function createFixture(overrides = {}) {
         "styles.css": ".aside {}\n",
         "LICENSE": "MIT\n",
         "src/main.ts": "export {};\n",
+        "scripts/hooks/pre-push": "#!/usr/bin/env bash\nexit 0\n",
         ".github/workflows/ci.yml": [
             "on: [push, pull_request]",
             "strategy:",
@@ -142,6 +143,21 @@ test("compliance checker rejects mutable release commands", () => {
         assert.deepEqual(checkObsidianCompliance(rootDir), [
             ".github/workflows/release.yml must not overwrite existing release assets",
             ".github/workflows/release.yml must create exactly main.js, manifest.json, and styles.css",
+        ]);
+    });
+});
+
+test("compliance checker rejects stale private remote hook routing", () => {
+    withFixture({
+        "scripts/hooks/pre-push": [
+            "#!/usr/bin/env bash",
+            "echo 'private → private repo for unreleased features'",
+            "echo 'To push this branch: git push private $branch'",
+            "git push icloud \"$branch\"",
+        ].join("\n"),
+    }, (rootDir) => {
+        assert.deepEqual(checkObsidianCompliance(rootDir), [
+            "scripts/hooks/pre-push must not advertise or require private or icloud remotes",
         ]);
     });
 });

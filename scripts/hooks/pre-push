@@ -1,52 +1,23 @@
 #!/usr/bin/env bash
-# pre-push: enforce two-remote routing and mirror private → iCloud
+# pre-push: enforce the public Aside repository's single-remote routing.
 #
-# Rules:
-#   origin  → only main is allowed
-#   private → feat/* and main allowed; auto-mirrors to iCloud after push
-#   icloud  → allowed (mirror target)
+# Rule:
+#   origin → normal public Obsidian marketplace repository remote
 #
 # Install: git config core.hooksPath scripts/hooks
 
 remote="$1"
-refs=()
 
-while read -r local_ref _local_sha _remote_ref _remote_sha; do
-  # Allow branch deletions
-  [[ "$local_ref" == "(delete)" ]] && continue
-
-  # Allow tags to pass through to any remote
-  [[ "$local_ref" == refs/tags/* ]] && continue
-
-  branch="${local_ref#refs/heads/}"
-  refs+=("$branch")
-
-  if [[ "$remote" == "origin" && "$branch" != "main" ]]; then
-    echo ""
-    echo "  BLOCKED: cannot push '$branch' to origin."
-    echo ""
-    echo "  aside uses a two-remote model:"
-    echo "    origin  → public Obsidian marketplace repo (main only)"
-    echo "    private → private repo for unreleased features (feat/* branches)"
-    echo ""
-    echo "  To push this branch:   git push private $branch"
-    echo "  To ship to public:     squash-merge into main, then push origin main"
-    echo ""
-    echo "  See docs/todo/private-features-strategy.md for the full workflow."
-    echo ""
-    exit 1
-  fi
-done
-
-# After a successful push to private, mirror to iCloud backup
-if [[ "$remote" == "private" && "${#refs[@]}" -gt 0 ]]; then
-  icloud_remote="$(git remote get-url icloud 2>/dev/null)"
-  if [[ -n "$icloud_remote" ]]; then
-    echo "  Mirroring to iCloud backup..."
-    for branch in "${refs[@]}"; do
-      git push icloud "$branch" --quiet 2>&1 && echo "  ✓ icloud ← $branch" || echo "  ✗ icloud mirror failed for $branch (continuing)"
-    done
-  fi
+if [[ "$remote" != "origin" ]]; then
+  echo ""
+  echo "  BLOCKED: this public Aside checkout uses only the 'origin' remote."
+  echo ""
+  echo "  Normal pushes should target origin:"
+  echo "    git push origin <branch>"
+  echo ""
+  echo "  Private package or service work belongs in a separate clone."
+  echo ""
+  exit 1
 fi
 
 exit 0

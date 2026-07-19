@@ -80,6 +80,18 @@ function releaseCreatesExactAssets(releaseWorkflow) {
     return ["main.js", "manifest.json", "styles.css"].every((asset) => createBlock.includes(asset));
 }
 
+function hasStalePrivateRemoteHookRouting(rootDir) {
+    const hookPath = path.join(rootDir, "scripts/hooks/pre-push");
+    if (!existsSync(hookPath)) {
+        return false;
+    }
+    const contents = readFileSync(hookPath, "utf8");
+    return /\btwo-remote\b/u.test(contents)
+        || /\bprivate\s*→/u.test(contents)
+        || /\bgit\s+push\s+private\b/u.test(contents)
+        || /\bicloud\b/u.test(contents);
+}
+
 export function checkObsidianCompliance(rootDir = process.cwd()) {
     const issues = [];
     const packageJson = readJson(rootDir, "package.json");
@@ -144,6 +156,9 @@ export function checkObsidianCompliance(rootDir = process.cwd()) {
     }
     if (!releaseCreatesExactAssets(releaseWorkflow)) {
         issues.push(".github/workflows/release.yml must create exactly main.js, manifest.json, and styles.css");
+    }
+    if (hasStalePrivateRemoteHookRouting(rootDir)) {
+        issues.push("scripts/hooks/pre-push must not advertise or require private or icloud remotes");
     }
 
     return issues;
