@@ -69,6 +69,7 @@ function createHarness(options: {
     let syncIndexNoteViewClassesCount = 0;
     let modifyHandledPath: string | null = null;
     let detachSidebarViewsCount = 0;
+    const renamedAgentRuns: Array<{ previousFilePath: string; nextFilePath: string }> = [];
     const renamedStoredComments: Array<{ previousFilePath: string; nextFilePath: string }> = [];
     const deletedStoredComments: string[] = [];
     const deletedStoredCommentFolders: string[] = [];
@@ -80,6 +81,10 @@ function createHarness(options: {
         app: {} as never,
         getCommentManager: () => commentManager,
         getAggregateCommentIndex: () => aggregateCommentIndex,
+        renameAgentRuns: async (previousFilePath, nextFilePath) => {
+            renamedAgentRuns.push({ previousFilePath, nextFilePath });
+            return true;
+        },
         renameStoredComments: async (previousFilePath, nextFilePath) => {
             renamedStoredComments.push({ previousFilePath, nextFilePath });
         },
@@ -170,6 +175,7 @@ function createHarness(options: {
         getSyncIndexNoteViewClassesCount: () => syncIndexNoteViewClassesCount,
         getDetachSidebarViewsCount: () => detachSidebarViewsCount,
         getModifyHandledPath: () => modifyHandledPath,
+        renamedAgentRuns,
         renamedStoredComments,
         deletedStoredComments,
         deletedStoredCommentFolders,
@@ -201,6 +207,10 @@ test("plugin lifecycle controller keeps renamed comment files and indexes aligne
 
     assert.equal(harness.commentManager.getCommentById("comment-1")?.filePath, renamedFile.path);
     assert.equal(harness.aggregateCommentIndex.getCommentById("comment-1")?.filePath, renamedFile.path);
+    assert.deepEqual(harness.renamedAgentRuns, [{
+        previousFilePath: originalFile.path,
+        nextFilePath: renamedFile.path,
+    }]);
     assert.deepEqual(harness.renamedStoredComments, [{
         previousFilePath: originalFile.path,
         nextFilePath: renamedFile.path,
@@ -231,6 +241,10 @@ test("plugin lifecycle controller keeps renamed PDF page-note files and indexes 
 
     assert.equal(harness.commentManager.getCommentById("comment-1")?.filePath, renamedFile.path);
     assert.equal(harness.aggregateCommentIndex.getCommentById("comment-1")?.filePath, renamedFile.path);
+    assert.deepEqual(harness.renamedAgentRuns, [{
+        previousFilePath: originalFile.path,
+        nextFilePath: renamedFile.path,
+    }]);
     assert.deepEqual(harness.renamedStoredComments, [{
         previousFilePath: originalFile.path,
         nextFilePath: renamedFile.path,

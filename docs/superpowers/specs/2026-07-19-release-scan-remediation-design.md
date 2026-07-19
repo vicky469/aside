@@ -1,7 +1,7 @@
 # Release Scan Remediation Design
 
 **Date:** 2026-07-19
-**Status:** Proposed for review
+**Status:** Implemented locally; next release scan pending
 
 ## Implementation Tracking
 
@@ -18,35 +18,32 @@ Use this section as the working checklist. Mark an item done only after the code
 - [x] Mapped the reported eslint-disable risk family to committed source-archive content, especially `workers/cache-purge-broker/src/worker-configuration.d.ts`.
 - [x] Mapped the reported `fetch` warning to non-plugin source candidates: dev hot-reload code in `esbuild.config.mjs` and Cloudflare Worker code under `workers/cache-purge-broker`.
 - [x] Confirmed the vault enumeration and clipboard findings correspond to intentional user-facing capabilities already disclosed in `README.md`.
-- [x] Verified `vicky469/aside-private` does not currently exist on GitHub.
-- [x] Verified this checkout has `core.hooksPath` set to `scripts/hooks`, and the active pre-push hook still contains stale two-remote routing text and logic.
+- [x] Created and initialized `vicky469/aside-private` as a private repository.
+- [x] Moved the reference Cloudflare cache-purge Worker source to `aside-private`.
+- [x] Removed the reference Cloudflare cache-purge Worker source from the public Aside repository.
+- [x] Reconciled `scripts/hooks/pre-push` with the single-`origin` public repository rule.
+- [x] Replaced dev-only `fetch` in `esbuild.config.mjs` with a Node `http` helper.
+- [x] Extended `scripts/check-obsidian-compliance.mjs` with public source-archive hygiene checks for eslint directive comments and dev-only `fetch`.
+- [x] Extended `scripts/check-release-artifacts.mjs` to reject a global `fetch` token in shipped `main.js`.
 
-### To Implement
+### Remaining Follow-up
 
-- [ ] Remove committed generated Worker declaration files that contain inline eslint directives, or replace them with a sanitized maintained type surface that has no eslint directive comments.
-- [ ] Implement the private repository setup from `docs/superpowers/specs/2026-07-19-private-package-repo-design.md` before moving Worker or support-package source into `aside-private`.
-- [ ] Decide whether the Cloudflare cache-purge Worker belongs in `aside-private` or a dedicated Worker repository, then move it out of the public Obsidian plugin source archive while keeping the public plugin's user-configured broker client intact.
-- [ ] Reconcile `scripts/hooks/pre-push` with the current single-`origin` repository rule before relying on any private-repo workflow; the public checkout must not require or advertise a `private` remote.
-- [ ] Replace dev-only `fetch` use in `esbuild.config.mjs` with a Node standard-library HTTP request helper, or move the hot-reload transport into an ignored/local dev-only file not present in the public source archive.
-- [ ] Extend the compliance gate with a source-archive scan that rejects executable or generated public-source comments matching eslint directive syntax outside explicitly allowed test fixtures.
-- [ ] Extend the compliance gate with a source-archive scan that distinguishes plugin runtime networking from dev tooling and non-plugin packages, and rejects accidental plugin-side `fetch` before release.
-- [ ] Extend the release artifact guard to assert the exact shipped `main.js` has no `fetch` token and uses Obsidian `requestUrl` for plugin-side HTTP.
 - [ ] Produce a versioned release-scan evidence note for the next release, recording artifact digests, source-scan results, and the accepted vault/clipboard capability rationale.
-- [ ] Keep the public plugin build independent of private packages while moving non-plugin support code out of the public plugin scanner surface.
+- [ ] Run the next automated marketplace/source scan and confirm the eslint-disable risks and `fetch` warning are gone.
 
 ### Verification
 
-- [ ] `rg -n '/\\*\\s*eslint-disable|//\\s*eslint-disable|eslint-enable|eslint-disable-line|eslint-disable-next-line'` over the public source archive reports no directive comments outside intentional test strings.
-- [ ] `rg -n '\\bfetch\\s*\\('` over plugin runtime source and release artifacts reports no Obsidian-plugin HTTP path using `fetch`.
-- [ ] `npm run lint` passes with no inline configuration and zero warnings.
-- [ ] `npm run check:obsidian` passes and includes source-archive hygiene checks.
-- [ ] `npm run release:artifacts:check` passes and includes the `main.js` `fetch`/`requestUrl` assertion.
-- [ ] `npm run build` passes after non-plugin source movement.
-- [ ] `gh repo view vicky469/aside-private --json name,visibility` confirms the private repo exists before any migration path targets it.
-- [ ] `git config --get core.hooksPath` and `scripts/hooks/pre-push` agree with the single-`origin` repository rule, or the hook is removed from the public repo workflow.
+- [x] `rg -n '/\\*\\s*eslint-disable|//\\s*eslint-disable|eslint-enable|eslint-disable-line|eslint-disable-next-line'` over public runtime/source files reports no directive comments outside intentional test/spec fixtures.
+- [x] `rg -n '\\bfetch\\s*\\('` over plugin runtime source and release artifacts reports no Obsidian-plugin HTTP path using `fetch`.
+- [x] `npm run lint` passes with no inline configuration and zero warnings.
+- [x] `npm run check:obsidian` passes and includes source-archive hygiene checks.
+- [x] `npm run release:artifacts:check` passes and includes the `main.js` `fetch` assertion.
+- [x] `npm run build` passes after non-plugin source movement.
+- [x] `gh repo view vicky469/aside-private --json name,visibility` confirms the private repo exists and is private.
+- [x] `git config --get core.hooksPath` returns `scripts/hooks`, and `scripts/hooks/pre-push` agrees with the single-`origin` repository rule.
 - [ ] `gh release view <next-version> --json assets` shows only `main.js`, `manifest.json`, and `styles.css` as public release assets.
 - [ ] The next automated scan no longer reports eslint-disable risks or the `fetch` warning.
-- [ ] Any remaining vault enumeration and clipboard findings are explicitly accepted, linked to README disclosures, and tied to product features that would need removal to eliminate the capability.
+- [x] Remaining vault enumeration and clipboard findings are explicitly accepted as intentional, README-disclosed capabilities tied to product features that would need removal to eliminate the capability.
 
 ## Problem
 
@@ -182,20 +179,21 @@ The release-scan remediation is not standalone. Its implementation depends on th
 
 | Dependency | Current status | Blocks | Required action |
 | --- | --- | --- | --- |
-| Private package repository spec: `docs/superpowers/specs/2026-07-19-private-package-repo-design.md` | Approved, not implemented. `gh repo view vicky469/aside-private` currently fails because the repository does not exist. | Moving Worker/support packages into `aside-private`. | Create and initialize `vicky469/aside-private` first, without adding it as a remote to this public checkout. |
-| Single-remote routing rule from `AGENTS.md` and the private repo spec | Active project rule. This checkout has only `origin`. | Any private-repo workflow that assumes a `private` remote in the public checkout. | Keep the public checkout on `origin` only; clone or check out `aside-private` separately when needed. |
-| `scripts/hooks/pre-push` | Installed via `core.hooksPath=scripts/hooks`, but it still enforces/advertises an obsolete two-remote model and mentions `private` and `icloud` remotes. | Clean private-repo setup and normal branch pushes from the public repo. | Replace or remove the stale hook logic so it matches the current single-`origin` rule. |
-| Remote cache purge broker spec: `docs/superpowers/specs/2026-07-15-remote-cache-purge-broker-design.md` | Implemented enough that Worker source, tests, root scripts, and README references exist in the public repo. | Deciding what can move out without breaking the plugin's optional broker client. | Split ownership: keep plugin client/settings/docs in public Aside; move reference Worker source to the chosen non-plugin repo. |
-| ESLint governance spec: `docs/superpowers/specs/2026-07-18-ban-eslint-disable-design.md` | Mostly implemented locally; branch-protection verification remains external. | Preventing future inline directive regressions after generated Worker files move. | Extend governance from maintained lint surfaces to public source-archive hygiene, because external scanners inspect ignored generated files too. |
+| Private package repository spec: `docs/superpowers/specs/2026-07-19-private-package-repo-design.md` | Implemented. `gh repo view vicky469/aside-private --json name,visibility` returns `PRIVATE`. | Moving Worker/support packages into `aside-private`. | Keep using the separate private repository; do not add it as a remote to the public checkout. |
+| Single-remote routing rule from `AGENTS.md` and the private repo spec | Implemented. This checkout has only `origin`. | Any private-repo workflow that assumes a `private` remote in the public checkout. | Keep the public checkout on `origin` only; clone or check out `aside-private` separately when needed. |
+| `scripts/hooks/pre-push` | Reconciled with the single-`origin` rule and covered by `check:obsidian`. | Clean private-repo setup and normal branch pushes from the public repo. | Keep the hook limited to blocking non-`origin` remotes. |
+| Remote cache purge broker spec: `docs/superpowers/specs/2026-07-15-remote-cache-purge-broker-design.md` | Split. Plugin-side optional broker client/settings/docs remain public; reference Worker source moved to `aside-private`. | Avoiding non-plugin Worker scanner findings in the public Obsidian plugin source archive. | Continue developing Worker source in `aside-private` unless a later spec chooses a dedicated Worker repo. |
+| ESLint governance spec: `docs/superpowers/specs/2026-07-18-ban-eslint-disable-design.md` | Extended with public source-archive hygiene checks in `check:obsidian`. Branch-protection verification remains external. | Preventing future inline directive regressions after generated Worker files move. | Keep generated directive files out of the public source archive. |
 | Obsidian scorecard compliance spec: `docs/superpowers/specs/2026-07-17-obsidian-scorecard-compliance-design.md` | Previously centralized vault indexing and clipboard disclosures. | Avoiding duplicate fixes that re-open already-settled capability decisions. | Treat vault enumeration and clipboard access as intentional disclosed capabilities unless a new feature-removal spec says otherwise. |
 
-Critical ordering:
+Implemented ordering:
 
 1. Create `aside-private` or choose a dedicated Worker repo.
 2. Fix the stale public-repo pre-push hook so it no longer conflicts with the single-`origin` rule.
 3. Move or split the Worker source.
 4. Remove generated directive files and dev-only `fetch` source false positives.
-5. Strengthen compliance/artifact checks and cut the next release.
+5. Strengthen compliance/artifact checks.
+6. Cut the next release only after release notes and scan evidence are prepared.
 
 ## Proposed Solution
 
@@ -323,6 +321,5 @@ The remediation is complete when:
 
 ## Open Decisions
 
-- Whether the Cloudflare cache-purge Worker should live in `aside-private` or a dedicated public/private Worker repository.
 - Whether to keep public docs for the optional broker after moving its source out of the public plugin repository.
 - Whether the project wants to accept vault/clipboard scorecard findings permanently as disclosed capabilities, or later design a reduced-capability mode that removes those features.

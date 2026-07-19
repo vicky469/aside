@@ -1,7 +1,7 @@
 # Private Package Repository Design
 
 **Date:** 2026-07-19
-**Status:** Approved for implementation planning
+**Status:** Implemented
 
 ## Implementation Tracking
 
@@ -12,23 +12,20 @@ Use this section as the working checklist. Mark an item done only after the code
 - [x] The public Aside repository uses a single `origin` remote for normal pushes.
 - [x] The public Aside package is currently marked `"private": true` and is not configured for npm publishing.
 - [x] The public Aside package manifest currently lists only public npm dependencies.
-
-### To Implement
-
-- [ ] Create a private GitHub repository named `aside-private` under the same GitHub owner used for the public Aside repository.
-- [ ] Initialize `aside-private` as a source repository for private modular packages, not as a second remote for the public `aside` repository.
-- [ ] Add a minimal private npm workspace structure under `packages/` so new internal modules can be added incrementally.
-- [ ] Document the boundary rule: the public `aside` repository must remain buildable without private dependencies unless an explicit private edition or private build path is designed later.
-- [ ] Document the future package publication path for stabilized private modules, with GitHub Packages as the default private package registry.
-- [ ] Avoid adding private package dependencies, private registry configuration, or a private remote to the public `aside` repository in this setup step.
+- [x] Created the private GitHub repository `vicky469/aside-private`.
+- [x] Initialized `aside-private` as a separate source repository for private modular packages and support services, not as a second remote for the public `aside` checkout.
+- [x] Added a minimal private npm workspace structure under `packages/`.
+- [x] Documented the boundary rule: the public `aside` repository must remain buildable without private dependencies unless an explicit private edition or private build path is designed later.
+- [x] Documented the future package publication path for stabilized private modules, with GitHub Packages as the default private package registry.
+- [x] Avoided adding private package dependencies, private registry configuration, or a private remote to the public `aside` repository.
 
 ### Verification
 
-- [ ] `gh repo view vicky469/aside-private --json name,visibility` or equivalent confirms the repo exists and is private.
-- [ ] The initialized `aside-private` repository contains `README.md`, root `package.json`, `packages/README.md`, and `docs/modularization.md`.
-- [ ] The public `aside` repository still has only its normal `origin` remote.
-- [ ] The public `aside` package manifest remains free of private package dependencies and private registry configuration.
-- [ ] No release artifact or public marketplace output changes are introduced by this setup.
+- [x] `gh repo view vicky469/aside-private --json name,visibility` returns `{"name":"aside-private","visibility":"PRIVATE"}`.
+- [x] The initialized `aside-private` repository contains `README.md`, root `package.json`, `packages/README.md`, and `docs/modularization.md`.
+- [x] The public `aside` repository still has only its normal `origin` remote.
+- [x] The public `aside` package manifest remains free of private package dependencies and private registry configuration.
+- [x] No release artifact or public marketplace output changes were introduced by the private repo skeleton setup.
 
 ## Problem
 
