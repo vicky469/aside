@@ -31,6 +31,7 @@ function createFixture(overrides = {}) {
         "styles.css": ".aside {}\n",
         "LICENSE": "MIT\n",
         "src/main.ts": "export {};\n",
+        "esbuild.config.mjs": "export default {};\n",
         "scripts/hooks/pre-push": "#!/usr/bin/env bash\nexit 0\n",
         ".github/workflows/ci.yml": [
             "on: [push, pull_request]",
@@ -158,6 +159,26 @@ test("compliance checker rejects stale private remote hook routing", () => {
     }, (rootDir) => {
         assert.deepEqual(checkObsidianCompliance(rootDir), [
             "scripts/hooks/pre-push must not advertise or require private or icloud remotes",
+        ]);
+    });
+});
+
+test("compliance checker rejects ESLint directive comments in public source", () => {
+    withFixture({
+        "src/generated.d.ts": "/* eslint-disable */\nexport interface Generated {}\n",
+    }, (rootDir) => {
+        assert.deepEqual(checkObsidianCompliance(rootDir), [
+            "src/generated.d.ts contains forbidden ESLint directive comment",
+        ]);
+    });
+});
+
+test("compliance checker rejects dev fetch in public source archive", () => {
+    withFixture({
+        "esbuild.config.mjs": "await fetch('http://127.0.0.1:9222/json/list');\n",
+    }, (rootDir) => {
+        assert.deepEqual(checkObsidianCompliance(rootDir), [
+            "esbuild.config.mjs uses fetch in public source; use Node http/https or keep dev-only transport out of the public source archive",
         ]);
     });
 });

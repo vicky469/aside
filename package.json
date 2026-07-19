@@ -18,14 +18,11 @@
 		"dev": "npm run typecheck && node esbuild.config.mjs",
 		"dev:install-built": "node scripts/install-built-plugin.mjs",
 		"dev:build-reload": "npm run build && npm run dev:install-built -- --vault .. && tmux new-session -d -s aside-reload-$(date +%s) 'obsidian plugin:reload id=aside vault=dev'",
-		"build": "npm run test && npm run verify:worker && npm run lint && npm run typecheck && npm run check:obsidian && npm run bundle && npm run release:artifacts:check",
+		"build": "npm run test && npm run lint && npm run typecheck && npm run check:obsidian && npm run bundle && npm run release:artifacts:check",
 		"lint": "eslint . --max-warnings 0",
 		"typecheck": "tsc -noEmit -skipLibCheck",
 		"check:obsidian": "node scripts/check-obsidian-compliance.mjs",
 		"bundle": "node esbuild.config.mjs production",
-		"test:worker": "npm test --prefix workers/cache-purge-broker",
-		"typecheck:worker": "npm run typecheck --prefix workers/cache-purge-broker",
-		"verify:worker": "npm run typecheck:worker && npm run test:worker",
 		"comment:create": "node scripts/create-note-comment-thread.mjs",
 		"comment:create-with-children": "node scripts/create-note-comment-thread-with-children.mjs",
 		"comment:append": "node scripts/append-note-comment-entry.mjs",
@@ -47,7 +44,6 @@
 		"@codemirror/view": "6.38.6"
 	},
 	"devDependencies": {
-		"@cloudflare/vitest-pool-workers": "^0.18.5",
 		"@emnapi/core": "1.11.2",
 		"@emnapi/runtime": "1.11.2",
 		"@eslint/js": "^9.39.4",
@@ -60,8 +56,6 @@
 		"obsidian": "^1.13.1",
 		"tslib": "2.4.0",
 		"typescript": "^5.9.3",
-		"typescript-eslint": "^8.58.2",
-		"vitest": "^4.1.10",
-		"wrangler": "^4.111.0"
+		"typescript-eslint": "^8.58.2"
 	}
 }

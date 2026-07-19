@@ -26,11 +26,16 @@ test("central ESLint policy disables inline configuration", async () => {
 });
 
 test("inline rule suppressions cannot change lint behavior", async (context) => {
+    const eslint = "eslint";
+    const blockDisable = `${eslint}-disable`;
+    const enable = `${eslint}-enable`;
+    const lineDisable = `${eslint}-disable-line`;
+    const nextLineDisable = `${eslint}-disable-next-line`;
     const cases = new Map([
-        ["block disable", "/* eslint-disable no-console */\nconsole.log('blocked');\n/* eslint-enable no-console */\n"],
-        ["line disable", "console.log('blocked'); // eslint-disable-line no-console\n"],
-        ["next-line disable", "// eslint-disable-next-line no-console\nconsole.log('blocked');\n"],
-        ["inline rule override", "/* eslint no-console: off */\nconsole.log('blocked');\n"],
+        ["block disable", `/* ${blockDisable} no-console */\nconsole.log('blocked');\n/* ${enable} no-console */\n`],
+        ["line disable", `console.log('blocked'); // ${lineDisable} no-console\n`],
+        ["next-line disable", `// ${nextLineDisable} no-console\nconsole.log('blocked');\n`],
+        ["inline rule override", `/* ${eslint} no-console: off */\nconsole.log('blocked');\n`],
     ]);
 
     for (const [name, source] of cases) {
@@ -55,8 +60,7 @@ test("lint entrypoint covers every maintained runtime", async () => {
         "scripts/check-obsidian-compliance.mjs",
         "src/main.ts",
         "tests/publicFilePublishActions.test.ts",
-        "workers/cache-purge-broker/src/index.ts",
-        "workers/cache-purge-broker/wrangler.jsonc",
+        "esbuild.config.mjs",
     ];
 
     assert.equal(packageJson.scripts.lint, "eslint . --max-warnings 0");

@@ -1,5 +1,6 @@
 import esbuild from "esbuild";
 import { execFile } from "node:child_process";
+import http from "node:http";
 import { dirname, resolve } from "node:path";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import process from "process";
@@ -46,17 +47,40 @@ async function openCdpWebSocket(url) {
 	return socket;
 }
 
+async function readLocalJson(url) {
+	return new Promise((resolve, reject) => {
+		const request = http.get(url, { timeout: 2000 }, (response) => {
+			const statusCode = response.statusCode ?? 0;
+			let body = "";
+			response.setEncoding("utf8");
+			response.on("data", (chunk) => {
+				body += chunk;
+			});
+			response.on("end", () => {
+				if (statusCode < 200 || statusCode >= 300) {
+					reject(new Error(`CDP target list returned HTTP ${statusCode}`));
+					return;
+				}
+				try {
+					resolve(JSON.parse(body));
+				} catch (error) {
+					reject(new Error(`CDP target list returned invalid JSON: ${formatError(error)}`));
+				}
+			});
+		});
+		request.on("timeout", () => {
+			request.destroy(new Error("Timed out reading CDP target list"));
+		});
+		request.on("error", reject);
+	});
+}
+
 async function reloadPluginViaCdp() {
-	if (typeof fetch !== "function" || typeof WebSocket !== "function") {
-		throw new Error("Current Node runtime does not expose fetch/WebSocket for CDP reload");
+	if (typeof WebSocket !== "function") {
+		throw new Error("Current Node runtime does not expose WebSocket for CDP reload");
 	}
 
-	const targetsResponse = await fetch(`http://127.0.0.1:${hotReloadCdpPort}/json/list`);
-	if (!targetsResponse.ok) {
-		throw new Error(`CDP target list returned HTTP ${targetsResponse.status}`);
-	}
-
-	const targets = await targetsResponse.json();
+	const targets = await readLocalJson(`http://127.0.0.1:${hotReloadCdpPort}/json/list`);
 	const target = targets.find((candidate) => candidate.url === "app://obsidian.md/index.html") ?? targets[0];
 	if (!target?.webSocketDebuggerUrl) {
 		throw new Error("No Obsidian CDP target found");

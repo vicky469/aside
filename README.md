@@ -91,7 +91,7 @@ Aside reads clipboard data only from a paste event initiated by the user. It wri
    - Create or choose a Cloudflare Pages project.
    - If you use a custom domain, attach it to the Pages project in Cloudflare first.
 	- Optional for immediate unpublish cache invalidation on a custom domain:
-	  - Deploy `workers/cache-purge-broker` after setting `ALLOWED_HOSTS` to your publishing hostname.
+	  - Deploy a compatible remote cache-purge broker outside the public plugin repository after setting `ALLOWED_HOSTS` to your publishing hostname. Aside's reference broker source is maintained separately from this marketplace plugin source archive.
 	  - Store `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ZONE_ID`, and `BROKER_AUTH_SECRET` as Worker secrets. The API token needs Cloudflare's Cache Purge permission for that zone.
 	  - In Aside settings, enter the deployed broker's `/purge` URL and select an Obsidian SecretStorage entry containing the same broker auth secret.
 	  - Remote purge does not support `*.pages.dev`; use a custom domain in a Cloudflare zone you control.

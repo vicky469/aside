@@ -24,9 +24,20 @@ const REQUIRED_DISCLOSURES = [
     "## External services",
 ];
 const SOURCE_EXTENSIONS = new Set([".js", ".jsx", ".mjs", ".ts", ".tsx"]);
+const PUBLIC_SOURCE_DIRECTORIES = [
+    "src",
+    "scripts",
+    "workers",
+];
+const PUBLIC_SOURCE_FILES = [
+    "esbuild.config.mjs",
+    "eslint.config.mjs",
+];
 const SUPPORTED_NODE_VERSIONS = new Set([22, 24]);
 const VERSION_PATTERN = /^\d+\.\d+\.\d+$/u;
 const REQUEST_LITERAL_HOST_PATTERN = /(?:fetch|request|WebSocket)\s*\(\s*["'`]https?:\/\/([a-z0-9.-]+)(?=[/:)'"`\s]|$)/giu;
+const ESLINT_DIRECTIVE_COMMENT_PATTERN = /(?:^|\s)(?:\/\*|\/\/|#)\s*eslint-(?:disable|enable|disable-line|disable-next-line)\b/u;
+const FETCH_CALL_PATTERN = /\bfetch\s*\(/u;
 
 function readText(rootDir, relativePath) {
     return readFileSync(path.join(rootDir, relativePath), "utf8");
@@ -51,6 +62,20 @@ function listSourceFiles(directory) {
         }
     }
     return results.sort();
+}
+
+function listPublicSourceFiles(rootDir) {
+    const files = [];
+    for (const directory of PUBLIC_SOURCE_DIRECTORIES) {
+        files.push(...listSourceFiles(path.join(rootDir, directory)));
+    }
+    for (const relativePath of PUBLIC_SOURCE_FILES) {
+        const filePath = path.join(rootDir, relativePath);
+        if (existsSync(filePath)) {
+            files.push(filePath);
+        }
+    }
+    return files.sort();
 }
 
 function readDeclaredPluginHosts(readme) {
@@ -78,6 +103,21 @@ function releaseCreatesExactAssets(releaseWorkflow) {
     }
     const createBlock = releaseWorkflow.slice(createIndex);
     return ["main.js", "manifest.json", "styles.css"].every((asset) => createBlock.includes(asset));
+}
+
+function inspectPublicSourceArchive(rootDir) {
+    const issues = [];
+    for (const filePath of listPublicSourceFiles(rootDir)) {
+        const contents = readFileSync(filePath, "utf8");
+        const relativePath = path.relative(rootDir, filePath);
+        if (ESLINT_DIRECTIVE_COMMENT_PATTERN.test(contents)) {
+            issues.push(`${relativePath} contains forbidden ESLint directive comment`);
+        }
+        if (relativePath === "esbuild.config.mjs" && FETCH_CALL_PATTERN.test(contents)) {
+            issues.push("esbuild.config.mjs uses fetch in public source; use Node http/https or keep dev-only transport out of the public source archive");
+        }
+    }
+    return issues;
 }
 
 function hasStalePrivateRemoteHookRouting(rootDir) {
@@ -127,6 +167,7 @@ export function checkObsidianCompliance(rootDir = process.cwd()) {
             issues.push(`README.md is missing capability disclosure: ${heading}`);
         }
     }
+    issues.push(...inspectPublicSourceArchive(rootDir));
 
     const declaredHosts = readDeclaredPluginHosts(readme);
     for (const filePath of listSourceFiles(path.join(rootDir, "src"))) {
