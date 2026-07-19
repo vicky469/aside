@@ -17,6 +17,10 @@ const FORBIDDEN_CONTENT_CHECKS = [
         pattern: /sourcesContent/,
     },
     {
+        label: "global fetch token",
+        pattern: /\bfetch\s*\(/,
+    },
+    {
         label: "private key material",
         pattern: /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/,
     },

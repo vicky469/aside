@@ -19,6 +19,18 @@ test("release artifact guard rejects embedded source content", () => {
     });
 });
 
+test("release artifact guard rejects global fetch in shipped main bundle", () => {
+    withTempDir((tempDir) => {
+        writeReleaseFiles(tempDir, {
+            "main.js": "async function send(url) { return fetch(url); }",
+        });
+        assert.match(
+            inspectReleaseArtifacts(tempDir).join("\n"),
+            /main\.js contains global fetch token/,
+        );
+    });
+});
+
 function withTempDir(callback) {
     const tempDir = mkdtempSync(path.join(os.tmpdir(), "aside-release-artifacts-"));
     try {
