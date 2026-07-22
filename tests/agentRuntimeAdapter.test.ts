@@ -291,17 +291,19 @@ test("extractCodexTextDeltaFromJsonEvent reads assistant deltas from exec json e
     );
 });
 
-test("extractCodexRunMetadataFromThreadItem captures tool names and sanitized urls", () => {
+test("extractCodexRunMetadataFromThreadItem captures tool names, files, and sanitized urls", () => {
     assert.deepEqual(
         extractCodexRunMetadataFromThreadItem({
             type: "mcpToolCall",
             tool: "browser-use.browser_navigate",
             arguments: {
                 url: "https://example.com/page?token=secret#debug",
+                filePath: "Raw/Source Note.md",
             },
         }),
         {
             usedTools: ["browser-use.browser_navigate"],
+            usedFiles: ["Raw/Source Note.md"],
             usedUrls: ["https://example.com/page"],
         },
     );
@@ -312,6 +314,7 @@ test("extractCodexRunMetadataFromThreadItem captures tool names and sanitized ur
         }),
         {
             usedTools: ["web-search"],
+            usedFiles: [],
             usedUrls: [],
         },
     );
@@ -322,6 +325,7 @@ test("extractCodexRunMetadataFromThreadItem captures tool names and sanitized ur
         }),
         {
             usedTools: [],
+            usedFiles: [],
             usedUrls: [],
         },
     );
@@ -375,7 +379,7 @@ test("extractClaudeReplyTextFromJsonEvent reads final result text", () => {
     );
 });
 
-test("extractClaudeRunMetadataFromJsonEvent captures tool names and sanitized urls", () => {
+test("extractClaudeRunMetadataFromJsonEvent captures tool names, files, and sanitized urls", () => {
     assert.deepEqual(
         extractClaudeRunMetadataFromJsonEvent({
             type: "assistant",
@@ -385,12 +389,14 @@ test("extractClaudeRunMetadataFromJsonEvent captures tool names and sanitized ur
                     name: "WebFetch",
                     input: {
                         url: "https://example.com/page?token=secret#debug",
+                        file_path: "docs/reference.md",
                     },
                 }],
             },
         }),
         {
             usedTools: ["WebFetch"],
+            usedFiles: ["docs/reference.md"],
             usedUrls: ["https://example.com/page"],
         },
     );
@@ -409,6 +415,7 @@ test("extractClaudeRunMetadataFromJsonEvent captures tool names and sanitized ur
         }),
         {
             usedTools: [],
+            usedFiles: [],
             usedUrls: [],
         },
     );
@@ -429,6 +436,7 @@ test("extractClaudeRunMetadataFromJsonEvent captures named tool error payloads",
         }),
         {
             usedTools: ["WebSearch (unavailable)"],
+            usedFiles: [],
             usedUrls: [],
             usedToolErrors: [{
                 name: "WebSearch",
@@ -456,6 +464,7 @@ test("extractClaudeRunMetadataFromJsonEvent captures skill name from Skill tool_
         {
             usedSkills: [{ name: "aside" }],
             usedTools: ["Skill"],
+            usedFiles: [],
             usedUrls: [],
         },
     );
@@ -474,6 +483,7 @@ test("extractClaudeRunMetadataFromJsonEvent does not capture skills from system 
         }),
         {
             usedTools: [],
+            usedFiles: [],
             usedUrls: [],
         },
     );

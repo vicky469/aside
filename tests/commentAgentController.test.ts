@@ -71,6 +71,7 @@ function createHarness(options: {
         runtime: "direct-cli";
         replyText: string;
         usedTools?: string[];
+        usedFiles?: string[];
         usedUrls?: string[];
         usedToolErrors?: Array<{ name: string; payload: string }>;
     }>;
@@ -260,6 +261,7 @@ test("comment agent controller appends a reply and marks the run succeeded", asy
         mode: "write",
         source: "built-in",
     }]);
+    assert.deepEqual(latestRun?.usedFiles, ["Folder/Note.md"]);
     assert.deepEqual(harness.appendedEntries, [{
         threadId: "thread-1",
         body: "",
@@ -414,6 +416,7 @@ test("comment agent controller persists runtime tool and url metadata", async ()
             runtime: "direct-cli",
             replyText: "Ship it.",
             usedTools: ["browser-use.browser_navigate"],
+            usedFiles: ["Folder/Reference.md"],
             usedUrls: ["http://localhost:3000/dashboard?token=secret#debug"],
             usedToolErrors: [{
                 name: "WebSearch",
@@ -433,6 +436,7 @@ test("comment agent controller persists runtime tool and url metadata", async ()
     const latestRun = harness.controller.getLatestAgentRunForThread("thread-1");
     assert.equal(latestRun?.status, "succeeded");
     assert.deepEqual(latestRun?.usedTools, ["browser-use.browser_navigate", "WebSearch (unavailable)"]);
+    assert.deepEqual(latestRun?.usedFiles, ["Folder/Note.md", "Folder/Reference.md"]);
     assert.deepEqual(latestRun?.usedUrls, ["http://localhost:3000/dashboard"]);
     assert.deepEqual(latestRun?.usedToolErrors, [{
         name: "WebSearch",

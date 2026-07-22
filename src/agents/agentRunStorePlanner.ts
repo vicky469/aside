@@ -1,5 +1,6 @@
 import {
     cloneAgentRunRecords,
+    normalizeAgentRunFilePaths,
     normalizeAgentRunSkillMetadata,
     normalizeAgentRunToolErrors,
     normalizeAgentRunToolNames,
@@ -60,6 +61,10 @@ function normalizeAgentRunRecord(value: unknown): AgentRunRecord | null {
 
     const usedSkills = normalizeAgentRunSkillMetadata(value.usedSkills);
     const usedTools = normalizeAgentRunToolNames(value.usedTools);
+    const usedFiles = normalizeAgentRunFilePaths([
+        filePath,
+        ...normalizeAgentRunFilePaths(value.usedFiles),
+    ]);
     const usedUrls = normalizeAgentRunUrls(value.usedUrls);
     const usedToolErrors = normalizeAgentRunToolErrors(value.usedToolErrors);
 
@@ -83,6 +88,7 @@ function normalizeAgentRunRecord(value: unknown): AgentRunRecord | null {
             : undefined,
         ...(usedSkills.length ? { usedSkills } : {}),
         ...(usedTools.length ? { usedTools } : {}),
+        ...(usedFiles.length ? { usedFiles } : {}),
         ...(usedUrls.length ? { usedUrls } : {}),
         ...(usedToolErrors.length ? { usedToolErrors } : {}),
     };

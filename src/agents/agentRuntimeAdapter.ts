@@ -1,6 +1,7 @@
 import {
     formatUnavailableAgentRunToolName,
     getAgentRunToolBaseName,
+    normalizeAgentRunFilePaths,
     normalizeAgentRunSkillMetadata,
     normalizeAgentRunToolErrors,
     normalizeAgentRunToolNames,
@@ -639,6 +640,66 @@ function collectUrlStrings(value: unknown, urls: Set<string>, depth: number = 0)
     }
 }
 
+function isFilePathMetadataKey(key: string): boolean {
+    const normalizedKey = key.replace(/[-_\s]/gu, "").toLowerCase();
+    return normalizedKey === "file"
+        || normalizedKey === "files"
+        || normalizedKey === "filepath"
+        || normalizedKey === "filepaths"
+        || normalizedKey === "path"
+        || normalizedKey === "paths";
+}
+
+function collectFilePathCandidateValues(value: unknown, candidates: unknown[], depth: number): void {
+    if (depth > 5 || value == null) {
+        return;
+    }
+
+    if (typeof value === "string") {
+        candidates.push(value);
+        return;
+    }
+
+    if (Array.isArray(value)) {
+        for (const item of value) {
+            collectFilePathCandidateValues(item, candidates, depth + 1);
+        }
+        return;
+    }
+
+    if (isRecord(value)) {
+        collectFilePathStrings(value, candidates, depth + 1);
+    }
+}
+
+function collectFilePathStrings(value: unknown, candidates: unknown[], depth: number = 0): void {
+    if (depth > 5 || value == null) {
+        return;
+    }
+
+    if (Array.isArray(value)) {
+        for (const item of value) {
+            collectFilePathStrings(item, candidates, depth + 1);
+        }
+        return;
+    }
+
+    if (!isRecord(value)) {
+        return;
+    }
+
+    for (const [key, item] of Object.entries(value)) {
+        if (isFilePathMetadataKey(key)) {
+            collectFilePathCandidateValues(item, candidates, depth + 1);
+            continue;
+        }
+
+        if (Array.isArray(item) || isRecord(item)) {
+            collectFilePathStrings(item, candidates, depth + 1);
+        }
+    }
+}
+
 function pushSkillMetadataCandidate(value: unknown, candidates: unknown[]): void {
     if (typeof value === "string") {
         candidates.push({ name: value });
@@ -711,19 +772,24 @@ function getCodexThreadItemToolName(item: Record<string, unknown>): string | nul
     }
 }
 
-export function extractCodexRunMetadataFromThreadItem(item: unknown): Pick<AgentRunMetadata, "usedSkills" | "usedTools" | "usedUrls"> {
+export function extractCodexRunMetadataFromThreadItem(item: unknown): Pick<AgentRunMetadata, "usedSkills" | "usedTools" | "usedFiles" | "usedUrls"> {
     if (!isRecord(item)) {
         return {
             usedTools: [],
+            usedFiles: [],
             usedUrls: [],
         };
     }
 
     const usedSkills = extractExplicitSkillMetadata(item);
+    const fileCandidates: unknown[] = [];
+    collectFilePathStrings(item, fileCandidates);
+    const usedFiles = normalizeAgentRunFilePaths(fileCandidates);
     if (typeof item.type !== "string") {
         return {
             ...(usedSkills.length ? { usedSkills } : {}),
             usedTools: [],
+            usedFiles,
             usedUrls: [],
         };
     }
@@ -737,6 +803,7 @@ export function extractCodexRunMetadataFromThreadItem(item: unknown): Pick<Agent
     return {
         ...(usedSkills.length ? { usedSkills } : {}),
         usedTools,
+        usedFiles,
         usedUrls: Array.from(urlSet),
     };
 }
@@ -1111,7 +1178,7 @@ export function extractClaudeReplyTextFromJsonEvent(event: unknown): string | nu
     ]);
 }
 
-export function extractClaudeRunMetadataFromJsonEvent(event: unknown): Pick<AgentRunMetadata, "usedSkills" | "usedTools" | "usedUrls" | "usedToolErrors"> {
+export function extractClaudeRunMetadataFromJsonEvent(event: unknown): Pick<AgentRunMetadata, "usedSkills" | "usedTools" | "usedFiles" | "usedUrls" | "usedToolErrors"> {
     const toolBlocks = getClaudeContentBlocks(event)
         .filter((block) => block.type === "tool_use");
     const toolNames = toolBlocks
@@ -1120,6 +1187,10 @@ export function extractClaudeRunMetadataFromJsonEvent(event: unknown): Pick<Agen
     const urlSet = new Set<string>();
     for (const block of toolBlocks) {
         collectUrlStrings(block.input ?? block, urlSet);
+    }
+    const fileCandidates: unknown[] = [];
+    for (const block of toolBlocks) {
+        collectFilePathStrings(block.input ?? block, fileCandidates);
     }
 
     const usedSkills = normalizeAgentRunSkillMetadata(
@@ -1146,6 +1217,7 @@ export function extractClaudeRunMetadataFromJsonEvent(event: unknown): Pick<Agen
             ...toolNames,
             ...usedToolErrors.map((error) => formatUnavailableAgentRunToolName(error.name)),
         ]),
+        usedFiles: normalizeAgentRunFilePaths(fileCandidates),
         usedUrls: Array.from(urlSet),
         ...(usedToolErrors.length ? { usedToolErrors } : {}),
     };
@@ -1206,6 +1278,7 @@ async function runCodexDirect(
         const codexErrorMessages: string[] = [];
         const usedSkills = new Map<string, AgentRunSkillMetadata>();
         const usedTools = new Set<string>();
+        const usedFiles = new Set<string>();
         const usedUrls = new Set<string>();
         let abortHandler: (() => void) | null = null;
 
@@ -1250,6 +1323,7 @@ async function runCodexDirect(
                 replyText,
                 usedSkills: Array.from(usedSkills.values()),
                 usedTools: Array.from(usedTools),
+                usedFiles: Array.from(usedFiles),
                 usedUrls: Array.from(usedUrls),
             });
         };
@@ -1278,6 +1352,12 @@ async function runCodexDirect(
                     changed = true;
                 }
             }
+            for (const filePath of metadata.usedFiles ?? []) {
+                if (!usedFiles.has(filePath)) {
+                    usedFiles.add(filePath);
+                    changed = true;
+                }
+            }
             for (const url of metadata.usedUrls ?? []) {
                 if (!usedUrls.has(url)) {
                     usedUrls.add(url);
@@ -1289,6 +1369,7 @@ async function runCodexDirect(
                 invocation.onRunMetadata?.({
                     usedSkills: Array.from(usedSkills.values()),
                     usedTools: Array.from(usedTools),
+                    usedFiles: Array.from(usedFiles),
                     usedUrls: Array.from(usedUrls),
                 });
             }
@@ -1483,6 +1564,7 @@ async function runClaudeDirect(
         let finalText: string | null = null;
         const usedSkills = new Map<string, AgentRunSkillMetadata>();
         const usedTools = new Set<string>();
+        const usedFiles = new Set<string>();
         const usedUrls = new Set<string>();
         const usedToolErrors = new Map<string, AgentRunToolErrorMetadata>();
         const claudeToolNamesById = new Map<string, string>();
@@ -1528,6 +1610,7 @@ async function runClaudeDirect(
                 replyText,
                 usedSkills: Array.from(usedSkills.values()),
                 usedTools: Array.from(usedTools),
+                usedFiles: Array.from(usedFiles),
                 usedUrls: Array.from(usedUrls),
                 usedToolErrors: Array.from(usedToolErrors.values()),
             });
@@ -1590,6 +1673,12 @@ async function runClaudeDirect(
                     changed = true;
                 }
             }
+            for (const filePath of metadata.usedFiles ?? []) {
+                if (!usedFiles.has(filePath)) {
+                    usedFiles.add(filePath);
+                    changed = true;
+                }
+            }
             for (const error of metadata.usedToolErrors ?? []) {
                 recordToolError(error);
             }
@@ -1612,6 +1701,7 @@ async function runClaudeDirect(
                 invocation.onRunMetadata?.({
                     usedSkills: Array.from(usedSkills.values()),
                     usedTools: Array.from(usedTools),
+                    usedFiles: Array.from(usedFiles),
                     usedUrls: Array.from(usedUrls),
                     usedToolErrors: Array.from(usedToolErrors.values()),
                 });

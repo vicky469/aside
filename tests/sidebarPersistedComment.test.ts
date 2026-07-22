@@ -78,6 +78,7 @@ function createAgentRun(overrides: Partial<AgentRunRecord> = {}): AgentRunRecord
         error: overrides.error,
         usedSkills: overrides.usedSkills,
         usedTools: overrides.usedTools,
+        usedFiles: overrides.usedFiles,
         usedUrls: overrides.usedUrls,
         usedToolErrors: overrides.usedToolErrors,
     };
@@ -114,6 +115,7 @@ class FakeClassList {
 }
 
 class FakeElement {
+    public static defaultView: Pick<Window, "setTimeout" | "clearTimeout"> | null = null;
     public readonly children: FakeElement[] = [];
     public parentElement: FakeElement | null = null;
     public textContent = "";
@@ -124,7 +126,9 @@ class FakeElement {
     public readonly style = { display: "" };
     public readonly classList = new FakeClassList(this);
     public readonly ownerDocument = {
-        defaultView: null,
+        get defaultView(): Pick<Window, "setTimeout" | "clearTimeout"> | null {
+            return FakeElement.defaultView;
+        },
         createElementNS: (_namespace: string, tagName: string) => new FakeElement(tagName),
     };
     private readonly attributes = new Map<string, string>();
@@ -1198,12 +1202,14 @@ test("formatAgentRunMetadataFrontmatter renders compact run metadata", () => {
     assert.equal(
         formatAgentRunMetadataFrontmatter(createAgentRun({
             usedSkills: [{ name: "aside", mode: "write", source: "built-in" }],
+            usedFiles: ["docs/source.md", "docs/source.md"],
             usedTools: ["browser-use.browser_navigate", "browser-use.browser_navigate"],
             usedUrls: ["https://example.com/page?token=secret#section"],
         })),
         [
             "---",
             "skills: aside (write)",
+            "files: docs/source.md",
             "tools: browser-use.browser_navigate",
             "urls: https://example.com/page",
             "---",
@@ -1222,6 +1228,7 @@ test("formatAgentRunVisibleMetadataLabels keeps metadata terse", () => {
     assert.deepEqual(
         formatAgentRunVisibleMetadataLabels(createAgentRun({
             usedSkills: [{ name: "aside", mode: "write", source: "built-in" }],
+            usedFiles: ["docs/source.md", "docs/source.md"],
             usedTools: ["WebSearch"],
             usedUrls: [
                 "https://example.com/page",
@@ -1235,10 +1242,243 @@ test("formatAgentRunVisibleMetadataLabels keeps metadata terse", () => {
         })),
         [
             "Skills: aside",
+            "Files: source",
             "Tools: WebSearch (unavailable)",
             "URLs:\nhttps://example.com/page\nhttps://example.com/other\nhttps://example.com/imported",
         ],
     );
+});
+
+test("renderPersistedCommentCard renders agent run files as clickable file links", async () => {
+    const thread = createThreadWithEntries({
+        entries: [
+            { id: "comment-1", body: "@codex check this", timestamp: 100 },
+            { id: "entry-2", body: "Agent reply", timestamp: 110 },
+        ],
+    });
+    const openedLinks: Array<{
+        href: string;
+        sourcePath: string;
+        focusTargetClass: string;
+    }> = [];
+    const host = createRenderHost({
+        threadAgentRuns: [
+            createAgentRun({
+                outputEntryId: "entry-2",
+                usedFiles: ["Folder/Source Note.md", "src/sidebarPersistedComment.ts"],
+            }),
+        ],
+        openSidebarInternalLink: async (href, sourcePath, focusTarget) => {
+            openedLinks.push({
+                href,
+                sourcePath,
+                focusTargetClass: (focusTarget as unknown as FakeElement).className,
+            });
+        },
+    });
+    const root = new FakeElement("div");
+
+    await renderPersistedCommentCard(root as unknown as HTMLDivElement, thread, host);
+
+    const fileLinks = root.findAllByClass("aside-agent-run-file-link");
+    assert.equal(fileLinks.length, 2);
+    assert.deepEqual(fileLinks.map((link) => link.textContent), [
+        "Source Note",
+        "sidebarPersistedComment.ts",
+    ]);
+    assert.deepEqual(fileLinks.map((link) => link.getAttribute("href")), [
+        "Folder/Source Note.md",
+        "src/sidebarPersistedComment.ts",
+    ]);
+    assert.deepEqual(fileLinks.map((link) => link.getAttribute("data-href")), [
+        "Folder/Source Note.md",
+        "src/sidebarPersistedComment.ts",
+    ]);
+    assert.deepEqual(fileLinks.map((link) => link.getAttribute("title")), [
+        "Folder/Source Note.md",
+        "src/sidebarPersistedComment.ts",
+    ]);
+    assert.equal(fileLinks.every((link) => link.classList.contains("internal-link")), true);
+
+    let prevented = false;
+    let stopped = false;
+    const clickEvent = {
+        type: "click",
+        preventDefault: () => {
+            prevented = true;
+        },
+        stopPropagation: () => {
+            stopped = true;
+        },
+    };
+    fileLinks[0]?.dispatchEvent(clickEvent);
+
+    assert.equal(prevented, true);
+    assert.equal(stopped, true);
+    assert.deepEqual(openedLinks, [{
+        href: "Folder/Source Note.md",
+        sourcePath: "docs/architecture.md",
+        focusTargetClass: "internal-link aside-agent-run-file-link",
+    }]);
+});
+
+test("renderPersistedCommentCard shows copied feedback after sharing a side note", async () => {
+    const thread = createThreadWithEntries({
+        entries: [
+            { id: "comment-1", body: "Share this", timestamp: 100 },
+        ],
+    });
+    const scheduledTimeouts: Array<{
+        callback: () => void;
+        delayMs: number;
+        timerId: number;
+    }> = [];
+    const sharedCommentIds: string[] = [];
+    const iconUpdates: Array<{ className: string; icon: string }> = [];
+    FakeElement.defaultView = {
+        setTimeout: ((handler: TimerHandler, delayMs?: number, ...args: unknown[]) => {
+            const timerId = scheduledTimeouts.length + 1;
+            scheduledTimeouts.push({
+                callback: () => {
+                    if (typeof handler === "function") {
+                        handler(...args);
+                    }
+                },
+                delayMs: delayMs ?? 0,
+                timerId,
+            });
+            return timerId;
+        }) as Window["setTimeout"],
+        clearTimeout: (() => {}) as Window["clearTimeout"],
+    };
+
+    try {
+        const host = createRenderHost({
+            shareComment: async (comment) => {
+                sharedCommentIds.push(comment.id);
+            },
+            setIcon: (element, icon) => {
+                iconUpdates.push({
+                    className: (element as unknown as FakeElement).className,
+                    icon,
+                });
+            },
+        });
+        const root = new FakeElement("div");
+
+        await renderPersistedCommentCard(root as unknown as HTMLDivElement, thread, host);
+
+        const shareButton = root.findAllByClass("aside-thread-share-button")[0];
+        assert.ok(shareButton);
+        assert.equal(shareButton.getAttribute("aria-label"), "Share side note");
+        const copiedLabel = root.findAllByClass("aside-thread-share-status")[0];
+        assert.ok(copiedLabel);
+        assert.equal(copiedLabel.hidden, true);
+
+        let stopped = false;
+        const clickEvent = {
+            stopPropagation: () => {
+                stopped = true;
+            },
+        };
+        const onclick = shareButton.onclick;
+        assert.equal(typeof onclick, "function");
+        await (onclick as (event: typeof clickEvent) => Promise<void>)(clickEvent);
+
+        assert.equal(stopped, true);
+        assert.deepEqual(sharedCommentIds, ["comment-1"]);
+        assert.equal(shareButton.getAttribute("aria-label"), "Copied");
+        assert.equal(shareButton.getAttribute("title"), "Copied");
+        assert.ok(shareButton.classList.contains("is-copied"));
+        assert.equal(shareButton.hidden, true);
+        assert.equal(copiedLabel.hidden, false);
+        assert.equal(copiedLabel.textContent, "Copied");
+        assert.equal(scheduledTimeouts.length, 1);
+        assert.equal(scheduledTimeouts[0]?.delayMs, 1000);
+        const shareIconUpdates = iconUpdates
+            .filter((update) => update.className.includes("aside-thread-share-button"))
+            .map((update) => update.icon);
+        assert.deepEqual(shareIconUpdates, ["share"]);
+
+        scheduledTimeouts[0]?.callback();
+
+        assert.equal(shareButton.getAttribute("aria-label"), "Share side note");
+        assert.equal(shareButton.getAttribute("title"), "Share side note");
+        assert.equal(shareButton.classList.contains("is-copied"), false);
+        assert.equal(shareButton.hidden, false);
+        assert.equal(copiedLabel.hidden, true);
+        assert.equal(copiedLabel.textContent, "");
+    } finally {
+        FakeElement.defaultView = null;
+    }
+});
+
+test("renderPersistedCommentCard can collapse agent run metadata from the footer actions", async () => {
+    const thread = createThreadWithEntries({
+        entries: [
+            { id: "comment-1", body: "@codex check this", timestamp: 100 },
+            { id: "entry-2", body: "Agent reply", timestamp: 110 },
+        ],
+    });
+    const iconUpdates: Array<{ className: string; icon: string }> = [];
+    const host = createRenderHost({
+        threadAgentRuns: [
+            createAgentRun({
+                outputEntryId: "entry-2",
+                usedSkills: [{ name: "aside" }],
+                usedFiles: ["Folder/Source Note.md"],
+            }),
+        ],
+        setIcon: (element, icon) => {
+            iconUpdates.push({
+                className: (element as unknown as FakeElement).className,
+                icon,
+            });
+        },
+    });
+    const root = new FakeElement("div");
+
+    await renderPersistedCommentCard(root as unknown as HTMLDivElement, thread, host);
+
+    const toggleButton = root.findAllByClass("aside-agent-run-metadata-toggle-button")[0];
+    assert.ok(toggleButton);
+    assert.equal(toggleButton.getAttribute("aria-expanded"), "true");
+    assert.equal(toggleButton.getAttribute("aria-label"), "Hide metadata");
+    assert.equal(toggleButton.getAttribute("type"), "button");
+    assert.equal(iconUpdates.at(-1)?.icon, "chevron-up");
+    const footerActionsEl = toggleButton.parentElement;
+    assert.ok(footerActionsEl);
+    assert.ok(footerActionsEl.classList.contains("aside-thread-footer-actions"));
+    const footerMetaEl = footerActionsEl.parentElement;
+    assert.ok(footerMetaEl);
+    assert.ok(footerMetaEl.classList.contains("aside-thread-footer-meta"));
+    const metadataRows = root.findAllByClass("aside-agent-run-visible-metadata");
+    assert.equal(metadataRows.length, 2);
+    assert.equal(metadataRows.every((row) => row.parentElement === footerMetaEl), true);
+    const footerActionsIndex = footerMetaEl.children.indexOf(footerActionsEl);
+    const firstMetadataIndex = footerMetaEl.children.indexOf(metadataRows[0]);
+    assert.notEqual(footerActionsIndex, -1);
+    assert.notEqual(firstMetadataIndex, -1);
+    assert.ok(footerActionsIndex < firstMetadataIndex);
+    assert.equal(metadataRows.every((row) => row.hidden === false), true);
+    assert.equal(metadataRows.every((row) => row.classList.contains("is-collapsed")), false);
+
+    let stopped = false;
+    const clickEvent = {
+        stopPropagation: () => {
+            stopped = true;
+        },
+    };
+    const onclick = toggleButton.onclick;
+    assert.equal(typeof onclick, "function");
+    (onclick as (event: typeof clickEvent) => void)(clickEvent);
+
+    assert.equal(stopped, true);
+    assert.equal(toggleButton.getAttribute("aria-expanded"), "false");
+    assert.equal(toggleButton.getAttribute("aria-label"), "Show metadata");
+    assert.equal(metadataRows.every((row) => row.hidden === true), true);
+    assert.equal(metadataRows.every((row) => row.classList.contains("is-collapsed")), true);
+    assert.equal(iconUpdates.at(-1)?.icon, "chevron-down");
 });
 
 test("renderPersistedCommentCard puts agent metadata above status and Add to file", async () => {

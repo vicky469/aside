@@ -66,6 +66,7 @@ function createAgentRun(overrides: Partial<AgentRunRecord> = {}): AgentRunRecord
         retryOfRunId: overrides.retryOfRunId,
         outputEntryId: overrides.outputEntryId ?? "entry-2",
         error: overrides.error,
+        usedFiles: overrides.usedFiles,
     };
 }
 
@@ -173,6 +174,38 @@ test("buildPageSidebarThreadRenderSignature changes when nested draft or run sta
     assert.notEqual(base, withEditDraft);
     assert.notEqual(base, withAppendDraft);
     assert.notEqual(base, withFailedRun);
+});
+
+test("buildPageSidebarThreadRenderSignature changes when agent run file metadata changes", () => {
+    const thread = createThread();
+    const base = buildPageSidebarThreadRenderSignature({
+        thread,
+        activeCommentId: null,
+        isPinned: false,
+        showNestedComments: false,
+        showNestedCommentsByDefault: false,
+        isSelectedForTagBatch: false,
+        enableTagSelection: false,
+        enablePageThreadReorder: true,
+        editDraftComment: null,
+        appendDraftComment: null,
+        threadAgentRuns: [createAgentRun({ usedFiles: ["docs/source.md"] })],
+    });
+    const withDifferentFile = buildPageSidebarThreadRenderSignature({
+        thread,
+        activeCommentId: null,
+        isPinned: false,
+        showNestedComments: false,
+        showNestedCommentsByDefault: false,
+        isSelectedForTagBatch: false,
+        enableTagSelection: false,
+        enablePageThreadReorder: true,
+        editDraftComment: null,
+        appendDraftComment: null,
+        threadAgentRuns: [createAgentRun({ usedFiles: ["docs/other.md"] })],
+    });
+
+    assert.notEqual(base, withDifferentFile);
 });
 
 test("buildPageSidebarThreadRenderSignature changes when nested comments are shown or hidden", () => {

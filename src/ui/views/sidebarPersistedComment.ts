@@ -192,6 +192,10 @@ function formatAgentRunUrlLines(urls: readonly string[] | undefined): string[] {
     return lines;
 }
 
+type AgentRunVisibleMetadataRow =
+    | { kind: "text"; label: string }
+    | { kind: "files"; filePaths: string[] };
+
 export function formatAgentRunMetadataFrontmatter(metadata: AgentRunMetadata): string | null {
     const normalizedMetadata = mergeAgentRunMetadata(metadata, {});
     const lines: string[] = [];
@@ -200,6 +204,11 @@ export function formatAgentRunMetadataFrontmatter(metadata: AgentRunMetadata): s
         .join(", ");
     if (skills) {
         lines.push(`skills: ${skills}`);
+    }
+
+    const files = normalizedMetadata.usedFiles?.join(", ");
+    if (files) {
+        lines.push(`files: ${files}`);
     }
 
     const tools = normalizedMetadata.usedTools?.join(", ");
@@ -237,49 +246,116 @@ export function renderAgentRunMetadataFrontmatter(
     metaEl.insertBefore(frontmatterEl, metaEl.firstChild);
 }
 
-export function formatAgentRunVisibleMetadataLabels(metadata: AgentRunMetadata): string[] {
+function getAgentRunVisibleMetadataRows(metadata: AgentRunMetadata): AgentRunVisibleMetadataRow[] {
     const normalizedMetadata = mergeAgentRunMetadata(metadata, {});
-    const labels: string[] = [];
+    const rows: AgentRunVisibleMetadataRow[] = [];
     const skills = Array.from(new Set(
         normalizedMetadata.usedSkills?.map((skill) => skill.name) ?? [],
     )).join(", ");
     if (skills) {
-        labels.push(`Skills: ${skills}`);
+        rows.push({ kind: "text", label: `Skills: ${skills}` });
+    }
+
+    const files = normalizedMetadata.usedFiles ?? [];
+    if (files.length) {
+        rows.push({ kind: "files", filePaths: files });
     }
 
     const tools = normalizedMetadata.usedTools?.join(", ");
     if (tools) {
-        labels.push(`Tools: ${tools}`);
+        rows.push({ kind: "text", label: `Tools: ${tools}` });
     }
 
     const urls = formatAgentRunUrlLines(normalizedMetadata.usedUrls);
     if (urls.length) {
-        labels.push(["URLs:", ...urls].join("\n"));
+        rows.push({ kind: "text", label: ["URLs:", ...urls].join("\n") });
     }
 
-    return labels;
+    return rows;
+}
+
+export function formatAgentRunVisibleMetadataLabels(metadata: AgentRunMetadata): string[] {
+    return getAgentRunVisibleMetadataRows(metadata).map((row) => {
+        if (row.kind === "files") {
+            return `Files: ${row.filePaths.map((filePath) =>
+                formatSidebarCommentSourceFileLabel(filePath)
+            ).join(", ")}`;
+        }
+
+        return row.label;
+    });
+}
+
+interface RenderAgentRunVisibleMetadataOptions {
+    sourcePath: string;
+    host: Pick<SidebarPersistedCommentHost, "openSidebarInternalLink">;
+}
+
+function renderAgentRunVisibleFileMetadata(
+    metaEl: HTMLElement,
+    filePaths: readonly string[],
+    options?: RenderAgentRunVisibleMetadataOptions,
+): HTMLElement {
+    const metadataEl = metaEl.createSpan({
+        cls: "aside-agent-run-visible-metadata aside-agent-run-file-metadata",
+    });
+    metadataEl.createSpan({ text: "Files: " });
+
+    filePaths.forEach((filePath, index) => {
+        if (index > 0) {
+            metadataEl.createSpan({ text: ", " });
+        }
+
+        const linkEl = metadataEl.createEl("a", {
+            cls: "internal-link aside-agent-run-file-link",
+            text: formatSidebarCommentSourceFileLabel(filePath),
+        });
+        linkEl.setAttribute("href", filePath);
+        linkEl.setAttribute("data-href", filePath);
+        linkEl.setAttribute("title", filePath);
+
+        if (!options) {
+            return;
+        }
+
+        linkEl.addEventListener("click", (event: MouseEvent) => {
+            event.preventDefault();
+            event.stopPropagation();
+            void options.host.openSidebarInternalLink(filePath, options.sourcePath, linkEl);
+        });
+    });
+
+    return metadataEl;
 }
 
 export function renderAgentRunVisibleMetadata(
     metaEl: HTMLElement,
     metadata: AgentRunMetadata,
-): void {
+    options?: RenderAgentRunVisibleMetadataOptions,
+): HTMLElement[] {
     const existing = metaEl.querySelectorAll(".aside-agent-run-visible-metadata");
     existing.forEach((element) => element.remove());
 
-    const labels = formatAgentRunVisibleMetadataLabels(metadata);
-    metaEl.classList.toggle("has-agent-run-metadata", labels.length > 0);
-    if (!labels.length) {
-        return;
+    const rows = getAgentRunVisibleMetadataRows(metadata);
+    metaEl.classList.toggle("has-agent-run-metadata", rows.length > 0);
+    if (!rows.length) {
+        return [];
     }
 
-    for (const label of labels) {
-        const metadataEl = metaEl.createSpan({
+    const metadataElements: HTMLElement[] = [];
+    for (const row of rows) {
+        if (row.kind === "files") {
+            metadataElements.push(renderAgentRunVisibleFileMetadata(metaEl, row.filePaths, options));
+            continue;
+        }
+
+        metadataElements.push(metaEl.createSpan({
             cls: "aside-agent-run-visible-metadata",
-            text: label,
-        });
-        metaEl.appendChild(metadataEl);
+            text: row.label,
+        }));
     }
+
+    return metadataElements;
 }
 
 function buildSidebarCommentAuthorPresentation(
@@ -334,6 +410,8 @@ export function formatSidebarCommentIndexLeadLabel(comment: Pick<Comment, "ancho
 }
 
 const SIDEBAR_SIDE_NOTE_REFERENCE_PREVIEW_LIMIT = 48;
+const SHARE_COPIED_FEEDBACK_MS = 1000;
+type ShareCopiedFeedbackTimer = number;
 const RAW_SIDE_NOTE_REFERENCE_URL_PATTERN = /obsidian:\/\/aside-comment\?[^)\]\s]+/g;
 
 function clipSidebarSideNoteReferencePreview(value: string): string {
@@ -886,6 +964,14 @@ function renderThreadFooterActions(
 ): void {
     const footerEl = commentEl.createDiv("aside-thread-footer");
     const footerMetaEl = footerEl.createDiv("aside-thread-footer-meta");
+    let agentRunVisibleMetadataElements: HTMLElement[] = [];
+    let footerActionsEl: HTMLDivElement | null = null;
+    const ensureFooterActionsEl = (): HTMLDivElement => {
+        if (!footerActionsEl) {
+            footerActionsEl = footerMetaEl.createDiv("aside-thread-footer-actions");
+        }
+        return footerActionsEl;
+    };
     if (options.nestedToggleAction) {
         renderThreadNestedToggleButton(
             footerMetaEl,
@@ -918,16 +1004,35 @@ function renderThreadFooterActions(
             void runInsert(event);
         });
     }
+    if (
+        options.showShareAction
+        || options.showAddEntryAction
+        || options.showRetryAction
+        || options.moveAction
+        || agentRun
+    ) {
+        footerActionsEl = ensureFooterActionsEl();
+    }
     if (agentRun) {
         renderAgentRunMetadataFrontmatter(footerMetaEl, agentRun);
-        renderAgentRunVisibleMetadata(footerMetaEl, agentRun);
+        agentRunVisibleMetadataElements = renderAgentRunVisibleMetadata(footerMetaEl, agentRun, {
+            sourcePath: comment.filePath,
+            host,
+        });
     }
 
-    if (!(options.showShareAction || options.showAddEntryAction || options.showRetryAction || options.moveAction)) {
+    if (!(
+        options.showShareAction
+        || options.showAddEntryAction
+        || options.showRetryAction
+        || options.moveAction
+        || agentRunVisibleMetadataElements.length
+    )) {
+        footerActionsEl?.remove();
         return;
     }
 
-    const footerActionsEl = footerEl.createDiv("aside-thread-footer-actions");
+    footerActionsEl = ensureFooterActionsEl();
     if (options.moveAction) {
         renderMoveActionButton(footerActionsEl, host, {
             ariaLabel: options.moveAction.ariaLabel,
@@ -937,19 +1042,30 @@ function renderThreadFooterActions(
     }
 
     if (options.showShareAction) {
+        let shareCopiedResetTimer: ShareCopiedFeedbackTimer | null = null;
         const shareButton = footerActionsEl.createEl("button", {
             cls: "clickable-icon aside-comment-action-button aside-comment-action-share aside-thread-share-button",
         });
+        const shareStatusEl = footerActionsEl.createSpan({
+            cls: "aside-thread-share-status",
+        });
+        shareStatusEl.hidden = true;
         attachSidebarActionButtonInteractions(shareButton, host);
         shareButton.setAttribute("type", "button");
         shareButton.setAttribute("aria-label", "Share side note");
+        shareButton.setAttribute("title", "Share side note");
         host.setIcon(shareButton, "share");
         shareButton.onclick = async (event) => {
             event.stopPropagation();
             if (!(await host.saveVisibleDraftIfPresent())) {
                 return;
             }
-            void host.shareComment(comment);
+            await host.shareComment(comment);
+            shareCopiedResetTimer = renderShareCopiedFeedback(
+                shareButton,
+                shareStatusEl,
+                shareCopiedResetTimer,
+            );
         };
     }
 
@@ -960,34 +1076,99 @@ function renderThreadFooterActions(
         });
     }
 
-    if (!options.showRetryAction || !regenerateAction) {
-        return;
+    if (options.showRetryAction && regenerateAction) {
+        const retryButton = footerActionsEl.createEl("button", {
+            cls: "clickable-icon aside-comment-action-button aside-comment-action-retry aside-thread-footer-regenerate-button",
+        });
+        attachSidebarActionButtonInteractions(retryButton, host);
+        retryButton.setAttribute("type", "button");
+        retryButton.setAttribute("aria-label", "Generate");
+        retryButton.disabled = options.disableRetryAction === true;
+        host.setIcon(retryButton, ASIDE_REGENERATE_ICON_ID);
+        retryButton.onclick = async (event) => {
+            event.stopPropagation();
+            if (retryButton.disabled) {
+                return;
+            }
+            retryButton.disabled = true;
+            if (!(await host.saveVisibleDraftIfPresent())) {
+                retryButton.disabled = options.disableRetryAction === true;
+                return;
+            }
+            const started = regenerateAction.kind === "agent-run"
+                ? await host.retryAgentRun(regenerateAction.runId)
+                : await host.retryAgentPromptForComment(comment.id, comment.filePath);
+            if (!started) {
+                retryButton.disabled = options.disableRetryAction === true;
+            }
+        };
     }
 
-    const retryButton = footerActionsEl.createEl("button", {
-        cls: "clickable-icon aside-comment-action-button aside-comment-action-retry aside-thread-footer-regenerate-button",
+    if (agentRunVisibleMetadataElements.length) {
+        renderAgentRunMetadataToggleButton(footerActionsEl, agentRunVisibleMetadataElements, host);
+    }
+}
+
+function renderShareCopiedFeedback(
+    shareButton: HTMLElement,
+    statusEl: HTMLElement,
+    previousResetTimer: ShareCopiedFeedbackTimer | null,
+): ShareCopiedFeedbackTimer {
+    const timerWindow = shareButton.ownerDocument.defaultView ?? window;
+    if (previousResetTimer) {
+        timerWindow.clearTimeout(previousResetTimer);
+    }
+
+    shareButton.classList.add("is-copied");
+    shareButton.hidden = true;
+    shareButton.setAttribute("aria-label", "Copied");
+    shareButton.setAttribute("title", "Copied");
+    statusEl.hidden = false;
+    statusEl.setText("Copied");
+    return timerWindow.setTimeout(() => {
+        shareButton.classList.remove("is-copied");
+        shareButton.hidden = false;
+        shareButton.setAttribute("aria-label", "Share side note");
+        shareButton.setAttribute("title", "Share side note");
+        statusEl.hidden = true;
+        statusEl.setText("");
+    }, SHARE_COPIED_FEEDBACK_MS);
+}
+
+function setAgentRunMetadataCollapsedState(
+    toggleButton: HTMLElement,
+    metadataElements: readonly HTMLElement[],
+    collapsed: boolean,
+    host: SidebarPersistedCommentHost,
+): void {
+    metadataElements.forEach((element) => {
+        element.hidden = collapsed;
+        element.classList.toggle("is-collapsed", collapsed);
     });
-    attachSidebarActionButtonInteractions(retryButton, host);
-    retryButton.setAttribute("type", "button");
-    retryButton.setAttribute("aria-label", "Generate");
-    retryButton.disabled = options.disableRetryAction === true;
-    host.setIcon(retryButton, ASIDE_REGENERATE_ICON_ID);
-    retryButton.onclick = async (event) => {
+    toggleButton.classList.toggle("is-collapsed", collapsed);
+    toggleButton.setAttribute("aria-expanded", collapsed ? "false" : "true");
+    toggleButton.setAttribute("aria-label", collapsed ? "Show metadata" : "Hide metadata");
+    host.setIcon(toggleButton, collapsed ? "chevron-down" : "chevron-up");
+}
+
+function renderAgentRunMetadataToggleButton(
+    container: HTMLElement,
+    metadataElements: readonly HTMLElement[],
+    host: SidebarPersistedCommentHost,
+): void {
+    const toggleButton = container.createEl("button", {
+        cls: "clickable-icon aside-comment-action-button aside-agent-run-metadata-toggle-button",
+    });
+    attachSidebarActionButtonInteractions(toggleButton, host);
+    toggleButton.setAttribute("type", "button");
+
+    let collapsed = false;
+    setAgentRunMetadataCollapsedState(toggleButton, metadataElements, collapsed, host);
+
+    toggleButton.onclick = (event) => {
         event.stopPropagation();
-        if (retryButton.disabled) {
-            return;
-        }
-        retryButton.disabled = true;
-        if (!(await host.saveVisibleDraftIfPresent())) {
-            retryButton.disabled = options.disableRetryAction === true;
-            return;
-        }
-        const started = regenerateAction.kind === "agent-run"
-            ? await host.retryAgentRun(regenerateAction.runId)
-            : await host.retryAgentPromptForComment(comment.id, comment.filePath);
-        if (!started) {
-            retryButton.disabled = options.disableRetryAction === true;
-        }
+        collapsed = !collapsed;
+        setAgentRunMetadataCollapsedState(toggleButton, metadataElements, collapsed, host);
     };
 }
 

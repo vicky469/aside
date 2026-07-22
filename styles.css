@@ -1851,6 +1851,20 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
     overflow-wrap: anywhere;
 }
 
+.aside-agent-run-visible-metadata.is-collapsed {
+    display: none;
+}
+
+.aside-agent-run-visible-metadata .aside-agent-run-file-link {
+    color: var(--link-color, var(--text-accent));
+    text-decoration-line: var(--link-decoration, none);
+}
+
+.aside-agent-run-visible-metadata .aside-agent-run-file-link:hover {
+    color: var(--link-color-hover, var(--link-color, var(--text-accent)));
+    text-decoration-line: var(--link-decoration-hover, underline);
+}
+
 .aside-agent-stream-item .aside-agent-run-status {
     gap: 4px;
 }
@@ -1976,6 +1990,15 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
     opacity: 1;
 }
 
+.aside-comment-action-button.is-copied {
+    color: var(--interactive-accent);
+    opacity: 1;
+}
+
+.aside-thread-share-button.is-copied {
+    display: none;
+}
+
 .aside-comment-action-button svg {
     width: 13px;
     height: 13px;
@@ -2015,6 +2038,20 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
 .aside-comment-action-button.is-pending {
     opacity: 0.55;
     cursor: progress;
+}
+
+.aside-thread-share-status {
+    display: inline-flex;
+    align-items: center;
+    flex: 0 0 auto;
+    color: var(--interactive-accent);
+    font-size: var(--font-ui-smaller, 11px);
+    line-height: 1;
+    white-space: nowrap;
+}
+
+.aside-thread-share-status[hidden] {
+    display: none;
 }
 
 .aside-comment-actions {
@@ -2058,7 +2095,6 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
     display: inline-flex;
 }
 
-.aside-comment-item:not(.aside-agent-stream-item) .aside-thread-footer-actions,
 .aside-comment-item:not(.aside-agent-stream-item) .aside-thread-reanchor-button {
     display: none;
     opacity: 0;
@@ -2066,7 +2102,6 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
     pointer-events: none;
 }
 
-.aside-comment-item:not(.aside-agent-stream-item).active .aside-thread-footer-actions,
 .aside-comment-item:not(.aside-agent-stream-item).active .aside-thread-reanchor-button {
     display: flex;
     opacity: 1;

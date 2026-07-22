@@ -19,6 +19,7 @@ export interface AgentRunToolErrorMetadata {
 export interface AgentRunMetadata {
     usedSkills?: AgentRunSkillMetadata[];
     usedTools?: string[];
+    usedFiles?: string[];
     usedUrls?: string[];
     usedToolErrors?: AgentRunToolErrorMetadata[];
 }
@@ -39,6 +40,7 @@ export interface AgentRunStreamState {
     error?: string;
     usedSkills?: AgentRunSkillMetadata[];
     usedTools?: string[];
+    usedFiles?: string[];
     usedUrls?: string[];
     usedToolErrors?: AgentRunToolErrorMetadata[];
 }
@@ -194,6 +196,39 @@ export function normalizeAgentRunToolNames(value: unknown): string[] {
     return Array.from(tools.values());
 }
 
+function normalizeFilePathToken(value: unknown): string | null {
+    if (typeof value !== "string") {
+        return null;
+    }
+
+    const normalized = value
+        .replace(/\r\n?/gu, "\n")
+        .replace(/\s*\n\s*/gu, " ")
+        .replace(/\\/gu, "/")
+        .trim();
+    if (!normalized || /^https?:\/\//iu.test(normalized) || /^obsidian:\/\//iu.test(normalized)) {
+        return null;
+    }
+
+    return normalized;
+}
+
+export function normalizeAgentRunFilePaths(value: unknown): string[] {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+
+    const files = new Set<string>();
+    for (const item of value) {
+        const filePath = normalizeFilePathToken(item);
+        if (filePath) {
+            files.add(filePath);
+        }
+    }
+
+    return Array.from(files);
+}
+
 export function normalizeAgentRunUrls(value: unknown): string[] {
     if (!Array.isArray(value)) {
         return [];
@@ -256,6 +291,10 @@ export function mergeAgentRunMetadata(
         ...(base.usedTools ?? []),
         ...(next.usedTools ?? []),
     ]);
+    const usedFiles = normalizeAgentRunFilePaths([
+        ...(base.usedFiles ?? []),
+        ...(next.usedFiles ?? []),
+    ]);
     const usedUrls = normalizeAgentRunUrls([
         ...(base.usedUrls ?? []),
         ...(next.usedUrls ?? []),
@@ -284,6 +323,7 @@ export function mergeAgentRunMetadata(
     return {
         ...(usedSkills.length ? { usedSkills } : {}),
         ...(displayToolsByBaseName.size ? { usedTools: Array.from(displayToolsByBaseName.values()) } : {}),
+        ...(usedFiles.length ? { usedFiles } : {}),
         ...(usedUrls.length ? { usedUrls } : {}),
         ...(usedToolErrors.length ? { usedToolErrors } : {}),
     };

@@ -21,6 +21,12 @@ test("normalizePersistedAgentRuns keeps valid records, normalizes legacy remote 
                 { name: "" },
             ],
             usedTools: [" browser-use.browser_navigate ", "", 1],
+            usedFiles: [
+                " Folder/Note.md ",
+                "Folder/Note.md",
+                "",
+                7,
+            ],
             usedUrls: [
                 "https://example.com/path?token=secret#frag",
                 "not a url",
@@ -56,10 +62,25 @@ test("normalizePersistedAgentRuns keeps valid records, normalizes legacy remote 
             source: "built-in",
         }],
         usedTools: ["browser-use.browser_navigate"],
+        usedFiles: ["Folder/Note.md"],
         usedUrls: ["https://example.com/path"],
         usedToolErrors: [{
             name: "WebSearch",
             payload: "unavailable",
         }],
     }]);
+});
+
+test("normalizePersistedAgentRuns seeds file metadata from the run file path", () => {
+    assert.deepEqual(normalizePersistedAgentRuns([{
+        id: "run-1",
+        threadId: "thread-1",
+        triggerEntryId: "entry-1",
+        filePath: "Folder/Note.md",
+        requestedAgent: "codex",
+        runtime: "direct-cli",
+        status: "succeeded",
+        promptText: "@codex explain",
+        createdAt: 100,
+    }])[0]?.usedFiles, ["Folder/Note.md"]);
 });

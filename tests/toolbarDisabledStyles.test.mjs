@@ -202,3 +202,48 @@ test("thread footer meta action uses a minimal muted text action", () => {
     assert.ok(buttonHoverFocusRule?.groups?.body, "missing native button hover/focus color override");
     assert.match(buttonHoverFocusRule.groups.body, /color:\s*var\(--text-normal\)\s*;/);
 });
+
+test("agent metadata collapse state is backed by stylesheet hiding", () => {
+    const collapsedRule = css.match(
+        /\.aside-agent-run-visible-metadata\.is-collapsed\s*\{(?<body>[\s\S]*?)\}/,
+    );
+
+    assert.ok(collapsedRule?.groups?.body, "missing collapsed agent metadata rule");
+    assert.match(collapsedRule.groups.body, /display:\s*none\s*;/);
+});
+
+test("thread footer actions stay visible without active card state", () => {
+    const footerActionsRule = css.match(
+        /\.aside-thread-footer-actions\s*\{(?<body>[\s\S]*?)\}/,
+    );
+
+    assert.ok(footerActionsRule?.groups?.body, "missing thread footer actions rule");
+    assert.match(footerActionsRule.groups.body, /display:\s*flex\s*;/);
+    assert.doesNotMatch(css, /\.aside-comment-item:not\(\.aside-agent-stream-item\)\s+\.aside-thread-footer-actions/);
+    assert.doesNotMatch(css, /\.aside-comment-item:not\(\.aside-agent-stream-item\)\.active\s+\.aside-thread-footer-actions/);
+});
+
+test("share copied feedback uses the accent purple", () => {
+    const copiedButtonRule = css.match(
+        /\.aside-comment-action-button\.is-copied\s*\{(?<body>[\s\S]*?)\}/,
+    );
+    const shareStatusRule = css.match(
+        /\.aside-thread-share-status\s*\{(?<body>[\s\S]*?)\}/,
+    );
+
+    assert.ok(copiedButtonRule?.groups?.body, "missing copied button state rule");
+    assert.ok(shareStatusRule?.groups?.body, "missing share copied status rule");
+    assert.match(copiedButtonRule.groups.body, /color:\s*var\(--interactive-accent\)\s*;/);
+    assert.match(shareStatusRule.groups.body, /color:\s*var\(--interactive-accent\)\s*;/);
+    assert.doesNotMatch(copiedButtonRule.groups.body, /text-success/);
+    assert.doesNotMatch(shareStatusRule.groups.body, /text-success/);
+});
+
+test("share copied feedback hides the share button while copied text is visible", () => {
+    const copiedShareButtonRule = css.match(
+        /\.aside-thread-share-button\.is-copied\s*\{(?<body>[\s\S]*?)\}/,
+    );
+
+    assert.ok(copiedShareButtonRule?.groups?.body, "missing copied share button rule");
+    assert.match(copiedShareButtonRule.groups.body, /display:\s*none\s*;/);
+});

@@ -1132,6 +1132,7 @@ export class CommentAgentController {
                 mode: BUILT_IN_ASIDE_SKILL_MODE,
                 source: "built-in",
             }],
+            usedFiles: [options.filePath],
         };
     }
 
@@ -1204,6 +1205,7 @@ export class CommentAgentController {
             && previous.outputEntryId === nextStream.outputEntryId
             && JSON.stringify(previous.usedSkills ?? []) === JSON.stringify(nextStream.usedSkills ?? [])
             && JSON.stringify(previous.usedTools ?? []) === JSON.stringify(nextStream.usedTools ?? [])
+            && JSON.stringify(previous.usedFiles ?? []) === JSON.stringify(nextStream.usedFiles ?? [])
             && JSON.stringify(previous.usedUrls ?? []) === JSON.stringify(nextStream.usedUrls ?? [])
             && JSON.stringify(previous.usedToolErrors ?? []) === JSON.stringify(nextStream.usedToolErrors ?? [])
         ) {
