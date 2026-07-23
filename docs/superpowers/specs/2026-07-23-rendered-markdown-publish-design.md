@@ -13,23 +13,23 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Add a deterministic basic Markdown-to-HTML renderer for publish snapshots.
-- [ ] Strip YAML frontmatter from generated public HTML bodies.
-- [ ] Escape raw Markdown HTML so generated pages do not execute embedded scripts or arbitrary tags.
-- [ ] Publish Markdown source files as derived `.html` snapshot files instead of raw `.md` files.
-- [ ] Return and open the derived `.html` public URL for Markdown publish actions.
-- [ ] Purge the derived `.html` public URL when Markdown pages are unpublished or republished.
-- [ ] Keep `asidePublish.markdownEnabled` as the persisted state for Markdown source publishing.
-- [ ] Keep explicit paired `.html` publishing and direct PDF publishing unchanged.
+- [x] Add a deterministic basic Markdown-to-HTML renderer for publish snapshots.
+- [x] Strip YAML frontmatter from generated public HTML bodies.
+- [x] Escape raw Markdown HTML so generated pages do not execute embedded scripts or arbitrary tags.
+- [x] Publish Markdown source files as derived `.html` snapshot files instead of raw `.md` files.
+- [x] Return and open the derived `.html` public URL for Markdown publish actions.
+- [x] Purge the derived `.html` public URL when Markdown pages are unpublished or republished.
+- [x] Keep `asidePublish.markdownEnabled` as the persisted state for Markdown source publishing.
+- [x] Keep explicit paired `.html` publishing and direct PDF publishing unchanged.
 
 ### Verification
 
-- [ ] Unit tests cover Markdown rendering for headings, paragraphs, lists, blockquotes, code, links, and frontmatter stripping.
-- [ ] Unit tests cover escaping raw HTML and rejecting unsafe link targets.
-- [ ] Controller tests cover Markdown publish staging `public/name.html` instead of `public/name.md`.
-- [ ] Controller tests cover Markdown publish, open-published, republish, and unpublish returning or purging the derived `.html` URL.
-- [ ] Controller tests confirm explicit paired `.html` and PDF snapshot behavior still works.
-- [ ] `npm run build` passes.
+- [x] Unit tests cover Markdown rendering for headings, paragraphs, lists, blockquotes, code, links, and frontmatter stripping.
+- [x] Unit tests cover escaping raw HTML and rejecting unsafe link targets.
+- [x] Controller tests cover Markdown publish staging `public/name.html` instead of `public/name.md`.
+- [x] Controller tests cover Markdown publish, open-published, republish, and unpublish returning or purging the derived `.html` URL.
+- [x] Controller tests confirm explicit paired `.html` and PDF snapshot behavior still works.
+- [x] `npm run build` passes.
 
 ## Context
 
@@ -79,9 +79,10 @@ The generated Markdown HTML file is separate from explicit paired HTML publishin
 
 - `markdownEnabled: true` stages generated HTML derived from the Markdown source.
 - `htmlEnabled: true` stages the user-authored HTML file named in `asidePublish.html` or inferred by the existing pair resolver.
+- If generated Markdown and enabled user-authored HTML resolve to the same `.html` path, the user-authored HTML wins and Aside does not stage a duplicate generated artifact for that path.
 - PDF artifacts keep using the persisted artifact path list.
 
-This means a source file can still publish both a generated Markdown page and a custom HTML pair if both states are enabled. Existing tests already model those states separately.
+This means a source file can publish both a generated Markdown page and a custom HTML pair only when the explicit custom HTML path differs from the generated Markdown `.html` path.
 
 ## Renderer
 

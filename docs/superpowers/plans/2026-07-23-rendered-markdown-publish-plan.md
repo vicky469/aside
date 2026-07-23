@@ -584,6 +584,11 @@ return this.buildCachePurgeResult(
 In `deployEnabledSnapshot`, replace the `frontmatter.markdownEnabled` artifact inspection and snapshot push with generated HTML:
 
 ```ts
+const ownedHtmlPath = this.resolveOwnedHtmlPathForSource(settings, sourcePath, frontmatter);
+if (ownedHtmlPath) {
+	ownedHtmlArtifactPaths.add(ownedHtmlPath);
+}
+
 if (frontmatter.markdownEnabled) {
 	if (!(await this.host.fileExists(sourcePath))) {
 		return {
@@ -592,23 +597,26 @@ if (frontmatter.markdownEnabled) {
 		};
 	}
 	const markdownArtifactPath = buildPublishedMarkdownArtifactPath(sourcePath);
-	const htmlContents = renderMarkdownToBasicHtml({
-		sourcePath,
-		markdown: nextSourceContents,
-	});
-	const markdownInspection = inspectPublishArtifact({
-		vaultRelativePath: markdownArtifactPath,
-		allowedRoot: settings.publishAllowedRoot,
-		configDir: this.host.getVaultConfigDir(),
-		contents: htmlContents,
-	});
-	if (!markdownInspection.ok) {
-		return markdownInspection;
+	const htmlPairUsesMarkdownArtifactPath = frontmatter.htmlEnabled && ownedHtmlPath === markdownArtifactPath;
+	if (!htmlPairUsesMarkdownArtifactPath) {
+		const htmlContents = renderMarkdownToBasicHtml({
+			sourcePath,
+			markdown: nextSourceContents,
+		});
+		const markdownInspection = inspectPublishArtifact({
+			vaultRelativePath: markdownArtifactPath,
+			allowedRoot: settings.publishAllowedRoot,
+			configDir: this.host.getVaultConfigDir(),
+			contents: htmlContents,
+		});
+		if (!markdownInspection.ok) {
+			return markdownInspection;
+		}
+		snapshotFiles.push({
+			vaultRelativePath: markdownArtifactPath,
+			contents: htmlContents,
+		});
 	}
-	snapshotFiles.push({
-		vaultRelativePath: markdownArtifactPath,
-		contents: htmlContents,
-	});
 }
 ```
 

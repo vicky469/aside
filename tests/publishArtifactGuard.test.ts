@@ -82,13 +82,20 @@ test("inspectPublishArtifact allows PDF files under the configured publish root"
 	assert.deepEqual(inspect("share/report.pdf", "%PDF-1.7"), { ok: true });
 });
 
-test("inspectPublishArtifact allows Markdown files under the configured publish root", () => {
-	assert.deepEqual(inspect("share/page.md", "# Draft"), { ok: true });
+test("inspectPublishArtifact blocks raw Markdown files as publish artifacts", () => {
+	assert.deepEqual(inspect("share/page.md", "# Draft"), {
+		ok: false,
+		notice: "Publish failed: only .html, .htm, and .pdf files can be published in this version.",
+	});
+});
+
+test("inspectPublishArtifact allows generated Markdown HTML files under the configured publish root", () => {
+	assert.deepEqual(inspect("share/page.html", "<!doctype html><html><body><h1>Draft</h1></body></html>"), { ok: true });
 });
 
 test("inspectPublishArtifact blocks unsupported public file types", () => {
 	assert.deepEqual(inspect("share/page.css", "body {}"), {
 		ok: false,
-		notice: "Publish failed: only .html, .htm, .md, and .pdf files can be published in this version.",
+		notice: "Publish failed: only .html, .htm, and .pdf files can be published in this version.",
 	});
 });

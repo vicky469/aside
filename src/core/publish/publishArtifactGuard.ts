@@ -55,10 +55,6 @@ function isHtmlPath(path: string): boolean {
 	return /\.html?$/iu.test(path);
 }
 
-function isMarkdownPath(path: string): boolean {
-	return /\.md$/iu.test(path);
-}
-
 function isPdfPath(path: string): boolean {
 	return /\.pdf$/iu.test(path);
 }
@@ -132,10 +128,10 @@ export function inspectPublishArtifact(options: InspectPublishArtifactOptions): 
 		};
 	}
 
-	if (!(isHtmlPath(normalizedPath.path) || isMarkdownPath(normalizedPath.path) || isPdfPath(normalizedPath.path))) {
+	if (!(isHtmlPath(normalizedPath.path) || isPdfPath(normalizedPath.path))) {
 		return {
 			ok: false,
-			notice: "Publish failed: only .html, .htm, .md, and .pdf files can be published in this version.",
+			notice: "Publish failed: only .html, .htm, and .pdf files can be published in this version.",
 		};
 	}
 
