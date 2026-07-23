@@ -60,8 +60,6 @@ For durable storage and sync across devices, use Aside with [Obsidian Sync](http
 
 Aside does not send vault contents, note paths, tags, or clipboard contents to an Aside-operated analytics service. Network-capable actions are user initiated: opening an external link, sending a support report in a build where a support endpoint is configured, invoking a local agent CLI, or publishing through the user's local Wrangler installation. The generated Aside index uses the default remote image at `ichef.bbci.co.uk` unless the user replaces or clears that image URL; Obsidian may request that image when it renders the note.
 
-Declared plugin hosts: ichef.bbci.co.uk
-
 ## Local vault indexing
 
 Aside indexes markdown note paths and cached tags locally so link suggestions, tag suggestions, move targets, Thought Trail, and the generated comment index stay current. The index is seeded once when the plugin loads and then updated from Obsidian vault and metadata events. Publishing traverses only the configured publishing folder. Aside does not transmit the local note or tag index.
