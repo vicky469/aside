@@ -145,11 +145,10 @@ test("public html publish controller removes stale standalone ownership when pub
 	]);
 });
 
-test("public html publish controller resolves markdown source files to the paired html actions", async () => {
+test("public html publish controller resolves markdown source files to generated html actions", async () => {
 	const harness = createHarness({
 		files: {
-			"public/page.md": "---\nasidePublish:\n  markdownEnabled: true\n  htmlEnabled: true\n  html: public/page.html\n---\n# Page\n",
-			"public/page.html": "<!doctype html><html><body>Page</body></html>",
+			"public/page.md": "---\nasidePublish:\n  markdownEnabled: true\n  htmlEnabled: false\n---\n# Page\n",
 		},
 	});
 
@@ -168,8 +167,31 @@ test("public html publish controller resolves markdown source files to the paire
 		label: "Open published Markdown",
 		icon: "external-link",
 		disabled: false,
-		url: "https://publish.example.com/public/page.md",
+		url: "https://publish.example.com/public/page.html",
 	}]);
+});
+
+test("public html publish controller publishes markdown as generated html", async () => {
+	const harness = createHarness({
+		files: {
+			"public/page.md": "---\nasidePublish:\n  markdownEnabled: false\n  htmlEnabled: false\n---\n# Page\n\nBody text.\n",
+		},
+	});
+
+	const result = await harness.controller.publishFile("public/page.md");
+
+	assert.deepEqual(result, {
+		ok: true,
+		url: "https://publish.example.com/public/page.html",
+	});
+	assert.match(harness.files.get("public/page.md") ?? "", /asidePublish:\n  markdownEnabled: true\n  htmlEnabled: false/u);
+	assert.deepEqual(harness.deployCalls.at(-1)?.map((file) => file.vaultRelativePath), [
+		"public/page.html",
+	]);
+	const html = decodeSnapshotContents(harness.deployCalls.at(-1)![0]);
+	assert.match(html, /<h1>Page<\/h1>/u);
+	assert.match(html, /<p>Body text\.<\/p>/u);
+	assert.doesNotMatch(html, /asidePublish/u);
 });
 
 test("public html publish controller rejects repointing one markdown file to another html file", async () => {
@@ -217,9 +239,9 @@ test("public html publish controller rejects publishing a html already paired wi
 test("public html publish controller stages all enabled html files", async () => {
 	const harness = createHarness({
 		files: {
-			"public/a.md": "---\nasidePublish:\n  markdownEnabled: true\n  htmlEnabled: true\n  html: public/a.html\n---\n# A\n",
+			"public/a.md": "---\nasidePublish:\n  markdownEnabled: false\n  htmlEnabled: true\n  html: public/a.html\n---\n# A\n",
 			"public/a.html": "<!doctype html><html><body>A</body></html>",
-			"public/b.md": "---\nasidePublish:\n  markdownEnabled: true\n  htmlEnabled: true\n  html: public/nested/b.html\n---\n# B\n",
+			"public/b.md": "---\nasidePublish:\n  markdownEnabled: false\n  htmlEnabled: true\n  html: public/nested/b.html\n---\n# B\n",
 			"public/nested/b.html": "<!doctype html><html><body>B</body></html>",
 			"public/c.md": "---\nasidePublish:\n  markdownEnabled: false\n  htmlEnabled: false\n  html: public/c.html\n---\n# C\n",
 			"public/c.html": "<!doctype html><html><body>C</body></html>",
@@ -234,21 +256,13 @@ test("public html publish controller stages all enabled html files", async () =>
 
 	const lastDeploy = harness.deployCalls.at(-1) ?? [];
 	assert.deepEqual(lastDeploy.map((file) => file.vaultRelativePath), [
-		"public/a.md",
 		"public/a.html",
-		"public/b.md",
 		"public/nested/b.html",
 		"public/report.pdf",
 	]);
-	assert.deepEqual(lastDeploy.slice(0, 4), [{
-		vaultRelativePath: "public/a.md",
-		contents: "---\nasidePublish:\n  markdownEnabled: true\n  htmlEnabled: true\n  html: public/a.html\n---\n# A\n",
-	}, {
+	assert.deepEqual(lastDeploy.slice(0, 2), [{
 		vaultRelativePath: "public/a.html",
 		contents: "<!doctype html><html><body>A</body></html>",
-	}, {
-		vaultRelativePath: "public/b.md",
-		contents: "---\nasidePublish:\n  markdownEnabled: true\n  htmlEnabled: true\n  html: public/nested/b.html\n---\n# B\n",
 	}, {
 		vaultRelativePath: "public/nested/b.html",
 		contents: "<!doctype html><html><body>B</body></html>",
@@ -259,7 +273,7 @@ test("public html publish controller stages all enabled html files", async () =>
 test("public html publish controller publishes a PDF artifact and remembers it for future snapshots", async () => {
 	const harness = createHarness({
 		files: {
-			"public/page.md": "---\nasidePublish:\n  markdownEnabled: true\n  htmlEnabled: true\n  html: public/page.html\n---\n# Page\n",
+			"public/page.md": "---\nasidePublish:\n  markdownEnabled: false\n  htmlEnabled: true\n  html: public/page.html\n---\n# Page\n",
 			"public/page.html": "<!doctype html><html><body>Page</body></html>",
 		},
 		binaryFiles: {
@@ -276,11 +290,10 @@ test("public html publish controller publishes a PDF artifact and remembers it f
 	assert.deepEqual(harness.getPublishedArtifactPaths(), ["public/report.pdf"]);
 	const lastDeploy = harness.deployCalls.at(-1) ?? [];
 	assert.deepEqual(lastDeploy.map((file) => file.vaultRelativePath), [
-		"public/page.md",
 		"public/page.html",
 		"public/report.pdf",
 	]);
-	assert.equal(decodeSnapshotContents(lastDeploy[2]), "PDF bytes");
+	assert.equal(decodeSnapshotContents(lastDeploy[1]), "PDF bytes");
 });
 
 test("public html publish controller exposes unpublish and update actions for published PDFs", async () => {
@@ -313,9 +326,9 @@ test("public html publish controller exposes unpublish and update actions for pu
 test("public html publish controller unpublishes by disabling frontmatter and redeploying remaining html", async () => {
 	const harness = createHarness({
 		files: {
-			"public/a.md": "---\nasidePublish:\n  markdownEnabled: true\n  htmlEnabled: true\n  html: public/a.html\n---\n# A\n",
+			"public/a.md": "---\nasidePublish:\n  markdownEnabled: false\n  htmlEnabled: true\n  html: public/a.html\n---\n# A\n",
 			"public/a.html": "<!doctype html><html><body>A</body></html>",
-			"public/b.md": "---\nasidePublish:\n  markdownEnabled: true\n  htmlEnabled: true\n  html: public/b.html\n---\n# B\n",
+			"public/b.md": "---\nasidePublish:\n  markdownEnabled: false\n  htmlEnabled: true\n  html: public/b.html\n---\n# B\n",
 			"public/b.html": "<!doctype html><html><body>B</body></html>",
 		},
 	});
@@ -327,14 +340,8 @@ test("public html publish controller unpublishes by disabling frontmatter and re
 		url: "https://publish.example.com/public/a.html",
 	});
 	assert.equal(harness.writes[0].path, "public/a.md");
-	assert.match(harness.writes[0].contents, /asidePublish:\n  markdownEnabled: true\n  htmlEnabled: false\n  html: public\/a\.html/u);
+	assert.match(harness.writes[0].contents, /asidePublish:\n  markdownEnabled: false\n  htmlEnabled: false\n  html: public\/a\.html/u);
 	assert.deepEqual(harness.deployCalls.at(-1), [{
-		vaultRelativePath: "public/a.md",
-		contents: "---\nasidePublish:\n  markdownEnabled: true\n  htmlEnabled: false\n  html: public/a.html\n---\n# A\n",
-	}, {
-		vaultRelativePath: "public/b.md",
-		contents: "---\nasidePublish:\n  markdownEnabled: true\n  htmlEnabled: true\n  html: public/b.html\n---\n# B\n",
-	}, {
 		vaultRelativePath: "public/b.html",
 		contents: "<!doctype html><html><body>B</body></html>",
 	}]);
@@ -356,11 +363,11 @@ test("public html publish controller unpublishes markdown and purges its public 
 
 	assert.deepEqual(result, {
 		ok: true,
-		url: "https://publish.example.com/public/page.md",
+		url: "https://publish.example.com/public/page.html",
 	});
 	assert.match(harness.files.get("public/page.md") ?? "", /asidePublish:\n  markdownEnabled: false\n  htmlEnabled: false/u);
 	assert.deepEqual(harness.purgeCalls, [{
-		url: "https://publish.example.com/public/page.md",
+		url: "https://publish.example.com/public/page.html",
 		sourcePath: "public/page.md",
 		event: "unpublish",
 	}]);
@@ -381,12 +388,12 @@ test("public html publish controller keeps unpublish when cache purge fails", as
 
 	assert.deepEqual(result, {
 		ok: true,
-		url: "https://publish.example.com/public/page.md",
+		url: "https://publish.example.com/public/page.html",
 		notice: "Unpublished, but remote cache purge failed: Cache purge broker request failed: socket closed",
 	});
 	assert.match(harness.files.get("public/page.md") ?? "", /asidePublish:\n  markdownEnabled: false\n  htmlEnabled: false/u);
 	assert.deepEqual(harness.purgeCalls, [{
-		url: "https://publish.example.com/public/page.md",
+		url: "https://publish.example.com/public/page.html",
 		sourcePath: "public/page.md",
 		event: "unpublish",
 	}]);
@@ -407,7 +414,7 @@ test("public html publish controller skips cache purge when remote purge is disa
 
 	assert.deepEqual(await harness.controller.unpublishFile("public/page.md"), {
 		ok: true,
-		url: "https://publish.example.com/public/page.md",
+		url: "https://publish.example.com/public/page.html",
 	});
 	assert.deepEqual(harness.purgeCalls, []);
 });
@@ -415,9 +422,9 @@ test("public html publish controller skips cache purge when remote purge is disa
 test("public html publish controller unpublishes paired html without redeploying a stale standalone artifact", async () => {
 	const harness = createHarness({
 		files: {
-			"public/a.md": "---\nasidePublish:\n  markdownEnabled: true\n  htmlEnabled: true\n  html: public/a.html\n---\n# A\n",
+			"public/a.md": "---\nasidePublish:\n  markdownEnabled: false\n  htmlEnabled: true\n  html: public/a.html\n---\n# A\n",
 			"public/a.html": "<!doctype html><html><body>A</body></html>",
-			"public/b.md": "---\nasidePublish:\n  markdownEnabled: true\n  htmlEnabled: true\n  html: public/b.html\n---\n# B\n",
+			"public/b.md": "---\nasidePublish:\n  markdownEnabled: false\n  htmlEnabled: true\n  html: public/b.html\n---\n# B\n",
 			"public/b.html": "<!doctype html><html><body>B</body></html>",
 		},
 		binaryFiles: {
@@ -434,8 +441,6 @@ test("public html publish controller unpublishes paired html without redeploying
 	});
 	assert.deepEqual(harness.getPublishedArtifactPaths(), ["public/report.pdf"]);
 	assert.deepEqual(harness.deployCalls.at(-1)?.map((file) => file.vaultRelativePath), [
-		"public/a.md",
-		"public/b.md",
 		"public/b.html",
 		"public/report.pdf",
 	]);
@@ -444,9 +449,9 @@ test("public html publish controller unpublishes paired html without redeploying
 test("public html publish controller keeps unpublish frontmatter enabled when deployment fails", async () => {
 	const harness = createHarness({
 		files: {
-			"public/a.md": "---\nasidePublish:\n  markdownEnabled: true\n  htmlEnabled: true\n  html: public/a.html\n---\n# A\n",
+			"public/a.md": "---\nasidePublish:\n  markdownEnabled: false\n  htmlEnabled: true\n  html: public/a.html\n---\n# A\n",
 			"public/a.html": "<!doctype html><html><body>A</body></html>",
-			"public/b.md": "---\nasidePublish:\n  markdownEnabled: true\n  htmlEnabled: true\n  html: public/b.html\n---\n# B\n",
+			"public/b.md": "---\nasidePublish:\n  markdownEnabled: false\n  htmlEnabled: true\n  html: public/b.html\n---\n# B\n",
 			"public/b.html": "<!doctype html><html><body>B</body></html>",
 		},
 		deployResult: {
@@ -463,14 +468,8 @@ test("public html publish controller keeps unpublish frontmatter enabled when de
 	});
 	assert.deepEqual(harness.writes, []);
 	assert.deepEqual(harness.purgeCalls, []);
-	assert.match(harness.files.get("public/a.md") ?? "", /asidePublish:\n  markdownEnabled: true\n  htmlEnabled: true\n  html: public\/a\.html/u);
+	assert.match(harness.files.get("public/a.md") ?? "", /asidePublish:\n  markdownEnabled: false\n  htmlEnabled: true\n  html: public\/a\.html/u);
 	assert.deepEqual(harness.deployCalls.at(-1), [{
-		vaultRelativePath: "public/a.md",
-		contents: "---\nasidePublish:\n  markdownEnabled: true\n  htmlEnabled: false\n  html: public/a.html\n---\n# A\n",
-	}, {
-		vaultRelativePath: "public/b.md",
-		contents: "---\nasidePublish:\n  markdownEnabled: true\n  htmlEnabled: true\n  html: public/b.html\n---\n# B\n",
-	}, {
 		vaultRelativePath: "public/b.html",
 		contents: "<!doctype html><html><body>B</body></html>",
 	}]);
@@ -659,7 +658,7 @@ test("public html publish controller resolves explicit frontmatter html paths fr
 test("public html publish controller updates a published html pair without rewriting frontmatter", async () => {
 	const harness = createHarness({
 		files: {
-			"public/page.md": "---\nasidePublish:\n  markdownEnabled: true\n  htmlEnabled: true\n  html: public/page.html\n---\n# Page\n",
+			"public/page.md": "---\nasidePublish:\n  markdownEnabled: false\n  htmlEnabled: true\n  html: public/page.html\n---\n# Page\n",
 			"public/page.html": "<!doctype html><html><body>Updated page</body></html>",
 		},
 	});
@@ -672,9 +671,6 @@ test("public html publish controller updates a published html pair without rewri
 	});
 	assert.deepEqual(harness.writes, []);
 	assert.deepEqual(harness.deployCalls.at(-1), [{
-		vaultRelativePath: "public/page.md",
-		contents: "---\nasidePublish:\n  markdownEnabled: true\n  htmlEnabled: true\n  html: public/page.html\n---\n# Page\n",
-	}, {
 		vaultRelativePath: "public/page.html",
 		contents: "<!doctype html><html><body>Updated page</body></html>",
 	}]);
@@ -683,6 +679,31 @@ test("public html publish controller updates a published html pair without rewri
 		sourcePath: "public/page.md",
 		event: "republish",
 	}]);
+});
+
+test("public html publish controller updates markdown by deploying generated html", async () => {
+	const harness = createHarness({
+		files: {
+			"public/page.md": "---\nasidePublish:\n  markdownEnabled: true\n  htmlEnabled: false\n---\n# Page\n\nUpdated.\n",
+		},
+	});
+
+	const result = await harness.controller.updatePublishedFile("public/page.md");
+
+	assert.deepEqual(result, {
+		ok: true,
+		url: "https://publish.example.com/public/page.html",
+	});
+	assert.deepEqual(harness.purgeCalls, [{
+		url: "https://publish.example.com/public/page.html",
+		sourcePath: "public/page.md",
+		event: "republish",
+	}]);
+	assert.deepEqual(harness.deployCalls.at(-1)?.map((file) => file.vaultRelativePath), [
+		"public/page.html",
+	]);
+	const html = decodeSnapshotContents(harness.deployCalls.at(-1)![0]);
+	assert.match(html, /<p>Updated\.<\/p>/u);
 });
 
 test("public html publish controller publishes a standalone html without a markdown pair", async () => {

@@ -14,6 +14,10 @@ import {
 	writeAsidePublishFrontmatter,
 } from "../core/publish/publishFrontmatter";
 import {
+	deriveMarkdownHtmlPublishPath,
+	renderMarkdownToBasicHtml,
+} from "../core/publish/markdownHtmlRender";
+import {
 	resolvePublicHtmlPairForHtml,
 	resolvePublicHtmlPairForSource,
 	type PublicHtmlPairResolution,
@@ -113,6 +117,10 @@ type PublishArtifactContext = PublishArtifactLabel;
 function normalizePublicFilePath(path: string): string | null {
 	const normalized = normalizeVaultRelativePublishPath(path);
 	return normalized.ok ? normalized.path : null;
+}
+
+function buildPublishedMarkdownArtifactPath(sourcePath: string): string {
+	return deriveMarkdownHtmlPublishPath(sourcePath);
 }
 
 function buildHtmlPublishFrontmatter(
@@ -325,7 +333,7 @@ export class PublicHtmlPublishController {
 		const sourceContents = await this.host.readVaultFile(sourcePath);
 		const frontmatter = readAsidePublishFrontmatter(sourceContents);
 		if (frontmatter.markdownEnabled) {
-			return this.publishedActionStates(settings, sourcePath, "Markdown");
+			return this.publishedActionStates(settings, buildPublishedMarkdownArtifactPath(sourcePath), "Markdown");
 		}
 
 		return [{
@@ -418,7 +426,7 @@ export class PublicHtmlPublishController {
 			ok: true,
 			url: buildPublishPublicUrl({
 				baseUrl: settings.publishBaseUrl,
-				vaultRelativePath: sourcePath,
+				vaultRelativePath: buildPublishedMarkdownArtifactPath(sourcePath),
 			}),
 		};
 	}
@@ -568,7 +576,12 @@ export class PublicHtmlPublishController {
 		}
 		await this.host.writeVaultFile(sourcePath, writeAsidePublishFrontmatter(sourceContents, nextFrontmatter));
 
-		return this.buildCachePurgeResult(settings, sourcePath, sourcePath, "unpublish");
+		return this.buildCachePurgeResult(
+			settings,
+			buildPublishedMarkdownArtifactPath(sourcePath),
+			sourcePath,
+			"unpublish",
+		);
 	}
 
 	public async unpublishFile(filePath: string): Promise<PublicHtmlPublishResult> {
@@ -724,7 +737,12 @@ export class PublicHtmlPublishController {
 			return deployResult;
 		}
 
-		return this.buildCachePurgeResult(settings, sourcePath, sourcePath, "republish");
+		return this.buildCachePurgeResult(
+			settings,
+			buildPublishedMarkdownArtifactPath(sourcePath),
+			sourcePath,
+			"republish",
+		);
 	}
 
 	public async updatePublishedFile(filePath: string): Promise<PublicHtmlPublishResult> {
@@ -1116,6 +1134,10 @@ export class PublicHtmlPublishController {
 			const nextSourceContents = options.frontmatterBySourcePath?.has(sourcePath)
 				? writeAsidePublishFrontmatter(sourceContents, frontmatter)
 				: sourceContents;
+			const ownedHtmlPath = this.resolveOwnedHtmlPathForSource(settings, sourcePath, frontmatter);
+			if (ownedHtmlPath) {
+				ownedHtmlArtifactPaths.add(ownedHtmlPath);
+			}
 
 			if (frontmatter.markdownEnabled) {
 				if (!(await this.host.fileExists(sourcePath))) {
@@ -1124,24 +1146,27 @@ export class PublicHtmlPublishController {
 						notice: `Publish file missing: ${sourcePath}`,
 					};
 				}
-				const markdownInspection = inspectPublishArtifact({
-					vaultRelativePath: sourcePath,
-					allowedRoot: settings.publishAllowedRoot,
-					configDir: this.host.getVaultConfigDir(),
-					contents: nextSourceContents,
-				});
-				if (!markdownInspection.ok) {
-					return markdownInspection;
+				const markdownArtifactPath = buildPublishedMarkdownArtifactPath(sourcePath);
+				const htmlPairUsesMarkdownArtifactPath = frontmatter.htmlEnabled && ownedHtmlPath === markdownArtifactPath;
+				if (!htmlPairUsesMarkdownArtifactPath) {
+					const htmlContents = renderMarkdownToBasicHtml({
+						sourcePath,
+						markdown: nextSourceContents,
+					});
+					const markdownInspection = inspectPublishArtifact({
+						vaultRelativePath: markdownArtifactPath,
+						allowedRoot: settings.publishAllowedRoot,
+						configDir: this.host.getVaultConfigDir(),
+						contents: htmlContents,
+					});
+					if (!markdownInspection.ok) {
+						return markdownInspection;
+					}
+					snapshotFiles.push({
+						vaultRelativePath: markdownArtifactPath,
+						contents: htmlContents,
+					});
 				}
-				snapshotFiles.push({
-					vaultRelativePath: sourcePath,
-					contents: nextSourceContents,
-				});
-			}
-
-			const ownedHtmlPath = this.resolveOwnedHtmlPathForSource(settings, sourcePath, frontmatter);
-			if (ownedHtmlPath) {
-				ownedHtmlArtifactPaths.add(ownedHtmlPath);
 			}
 
 			if (frontmatter.htmlEnabled) {
