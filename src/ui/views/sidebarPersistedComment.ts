@@ -6,6 +6,7 @@ import {
     getAgentRunByOutputEntryId,
     getLatestAgentRunForTriggerEntry,
     mergeAgentRunMetadata,
+    normalizeAgentRunFilePaths,
     type AgentRunRecord,
     type AgentRunMetadata,
     type AgentRunStreamState,
@@ -246,7 +247,23 @@ export function renderAgentRunMetadataFrontmatter(
     metaEl.insertBefore(frontmatterEl, metaEl.firstChild);
 }
 
-function getAgentRunVisibleMetadataRows(metadata: AgentRunMetadata): AgentRunVisibleMetadataRow[] {
+function getVisibleAgentRunFilePaths(
+    filePaths: readonly string[] | undefined,
+    sourcePath: string | undefined,
+): string[] {
+    const normalizedFilePaths = normalizeAgentRunFilePaths(filePaths ?? []);
+    const [normalizedSourcePath] = normalizeAgentRunFilePaths(sourcePath ? [sourcePath] : []);
+    if (!normalizedSourcePath) {
+        return normalizedFilePaths;
+    }
+
+    return normalizedFilePaths.filter((filePath) => filePath !== normalizedSourcePath);
+}
+
+function getAgentRunVisibleMetadataRows(
+    metadata: AgentRunMetadata,
+    sourcePath?: string,
+): AgentRunVisibleMetadataRow[] {
     const normalizedMetadata = mergeAgentRunMetadata(metadata, {});
     const rows: AgentRunVisibleMetadataRow[] = [];
     const skills = Array.from(new Set(
@@ -256,7 +273,7 @@ function getAgentRunVisibleMetadataRows(metadata: AgentRunMetadata): AgentRunVis
         rows.push({ kind: "text", label: `Skills: ${skills}` });
     }
 
-    const files = normalizedMetadata.usedFiles ?? [];
+    const files = getVisibleAgentRunFilePaths(normalizedMetadata.usedFiles, sourcePath);
     if (files.length) {
         rows.push({ kind: "files", filePaths: files });
     }
@@ -274,8 +291,11 @@ function getAgentRunVisibleMetadataRows(metadata: AgentRunMetadata): AgentRunVis
     return rows;
 }
 
-export function formatAgentRunVisibleMetadataLabels(metadata: AgentRunMetadata): string[] {
-    return getAgentRunVisibleMetadataRows(metadata).map((row) => {
+export function formatAgentRunVisibleMetadataLabels(
+    metadata: AgentRunMetadata,
+    sourcePath?: string,
+): string[] {
+    return getAgentRunVisibleMetadataRows(metadata, sourcePath).map((row) => {
         if (row.kind === "files") {
             return `Files: ${row.filePaths.map((filePath) =>
                 formatSidebarCommentSourceFileLabel(filePath)
@@ -336,7 +356,7 @@ export function renderAgentRunVisibleMetadata(
     const existing = metaEl.querySelectorAll(".aside-agent-run-visible-metadata");
     existing.forEach((element) => element.remove());
 
-    const rows = getAgentRunVisibleMetadataRows(metadata);
+    const rows = getAgentRunVisibleMetadataRows(metadata, options?.sourcePath);
     metaEl.classList.toggle("has-agent-run-metadata", rows.length > 0);
     if (!rows.length) {
         return [];

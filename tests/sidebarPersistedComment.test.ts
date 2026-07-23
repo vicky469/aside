@@ -1265,7 +1265,11 @@ test("renderPersistedCommentCard renders agent run files as clickable file links
         threadAgentRuns: [
             createAgentRun({
                 outputEntryId: "entry-2",
-                usedFiles: ["Folder/Source Note.md", "src/sidebarPersistedComment.ts"],
+                usedFiles: [
+                    "docs/architecture.md",
+                    "Folder/Source Note.md",
+                    "src/sidebarPersistedComment.ts",
+                ],
             }),
         ],
         openSidebarInternalLink: async (href, sourcePath, focusTarget) => {
@@ -1320,6 +1324,30 @@ test("renderPersistedCommentCard renders agent run files as clickable file links
         sourcePath: "docs/architecture.md",
         focusTargetClass: "internal-link aside-agent-run-file-link",
     }]);
+});
+
+test("renderPersistedCommentCard omits current-file-only agent run file metadata", async () => {
+    const thread = createThreadWithEntries({
+        entries: [
+            { id: "comment-1", body: "@codex check this", timestamp: 100 },
+            { id: "entry-2", body: "Agent reply", timestamp: 110 },
+        ],
+    });
+    const host = createRenderHost({
+        threadAgentRuns: [
+            createAgentRun({
+                outputEntryId: "entry-2",
+                usedFiles: ["docs/architecture.md"],
+            }),
+        ],
+    });
+    const root = new FakeElement("div");
+
+    await renderPersistedCommentCard(root as unknown as HTMLDivElement, thread, host);
+
+    assert.equal(root.findAllByClass("aside-agent-run-file-link").length, 0);
+    assert.equal(root.findAllByClass("aside-agent-run-file-metadata").length, 0);
+    assert.equal(root.findAllByClass("aside-agent-run-metadata-toggle-button").length, 0);
 });
 
 test("renderPersistedCommentCard shows copied feedback after sharing a side note", async () => {
