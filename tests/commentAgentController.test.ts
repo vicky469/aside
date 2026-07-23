@@ -70,6 +70,7 @@ function createHarness(options: {
     }) => Promise<{
         runtime: "direct-cli";
         replyText: string;
+        usedSkills?: Array<{ name: string; mode?: string; source?: string }>;
         usedTools?: string[];
         usedFiles?: string[];
         usedUrls?: string[];
@@ -290,6 +291,40 @@ test("comment agent controller appends a reply and marks the run succeeded", asy
     );
 });
 
+test("comment agent controller records requested Excalidraw subskills", async () => {
+    const filePath = "Excalidraw/Drawing 2026-07-23 12.57.34.excalidraw.md";
+    const harness = createHarness({
+        initialComments: [createComment({
+            filePath,
+            selectedText: "Drawing 2026-07-23 12.57.34.excalidraw",
+            comment: "@codex create some arts in excalidraw",
+        })],
+        availableFilePaths: [filePath],
+        runtimeReplyText: "Created.",
+    });
+
+    await harness.controller.handleSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath,
+        body: "@codex create some arts in excalidraw",
+    });
+    await waitForAgentQueueToDrain(harness.controller);
+
+    const latestRun = harness.controller.getLatestAgentRunForThread("thread-1");
+    assert.deepEqual(latestRun?.usedSkills, [
+        {
+            name: "aside",
+            mode: "write",
+            source: "built-in",
+        },
+        {
+            name: "obsidian-excalidraw",
+            source: "requested",
+        },
+    ]);
+});
+
 test("comment agent controller turns annotation proposals into anchored side notes", async () => {
     const harness = createHarness({
         currentNoteContent: "# Plan\n\nThis offer needs a sharper promise for factory buyers.\n",
@@ -415,6 +450,7 @@ test("comment agent controller persists runtime tool and url metadata", async ()
         customRunAgentRuntime: async () => ({
             runtime: "direct-cli",
             replyText: "Ship it.",
+            usedSkills: [{ name: "obsidian-excalidraw" }],
             usedTools: ["browser-use.browser_navigate"],
             usedFiles: ["Folder/Reference.md"],
             usedUrls: ["http://localhost:3000/dashboard?token=secret#debug"],
@@ -435,6 +471,16 @@ test("comment agent controller persists runtime tool and url metadata", async ()
 
     const latestRun = harness.controller.getLatestAgentRunForThread("thread-1");
     assert.equal(latestRun?.status, "succeeded");
+    assert.deepEqual(latestRun?.usedSkills, [
+        {
+            name: "aside",
+            mode: "write",
+            source: "built-in",
+        },
+        {
+            name: "obsidian-excalidraw",
+        },
+    ]);
     assert.deepEqual(latestRun?.usedTools, ["browser-use.browser_navigate", "WebSearch (unavailable)"]);
     assert.deepEqual(latestRun?.usedFiles, ["Folder/Note.md", "Folder/Reference.md"]);
     assert.deepEqual(latestRun?.usedUrls, ["http://localhost:3000/dashboard"]);

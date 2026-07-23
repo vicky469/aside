@@ -283,7 +283,7 @@ function getAgentRunVisibleMetadataRows(
     const rows: AgentRunVisibleMetadataRow[] = [];
     const skills = getVisibleAgentRunSkillNames(normalizedMetadata.usedSkills).join(", ");
     if (skills) {
-        rows.push({ kind: "text", label: `Routed skills: ${skills}` });
+        rows.push({ kind: "text", label: `Skills: ${skills}` });
     }
 
     const files = getVisibleAgentRunFilePaths(normalizedMetadata.usedFiles, sourcePath);

@@ -14,6 +14,7 @@ import {
 } from "../core/agents/agentRuns";
 import type { AgentRuntimeModePreference } from "../core/agents/agentRuntimePreferences";
 import { resolveUnsupportedAgentNotice } from "../core/agents/agentActorRegistry";
+import { resolveRequestedAgentRunSkills } from "../core/agents/agentSkillRouting";
 import type { AsideAgentTarget } from "../core/config/agentTargets";
 import { parseAgentDirectives } from "../core/text/agentDirectives";
 import { AgentRunStore } from "./agentRunStore";
@@ -1131,7 +1132,10 @@ export class CommentAgentController {
                 name: BUILT_IN_ASIDE_SKILL_NAME,
                 mode: BUILT_IN_ASIDE_SKILL_MODE,
                 source: "built-in",
-            }],
+            }, ...resolveRequestedAgentRunSkills({
+                filePath: options.filePath,
+                promptText: options.promptText,
+            })],
             usedFiles: [options.filePath],
         };
     }

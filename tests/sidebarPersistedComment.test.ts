@@ -1229,7 +1229,7 @@ test("formatAgentRunVisibleMetadataLabels keeps metadata terse", () => {
         formatAgentRunVisibleMetadataLabels(createAgentRun({
             usedSkills: [
                 { name: "aside", mode: "write", source: "built-in" },
-                { name: "canvas-design" },
+                { name: "canvas-design", source: "requested" },
                 { name: "canvas-design" },
             ],
             usedFiles: ["docs/source.md", "docs/source.md"],
@@ -1245,7 +1245,7 @@ test("formatAgentRunVisibleMetadataLabels keeps metadata terse", () => {
             }],
         })),
         [
-            "Routed skills: canvas-design",
+            "Skills: canvas-design",
             "Files: source",
             "Tools: WebSearch (unavailable)",
             "URLs:\nhttps://example.com/page\nhttps://example.com/other\nhttps://example.com/imported",
