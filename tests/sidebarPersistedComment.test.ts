@@ -1227,7 +1227,11 @@ test("formatAgentRunMetadataFrontmatter renders compact run metadata", () => {
 test("formatAgentRunVisibleMetadataLabels keeps metadata terse", () => {
     assert.deepEqual(
         formatAgentRunVisibleMetadataLabels(createAgentRun({
-            usedSkills: [{ name: "aside", mode: "write", source: "built-in" }],
+            usedSkills: [
+                { name: "aside", mode: "write", source: "built-in" },
+                { name: "canvas-design" },
+                { name: "canvas-design" },
+            ],
             usedFiles: ["docs/source.md", "docs/source.md"],
             usedTools: ["WebSearch"],
             usedUrls: [
@@ -1241,11 +1245,17 @@ test("formatAgentRunVisibleMetadataLabels keeps metadata terse", () => {
             }],
         })),
         [
-            "Skills: aside",
+            "Routed skills: canvas-design",
             "Files: source",
             "Tools: WebSearch (unavailable)",
             "URLs:\nhttps://example.com/page\nhttps://example.com/other\nhttps://example.com/imported",
         ],
+    );
+    assert.deepEqual(
+        formatAgentRunVisibleMetadataLabels(createAgentRun({
+            usedSkills: [{ name: "aside", mode: "write", source: "built-in" }],
+        })),
+        [],
     );
 });
 
@@ -1347,6 +1357,29 @@ test("renderPersistedCommentCard omits current-file-only agent run file metadata
 
     assert.equal(root.findAllByClass("aside-agent-run-file-link").length, 0);
     assert.equal(root.findAllByClass("aside-agent-run-file-metadata").length, 0);
+    assert.equal(root.findAllByClass("aside-agent-run-metadata-toggle-button").length, 0);
+});
+
+test("renderPersistedCommentCard omits wrapper-only agent run skill metadata", async () => {
+    const thread = createThreadWithEntries({
+        entries: [
+            { id: "comment-1", body: "@codex check this", timestamp: 100 },
+            { id: "entry-2", body: "Agent reply", timestamp: 110 },
+        ],
+    });
+    const host = createRenderHost({
+        threadAgentRuns: [
+            createAgentRun({
+                outputEntryId: "entry-2",
+                usedSkills: [{ name: "aside", mode: "write", source: "built-in" }],
+            }),
+        ],
+    });
+    const root = new FakeElement("div");
+
+    await renderPersistedCommentCard(root as unknown as HTMLDivElement, thread, host);
+
+    assert.equal(root.findAllByClass("aside-agent-run-visible-metadata").length, 0);
     assert.equal(root.findAllByClass("aside-agent-run-metadata-toggle-button").length, 0);
 });
 
@@ -1453,7 +1486,7 @@ test("renderPersistedCommentCard can collapse agent run metadata from the footer
         threadAgentRuns: [
             createAgentRun({
                 outputEntryId: "entry-2",
-                usedSkills: [{ name: "aside" }],
+                usedSkills: [{ name: "aside" }, { name: "canvas-design" }],
                 usedFiles: ["Folder/Source Note.md"],
             }),
         ],

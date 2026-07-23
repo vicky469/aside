@@ -171,6 +171,21 @@ function formatSkillMetadataLabel(skill: { name: string; mode?: string }): strin
     return skill.mode ? `${skill.name} (${skill.mode})` : skill.name;
 }
 
+const ASIDE_WRAPPER_SKILL_NAME = "aside";
+
+function getVisibleAgentRunSkillNames(skills: readonly { name: string }[] | undefined): string[] {
+    const names = new Set<string>();
+    for (const skill of skills ?? []) {
+        if (skill.name === ASIDE_WRAPPER_SKILL_NAME) {
+            continue;
+        }
+
+        names.add(skill.name);
+    }
+
+    return Array.from(names);
+}
+
 function formatAgentRunUrlLines(urls: readonly string[] | undefined): string[] {
     const seen = new Set<string>();
     const lines: string[] = [];
@@ -266,11 +281,9 @@ function getAgentRunVisibleMetadataRows(
 ): AgentRunVisibleMetadataRow[] {
     const normalizedMetadata = mergeAgentRunMetadata(metadata, {});
     const rows: AgentRunVisibleMetadataRow[] = [];
-    const skills = Array.from(new Set(
-        normalizedMetadata.usedSkills?.map((skill) => skill.name) ?? [],
-    )).join(", ");
+    const skills = getVisibleAgentRunSkillNames(normalizedMetadata.usedSkills).join(", ");
     if (skills) {
-        rows.push({ kind: "text", label: `Skills: ${skills}` });
+        rows.push({ kind: "text", label: `Routed skills: ${skills}` });
     }
 
     const files = getVisibleAgentRunFilePaths(normalizedMetadata.usedFiles, sourcePath);
