@@ -39,6 +39,7 @@ export function renderMarkdownToBasicHtml(options: RenderMarkdownToBasicHtmlOpti
 		"ul,ol{padding-left:1.5em;}blockquote{border-left:4px solid color-mix(in srgb, CanvasText 22%, transparent);padding-left:1em;color:color-mix(in srgb, CanvasText 74%, transparent);}",
 		"code{font-family:\"SFMono-Regular\",Consolas,\"Liberation Mono\",monospace;font-size:.92em;background:color-mix(in srgb, CanvasText 8%, transparent);padding:.12em .28em;border-radius:4px;}",
 		"pre{overflow:auto;background:color-mix(in srgb, CanvasText 8%, transparent);padding:1em;border-radius:8px;}pre code{background:transparent;padding:0;}",
+		"img{max-width:100%;height:auto;display:block;margin:1.25em auto;border-radius:8px;}",
 		"a{color:#6d47ff;text-underline-offset:.18em;}",
 		"@media (max-width:640px){main{padding:32px 18px 56px;font-size:16px;}}",
 		"</style>",
@@ -199,25 +200,45 @@ function renderBlock(block: MarkdownBlock): string {
 }
 
 function renderInline(value: string): string {
-	const codeSpans: string[] = [];
-	let html = escapeHtml(value).replace(/`([^`]+)`/gu, (_match, code: string) => {
-		const marker = `\u0000CODE${codeSpans.length}\u0000`;
-		codeSpans.push(`<code>${code}</code>`);
+	const inlineHtml: string[] = [];
+	const stashInlineHtml = (html: string): string => {
+		const marker = `\u0000INLINE${inlineHtml.length}\u0000`;
+		inlineHtml.push(html);
 		return marker;
+	};
+	let html = value.replace(/`([^`]+)`/gu, (_match, code: string) => {
+		return stashInlineHtml(`<code>${escapeHtml(code)}</code>`);
 	});
 
-	html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/gu, (_match, label: string, href: string) => {
+	html = html.replace(/!\[([^\]]*)\]\(([^)\n]+)\)/gu, (_match, label: string, src: string) => {
+		const safeSrc = sanitizeImageSrc(src);
+		const alt = plainText(label);
+		if (!safeSrc) {
+			return alt;
+		}
+		return stashInlineHtml(`<img src="${escapeAttribute(safeSrc)}" alt="${escapeAttribute(alt)}" loading="lazy">`);
+	});
+	html = html.replace(/\[([^\]]+)\]\(([^)\n]+)\)/gu, (_match, label: string, href: string) => {
 		const renderedLabel = renderInline(label);
 		const safeHref = sanitizeHref(href);
-		return safeHref ? `<a href="${escapeAttribute(safeHref)}">${renderedLabel}</a>` : renderedLabel;
+		return safeHref ? stashInlineHtml(`<a href="${escapeAttribute(safeHref)}">${renderedLabel}</a>`) : renderedLabel;
 	});
-	html = html.replace(/\*\*([^*]+)\*\*/gu, "<strong>$1</strong>");
-	html = html.replace(/\*([^*]+)\*/gu, "<em>$1</em>");
+	html = escapeHtml(unescapeMarkdownPunctuation(html));
+	html = html.replace(/(^|[^\\])\*\*([^*]+)\*\*/gu, "$1<strong>$2</strong>");
+	html = html.replace(/(^|[^\\])\*([^*]+)\*/gu, "$1<em>$2</em>");
 
-	for (let index = 0; index < codeSpans.length; index += 1) {
-		html = html.replace(`\u0000CODE${index}\u0000`, codeSpans[index]);
+	for (let index = 0; index < inlineHtml.length; index += 1) {
+		html = html.replace(`\u0000INLINE${index}\u0000`, inlineHtml[index]);
 	}
 	return html;
+}
+
+function sanitizeImageSrc(value: string): string | null {
+	const trimmed = value.trim();
+	if (UNSAFE_LINK_PROTOCOL_PATTERN.test(trimmed) && !/^https?:/iu.test(trimmed)) {
+		return null;
+	}
+	return trimmed;
 }
 
 function sanitizeHref(value: string): string | null {
@@ -239,7 +260,11 @@ function fallbackTitle(sourcePath: string): string {
 }
 
 function plainText(value: string): string {
-	return value.replace(/[`*_#[\]()]/gu, "").trim();
+	return unescapeMarkdownPunctuation(value).replace(/[`*_#[\]()]/gu, "").trim();
+}
+
+function unescapeMarkdownPunctuation(value: string): string {
+	return value.replace(/\\([!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~])/gu, "$1");
 }
 
 function escapeHtml(value: string): string {

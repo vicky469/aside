@@ -72,6 +72,47 @@ test("renderMarkdownToBasicHtml escapes raw html and unsafe links", () => {
 	assert.match(html, /<a href="\/public\/page\.html">good<\/a>/u);
 });
 
+test("renderMarkdownToBasicHtml renders markdown images with safe sources", () => {
+	const html = renderMarkdownToBasicHtml({
+		sourcePath: "public/image.md",
+		markdown: [
+			"# Image",
+			"",
+			"![Image](https://example.com/cover.jpg?width=640&from=app#img)",
+			"![Unsafe](javascript:alert(1))",
+		].join("\n"),
+	});
+
+	assert.match(
+		html,
+		/<img src="https:\/\/example\.com\/cover\.jpg\?width=640&amp;from=app#img" alt="Image" loading="lazy">/u,
+	);
+	assert.doesNotMatch(html, /!<a/u);
+	assert.doesNotMatch(html, /&amp;amp;/u);
+	assert.doesNotMatch(html, /javascript:alert/u);
+	assert.match(html, /Unsafe/u);
+});
+
+test("renderMarkdownToBasicHtml unescapes readable markdown punctuation", () => {
+	const html = renderMarkdownToBasicHtml({
+		sourcePath: "public/timestamps.md",
+		markdown: [
+			"# Timestamps",
+			"",
+			"\\[00:00:01\\]",
+			"",
+			"## \\## \\[03:17:47\\]",
+			"",
+			"Loss is \\(1\\%\\) to \\(2\\%\\).",
+		].join("\n"),
+	});
+
+	assert.match(html, /<p>\[00:00:01\]<\/p>/u);
+	assert.match(html, /<h2>## \[03:17:47\]<\/h2>/u);
+	assert.match(html, /<p>Loss is \(1%\) to \(2%\)\.<\/p>/u);
+	assert.doesNotMatch(html, /\\\[/u);
+});
+
 test("renderMarkdownToBasicHtml falls back to the source basename for title", () => {
 	const html = renderMarkdownToBasicHtml({
 		sourcePath: "public/no-heading.md",

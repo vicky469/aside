@@ -31,7 +31,8 @@ export function normalizeVaultRelativePublishPath(value: string): NormalizedRela
 
 export function buildPublishPublicUrl(options: BuildPublishPublicUrlOptions): string {
 	const normalizedPath = normalizeVaultRelativePublishPath(options.vaultRelativePath);
-	const encodedPath = normalizedPath.path
+	const publicPath = normalizedPath.path.replace(/\.html?$/iu, "");
+	const encodedPath = publicPath
 		.split("/")
 		.filter(Boolean)
 		.map((segment) => encodeURIComponent(segment))

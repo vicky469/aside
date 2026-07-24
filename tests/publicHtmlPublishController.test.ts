@@ -95,7 +95,7 @@ test("public html publish controller publishes one html pair and records enabled
 
 	assert.deepEqual(result, {
 		ok: true,
-		url: "https://publish.example.com/public/page.html",
+		url: "https://publish.example.com/public/page",
 	});
 	assert.equal(harness.writes.length, 1);
 	assert.equal(harness.writes[0].path, "public/page.md");
@@ -136,7 +136,7 @@ test("public html publish controller removes stale standalone ownership when pub
 
 	assert.deepEqual(result, {
 		ok: true,
-		url: "https://publish.example.com/public/page.html",
+		url: "https://publish.example.com/public/page",
 	});
 	assert.deepEqual(harness.getPublishedArtifactPaths(), ["public/report.pdf"]);
 	assert.deepEqual(harness.deployCalls.at(-1)?.map((file) => file.vaultRelativePath), [
@@ -167,7 +167,7 @@ test("public html publish controller resolves markdown source files to generated
 		label: "Open published Markdown",
 		icon: "external-link",
 		disabled: false,
-		url: "https://publish.example.com/public/page.html",
+		url: "https://publish.example.com/public/page",
 	}]);
 });
 
@@ -182,7 +182,7 @@ test("public html publish controller publishes markdown as generated html", asyn
 
 	assert.deepEqual(result, {
 		ok: true,
-		url: "https://publish.example.com/public/page.html",
+		url: "https://publish.example.com/public/page",
 	});
 	assert.match(harness.files.get("public/page.md") ?? "", /asidePublish:\n  markdownEnabled: true\n  htmlEnabled: false/u);
 	assert.deepEqual(harness.deployCalls.at(-1)?.map((file) => file.vaultRelativePath), [
@@ -337,7 +337,7 @@ test("public html publish controller unpublishes by disabling frontmatter and re
 
 	assert.deepEqual(result, {
 		ok: true,
-		url: "https://publish.example.com/public/a.html",
+		url: "https://publish.example.com/public/a",
 	});
 	assert.equal(harness.writes[0].path, "public/a.md");
 	assert.match(harness.writes[0].contents, /asidePublish:\n  markdownEnabled: false\n  htmlEnabled: false\n  html: public\/a\.html/u);
@@ -346,7 +346,7 @@ test("public html publish controller unpublishes by disabling frontmatter and re
 		contents: "<!doctype html><html><body>B</body></html>",
 	}]);
 	assert.deepEqual(harness.purgeCalls, [{
-		url: "https://publish.example.com/public/a.html",
+		url: "https://publish.example.com/public/a",
 		sourcePath: "public/a.md",
 		event: "unpublish",
 	}]);
@@ -363,11 +363,11 @@ test("public html publish controller unpublishes markdown and purges its public 
 
 	assert.deepEqual(result, {
 		ok: true,
-		url: "https://publish.example.com/public/page.html",
+		url: "https://publish.example.com/public/page",
 	});
 	assert.match(harness.files.get("public/page.md") ?? "", /asidePublish:\n  markdownEnabled: false\n  htmlEnabled: false/u);
 	assert.deepEqual(harness.purgeCalls, [{
-		url: "https://publish.example.com/public/page.html",
+		url: "https://publish.example.com/public/page",
 		sourcePath: "public/page.md",
 		event: "unpublish",
 	}]);
@@ -388,12 +388,12 @@ test("public html publish controller keeps unpublish when cache purge fails", as
 
 	assert.deepEqual(result, {
 		ok: true,
-		url: "https://publish.example.com/public/page.html",
+		url: "https://publish.example.com/public/page",
 		notice: "Unpublished, but remote cache purge failed: Cache purge broker request failed: socket closed",
 	});
 	assert.match(harness.files.get("public/page.md") ?? "", /asidePublish:\n  markdownEnabled: false\n  htmlEnabled: false/u);
 	assert.deepEqual(harness.purgeCalls, [{
-		url: "https://publish.example.com/public/page.html",
+		url: "https://publish.example.com/public/page",
 		sourcePath: "public/page.md",
 		event: "unpublish",
 	}]);
@@ -414,7 +414,7 @@ test("public html publish controller skips cache purge when remote purge is disa
 
 	assert.deepEqual(await harness.controller.unpublishFile("public/page.md"), {
 		ok: true,
-		url: "https://publish.example.com/public/page.html",
+		url: "https://publish.example.com/public/page",
 	});
 	assert.deepEqual(harness.purgeCalls, []);
 });
@@ -437,7 +437,7 @@ test("public html publish controller unpublishes paired html without redeploying
 
 	assert.deepEqual(result, {
 		ok: true,
-		url: "https://publish.example.com/public/a.html",
+		url: "https://publish.example.com/public/a",
 	});
 	assert.deepEqual(harness.getPublishedArtifactPaths(), ["public/report.pdf"]);
 	assert.deepEqual(harness.deployCalls.at(-1)?.map((file) => file.vaultRelativePath), [
@@ -535,7 +535,7 @@ test("public html publish controller exposes standalone artifact actions when an
 		label: "Open published HTML",
 		icon: "external-link",
 		disabled: false,
-		url: "https://publish.example.com/public/page.html",
+		url: "https://publish.example.com/public/page",
 	}]);
 });
 
@@ -552,7 +552,7 @@ test("public html publish controller unpublishes standalone html when an implici
 
 	assert.deepEqual(result, {
 		ok: true,
-		url: "https://publish.example.com/public/page.html",
+		url: "https://publish.example.com/public/page",
 	});
 	assert.deepEqual(harness.getPublishedArtifactPaths(), []);
 	assert.deepEqual(harness.deployCalls.at(-1), []);
@@ -597,7 +597,7 @@ test("public html publish controller exposes unpublish and update actions while 
 		label: "Open published HTML",
 		icon: "external-link",
 		disabled: false,
-		url: "https://publish.example.com/public/page.html",
+		url: "https://publish.example.com/public/page",
 	}]);
 });
 
@@ -624,7 +624,7 @@ test("public html publish controller resolves language-suffixed html to the base
 		label: "Open published HTML",
 		icon: "external-link",
 		disabled: false,
-		url: "https://publish.example.com/public/page.zh.html",
+		url: "https://publish.example.com/public/page.zh",
 	}]);
 });
 
@@ -651,7 +651,7 @@ test("public html publish controller resolves explicit frontmatter html paths fr
 		label: "Open published HTML",
 		icon: "external-link",
 		disabled: false,
-		url: "https://publish.example.com/public/generated/page.html",
+		url: "https://publish.example.com/public/generated/page",
 	}]);
 });
 
@@ -667,7 +667,7 @@ test("public html publish controller updates a published html pair without rewri
 
 	assert.deepEqual(result, {
 		ok: true,
-		url: "https://publish.example.com/public/page.html",
+		url: "https://publish.example.com/public/page",
 	});
 	assert.deepEqual(harness.writes, []);
 	assert.deepEqual(harness.deployCalls.at(-1), [{
@@ -675,7 +675,7 @@ test("public html publish controller updates a published html pair without rewri
 		contents: "<!doctype html><html><body>Updated page</body></html>",
 	}]);
 	assert.deepEqual(harness.purgeCalls, [{
-		url: "https://publish.example.com/public/page.html",
+		url: "https://publish.example.com/public/page",
 		sourcePath: "public/page.md",
 		event: "republish",
 	}]);
@@ -692,10 +692,10 @@ test("public html publish controller updates markdown by deploying generated htm
 
 	assert.deepEqual(result, {
 		ok: true,
-		url: "https://publish.example.com/public/page.html",
+		url: "https://publish.example.com/public/page",
 	});
 	assert.deepEqual(harness.purgeCalls, [{
-		url: "https://publish.example.com/public/page.html",
+		url: "https://publish.example.com/public/page",
 		sourcePath: "public/page.md",
 		event: "republish",
 	}]);
