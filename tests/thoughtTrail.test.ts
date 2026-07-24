@@ -1,6 +1,7 @@
 import * as assert from "node:assert/strict";
 import test from "node:test";
 import {
+    buildTagGroupedRelatedFiles,
     buildThoughtTrailCommentTagsByFilePath,
     buildTagRelatedFileLines,
     buildThoughtTrailLines,
@@ -287,6 +288,79 @@ test("buildTagRelatedFileLines renders a deduped file set that shares the source
     assert.equal(lines.filter((line: string) => line.includes("Open docs/c.md")).length, 1);
     assert.equal(lines.some((line: string) => line.includes("Open docs/b.md")), false);
     assert.equal(lines.filter((line: string) => /^\s+n0 --> n\d+$/.test(line)).length, 2);
+});
+
+test("buildTagRelatedFileLines excludes the configured index note from tag matches", () => {
+    const tagsByPath = new Map<string, string[]>([
+        ["docs/source.md", ["#project"]],
+        ["docs/a.md", ["#project"]],
+        ["Custom Aside Index.md", ["#project"]],
+    ]);
+    const lines = buildTagRelatedFileLines(
+        "dev",
+        "docs/source.md",
+        ["docs/a.md", "Custom Aside Index.md"],
+        (filePath: string) => tagsByPath.get(filePath) ?? [],
+        { allCommentsNotePath: "Custom Aside Index.md" },
+    );
+
+    assert.equal(lines.some((line: string) => line.includes("Open docs/a.md")), true);
+    assert.equal(lines.some((line: string) => line.includes("Custom Aside Index.md")), false);
+});
+
+test("buildTagGroupedRelatedFiles excludes the configured index note from tag matches", () => {
+    const tagsByPath = new Map<string, string[]>([
+        ["docs/source.md", ["#project"]],
+        ["docs/a.md", ["#project"]],
+        ["Custom Aside Index.md", ["#project"]],
+    ]);
+    assert.deepEqual(
+        buildTagGroupedRelatedFiles(
+            "docs/source.md",
+            ["docs/a.md", "Custom Aside Index.md"],
+            (filePath: string) => tagsByPath.get(filePath) ?? [],
+            { allCommentsNotePath: "Custom Aside Index.md" },
+        ),
+        [{
+            tagDisplay: "project",
+            tagKey: "project",
+            filePaths: ["docs/a.md"],
+        }],
+    );
+});
+
+test("buildTagGroupedRelatedFiles still uses side comment tags when excluding the index note", () => {
+    const tagsByPath = buildThoughtTrailCommentTagsByFilePath([
+        createThread({
+            id: "source-thread",
+            filePath: "docs/source.md",
+            entries: [{ id: "source-entry", body: "Source side comment #project", timestamp: 100 }],
+        }),
+        createThread({
+            id: "target-thread",
+            filePath: "docs/a.md",
+            entries: [{ id: "target-entry", body: "Target side comment #project", timestamp: 100 }],
+        }),
+        createThread({
+            id: "index-thread",
+            filePath: "Custom Aside Index.md",
+            entries: [{ id: "index-entry", body: "Generated index mention #project", timestamp: 100 }],
+        }),
+    ]);
+
+    assert.deepEqual(
+        buildTagGroupedRelatedFiles(
+            "docs/source.md",
+            ["docs/a.md", "Custom Aside Index.md"],
+            (filePath: string) => tagsByPath.get(filePath) ?? [],
+            { allCommentsNotePath: "Custom Aside Index.md" },
+        ),
+        [{
+            tagDisplay: "project",
+            tagKey: "project",
+            filePaths: ["docs/a.md"],
+        }],
+    );
 });
 
 test("buildTagRelatedFileLines returns no graph when the source file has no tags", () => {

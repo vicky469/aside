@@ -146,6 +146,7 @@ export async function renderSidebarThoughtTrail(
         rootFilePath,
         options.candidateFilePaths,
         options.getTagsForFilePath,
+        { allCommentsNotePath: context.allCommentsNotePath },
     );
     renderThoughtTrailSourceControl(thoughtTrailEl, {
         source: options.source,

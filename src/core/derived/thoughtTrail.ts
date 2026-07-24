@@ -384,12 +384,21 @@ export interface TagRelatedFileGroup {
     filePaths: string[];
 }
 
+export interface ThoughtTrailTagRelatedOptions {
+    allCommentsNotePath?: string;
+}
+
 export function buildTagGroupedRelatedFiles(
     sourceFilePath: string,
     candidateFilePaths: readonly string[],
     getTagsForFilePath: ThoughtTrailFileTagLookup,
+    options: ThoughtTrailTagRelatedOptions = {},
 ): TagRelatedFileGroup[] {
     const normalizedSourcePath = normalizeNotePath(sourceFilePath);
+    if (!normalizedSourcePath || isAllCommentsNotePath(normalizedSourcePath, options.allCommentsNotePath)) {
+        return [];
+    }
+
     const sourceTagsByKey = new Map<string, string>();
     for (const tag of getTagsForFilePath(normalizedSourcePath) ?? []) {
         const key = normalizeThoughtTrailTagKey(tag);
@@ -406,7 +415,12 @@ export function buildTagGroupedRelatedFiles(
 
     for (const candidateFilePath of candidateFilePaths) {
         const normalizedCandidate = normalizeNotePath(candidateFilePath);
-        if (!normalizedCandidate || normalizedCandidate === normalizedSourcePath || seenFilePaths.has(normalizedCandidate)) {
+        if (
+            !normalizedCandidate
+            || normalizedCandidate === normalizedSourcePath
+            || isAllCommentsNotePath(normalizedCandidate, options.allCommentsNotePath)
+            || seenFilePaths.has(normalizedCandidate)
+        ) {
             continue;
         }
         seenFilePaths.add(normalizedCandidate);
@@ -439,11 +453,16 @@ export function buildTagRelatedFileLines(
     candidateFilePaths: readonly string[],
     getTagsForFilePath: ThoughtTrailFileTagLookup,
     options: {
+        allCommentsNotePath?: string;
         layout?: "default" | "vertical";
         matchMode?: "all" | "any";
     } = {},
 ): string[] {
     const normalizedSourcePath = normalizeNotePath(sourceFilePath);
+    if (!normalizedSourcePath || isAllCommentsNotePath(normalizedSourcePath, options.allCommentsNotePath)) {
+        return [];
+    }
+
     const sourceTagKeys = getNormalizedThoughtTrailTagKeys(getTagsForFilePath(normalizedSourcePath));
     if (!sourceTagKeys.size) {
         return [];
@@ -456,6 +475,7 @@ export function buildTagRelatedFileLines(
         if (
             !normalizedCandidatePath
             || normalizedCandidatePath === normalizedSourcePath
+            || isAllCommentsNotePath(normalizedCandidatePath, options.allCommentsNotePath)
             || seenFilePaths.has(normalizedCandidatePath)
         ) {
             continue;

@@ -1627,6 +1627,7 @@ export default class AsideView extends ItemView {
                     selectedIndexFileFilterRootPath,
                     this.getThoughtTrailVaultCandidateFilePaths(selectedIndexFileFilterRootPath),
                     indexThoughtTrailTagLookup,
+                    { allCommentsNotePath: this.plugin.getAllCommentsNotePath() },
                 ).length > 0
             );
             const indexThoughtTrailUnavailableReason = isAllCommentsView
