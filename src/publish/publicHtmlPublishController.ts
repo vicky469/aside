@@ -36,6 +36,16 @@ import {
 import {
 	selectPrivatePublishPaths,
 } from "../core/publish/privatePublishSelection";
+import {
+	parsePrivatePublishAuthMarkdown,
+} from "../core/publish/privatePublishAuth";
+import {
+	buildPrivatePublishSnapshotSupportFiles,
+	type PrivatePublishSnapshotContentFile,
+	type PrivatePublishSnapshotFileKind,
+	type PrivatePublishSnapshotProjectFile,
+	type PrivatePublishSnapshotStaticAssetFile,
+} from "../core/publish/privatePublishSnapshot";
 import type {
 	AsidePublishFrontmatter,
 } from "../core/publish/publishFrontmatter";
@@ -43,6 +53,11 @@ import type {
 export interface PublicHtmlPublishSnapshotFile {
 	vaultRelativePath: string;
 	contents: string | ArrayBuffer;
+}
+
+export interface PublicHtmlDeploySnapshotSupport {
+	staticAssets: PrivatePublishSnapshotStaticAssetFile[];
+	projectFiles: PrivatePublishSnapshotProjectFile[];
 }
 
 export type PublicHtmlPublishResult =
@@ -103,7 +118,10 @@ export interface PublicHtmlPublishHost {
 	getPublishedArtifactPaths(): string[];
 	setPublishedArtifactPaths(paths: string[]): Promise<void>;
 	getCurrentTimestamp(): string;
-	deploySnapshot(files: PublicHtmlPublishSnapshotFile[]): Promise<PublicHtmlDeploySnapshotResult>;
+	deploySnapshot(
+		files: PublicHtmlPublishSnapshotFile[],
+		supportFiles?: PublicHtmlDeploySnapshotSupport,
+	): Promise<PublicHtmlDeploySnapshotResult>;
 	purgePublicUrlFromCache(input: PublicHtmlCachePurgeInput): Promise<PublicHtmlCachePurgeResult>;
 }
 
@@ -143,6 +161,16 @@ function normalizePublicFilePath(path: string): string | null {
 
 function buildPublishedMarkdownArtifactPath(sourcePath: string): string {
 	return deriveMarkdownHtmlPublishPath(sourcePath);
+}
+
+async function buildSnapshotContentHash(contents: string | ArrayBuffer): Promise<string> {
+	const bytes = typeof contents === "string"
+		? new TextEncoder().encode(contents)
+		: new Uint8Array(contents);
+	const hashBuffer = await crypto.subtle.digest("SHA-256", bytes);
+	const hex = Array.from(new Uint8Array(hashBuffer), (byte) =>
+		byte.toString(16).padStart(2, "0")).join("");
+	return `sha256-${hex}`;
 }
 
 function buildHtmlPublishFrontmatter(
@@ -1421,7 +1449,25 @@ export class PublicHtmlPublishController {
 	): Promise<PublicHtmlDeploySnapshotResult> {
 		const markdownFiles = (await this.host.listMarkdownFiles(settings.publishAllowedRoot)).sort();
 		const snapshotFiles: PublicHtmlPublishSnapshotFile[] = [];
+		const snapshotContentFiles: PrivatePublishSnapshotContentFile[] = [];
 		const ownedHtmlArtifactPaths = new Set<string>();
+		const addSnapshotFile = async (input: {
+			vaultRelativePath: string;
+			sourcePath: string;
+			kind: PrivatePublishSnapshotFileKind;
+			contents: string | ArrayBuffer;
+		}) => {
+			snapshotFiles.push({
+				vaultRelativePath: input.vaultRelativePath,
+				contents: input.contents,
+			});
+			snapshotContentFiles.push({
+				vaultRelativePath: input.vaultRelativePath,
+				sourcePath: input.sourcePath,
+				kind: input.kind,
+				contentHash: await buildSnapshotContentHash(input.contents),
+			});
+		};
 		for (const sourcePath of markdownFiles) {
 			if (this.isPrivatePublishRootControlFile(settings, sourcePath)) {
 				continue;
@@ -1462,8 +1508,10 @@ export class PublicHtmlPublishController {
 					if (!markdownInspection.ok) {
 						return markdownInspection;
 					}
-					snapshotFiles.push({
+					await addSnapshotFile({
 						vaultRelativePath: markdownArtifactPath,
+						sourcePath,
+						kind: "markdown",
 						contents: htmlContents,
 					});
 				}
@@ -1499,8 +1547,10 @@ export class PublicHtmlPublishController {
 				if (!artifactInspection.ok) {
 					return artifactInspection;
 				}
-				snapshotFiles.push({
+				await addSnapshotFile({
 					vaultRelativePath: pair.htmlPath,
+					sourcePath,
+					kind: "html",
 					contents: htmlContents,
 				});
 			}
@@ -1529,12 +1579,52 @@ export class PublicHtmlPublishController {
 			if (!artifactInspection.ok) {
 				return artifactInspection;
 			}
-			snapshotFiles.push({
+			await addSnapshotFile({
 				vaultRelativePath: artifact.artifactPath,
+				sourcePath: artifact.artifactPath,
+				kind: this.getSnapshotFileKind(artifact.artifactPath),
 				contents,
 			});
 		}
 
-		return this.host.deploySnapshot(snapshotFiles);
+		return this.host.deploySnapshot(
+			snapshotFiles,
+			await this.buildDeploySnapshotSupport(settings, snapshotContentFiles),
+		);
+	}
+
+	private getSnapshotFileKind(path: string): PrivatePublishSnapshotFileKind {
+		if (isPdfPath(path)) {
+			return "pdf";
+		}
+		return "html";
+	}
+
+	private async buildDeploySnapshotSupport(
+		settings: PublishSettings,
+		files: readonly PrivatePublishSnapshotContentFile[],
+	): Promise<PublicHtmlDeploySnapshotSupport | undefined> {
+		if (files.length === 0) {
+			return undefined;
+		}
+
+		const authPath = `${normalizePublishAllowedRoot(settings.publishAllowedRoot)}auth.md`;
+		const authRules = await this.host.fileExists(authPath)
+			? parsePrivatePublishAuthMarkdown(await this.host.readVaultFile(authPath))
+			: [];
+		const supportFiles = buildPrivatePublishSnapshotSupportFiles({
+			allowedRoot: settings.publishAllowedRoot,
+			publishBaseUrl: settings.publishBaseUrl,
+			publishedAt: this.host.getCurrentTimestamp(),
+			files,
+			authRules,
+		});
+		return {
+			staticAssets: supportFiles.staticAssets,
+			projectFiles: [
+				...supportFiles.functions,
+				...supportFiles.privateModules,
+			],
+		};
 	}
 }

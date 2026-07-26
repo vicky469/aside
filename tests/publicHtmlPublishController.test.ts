@@ -2,6 +2,7 @@ import * as assert from "node:assert/strict";
 import test from "node:test";
 import {
 	PublicHtmlPublishController,
+	type PublicHtmlDeploySnapshotSupport,
 	type PublicHtmlPublishSnapshotFile,
 } from "../src/publish/publicHtmlPublishController";
 import type { PublishSettings } from "../src/core/publish/publishSettings";
@@ -37,6 +38,7 @@ function createHarness(options: {
 	let publishedArtifactPaths = [...(options.publishedArtifactPaths ?? [])];
 	const writes: Array<{ path: string; contents: string }> = [];
 	const deployCalls: PublicHtmlPublishSnapshotFile[][] = [];
+	const deploySupportCalls: Array<PublicHtmlDeploySnapshotSupport | undefined> = [];
 	const purgeCalls: Array<{ url: string; sourcePath: string; event: "unpublish" | "republish" }> = [];
 	const host = {
 		getSettings: () => options.settings ?? settings,
@@ -78,8 +80,12 @@ function createHarness(options: {
 			publishedArtifactPaths = [...paths];
 		},
 		getCurrentTimestamp: () => "2026-07-26T08:00:00.000Z",
-		deploySnapshot: async (snapshotFiles: PublicHtmlPublishSnapshotFile[]) => {
+		deploySnapshot: async (
+			snapshotFiles: PublicHtmlPublishSnapshotFile[],
+			supportFiles?: PublicHtmlDeploySnapshotSupport,
+		) => {
 			deployCalls.push(snapshotFiles);
+			deploySupportCalls.push(supportFiles);
 			return options.deployResult ?? { ok: true };
 		},
 		purgePublicUrlFromCache: async (input: { url: string; sourcePath: string; event: "unpublish" | "republish" }) => {
@@ -95,6 +101,7 @@ function createHarness(options: {
 		getPublishedArtifactPaths: () => publishedArtifactPaths,
 		writes,
 		deployCalls,
+		deploySupportCalls,
 		purgeCalls,
 	};
 }
@@ -488,6 +495,42 @@ test("public html publish controller does not deploy root control markdown files
 		"public/page.html",
 	]);
 	assert.doesNotMatch(lastDeploy.map((file) => file.vaultRelativePath).join("\n"), /auth|index/u);
+});
+
+test("public html publish controller generates private Pages support files from auth rules", async () => {
+	const harness = createHarness({
+		files: {
+			"public/auth.md": [
+				"| path | provider | identifier | access |",
+				"| --- | --- | --- | --- |",
+				"| / | google | Alice@Example.com | comment |",
+				"| docs/ | wechat | wx-alice | view |",
+			].join("\n"),
+			"public/page.md": "---\nasidePublish:\n  markdownEnabled: false\n  htmlEnabled: false\n---\n# Page\n",
+		},
+	});
+
+	await harness.controller.publishFile("public/page.md");
+
+	const support = harness.deploySupportCalls.at(-1);
+	assert.deepEqual(support?.staticAssets.map((file) => file.assetRelativePath), [
+		"_routes.json",
+	]);
+	assert.deepEqual(support?.projectFiles.map((file) => file.projectRelativePath), [
+		"functions/_middleware.js",
+		"functions/_aside/api/auth/session.js",
+		"functions/_aside/api/comments/index.js",
+		"src/_aside/private-publish-data.js",
+	]);
+	assert.doesNotMatch(support?.staticAssets.map((file) => file.contents).join("\n") ?? "", /Alice@Example|wx-alice/u);
+	const privateData = support?.projectFiles.find((file) =>
+		file.projectRelativePath === "src/_aside/private-publish-data.js")?.contents ?? "";
+	assert.match(privateData, /"identifier": "alice@example\.com"/u);
+	assert.match(privateData, /"provider": "wechat"/u);
+	assert.match(privateData, /"unsupportedProviders": \[\n\t\t"wechat"\n\t\]/u);
+	assert.match(privateData, /"publicPath": "page\.html"/u);
+	assert.match(privateData, /"sourcePath": "page\.md"/u);
+	assert.match(privateData, /"contentHash": "sha256-/u);
 });
 
 test("public html publish controller publishes a PDF artifact and remembers it for future snapshots", async () => {

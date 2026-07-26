@@ -59,6 +59,7 @@ import {
     PublicHtmlPublishController,
     type PublicHtmlPublishActionState,
     type PublicHtmlPublishResult,
+	type PublicHtmlDeploySnapshotSupport,
     type PublicHtmlPublishSnapshotFile,
     type PublicHtmlDeploySnapshotResult,
 	type PublicHtmlCachePurgeInput,
@@ -566,7 +567,7 @@ export default class Aside extends Plugin {
         getPublishedArtifactPaths: () => this.settings.publishedPublicArtifactPaths,
         setPublishedArtifactPaths: (paths) => this.setPublishedPublicArtifactPaths(paths),
         getCurrentTimestamp: () => new Date().toISOString(),
-        deploySnapshot: (files) => this.publishSnapshotArtifacts(files),
+        deploySnapshot: (files, supportFiles) => this.publishSnapshotArtifacts(files, supportFiles),
         purgePublicUrlFromCache: (url) => this.purgePublishedPublicUrlCache(url),
     });
     private readonly publicFilePublishActionController = new PublicFilePublishActionController({
@@ -1673,7 +1674,10 @@ export default class Aside extends Plugin {
         );
     }
 
-    private async publishSnapshotArtifacts(files: PublicHtmlPublishSnapshotFile[]): Promise<PublicHtmlDeploySnapshotResult> {
+    private async publishSnapshotArtifacts(
+        files: PublicHtmlPublishSnapshotFile[],
+        supportFiles?: PublicHtmlDeploySnapshotSupport,
+    ): Promise<PublicHtmlDeploySnapshotResult> {
         const modules = this.getPublishRuntimeModules();
         const vaultRootPath = this.getVaultRootPath();
         if (!modules || !vaultRootPath) {
@@ -1685,6 +1689,8 @@ export default class Aside extends Plugin {
 
         const deployResult = await deployPublicHtmlSnapshotToWranglerPages(modules, {
             files,
+            staticAssets: supportFiles?.staticAssets,
+            projectFiles: supportFiles?.projectFiles,
             projectName: this.settings.publishPagesProjectName,
             publishBaseUrl: this.settings.publishBaseUrl,
             vaultRootPath,

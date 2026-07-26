@@ -21,6 +21,7 @@ Use this section as the working checklist. Mark an item done only after the code
 - [x] Wrangler Pages staging layout planning can keep static assets under an asset directory and Functions/private modules at the temporary Pages project root.
 - [x] Server-side private publish manifest core includes a folder-first tree, file route metadata, permission rules, supported/unsupported providers, and single-entry version metadata for each file.
 - [x] Wrangler Pages snapshot deployment has a tested adapter that stages Pages Functions/private modules beside the static asset directory only when generated project files are present, while preserving the static-only deploy layout.
+- [x] Publish snapshot deployment now parses root `auth.md`, hashes deployed content, generates private Pages support files, and passes static/project support into the Wrangler Pages adapter without exposing permission data as a static asset.
 
 ### To Implement
 
@@ -34,8 +35,8 @@ Use this section as the working checklist. Mark an item done only after the code
 - [ ] Wire the private manifest into deployed Pages Functions and expose only permission-filtered manifest data to browser clients.
 - [ ] Generate the approved three-pane published shell: folder tree, file viewer with version controls, and Aside sidebar.
 - [x] Exclude root `public/auth.md` and root `public/index.md` from the enabled snapshot scanner even when stale publish frontmatter exists.
-- [ ] Wire parsed `public/auth.md` rules into generated server-side permission data during deployment without exposing readable static permission assets.
-- [ ] Stage Cloudflare Pages Functions, including site-wide middleware, auth routes, and comment API routes.
+- [x] Wire parsed `public/auth.md` rules into generated server-side permission data during deployment without exposing readable static permission assets.
+- [x] Stage Cloudflare Pages Functions, including site-wide middleware, auth routes, and comment API routes.
 - [ ] Implement Google OAuth for V1 using user-owned Cloudflare environment variables/secrets, server-side token verification, and signed session cookies.
 - [ ] Keep WeChat as a parsed provider and generated-provider slot, but report it as unsupported until its OAuth setup is implemented and tested.
 - [ ] Add Cloudflare D1-backed comment event storage for published-site page comments.
@@ -58,7 +59,7 @@ Use this section as the working checklist. Mark an item done only after the code
 - [x] Staging-layout tests prove generated Functions and private modules are planned beside the static asset directory for Wrangler direct upload.
 - [x] Manifest tests cover folder tree, file routes, permission rules, provider support, and minimal version history.
 - [x] Deployment adapter tests prove generated Functions/private modules are written beside the static asset directory before Wrangler is invoked, and static-only deploys keep the previous staging layout.
-- [ ] Integration tests prove `publishSnapshotArtifacts` writes generated Functions and private modules beside the static asset directory before invoking Wrangler.
+- [x] Controller and deployment adapter tests prove generated support files from `auth.md` are passed into deployment and Functions/private modules are written beside the static asset directory before Wrangler is invoked.
 - [ ] Snapshot tests cover generated `site-manifest.json`, three-pane shell assets, comments seed data, and generated Pages Functions files.
 - [ ] Generated Functions tests cover authenticated/unauthenticated view access, `view` versus `comment` enforcement, and path-specific permission inheritance.
 - [ ] D1 API tests cover comment read/write, own-comment edit/delete policy, idempotent event writes, and malformed payload rejection.
