@@ -45,6 +45,7 @@ export interface BuildPrivatePublishSnapshotSupportFilesInput {
 	publishedAt: string;
 	files: readonly PrivatePublishSnapshotContentFile[];
 	authRules: readonly PrivatePublishAuthRule[];
+	commentSeeds?: readonly PrivatePublishSnapshotCommentSeedInput[];
 }
 
 export interface PrivatePublishManifestFileVersion {
@@ -86,6 +87,30 @@ export interface PrivatePublishManifestPermissionRule {
 	line: number;
 }
 
+export interface PrivatePublishSnapshotCommentSeedAuthor {
+	provider: string;
+	identity: string;
+	displayName?: string;
+}
+
+export interface PrivatePublishSnapshotCommentSeedInput {
+	publicPath: string;
+	id: string;
+	body: string;
+	createdAt: string;
+	author?: PrivatePublishSnapshotCommentSeedAuthor;
+}
+
+export interface PrivatePublishManifestCommentSeed {
+	id: string;
+	path: string;
+	body: string;
+	createdAt: string;
+	author?: PrivatePublishSnapshotCommentSeedAuthor;
+	readOnly: true;
+	replies: [];
+}
+
 export interface PrivatePublishManifest {
 	version: 1;
 	generatedAt: string;
@@ -99,6 +124,7 @@ export interface PrivatePublishManifest {
 	providers: PrivatePublishProvider[];
 	unsupportedProviders: PrivatePublishProvider[];
 	permissionRules: PrivatePublishManifestPermissionRule[];
+	commentSeeds: PrivatePublishManifestCommentSeed[];
 }
 
 const GOOGLE_PROVIDER: PrivatePublishProvider = "google";
@@ -142,6 +168,9 @@ export function buildPrivatePublishSnapshotSupportFiles(
 		}, {
 			projectRelativePath: "functions/_aside/api/comments/index.js",
 			contents: renderCommentsRoute(),
+		}, {
+			projectRelativePath: "functions/_aside/api/comment-events/index.js",
+			contents: renderCommentEventsRoute(),
 		}],
 		privateModules: [{
 			projectRelativePath: "src/_aside/private-publish-data.js",
@@ -161,6 +190,10 @@ export function buildPrivatePublishManifest(input: BuildPrivatePublishSnapshotSu
 	const permissionRules = input.authRules
 		.map(normalizePermissionRule)
 		.filter((rule): rule is PrivatePublishManifestPermissionRule => rule !== null);
+	const publicPaths = new Set(files.map((file) => file.publicPath));
+	const commentSeeds = (input.commentSeeds ?? [])
+		.map((seed) => normalizeCommentSeed(seed, publicPaths))
+		.filter((seed): seed is PrivatePublishManifestCommentSeed => seed !== null);
 	const providers = [...new Set(permissionRules.map((rule) => rule.provider))].sort();
 	const unsupportedProviders = providers.filter((provider) => provider !== GOOGLE_PROVIDER);
 
@@ -177,6 +210,7 @@ export function buildPrivatePublishManifest(input: BuildPrivatePublishSnapshotSu
 		providers: providers.filter((provider) => provider === GOOGLE_PROVIDER),
 		unsupportedProviders,
 		permissionRules,
+		commentSeeds,
 	};
 }
 
@@ -213,6 +247,48 @@ function normalizePermissionRule(rule: PrivatePublishAuthRule): PrivatePublishMa
 		path: rule.path,
 		access: rule.access,
 		line: rule.line,
+	};
+}
+
+function normalizeCommentSeedAuthor(author: unknown): PrivatePublishSnapshotCommentSeedAuthor | undefined {
+	if (!author || typeof author !== "object" || Array.isArray(author)) {
+		return undefined;
+	}
+	const record = author as Record<string, unknown>;
+	const provider = typeof record.provider === "string" ? record.provider.trim() : "";
+	const identity = typeof record.identity === "string" ? record.identity.trim() : "";
+	if (!provider || !identity) {
+		return undefined;
+	}
+	const displayName = typeof record.displayName === "string" ? record.displayName.trim() : "";
+	return {
+		provider,
+		identity,
+		...(displayName ? { displayName } : {}),
+	};
+}
+
+function normalizeCommentSeed(
+	seed: PrivatePublishSnapshotCommentSeedInput,
+	publicPaths: ReadonlySet<string>,
+): PrivatePublishManifestCommentSeed | null {
+	const normalizedPath = normalizeVaultRelativePublishPath(seed.publicPath.replace(/^\/+/u, ""));
+	const id = typeof seed.id === "string" ? seed.id.trim() : "";
+	const body = typeof seed.body === "string" ? seed.body.trim() : "";
+	const createdAt = typeof seed.createdAt === "string" ? seed.createdAt.trim() : "";
+	if (!normalizedPath.ok || !publicPaths.has(normalizedPath.path) || !id || !body || !createdAt) {
+		return null;
+	}
+
+	const author = normalizeCommentSeedAuthor(seed.author);
+	return {
+		id,
+		path: normalizedPath.path,
+		body,
+		createdAt,
+		...(author ? { author } : {}),
+		readOnly: true,
+		replies: [],
 	};
 }
 
@@ -463,7 +539,7 @@ function renderCommentsRoute(): string {
 		"\tif (!permission.canView) {",
 		"\t\treturn Response.json({ error: \"Not authorized to read comments for this path.\" }, { status: 403 });",
 		"\t}",
-		"\tconst result = await getPublishedComments(context.env, path);",
+		"\tconst result = await getPublishedComments(context.env, path, privatePublishManifest.commentSeeds);",
 		"\treturn result.ok",
 		"\t\t? Response.json({ comments: result.comments })",
 		"\t\t: Response.json({ error: result.error }, { status: 500 });",
@@ -520,6 +596,39 @@ function renderCommentsRoute(): string {
 		"\t\t\t: Response.json({ error: result.error }, { status: 400 });",
 		"\t}",
 		"\treturn Response.json({ error: \"Unsupported comment operation.\" }, { status: 400 });",
+		"}",
+		"",
+	].join("\n");
+}
+
+function renderCommentEventsRoute(): string {
+	return [
+		"import { privatePublishManifest } from \"../../../../src/_aside/private-publish-data.js\";",
+		"import { getAsideSessionIdentity, getPublishedCommentEvents, resolvePrivatePublishPermission } from \"../../../../src/_aside/private-publish-runtime.js\";",
+		"",
+		"export async function onRequestGet(context) {",
+		"\tconst identity = await getAsideSessionIdentity(context.request, context.env);",
+		"\tif (!identity) {",
+		"\t\treturn Response.json({ error: \"Sign in before exporting comment events.\" }, { status: 401 });",
+		"\t}",
+		"\tconst permission = resolvePrivatePublishPermission(privatePublishManifest.permissionRules, identity, \"/\");",
+		"\tif (!permission.canManage) {",
+		"\t\treturn Response.json({ error: \"Not authorized to export comment events.\" }, { status: 403 });",
+		"\t}",
+		"\tconst searchParams = new URL(context.request.url).searchParams;",
+		"\tconst cursor = {};",
+		"\tconst afterCreatedAt = searchParams.get(\"afterCreatedAt\") ?? \"\";",
+		"\tconst afterEventId = searchParams.get(\"afterEventId\") ?? \"\";",
+		"\tif (afterCreatedAt) {",
+		"\t\tcursor.afterCreatedAt = afterCreatedAt;",
+		"\t}",
+		"\tif (afterEventId) {",
+		"\t\tcursor.afterEventId = afterEventId;",
+		"\t}",
+		"\tconst result = await getPublishedCommentEvents(context.env, cursor);",
+		"\treturn result.ok",
+		"\t\t? Response.json({ events: result.events })",
+		"\t\t: Response.json({ error: result.error }, { status: 500 });",
 		"}",
 		"",
 	].join("\n");
@@ -693,19 +802,46 @@ function renderPrivatePublishRuntimeModule(): string {
 		"\t].join(\"\\n\");",
 		"}",
 		"",
-		"export async function getPublishedComments(env, path) {",
-		"\tconst db = getPublishedCommentsDatabase(env);",
-		"\tif (!db) {",
-		"\t\treturn { ok: false, error: \"Aside comments D1 binding ASIDE_COMMENTS_DB is not configured.\" };",
-		"\t}",
+		"export async function getPublishedComments(env, path, seeds = []) {",
 		"\tconst normalizedPath = normalizePublishedCommentPath(path);",
 		"\tif (!normalizedPath) {",
 		"\t\treturn { ok: false, error: \"Comment path is required.\" };",
 		"\t}",
+		"\tconst seedComments = normalizePublishedCommentSeedsForPath(seeds, normalizedPath);",
+		"\tconst db = getPublishedCommentsDatabase(env);",
+		"\tif (!db) {",
+		"\t\treturn seedComments.length > 0",
+		"\t\t\t? { ok: true, comments: seedComments }",
+		"\t\t\t: { ok: false, error: \"Aside comments D1 binding ASIDE_COMMENTS_DB is not configured.\" };",
+		"\t}",
 		"\ttry {",
 		"\t\treturn {",
 		"\t\t\tok: true,",
-		"\t\t\tcomments: await getPublishedCommentThreadsForPath(db, normalizedPath),",
+		"\t\t\tcomments: seedComments.concat(await getPublishedCommentThreadsForPath(db, normalizedPath)),",
+		"\t\t};",
+		"\t} catch {",
+		"\t\treturn { ok: false, error: \"Aside comments D1 query failed.\" };",
+		"\t}",
+		"}",
+		"",
+		"export async function getPublishedCommentEvents(env, cursor = {}) {",
+		"\tconst db = getPublishedCommentsDatabase(env);",
+		"\tif (!db) {",
+		"\t\treturn { ok: false, error: \"Aside comments D1 binding ASIDE_COMMENTS_DB is not configured.\" };",
+		"\t}",
+		"\tconst afterCreatedAt = typeof cursor?.afterCreatedAt === \"string\" ? cursor.afterCreatedAt.trim() : \"\";",
+		"\tconst afterEventId = typeof cursor?.afterEventId === \"string\" ? cursor.afterEventId.trim() : \"\";",
+		"\ttry {",
+		"\t\tconst result = await db.prepare(\"SELECT event_id, path, op, payload_json, author_provider, author_identity, author_display_name, created_at FROM aside_comment_events WHERE (? = '' OR created_at > ? OR (created_at = ? AND event_id > ?)) ORDER BY created_at ASC, event_id ASC\").bind(",
+		"\t\t\tafterCreatedAt,",
+		"\t\t\tafterCreatedAt,",
+		"\t\t\tafterCreatedAt,",
+		"\t\t\tafterEventId,",
+		"\t\t).all();",
+		"\t\tconst rows = Array.isArray(result?.results) ? result.results : [];",
+		"\t\treturn {",
+		"\t\t\tok: true,",
+		"\t\t\tevents: rows.map(commentRowToPublishedEvent).filter(Boolean),",
 		"\t\t};",
 		"\t} catch {",
 		"\t\treturn { ok: false, error: \"Aside comments D1 query failed.\" };",
@@ -949,6 +1085,77 @@ function renderPrivatePublishRuntimeModule(): string {
 		"async function getPublishedCommentThreadsForPath(db, path) {",
 		"\tconst result = await db.prepare(\"SELECT event_id, path, op, payload_json, author_provider, author_identity, author_display_name, created_at FROM aside_comment_events WHERE path = ? ORDER BY created_at ASC, event_id ASC\").bind(path).all();",
 		"\treturn buildPublishedCommentThreads(Array.isArray(result?.results) ? result.results : []);",
+		"}",
+		"",
+		"function commentRowToPublishedEvent(row) {",
+		"\tif (!row || typeof row !== \"object\") {",
+		"\t\treturn null;",
+		"\t}",
+		"\tif (typeof row.event_id !== \"string\" || typeof row.path !== \"string\" || typeof row.op !== \"string\" || typeof row.created_at !== \"string\") {",
+		"\t\treturn null;",
+		"\t}",
+		"\tconst payload = parseJsonObject(row.payload_json);",
+		"\tif (!payload) {",
+		"\t\treturn null;",
+		"\t}",
+		"\tconst provider = typeof row.author_provider === \"string\" ? row.author_provider : \"\";",
+		"\tconst identity = typeof row.author_identity === \"string\" ? row.author_identity : \"\";",
+		"\tif (!provider || !identity) {",
+		"\t\treturn null;",
+		"\t}",
+		"\treturn {",
+		"\t\teventId: row.event_id,",
+		"\t\tpath: row.path,",
+		"\t\top: row.op,",
+		"\t\tpayload,",
+		"\t\tauthor: {",
+		"\t\t\tprovider,",
+		"\t\t\tidentity,",
+		"\t\t\t...(typeof row.author_display_name === \"string\" && row.author_display_name.trim() ? { displayName: row.author_display_name.trim() } : {}),",
+		"\t\t},",
+		"\t\tcreatedAt: row.created_at,",
+		"\t};",
+		"}",
+		"",
+		"function normalizePublishedCommentSeedsForPath(seeds, path) {",
+		"\treturn (Array.isArray(seeds) ? seeds : [])",
+		"\t\t.map((seed) => normalizePublishedCommentSeed(seed, path))",
+		"\t\t.filter(Boolean);",
+		"}",
+		"",
+		"function normalizePublishedCommentSeed(seed, path) {",
+		"\tif (!seed || typeof seed !== \"object\" || seed.path !== path) {",
+		"\t\treturn null;",
+		"\t}",
+		"\tif (typeof seed.id !== \"string\" || typeof seed.body !== \"string\" || typeof seed.createdAt !== \"string\") {",
+		"\t\treturn null;",
+		"\t}",
+		"\tconst author = normalizePublishedCommentSeedAuthor(seed.author);",
+		"\treturn {",
+		"\t\tid: seed.id,",
+		"\t\tpath,",
+		"\t\tbody: seed.body,",
+		"\t\tcreatedAt: seed.createdAt,",
+		"\t\t...(author ? { author } : {}),",
+		"\t\treadOnly: true,",
+		"\t\treplies: [],",
+		"\t};",
+		"}",
+		"",
+		"function normalizePublishedCommentSeedAuthor(author) {",
+		"\tif (!author || typeof author !== \"object\") {",
+		"\t\treturn null;",
+		"\t}",
+		"\tconst provider = typeof author.provider === \"string\" ? author.provider : \"\";",
+		"\tconst identity = typeof author.identity === \"string\" ? author.identity : \"\";",
+		"\tif (!provider || !identity) {",
+		"\t\treturn null;",
+		"\t}",
+		"\treturn {",
+		"\t\tprovider,",
+		"\t\tidentity,",
+		"\t\t...(typeof author.displayName === \"string\" && author.displayName.trim() ? { displayName: author.displayName.trim() } : {}),",
+		"\t};",
 		"}",
 		"",
 		"export function filterPrivatePublishManifestForIdentity(manifest, identity) {",

@@ -135,6 +135,7 @@ test("private publish snapshot support files keep permission data server-side", 
 		"functions/_aside/api/auth/logout.js",
 		"functions/_aside/api/site-manifest.js",
 		"functions/_aside/api/comments/index.js",
+		"functions/_aside/api/comment-events/index.js",
 	]);
 	assert.deepEqual(supportFiles.privateModules.map((file) => file.projectRelativePath), [
 		"src/_aside/private-publish-data.js",
@@ -216,11 +217,63 @@ test("private publish snapshot support files include a three-pane shell without 
 	assert.match(shellApp, /appendReply/u);
 	assert.match(shellApp, /aside-publish-comment-replies/u);
 	assert.match(shellApp, /Reply/u);
+	assert.match(shellApp, /!comment\.readOnly/u);
 	assert.match(shellStyles, /\.aside-publish-shell/u);
 	assert.match(shellStyles, /\.aside-publish-comment-replies/u);
 	assert.match(shellStyles, /grid-template-columns/u);
 	assert.match(shellStyles, /@media \(max-width: 860px\)/u);
 	assert.doesNotMatch(`${shellHtml}\n${shellApp}\n${shellStyles}`, /permissionRules|alice@example\.com/u);
+});
+
+test("private publish snapshot stores comment seeds server-side only", () => {
+	const supportFiles = buildPrivatePublishSnapshotSupportFiles({
+		allowedRoot: "public/",
+		publishBaseUrl: "https://publish.example.com",
+		publishedAt: "2026-07-26T08:00:00.000Z",
+		files: [{
+			vaultRelativePath: "public/docs/page.html",
+			sourcePath: "public/docs/page.md",
+			kind: "markdown",
+			contentHash: "sha256-page",
+		}],
+		authRules: [],
+		commentSeeds: [{
+			publicPath: "docs/page.html",
+			id: "local-page-note",
+			body: "Existing local note",
+			createdAt: "2026-07-26T07:30:00.000Z",
+			author: {
+				provider: "google",
+				identity: "owner@example.com",
+				displayName: "Owner",
+			},
+		}],
+	});
+	const privateData = supportFiles.privateModules.find((file) =>
+		file.projectRelativePath === "src/_aside/private-publish-data.js")?.contents ?? "";
+	const privateDataMatch = /^export const privatePublishManifest = ([\s\S]*);$/u.exec(privateData);
+	assert.ok(privateDataMatch);
+	const manifest = JSON.parse(privateDataMatch[1]) as {
+		commentSeeds?: unknown[];
+	};
+
+	assert.deepEqual(manifest.commentSeeds, [{
+		id: "local-page-note",
+		path: "docs/page.html",
+		body: "Existing local note",
+		createdAt: "2026-07-26T07:30:00.000Z",
+		author: {
+			provider: "google",
+			identity: "owner@example.com",
+			displayName: "Owner",
+		},
+		readOnly: true,
+		replies: [],
+	}]);
+	assert.doesNotMatch(
+		supportFiles.staticAssets.map((file) => file.contents).join("\n"),
+		/Existing local note|owner@example/u,
+	);
 });
 
 test("generated private publish runtime filters manifests by identity without exposing permission rules", () => {
@@ -494,6 +547,93 @@ return { createPublishedCommentEvent, getPublishedComments, getPublishedComments
 	assert.match(commentsRoute, /resolvePrivatePublishPermission/u);
 });
 
+test("generated private publish runtime returns read-only seed comments with D1 comments", async () => {
+	const supportFiles = buildPrivatePublishSnapshotSupportFiles({
+		allowedRoot: "public/",
+		publishBaseUrl: "https://publish.example.com",
+		publishedAt: "2026-07-26T08:00:00.000Z",
+		files: [],
+		authRules: [],
+	});
+	const runtime = supportFiles.privateModules.find((file) =>
+		file.projectRelativePath === "src/_aside/private-publish-runtime.js");
+	assert.ok(runtime);
+	const runtimeModule = new Function(`
+${runtime.contents.replace(/\bexport\s+/gu, "")}
+return { createPublishedCommentEvent, getPublishedComments };
+`)() as {
+		createPublishedCommentEvent: (
+			env: Record<string, unknown>,
+			input: {
+				path: string;
+				body: string;
+				identity: { provider: "google"; identifier: string; name?: string };
+				eventId: string;
+				createdAt: string;
+			},
+		) => Promise<{ ok: true; comment: unknown } | { ok: false; error: string }>;
+		getPublishedComments: (
+			env: Record<string, unknown>,
+			path: string,
+			seeds?: unknown[],
+		) => Promise<{ ok: true; comments: unknown[] } | { ok: false; error: string }>;
+	};
+	const seedComments = [{
+		id: "local-page-note",
+		path: "docs/page.html",
+		body: "Existing local note",
+		createdAt: "2026-07-26T07:30:00.000Z",
+		author: {
+			provider: "google",
+			identity: "owner@example.com",
+			displayName: "Owner",
+		},
+		readOnly: true,
+		replies: [],
+	}];
+
+	assert.deepEqual(await runtimeModule.getPublishedComments({}, "docs/page.html", seedComments), {
+		ok: true,
+		comments: seedComments,
+	});
+
+	const d1 = createFakeCommentsD1();
+	await runtimeModule.createPublishedCommentEvent({
+		ASIDE_COMMENTS_DB: d1,
+	}, {
+		path: "docs/page.html",
+		body: "Remote note",
+		identity: {
+			provider: "google",
+			identifier: "alice@example.com",
+			name: "Alice",
+		},
+		eventId: "event-1",
+		createdAt: "2026-07-26T09:00:00.000Z",
+	});
+
+	assert.deepEqual(await runtimeModule.getPublishedComments({
+		ASIDE_COMMENTS_DB: d1,
+	}, "docs/page.html", seedComments), {
+		ok: true,
+		comments: [
+			...seedComments,
+			{
+				id: "event-1",
+				path: "docs/page.html",
+				body: "Remote note",
+				createdAt: "2026-07-26T09:00:00.000Z",
+				author: {
+					provider: "google",
+					identity: "alice@example.com",
+					displayName: "Alice",
+				},
+				replies: [],
+			},
+		],
+	});
+});
+
 test("generated private publish runtime folds reply, update, and delete events with author ownership", async () => {
 	const supportFiles = buildPrivatePublishSnapshotSupportFiles({
 		allowedRoot: "public/",
@@ -748,6 +888,172 @@ return { createPublishedCommentEvent, getPublishedComments };
 		}],
 	});
 	assert.equal(d1.rows.length, 1);
+});
+
+test("generated private publish runtime exports D1 comment event rows for local import", async () => {
+	const supportFiles = buildPrivatePublishSnapshotSupportFiles({
+		allowedRoot: "public/",
+		publishBaseUrl: "https://publish.example.com",
+		publishedAt: "2026-07-26T08:00:00.000Z",
+		files: [],
+		authRules: [],
+	});
+	const runtime = supportFiles.privateModules.find((file) =>
+		file.projectRelativePath === "src/_aside/private-publish-runtime.js");
+	assert.ok(runtime);
+	const runtimeModule = new Function(`
+${runtime.contents.replace(/\bexport\s+/gu, "")}
+return { getPublishedCommentEvents };
+`)() as {
+		getPublishedCommentEvents: (
+			env: Record<string, unknown>,
+			cursor?: { afterCreatedAt?: string; afterEventId?: string },
+		) => Promise<{ ok: true; events: unknown[] } | { ok: false; error: string }>;
+	};
+	const d1 = createFakeCommentsD1();
+	d1.rows.push({
+		event_id: "event-1",
+		path: "docs/page.html",
+		op: "createThread",
+		payload_json: JSON.stringify({ body: "Root note" }),
+		author_provider: "google",
+		author_identity: "alice@example.com",
+		author_display_name: "Alice",
+		created_at: "2026-07-26T09:00:00.000Z",
+	}, {
+		event_id: "event-2",
+		path: "docs/page.html",
+		op: "appendReply",
+		payload_json: JSON.stringify({ parentId: "event-1", body: "Reply" }),
+		author_provider: "google",
+		author_identity: "bob@example.com",
+		author_display_name: null,
+		created_at: "2026-07-26T09:05:00.000Z",
+	});
+
+	assert.deepEqual(await runtimeModule.getPublishedCommentEvents({ ASIDE_COMMENTS_DB: d1 }), {
+		ok: true,
+		events: [{
+			eventId: "event-1",
+			path: "docs/page.html",
+			op: "createThread",
+			payload: {
+				body: "Root note",
+			},
+			author: {
+				provider: "google",
+				identity: "alice@example.com",
+				displayName: "Alice",
+			},
+			createdAt: "2026-07-26T09:00:00.000Z",
+		}, {
+			eventId: "event-2",
+			path: "docs/page.html",
+			op: "appendReply",
+			payload: {
+				parentId: "event-1",
+				body: "Reply",
+			},
+			author: {
+				provider: "google",
+				identity: "bob@example.com",
+			},
+			createdAt: "2026-07-26T09:05:00.000Z",
+		}],
+	});
+	assert.deepEqual(await runtimeModule.getPublishedCommentEvents({ ASIDE_COMMENTS_DB: d1 }, {
+		afterCreatedAt: "2026-07-26T09:00:00.000Z",
+		afterEventId: "event-1",
+	}), {
+		ok: true,
+		events: [{
+			eventId: "event-2",
+			path: "docs/page.html",
+			op: "appendReply",
+			payload: {
+				parentId: "event-1",
+				body: "Reply",
+			},
+			author: {
+				provider: "google",
+				identity: "bob@example.com",
+			},
+			createdAt: "2026-07-26T09:05:00.000Z",
+		}],
+	});
+});
+
+test("generated comment event export route requires manage permission", async () => {
+	const supportFiles = buildPrivatePublishSnapshotSupportFiles({
+		allowedRoot: "public/",
+		publishBaseUrl: "https://publish.example.com",
+		publishedAt: "2026-07-26T08:00:00.000Z",
+		files: [],
+		authRules: [],
+	});
+	const eventRoute = supportFiles.functions.find((file) =>
+		file.projectRelativePath === "functions/_aside/api/comment-events/index.js")?.contents ?? "";
+	let sessionIdentity: { provider: "google"; identifier: string } | null = null;
+	let canManage = false;
+	const calls: unknown[] = [];
+	const routeModule = new Function(
+		"privatePublishManifest",
+		"getAsideSessionIdentity",
+		"getPublishedCommentEvents",
+		"resolvePrivatePublishPermission",
+		`
+${eventRoute.replace(/^import .*;\n/gmu, "")}
+return { onRequestGet };
+`.replace(/\bexport\s+/gu, ""),
+	)({
+		permissionRules: [],
+	}, async () => sessionIdentity, async (_env: unknown, cursor: unknown) => {
+		calls.push(cursor);
+		return {
+			ok: true,
+			events: [{
+				eventId: "event-2",
+				path: "docs/page.html",
+			}],
+		};
+	}, (_rules: unknown, identity: unknown, path: string) => ({
+		canView: Boolean(identity),
+		canComment: Boolean(identity),
+		canManage: path === "/" && canManage,
+	})) as {
+		onRequestGet: (context: { request: Request; env: Record<string, unknown> }) => Promise<Response>;
+	};
+
+	assert.equal((await routeModule.onRequestGet({
+		request: new Request("https://publish.example.com/_aside/api/comment-events"),
+		env: {},
+	})).status, 401);
+
+	sessionIdentity = {
+		provider: "google",
+		identifier: "owner@example.com",
+	};
+	assert.equal((await routeModule.onRequestGet({
+		request: new Request("https://publish.example.com/_aside/api/comment-events"),
+		env: {},
+	})).status, 403);
+
+	canManage = true;
+	const response = await routeModule.onRequestGet({
+		request: new Request("https://publish.example.com/_aside/api/comment-events?afterCreatedAt=2026-07-26T09%3A00%3A00.000Z&afterEventId=event-1"),
+		env: {},
+	});
+	assert.equal(response.status, 200);
+	assert.deepEqual(await response.json(), {
+		events: [{
+			eventId: "event-2",
+			path: "docs/page.html",
+		}],
+	});
+	assert.deepEqual(calls, [{
+		afterCreatedAt: "2026-07-26T09:00:00.000Z",
+		afterEventId: "event-1",
+	}]);
 });
 
 test("generated comments route enforces view and comment permissions", async () => {
@@ -1103,13 +1409,20 @@ function createFakeCommentsD1() {
 					return {
 						async all() {
 							capturedSql.push({ sql, params });
+							const sortedRows = rows
+								.slice()
+								.sort((left, right) =>
+									String(left.created_at).localeCompare(String(right.created_at))
+									|| String(left.event_id).localeCompare(String(right.event_id)));
+							const results = /WHERE path = \?/u.test(sql)
+								? sortedRows.filter((row) => row.path === params[0])
+								: sortedRows.filter((row) =>
+									!params[0]
+									|| String(row.created_at) > String(params[1])
+									|| (String(row.created_at) === String(params[2]) && String(row.event_id) > String(params[3])));
 							return {
 								success: true,
-								results: rows
-									.filter((row) => row.path === params[0])
-									.sort((left, right) =>
-										String(left.created_at).localeCompare(String(right.created_at))
-										|| String(left.event_id).localeCompare(String(right.event_id))),
+								results,
 							};
 						},
 						async first() {

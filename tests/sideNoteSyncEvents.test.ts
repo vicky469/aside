@@ -631,6 +631,71 @@ test("side-note sync event store appends local events and marks them processed f
     assert.deepEqual(store.getUnprocessedEvents(), []);
 });
 
+test("side-note sync event store imports external events without marking them processed locally", async () => {
+    let persistedData: PersistedPluginData = {};
+    const store = new SideNoteSyncEventStore({
+        readPersistedPluginData: () => persistedData,
+        writePersistedPluginData: async (data) => {
+            persistedData = data;
+        },
+        getDeviceId: () => "device-a",
+        createEventId: () => "local-event",
+        hashText: async (text) => `hash-${text.replace(/\//g, "_")}`,
+        now: () => 1710000000100,
+    });
+    const externalEvents: SideNoteSyncEvent[] = [
+        createEvent({
+            eventId: "published-event-1",
+            deviceId: "published:site-1",
+            logicalClock: 1,
+        }),
+        createEvent({
+            eventId: "published-event-1",
+            deviceId: "published:site-1",
+            logicalClock: 1,
+        }),
+        createEvent({
+            eventId: "published-event-2",
+            deviceId: "published:site-1",
+            logicalClock: 2,
+            op: "appendEntry",
+            payload: {
+                threadId: "thread-1",
+                entry: {
+                    id: "entry-2",
+                    body: "published reply",
+                    timestamp: 1710000000200,
+                },
+            },
+        }),
+    ];
+
+    const importedCount = await store.appendExternalEvents(externalEvents);
+    const state = store.readState();
+
+    assert.equal(importedCount, 2);
+    assert.equal(state.deviceLogs["published:site-1"]?.lastClock, 2);
+    assert.deepEqual(
+        state.deviceLogs["published:site-1"]?.events.map((event) => event.eventId),
+        ["published-event-1", "published-event-2"],
+    );
+    assert.equal(state.processedWatermarks["device-a"]?.["published:site-1"], undefined);
+    assert.equal(state.processedWatermarks["published:site-1"]?.["published:site-1"], 2);
+    assert.deepEqual(
+        store.getUnprocessedEvents().map((event) => event.eventId),
+        ["published-event-1", "published-event-2"],
+    );
+
+    await store.markEventsProcessed(store.getUnprocessedEvents());
+    await store.compactProcessedEventsForSnapshots([{
+        notePath: "docs/note.md",
+        threads: [createThread("docs/note.md")],
+    }]);
+
+    assert.equal(await store.appendExternalEvents(externalEvents), 0);
+    assert.deepEqual(store.getUnprocessedEvents(), []);
+});
+
 test("side-note sync event store merges latest plugin data before writing stale local state", async () => {
     let diskData: PersistedPluginData = {};
     let deviceAData: PersistedPluginData = {};

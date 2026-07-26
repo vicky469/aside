@@ -29,6 +29,16 @@ function createHarness(options: {
 	publishedArtifactPaths?: string[];
 	deployResult?: { ok: true } | { ok: false; notice: string };
 	purgeResult?: { ok: true } | { ok: false; notice: string };
+	commentSeeds?: Record<string, Array<{
+		id: string;
+		body: string;
+		createdAt: string;
+		author?: {
+			provider: string;
+			identity: string;
+			displayName?: string;
+		};
+	}>>;
 } = {}) {
 	const files = new Map(Object.entries(options.files ?? {
 		"public/page.md": "---\nasidePublish:\n  markdownEnabled: false\n  htmlEnabled: false\n---\n# Page\n",
@@ -40,6 +50,7 @@ function createHarness(options: {
 	const deployCalls: PublicHtmlPublishSnapshotFile[][] = [];
 	const deploySupportCalls: Array<PublicHtmlDeploySnapshotSupport | undefined> = [];
 	const purgeCalls: Array<{ url: string; sourcePath: string; event: "unpublish" | "republish" }> = [];
+	const seedCalls: string[] = [];
 	const host = {
 		getSettings: () => options.settings ?? settings,
 		getFeatureFlags: () => options.featureFlags ?? { [FeatureFlag.publish]: true },
@@ -92,6 +103,10 @@ function createHarness(options: {
 			purgeCalls.push(input);
 			return options.purgeResult ?? { ok: true };
 		},
+		getPrivatePublishPageCommentSeeds: async (sourcePath: string) => {
+			seedCalls.push(sourcePath);
+			return options.commentSeeds?.[sourcePath] ?? [];
+		},
 	};
 	const controller = new PublicHtmlPublishController(host);
 
@@ -103,6 +118,7 @@ function createHarness(options: {
 		deployCalls,
 		deploySupportCalls,
 		purgeCalls,
+		seedCalls,
 	};
 }
 
@@ -527,6 +543,7 @@ test("public html publish controller generates private Pages support files from 
 		"functions/_aside/api/auth/logout.js",
 		"functions/_aside/api/site-manifest.js",
 		"functions/_aside/api/comments/index.js",
+		"functions/_aside/api/comment-events/index.js",
 		"src/_aside/private-publish-data.js",
 		"src/_aside/private-publish-runtime.js",
 	]);
@@ -539,6 +556,40 @@ test("public html publish controller generates private Pages support files from 
 	assert.match(privateData, /"publicPath": "page\.html"/u);
 	assert.match(privateData, /"sourcePath": "page\.md"/u);
 	assert.match(privateData, /"contentHash": "sha256-/u);
+});
+
+test("public html publish controller seeds local page-note comments into private support data", async () => {
+	const harness = createHarness({
+		files: {
+			"public/page.md": "---\nasidePublish:\n  markdownEnabled: false\n  htmlEnabled: false\n---\n# Page\n",
+		},
+		commentSeeds: {
+			"public/page.md": [{
+				id: "local-page-note",
+				body: "Existing local note",
+				createdAt: "2026-07-26T07:30:00.000Z",
+				author: {
+					provider: "google",
+					identity: "owner@example.com",
+					displayName: "Owner",
+				},
+			}],
+		},
+	});
+
+	await harness.controller.publishFile("public/page.md");
+
+	const privateData = harness.deploySupportCalls.at(-1)?.projectFiles.find((file) =>
+		file.projectRelativePath === "src/_aside/private-publish-data.js")?.contents ?? "";
+	assert.deepEqual(harness.seedCalls, ["public/page.md"]);
+	assert.match(privateData, /"commentSeeds": \[/u);
+	assert.match(privateData, /"path": "page\.html"/u);
+	assert.match(privateData, /"body": "Existing local note"/u);
+	assert.match(privateData, /"readOnly": true/u);
+	assert.doesNotMatch(
+		harness.deploySupportCalls.at(-1)?.staticAssets.map((file) => file.contents).join("\n") ?? "",
+		/Existing local note|owner@example/u,
+	);
 });
 
 test("public html publish controller publishes a PDF artifact and remembers it for future snapshots", async () => {

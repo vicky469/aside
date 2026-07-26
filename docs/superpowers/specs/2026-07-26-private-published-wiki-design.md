@@ -49,9 +49,9 @@ Use this section as the working checklist. Mark an item done only after the code
 - [x] Add published-site APIs for reading comments and creating page-note comment threads.
 - [x] Add published-site APIs for appending replies, and later editing/deleting own comments.
 - [x] Extend local comment entry metadata with optional author identity and preserve it through cloning, normalization, projection, sync events, sidecar storage, and sidebar rendering.
-- [ ] Add local remote-comment sync that pulls Cloudflare D1 events and imports them through Aside's existing sync-event reducer into sidecar storage.
-- [ ] Seed published pages with existing local Aside page-note comments as read-only initial state.
-- [ ] Document required Cloudflare setup: Pages project, D1 binding, Google OAuth credentials, session signing secret, and Wrangler deployment path.
+- [x] Add local remote-comment sync that pulls Cloudflare D1 events and imports them through Aside's existing sync-event reducer into sidecar storage.
+- [x] Seed published pages with existing local Aside page-note comments as read-only initial state.
+- [x] Document required Cloudflare setup: Pages project, D1 binding, Google OAuth credentials, session signing secret, and Wrangler deployment path.
 
 ### Verification
 
@@ -72,9 +72,9 @@ Use this section as the working checklist. Mark an item done only after the code
 - [x] Snapshot tests cover generated three-pane shell assets and generated Pages Functions files without exposing raw permission data to client assets.
 - [x] Generated D1 comment tests cover binding detection, prepared-statement event writes, comment reads, and route-level view/comment permission enforcement.
 - [x] Generated Functions tests cover authenticated/unauthenticated static content access, `view` versus `comment` route enforcement, and path-specific permission inheritance.
-- [ ] Snapshot tests cover comments seed data and any future static client seed assets.
+- [x] Snapshot tests cover comments seed data and any future static client seed assets.
 - [x] D1 API tests cover reply writes, own-comment edit/delete policy, idempotent event writes, and malformed payload rejection.
-- [ ] Sync import tests prove remote comment events become local Aside sidecar comments without modifying source Markdown.
+- [x] Sync import tests prove remote comment events become local Aside sidecar comments without modifying source Markdown.
 - [x] Author metadata tests prove Google identities render distinctly in the local Aside sidebar while current-user comments still hide the default "You" badge.
 - [x] `npm run build` passes.
 - [x] Release artifact inspection confirms no OAuth secret, session signing secret, D1 credentials, generated permission manifests, source maps, raw TypeScript, or local `.superpowers/` artifacts ship in `main.js`, `manifest.json`, or `styles.css`.

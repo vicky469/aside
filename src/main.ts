@@ -63,6 +63,7 @@ import {
     type PublicHtmlPublishSnapshotFile,
     type PublicHtmlDeploySnapshotResult,
 	type PublicHtmlCachePurgeInput,
+	type PrivatePublishPageCommentSeed,
 } from "./publish/publicHtmlPublishController";
 import {
 	deployPublicHtmlSnapshotToWranglerPages,
@@ -567,6 +568,7 @@ export default class Aside extends Plugin {
         getPublishedArtifactPaths: () => this.settings.publishedPublicArtifactPaths,
         setPublishedArtifactPaths: (paths) => this.setPublishedPublicArtifactPaths(paths),
         getCurrentTimestamp: () => new Date().toISOString(),
+        getPrivatePublishPageCommentSeeds: (sourcePath) => this.getPrivatePublishPageCommentSeeds(sourcePath),
         deploySnapshot: (files, supportFiles) => this.publishSnapshotArtifacts(files, supportFiles),
         purgePublicUrlFromCache: (url) => this.purgePublishedPublicUrlCache(url),
     });
@@ -1957,6 +1959,31 @@ export default class Aside extends Plugin {
 
     private clearParsedNoteCache(filePath: string) {
         this.parsedNoteCache.clear(filePath);
+    }
+
+    private async getPrivatePublishPageCommentSeeds(sourcePath: string): Promise<PrivatePublishPageCommentSeed[]> {
+        const file = this.getVaultFileByPath(sourcePath);
+        if (!file || !this.isPageNoteCapableFile(file)) {
+            return [];
+        }
+
+        const comments = await this.commentPersistenceController.loadCommentsForFile(file);
+        return comments
+            .filter((comment) => comment.anchorKind === "page" && comment.deletedAt === undefined)
+            .map((comment) => ({
+                id: comment.id,
+                body: comment.comment,
+                createdAt: Number.isFinite(comment.timestamp)
+                    ? new Date(comment.timestamp).toISOString()
+                    : new Date().toISOString(),
+                ...(comment.author ? {
+                    author: {
+                        provider: comment.author.provider,
+                        identity: comment.author.identity,
+                        ...(comment.author.displayName ? { displayName: comment.author.displayName } : {}),
+                    },
+                } : {}),
+            }));
     }
 
     async loadCommentsForFile(file: TFile | null): Promise<Comment[]> {

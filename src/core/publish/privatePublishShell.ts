@@ -195,7 +195,7 @@ export function renderPrivatePublishShellScript(): string {
 		"\tif (replies.length > 0) {",
 		"\t\tchildren.push(createElement(\"div\", { className: \"aside-publish-comment-replies\" }, replies));",
 		"\t}",
-		"\tif (canComment) {",
+		"\tif (canComment && !comment.readOnly) {",
 		"\t\tconst replyForm = createElement(\"form\", { className: \"aside-publish-comment-form aside-publish-reply-form\" }, [",
 		"\t\t\tcreateElement(\"textarea\", { text: \"\" }),",
 		"\t\t\tcreateElement(\"button\", { type: \"submit\", text: \"Reply\" }),",

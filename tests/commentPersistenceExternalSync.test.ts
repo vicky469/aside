@@ -8,6 +8,7 @@ import type { PersistedPluginData } from "../src/settings/indexNoteSettingsPlann
 import { SideNoteSyncEventStore, type SideNoteSyncEventState } from "../src/sync/sideNoteSyncEventStore";
 import { parseNoteComments } from "../src/core/storage/noteCommentStorage";
 import { AggregateCommentIndex } from "../src/index/AggregateCommentIndex";
+import { buildPublishedCommentSyncEvents } from "../src/core/publish/publishedCommentSync";
 
 class FakeAdapter implements Pick<DataAdapter, "exists" | "mkdir" | "write" | "read" | "remove" | "rename" | "list"> {
     public readonly directories = new Set<string>();
@@ -589,6 +590,147 @@ test("comment persistence controller replays synced plugin-data events into the 
             (persistedData.sideNoteSyncEventState as {
                 processedWatermarks?: Record<string, Record<string, number>>;
             }).processedWatermarks?.["device-a"]?.["device-b"],
+            2,
+        );
+    } finally {
+        globalThis.window = originalWindow;
+    }
+});
+
+test("published comment sync imports remote D1 events into local sidecars without rewriting Markdown", async () => {
+    const originalWindow = globalThis.window;
+    globalThis.window = {
+        setTimeout: () => 1,
+        clearTimeout: () => {},
+    } as unknown as typeof globalThis.window;
+
+    const file = createFile("public/docs/page.md");
+    const noteBody = "# Page\n\nPublished source stays clean.\n";
+    const adapter = new FakeAdapter();
+    const commentManager = new CommentManager([]);
+    const aggregateCommentIndex = new AggregateCommentIndex();
+    let persistedData: PersistedPluginData = {};
+    let processCount = 0;
+
+    const eventStore = new SideNoteSyncEventStore({
+        readPersistedPluginData: () => persistedData,
+        writePersistedPluginData: async (data) => {
+            persistedData = data;
+        },
+        getDeviceId: () => "device-a",
+        createEventId: () => "local-event",
+        hashText: async (text) => `hash-${text.replace(/\//g, "_")}`,
+        now: () => 1710000000100,
+    });
+    const events = await buildPublishedCommentSyncEvents({
+        siteId: "site-1",
+        allowedRoot: "public/",
+        files: [{
+            publicPath: "docs/page.html",
+            sourcePath: "docs/page.md",
+        }],
+        rows: [{
+            eventId: "remote-create",
+            path: "docs/page.html",
+            op: "createThread",
+            payload: {
+                body: "Remote root",
+            },
+            author: {
+                provider: "google",
+                identity: "alice@example.com",
+                displayName: "Alice",
+            },
+            createdAt: "2026-07-26T09:00:00.000Z",
+        }, {
+            eventId: "remote-reply",
+            path: "docs/page.html",
+            op: "appendReply",
+            payload: {
+                parentId: "remote-create",
+                body: "Remote reply",
+            },
+            author: {
+                provider: "google",
+                identity: "bob@example.com",
+                displayName: "Bob",
+            },
+            createdAt: "2026-07-26T09:05:00.000Z",
+        }],
+        hashText: async (text) => `hash-${text.replace(/\//g, "_")}`,
+    });
+
+    assert.equal(await eventStore.appendExternalEvents(events), 2);
+
+    const controller = new CommentPersistenceController({
+        app: {
+            vault: {
+                adapter: adapter as unknown as DataAdapter,
+                process: async () => {
+                    processCount += 1;
+                    throw new Error("Remote published comment import must not rewrite Markdown.");
+                },
+            },
+        } as never,
+        getAllCommentsNotePath: () => "Aside index.md",
+        getIndexHeaderImageUrl: () => "",
+        getIndexHeaderImageCaption: () => "",
+        getMarkdownViewForFile: () => ({}) as MarkdownView,
+        getMarkdownFileByPath: (path) => path === file.path ? file : null,
+        getCurrentNoteContent: async () => noteBody,
+        getStoredNoteContent: async () => noteBody,
+        getParsedNoteComments: (filePath, noteContent) => parseNoteComments(noteContent, filePath),
+        getPluginDataDirPath: () => ".obsidian/plugins/aside",
+        getSideNoteSyncDeviceId: () => "device-a",
+        readPersistedPluginData: () => persistedData,
+        writePersistedPluginData: async (data) => {
+            persistedData = data;
+        },
+        isAllCommentsNotePath: () => false,
+        isCommentableFile: (candidate): candidate is TFile => !!candidate && candidate.extension === "md",
+        isMarkdownEditorFocused: () => false,
+        getCommentManager: () => commentManager,
+        getAggregateCommentIndex: () => aggregateCommentIndex,
+        createCommentId: () => "generated-id",
+        hashText: async (text) => `hash-${text.replace(/\//g, "_")}`,
+        syncDerivedCommentLinksForFile: () => {},
+        refreshCommentViews: async () => {},
+        refreshAllCommentsSidebarViews: async () => {},
+        refreshEditorDecorations: () => {},
+        refreshMarkdownPreviews: () => {},
+        getCommentMentionedPageLabels: () => [],
+        syncIndexNoteLeafMode: async () => {},
+        log: async () => {},
+    });
+
+    try {
+        const appliedEventCount = await controller.replaySyncedSideNoteEvents();
+        const thread = commentManager.getThreadById("published:site-1:remote-create");
+        const sidecar = JSON.parse(adapter.files.get(getSidecarStoragePath(file.path)) ?? "{}") as {
+            threads?: CommentThread[];
+        };
+
+        assert.equal(appliedEventCount, 2);
+        assert.equal(processCount, 0);
+        assert.equal(thread?.filePath, file.path);
+        assert.equal(thread?.anchorKind, "page");
+        assert.equal(thread?.entries[0]?.body, "Remote root");
+        assert.deepEqual(thread?.entries[0]?.author, {
+            provider: "google",
+            identity: "alice@example.com",
+            displayName: "Alice",
+        });
+        assert.equal(thread?.entries[1]?.id, "published:site-1:remote-reply");
+        assert.equal(thread?.entries[1]?.body, "Remote reply");
+        assert.deepEqual(thread?.entries[1]?.author, {
+            provider: "google",
+            identity: "bob@example.com",
+            displayName: "Bob",
+        });
+        assert.equal(aggregateCommentIndex.getCommentById("published:site-1:remote-reply")?.comment, "Remote reply");
+        assert.equal(sidecar.threads?.[0]?.entries.length, 2);
+        assert.equal(
+            (persistedData.sideNoteSyncEventState as SideNoteSyncEventState).processedWatermarks["device-a"]?.["published:site-1"],
             2,
         );
     } finally {

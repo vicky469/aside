@@ -41,6 +41,7 @@ import {
 } from "../core/publish/privatePublishAuth";
 import {
 	buildPrivatePublishSnapshotSupportFiles,
+	type PrivatePublishSnapshotCommentSeedInput,
 	type PrivatePublishSnapshotContentFile,
 	type PrivatePublishSnapshotFileKind,
 	type PrivatePublishSnapshotProjectFile,
@@ -82,6 +83,8 @@ export interface PublicHtmlCachePurgeInput {
 	event: "unpublish" | "republish";
 }
 
+export type PrivatePublishPageCommentSeed = Omit<PrivatePublishSnapshotCommentSeedInput, "publicPath">;
+
 export type PublicHtmlPublishActionKind = "publish" | "unpublish" | "update-publish" | "open-published";
 
 export type PublicHtmlPublishActionState =
@@ -118,6 +121,7 @@ export interface PublicHtmlPublishHost {
 	getPublishedArtifactPaths(): string[];
 	setPublishedArtifactPaths(paths: string[]): Promise<void>;
 	getCurrentTimestamp(): string;
+	getPrivatePublishPageCommentSeeds?(sourcePath: string): Promise<PrivatePublishPageCommentSeed[]>;
 	deploySnapshot(
 		files: PublicHtmlPublishSnapshotFile[],
 		supportFiles?: PublicHtmlDeploySnapshotSupport,
@@ -1450,6 +1454,7 @@ export class PublicHtmlPublishController {
 		const markdownFiles = (await this.host.listMarkdownFiles(settings.publishAllowedRoot)).sort();
 		const snapshotFiles: PublicHtmlPublishSnapshotFile[] = [];
 		const snapshotContentFiles: PrivatePublishSnapshotContentFile[] = [];
+		const snapshotCommentSeeds: PrivatePublishSnapshotCommentSeedInput[] = [];
 		const ownedHtmlArtifactPaths = new Set<string>();
 		const addSnapshotFile = async (input: {
 			vaultRelativePath: string;
@@ -1467,6 +1472,16 @@ export class PublicHtmlPublishController {
 				kind: input.kind,
 				contentHash: await buildSnapshotContentHash(input.contents),
 			});
+			const commentSeeds = await this.host.getPrivatePublishPageCommentSeeds?.(input.sourcePath) ?? [];
+			const normalizedRoot = normalizePublishAllowedRoot(settings.publishAllowedRoot);
+			const normalizedArtifactPath = normalizePublicFilePath(input.vaultRelativePath);
+			const publicPath = normalizedArtifactPath?.startsWith(normalizedRoot)
+				? normalizedArtifactPath.slice(normalizedRoot.length)
+				: input.vaultRelativePath;
+			snapshotCommentSeeds.push(...commentSeeds.map((seed) => ({
+				...seed,
+				publicPath,
+			})));
 		};
 		for (const sourcePath of markdownFiles) {
 			if (this.isPrivatePublishRootControlFile(settings, sourcePath)) {
@@ -1589,7 +1604,7 @@ export class PublicHtmlPublishController {
 
 		return this.host.deploySnapshot(
 			snapshotFiles,
-			await this.buildDeploySnapshotSupport(settings, snapshotContentFiles),
+			await this.buildDeploySnapshotSupport(settings, snapshotContentFiles, snapshotCommentSeeds),
 		);
 	}
 
@@ -1603,6 +1618,7 @@ export class PublicHtmlPublishController {
 	private async buildDeploySnapshotSupport(
 		settings: PublishSettings,
 		files: readonly PrivatePublishSnapshotContentFile[],
+		commentSeeds: readonly PrivatePublishSnapshotCommentSeedInput[] = [],
 	): Promise<PublicHtmlDeploySnapshotSupport | undefined> {
 		if (files.length === 0) {
 			return undefined;
@@ -1618,6 +1634,7 @@ export class PublicHtmlPublishController {
 			publishedAt: this.host.getCurrentTimestamp(),
 			files,
 			authRules,
+			commentSeeds,
 		});
 		return {
 			staticAssets: supportFiles.staticAssets,
