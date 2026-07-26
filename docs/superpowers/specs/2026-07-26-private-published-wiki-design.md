@@ -20,6 +20,7 @@ Use this section as the working checklist. Mark an item done only after the code
 - [x] Private publish snapshot support generation can classify Cloudflare Pages `_routes.json`, Pages Functions stubs, and a non-route private permission manifest module so generated permission data is not treated as a static asset.
 - [x] Wrangler Pages staging layout planning can keep static assets under an asset directory and Functions/private modules at the temporary Pages project root.
 - [x] Server-side private publish manifest core includes a folder-first tree, file route metadata, permission rules, supported/unsupported providers, and single-entry version metadata for each file.
+- [x] Wrangler Pages snapshot deployment has a tested adapter that stages Pages Functions/private modules beside the static asset directory only when generated project files are present, while preserving the static-only deploy layout.
 
 ### To Implement
 
@@ -56,6 +57,7 @@ Use this section as the working checklist. Mark an item done only after the code
 - [x] Snapshot support tests prove generated private data is classified as a non-route private module, not a static asset or Pages route file.
 - [x] Staging-layout tests prove generated Functions and private modules are planned beside the static asset directory for Wrangler direct upload.
 - [x] Manifest tests cover folder tree, file routes, permission rules, provider support, and minimal version history.
+- [x] Deployment adapter tests prove generated Functions/private modules are written beside the static asset directory before Wrangler is invoked, and static-only deploys keep the previous staging layout.
 - [ ] Integration tests prove `publishSnapshotArtifacts` writes generated Functions and private modules beside the static asset directory before invoking Wrangler.
 - [ ] Snapshot tests cover generated `site-manifest.json`, three-pane shell assets, comments seed data, and generated Pages Functions files.
 - [ ] Generated Functions tests cover authenticated/unauthenticated view access, `view` versus `comment` enforcement, and path-specific permission inheritance.

@@ -64,9 +64,9 @@ import {
 	type PublicHtmlCachePurgeInput,
 } from "./publish/publicHtmlPublishController";
 import {
-    runWranglerPagesDeploy,
-    type WranglerRuntimeModules,
-} from "./publish/wranglerPagesPublisher";
+	deployPublicHtmlSnapshotToWranglerPages,
+	type PublicHtmlSnapshotDeployRuntimeModules,
+} from "./publish/wranglerPagesSnapshotDeploy";
 import {
 	purgeRemoteCache,
 	readRemoteCachePurgeAuthSecret,
@@ -142,21 +142,7 @@ import {
 } from "./logs/logService";
 import bundledAsideSkillContent from "../skills/aside/SKILL.md";
 
-interface PublishRuntimeModules extends WranglerRuntimeModules {
-    fsPromises: {
-        mkdtemp(prefix: string): Promise<string>;
-        mkdir(path: string, options: { recursive?: boolean }): Promise<void>;
-        writeFile(path: string, contents: string | Uint8Array, encoding?: "utf8"): Promise<void>;
-        rm(path: string, options: { recursive?: boolean; force?: boolean }): Promise<void>;
-    };
-    os: {
-        tmpdir(): string;
-    };
-    path: {
-        dirname(path: string): string;
-        join(...paths: string[]): string;
-    };
-}
+type PublishRuntimeModules = PublicHtmlSnapshotDeployRuntimeModules;
 
 const SIDE_NOTE_SYNC_EVENT_MIGRATION_VERSION = 2;
 const SOURCE_IDENTITY_MIGRATION_VERSION = 1;
@@ -1697,87 +1683,28 @@ export default class Aside extends Plugin {
             };
         }
 
-        const stagedFiles: PublicHtmlPublishSnapshotFile[] = [];
-        for (const file of files) {
-            const normalizedPath = normalizeVaultRelativePublishPath(file.vaultRelativePath);
-            if (!normalizedPath.ok) {
-                return {
-                    ok: false,
-                    notice: "Selected publish path must stay inside the current vault.",
-                };
-            }
-            stagedFiles.push({
-                vaultRelativePath: normalizedPath.path,
-                contents: file.contents,
+        const deployResult = await deployPublicHtmlSnapshotToWranglerPages(modules, {
+            files,
+            projectName: this.settings.publishPagesProjectName,
+            publishBaseUrl: this.settings.publishBaseUrl,
+            vaultRootPath,
+            env: getProcessEnv(),
+            onResolvedProjectName: (projectName) => this.storeResolvedPublishPagesProjectName(projectName),
+            onCleanupWarning: (error) => this.warn(
+                "Failed to remove Aside public publish staging directory.",
+                error,
+                "publish",
+                "publish.public-html.cleanup.warn",
+            ),
+        });
+        if (!deployResult.ok) {
+            void this.logEvent("warn", "publish", "publish.public-html.wrangler.failed", {
+                fileCount: files.length,
+                vaultRelativePaths: files.map((file) => file.vaultRelativePath),
+                notice: deployResult.notice,
             });
         }
-
-        let stagingDirPath: string | null = null;
-        try {
-            stagingDirPath = await modules.fsPromises.mkdtemp(
-                modules.path.join(modules.os.tmpdir(), "aside-public-publish-"),
-            );
-            for (const file of stagedFiles) {
-                const stagedFilePath = modules.path.join(
-                    stagingDirPath,
-                    ...file.vaultRelativePath.split("/").filter(Boolean),
-                );
-                await modules.fsPromises.mkdir(modules.path.dirname(stagedFilePath), { recursive: true });
-                if (typeof file.contents === "string") {
-                    await modules.fsPromises.writeFile(stagedFilePath, file.contents, "utf8");
-                } else {
-                    await modules.fsPromises.writeFile(stagedFilePath, new Uint8Array(file.contents));
-                }
-            }
-
-            const deployResult = await runWranglerPagesDeploy(modules, {
-                stagingDirPath,
-                projectName: this.settings.publishPagesProjectName,
-                publishBaseUrl: this.settings.publishBaseUrl,
-                cwd: vaultRootPath,
-                env: getProcessEnv(),
-            });
-            await this.storeResolvedPublishPagesProjectName(deployResult.projectName);
-            if (!deployResult.ok) {
-                void this.logEvent("warn", "publish", "publish.public-html.wrangler.failed", {
-                    fileCount: stagedFiles.length,
-                    vaultRelativePaths: stagedFiles.map((file) => file.vaultRelativePath),
-                    notice: deployResult.notice,
-                });
-                return {
-                    ok: false,
-                    notice: deployResult.notice,
-                };
-            }
-
-            return { ok: true };
-        } catch (error) {
-            const message = error instanceof Error && error.message.trim()
-                ? error.message.trim()
-                : "Unable to stage or deploy the publish snapshot.";
-            void this.logEvent("error", "publish", "publish.public-html.runtime.error", {
-                fileCount: stagedFiles.length,
-                vaultRelativePaths: stagedFiles.map((file) => file.vaultRelativePath),
-                error: message,
-            });
-            return {
-                ok: false,
-                notice: message,
-            };
-        } finally {
-            if (stagingDirPath) {
-                try {
-                    await modules.fsPromises.rm(stagingDirPath, { recursive: true, force: true });
-                } catch (error) {
-                    this.warn(
-                        "Failed to remove Aside public publish staging directory.",
-                        error,
-                        "publish",
-                        "publish.public-html.cleanup.warn",
-                    );
-                }
-            }
-        }
+        return deployResult;
     }
 
 	private async purgePublishedPublicUrlCache(input: PublicHtmlCachePurgeInput): Promise<{ ok: true } | { ok: false; notice: string }> {
