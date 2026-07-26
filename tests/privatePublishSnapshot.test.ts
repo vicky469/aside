@@ -1,8 +1,94 @@
 import * as assert from "node:assert/strict";
 import test from "node:test";
 import {
+	buildPrivatePublishManifest,
 	buildPrivatePublishSnapshotSupportFiles,
 } from "../src/core/publish/privatePublishSnapshot";
+
+test("private publish manifest includes tree, permission, route, and version metadata", () => {
+	const manifest = buildPrivatePublishManifest({
+		allowedRoot: "public/",
+		publishBaseUrl: "https://publish.example.com",
+		publishedAt: "2026-07-26T08:00:00.000Z",
+		files: [{
+			vaultRelativePath: "public/docs/page.html",
+			sourcePath: "public/docs/page.md",
+			kind: "markdown",
+			contentHash: "sha256-page",
+		}, {
+			vaultRelativePath: "public/report.pdf",
+			sourcePath: "public/report.pdf",
+			kind: "pdf",
+			contentHash: "sha256-report",
+		}],
+		authRules: [{
+			provider: "google",
+			identifier: "alice@example.com",
+			path: "docs/",
+			access: "comment",
+			line: 3,
+		}],
+	});
+
+	assert.deepEqual(manifest.files, [{
+		publicPath: "docs/page.html",
+		routePath: "/public/docs/page",
+		sourcePath: "docs/page.md",
+		kind: "markdown",
+		contentHash: "sha256-page",
+		publishedAt: "2026-07-26T08:00:00.000Z",
+		currentVersion: {
+			id: "sha256-page",
+			contentHash: "sha256-page",
+			publishedAt: "2026-07-26T08:00:00.000Z",
+		},
+		versions: [{
+			id: "sha256-page",
+			contentHash: "sha256-page",
+			publishedAt: "2026-07-26T08:00:00.000Z",
+		}],
+	}, {
+		publicPath: "report.pdf",
+		routePath: "/public/report.pdf",
+		sourcePath: "report.pdf",
+		kind: "pdf",
+		contentHash: "sha256-report",
+		publishedAt: "2026-07-26T08:00:00.000Z",
+		currentVersion: {
+			id: "sha256-report",
+			contentHash: "sha256-report",
+			publishedAt: "2026-07-26T08:00:00.000Z",
+		},
+		versions: [{
+			id: "sha256-report",
+			contentHash: "sha256-report",
+			publishedAt: "2026-07-26T08:00:00.000Z",
+		}],
+	}]);
+	assert.deepEqual(manifest.tree.children, [{
+		name: "docs",
+		path: "docs/",
+		type: "folder",
+		children: [{
+			name: "page.html",
+			path: "docs/page.html",
+			type: "file",
+			kind: "markdown",
+		}],
+	}, {
+		name: "report.pdf",
+		path: "report.pdf",
+		type: "file",
+		kind: "pdf",
+	}]);
+	assert.deepEqual(manifest.permissionRules, [{
+		provider: "google",
+		identifier: "alice@example.com",
+		path: "docs/",
+		access: "comment",
+		line: 3,
+	}]);
+});
 
 test("private publish snapshot support files keep permission data server-side", () => {
 	const supportFiles = buildPrivatePublishSnapshotSupportFiles({

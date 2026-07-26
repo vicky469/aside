@@ -42,35 +42,58 @@ export interface BuildPrivatePublishSnapshotSupportFilesInput {
 	authRules: readonly PrivatePublishAuthRule[];
 }
 
-interface PrivatePublishManifestFile {
+export interface PrivatePublishManifestFileVersion {
+	id: string;
+	contentHash: string;
+	publishedAt: string;
+}
+
+export interface PrivatePublishManifestFile {
 	publicPath: string;
 	routePath: string;
 	sourcePath: string;
 	kind: PrivatePublishSnapshotFileKind;
 	contentHash: string;
 	publishedAt: string;
+	currentVersion: PrivatePublishManifestFileVersion;
+	versions: PrivatePublishManifestFileVersion[];
 }
 
-interface PrivatePublishManifestFolder {
+export interface PrivatePublishManifestFolder {
 	name: string;
 	path: string;
 	type: "folder";
 	children: Array<PrivatePublishManifestFolder | PrivatePublishManifestTreeFile>;
 }
 
-interface PrivatePublishManifestTreeFile {
+export interface PrivatePublishManifestTreeFile {
 	name: string;
 	path: string;
 	type: "file";
 	kind: PrivatePublishSnapshotFileKind;
 }
 
-interface PrivatePublishManifestPermissionRule {
+export interface PrivatePublishManifestPermissionRule {
 	provider: PrivatePublishProvider;
 	identifier: string;
 	path: string;
 	access: PrivatePublishAuthRule["access"];
 	line: number;
+}
+
+export interface PrivatePublishManifest {
+	version: 1;
+	generatedAt: string;
+	allowedRoot: string;
+	baseUrl: string;
+	controlPaths: {
+		auth: string;
+	};
+	files: PrivatePublishManifestFile[];
+	tree: PrivatePublishManifestFolder;
+	providers: PrivatePublishProvider[];
+	unsupportedProviders: PrivatePublishProvider[];
+	permissionRules: PrivatePublishManifestPermissionRule[];
 }
 
 const GOOGLE_PROVIDER: PrivatePublishProvider = "google";
@@ -101,7 +124,7 @@ export function buildPrivatePublishSnapshotSupportFiles(
 	};
 }
 
-function buildPrivatePublishManifest(input: BuildPrivatePublishSnapshotSupportFilesInput) {
+export function buildPrivatePublishManifest(input: BuildPrivatePublishSnapshotSupportFilesInput): PrivatePublishManifest {
 	const files = input.files
 		.map((file) => normalizeManifestFile(input, file))
 		.filter((file): file is PrivatePublishManifestFile => file !== null)
@@ -137,6 +160,11 @@ function normalizeManifestFile(
 	if (!publicPath || !sourcePath) {
 		return null;
 	}
+	const currentVersion: PrivatePublishManifestFileVersion = {
+		id: file.contentHash,
+		contentHash: file.contentHash,
+		publishedAt: input.publishedAt,
+	};
 	return {
 		publicPath,
 		routePath: buildRoutePath(file.vaultRelativePath),
@@ -144,6 +172,8 @@ function normalizeManifestFile(
 		kind: file.kind,
 		contentHash: file.contentHash,
 		publishedAt: input.publishedAt,
+		currentVersion,
+		versions: [currentVersion],
 	};
 }
 
@@ -222,12 +252,16 @@ function buildManifestTree(files: readonly PrivatePublishManifestFile[]): Privat
 
 function sortManifestTree(folder: PrivatePublishManifestFolder): void {
 	folder.children.sort((left, right) =>
-		left.type.localeCompare(right.type) || left.name.localeCompare(right.name));
+		manifestTreeTypeRank(left.type) - manifestTreeTypeRank(right.type) || left.name.localeCompare(right.name));
 	for (const child of folder.children) {
 		if (child.type === "folder") {
 			sortManifestTree(child);
 		}
 	}
+}
+
+function manifestTreeTypeRank(type: "file" | "folder"): number {
+	return type === "folder" ? 0 : 1;
 }
 
 function renderRoutesJson(): string {
@@ -282,7 +316,7 @@ function renderCommentsRoute(): string {
 	].join("\n");
 }
 
-function renderPrivatePublishDataModule(manifest: ReturnType<typeof buildPrivatePublishManifest>): string {
+function renderPrivatePublishDataModule(manifest: PrivatePublishManifest): string {
 	return [
 		"export const privatePublishManifest = ",
 		JSON.stringify(manifest, null, "\t"),

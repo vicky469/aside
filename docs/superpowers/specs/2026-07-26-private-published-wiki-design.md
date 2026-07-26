@@ -19,6 +19,7 @@ Use this section as the working checklist. Mark an item done only after the code
 - [x] Private publish core has deterministic file, folder, and whole-root selection helpers for supported files under the configured publish root.
 - [x] Private publish snapshot support generation can classify Cloudflare Pages `_routes.json`, Pages Functions stubs, and a non-route private permission manifest module so generated permission data is not treated as a static asset.
 - [x] Wrangler Pages staging layout planning can keep static assets under an asset directory and Functions/private modules at the temporary Pages project root.
+- [x] Server-side private publish manifest core includes a folder-first tree, file route metadata, permission rules, supported/unsupported providers, and single-entry version metadata for each file.
 
 ### To Implement
 
@@ -28,7 +29,8 @@ Use this section as the working checklist. Mark an item done only after the code
 - [x] Wire `public/index.md` updates into successful publish flows as the owner-visible publish inventory and status table.
 - [x] Add file and folder publish actions under `public/`, including publishing the whole `public/` root.
 - [x] Wire `public/index.md` status updates into unpublish flows.
-- [ ] Generate a private published-site manifest with folder tree, file metadata, routes, versions, and permission-aware paths.
+- [x] Generate the server-side private published-site manifest core with folder tree, file metadata, routes, versions, and permission rules.
+- [ ] Wire the private manifest into deployed Pages Functions and expose only permission-filtered manifest data to browser clients.
 - [ ] Generate the approved three-pane published shell: folder tree, file viewer with version controls, and Aside sidebar.
 - [x] Exclude root `public/auth.md` and root `public/index.md` from the enabled snapshot scanner even when stale publish frontmatter exists.
 - [ ] Wire parsed `public/auth.md` rules into generated server-side permission data during deployment without exposing readable static permission assets.
@@ -53,6 +55,7 @@ Use this section as the working checklist. Mark an item done only after the code
 - [x] Unit tests prove stale root `auth.md` and `index.md` publish frontmatter cannot leak root control Markdown into a deploy snapshot.
 - [x] Snapshot support tests prove generated private data is classified as a non-route private module, not a static asset or Pages route file.
 - [x] Staging-layout tests prove generated Functions and private modules are planned beside the static asset directory for Wrangler direct upload.
+- [x] Manifest tests cover folder tree, file routes, permission rules, provider support, and minimal version history.
 - [ ] Integration tests prove `publishSnapshotArtifacts` writes generated Functions and private modules beside the static asset directory before invoking Wrangler.
 - [ ] Snapshot tests cover generated `site-manifest.json`, three-pane shell assets, comments seed data, and generated Pages Functions files.
 - [ ] Generated Functions tests cover authenticated/unauthenticated view access, `view` versus `comment` enforcement, and path-specific permission inheritance.
