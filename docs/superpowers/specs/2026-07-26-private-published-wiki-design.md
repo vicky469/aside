@@ -47,7 +47,7 @@ Use this section as the working checklist. Mark an item done only after the code
 - [x] Keep WeChat as a parsed provider and generated-provider slot, but report it as unsupported until its OAuth setup is implemented and tested.
 - [x] Add Cloudflare D1-backed comment event storage for published-site page comments.
 - [x] Add published-site APIs for reading comments and creating page-note comment threads.
-- [ ] Add published-site APIs for appending replies, and later editing/deleting own comments.
+- [x] Add published-site APIs for appending replies, and later editing/deleting own comments.
 - [ ] Extend local comment entry metadata with optional author identity and preserve it through cloning, normalization, projection, sync events, sidecar storage, and sidebar rendering.
 - [ ] Add local remote-comment sync that pulls Cloudflare D1 events and imports them through Aside's existing sync-event reducer into sidecar storage.
 - [ ] Seed published pages with existing local Aside page-note comments as read-only initial state.
@@ -73,7 +73,7 @@ Use this section as the working checklist. Mark an item done only after the code
 - [x] Generated D1 comment tests cover binding detection, prepared-statement event writes, comment reads, and route-level view/comment permission enforcement.
 - [x] Generated Functions tests cover authenticated/unauthenticated static content access, `view` versus `comment` route enforcement, and path-specific permission inheritance.
 - [ ] Snapshot tests cover comments seed data and any future static client seed assets.
-- [ ] D1 API tests cover reply writes, own-comment edit/delete policy, idempotent event writes, and malformed payload rejection.
+- [x] D1 API tests cover reply writes, own-comment edit/delete policy, idempotent event writes, and malformed payload rejection.
 - [ ] Sync import tests prove remote comment events become local Aside sidecar comments without modifying source Markdown.
 - [ ] Author metadata tests prove Google identities render distinctly in the local Aside sidebar while current-user comments still hide the default "You" badge.
 - [x] `npm run build` passes.
