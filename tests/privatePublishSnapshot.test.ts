@@ -590,6 +590,94 @@ return { onRequestGet, onRequestPost };
 	assert.equal(forbiddenCreate.status, 403);
 });
 
+test("generated middleware enforces view permissions for published content", async () => {
+	const supportFiles = buildPrivatePublishSnapshotSupportFiles({
+		allowedRoot: "public/",
+		publishBaseUrl: "https://publish.example.com",
+		publishedAt: "2026-07-26T08:00:00.000Z",
+		files: [{
+			vaultRelativePath: "public/docs/page.html",
+			sourcePath: "public/docs/page.md",
+			kind: "markdown",
+			contentHash: "sha256-page",
+		}, {
+			vaultRelativePath: "public/secret.html",
+			sourcePath: "public/secret.md",
+			kind: "markdown",
+			contentHash: "sha256-secret",
+		}],
+		authRules: [{
+			provider: "google",
+			identifier: "alice@example.com",
+			path: "docs/",
+			access: "view",
+			line: 3,
+		}],
+	});
+	const middleware = supportFiles.functions.find((file) => file.projectRelativePath === "functions/_middleware.js")?.contents ?? "";
+	const runtime = supportFiles.privateModules.find((file) =>
+		file.projectRelativePath === "src/_aside/private-publish-runtime.js");
+	assert.ok(runtime);
+	const runtimeModule = new Function(`
+${runtime.contents.replace(/\bexport\s+/gu, "")}
+return { resolvePrivatePublishPermission };
+`)() as {
+		resolvePrivatePublishPermission: (
+			rules: unknown,
+			identity: unknown,
+			path: string,
+		) => { canView: boolean; canComment: boolean; canManage: boolean };
+	};
+	const privateData = supportFiles.privateModules.find((file) =>
+		file.projectRelativePath === "src/_aside/private-publish-data.js");
+	assert.ok(privateData);
+	const privateDataMatch = /^export const privatePublishManifest = ([\s\S]*);$/u.exec(privateData.contents);
+	assert.ok(privateDataMatch);
+	const manifest = JSON.parse(privateDataMatch[1]) as unknown;
+	let identity: { provider: "google"; identifier: string } | null = null;
+	let nextCalls = 0;
+	const middlewareModule = new Function(
+		"privatePublishManifest",
+		"getAsideSessionIdentity",
+		"resolvePrivatePublishPermission",
+		`
+${middleware.replace(/^import .*;\n/gmu, "")}
+return { onRequest };
+`.replace(/\bexport\s+/gu, ""),
+	)(manifest, async () => identity, runtimeModule.resolvePrivatePublishPermission) as {
+		onRequest: (context: {
+			request: Request;
+			env: Record<string, unknown>;
+			next: () => Promise<Response>;
+		}) => Promise<Response>;
+	};
+	const makeContext = (path: string) => ({
+		request: new Request(`https://publish.example.com${path}`),
+		env: {},
+		next: async () => {
+			nextCalls += 1;
+			return new Response("next");
+		},
+	});
+
+	assert.equal((await middlewareModule.onRequest(makeContext("/public/docs/page.html"))).status, 403);
+	assert.equal(nextCalls, 0);
+
+	identity = {
+		provider: "google",
+		identifier: "alice@example.com",
+	};
+	assert.equal(await (await middlewareModule.onRequest(makeContext("/public/docs/page.html"))).text(), "next");
+	assert.equal(nextCalls, 1);
+	assert.equal(await (await middlewareModule.onRequest(makeContext("/public/docs/page"))).text(), "next");
+	assert.equal(nextCalls, 2);
+	assert.equal((await middlewareModule.onRequest(makeContext("/public/secret.html"))).status, 403);
+	assert.equal(nextCalls, 2);
+	assert.equal((await middlewareModule.onRequest(makeContext("/public/auth.md"))).status, 404);
+	assert.equal(await (await middlewareModule.onRequest(makeContext("/"))).text(), "next");
+	assert.equal(nextCalls, 3);
+});
+
 function createFakeCommentsD1() {
 	const rows: Array<Record<string, unknown>> = [];
 	const capturedSql: Array<{ sql: string; params: unknown[] }> = [];

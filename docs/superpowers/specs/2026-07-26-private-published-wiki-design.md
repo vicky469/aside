@@ -26,6 +26,7 @@ Use this section as the working checklist. Mark an item done only after the code
 - [x] Generated Pages support includes Google OAuth start/callback routes, logout, signed session cookies, and an auth session route that reports the signed-in identity.
 - [x] Generated snapshot support includes the published shell assets for a folder tree, file viewer with version metadata, and Aside comment pane.
 - [x] Generated comment APIs can read page comments and create page-note comment events through a user-owned Cloudflare D1 binding.
+- [x] Generated middleware enforces `view` permission before serving published content files, while leaving the shell and generated APIs to their own route checks.
 
 ### To Implement
 
@@ -37,6 +38,7 @@ Use this section as the working checklist. Mark an item done only after the code
 - [x] Wire `public/index.md` status updates into unpublish flows.
 - [x] Generate the server-side private published-site manifest core with folder tree, file metadata, routes, versions, and permission rules.
 - [x] Wire the private manifest into deployed Pages Functions and expose only permission-filtered manifest data to browser clients.
+- [x] Enforce server-side `view` checks for published static content in generated Pages middleware.
 - [x] Generate the approved three-pane published shell: folder tree, file viewer with version controls, and Aside sidebar.
 - [x] Exclude root `public/auth.md` and root `public/index.md` from the enabled snapshot scanner even when stale publish frontmatter exists.
 - [x] Wire parsed `public/auth.md` rules into generated server-side permission data during deployment without exposing readable static permission assets.
@@ -69,8 +71,8 @@ Use this section as the working checklist. Mark an item done only after the code
 - [x] Generated runtime tests cover signed, tampered, expired, and malformed session-cookie handling plus Google authorization URL generation.
 - [x] Snapshot tests cover generated three-pane shell assets and generated Pages Functions files without exposing raw permission data to client assets.
 - [x] Generated D1 comment tests cover binding detection, prepared-statement event writes, comment reads, and route-level view/comment permission enforcement.
+- [x] Generated Functions tests cover authenticated/unauthenticated static content access, `view` versus `comment` route enforcement, and path-specific permission inheritance.
 - [ ] Snapshot tests cover comments seed data and any future static client seed assets.
-- [ ] Generated Functions tests cover authenticated/unauthenticated view access, `view` versus `comment` enforcement, and path-specific permission inheritance.
 - [ ] D1 API tests cover reply writes, own-comment edit/delete policy, idempotent event writes, and malformed payload rejection.
 - [ ] Sync import tests prove remote comment events become local Aside sidecar comments without modifying source Markdown.
 - [ ] Author metadata tests prove Google identities render distinctly in the local Aside sidebar while current-user comments still hide the default "You" badge.
