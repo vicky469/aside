@@ -519,6 +519,9 @@ test("public html publish controller generates private Pages support files from 
 	assert.deepEqual(support?.projectFiles.map((file) => file.projectRelativePath), [
 		"functions/_middleware.js",
 		"functions/_aside/api/auth/session.js",
+		"functions/_aside/api/auth/google/start.js",
+		"functions/_aside/api/auth/google/callback.js",
+		"functions/_aside/api/auth/logout.js",
 		"functions/_aside/api/site-manifest.js",
 		"functions/_aside/api/comments/index.js",
 		"src/_aside/private-publish-data.js",

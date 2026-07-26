@@ -23,6 +23,7 @@ Use this section as the working checklist. Mark an item done only after the code
 - [x] Wrangler Pages snapshot deployment has a tested adapter that stages Pages Functions/private modules beside the static asset directory only when generated project files are present, while preserving the static-only deploy layout.
 - [x] Publish snapshot deployment now parses root `auth.md`, hashes deployed content, generates private Pages support files, and passes static/project support into the Wrangler Pages adapter without exposing permission data as a static asset.
 - [x] Generated Pages support includes a private runtime module and `_aside/api/site-manifest` route that returns only identity-filtered file, folder, version, and permission metadata without exposing raw permission rules.
+- [x] Generated Pages support includes Google OAuth start/callback routes, logout, signed session cookies, and an auth session route that reports the signed-in identity.
 
 ### To Implement
 
@@ -38,7 +39,7 @@ Use this section as the working checklist. Mark an item done only after the code
 - [x] Exclude root `public/auth.md` and root `public/index.md` from the enabled snapshot scanner even when stale publish frontmatter exists.
 - [x] Wire parsed `public/auth.md` rules into generated server-side permission data during deployment without exposing readable static permission assets.
 - [x] Stage Cloudflare Pages Functions, including site-wide middleware, auth routes, and comment API routes.
-- [ ] Implement Google OAuth for V1 using user-owned Cloudflare environment variables/secrets, server-side token verification, and signed session cookies.
+- [x] Implement Google OAuth for V1 using user-owned Cloudflare environment variables/secrets, server-side authorization-code exchange, Google UserInfo email verification, and signed session cookies.
 - [x] Keep WeChat as a parsed provider and generated-provider slot, but report it as unsupported until its OAuth setup is implemented and tested.
 - [ ] Add Cloudflare D1-backed comment event storage for published-site page comments.
 - [ ] Add published-site APIs for reading comments, creating page-note threads, appending replies, and later editing/deleting own comments.
@@ -62,6 +63,7 @@ Use this section as the working checklist. Mark an item done only after the code
 - [x] Deployment adapter tests prove generated Functions/private modules are written beside the static asset directory before Wrangler is invoked, and static-only deploys keep the previous staging layout.
 - [x] Controller and deployment adapter tests prove generated support files from `auth.md` are passed into deployment and Functions/private modules are written beside the static asset directory before Wrangler is invoked.
 - [x] Generated runtime tests prove the published site manifest response filters files/tree/permissions by identity and does not expose raw permission rules.
+- [x] Generated runtime tests cover signed, tampered, expired, and malformed session-cookie handling plus Google authorization URL generation.
 - [ ] Snapshot tests cover generated `site-manifest.json`, three-pane shell assets, comments seed data, and generated Pages Functions files.
 - [ ] Generated Functions tests cover authenticated/unauthenticated view access, `view` versus `comment` enforcement, and path-specific permission inheritance.
 - [ ] D1 API tests cover comment read/write, own-comment edit/delete policy, idempotent event writes, and malformed payload rejection.
@@ -160,6 +162,12 @@ Secrets and sensitive configuration belong in Cloudflare, not in the Obsidian pl
 - Session signing secret.
 - D1 binding configuration.
 - Future WeChat OAuth configuration.
+
+The generated Google OAuth routes read these Cloudflare environment variables/secrets:
+
+- `ASIDE_GOOGLE_CLIENT_ID`
+- `ASIDE_GOOGLE_CLIENT_SECRET`
+- `ASIDE_SESSION_SECRET`
 
 Aside should generate code and clear setup diagnostics, but it should not store Cloudflare API tokens or OAuth secrets in plugin settings.
 

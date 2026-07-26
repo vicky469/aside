@@ -127,6 +127,9 @@ test("private publish snapshot support files keep permission data server-side", 
 	assert.deepEqual(supportFiles.functions.map((file) => file.projectRelativePath), [
 		"functions/_middleware.js",
 		"functions/_aside/api/auth/session.js",
+		"functions/_aside/api/auth/google/start.js",
+		"functions/_aside/api/auth/google/callback.js",
+		"functions/_aside/api/auth/logout.js",
 		"functions/_aside/api/site-manifest.js",
 		"functions/_aside/api/comments/index.js",
 	]);
@@ -256,5 +259,96 @@ return { filterPrivatePublishManifestForIdentity, getAsideSessionIdentity, resol
 	const siteManifestRoute = supportFiles.functions.find((file) =>
 		file.projectRelativePath === "functions/_aside/api/site-manifest.js")?.contents ?? "";
 	assert.match(siteManifestRoute, /filterPrivatePublishManifestForIdentity/u);
+	assert.match(siteManifestRoute, /from "\.\.\/\.\.\/\.\.\/src\/_aside\/private-publish-runtime\.js"/u);
 	assert.doesNotMatch(siteManifestRoute, /permissionRules/u);
+});
+
+test("generated private publish runtime signs and verifies Google session cookies", async () => {
+	const supportFiles = buildPrivatePublishSnapshotSupportFiles({
+		allowedRoot: "public/",
+		publishBaseUrl: "https://publish.example.com",
+		publishedAt: "2026-07-26T08:00:00.000Z",
+		files: [],
+		authRules: [],
+	});
+	const runtime = supportFiles.privateModules.find((file) =>
+		file.projectRelativePath === "src/_aside/private-publish-runtime.js");
+	assert.ok(runtime);
+	const runtimeModule = new Function(`
+${runtime.contents.replace(/\bexport\s+/gu, "")}
+return { createAsideSessionCookie, getAsideSessionIdentity, clearAsideSessionCookie, createGoogleAuthorizationUrl };
+`)() as {
+		createAsideSessionCookie: (env: Record<string, string>, identity: unknown, nowSeconds: number) => Promise<string>;
+		getAsideSessionIdentity: (request: Request, env: Record<string, string>, nowSeconds: number) => Promise<unknown>;
+		clearAsideSessionCookie: () => string;
+		createGoogleAuthorizationUrl: (input: { clientId: string; redirectUri: string; state: string }) => string;
+	};
+
+	const cookie = await runtimeModule.createAsideSessionCookie({
+		ASIDE_SESSION_SECRET: "test-secret",
+	}, {
+		provider: "google",
+		identifier: "Alice@Example.com",
+		name: "Alice",
+		picture: "https://example.com/alice.png",
+	}, 100);
+	assert.match(cookie, /^aside_session=/u);
+	assert.match(cookie, /HttpOnly; Secure; SameSite=Lax; Path=\/; Max-Age=604800/u);
+	const cookieHeader = cookie.split(";")[0];
+	assert.deepEqual(await runtimeModule.getAsideSessionIdentity(new Request("https://publish.example.com", {
+		headers: {
+			Cookie: cookieHeader,
+		},
+	}), {
+		ASIDE_SESSION_SECRET: "test-secret",
+	}, 200), {
+		provider: "google",
+		identifier: "alice@example.com",
+		name: "Alice",
+		picture: "https://example.com/alice.png",
+	});
+	assert.equal(await runtimeModule.getAsideSessionIdentity(new Request("https://publish.example.com", {
+		headers: {
+			Cookie: cookieHeader.replace(/.$/u, "x"),
+		},
+	}), {
+		ASIDE_SESSION_SECRET: "test-secret",
+	}, 200), null);
+	assert.equal(await runtimeModule.getAsideSessionIdentity(new Request("https://publish.example.com", {
+		headers: {
+			Cookie: "aside_session=%",
+		},
+	}), {
+		ASIDE_SESSION_SECRET: "test-secret",
+	}, 200), null);
+	assert.equal(await runtimeModule.getAsideSessionIdentity(new Request("https://publish.example.com", {
+		headers: {
+			Cookie: cookieHeader,
+		},
+	}), {
+		ASIDE_SESSION_SECRET: "test-secret",
+	}, 604901), null);
+	assert.match(runtimeModule.clearAsideSessionCookie(), /^aside_session=; HttpOnly; Secure; SameSite=Lax; Path=\/; Max-Age=0/u);
+
+	const authUrl = new URL(runtimeModule.createGoogleAuthorizationUrl({
+		clientId: "client-id",
+		redirectUri: "https://publish.example.com/_aside/api/auth/google/callback",
+		state: "state-token",
+	}));
+	assert.equal(authUrl.origin + authUrl.pathname, "https://accounts.google.com/o/oauth2/v2/auth");
+	assert.equal(authUrl.searchParams.get("response_type"), "code");
+	assert.equal(authUrl.searchParams.get("client_id"), "client-id");
+	assert.equal(authUrl.searchParams.get("redirect_uri"), "https://publish.example.com/_aside/api/auth/google/callback");
+	assert.equal(authUrl.searchParams.get("scope"), "openid email profile");
+	assert.equal(authUrl.searchParams.get("state"), "state-token");
+
+	const startRoute = supportFiles.functions.find((file) =>
+		file.projectRelativePath === "functions/_aside/api/auth/google/start.js")?.contents ?? "";
+	assert.match(runtime.contents, /ASIDE_GOOGLE_CLIENT_ID/u);
+	assert.match(startRoute, /createGoogleAuthorizationUrl/u);
+	const callbackRoute = supportFiles.functions.find((file) =>
+		file.projectRelativePath === "functions/_aside/api/auth/google/callback.js")?.contents ?? "";
+	assert.match(callbackRoute, /exchangeGoogleAuthorizationCode/u);
+	assert.match(runtime.contents, /https:\/\/oauth2\.googleapis\.com\/token/u);
+	assert.match(runtime.contents, /https:\/\/openidconnect\.googleapis\.com\/v1\/userinfo/u);
 });
