@@ -394,3 +394,237 @@ return { createAsideSessionCookie, getAsideSessionIdentity, clearAsideSessionCoo
 	assert.match(runtime.contents, /https:\/\/oauth2\.googleapis\.com\/token/u);
 	assert.match(runtime.contents, /https:\/\/openidconnect\.googleapis\.com\/v1\/userinfo/u);
 });
+
+test("generated private publish runtime reads and writes D1 comment events", async () => {
+	const supportFiles = buildPrivatePublishSnapshotSupportFiles({
+		allowedRoot: "public/",
+		publishBaseUrl: "https://publish.example.com",
+		publishedAt: "2026-07-26T08:00:00.000Z",
+		files: [],
+		authRules: [],
+	});
+	const runtime = supportFiles.privateModules.find((file) =>
+		file.projectRelativePath === "src/_aside/private-publish-runtime.js");
+	assert.ok(runtime);
+	const runtimeModule = new Function(`
+${runtime.contents.replace(/\bexport\s+/gu, "")}
+return { createPublishedCommentEvent, getPublishedComments, getPublishedCommentsSchemaSql };
+`)() as {
+		createPublishedCommentEvent: (
+			env: Record<string, unknown>,
+			input: {
+				path: string;
+				body: string;
+				identity: { provider: "google"; identifier: string; name?: string };
+				eventId: string;
+				createdAt: string;
+			},
+		) => Promise<{ ok: true; comment: unknown } | { ok: false; error: string }>;
+		getPublishedComments: (
+			env: Record<string, unknown>,
+			path: string,
+		) => Promise<{ ok: true; comments: unknown[] } | { ok: false; error: string }>;
+		getPublishedCommentsSchemaSql: () => string;
+	};
+	const d1 = createFakeCommentsD1();
+
+	assert.match(runtimeModule.getPublishedCommentsSchemaSql(), /CREATE TABLE IF NOT EXISTS aside_comment_events/u);
+	assert.deepEqual(await runtimeModule.getPublishedComments({}, "docs/page.html"), {
+		ok: false,
+		error: "Aside comments D1 binding ASIDE_COMMENTS_DB is not configured.",
+	});
+
+	assert.deepEqual(await runtimeModule.createPublishedCommentEvent({
+		ASIDE_COMMENTS_DB: d1,
+	}, {
+		path: "docs/page.html",
+		body: " First comment ",
+		identity: {
+			provider: "google",
+			identifier: "Alice@Example.com",
+			name: "Alice",
+		},
+		eventId: "event-1",
+		createdAt: "2026-07-26T09:00:00.000Z",
+	}), {
+		ok: true,
+		comment: {
+			id: "event-1",
+			path: "docs/page.html",
+			body: "First comment",
+			createdAt: "2026-07-26T09:00:00.000Z",
+			author: {
+				provider: "google",
+				identity: "alice@example.com",
+				displayName: "Alice",
+			},
+		},
+	});
+	assert.deepEqual(d1.capturedSql.map((entry) => entry.sql), [
+		"INSERT INTO aside_comment_events (event_id, path, op, payload_json, author_provider, author_identity, author_display_name, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+	]);
+
+	assert.deepEqual(await runtimeModule.getPublishedComments({
+		ASIDE_COMMENTS_DB: d1,
+	}, "docs/page.html"), {
+		ok: true,
+		comments: [{
+			id: "event-1",
+			path: "docs/page.html",
+			body: "First comment",
+			createdAt: "2026-07-26T09:00:00.000Z",
+			author: {
+				provider: "google",
+				identity: "alice@example.com",
+				displayName: "Alice",
+			},
+		}],
+	});
+
+	const commentsRoute = supportFiles.functions.find((file) =>
+		file.projectRelativePath === "functions/_aside/api/comments/index.js")?.contents ?? "";
+	assert.match(commentsRoute, /getPublishedComments/u);
+	assert.match(commentsRoute, /createPublishedCommentEvent/u);
+	assert.match(commentsRoute, /resolvePrivatePublishPermission/u);
+});
+
+test("generated comments route enforces view and comment permissions", async () => {
+	const supportFiles = buildPrivatePublishSnapshotSupportFiles({
+		allowedRoot: "public/",
+		publishBaseUrl: "https://publish.example.com",
+		publishedAt: "2026-07-26T08:00:00.000Z",
+		files: [],
+		authRules: [],
+	});
+	const commentsRoute = supportFiles.functions.find((file) =>
+		file.projectRelativePath === "functions/_aside/api/comments/index.js")?.contents ?? "";
+	let sessionIdentity: { provider: "google"; identifier: string } | null = null;
+	const createdInputs: unknown[] = [];
+	const routeModule = new Function(
+		"privatePublishManifest",
+		"createPublishedCommentEvent",
+		"getAsideSessionIdentity",
+		"getPublishedComments",
+		"resolvePrivatePublishPermission",
+		`
+${commentsRoute.replace(/^import .*;\n/gmu, "")}
+return { onRequestGet, onRequestPost };
+`.replace(/\bexport\s+/gu, ""),
+	)({
+		permissionRules: [],
+	}, async (_env: unknown, input: unknown) => {
+		createdInputs.push(input);
+		return {
+			ok: true,
+			comment: {
+				id: "event-1",
+				body: "A note",
+			},
+		};
+	}, async () => sessionIdentity, async (_env: unknown, path: string) => ({
+		ok: true,
+		comments: [{
+			id: "event-1",
+			path,
+			body: "A note",
+		}],
+	}), (_rules: unknown, identity: unknown, path: string) => ({
+		canView: Boolean(identity) && path === "docs/page.html",
+		canComment: Boolean(identity) && path === "docs/page.html",
+		canManage: false,
+	})) as {
+		onRequestGet: (context: { request: Request; env: Record<string, unknown> }) => Promise<Response>;
+		onRequestPost: (context: { request: Request; env: Record<string, unknown> }) => Promise<Response>;
+	};
+
+	const forbiddenRead = await routeModule.onRequestGet({
+		request: new Request("https://publish.example.com/_aside/api/comments?path=docs/page.html"),
+		env: {},
+	});
+	assert.equal(forbiddenRead.status, 403);
+
+	sessionIdentity = {
+		provider: "google",
+		identifier: "alice@example.com",
+	};
+	const read = await routeModule.onRequestGet({
+		request: new Request("https://publish.example.com/_aside/api/comments?path=docs/page.html"),
+		env: {},
+	});
+	assert.equal(read.status, 200);
+	assert.deepEqual(await read.json(), {
+		comments: [{
+			id: "event-1",
+			path: "docs/page.html",
+			body: "A note",
+		}],
+	});
+
+	const created = await routeModule.onRequestPost({
+		request: new Request("https://publish.example.com/_aside/api/comments", {
+			method: "POST",
+			body: JSON.stringify({
+				path: "docs/page.html",
+				body: "A note",
+			}),
+		}),
+		env: {},
+	});
+	assert.equal(created.status, 201);
+	assert.deepEqual(createdInputs, [{
+		path: "docs/page.html",
+		body: "A note",
+		identity: sessionIdentity,
+	}]);
+
+	const forbiddenCreate = await routeModule.onRequestPost({
+		request: new Request("https://publish.example.com/_aside/api/comments", {
+			method: "POST",
+			body: JSON.stringify({
+				path: "secret/page.html",
+				body: "A note",
+			}),
+		}),
+		env: {},
+	});
+	assert.equal(forbiddenCreate.status, 403);
+});
+
+function createFakeCommentsD1() {
+	const rows: Array<Record<string, unknown>> = [];
+	const capturedSql: Array<{ sql: string; params: unknown[] }> = [];
+	return {
+		capturedSql,
+		prepare(sql: string) {
+			return {
+				bind(...params: unknown[]) {
+					return {
+						async all() {
+							capturedSql.push({ sql, params });
+							return {
+								success: true,
+								results: rows
+									.filter((row) => row.path === params[0])
+									.sort((left, right) => String(left.created_at).localeCompare(String(right.created_at))),
+							};
+						},
+						async run() {
+							capturedSql.push({ sql, params });
+							rows.push({
+								event_id: params[0],
+								path: params[1],
+								op: params[2],
+								payload_json: params[3],
+								author_provider: params[4],
+								author_identity: params[5],
+								author_display_name: params[6],
+								created_at: params[7],
+							});
+							return { success: true };
+						},
+					};
+				},
+			};
+		},
+	};
+}

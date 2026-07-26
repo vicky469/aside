@@ -25,6 +25,7 @@ Use this section as the working checklist. Mark an item done only after the code
 - [x] Generated Pages support includes a private runtime module and `_aside/api/site-manifest` route that returns only identity-filtered file, folder, version, and permission metadata without exposing raw permission rules.
 - [x] Generated Pages support includes Google OAuth start/callback routes, logout, signed session cookies, and an auth session route that reports the signed-in identity.
 - [x] Generated snapshot support includes the published shell assets for a folder tree, file viewer with version metadata, and Aside comment pane.
+- [x] Generated comment APIs can read page comments and create page-note comment events through a user-owned Cloudflare D1 binding.
 
 ### To Implement
 
@@ -42,8 +43,9 @@ Use this section as the working checklist. Mark an item done only after the code
 - [x] Stage Cloudflare Pages Functions, including site-wide middleware, auth routes, and comment API routes.
 - [x] Implement Google OAuth for V1 using user-owned Cloudflare environment variables/secrets, server-side authorization-code exchange, Google UserInfo email verification, and signed session cookies.
 - [x] Keep WeChat as a parsed provider and generated-provider slot, but report it as unsupported until its OAuth setup is implemented and tested.
-- [ ] Add Cloudflare D1-backed comment event storage for published-site page comments.
-- [ ] Add published-site APIs for reading comments, creating page-note threads, appending replies, and later editing/deleting own comments.
+- [x] Add Cloudflare D1-backed comment event storage for published-site page comments.
+- [x] Add published-site APIs for reading comments and creating page-note comment threads.
+- [ ] Add published-site APIs for appending replies, and later editing/deleting own comments.
 - [ ] Extend local comment entry metadata with optional author identity and preserve it through cloning, normalization, projection, sync events, sidecar storage, and sidebar rendering.
 - [ ] Add local remote-comment sync that pulls Cloudflare D1 events and imports them through Aside's existing sync-event reducer into sidecar storage.
 - [ ] Seed published pages with existing local Aside page-note comments as read-only initial state.
@@ -66,9 +68,10 @@ Use this section as the working checklist. Mark an item done only after the code
 - [x] Generated runtime tests prove the published site manifest response filters files/tree/permissions by identity and does not expose raw permission rules.
 - [x] Generated runtime tests cover signed, tampered, expired, and malformed session-cookie handling plus Google authorization URL generation.
 - [x] Snapshot tests cover generated three-pane shell assets and generated Pages Functions files without exposing raw permission data to client assets.
+- [x] Generated D1 comment tests cover binding detection, prepared-statement event writes, comment reads, and route-level view/comment permission enforcement.
 - [ ] Snapshot tests cover comments seed data and any future static client seed assets.
 - [ ] Generated Functions tests cover authenticated/unauthenticated view access, `view` versus `comment` enforcement, and path-specific permission inheritance.
-- [ ] D1 API tests cover comment read/write, own-comment edit/delete policy, idempotent event writes, and malformed payload rejection.
+- [ ] D1 API tests cover reply writes, own-comment edit/delete policy, idempotent event writes, and malformed payload rejection.
 - [ ] Sync import tests prove remote comment events become local Aside sidecar comments without modifying source Markdown.
 - [ ] Author metadata tests prove Google identities render distinctly in the local Aside sidebar while current-user comments still hide the default "You" badge.
 - [x] `npm run build` passes.
@@ -170,6 +173,10 @@ The generated Google OAuth routes read these Cloudflare environment variables/se
 - `ASIDE_GOOGLE_CLIENT_ID`
 - `ASIDE_GOOGLE_CLIENT_SECRET`
 - `ASIDE_SESSION_SECRET`
+
+The generated comment routes read this Cloudflare D1 binding:
+
+- `ASIDE_COMMENTS_DB`
 
 Aside should generate code and clear setup diagnostics, but it should not store Cloudflare API tokens or OAuth secrets in plugin settings.
 
