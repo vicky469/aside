@@ -42,6 +42,11 @@ interface MarkdownFence {
 
 const supportedProviders = new Set<PrivatePublishProvider>(["google", "wechat"]);
 const supportedAccessLevels = new Set<PrivatePublishAccess>(["view", "comment", "full"]);
+const accessRanks: Record<PrivatePublishAccess, number> = {
+	view: 1,
+	comment: 2,
+	full: 3,
+};
 
 export function parsePrivatePublishAuthMarkdown(markdown: string): PrivatePublishAuthRule[] {
 	const rules: PrivatePublishAuthRule[] = [];
@@ -153,7 +158,10 @@ export function resolvePrivatePublishPermission(
 
 	let winningRule: PrivatePublishAuthRule | undefined;
 	let winningSpecificity = -1;
-	const identifier = identity.identifier.trim();
+	const identifier = normalizeIdentifier(identity.identifier, identity.provider);
+	if (!identifier) {
+		return createDeniedPermission();
+	}
 
 	for (const rule of rules) {
 		if (rule.provider !== identity.provider || rule.identifier !== identifier) {
@@ -165,7 +173,13 @@ export function resolvePrivatePublishPermission(
 			continue;
 		}
 
-		if (match.specificity >= winningSpecificity) {
+		if (
+			match.specificity > winningSpecificity
+			|| (
+				match.specificity === winningSpecificity
+				&& accessRanks[rule.access] >= accessRanks[winningRule?.access ?? "view"]
+			)
+		) {
 			winningRule = rule;
 			winningSpecificity = match.specificity;
 		}
@@ -249,10 +263,10 @@ function closesMarkdownFence(line: string, fence: MarkdownFence): boolean {
 function resolveAuthTableColumns(cells: readonly string[]): AuthTableColumns | undefined {
 	const normalizedCells = cells.map((cell) => cell.toLowerCase());
 	const columns = {
-		path: normalizedCells.indexOf("path"),
-		provider: normalizedCells.indexOf("provider"),
-		identifier: normalizedCells.indexOf("identifier"),
-		access: normalizedCells.indexOf("access"),
+		path: findColumn(normalizedCells, ["path"]),
+		provider: findColumn(normalizedCells, ["provider"]),
+		identifier: findColumn(normalizedCells, ["identifier", "identity"]),
+		access: findColumn(normalizedCells, ["access", "permission"]),
 	};
 
 	if (
@@ -265,6 +279,16 @@ function resolveAuthTableColumns(cells: readonly string[]): AuthTableColumns | u
 	}
 
 	return columns;
+}
+
+function findColumn(cells: readonly string[], names: readonly string[]): number {
+	for (const name of names) {
+		const index = cells.indexOf(name);
+		if (index >= 0) {
+			return index;
+		}
+	}
+	return -1;
 }
 
 function isMarkdownTableSeparator(cells: readonly string[]): boolean {
@@ -295,9 +319,9 @@ function parseAuthTableRule(
 		return undefined;
 	}
 
-	const path = normalizeAuthRulePath(pathValue);
 	const provider = normalizeProvider(providerValue);
-	const identifier = identifierValue.trim();
+	const path = normalizeAuthRulePath(pathValue);
+	const identifier = provider ? normalizeIdentifier(identifierValue, provider) : "";
 	const access = normalizeAccess(accessValue);
 
 	if (!path || !provider || !identifier || !access) {
@@ -329,12 +353,20 @@ function normalizeAccess(value: string): PrivatePublishAccess | undefined {
 	return undefined;
 }
 
+function normalizeIdentifier(value: string, provider: PrivatePublishProvider): string {
+	const identifier = value.trim();
+	return provider === "google" ? identifier.toLowerCase() : identifier;
+}
+
 function normalizeAuthRulePath(value: string): string | undefined {
-	const normalized = normalizePrivatePublishPath(value);
+	const normalized = normalizePrivatePublishPath(value, { allowRoot: true });
 	if (!normalized) {
 		return undefined;
 	}
 
+	if (normalized.path === "/") {
+		return "/";
+	}
 	return normalized.isFolder ? `${normalized.path}/` : normalized.path;
 }
 
@@ -342,8 +374,18 @@ function isAuthPathAbsoluteish(value: string): boolean {
 	return value.startsWith("/") || /^[A-Za-z]:/u.test(value) || /^[A-Za-z][A-Za-z0-9+.-]*:/u.test(value);
 }
 
-function normalizePrivatePublishPath(value: string): NormalizedPrivatePublishPath | undefined {
+function normalizePrivatePublishPath(
+	value: string,
+	options: { allowRoot?: boolean } = {},
+): NormalizedPrivatePublishPath | undefined {
 	const trimmed = value.trim();
+	if (options.allowRoot === true && trimmed === "/") {
+		return {
+			path: "/",
+			isFolder: true,
+		};
+	}
+
 	if (
 		!trimmed
 		|| isAuthPathAbsoluteish(trimmed)
@@ -383,6 +425,13 @@ function matchRulePath(
 	rulePath: string,
 	requestedPath: NormalizedPrivatePublishPath,
 ): { ok: boolean; specificity: number } {
+	if (rulePath === "/") {
+		return {
+			ok: true,
+			specificity: 0,
+		};
+	}
+
 	if (rulePath.endsWith("/")) {
 		const folderPath = rulePath.slice(0, -1);
 		return {

@@ -8,10 +8,35 @@ import {
 
 test("parsePrivatePublishAuthMarkdown parses a standard auth table", () => {
 	const rules = parsePrivatePublishAuthMarkdown([
+		"| provider | identity | path | permission |",
+		"| --- | --- | --- | --- |",
+		"| google | Ada@Example.COM | / | view |",
+		"| wechat | wx-42 | investors/ | full |",
+	].join("\n"));
+
+	assert.deepEqual(rules, [
+		{
+			path: "/",
+			provider: "google",
+			identifier: "ada@example.com",
+			access: "view",
+			line: 3,
+		},
+		{
+			path: "investors/",
+			provider: "wechat",
+			identifier: "wx-42",
+			access: "full",
+			line: 4,
+		},
+	]);
+});
+
+test("parsePrivatePublishAuthMarkdown accepts legacy identifier and access headers", () => {
+	const rules = parsePrivatePublishAuthMarkdown([
 		"| path | provider | identifier | access |",
 		"| --- | --- | --- | --- |",
-		"| roadmap.md | google | ada@example.com | comment |",
-		"| investors/ | wechat | wx-42 | full |",
+		"| roadmap.md | google | ADA@example.com | comment |",
 	].join("\n"));
 
 	assert.deepEqual(rules, [
@@ -21,13 +46,6 @@ test("parsePrivatePublishAuthMarkdown parses a standard auth table", () => {
 			identifier: "ada@example.com",
 			access: "comment",
 			line: 3,
-		},
-		{
-			path: "investors/",
-			provider: "wechat",
-			identifier: "wx-42",
-			access: "full",
-			line: 4,
 		},
 	]);
 });
@@ -149,7 +167,7 @@ test("parsePrivatePublishAuthMarkdown ignores invalid paths and unknown values",
 		"| folder/../secret.md | google | ada@example.com | view |",
 		"| %2e%2e/secret.md | google | ada@example.com | view |",
 		"| %252e%252e/secret.md | google | ada@example.com | view |",
-		"| / | google | ada@example.com | view |",
+		"| /secret.md | google | ada@example.com | view |",
 		"| file:/secret.md | google | ada@example.com | view |",
 		"| ./file:/secret.md | google | ada@example.com | view |",
 		"| ./C:/secret.md | google | ada@example.com | view |",
@@ -179,35 +197,53 @@ test("parsePrivatePublishAuthMarkdown normalizes provider and access while prese
 		"| path | provider | identifier | access |",
 		"| --- | --- | --- | --- |",
 		"| Roadmap.md | Google | Ada@Example.com | COMMENT |",
+		"| wechat.md | WeChat | Wx-ID | VIEW |",
 	].join("\n"));
 
 	assert.deepEqual(rules, [
 		{
 			path: "Roadmap.md",
 			provider: "google",
-			identifier: "Ada@Example.com",
+			identifier: "ada@example.com",
 			access: "comment",
 			line: 3,
+		},
+		{
+			path: "wechat.md",
+			provider: "wechat",
+			identifier: "Wx-ID",
+			access: "view",
+			line: 4,
 		},
 	]);
 
 	assert.deepEqual(resolvePrivatePublishPermission(rules, {
 		provider: "google",
-		identifier: "ada@example.com",
-	}, "Roadmap.md"), {
-		canView: false,
-		canComment: false,
-		canManage: false,
-	});
-
-	assert.deepEqual(resolvePrivatePublishPermission(rules, {
-		provider: "google",
-		identifier: "Ada@Example.com",
+		identifier: "ADA@example.COM",
 	}, "Roadmap.md"), {
 		canView: true,
 		canComment: true,
 		canManage: false,
 		rule: rules[0],
+	});
+
+	assert.deepEqual(resolvePrivatePublishPermission(rules, {
+		provider: "wechat",
+		identifier: "Wx-ID",
+	}, "wechat.md"), {
+		canView: true,
+		canComment: false,
+		canManage: false,
+		rule: rules[1],
+	});
+
+	assert.deepEqual(resolvePrivatePublishPermission(rules, {
+		provider: "wechat",
+		identifier: "wx-id",
+	}, "wechat.md"), {
+		canView: false,
+		canComment: false,
+		canManage: false,
 	});
 });
 
@@ -394,6 +430,44 @@ test("resolvePrivatePublishPermission matches folder rules on exact folder bound
 	});
 });
 
+test("resolvePrivatePublishPermission applies root rules to all root-relative paths", () => {
+	const rules: PrivatePublishAuthRule[] = [
+		{
+			path: "/",
+			provider: "google",
+			identifier: "ada@example.com",
+			access: "view",
+			line: 3,
+		},
+		{
+			path: "investors/",
+			provider: "google",
+			identifier: "ada@example.com",
+			access: "comment",
+			line: 4,
+		},
+	];
+
+	assert.deepEqual(resolvePrivatePublishPermission(rules, {
+		provider: "google",
+		identifier: "ADA@example.com",
+	}, "roadmap.md"), {
+		canView: true,
+		canComment: false,
+		canManage: false,
+		rule: rules[0],
+	});
+	assert.deepEqual(resolvePrivatePublishPermission(rules, {
+		provider: "google",
+		identifier: "ada@example.com",
+	}, "investors/memo.md"), {
+		canView: true,
+		canComment: true,
+		canManage: false,
+		rule: rules[1],
+	});
+});
+
 test("resolvePrivatePublishPermission rejects unsafe request paths", () => {
 	const rules: PrivatePublishAuthRule[] = [
 		{
@@ -564,5 +638,34 @@ test("resolvePrivatePublishPermission uses the later rule for equal-specificity 
 		canComment: true,
 		canManage: true,
 		rule: rules[1],
+	});
+});
+
+test("resolvePrivatePublishPermission uses the strongest permission for equal-specificity matches", () => {
+	const rules: PrivatePublishAuthRule[] = [
+		{
+			path: "roadmap.md",
+			provider: "google",
+			identifier: "ada@example.com",
+			access: "full",
+			line: 3,
+		},
+		{
+			path: "roadmap.md",
+			provider: "google",
+			identifier: "ada@example.com",
+			access: "view",
+			line: 4,
+		},
+	];
+
+	assert.deepEqual(resolvePrivatePublishPermission(rules, {
+		provider: "google",
+		identifier: "ada@example.com",
+	}, "roadmap.md"), {
+		canView: true,
+		canComment: true,
+		canManage: true,
+		rule: rules[0],
 	});
 });
