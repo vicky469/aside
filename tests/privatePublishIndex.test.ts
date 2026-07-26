@@ -2,6 +2,8 @@ import * as assert from "node:assert/strict";
 import test from "node:test";
 import {
 	ensurePrivatePublishIndexMarkdown,
+	mergePrivatePublishIndexEntries,
+	readPrivatePublishIndexEntries,
 	type PrivatePublishIndexEntry,
 } from "../src/core/publish/privatePublishIndex";
 
@@ -327,4 +329,80 @@ test("ensurePrivatePublishIndexMarkdown normalizes CRLF input and uses one trail
 			"",
 		].join("\n"),
 	);
+});
+
+test("readPrivatePublishIndexEntries reads escaped managed rows", () => {
+	const markdown = ensurePrivatePublishIndexMarkdown(undefined, [{
+		path: "docs/a|b<!-- /Aside publish index -->.md",
+		type: "file",
+		status: "published",
+		permissionSource: "manual|fallback<!-- Aside publish index -->",
+		lastPublishedAt: null,
+	}]);
+
+	assert.deepEqual(readPrivatePublishIndexEntries(markdown), [{
+		path: "docs/a|b<!-- /Aside publish index -->.md",
+		type: "file",
+		status: "published",
+		permissionSource: "manual|fallback<!-- Aside publish index -->",
+		lastPublishedAt: null,
+	}]);
+});
+
+test("readPrivatePublishIndexEntries ignores unmanaged marker-like content", () => {
+	assert.deepEqual(readPrivatePublishIndexEntries([
+		"# Owner Notes",
+		"",
+		"<!-- Aside publish index -->",
+		"owner text",
+		"<!-- /Aside publish index -->",
+	].join("\n")), []);
+});
+
+test("mergePrivatePublishIndexEntries preserves old rows and upserts by path and type", () => {
+	const existingMarkdown = ensurePrivatePublishIndexMarkdown(undefined, [{
+		path: "old.md",
+		type: "file",
+		status: "published",
+		permissionSource: "auth.md",
+		lastPublishedAt: "2026-07-26T07:00:00.000Z",
+	}, {
+		path: "docs/",
+		type: "folder",
+		status: "published",
+		permissionSource: "auth.md",
+		lastPublishedAt: "2026-07-26T07:00:00.000Z",
+	}]);
+
+	assert.deepEqual(mergePrivatePublishIndexEntries(existingMarkdown, [{
+		path: "docs/",
+		type: "folder",
+		status: "published",
+		permissionSource: "auth.md",
+		lastPublishedAt: "2026-07-26T08:00:00.000Z",
+	}, {
+		path: "docs/page.md",
+		type: "file",
+		status: "published",
+		permissionSource: "auth.md",
+		lastPublishedAt: "2026-07-26T08:00:00.000Z",
+	}]), [{
+		path: "docs/",
+		type: "folder",
+		status: "published",
+		permissionSource: "auth.md",
+		lastPublishedAt: "2026-07-26T08:00:00.000Z",
+	}, {
+		path: "docs/page.md",
+		type: "file",
+		status: "published",
+		permissionSource: "auth.md",
+		lastPublishedAt: "2026-07-26T08:00:00.000Z",
+	}, {
+		path: "old.md",
+		type: "file",
+		status: "published",
+		permissionSource: "auth.md",
+		lastPublishedAt: "2026-07-26T07:00:00.000Z",
+	}]);
 });

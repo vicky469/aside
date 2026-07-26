@@ -45,6 +45,37 @@ export function ensurePrivatePublishIndexMarkdown(
 	].join("\n"));
 }
 
+export function readPrivatePublishIndexEntries(
+	existingMarkdown: string | null | undefined,
+): PrivatePublishIndexEntry[] {
+	const normalizedExisting = normalizeLineEndings(existingMarkdown ?? "");
+	const existingSection = findManagedSection(normalizedExisting);
+	if (!existingSection) {
+		return [];
+	}
+
+	const section = normalizedExisting.slice(existingSection.start, existingSection.end);
+	return section
+		.split("\n")
+		.slice(3, -1)
+		.map(parseGeneratedTableRow)
+		.filter((entry): entry is PrivatePublishIndexEntry => entry !== null);
+}
+
+export function mergePrivatePublishIndexEntries(
+	existingMarkdown: string | null | undefined,
+	entries: readonly PrivatePublishIndexEntry[],
+): PrivatePublishIndexEntry[] {
+	const mergedByPathAndType = new Map<string, PrivatePublishIndexEntry>();
+	for (const entry of readPrivatePublishIndexEntries(existingMarkdown)) {
+		mergedByPathAndType.set(buildEntryKey(entry), entry);
+	}
+	for (const entry of entries) {
+		mergedByPathAndType.set(buildEntryKey(entry), entry);
+	}
+	return [...mergedByPathAndType.values()].sort(compareEntries);
+}
+
 function renderManagedSection(entries: readonly PrivatePublishIndexEntry[]): string {
 	const rows = [...entries]
 		.sort(compareEntries)
@@ -166,6 +197,39 @@ function isGeneratedTableRow(line: string): boolean {
 		&& cells[0].length > 0
 		&& (cells[1] === "file" || cells[1] === "folder")
 		&& (cells[2] === "published" || cells[2] === "unpublished");
+}
+
+function parseGeneratedTableRow(line: string): PrivatePublishIndexEntry | null {
+	if (!isGeneratedTableRow(line)) {
+		return null;
+	}
+	const cells = splitGeneratedTableRowCells(line);
+	if (!cells || cells.length !== 5) {
+		return null;
+	}
+	const type = unescapeTableCell(cells[1]);
+	const status = unescapeTableCell(cells[2]);
+	if ((type !== "file" && type !== "folder") || (status !== "published" && status !== "unpublished")) {
+		return null;
+	}
+	return {
+		path: unescapeTableCell(cells[0]),
+		type,
+		status,
+		permissionSource: unescapeTableCell(cells[3]),
+		lastPublishedAt: cells[4] === "" ? null : unescapeTableCell(cells[4]),
+	};
+}
+
+function unescapeTableCell(value: string): string {
+	return value
+		.replace(/<\\!--/gu, "<!--")
+		.replace(/--\\>/gu, "-->")
+		.replace(/\\\|/gu, "|");
+}
+
+function buildEntryKey(entry: PrivatePublishIndexEntry): string {
+	return `${entry.type}\n${entry.path}`;
 }
 
 function splitGeneratedTableRowCells(line: string): string[] | null {

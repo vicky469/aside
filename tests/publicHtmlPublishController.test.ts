@@ -44,6 +44,12 @@ function createHarness(options: {
 		getVaultConfigDir: () => ".obsidian",
 		listMarkdownFiles: async (rootPath: string) => Array.from(files.keys())
 			.filter((path) => path.startsWith(rootPath) && path.endsWith(".md")),
+		listVaultFiles: async (rootPath: string) => [...new Set([
+			...Array.from(files.keys()),
+			...Array.from(binaryFiles.keys()),
+		])]
+			.filter((path) => path.startsWith(rootPath))
+			.sort(),
 		fileExists: async (path: string) => files.has(path) || binaryFiles.has(path),
 		readVaultFile: async (path: string) => {
 			const contents = files.get(path);
@@ -63,10 +69,15 @@ function createHarness(options: {
 			writes.push({ path, contents });
 			files.set(path, contents);
 		},
+		writeOrCreateVaultFile: async (path: string, contents: string) => {
+			writes.push({ path, contents });
+			files.set(path, contents);
+		},
 		getPublishedArtifactPaths: () => publishedArtifactPaths,
 		setPublishedArtifactPaths: async (paths: string[]) => {
 			publishedArtifactPaths = [...paths];
 		},
+		getCurrentTimestamp: () => "2026-07-26T08:00:00.000Z",
 		deploySnapshot: async (snapshotFiles: PublicHtmlPublishSnapshotFile[]) => {
 			deployCalls.push(snapshotFiles);
 			return options.deployResult ?? { ok: true };
@@ -116,6 +127,26 @@ test("public html publish controller fails closed when the publish feature flag 
 	assert.deepEqual(harness.writes, []);
 });
 
+test("public html publish controller creates a private publish index file", async () => {
+	const harness = createHarness({
+		files: {},
+	});
+
+	assert.deepEqual(await harness.controller.ensurePrivatePublishIndex(), {
+		ok: true,
+		path: "public/index.md",
+	});
+	assert.equal(harness.files.get("public/index.md"), [
+		"# Published Index",
+		"",
+		"<!-- Aside publish index -->",
+		"| path | type | status | permission_source | last_published_at |",
+		"| --- | --- | --- | --- | --- |",
+		"<!-- /Aside publish index -->",
+		"",
+	].join("\n"));
+});
+
 test("public html publish controller publishes one html pair and records enabled frontmatter", async () => {
 	const harness = createHarness();
 
@@ -125,9 +156,12 @@ test("public html publish controller publishes one html pair and records enabled
 		ok: true,
 		url: "https://publish.example.com/public/page",
 	});
-	assert.equal(harness.writes.length, 1);
-	assert.equal(harness.writes[0].path, "public/page.md");
+	assert.deepEqual(harness.writes.map((write) => write.path), [
+		"public/page.md",
+		"public/index.md",
+	]);
 	assert.match(harness.writes[0].contents, /asidePublish:\n  markdownEnabled: false\n  htmlEnabled: true\n  html: public\/page\.html/u);
+	assert.match(harness.writes[1].contents, /\| page\.html \| file \| published \| auth\.md \| 2026-07-26T08:00:00\.000Z \|/u);
 	assert.deepEqual(harness.deployCalls, [[{
 		vaultRelativePath: "public/page.html",
 		contents: "<!doctype html><html><body>Page</body></html>",
@@ -213,6 +247,7 @@ test("public html publish controller publishes markdown as generated html", asyn
 		url: "https://publish.example.com/public/page",
 	});
 	assert.match(harness.files.get("public/page.md") ?? "", /asidePublish:\n  markdownEnabled: true\n  htmlEnabled: false/u);
+	assert.match(harness.files.get("public/index.md") ?? "", /\| page\.md \| file \| published \| auth\.md \| 2026-07-26T08:00:00\.000Z \|/u);
 	assert.deepEqual(harness.deployCalls.at(-1)?.map((file) => file.vaultRelativePath), [
 		"public/page.html",
 	]);
@@ -220,6 +255,145 @@ test("public html publish controller publishes markdown as generated html", asyn
 	assert.match(html, /<h1>Page<\/h1>/u);
 	assert.match(html, /<p>Body text\.<\/p>/u);
 	assert.doesNotMatch(html, /asidePublish/u);
+});
+
+test("public html publish controller removes stale standalone html ownership when publishing markdown", async () => {
+	const harness = createHarness({
+		files: {
+			"public/page.md": "---\nasidePublish:\n  markdownEnabled: false\n  htmlEnabled: false\n---\n# Page\n",
+			"public/page.html": "<!doctype html><html><body>Standalone</body></html>",
+		},
+		binaryFiles: {
+			"public/report.pdf": "PDF bytes",
+		},
+		publishedArtifactPaths: ["public/page.html", "public/report.pdf"],
+	});
+
+	const result = await harness.controller.publishFile("public/page.md");
+
+	assert.deepEqual(result, {
+		ok: true,
+		url: "https://publish.example.com/public/page",
+	});
+	assert.deepEqual(harness.getPublishedArtifactPaths(), ["public/report.pdf"]);
+	assert.deepEqual(harness.deployCalls.at(-1)?.map((file) => file.vaultRelativePath), [
+		"public/page.html",
+		"public/report.pdf",
+	]);
+	const pageArtifacts = harness.deployCalls.at(-1)?.filter((file) => file.vaultRelativePath === "public/page.html") ?? [];
+	assert.equal(pageArtifacts.length, 1);
+	assert.match(decodeSnapshotContents(pageArtifacts[0]), /<h1>Page<\/h1>/u);
+});
+
+test("public html publish controller publishes a folder selection and updates the private index", async () => {
+	const harness = createHarness({
+		files: {
+			"public/index.md": [
+				"# Published Index",
+				"",
+				"Owner notes stay here.",
+				"",
+				"<!-- Aside publish index -->",
+				"| path | type | status | permission_source | last_published_at |",
+				"| --- | --- | --- | --- | --- |",
+				"| old.md | file | published | auth.md | 2026-07-26T07:00:00.000Z |",
+				"<!-- /Aside publish index -->",
+				"",
+			].join("\n"),
+			"public/auth.md": "| provider | identity | path | permission |\n",
+			"public/docs/a.md": "---\nasidePublish:\n  markdownEnabled: false\n  htmlEnabled: false\n---\n# A\n",
+			"public/docs/page.html": "<!doctype html><html><body>Page</body></html>",
+			"public/docs/raw.txt": "Raw",
+			"public/other.md": "# Other\n",
+		},
+		binaryFiles: {
+			"public/docs/report.pdf": "PDF bytes",
+		},
+	});
+
+	const result = await harness.controller.publishFolder("public/docs");
+
+	assert.deepEqual(result, {
+		ok: true,
+		url: "https://publish.example.com/public/docs",
+		notice: "Published 3 files from public/docs/.",
+	});
+	assert.match(harness.files.get("public/docs/a.md") ?? "", /asidePublish:\n  markdownEnabled: true\n  htmlEnabled: false/u);
+	assert.deepEqual(harness.getPublishedArtifactPaths(), [
+		"public/docs/page.html",
+		"public/docs/report.pdf",
+	]);
+	assert.deepEqual(harness.deployCalls.at(-1)?.map((file) => file.vaultRelativePath), [
+		"public/docs/a.html",
+		"public/docs/page.html",
+		"public/docs/report.pdf",
+	]);
+	const indexMarkdown = harness.files.get("public/index.md") ?? "";
+	assert.match(indexMarkdown, /Owner notes stay here\./u);
+	assert.match(indexMarkdown, /\| docs\/ \| folder \| published \| auth\.md \| 2026-07-26T08:00:00\.000Z \|/u);
+	assert.match(indexMarkdown, /\| docs\/a\.md \| file \| published \| auth\.md \| 2026-07-26T08:00:00\.000Z \|/u);
+	assert.match(indexMarkdown, /\| docs\/page\.html \| file \| published \| auth\.md \| 2026-07-26T08:00:00\.000Z \|/u);
+	assert.match(indexMarkdown, /\| docs\/report\.pdf \| file \| published \| auth\.md \| 2026-07-26T08:00:00\.000Z \|/u);
+	assert.match(indexMarkdown, /\| old\.md \| file \| published \| auth\.md \| 2026-07-26T07:00:00\.000Z \|/u);
+	assert.doesNotMatch(indexMarkdown, /raw\.txt/u);
+});
+
+test("public html publish controller lets selected markdown own generated html during folder publish", async () => {
+	const harness = createHarness({
+		files: {
+			"public/docs/page.md": "# Markdown Page\n",
+			"public/docs/page.html": "<!doctype html><html><body>Standalone</body></html>",
+		},
+	});
+
+	const result = await harness.controller.publishFolder("public/docs");
+
+	assert.deepEqual(result, {
+		ok: true,
+		url: "https://publish.example.com/public/docs",
+		notice: "Published 1 files from public/docs/.",
+	});
+	assert.deepEqual(harness.getPublishedArtifactPaths(), []);
+	assert.deepEqual(harness.deployCalls.at(-1)?.map((file) => file.vaultRelativePath), [
+		"public/docs/page.html",
+	]);
+	assert.match(decodeSnapshotContents(harness.deployCalls.at(-1)![0]), /<h1>Markdown Page<\/h1>/u);
+	assert.doesNotMatch(harness.files.get("public/index.md") ?? "", /\| docs\/page\.html \| file \|/u);
+	assert.match(harness.files.get("public/index.md") ?? "", /\| docs\/page\.md \| file \| published \| auth\.md \|/u);
+});
+
+test("public html publish controller publishes the configured root and excludes root control files", async () => {
+	const harness = createHarness({
+		files: {
+			"public/index.md": "# Published Index\n",
+			"public/auth.md": "| provider | identity | path | permission |\n",
+			"public/a.md": "# A\n",
+			"public/nested/index.md": "# Nested Index\n",
+		},
+		binaryFiles: {
+			"public/report.pdf": "PDF bytes",
+		},
+	});
+
+	const result = await harness.controller.publishRoot();
+
+	assert.deepEqual(result, {
+		ok: true,
+		url: "https://publish.example.com/public",
+		notice: "Published 3 files from public/.",
+	});
+	assert.deepEqual(harness.deployCalls.at(-1)?.map((file) => file.vaultRelativePath), [
+		"public/a.html",
+		"public/nested/index.html",
+		"public/report.pdf",
+	]);
+	const indexMarkdown = harness.files.get("public/index.md") ?? "";
+	assert.match(indexMarkdown, /\| \/ \| folder \| published \| auth\.md \| 2026-07-26T08:00:00\.000Z \|/u);
+	assert.match(indexMarkdown, /\| a\.md \| file \| published \| auth\.md \| 2026-07-26T08:00:00\.000Z \|/u);
+	assert.match(indexMarkdown, /\| nested\/index\.md \| file \| published \| auth\.md \| 2026-07-26T08:00:00\.000Z \|/u);
+	assert.match(indexMarkdown, /\| report\.pdf \| file \| published \| auth\.md \| 2026-07-26T08:00:00\.000Z \|/u);
+	assert.doesNotMatch(indexMarkdown, /\| auth\.md \| file \|/u);
+	assert.doesNotMatch(indexMarkdown, /\| index\.md \| file \|/u);
 });
 
 test("public html publish controller rejects repointing one markdown file to another html file", async () => {

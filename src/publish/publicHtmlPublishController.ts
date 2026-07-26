@@ -3,6 +3,7 @@ import type {
 	PublishSettingsValidation,
 } from "../core/publish/publishSettings";
 import {
+	normalizePublishAllowedRoot,
 	validatePublishSettings,
 } from "../core/publish/publishSettings";
 import type { FeatureFlags } from "../core/config/featureFlags";
@@ -26,6 +27,15 @@ import {
 	resolvePublicHtmlPairForSource,
 	type PublicHtmlPairResolution,
 } from "../core/publish/publishPair";
+import {
+	ensurePrivatePublishIndexMarkdown,
+	mergePrivatePublishIndexEntries,
+	readPrivatePublishIndexEntries,
+	type PrivatePublishIndexEntry,
+} from "../core/publish/privatePublishIndex";
+import {
+	selectPrivatePublishPaths,
+} from "../core/publish/privatePublishSelection";
 import type {
 	AsidePublishFrontmatter,
 } from "../core/publish/publishFrontmatter";
@@ -45,6 +55,10 @@ export type PublicHtmlDeploySnapshotResult =
 
 export type PublicHtmlCachePurgeResult =
 	| { ok: true }
+	| { ok: false; notice: string };
+
+export type PublicHtmlPublishIndexResult =
+	| { ok: true; path: string; notice?: string }
 	| { ok: false; notice: string };
 
 export interface PublicHtmlCachePurgeInput {
@@ -80,12 +94,15 @@ export interface PublicHtmlPublishHost {
 	getFeatureFlags(): FeatureFlags;
 	getVaultConfigDir(): string;
 	listMarkdownFiles(rootPath: string): Promise<string[]>;
+	listVaultFiles(rootPath: string): Promise<string[]>;
 	fileExists(path: string): Promise<boolean>;
 	readVaultFile(path: string): Promise<string>;
 	readVaultBinaryFile(path: string): Promise<ArrayBuffer>;
 	writeVaultFile(path: string, contents: string): Promise<void>;
+	writeOrCreateVaultFile(path: string, contents: string): Promise<void>;
 	getPublishedArtifactPaths(): string[];
 	setPublishedArtifactPaths(paths: string[]): Promise<void>;
+	getCurrentTimestamp(): string;
 	deploySnapshot(files: PublicHtmlPublishSnapshotFile[]): Promise<PublicHtmlDeploySnapshotResult>;
 	purgePublicUrlFromCache(input: PublicHtmlCachePurgeInput): Promise<PublicHtmlCachePurgeResult>;
 }
@@ -148,6 +165,129 @@ export class PublicHtmlPublishController {
 		return validatePublishSettings(settings, this.host.getFeatureFlags());
 	}
 
+	public async ensurePrivatePublishIndex(): Promise<PublicHtmlPublishIndexResult> {
+		const settings = this.host.getSettings();
+		const validation = this.validateSettings(settings);
+		if (!validation.ok) {
+			return validation;
+		}
+
+		await this.writePrivatePublishIndexEntries(settings, []);
+		return {
+			ok: true,
+			path: this.getPrivatePublishIndexPath(settings),
+		};
+	}
+
+	public async publishRoot(): Promise<PublicHtmlPublishResult> {
+		const settings = this.host.getSettings();
+		return this.publishFolder(settings.publishAllowedRoot);
+	}
+
+	public async publishFolder(folderPath: string): Promise<PublicHtmlPublishResult> {
+		const settings = this.host.getSettings();
+		const validation = this.validateSettings(settings);
+		if (!validation.ok) {
+			return validation;
+		}
+
+		const selected = selectPrivatePublishPaths({
+			targetPath: folderPath,
+			allFilePaths: await this.host.listVaultFiles(settings.publishAllowedRoot),
+			allowedRoot: settings.publishAllowedRoot,
+		});
+		if (!selected.ok) {
+			return selected;
+		}
+		if (selected.rootKind !== "folder") {
+			return {
+				ok: false,
+				notice: `Private publish target must be a folder inside ${settings.publishAllowedRoot}.`,
+			};
+		}
+		if (selected.paths.length === 0) {
+			await this.writePrivatePublishIndexEntries(settings, []);
+			return {
+				ok: false,
+				notice: `No publishable files found under ${selected.rootPath}.`,
+			};
+		}
+
+		const selectedMarkdownArtifactPaths = new Set(
+			selected.paths
+				.filter(isMarkdownPath)
+				.map(buildPublishedMarkdownArtifactPath),
+		);
+		const publishedIndexPaths: string[] = [];
+		const frontmatterBySourcePath = new Map<string, AsidePublishFrontmatter>();
+		const sourceContentsByPath = new Map<string, string>();
+		let nextArtifactPaths = this.getNormalizedPublishedArtifactPaths(settings, {
+			omitArtifactPaths: selectedMarkdownArtifactPaths,
+		});
+		for (const selectedPath of selected.paths) {
+			if (isMarkdownPath(selectedPath)) {
+				const sourceContents = await this.host.readVaultFile(selectedPath);
+				const sourceFrontmatter = readAsidePublishFrontmatter(sourceContents);
+				frontmatterBySourcePath.set(selectedPath, buildHtmlPublishFrontmatter(sourceFrontmatter, {
+					markdownEnabled: true,
+				}));
+				sourceContentsByPath.set(selectedPath, sourceContents);
+				publishedIndexPaths.push(selectedPath);
+				continue;
+			}
+
+			if (isPublishArtifactPath(selectedPath)) {
+				const artifact = this.resolveArtifactPath(settings, selectedPath);
+				if (!artifact.ok) {
+					return artifact;
+				}
+				const availability = await this.validateArtifactExists(artifact.artifactPath);
+				if (!availability.ok) {
+					return availability;
+				}
+				if (selectedMarkdownArtifactPaths.has(artifact.artifactPath)) {
+					continue;
+				}
+				nextArtifactPaths = this.getNormalizedPublishedArtifactPaths(settings, {
+					artifactPaths: nextArtifactPaths,
+					includeArtifactPath: artifact.artifactPath,
+				});
+				publishedIndexPaths.push(artifact.artifactPath);
+			}
+		}
+
+		const deployResult = await this.deployEnabledSnapshot(settings, {
+			frontmatterBySourcePath,
+			artifactPaths: nextArtifactPaths,
+		});
+		if (!deployResult.ok) {
+			return deployResult;
+		}
+
+		for (const [sourcePath, nextFrontmatter] of frontmatterBySourcePath) {
+			const sourceContents = sourceContentsByPath.get(sourcePath);
+			if (sourceContents === undefined) {
+				continue;
+			}
+			await this.host.writeVaultFile(sourcePath, writeAsidePublishFrontmatter(sourceContents, nextFrontmatter));
+		}
+		await this.host.setPublishedArtifactPaths(nextArtifactPaths);
+		await this.writePrivatePublishIndexEntries(settings, this.buildPublishedIndexEntries(
+			settings,
+			publishedIndexPaths,
+			selected.rootPath,
+		));
+
+		return {
+			ok: true,
+			url: buildPublishPublicUrl({
+				baseUrl: settings.publishBaseUrl,
+				vaultRelativePath: selected.rootPath,
+			}),
+			notice: `Published ${publishedIndexPaths.length} files from ${selected.rootPath}.`,
+		};
+	}
+
 	public async getFileActionState(filePath: string): Promise<PublicHtmlPublishActionState> {
 		return (await this.getFileActionStates(filePath))[0];
 	}
@@ -156,6 +296,9 @@ export class PublicHtmlPublishController {
 		const normalizedPath = normalizePublicFilePath(filePath);
 		if (!normalizedPath) {
 			return [this.disabledAction("Publish file path must stay inside the vault.")];
+		}
+		if (this.isPrivatePublishRootControlFile(this.host.getSettings(), normalizedPath)) {
+			return [this.disabledAction("Private publish control files are not published.")];
 		}
 		if (isMarkdownPath(normalizedPath)) {
 			return this.getMarkdownFileActionStates(normalizedPath);
@@ -276,6 +419,9 @@ export class PublicHtmlPublishController {
 				}
 				await this.host.writeVaultFile(pair.sourcePath, writeAsidePublishFrontmatter(sourceContents, nextFrontmatter));
 				await this.host.setPublishedArtifactPaths(nextArtifactPaths);
+				await this.writePrivatePublishIndexEntries(settings, [
+					this.buildPublishedIndexEntry(settings, pair.htmlPath, "file"),
+				]);
 
 				return {
 					ok: true,
@@ -311,6 +457,9 @@ export class PublicHtmlPublishController {
 			return deployResult;
 		}
 		await this.host.setPublishedArtifactPaths(nextArtifactPaths);
+		await this.writePrivatePublishIndexEntries(settings, [
+			this.buildPublishedIndexEntry(settings, htmlPath, "file"),
+		]);
 
 		return {
 			ok: true,
@@ -389,6 +538,12 @@ export class PublicHtmlPublishController {
 				notice: "Publish file path must stay inside the vault.",
 			};
 		}
+		if (this.isPrivatePublishRootControlFile(this.host.getSettings(), normalizedPath)) {
+			return {
+				ok: false,
+				notice: "Private publish control files are not published.",
+			};
+		}
 		if (isMarkdownPath(normalizedPath)) {
 			return this.publishMarkdownFile(normalizedPath);
 		}
@@ -422,20 +577,29 @@ export class PublicHtmlPublishController {
 		const nextFrontmatter = buildHtmlPublishFrontmatter(sourceFrontmatter, {
 			markdownEnabled: true,
 		});
+		const markdownArtifactPath = buildPublishedMarkdownArtifactPath(sourcePath);
+		const nextArtifactPaths = this.getNormalizedPublishedArtifactPaths(settings, {
+			omitArtifactPath: markdownArtifactPath,
+		});
 
 		const deployResult = await this.deployEnabledSnapshot(settings, {
 			frontmatterBySourcePath: new Map([[sourcePath, nextFrontmatter]]),
+			artifactPaths: nextArtifactPaths,
 		});
 		if (!deployResult.ok) {
 			return deployResult;
 		}
 		await this.host.writeVaultFile(sourcePath, writeAsidePublishFrontmatter(sourceContents, nextFrontmatter));
+		await this.host.setPublishedArtifactPaths(nextArtifactPaths);
+		await this.writePrivatePublishIndexEntries(settings, [
+			this.buildPublishedIndexEntry(settings, sourcePath, "file"),
+		]);
 
 		return {
 			ok: true,
 			url: buildPublishPublicUrl({
 				baseUrl: settings.publishBaseUrl,
-				vaultRelativePath: buildPublishedMarkdownArtifactPath(sourcePath),
+				vaultRelativePath: markdownArtifactPath,
 			}),
 		};
 	}
@@ -466,6 +630,9 @@ export class PublicHtmlPublishController {
 			return deployResult;
 		}
 		await this.host.setPublishedArtifactPaths(nextArtifactPaths);
+		await this.writePrivatePublishIndexEntries(settings, [
+			this.buildPublishedIndexEntry(settings, artifact.artifactPath, "file"),
+		]);
 
 		return {
 			ok: true,
@@ -1069,6 +1236,93 @@ export class PublicHtmlPublishController {
 		};
 	}
 
+	private getPrivatePublishIndexPath(settings: PublishSettings): string {
+		return `${normalizePublishAllowedRoot(settings.publishAllowedRoot)}index.md`;
+	}
+
+	private getPrivatePublishAuthPath(_settings: PublishSettings): string {
+		return "auth.md";
+	}
+
+	private async writePrivatePublishIndexEntries(
+		settings: PublishSettings,
+		entries: readonly PrivatePublishIndexEntry[],
+	): Promise<void> {
+		const indexPath = this.getPrivatePublishIndexPath(settings);
+		const existingMarkdown = await this.host.fileExists(indexPath)
+			? await this.host.readVaultFile(indexPath)
+			: null;
+		const nextEntries = entries.length > 0
+			? mergePrivatePublishIndexEntries(existingMarkdown, entries)
+			: readPrivatePublishIndexEntries(existingMarkdown);
+		const nextMarkdown = ensurePrivatePublishIndexMarkdown(existingMarkdown, nextEntries);
+		if (existingMarkdown !== nextMarkdown) {
+			await this.host.writeOrCreateVaultFile(indexPath, nextMarkdown);
+		}
+	}
+
+	private buildPublishedIndexEntries(
+		settings: PublishSettings,
+		filePaths: readonly string[],
+		folderPath?: string,
+	): PrivatePublishIndexEntry[] {
+		const timestamp = this.host.getCurrentTimestamp();
+		const entries: PrivatePublishIndexEntry[] = filePaths.map((filePath) =>
+			this.buildPublishedIndexEntry(settings, filePath, "file", timestamp));
+		if (folderPath) {
+			entries.push(this.buildPublishedIndexEntry(settings, folderPath, "folder", timestamp));
+		}
+		return entries;
+	}
+
+	private buildPublishedIndexEntry(
+		settings: PublishSettings,
+		vaultRelativePath: string,
+		type: PrivatePublishIndexEntry["type"],
+		timestamp = this.host.getCurrentTimestamp(),
+	): PrivatePublishIndexEntry {
+		return {
+			path: this.toPrivatePublishIndexPath(settings, vaultRelativePath, type),
+			type,
+			status: "published",
+			permissionSource: this.getPrivatePublishAuthPath(settings),
+			lastPublishedAt: timestamp,
+		};
+	}
+
+	private toPrivatePublishIndexPath(
+		settings: PublishSettings,
+		vaultRelativePath: string,
+		type: PrivatePublishIndexEntry["type"],
+	): string {
+		const allowedRoot = normalizePublishAllowedRoot(settings.publishAllowedRoot);
+		const allowedRootPath = allowedRoot.slice(0, -1);
+		const normalizedPath = normalizePublicFilePath(vaultRelativePath);
+		if (!normalizedPath) {
+			return vaultRelativePath;
+		}
+		if (type === "folder" && normalizedPath === allowedRootPath) {
+			return "/";
+		}
+		if (normalizedPath.startsWith(allowedRoot)) {
+			const relativePath = normalizedPath.slice(allowedRoot.length);
+			if (type === "folder") {
+				return relativePath.endsWith("/") ? relativePath : `${relativePath}/`;
+			}
+			return relativePath;
+		}
+		return normalizedPath;
+	}
+
+	private isPrivatePublishRootControlFile(settings: PublishSettings, filePath: string): boolean {
+		const allowedRoot = normalizePublishAllowedRoot(settings.publishAllowedRoot);
+		if (!filePath.startsWith(allowedRoot)) {
+			return false;
+		}
+		const relativePath = filePath.slice(allowedRoot.length).toLowerCase();
+		return relativePath === "index.md" || relativePath === "auth.md";
+	}
+
 	private disabledAction(
 		notice: string,
 		artifact?: PublishArtifactContext,
@@ -1156,6 +1410,7 @@ export class PublicHtmlPublishController {
 					};
 				}
 				const markdownArtifactPath = buildPublishedMarkdownArtifactPath(sourcePath);
+				ownedHtmlArtifactPaths.add(markdownArtifactPath);
 				const htmlPairUsesMarkdownArtifactPath = frontmatter.htmlEnabled && ownedHtmlPath === markdownArtifactPath;
 				if (!htmlPairUsesMarkdownArtifactPath) {
 					const htmlContents = renderMarkdownToBasicHtml({

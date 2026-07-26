@@ -58,6 +58,7 @@ import {
 import {
     PublicHtmlPublishController,
     type PublicHtmlPublishActionState,
+    type PublicHtmlPublishResult,
     type PublicHtmlPublishSnapshotFile,
     type PublicHtmlDeploySnapshotResult,
 	type PublicHtmlCachePurgeInput,
@@ -537,6 +538,14 @@ export default class Aside extends Plugin {
                 ? this.vaultCapabilityIndex.listMarkdownFilesInFolder(folder).map((file) => file.path)
                 : []);
         },
+        listVaultFiles: (rootPath) => {
+            const folderPath = normalizePath(rootPath.replace(/\/+$/u, ""));
+            const rootPrefix = `${folderPath}/`;
+            return Promise.resolve(this.app.vault.getFiles()
+                .map((file) => file.path)
+                .filter((filePath) => filePath.startsWith(rootPrefix))
+                .sort());
+        },
         fileExists: (filePath) => Promise.resolve(this.getVaultFileByPath(filePath) !== null),
         readVaultFile: async (filePath) => {
             const file = this.getVaultFileByPath(filePath);
@@ -559,8 +568,18 @@ export default class Aside extends Plugin {
             }
             await this.app.vault.modify(file, contents);
         },
+        writeOrCreateVaultFile: async (filePath, contents) => {
+            const normalizedPath = normalizePath(filePath);
+            const file = this.getVaultFileByPath(normalizedPath);
+            if (file) {
+                await this.app.vault.modify(file, contents);
+                return;
+            }
+            await this.app.vault.create(normalizedPath, contents);
+        },
         getPublishedArtifactPaths: () => this.settings.publishedPublicArtifactPaths,
         setPublishedArtifactPaths: (paths) => this.setPublishedPublicArtifactPaths(paths),
+        getCurrentTimestamp: () => new Date().toISOString(),
         deploySnapshot: (files) => this.publishSnapshotArtifacts(files),
         purgePublicUrlFromCache: (url) => this.purgePublishedPublicUrlCache(url),
     });
@@ -648,6 +667,8 @@ export default class Aside extends Plugin {
             this.commentEntryController.startDraftFromEditorSelection(editor as unknown as Editor, file),
         openCommentById: (filePath, commentId) => this.openCommentById(filePath, commentId),
         openIndexNote: () => this.openIndexNote(),
+        publishActiveFileFolder: () => this.publishActiveFileFolder(),
+        publishPublicRoot: () => this.publishPublicRoot(),
     });
     private readonly workspaceContextController = new WorkspaceContextController({
         app: this.app,
@@ -907,8 +928,14 @@ export default class Aside extends Plugin {
 					nextProjectName,
 				));
 			}
-		}
+        }
         await this.indexNoteSettingsController.setPublishEnabled(enabled);
+        if (enabled) {
+            const indexResult = await this.publicHtmlPublishController.ensurePrivatePublishIndex();
+            if (!indexResult.ok) {
+                this.showNotice(indexResult.notice, "publish", "publish.index.ensure.failed");
+            }
+        }
         this.syncPublicFilePublishActions();
     }
 
@@ -1144,6 +1171,48 @@ export default class Aside extends Plugin {
                 url: result.url,
             },
         );
+        this.syncPublicFilePublishActions();
+    }
+
+    private async publishActiveFileFolder(): Promise<void> {
+        const activeFile = this.app.workspace.getActiveFile();
+        if (!activeFile) {
+            this.showNotice("Open a file inside the publish root first.", "publish", "publish.folder.active-file.missing");
+            return;
+        }
+
+        const folderPath = activeFile.path.includes("/")
+            ? activeFile.path.slice(0, activeFile.path.lastIndexOf("/"))
+            : activeFile.path;
+        await this.runPublicHtmlFolderPublish(folderPath, "publish.folder.active-file");
+    }
+
+    private async publishPublicRoot(): Promise<void> {
+        const result = await this.publicHtmlPublishController.publishRoot();
+        this.handlePublicHtmlFolderPublishResult(result, this.settings.publishAllowedRoot, "publish.root");
+    }
+
+    private async runPublicHtmlFolderPublish(folderPath: string, eventPrefix: string): Promise<void> {
+        const result = await this.publicHtmlPublishController.publishFolder(folderPath);
+        this.handlePublicHtmlFolderPublishResult(result, folderPath, eventPrefix);
+    }
+
+    private handlePublicHtmlFolderPublishResult(
+        result: PublicHtmlPublishResult,
+        folderPath: string,
+        eventPrefix: string,
+    ): void {
+        if (!result.ok) {
+            this.showNotice(result.notice, "publish", `${eventPrefix}.failed`, {
+                vaultRelativePath: folderPath,
+            });
+            return;
+        }
+
+        this.showNotice(result.notice ?? `Published: ${result.url}`, "publish", `${eventPrefix}.published`, {
+            vaultRelativePath: folderPath,
+            url: result.url,
+        });
         this.syncPublicFilePublishActions();
     }
 
