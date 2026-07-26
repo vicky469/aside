@@ -18,6 +18,7 @@ Use this section as the working checklist. Mark an item done only after the code
 - [x] Private publish core has deterministic `public/index.md` managed-section formatting for creating or replacing the owner-visible inventory content.
 - [x] Private publish core has deterministic file, folder, and whole-root selection helpers for supported files under the configured publish root.
 - [x] Private publish snapshot support generation can classify Cloudflare Pages `_routes.json`, Pages Functions stubs, and a non-route private permission manifest module so generated permission data is not treated as a static asset.
+- [x] Wrangler Pages staging layout planning can keep static assets under an asset directory and Functions/private modules at the temporary Pages project root.
 
 ### To Implement
 
@@ -51,7 +52,8 @@ Use this section as the working checklist. Mark an item done only after the code
 - [x] Unit tests cover `public/index.md` status updates after Markdown, paired HTML, standalone HTML, and PDF unpublish.
 - [x] Unit tests prove stale root `auth.md` and `index.md` publish frontmatter cannot leak root control Markdown into a deploy snapshot.
 - [x] Snapshot support tests prove generated private data is classified as a non-route private module, not a static asset or Pages route file.
-- [ ] Staging-layout tests prove generated Functions and private modules are written beside the static asset directory for Wrangler direct upload.
+- [x] Staging-layout tests prove generated Functions and private modules are planned beside the static asset directory for Wrangler direct upload.
+- [ ] Integration tests prove `publishSnapshotArtifacts` writes generated Functions and private modules beside the static asset directory before invoking Wrangler.
 - [ ] Snapshot tests cover generated `site-manifest.json`, three-pane shell assets, comments seed data, and generated Pages Functions files.
 - [ ] Generated Functions tests cover authenticated/unauthenticated view access, `view` versus `comment` enforcement, and path-specific permission inheritance.
 - [ ] D1 API tests cover comment read/write, own-comment edit/delete policy, idempotent event writes, and malformed payload rejection.
