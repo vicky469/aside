@@ -519,8 +519,10 @@ test("public html publish controller generates private Pages support files from 
 	assert.deepEqual(support?.projectFiles.map((file) => file.projectRelativePath), [
 		"functions/_middleware.js",
 		"functions/_aside/api/auth/session.js",
+		"functions/_aside/api/site-manifest.js",
 		"functions/_aside/api/comments/index.js",
 		"src/_aside/private-publish-data.js",
+		"src/_aside/private-publish-runtime.js",
 	]);
 	assert.doesNotMatch(support?.staticAssets.map((file) => file.contents).join("\n") ?? "", /Alice@Example|wx-alice/u);
 	const privateData = support?.projectFiles.find((file) =>

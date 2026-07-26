@@ -22,6 +22,7 @@ Use this section as the working checklist. Mark an item done only after the code
 - [x] Server-side private publish manifest core includes a folder-first tree, file route metadata, permission rules, supported/unsupported providers, and single-entry version metadata for each file.
 - [x] Wrangler Pages snapshot deployment has a tested adapter that stages Pages Functions/private modules beside the static asset directory only when generated project files are present, while preserving the static-only deploy layout.
 - [x] Publish snapshot deployment now parses root `auth.md`, hashes deployed content, generates private Pages support files, and passes static/project support into the Wrangler Pages adapter without exposing permission data as a static asset.
+- [x] Generated Pages support includes a private runtime module and `_aside/api/site-manifest` route that returns only identity-filtered file, folder, version, and permission metadata without exposing raw permission rules.
 
 ### To Implement
 
@@ -32,13 +33,13 @@ Use this section as the working checklist. Mark an item done only after the code
 - [x] Add file and folder publish actions under `public/`, including publishing the whole `public/` root.
 - [x] Wire `public/index.md` status updates into unpublish flows.
 - [x] Generate the server-side private published-site manifest core with folder tree, file metadata, routes, versions, and permission rules.
-- [ ] Wire the private manifest into deployed Pages Functions and expose only permission-filtered manifest data to browser clients.
+- [x] Wire the private manifest into deployed Pages Functions and expose only permission-filtered manifest data to browser clients.
 - [ ] Generate the approved three-pane published shell: folder tree, file viewer with version controls, and Aside sidebar.
 - [x] Exclude root `public/auth.md` and root `public/index.md` from the enabled snapshot scanner even when stale publish frontmatter exists.
 - [x] Wire parsed `public/auth.md` rules into generated server-side permission data during deployment without exposing readable static permission assets.
 - [x] Stage Cloudflare Pages Functions, including site-wide middleware, auth routes, and comment API routes.
 - [ ] Implement Google OAuth for V1 using user-owned Cloudflare environment variables/secrets, server-side token verification, and signed session cookies.
-- [ ] Keep WeChat as a parsed provider and generated-provider slot, but report it as unsupported until its OAuth setup is implemented and tested.
+- [x] Keep WeChat as a parsed provider and generated-provider slot, but report it as unsupported until its OAuth setup is implemented and tested.
 - [ ] Add Cloudflare D1-backed comment event storage for published-site page comments.
 - [ ] Add published-site APIs for reading comments, creating page-note threads, appending replies, and later editing/deleting own comments.
 - [ ] Extend local comment entry metadata with optional author identity and preserve it through cloning, normalization, projection, sync events, sidecar storage, and sidebar rendering.
@@ -60,6 +61,7 @@ Use this section as the working checklist. Mark an item done only after the code
 - [x] Manifest tests cover folder tree, file routes, permission rules, provider support, and minimal version history.
 - [x] Deployment adapter tests prove generated Functions/private modules are written beside the static asset directory before Wrangler is invoked, and static-only deploys keep the previous staging layout.
 - [x] Controller and deployment adapter tests prove generated support files from `auth.md` are passed into deployment and Functions/private modules are written beside the static asset directory before Wrangler is invoked.
+- [x] Generated runtime tests prove the published site manifest response filters files/tree/permissions by identity and does not expose raw permission rules.
 - [ ] Snapshot tests cover generated `site-manifest.json`, three-pane shell assets, comments seed data, and generated Pages Functions files.
 - [ ] Generated Functions tests cover authenticated/unauthenticated view access, `view` versus `comment` enforcement, and path-specific permission inheritance.
 - [ ] D1 API tests cover comment read/write, own-comment edit/delete policy, idempotent event writes, and malformed payload rejection.
