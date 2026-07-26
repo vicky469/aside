@@ -123,6 +123,9 @@ test("private publish snapshot support files keep permission data server-side", 
 
 	assert.deepEqual(supportFiles.staticAssets.map((file) => file.assetRelativePath), [
 		"_routes.json",
+		"index.html",
+		"_aside/app.js",
+		"_aside/styles.css",
 	]);
 	assert.deepEqual(supportFiles.functions.map((file) => file.projectRelativePath), [
 		"functions/_middleware.js",
@@ -175,6 +178,45 @@ test("private publish snapshot support files keep permission data server-side", 
 	assert.match(serverData, /"contentHash": "sha256-page"/u);
 	assert.match(serverData, /"provider": "google"/u);
 	assert.match(serverData, /"unsupportedProviders": \[\n\t\t"wechat"\n\t\]/u);
+});
+
+test("private publish snapshot support files include a three-pane shell without permission data", () => {
+	const supportFiles = buildPrivatePublishSnapshotSupportFiles({
+		allowedRoot: "public/",
+		publishBaseUrl: "https://publish.example.com",
+		publishedAt: "2026-07-26T08:00:00.000Z",
+		files: [{
+			vaultRelativePath: "public/docs/page.html",
+			sourcePath: "public/docs/page.md",
+			kind: "markdown",
+			contentHash: "sha256-page",
+		}],
+		authRules: [{
+			provider: "google",
+			identifier: "alice@example.com",
+			path: "docs/",
+			access: "comment",
+			line: 3,
+		}],
+	});
+
+	const shellHtml = supportFiles.staticAssets.find((file) => file.assetRelativePath === "index.html")?.contents ?? "";
+	const shellApp = supportFiles.staticAssets.find((file) => file.assetRelativePath === "_aside/app.js")?.contents ?? "";
+	const shellStyles = supportFiles.staticAssets.find((file) => file.assetRelativePath === "_aside/styles.css")?.contents ?? "";
+
+	assert.match(shellHtml, /<div id="aside-private-publish-app">/u);
+	assert.match(shellHtml, /<script type="module" src="\/_aside\/app\.js"><\/script>/u);
+	assert.match(shellHtml, /<link rel="stylesheet" href="\/_aside\/styles\.css">/u);
+	assert.match(shellApp, /\/_aside\/api\/site-manifest/u);
+	assert.match(shellApp, /aside-publish-tree/u);
+	assert.match(shellApp, /aside-publish-viewer/u);
+	assert.match(shellApp, /aside-publish-sidebar/u);
+	assert.match(shellApp, /currentVersion/u);
+	assert.match(shellApp, /\/_aside\/api\/comments/u);
+	assert.match(shellStyles, /\.aside-publish-shell/u);
+	assert.match(shellStyles, /grid-template-columns/u);
+	assert.match(shellStyles, /@media \(max-width: 860px\)/u);
+	assert.doesNotMatch(`${shellHtml}\n${shellApp}\n${shellStyles}`, /permissionRules|alice@example\.com/u);
 });
 
 test("generated private publish runtime filters manifests by identity without exposing permission rules", () => {

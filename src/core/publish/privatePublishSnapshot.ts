@@ -8,6 +8,11 @@ import {
 import {
 	normalizePublishAllowedRoot,
 } from "./publishSettings";
+import {
+	renderPrivatePublishShellHtml,
+	renderPrivatePublishShellScript,
+	renderPrivatePublishShellStyles,
+} from "./privatePublishShell";
 
 export type PrivatePublishSnapshotFileKind = "markdown" | "html" | "pdf";
 
@@ -106,6 +111,15 @@ export function buildPrivatePublishSnapshotSupportFiles(
 		staticAssets: [{
 			assetRelativePath: "_routes.json",
 			contents: renderRoutesJson(),
+		}, {
+			assetRelativePath: "index.html",
+			contents: renderPrivatePublishShellHtml(),
+		}, {
+			assetRelativePath: "_aside/app.js",
+			contents: renderPrivatePublishShellScript(),
+		}, {
+			assetRelativePath: "_aside/styles.css",
+			contents: renderPrivatePublishShellStyles(),
 		}],
 		functions: [{
 			projectRelativePath: "functions/_middleware.js",

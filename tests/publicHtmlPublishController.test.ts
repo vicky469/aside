@@ -515,6 +515,9 @@ test("public html publish controller generates private Pages support files from 
 	const support = harness.deploySupportCalls.at(-1);
 	assert.deepEqual(support?.staticAssets.map((file) => file.assetRelativePath), [
 		"_routes.json",
+		"index.html",
+		"_aside/app.js",
+		"_aside/styles.css",
 	]);
 	assert.deepEqual(support?.projectFiles.map((file) => file.projectRelativePath), [
 		"functions/_middleware.js",

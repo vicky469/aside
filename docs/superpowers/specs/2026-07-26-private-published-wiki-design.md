@@ -24,6 +24,7 @@ Use this section as the working checklist. Mark an item done only after the code
 - [x] Publish snapshot deployment now parses root `auth.md`, hashes deployed content, generates private Pages support files, and passes static/project support into the Wrangler Pages adapter without exposing permission data as a static asset.
 - [x] Generated Pages support includes a private runtime module and `_aside/api/site-manifest` route that returns only identity-filtered file, folder, version, and permission metadata without exposing raw permission rules.
 - [x] Generated Pages support includes Google OAuth start/callback routes, logout, signed session cookies, and an auth session route that reports the signed-in identity.
+- [x] Generated snapshot support includes the published shell assets for a folder tree, file viewer with version metadata, and Aside comment pane.
 
 ### To Implement
 
@@ -35,7 +36,7 @@ Use this section as the working checklist. Mark an item done only after the code
 - [x] Wire `public/index.md` status updates into unpublish flows.
 - [x] Generate the server-side private published-site manifest core with folder tree, file metadata, routes, versions, and permission rules.
 - [x] Wire the private manifest into deployed Pages Functions and expose only permission-filtered manifest data to browser clients.
-- [ ] Generate the approved three-pane published shell: folder tree, file viewer with version controls, and Aside sidebar.
+- [x] Generate the approved three-pane published shell: folder tree, file viewer with version controls, and Aside sidebar.
 - [x] Exclude root `public/auth.md` and root `public/index.md` from the enabled snapshot scanner even when stale publish frontmatter exists.
 - [x] Wire parsed `public/auth.md` rules into generated server-side permission data during deployment without exposing readable static permission assets.
 - [x] Stage Cloudflare Pages Functions, including site-wide middleware, auth routes, and comment API routes.
@@ -64,7 +65,8 @@ Use this section as the working checklist. Mark an item done only after the code
 - [x] Controller and deployment adapter tests prove generated support files from `auth.md` are passed into deployment and Functions/private modules are written beside the static asset directory before Wrangler is invoked.
 - [x] Generated runtime tests prove the published site manifest response filters files/tree/permissions by identity and does not expose raw permission rules.
 - [x] Generated runtime tests cover signed, tampered, expired, and malformed session-cookie handling plus Google authorization URL generation.
-- [ ] Snapshot tests cover generated `site-manifest.json`, three-pane shell assets, comments seed data, and generated Pages Functions files.
+- [x] Snapshot tests cover generated three-pane shell assets and generated Pages Functions files without exposing raw permission data to client assets.
+- [ ] Snapshot tests cover comments seed data and any future static client seed assets.
 - [ ] Generated Functions tests cover authenticated/unauthenticated view access, `view` versus `comment` enforcement, and path-specific permission inheritance.
 - [ ] D1 API tests cover comment read/write, own-comment edit/delete policy, idempotent event writes, and malformed payload rejection.
 - [ ] Sync import tests prove remote comment events become local Aside sidecar comments without modifying source Markdown.
