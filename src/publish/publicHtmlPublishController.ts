@@ -1423,6 +1423,9 @@ export class PublicHtmlPublishController {
 		const snapshotFiles: PublicHtmlPublishSnapshotFile[] = [];
 		const ownedHtmlArtifactPaths = new Set<string>();
 		for (const sourcePath of markdownFiles) {
+			if (this.isPrivatePublishRootControlFile(settings, sourcePath)) {
+				continue;
+			}
 			const sourceContents = await this.host.readVaultFile(sourcePath);
 			const frontmatter = options.frontmatterBySourcePath?.get(sourcePath)
 				? options.frontmatterBySourcePath.get(sourcePath) as AsidePublishFrontmatter

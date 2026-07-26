@@ -472,6 +472,24 @@ test("public html publish controller stages all enabled html files", async () =>
 	assert.equal(decodeSnapshotContents(lastDeploy.at(-1)!), "PDF bytes");
 });
 
+test("public html publish controller does not deploy root control markdown files with stale frontmatter", async () => {
+	const harness = createHarness({
+		files: {
+			"public/auth.md": "---\nasidePublish:\n  markdownEnabled: true\n  htmlEnabled: false\n---\n| provider | identity | path | permission |\n| --- | --- | --- | --- |\n| google | alice@example.com | / | full |\n",
+			"public/index.md": "---\nasidePublish:\n  markdownEnabled: true\n  htmlEnabled: false\n---\n# Published Index\n",
+			"public/page.md": "---\nasidePublish:\n  markdownEnabled: false\n  htmlEnabled: false\n---\n# Page\n",
+		},
+	});
+
+	await harness.controller.publishFile("public/page.md");
+
+	const lastDeploy = harness.deployCalls.at(-1) ?? [];
+	assert.deepEqual(lastDeploy.map((file) => file.vaultRelativePath), [
+		"public/page.html",
+	]);
+	assert.doesNotMatch(lastDeploy.map((file) => file.vaultRelativePath).join("\n"), /auth|index/u);
+});
+
 test("public html publish controller publishes a PDF artifact and remembers it for future snapshots", async () => {
 	const harness = createHarness({
 		files: {

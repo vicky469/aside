@@ -17,6 +17,7 @@ Use this section as the working checklist. Mark an item done only after the code
 - [x] Existing publish artifact guards block obvious secret-bearing files, Obsidian plugin data, source maps, local-only files, and unsafe paths from public release/publish surfaces.
 - [x] Private publish core has deterministic `public/index.md` managed-section formatting for creating or replacing the owner-visible inventory content.
 - [x] Private publish core has deterministic file, folder, and whole-root selection helpers for supported files under the configured publish root.
+- [x] Private publish snapshot support generation can classify Cloudflare Pages `_routes.json`, Pages Functions stubs, and a non-route private permission manifest module so generated permission data is not treated as a static asset.
 
 ### To Implement
 
@@ -28,7 +29,8 @@ Use this section as the working checklist. Mark an item done only after the code
 - [x] Wire `public/index.md` status updates into unpublish flows.
 - [ ] Generate a private published-site manifest with folder tree, file metadata, routes, versions, and permission-aware paths.
 - [ ] Generate the approved three-pane published shell: folder tree, file viewer with version controls, and Aside sidebar.
-- [ ] Exclude `public/auth.md` from deployed readable content while using it to generate server-side permission data.
+- [x] Exclude root `public/auth.md` and root `public/index.md` from the enabled snapshot scanner even when stale publish frontmatter exists.
+- [ ] Wire parsed `public/auth.md` rules into generated server-side permission data during deployment without exposing readable static permission assets.
 - [ ] Stage Cloudflare Pages Functions, including site-wide middleware, auth routes, and comment API routes.
 - [ ] Implement Google OAuth for V1 using user-owned Cloudflare environment variables/secrets, server-side token verification, and signed session cookies.
 - [ ] Keep WeChat as a parsed provider and generated-provider slot, but report it as unsupported until its OAuth setup is implemented and tested.
@@ -47,7 +49,9 @@ Use this section as the working checklist. Mark an item done only after the code
 - [x] Unit tests cover file, folder, and whole-`public/` publish selection helpers.
 - [x] Unit tests cover controller integration for file publish, folder publish, whole-root publish, control-file exclusion, and generated Markdown HTML ownership.
 - [x] Unit tests cover `public/index.md` status updates after Markdown, paired HTML, standalone HTML, and PDF unpublish.
-- [ ] Snapshot tests prove `auth.md` is not deployed as readable content and generated server-side permission data is not exposed as static JSON.
+- [x] Unit tests prove stale root `auth.md` and `index.md` publish frontmatter cannot leak root control Markdown into a deploy snapshot.
+- [x] Snapshot support tests prove generated private data is classified as a non-route private module, not a static asset or Pages route file.
+- [ ] Staging-layout tests prove generated Functions and private modules are written beside the static asset directory for Wrangler direct upload.
 - [ ] Snapshot tests cover generated `site-manifest.json`, three-pane shell assets, comments seed data, and generated Pages Functions files.
 - [ ] Generated Functions tests cover authenticated/unauthenticated view access, `view` versus `comment` enforcement, and path-specific permission inheritance.
 - [ ] D1 API tests cover comment read/write, own-comment edit/delete policy, idempotent event writes, and malformed payload rejection.
