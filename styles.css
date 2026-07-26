@@ -1787,6 +1787,10 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
     color: var(--text-muted);
 }
 
+.aside-comment-author-indicator.is-remote {
+    color: var(--text-normal);
+}
+
 .aside-comment-author-indicator.is-codex {
     color: var(--interactive-accent);
 }

@@ -1,9 +1,10 @@
 import {
     normalizeDeletedAt,
 } from "../../core/rules/deletedCommentVisibility";
-import type { CommentAnchorKind, CommentThread, CommentThreadEntry } from "./commentThread";
+import type { CommentAnchorKind, CommentThread, CommentThreadEntry, CommentThreadEntryAuthor } from "./commentThread";
 import {
     getLatestThreadEntry,
+    normalizeCommentThreadEntryAuthor,
     normalizeCommentThread,
 } from "./commentThreadNormalization";
 
@@ -23,6 +24,7 @@ export interface Comment {
     isPinned?: boolean;
     deletedAt?: number;
     entryCount?: number;
+    author?: CommentThreadEntryAuthor;
 }
 
 export function isCommentThreadLike(value: Comment | CommentThread): value is CommentThread {
@@ -30,6 +32,7 @@ export function isCommentThreadLike(value: Comment | CommentThread): value is Co
 }
 
 export function commentToThread(comment: Comment): CommentThread {
+    const author = normalizeCommentThreadEntryAuthor(comment.author);
     return normalizeCommentThread({
         id: comment.id,
         filePath: comment.filePath,
@@ -48,6 +51,7 @@ export function commentToThread(comment: Comment): CommentThread {
             body: comment.comment,
             timestamp: comment.timestamp,
             deletedAt: normalizeDeletedAt(comment.deletedAt),
+            ...(author ? { author } : {}),
         }],
         createdAt: comment.timestamp,
         updatedAt: comment.timestamp,
@@ -68,6 +72,7 @@ export function threadEntryToComment(thread: CommentThread, entry: CommentThread
     const normalized = normalizeCommentThread(thread);
     const deletedAt = normalizeDeletedAt(entry.deletedAt) ?? normalized.deletedAt;
     const anchor = entry.anchor;
+    const author = normalizeCommentThreadEntryAuthor(entry.author);
 
     return {
         id: entry.id,
@@ -85,5 +90,6 @@ export function threadEntryToComment(thread: CommentThread, entry: CommentThread
         ...(normalized.id === entry.id && normalized.isPinned === true ? { isPinned: true } : {}),
         ...(deletedAt !== undefined ? { deletedAt } : {}),
         entryCount: normalized.entries.length,
+        ...(author ? { author } : {}),
     };
 }

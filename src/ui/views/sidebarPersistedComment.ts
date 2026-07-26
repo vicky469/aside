@@ -89,7 +89,7 @@ export interface PersistedThreadEntryPresentation extends BasePersistedCommentPr
 }
 
 export interface SidebarCommentAuthorPresentation {
-    kind: "user" | AsideAgentTarget | "script";
+    kind: "user" | "remote" | AsideAgentTarget | "script";
     label: string;
 }
 
@@ -426,17 +426,26 @@ export function renderAgentRunVisibleMetadata(
 function buildSidebarCommentAuthorPresentation(
     currentUserLabel: string,
     run: AgentRunRecord | null,
+    author?: Comment["author"],
 ): SidebarCommentAuthorPresentation {
-    if (!run) {
+    if (run) {
         return {
-            kind: "user",
-            label: currentUserLabel,
+            kind: run.requestedAgent,
+            label: getAgentLabel(run.requestedAgent),
+        };
+    }
+
+    const remoteLabel = author?.displayName?.trim() || author?.identity?.trim();
+    if (remoteLabel) {
+        return {
+            kind: "remote",
+            label: remoteLabel,
         };
     }
 
     return {
-        kind: run.requestedAgent,
-        label: getAgentLabel(run.requestedAgent),
+        kind: "user",
+        label: currentUserLabel,
     };
 }
 
@@ -581,6 +590,7 @@ export function resolveSidebarCommentAuthor(
     commentId: string,
     threadAgentRuns: readonly AgentRunRecord[],
     currentUserLabel: string,
+    author?: Comment["author"],
     threadScriptRuns: readonly ScriptRunRecord[] = [],
 ): SidebarCommentAuthorPresentation {
     if (getScriptRunByOutputEntryId(threadScriptRuns, commentId)) {
@@ -592,6 +602,7 @@ export function resolveSidebarCommentAuthor(
     return buildSidebarCommentAuthorPresentation(
         currentUserLabel,
         getAgentRunByOutputEntryId(threadAgentRuns, commentId),
+        author,
     );
 }
 
@@ -1337,6 +1348,7 @@ function renderStoredThreadEntry(
         entryComment.id,
         host.threadAgentRuns,
         host.currentUserLabel,
+        entry.author,
         host.threadScriptRuns,
     );
     const entryBody = entryAuthor.kind === "script" ? "" : (entry.body ?? "");
@@ -1508,6 +1520,7 @@ export async function renderPersistedCommentCard(
         comment.id,
         host.threadAgentRuns,
         host.currentUserLabel,
+        comment.author,
         host.threadScriptRuns,
     );
     const renderTasks: Array<Promise<void>> = [];

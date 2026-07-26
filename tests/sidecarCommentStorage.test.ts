@@ -167,6 +167,32 @@ test("sidecar comment storage strips legacy resolution state on read and rewrite
     assert.equal(Object.prototype.hasOwnProperty.call(rereadThreads[0], "resolved"), false);
 });
 
+test("sidecar comment storage preserves remote entry author metadata", async () => {
+    const adapter = new FakeAdapter();
+    const storage = new SidecarCommentStorage({
+        adapter: adapter as unknown as DataAdapter,
+        pluginDirPath: ".obsidian/plugins/aside",
+        hashText: async (text) => hashText(text),
+    });
+    const notePath = "books/example.md";
+    const thread = createThread(notePath);
+    thread.entries[0].author = {
+        provider: "google",
+        identity: "alice@example.com",
+        displayName: "Alice",
+    };
+
+    await storage.write(notePath, [thread]);
+
+    const readThreads = await storage.read(notePath);
+    assert.ok(readThreads);
+    assert.deepEqual(readThreads[0].entries[0]?.author, {
+        provider: "google",
+        identity: "alice@example.com",
+        displayName: "Alice",
+    });
+});
+
 test("sidecar comment storage renames the hashed file when the note path changes", async () => {
     const adapter = new FakeAdapter();
     const storage = new SidecarCommentStorage({

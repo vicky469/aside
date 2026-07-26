@@ -12,11 +12,18 @@ export interface CommentThreadEntryAnchor {
     orphaned?: boolean;
 }
 
+export interface CommentThreadEntryAuthor {
+    provider: string;
+    identity: string;
+    displayName?: string;
+}
+
 export interface CommentThreadEntry {
     id: string;
     body: string;
     timestamp: number;
     deletedAt?: number;
+    author?: CommentThreadEntryAuthor;
     anchor?: CommentThreadEntryAnchor;
 }
 

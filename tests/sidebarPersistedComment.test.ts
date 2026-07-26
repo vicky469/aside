@@ -1116,6 +1116,24 @@ test("resolveSidebarCommentAuthor labels user-written entries as the current use
     });
 });
 
+test("resolveSidebarCommentAuthor labels remote Google entries by display name", () => {
+    assert.deepEqual(resolveSidebarCommentAuthor("entry-remote", [], "You", {
+        provider: "google",
+        identity: "alice@example.com",
+        displayName: "Alice",
+    }), {
+        kind: "remote",
+        label: "Alice",
+    });
+    assert.deepEqual(resolveSidebarCommentAuthor("entry-remote", [], "You", {
+        provider: "google",
+        identity: "bob@example.com",
+    }), {
+        kind: "remote",
+        label: "bob@example.com",
+    });
+});
+
 test("shouldRenderSidebarCommentAuthor hides the current user badge but keeps agent badges", () => {
     assert.equal(shouldRenderSidebarCommentAuthor({
         kind: "user",
@@ -1124,6 +1142,10 @@ test("shouldRenderSidebarCommentAuthor hides the current user badge but keeps ag
     assert.equal(shouldRenderSidebarCommentAuthor({
         kind: "codex",
         label: "Codex",
+    }), true);
+    assert.equal(shouldRenderSidebarCommentAuthor({
+        kind: "remote",
+        label: "Alice",
     }), true);
 });
 

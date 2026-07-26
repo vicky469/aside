@@ -43,6 +43,7 @@ export type {
     CommentThread,
     CommentThreadEntry,
     CommentThreadEntryAnchor,
+    CommentThreadEntryAuthor,
     ReorderPlacement,
 } from "./domain/comments/commentThread";
 export type { Comment } from "./domain/comments/commentProjection";

@@ -48,7 +48,7 @@ Use this section as the working checklist. Mark an item done only after the code
 - [x] Add Cloudflare D1-backed comment event storage for published-site page comments.
 - [x] Add published-site APIs for reading comments and creating page-note comment threads.
 - [x] Add published-site APIs for appending replies, and later editing/deleting own comments.
-- [ ] Extend local comment entry metadata with optional author identity and preserve it through cloning, normalization, projection, sync events, sidecar storage, and sidebar rendering.
+- [x] Extend local comment entry metadata with optional author identity and preserve it through cloning, normalization, projection, sync events, sidecar storage, and sidebar rendering.
 - [ ] Add local remote-comment sync that pulls Cloudflare D1 events and imports them through Aside's existing sync-event reducer into sidecar storage.
 - [ ] Seed published pages with existing local Aside page-note comments as read-only initial state.
 - [ ] Document required Cloudflare setup: Pages project, D1 binding, Google OAuth credentials, session signing secret, and Wrangler deployment path.
@@ -75,7 +75,7 @@ Use this section as the working checklist. Mark an item done only after the code
 - [ ] Snapshot tests cover comments seed data and any future static client seed assets.
 - [x] D1 API tests cover reply writes, own-comment edit/delete policy, idempotent event writes, and malformed payload rejection.
 - [ ] Sync import tests prove remote comment events become local Aside sidecar comments without modifying source Markdown.
-- [ ] Author metadata tests prove Google identities render distinctly in the local Aside sidebar while current-user comments still hide the default "You" badge.
+- [x] Author metadata tests prove Google identities render distinctly in the local Aside sidebar while current-user comments still hide the default "You" badge.
 - [x] `npm run build` passes.
 - [x] Release artifact inspection confirms no OAuth secret, session signing secret, D1 credentials, generated permission manifests, source maps, raw TypeScript, or local `.superpowers/` artifacts ship in `main.js`, `manifest.json`, or `styles.css`.
 - [ ] Manual Cloudflare test confirms a user without permission cannot fetch protected static artifacts directly.

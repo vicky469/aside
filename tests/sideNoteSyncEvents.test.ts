@@ -152,6 +152,83 @@ test("side-note sync reducer keeps legacy resolution events in the logical clock
     assert.equal(reduced.appliedLogicalClocks.has("device-a:3"), true);
 });
 
+test("side-note sync events preserve remote entry author metadata", () => {
+    const alice = {
+        provider: "google",
+        identity: "alice@example.com",
+        displayName: "Alice",
+    };
+    const bob = {
+        provider: "google",
+        identity: "bob@example.com",
+        displayName: "Bob",
+    };
+    const create = createEvent({
+        payload: {
+            thread: createThread("docs/note.md", {
+                entries: [{
+                    id: "entry-1",
+                    body: "remote root",
+                    timestamp: 1710000000000,
+                    author: alice,
+                }],
+            }),
+        },
+    });
+    const append = createEvent({
+        eventId: "event-2",
+        logicalClock: 2,
+        op: "appendEntry",
+        payload: {
+            threadId: "thread-1",
+            entry: {
+                id: "entry-2",
+                body: "remote reply",
+                timestamp: 1710000000200,
+                author: bob,
+            },
+        },
+    });
+
+    const reduced = reduceSideNoteSyncEvents([], [create, append]);
+
+    assert.deepEqual(reduced.threads[0].entries.map((entry) => entry.author), [
+        alice,
+        bob,
+    ]);
+
+    const authorChangeInputs = buildSideNoteSyncEventInputsForThreadDiff([
+        createThread("docs/note.md"),
+    ], [
+        createThread("docs/note.md", {
+            entries: [{
+                id: "entry-1",
+                body: "hello",
+                timestamp: 1710000000000,
+                author: alice,
+            }],
+        }),
+    ]);
+    assert.deepEqual(authorChangeInputs, [{
+        op: "updateEntry",
+        payload: {
+            threadId: "thread-1",
+            entryId: "entry-1",
+            entry: {
+                id: "entry-1",
+                body: "hello",
+                timestamp: 1710000000000,
+                author: alice,
+            },
+            previousEntry: {
+                id: "entry-1",
+                body: "hello",
+                timestamp: 1710000000000,
+            },
+        },
+    }]);
+});
+
 test("side-note sync reducer retargets renameSource events that use nextPath", () => {
     const previous = createThread("docs/old.md");
     const renameSource = createEvent({
