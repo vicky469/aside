@@ -525,9 +525,81 @@ test("public html publish controller exposes unpublish and update actions for pu
 	}]);
 });
 
+test("public html publish controller marks a PDF index row unpublished", async () => {
+	const harness = createHarness({
+		files: {
+			"public/index.md": [
+				"# Published Index",
+				"",
+				"<!-- Aside publish index -->",
+				"| path | type | status | permission_source | last_published_at |",
+				"| --- | --- | --- | --- | --- |",
+				"| report.pdf | file | published | auth.md | 2026-07-26T07:00:00.000Z |",
+				"<!-- /Aside publish index -->",
+				"",
+			].join("\n"),
+		},
+		binaryFiles: {
+			"public/report.pdf": "PDF bytes",
+		},
+		publishedArtifactPaths: ["public/report.pdf"],
+	});
+
+	const result = await harness.controller.unpublishFile("public/report.pdf");
+
+	assert.deepEqual(result, {
+		ok: true,
+		url: "https://publish.example.com/public/report.pdf",
+	});
+	assert.deepEqual(harness.getPublishedArtifactPaths(), []);
+	assert.match(harness.files.get("public/index.md") ?? "", /\| report\.pdf \| file \| unpublished \| auth\.md \|  \|/u);
+});
+
+test("public html publish controller rejects unpublishing an unpublished PDF without changing the index", async () => {
+	const existingIndexMarkdown = [
+		"# Published Index",
+		"",
+		"<!-- Aside publish index -->",
+		"| path | type | status | permission_source | last_published_at |",
+		"| --- | --- | --- | --- | --- |",
+		"| report.pdf | file | published | auth.md | 2026-07-26T07:00:00.000Z |",
+		"<!-- /Aside publish index -->",
+		"",
+	].join("\n");
+	const harness = createHarness({
+		files: {
+			"public/index.md": existingIndexMarkdown,
+		},
+		binaryFiles: {
+			"public/report.pdf": "PDF bytes",
+		},
+		publishedArtifactPaths: [],
+	});
+
+	assert.deepEqual(await harness.controller.unpublishFile("public/report.pdf"), {
+		ok: false,
+		notice: "Publish this PDF before unpublishing it.",
+	});
+	assert.deepEqual(harness.deployCalls, []);
+	assert.equal(harness.files.get("public/index.md"), existingIndexMarkdown);
+});
+
 test("public html publish controller unpublishes by disabling frontmatter and redeploying remaining html", async () => {
 	const harness = createHarness({
 		files: {
+			"public/index.md": [
+				"# Published Index",
+				"",
+				"Owner notes.",
+				"",
+				"<!-- Aside publish index -->",
+				"| path | type | status | permission_source | last_published_at |",
+				"| --- | --- | --- | --- | --- |",
+				"| a.html | file | published | auth.md | 2026-07-26T07:00:00.000Z |",
+				"| old.md | file | published | auth.md | 2026-07-26T07:00:00.000Z |",
+				"<!-- /Aside publish index -->",
+				"",
+			].join("\n"),
 			"public/a.md": "---\nasidePublish:\n  markdownEnabled: false\n  htmlEnabled: true\n  html: public/a.html\n---\n# A\n",
 			"public/a.html": "<!doctype html><html><body>A</body></html>",
 			"public/b.md": "---\nasidePublish:\n  markdownEnabled: false\n  htmlEnabled: true\n  html: public/b.html\n---\n# B\n",
@@ -552,11 +624,25 @@ test("public html publish controller unpublishes by disabling frontmatter and re
 		sourcePath: "public/a.md",
 		event: "unpublish",
 	}]);
+	const indexMarkdown = harness.files.get("public/index.md") ?? "";
+	assert.match(indexMarkdown, /Owner notes\./u);
+	assert.match(indexMarkdown, /\| a\.html \| file \| unpublished \| auth\.md \|  \|/u);
+	assert.match(indexMarkdown, /\| old\.md \| file \| published \| auth\.md \| 2026-07-26T07:00:00\.000Z \|/u);
 });
 
 test("public html publish controller unpublishes markdown and purges its public URL", async () => {
 	const harness = createHarness({
 		files: {
+			"public/index.md": [
+				"# Published Index",
+				"",
+				"<!-- Aside publish index -->",
+				"| path | type | status | permission_source | last_published_at |",
+				"| --- | --- | --- | --- | --- |",
+				"| page.md | file | published | auth.md | 2026-07-26T07:00:00.000Z |",
+				"<!-- /Aside publish index -->",
+				"",
+			].join("\n"),
 			"public/page.md": "---\nasidePublish:\n  markdownEnabled: true\n  htmlEnabled: false\n---\n# Page\n",
 		},
 	});
@@ -573,6 +659,7 @@ test("public html publish controller unpublishes markdown and purges its public 
 		sourcePath: "public/page.md",
 		event: "unpublish",
 	}]);
+	assert.match(harness.files.get("public/index.md") ?? "", /\| page\.md \| file \| unpublished \| auth\.md \|  \|/u);
 });
 
 test("public html publish controller keeps unpublish when cache purge fails", async () => {
@@ -649,8 +736,19 @@ test("public html publish controller unpublishes paired html without redeploying
 });
 
 test("public html publish controller keeps unpublish frontmatter enabled when deployment fails", async () => {
+	const existingIndexMarkdown = [
+		"# Published Index",
+		"",
+		"<!-- Aside publish index -->",
+		"| path | type | status | permission_source | last_published_at |",
+		"| --- | --- | --- | --- | --- |",
+		"| a.html | file | published | auth.md | 2026-07-26T07:00:00.000Z |",
+		"<!-- /Aside publish index -->",
+		"",
+	].join("\n");
 	const harness = createHarness({
 		files: {
+			"public/index.md": existingIndexMarkdown,
 			"public/a.md": "---\nasidePublish:\n  markdownEnabled: false\n  htmlEnabled: true\n  html: public/a.html\n---\n# A\n",
 			"public/a.html": "<!doctype html><html><body>A</body></html>",
 			"public/b.md": "---\nasidePublish:\n  markdownEnabled: false\n  htmlEnabled: true\n  html: public/b.html\n---\n# B\n",
@@ -671,6 +769,7 @@ test("public html publish controller keeps unpublish frontmatter enabled when de
 	assert.deepEqual(harness.writes, []);
 	assert.deepEqual(harness.purgeCalls, []);
 	assert.match(harness.files.get("public/a.md") ?? "", /asidePublish:\n  markdownEnabled: false\n  htmlEnabled: true\n  html: public\/a\.html/u);
+	assert.equal(harness.files.get("public/index.md"), existingIndexMarkdown);
 	assert.deepEqual(harness.deployCalls.at(-1), [{
 		vaultRelativePath: "public/b.html",
 		contents: "<!doctype html><html><body>B</body></html>",
@@ -744,6 +843,16 @@ test("public html publish controller exposes standalone artifact actions when an
 test("public html publish controller unpublishes standalone html when an implicit markdown pair is disabled", async () => {
 	const harness = createHarness({
 		files: {
+			"public/index.md": [
+				"# Published Index",
+				"",
+				"<!-- Aside publish index -->",
+				"| path | type | status | permission_source | last_published_at |",
+				"| --- | --- | --- | --- | --- |",
+				"| page.html | file | published | auth.md | 2026-07-26T07:00:00.000Z |",
+				"<!-- /Aside publish index -->",
+				"",
+			].join("\n"),
 			"public/page.md": "---\nasidePublish:\n  markdownEnabled: false\n  htmlEnabled: false\n---\n# Page\n",
 			"public/page.html": "<!doctype html><html><body>Page</body></html>",
 		},
@@ -758,6 +867,7 @@ test("public html publish controller unpublishes standalone html when an implici
 	});
 	assert.deepEqual(harness.getPublishedArtifactPaths(), []);
 	assert.deepEqual(harness.deployCalls.at(-1), []);
+	assert.match(harness.files.get("public/index.md") ?? "", /\| page\.html \| file \| unpublished \| auth\.md \|  \|/u);
 });
 
 test("public html publish controller reports an unpublish action for enabled html pairs", async () => {

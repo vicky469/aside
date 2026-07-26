@@ -683,6 +683,9 @@ export class PublicHtmlPublishController {
 				}
 				await this.host.writeVaultFile(pair.sourcePath, writeAsidePublishFrontmatter(sourceContents, nextFrontmatter));
 				await this.host.setPublishedArtifactPaths(nextArtifactPaths);
+				await this.writePrivatePublishIndexEntries(settings, [
+					this.buildUnpublishedIndexEntry(settings, pair.htmlPath, "file"),
+				]);
 
 				return this.buildCachePurgeResult(settings, pair.htmlPath, pair.sourcePath, "unpublish");
 			}
@@ -713,6 +716,9 @@ export class PublicHtmlPublishController {
 			return deployResult;
 		}
 		await this.host.setPublishedArtifactPaths(nextArtifactPaths);
+		await this.writePrivatePublishIndexEntries(settings, [
+			this.buildUnpublishedIndexEntry(settings, htmlPath, "file"),
+		]);
 
 		return this.buildCachePurgeResult(settings, htmlPath, htmlPath, "unpublish");
 	}
@@ -751,6 +757,9 @@ export class PublicHtmlPublishController {
 			return deployResult;
 		}
 		await this.host.writeVaultFile(sourcePath, writeAsidePublishFrontmatter(sourceContents, nextFrontmatter));
+		await this.writePrivatePublishIndexEntries(settings, [
+			this.buildUnpublishedIndexEntry(settings, sourcePath, "file"),
+		]);
 
 		return this.buildCachePurgeResult(
 			settings,
@@ -794,6 +803,13 @@ export class PublicHtmlPublishController {
 		if (!artifact.ok) {
 			return artifact;
 		}
+		const publishedArtifactPaths = this.getNormalizedPublishedArtifactPaths(settings);
+		if (!publishedArtifactPaths.includes(artifact.artifactPath)) {
+			return {
+				ok: false,
+				notice: "Publish this PDF before unpublishing it.",
+			};
+		}
 		const nextArtifactPaths = this.getNormalizedPublishedArtifactPaths(settings, {
 			omitArtifactPath: artifact.artifactPath,
 		});
@@ -804,6 +820,9 @@ export class PublicHtmlPublishController {
 			return deployResult;
 		}
 		await this.host.setPublishedArtifactPaths(nextArtifactPaths);
+		await this.writePrivatePublishIndexEntries(settings, [
+			this.buildUnpublishedIndexEntry(settings, artifact.artifactPath, "file"),
+		]);
 
 		return this.buildCachePurgeResult(settings, artifact.artifactPath, artifact.artifactPath, "unpublish");
 	}
@@ -1287,6 +1306,20 @@ export class PublicHtmlPublishController {
 			status: "published",
 			permissionSource: this.getPrivatePublishAuthPath(settings),
 			lastPublishedAt: timestamp,
+		};
+	}
+
+	private buildUnpublishedIndexEntry(
+		settings: PublishSettings,
+		vaultRelativePath: string,
+		type: PrivatePublishIndexEntry["type"],
+	): PrivatePublishIndexEntry {
+		return {
+			path: this.toPrivatePublishIndexPath(settings, vaultRelativePath, type),
+			type,
+			status: "unpublished",
+			permissionSource: this.getPrivatePublishAuthPath(settings),
+			lastPublishedAt: null,
 		};
 	}
 

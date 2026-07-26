@@ -25,7 +25,7 @@ Use this section as the working checklist. Mark an item done only after the code
 - [x] Wire `public/index.md` creation into publish enablement or folder publish flows when the file does not exist.
 - [x] Wire `public/index.md` updates into successful publish flows as the owner-visible publish inventory and status table.
 - [x] Add file and folder publish actions under `public/`, including publishing the whole `public/` root.
-- [ ] Wire `public/index.md` status updates into unpublish flows.
+- [x] Wire `public/index.md` status updates into unpublish flows.
 - [ ] Generate a private published-site manifest with folder tree, file metadata, routes, versions, and permission-aware paths.
 - [ ] Generate the approved three-pane published shell: folder tree, file viewer with version controls, and Aside sidebar.
 - [ ] Exclude `public/auth.md` from deployed readable content while using it to generate server-side permission data.
@@ -46,6 +46,7 @@ Use this section as the working checklist. Mark an item done only after the code
 - [x] Unit tests cover `public/index.md` creation and status-table updates without overwriting unrelated user content.
 - [x] Unit tests cover file, folder, and whole-`public/` publish selection helpers.
 - [x] Unit tests cover controller integration for file publish, folder publish, whole-root publish, control-file exclusion, and generated Markdown HTML ownership.
+- [x] Unit tests cover `public/index.md` status updates after Markdown, paired HTML, standalone HTML, and PDF unpublish.
 - [ ] Snapshot tests prove `auth.md` is not deployed as readable content and generated server-side permission data is not exposed as static JSON.
 - [ ] Snapshot tests cover generated `site-manifest.json`, three-pane shell assets, comments seed data, and generated Pages Functions files.
 - [ ] Generated Functions tests cover authenticated/unauthenticated view access, `view` versus `comment` enforcement, and path-specific permission inheritance.
