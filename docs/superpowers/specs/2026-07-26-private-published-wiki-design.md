@@ -15,13 +15,15 @@ Use this section as the working checklist. Mark an item done only after the code
 - [x] Aside already keeps local comments in sidecar JSON and plugin-data sync events rather than writing comment blocks into source Markdown.
 - [x] Aside already has sync-event operations for comment thread creation, replies, updates, deletion, pinning, movement, and source rename recovery.
 - [x] Existing publish artifact guards block obvious secret-bearing files, Obsidian plugin data, source maps, local-only files, and unsafe paths from public release/publish surfaces.
+- [x] Private publish core has deterministic `public/index.md` managed-section formatting for creating or replacing the owner-visible inventory content.
+- [x] Private publish core has deterministic file, folder, and whole-root selection helpers for supported files under the configured publish root.
 
 ### To Implement
 
-- [ ] Add `public/auth.md` parsing for Google and WeChat identities, public-root-relative paths, and `view`, `comment`, and `full` permissions.
-- [ ] Add inherited permission resolution where folder rows apply downward and more specific rows override broader rows for the same identity.
-- [ ] Create `public/index.md` when publishing is enabled or a folder publish begins and the file does not exist.
-- [ ] Keep `public/index.md` updated as the owner-visible publish inventory and status table.
+- [x] Add `public/auth.md` parsing for Google and WeChat identities, public-root-relative paths, and `view`, `comment`, and `full` permissions.
+- [x] Add inherited permission resolution where folder rows apply downward and more specific rows override broader rows for the same identity.
+- [ ] Wire `public/index.md` creation into publish enablement or folder publish flows when the file does not exist.
+- [ ] Wire `public/index.md` updates into publish/unpublish flows as the owner-visible publish inventory and status table.
 - [ ] Add file and folder publish actions under `public/`, including publishing the whole `public/` root.
 - [ ] Generate a private published-site manifest with folder tree, file metadata, routes, versions, and permission-aware paths.
 - [ ] Generate the approved three-pane published shell: folder tree, file viewer with version controls, and Aside sidebar.
@@ -38,18 +40,18 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### Verification
 
-- [ ] Unit tests cover `auth.md` table parsing, validation errors, unsupported provider handling, and path normalization.
-- [ ] Unit tests cover inherited permission resolution, specificity overrides, and permission ordering.
-- [ ] Unit tests cover `public/index.md` creation and status-table updates without overwriting unrelated user content.
-- [ ] Controller tests cover file publish, folder publish, and whole-`public/` publish selection.
+- [x] Unit tests cover `auth.md` table parsing, validation errors, Google/WeChat provider handling, and path normalization.
+- [x] Unit tests cover inherited permission resolution, specificity overrides, and permission ordering.
+- [x] Unit tests cover `public/index.md` creation and status-table updates without overwriting unrelated user content.
+- [x] Unit tests cover file, folder, and whole-`public/` publish selection helpers.
 - [ ] Snapshot tests prove `auth.md` is not deployed as readable content and generated server-side permission data is not exposed as static JSON.
 - [ ] Snapshot tests cover generated `site-manifest.json`, three-pane shell assets, comments seed data, and generated Pages Functions files.
 - [ ] Generated Functions tests cover authenticated/unauthenticated view access, `view` versus `comment` enforcement, and path-specific permission inheritance.
 - [ ] D1 API tests cover comment read/write, own-comment edit/delete policy, idempotent event writes, and malformed payload rejection.
 - [ ] Sync import tests prove remote comment events become local Aside sidecar comments without modifying source Markdown.
 - [ ] Author metadata tests prove Google identities render distinctly in the local Aside sidebar while current-user comments still hide the default "You" badge.
-- [ ] `npm run build` passes.
-- [ ] Release artifact inspection confirms no OAuth secret, session signing secret, D1 credentials, generated permission manifests, source maps, raw TypeScript, or local `.superpowers/` artifacts ship in `main.js`, `manifest.json`, or `styles.css`.
+- [x] `npm run build` passes.
+- [x] Release artifact inspection confirms no OAuth secret, session signing secret, D1 credentials, generated permission manifests, source maps, raw TypeScript, or local `.superpowers/` artifacts ship in `main.js`, `manifest.json`, or `styles.css`.
 - [ ] Manual Cloudflare test confirms a user without permission cannot fetch protected static artifacts directly.
 - [ ] Manual Cloudflare test confirms a permitted Google user can view, comment, and later see the comment imported into local Aside.
 
