@@ -83,6 +83,9 @@ test("deployPublicHtmlSnapshotToWranglerPages stages Pages Functions beside the 
 			vaultRelativePath: "public/page.html",
 			contents: "<!doctype html><html><body>Page</body></html>",
 		}],
+		staticAssetPathByVaultRelativePath: {
+			"public/page.html": "_aside/private-assets/sha256-page/page.html",
+		},
 		staticAssets: [{
 			assetRelativePath: "_routes.json",
 			contents: "{\"version\":1}",
@@ -104,7 +107,7 @@ test("deployPublicHtmlSnapshotToWranglerPages stages Pages Functions beside the 
 
 	assert.deepEqual(result, { ok: true });
 	assert.deepEqual(writeCalls, [{
-		path: "/tmp/aside-stage/assets/public/page.html",
+		path: "/tmp/aside-stage/assets/_aside/private-assets/sha256-page/page.html",
 		contents: "<!doctype html><html><body>Page</body></html>",
 		encoding: "utf8",
 	}, {
@@ -120,7 +123,7 @@ test("deployPublicHtmlSnapshotToWranglerPages stages Pages Functions beside the 
 		contents: "export const privatePublishManifest = {};",
 		encoding: "utf8",
 	}]);
-	assert.ok(mkdirCalls.includes("/tmp/aside-stage/assets/public"));
+	assert.ok(mkdirCalls.includes("/tmp/aside-stage/assets/_aside/private-assets/sha256-page"));
 	assert.ok(mkdirCalls.includes("/tmp/aside-stage/functions"));
 	assert.ok(mkdirCalls.includes("/tmp/aside-stage/src/_aside"));
 	assert.deepEqual(deployCalls.at(-1), {

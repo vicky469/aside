@@ -31,6 +31,7 @@ test("private publish manifest includes tree, permission, route, and version met
 	});
 
 	assert.deepEqual(manifest.files, [{
+		assetPath: "_aside/private-assets/sha256-page/docs/page.html",
 		publicPath: "docs/page.html",
 		routePath: "/public/docs/page",
 		sourcePath: "docs/page.md",
@@ -48,6 +49,7 @@ test("private publish manifest includes tree, permission, route, and version met
 			publishedAt: "2026-07-26T08:00:00.000Z",
 		}],
 	}, {
+		assetPath: "_aside/private-assets/sha256-report/report.pdf",
 		publicPath: "report.pdf",
 		routePath: "/public/report.pdf",
 		sourcePath: "report.pdf",
@@ -129,6 +131,8 @@ test("private publish snapshot support files keep permission data server-side", 
 	]);
 	assert.deepEqual(supportFiles.functions.map((file) => file.projectRelativePath), [
 		"functions/_middleware.js",
+		"functions/_aside/private-assets/[[path]].js",
+		"functions/public/[[path]].js",
 		"functions/_aside/api/auth/session.js",
 		"functions/_aside/api/auth/google/start.js",
 		"functions/_aside/api/auth/google/callback.js",
@@ -141,6 +145,10 @@ test("private publish snapshot support files keep permission data server-side", 
 		"src/_aside/private-publish-data.js",
 		"src/_aside/private-publish-runtime.js",
 	]);
+	assert.deepEqual(supportFiles.privateAssetPathByVaultRelativePath, {
+		"public/docs/page.html": "_aside/private-assets/sha256-page/docs/page.html",
+		"public/report.pdf": "_aside/private-assets/sha256-report/report.pdf",
+	});
 	assert.deepEqual(JSON.parse(supportFiles.staticAssets[0].contents), {
 		version: 1,
 		include: ["/*"],
@@ -162,6 +170,11 @@ test("private publish snapshot support files keep permission data server-side", 
 	assert.doesNotMatch(middleware, /endsWith\("\/auth\.md"\)/u);
 	assert.match(middleware, /return context\.next\(\)/u);
 
+	const privateAssetRoute = supportFiles.functions.find((file) =>
+		file.projectRelativePath === "functions/_aside/private-assets/[[path]].js")?.contents ?? "";
+	assert.match(privateAssetRoute, /export function onRequest\(\)/u);
+	assert.match(privateAssetRoute, /return new Response\("Not Found", \{ status: 404 \}\)/u);
+
 	const sessionRoute = supportFiles.functions.find((file) =>
 		file.projectRelativePath === "functions/_aside/api/auth/session.js")?.contents ?? "";
 	assert.match(
@@ -174,6 +187,7 @@ test("private publish snapshot support files keep permission data server-side", 
 	assert.match(serverData, /"allowedRoot": "public\/"/u);
 	assert.match(serverData, /"controlPaths": \{\n\t\t"auth": "\/public\/auth\.md"\n\t\}/u);
 	assert.match(serverData, /"baseUrl": "https:\/\/publish\.example\.com"/u);
+	assert.match(serverData, /"assetPath": "_aside\/private-assets\/sha256-page\/docs\/page\.html"/u);
 	assert.match(serverData, /"publicPath": "docs\/page\.html"/u);
 	assert.match(serverData, /"sourcePath": "docs\/page\.md"/u);
 	assert.match(serverData, /"contentHash": "sha256-page"/u);
@@ -276,6 +290,102 @@ test("private publish snapshot stores comment seeds server-side only", () => {
 	);
 });
 
+test("generated private publish route gates public assets before serving static files", async () => {
+	const supportFiles = buildPrivatePublishSnapshotSupportFiles({
+		allowedRoot: "public/",
+		publishBaseUrl: "https://publish.example.com",
+		publishedAt: "2026-07-26T08:00:00.000Z",
+		files: [{
+			vaultRelativePath: "public/docs/page.html",
+			sourcePath: "public/docs/page.md",
+			kind: "markdown",
+			contentHash: "sha256-page",
+		}, {
+			vaultRelativePath: "public/report.pdf",
+			sourcePath: "public/report.pdf",
+			kind: "pdf",
+			contentHash: "sha256-report",
+		}],
+		authRules: [{
+			provider: "google",
+			identifier: "alice@example.com",
+			path: "/",
+			access: "view",
+			line: 3,
+		}],
+	});
+	const route = supportFiles.functions.find((file) => file.projectRelativePath === "functions/public/[[path]].js");
+	assert.ok(route);
+	const runtime = supportFiles.privateModules.find((file) =>
+		file.projectRelativePath === "src/_aside/private-publish-runtime.js");
+	assert.ok(runtime);
+	const runtimeModule = new Function(`
+${runtime.contents.replace(/\bexport\s+/gu, "")}
+return { resolvePrivatePublishPermission };
+`)() as {
+		resolvePrivatePublishPermission: (rules: unknown[], identity: unknown, requestedPath: string) => { canView: boolean };
+	};
+	const privateData = supportFiles.privateModules.find((file) =>
+		file.projectRelativePath === "src/_aside/private-publish-data.js");
+	assert.ok(privateData);
+	const privateDataMatch = /^export const privatePublishManifest = ([\s\S]*);$/u.exec(privateData.contents);
+	assert.ok(privateDataMatch);
+	const privatePublishManifest = JSON.parse(privateDataMatch[1]) as unknown;
+	const loadRoute = (identity: unknown) => new Function(
+		"privatePublishManifest",
+		"getAsideSessionIdentity",
+		"resolvePrivatePublishPermission",
+		`
+${route.contents
+	.replace(/^import .+;\n/gmu, "")
+	.replace(/\bexport\s+/gu, "")}
+return { onRequest };
+`,
+	)(
+		privatePublishManifest,
+		async () => identity,
+		runtimeModule.resolvePrivatePublishPermission,
+	) as {
+		onRequest(context: {
+			request: Request;
+			env: { ASSETS: { fetch(request: Request): Promise<Response> } };
+			next(): Promise<Response>;
+		}): Promise<Response>;
+	};
+	const fetchedAssetPaths: string[] = [];
+	const env = {
+		ASSETS: {
+			async fetch(request: Request) {
+				fetchedAssetPaths.push(new URL(request.url).pathname);
+				return new Response("asset", { status: 200 });
+			},
+		},
+	};
+
+	const denied = await loadRoute(null).onRequest({
+		request: new Request("https://publish.example.com/public/report.pdf"),
+		env,
+		next: async () => new Response("next", { status: 599 }),
+	});
+	assert.equal(denied.status, 403);
+	assert.deepEqual(fetchedAssetPaths, []);
+
+	const allowedHtml = await loadRoute({ provider: "google", identifier: "alice@example.com" }).onRequest({
+		request: new Request("https://publish.example.com/public/docs/page"),
+		env,
+		next: async () => new Response("next", { status: 599 }),
+	});
+	assert.equal(allowedHtml.status, 200);
+	assert.deepEqual(fetchedAssetPaths, ["/_aside/private-assets/sha256-page/docs/page.html"]);
+
+	const missing = await loadRoute({ provider: "google", identifier: "alice@example.com" }).onRequest({
+		request: new Request("https://publish.example.com/public/missing"),
+		env,
+		next: async () => new Response("next", { status: 599 }),
+	});
+	assert.equal(missing.status, 404);
+});
+
 test("generated private publish runtime filters manifests by identity without exposing permission rules", () => {
 	const supportFiles = buildPrivatePublishSnapshotSupportFiles({
 		allowedRoot: "public/",
@@ -337,6 +447,7 @@ return { filterPrivatePublishManifestForIdentity, getAsideSessionIdentity, resol
 	assert.deepEqual(aliceManifest.files.map((file: { publicPath: string }) => file.publicPath), [
 		"docs/page.html",
 	]);
+	assert.equal("assetPath" in aliceManifest.files[0], false);
 	assert.deepEqual(aliceManifest.files[0].permission, {
 		canView: true,
 		canComment: true,

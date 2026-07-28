@@ -59,6 +59,7 @@ export interface PublicHtmlPublishSnapshotFile {
 export interface PublicHtmlDeploySnapshotSupport {
 	staticAssets: PrivatePublishSnapshotStaticAssetFile[];
 	projectFiles: PrivatePublishSnapshotProjectFile[];
+	privateAssetPathByVaultRelativePath?: Record<string, string>;
 }
 
 export type PublicHtmlPublishResult =
@@ -1334,6 +1335,12 @@ export class PublicHtmlPublishController {
 	): PrivatePublishIndexEntry {
 		return {
 			path: this.toPrivatePublishIndexPath(settings, vaultRelativePath, type),
+			publishedUrl: buildPublishPublicUrl({
+				baseUrl: settings.publishBaseUrl,
+				vaultRelativePath: type === "file" && isMarkdownPath(vaultRelativePath)
+					? buildPublishedMarkdownArtifactPath(vaultRelativePath)
+					: vaultRelativePath,
+			}),
 			type,
 			status: "published",
 			permissionSource: this.getPrivatePublishAuthPath(settings),
@@ -1348,6 +1355,7 @@ export class PublicHtmlPublishController {
 	): PrivatePublishIndexEntry {
 		return {
 			path: this.toPrivatePublishIndexPath(settings, vaultRelativePath, type),
+			publishedUrl: null,
 			type,
 			status: "unpublished",
 			permissionSource: this.getPrivatePublishAuthPath(settings),
@@ -1642,6 +1650,7 @@ export class PublicHtmlPublishController {
 				...supportFiles.functions,
 				...supportFiles.privateModules,
 			],
+			privateAssetPathByVaultRelativePath: supportFiles.privateAssetPathByVaultRelativePath,
 		};
 	}
 }

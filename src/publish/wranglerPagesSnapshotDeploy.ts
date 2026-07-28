@@ -44,6 +44,7 @@ export interface DeployPublicHtmlSnapshotToWranglerPagesOptions {
 	vaultRootPath: string;
 	env?: ExecEnv;
 	assetDirectoryName?: string;
+	staticAssetPathByVaultRelativePath?: Record<string, string>;
 	onResolvedProjectName?: (projectName: string) => void | Promise<void>;
 	onCleanupWarning?: (error: unknown) => void;
 }
@@ -54,7 +55,11 @@ export async function deployPublicHtmlSnapshotToWranglerPages(
 	modules: PublicHtmlSnapshotDeployRuntimeModules,
 	options: DeployPublicHtmlSnapshotToWranglerPagesOptions,
 ): Promise<PublicHtmlDeploySnapshotResult> {
-	const staticAssets = normalizeStaticAssets(options.files, options.staticAssets ?? []);
+	const staticAssets = normalizeStaticAssets(
+		options.files,
+		options.staticAssets ?? [],
+		options.staticAssetPathByVaultRelativePath,
+	);
 	if (!staticAssets.ok) {
 		return {
 			ok: false,
@@ -124,6 +129,7 @@ export async function deployPublicHtmlSnapshotToWranglerPages(
 function normalizeStaticAssets(
 	files: readonly PublicHtmlPublishSnapshotFile[],
 	staticAssets: readonly WranglerPagesStaticAsset[],
+	staticAssetPathByVaultRelativePath: Readonly<Record<string, string>> = {},
 ): { ok: true; assets: WranglerPagesStaticAsset[] } | { ok: false; notice: string } {
 	const assets: WranglerPagesStaticAsset[] = [];
 	for (const file of files) {
@@ -134,8 +140,16 @@ function normalizeStaticAssets(
 				notice: "Selected publish path must stay inside the current vault.",
 			};
 		}
+		const assetPath = staticAssetPathByVaultRelativePath[file.vaultRelativePath] ?? normalizedPath.path;
+		const normalizedAssetPath = normalizeVaultRelativePublishPath(assetPath);
+		if (!normalizedAssetPath.ok) {
+			return {
+				ok: false,
+				notice: "Selected publish asset path must stay inside the Pages asset directory.",
+			};
+		}
 		assets.push({
-			assetRelativePath: normalizedPath.path,
+			assetRelativePath: normalizedAssetPath.path,
 			contents: file.contents,
 		});
 	}

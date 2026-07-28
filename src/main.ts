@@ -1693,6 +1693,7 @@ export default class Aside extends Plugin {
             files,
             staticAssets: supportFiles?.staticAssets,
             projectFiles: supportFiles?.projectFiles,
+            staticAssetPathByVaultRelativePath: supportFiles?.privateAssetPathByVaultRelativePath,
             projectName: this.settings.publishPagesProjectName,
             publishBaseUrl: this.settings.publishBaseUrl,
             vaultRootPath,

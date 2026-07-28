@@ -3,6 +3,7 @@ export type PrivatePublishIndexEntryStatus = "published" | "unpublished";
 
 export interface PrivatePublishIndexEntry {
 	path: string;
+	publishedUrl?: string | null;
 	type: PrivatePublishIndexEntryType;
 	status: PrivatePublishIndexEntryStatus;
 	permissionSource: string;
@@ -11,8 +12,10 @@ export interface PrivatePublishIndexEntry {
 
 const startMarker = "<!-- Aside publish index -->";
 const endMarker = "<!-- /Aside publish index -->";
-const tableHeader = "| path | type | status | permission_source | last_published_at |";
-const tableSeparator = "| --- | --- | --- | --- | --- |";
+const tableHeader = "| path | published_url | type | status | permission_source | last_published_at |";
+const tableSeparator = "| --- | --- | --- | --- | --- | --- |";
+const legacyTableHeader = "| path | type | status | permission_source | last_published_at |";
+const legacyTableSeparator = "| --- | --- | --- | --- | --- |";
 
 export function ensurePrivatePublishIndexMarkdown(
 	existingMarkdown: string | null | undefined,
@@ -92,6 +95,7 @@ function renderManagedSection(entries: readonly PrivatePublishIndexEntry[]): str
 
 function compareEntries(left: PrivatePublishIndexEntry, right: PrivatePublishIndexEntry): number {
 	return compareLexicographic(left.path, right.path)
+		|| compareLexicographic(left.publishedUrl ?? "", right.publishedUrl ?? "")
 		|| compareLexicographic(left.type, right.type)
 		|| compareLexicographic(left.status, right.status)
 		|| compareLexicographic(left.permissionSource, right.permissionSource)
@@ -109,10 +113,13 @@ function compareLexicographic(left: string, right: string): number {
 }
 
 function renderEntryRow(entry: PrivatePublishIndexEntry): string {
+	const publishedUrl = entry.publishedUrl == null
+		? ""
+		: escapeTableCell(entry.publishedUrl);
 	const lastPublishedAt = entry.lastPublishedAt === null
 		? ""
 		: escapeTableCell(entry.lastPublishedAt);
-	return `| ${escapeTableCell(entry.path)} | ${entry.type} | ${entry.status} | ${escapeTableCell(entry.permissionSource)} | ${lastPublishedAt} |`;
+	return `| ${escapeTableCell(entry.path)} | ${publishedUrl} | ${entry.type} | ${entry.status} | ${escapeTableCell(entry.permissionSource)} | ${lastPublishedAt} |`;
 }
 
 function escapeTableCell(value: string): string {
@@ -175,10 +182,11 @@ function isLineIsolatedMarker(markdown: string, index: number, markerLength: num
 
 function isGeneratedManagedSection(section: string): boolean {
 	const lines = section.split("\n");
+	const usesCurrentTable = lines[1] === tableHeader && lines[2] === tableSeparator;
+	const usesLegacyTable = lines[1] === legacyTableHeader && lines[2] === legacyTableSeparator;
 	if (
 		lines[0] !== startMarker
-		|| lines[1] !== tableHeader
-		|| lines[2] !== tableSeparator
+		|| (!usesCurrentTable && !usesLegacyTable)
 		|| lines[lines.length - 1] !== endMarker
 	) {
 		return false;
@@ -192,11 +200,13 @@ function isGeneratedTableRow(line: string): boolean {
 		return false;
 	}
 	const cells = splitGeneratedTableRowCells(line);
+	const typeCellIndex = cells?.length === 6 ? 2 : 1;
+	const statusCellIndex = cells?.length === 6 ? 3 : 2;
 	return cells !== null
-		&& cells.length === 5
+		&& (cells.length === 5 || cells.length === 6)
 		&& cells[0].length > 0
-		&& (cells[1] === "file" || cells[1] === "folder")
-		&& (cells[2] === "published" || cells[2] === "unpublished");
+		&& (cells[typeCellIndex] === "file" || cells[typeCellIndex] === "folder")
+		&& (cells[statusCellIndex] === "published" || cells[statusCellIndex] === "unpublished");
 }
 
 function parseGeneratedTableRow(line: string): PrivatePublishIndexEntry | null {
@@ -204,20 +214,30 @@ function parseGeneratedTableRow(line: string): PrivatePublishIndexEntry | null {
 		return null;
 	}
 	const cells = splitGeneratedTableRowCells(line);
-	if (!cells || cells.length !== 5) {
+	if (!cells || (cells.length !== 5 && cells.length !== 6)) {
 		return null;
 	}
-	const type = unescapeTableCell(cells[1]);
-	const status = unescapeTableCell(cells[2]);
+	const publishedUrlCellIndex = cells.length === 6 ? 1 : null;
+	const typeCellIndex = cells.length === 6 ? 2 : 1;
+	const statusCellIndex = cells.length === 6 ? 3 : 2;
+	const permissionSourceCellIndex = cells.length === 6 ? 4 : 3;
+	const lastPublishedAtCellIndex = cells.length === 6 ? 5 : 4;
+	const type = unescapeTableCell(cells[typeCellIndex]);
+	const status = unescapeTableCell(cells[statusCellIndex]);
 	if ((type !== "file" && type !== "folder") || (status !== "published" && status !== "unpublished")) {
 		return null;
 	}
 	return {
 		path: unescapeTableCell(cells[0]),
+		publishedUrl: publishedUrlCellIndex === null || cells[publishedUrlCellIndex] === ""
+			? null
+			: unescapeTableCell(cells[publishedUrlCellIndex]),
 		type,
 		status,
-		permissionSource: unescapeTableCell(cells[3]),
-		lastPublishedAt: cells[4] === "" ? null : unescapeTableCell(cells[4]),
+		permissionSource: unescapeTableCell(cells[permissionSourceCellIndex]),
+		lastPublishedAt: cells[lastPublishedAtCellIndex] === ""
+			? null
+			: unescapeTableCell(cells[lastPublishedAtCellIndex]),
 	};
 }
 

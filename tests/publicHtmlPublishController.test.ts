@@ -163,8 +163,8 @@ test("public html publish controller creates a private publish index file", asyn
 		"# Published Index",
 		"",
 		"<!-- Aside publish index -->",
-		"| path | type | status | permission_source | last_published_at |",
-		"| --- | --- | --- | --- | --- |",
+		"| path | published_url | type | status | permission_source | last_published_at |",
+		"| --- | --- | --- | --- | --- | --- |",
 		"<!-- /Aside publish index -->",
 		"",
 	].join("\n"));
@@ -184,7 +184,7 @@ test("public html publish controller publishes one html pair and records enabled
 		"public/index.md",
 	]);
 	assert.match(harness.writes[0].contents, /asidePublish:\n  markdownEnabled: false\n  htmlEnabled: true\n  html: public\/page\.html/u);
-	assert.match(harness.writes[1].contents, /\| page\.html \| file \| published \| auth\.md \| 2026-07-26T08:00:00\.000Z \|/u);
+	assert.match(harness.writes[1].contents, /\| page\.html \| https:\/\/publish\.example\.com\/public\/page \| file \| published \| auth\.md \| 2026-07-26T08:00:00\.000Z \|/u);
 	assert.deepEqual(harness.deployCalls, [[{
 		vaultRelativePath: "public/page.html",
 		contents: "<!doctype html><html><body>Page</body></html>",
@@ -270,7 +270,7 @@ test("public html publish controller publishes markdown as generated html", asyn
 		url: "https://publish.example.com/public/page",
 	});
 	assert.match(harness.files.get("public/page.md") ?? "", /asidePublish:\n  markdownEnabled: true\n  htmlEnabled: false/u);
-	assert.match(harness.files.get("public/index.md") ?? "", /\| page\.md \| file \| published \| auth\.md \| 2026-07-26T08:00:00\.000Z \|/u);
+	assert.match(harness.files.get("public/index.md") ?? "", /\| page\.md \| https:\/\/publish\.example\.com\/public\/page \| file \| published \| auth\.md \| 2026-07-26T08:00:00\.000Z \|/u);
 	assert.deepEqual(harness.deployCalls.at(-1)?.map((file) => file.vaultRelativePath), [
 		"public/page.html",
 	]);
@@ -353,11 +353,11 @@ test("public html publish controller publishes a folder selection and updates th
 	]);
 	const indexMarkdown = harness.files.get("public/index.md") ?? "";
 	assert.match(indexMarkdown, /Owner notes stay here\./u);
-	assert.match(indexMarkdown, /\| docs\/ \| folder \| published \| auth\.md \| 2026-07-26T08:00:00\.000Z \|/u);
-	assert.match(indexMarkdown, /\| docs\/a\.md \| file \| published \| auth\.md \| 2026-07-26T08:00:00\.000Z \|/u);
-	assert.match(indexMarkdown, /\| docs\/page\.html \| file \| published \| auth\.md \| 2026-07-26T08:00:00\.000Z \|/u);
-	assert.match(indexMarkdown, /\| docs\/report\.pdf \| file \| published \| auth\.md \| 2026-07-26T08:00:00\.000Z \|/u);
-	assert.match(indexMarkdown, /\| old\.md \| file \| published \| auth\.md \| 2026-07-26T07:00:00\.000Z \|/u);
+	assert.match(indexMarkdown, /\| docs\/ \| https:\/\/publish\.example\.com\/public\/docs \| folder \| published \| auth\.md \| 2026-07-26T08:00:00\.000Z \|/u);
+	assert.match(indexMarkdown, /\| docs\/a\.md \| https:\/\/publish\.example\.com\/public\/docs\/a \| file \| published \| auth\.md \| 2026-07-26T08:00:00\.000Z \|/u);
+	assert.match(indexMarkdown, /\| docs\/page\.html \| https:\/\/publish\.example\.com\/public\/docs\/page \| file \| published \| auth\.md \| 2026-07-26T08:00:00\.000Z \|/u);
+	assert.match(indexMarkdown, /\| docs\/report\.pdf \| https:\/\/publish\.example\.com\/public\/docs\/report\.pdf \| file \| published \| auth\.md \| 2026-07-26T08:00:00\.000Z \|/u);
+	assert.match(indexMarkdown, /\| old\.md \|  \| file \| published \| auth\.md \| 2026-07-26T07:00:00\.000Z \|/u);
 	assert.doesNotMatch(indexMarkdown, /raw\.txt/u);
 });
 
@@ -381,8 +381,8 @@ test("public html publish controller lets selected markdown own generated html d
 		"public/docs/page.html",
 	]);
 	assert.match(decodeSnapshotContents(harness.deployCalls.at(-1)![0]), /<h1>Markdown Page<\/h1>/u);
-	assert.doesNotMatch(harness.files.get("public/index.md") ?? "", /\| docs\/page\.html \| file \|/u);
-	assert.match(harness.files.get("public/index.md") ?? "", /\| docs\/page\.md \| file \| published \| auth\.md \|/u);
+	assert.doesNotMatch(harness.files.get("public/index.md") ?? "", /\| docs\/page\.html \|/u);
+	assert.match(harness.files.get("public/index.md") ?? "", /\| docs\/page\.md \| https:\/\/publish\.example\.com\/public\/docs\/page \| file \| published \| auth\.md \|/u);
 });
 
 test("public html publish controller publishes the configured root and excludes root control files", async () => {
@@ -411,10 +411,10 @@ test("public html publish controller publishes the configured root and excludes 
 		"public/report.pdf",
 	]);
 	const indexMarkdown = harness.files.get("public/index.md") ?? "";
-	assert.match(indexMarkdown, /\| \/ \| folder \| published \| auth\.md \| 2026-07-26T08:00:00\.000Z \|/u);
-	assert.match(indexMarkdown, /\| a\.md \| file \| published \| auth\.md \| 2026-07-26T08:00:00\.000Z \|/u);
-	assert.match(indexMarkdown, /\| nested\/index\.md \| file \| published \| auth\.md \| 2026-07-26T08:00:00\.000Z \|/u);
-	assert.match(indexMarkdown, /\| report\.pdf \| file \| published \| auth\.md \| 2026-07-26T08:00:00\.000Z \|/u);
+	assert.match(indexMarkdown, /\| \/ \| https:\/\/publish\.example\.com\/public \| folder \| published \| auth\.md \| 2026-07-26T08:00:00\.000Z \|/u);
+	assert.match(indexMarkdown, /\| a\.md \| https:\/\/publish\.example\.com\/public\/a \| file \| published \| auth\.md \| 2026-07-26T08:00:00\.000Z \|/u);
+	assert.match(indexMarkdown, /\| nested\/index\.md \| https:\/\/publish\.example\.com\/public\/nested\/index \| file \| published \| auth\.md \| 2026-07-26T08:00:00\.000Z \|/u);
+	assert.match(indexMarkdown, /\| report\.pdf \| https:\/\/publish\.example\.com\/public\/report\.pdf \| file \| published \| auth\.md \| 2026-07-26T08:00:00\.000Z \|/u);
 	assert.doesNotMatch(indexMarkdown, /\| auth\.md \| file \|/u);
 	assert.doesNotMatch(indexMarkdown, /\| index\.md \| file \|/u);
 });
@@ -537,6 +537,8 @@ test("public html publish controller generates private Pages support files from 
 	]);
 	assert.deepEqual(support?.projectFiles.map((file) => file.projectRelativePath), [
 		"functions/_middleware.js",
+		"functions/_aside/private-assets/[[path]].js",
+		"functions/public/[[path]].js",
 		"functions/_aside/api/auth/session.js",
 		"functions/_aside/api/auth/google/start.js",
 		"functions/_aside/api/auth/google/callback.js",
@@ -556,6 +558,13 @@ test("public html publish controller generates private Pages support files from 
 	assert.match(privateData, /"publicPath": "page\.html"/u);
 	assert.match(privateData, /"sourcePath": "page\.md"/u);
 	assert.match(privateData, /"contentHash": "sha256-/u);
+	assert.deepEqual(Object.keys(support?.privateAssetPathByVaultRelativePath ?? {}), [
+		"public/page.html",
+	]);
+	assert.match(
+		support?.privateAssetPathByVaultRelativePath?.["public/page.html"] ?? "",
+		/^_aside\/private-assets\/sha256-[a-f0-9]{64}\/page\.html$/u,
+	);
 });
 
 test("public html publish controller seeds local page-note comments into private support data", async () => {
@@ -672,7 +681,7 @@ test("public html publish controller marks a PDF index row unpublished", async (
 		url: "https://publish.example.com/public/report.pdf",
 	});
 	assert.deepEqual(harness.getPublishedArtifactPaths(), []);
-	assert.match(harness.files.get("public/index.md") ?? "", /\| report\.pdf \| file \| unpublished \| auth\.md \|  \|/u);
+	assert.match(harness.files.get("public/index.md") ?? "", /\| report\.pdf \|  \| file \| unpublished \| auth\.md \|  \|/u);
 });
 
 test("public html publish controller rejects unpublishing an unpublished PDF without changing the index", async () => {
@@ -680,9 +689,9 @@ test("public html publish controller rejects unpublishing an unpublished PDF wit
 		"# Published Index",
 		"",
 		"<!-- Aside publish index -->",
-		"| path | type | status | permission_source | last_published_at |",
-		"| --- | --- | --- | --- | --- |",
-		"| report.pdf | file | published | auth.md | 2026-07-26T07:00:00.000Z |",
+		"| path | published_url | type | status | permission_source | last_published_at |",
+		"| --- | --- | --- | --- | --- | --- |",
+		"| report.pdf | https://publish.example.com/public/report.pdf | file | published | auth.md | 2026-07-26T07:00:00.000Z |",
 		"<!-- /Aside publish index -->",
 		"",
 	].join("\n");
@@ -746,8 +755,8 @@ test("public html publish controller unpublishes by disabling frontmatter and re
 	}]);
 	const indexMarkdown = harness.files.get("public/index.md") ?? "";
 	assert.match(indexMarkdown, /Owner notes\./u);
-	assert.match(indexMarkdown, /\| a\.html \| file \| unpublished \| auth\.md \|  \|/u);
-	assert.match(indexMarkdown, /\| old\.md \| file \| published \| auth\.md \| 2026-07-26T07:00:00\.000Z \|/u);
+	assert.match(indexMarkdown, /\| a\.html \|  \| file \| unpublished \| auth\.md \|  \|/u);
+	assert.match(indexMarkdown, /\| old\.md \|  \| file \| published \| auth\.md \| 2026-07-26T07:00:00\.000Z \|/u);
 });
 
 test("public html publish controller unpublishes markdown and purges its public URL", async () => {
@@ -779,7 +788,7 @@ test("public html publish controller unpublishes markdown and purges its public 
 		sourcePath: "public/page.md",
 		event: "unpublish",
 	}]);
-	assert.match(harness.files.get("public/index.md") ?? "", /\| page\.md \| file \| unpublished \| auth\.md \|  \|/u);
+	assert.match(harness.files.get("public/index.md") ?? "", /\| page\.md \|  \| file \| unpublished \| auth\.md \|  \|/u);
 });
 
 test("public html publish controller keeps unpublish when cache purge fails", async () => {
@@ -860,9 +869,9 @@ test("public html publish controller keeps unpublish frontmatter enabled when de
 		"# Published Index",
 		"",
 		"<!-- Aside publish index -->",
-		"| path | type | status | permission_source | last_published_at |",
-		"| --- | --- | --- | --- | --- |",
-		"| a.html | file | published | auth.md | 2026-07-26T07:00:00.000Z |",
+		"| path | published_url | type | status | permission_source | last_published_at |",
+		"| --- | --- | --- | --- | --- | --- |",
+		"| a.html | https://publish.example.com/public/a | file | published | auth.md | 2026-07-26T07:00:00.000Z |",
 		"<!-- /Aside publish index -->",
 		"",
 	].join("\n");
@@ -987,7 +996,7 @@ test("public html publish controller unpublishes standalone html when an implici
 	});
 	assert.deepEqual(harness.getPublishedArtifactPaths(), []);
 	assert.deepEqual(harness.deployCalls.at(-1), []);
-	assert.match(harness.files.get("public/index.md") ?? "", /\| page\.html \| file \| unpublished \| auth\.md \|  \|/u);
+	assert.match(harness.files.get("public/index.md") ?? "", /\| page\.html \|  \| file \| unpublished \| auth\.md \|  \|/u);
 });
 
 test("public html publish controller reports an unpublish action for enabled html pairs", async () => {

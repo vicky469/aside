@@ -37,6 +37,7 @@ export interface PrivatePublishSnapshotSupportFiles {
 	staticAssets: PrivatePublishSnapshotStaticAssetFile[];
 	functions: PrivatePublishSnapshotProjectFile[];
 	privateModules: PrivatePublishSnapshotProjectFile[];
+	privateAssetPathByVaultRelativePath: Record<string, string>;
 }
 
 export interface BuildPrivatePublishSnapshotSupportFilesInput {
@@ -55,6 +56,7 @@ export interface PrivatePublishManifestFileVersion {
 }
 
 export interface PrivatePublishManifestFile {
+	assetPath: string;
 	publicPath: string;
 	routePath: string;
 	sourcePath: string;
@@ -151,6 +153,12 @@ export function buildPrivatePublishSnapshotSupportFiles(
 			projectRelativePath: "functions/_middleware.js",
 			contents: renderMiddleware(),
 		}, {
+			projectRelativePath: "functions/_aside/private-assets/[[path]].js",
+			contents: renderPrivateAssetDenyRoute(),
+		}, {
+			projectRelativePath: buildProtectedAssetRouteProjectPath(input.allowedRoot),
+			contents: renderProtectedAssetRoute(input.allowedRoot),
+		}, {
 			projectRelativePath: "functions/_aside/api/auth/session.js",
 			contents: renderAuthSessionRoute(),
 		}, {
@@ -179,6 +187,7 @@ export function buildPrivatePublishSnapshotSupportFiles(
 			projectRelativePath: "src/_aside/private-publish-runtime.js",
 			contents: renderPrivatePublishRuntimeModule(),
 		}],
+		privateAssetPathByVaultRelativePath: buildPrivateAssetPathByVaultRelativePath(input, manifest),
 	};
 }
 
@@ -229,6 +238,7 @@ function normalizeManifestFile(
 		publishedAt: input.publishedAt,
 	};
 	return {
+		assetPath: buildPrivateAssetPath(publicPath, file.contentHash),
 		publicPath,
 		routePath: buildRoutePath(file.vaultRelativePath),
 		sourcePath,
@@ -238,6 +248,22 @@ function normalizeManifestFile(
 		currentVersion,
 		versions: [currentVersion],
 	};
+}
+
+function buildPrivateAssetPathByVaultRelativePath(
+	input: BuildPrivatePublishSnapshotSupportFilesInput,
+	manifest: PrivatePublishManifest,
+): Record<string, string> {
+	const assetPathByPublicPath = new Map(manifest.files.map((file) => [file.publicPath, file.assetPath]));
+	const entries: Array<[string, string]> = [];
+	for (const file of input.files) {
+		const publicPath = toPublicRootRelativePath(input.allowedRoot, file.vaultRelativePath);
+		const assetPath = publicPath ? assetPathByPublicPath.get(publicPath) : undefined;
+		if (assetPath) {
+			entries.push([file.vaultRelativePath, assetPath]);
+		}
+	}
+	return Object.fromEntries(entries);
 }
 
 function normalizePermissionRule(rule: PrivatePublishAuthRule): PrivatePublishManifestPermissionRule {
@@ -309,6 +335,30 @@ function buildRoutePath(vaultRelativePath: string): string {
 	const path = normalizedPath.ok ? normalizedPath.path : vaultRelativePath;
 	const withoutHtmlExtension = path.replace(/\.html?$/iu, "");
 	return `/${withoutHtmlExtension}`;
+}
+
+function buildPrivateAssetPath(publicPath: string, contentHash: string): string {
+	const normalizedPath = normalizeVaultRelativePublishPath(publicPath);
+	const assetPath = normalizedPath.ok ? normalizedPath.path : "asset";
+	const safeHash = contentHash.replace(/[^a-zA-Z0-9._-]/gu, "-");
+	return `_aside/private-assets/${safeHash}/${assetPath}`;
+}
+
+function getAllowedRootFunctionSegments(allowedRoot: string): string[] {
+	return normalizePublishAllowedRoot(allowedRoot).split("/").filter(Boolean);
+}
+
+function buildProtectedAssetRouteProjectPath(allowedRoot: string): string {
+	return [
+		"functions",
+		...getAllowedRootFunctionSegments(allowedRoot),
+		"[[path]].js",
+	].join("/");
+}
+
+function buildProtectedAssetRoutePrivateModulePrefix(allowedRoot: string): string {
+	const segmentCount = getAllowedRootFunctionSegments(allowedRoot).length;
+	return `${Array.from({ length: segmentCount + 1 }, () => "..").join("/")}/src/_aside`;
 }
 
 function buildManifestTree(files: readonly PrivatePublishManifestFile[]): PrivatePublishManifestFolder {
@@ -406,6 +456,62 @@ function renderMiddleware(): string {
 		"\t\tconst staticPath = `/${manifest.allowedRoot}${file.publicPath}`;",
 		"\t\treturn normalizeRequestPath(file.routePath) === normalizedPathname || normalizeRequestPath(staticPath) === normalizedPathname;",
 		"\t}) ?? null;",
+		"}",
+		"",
+		"function normalizeRequestPath(pathname) {",
+		"\tconst value = typeof pathname === \"string\" && pathname ? pathname : \"/\";",
+		"\treturn value.endsWith(\"/\") && value.length > 1 ? value.slice(0, -1) : value;",
+		"}",
+		"",
+	].join("\n");
+}
+
+function renderPrivateAssetDenyRoute(): string {
+	return [
+		"export function onRequest() {",
+		"\treturn new Response(\"Not Found\", { status: 404 });",
+		"}",
+		"",
+	].join("\n");
+}
+
+function renderProtectedAssetRoute(allowedRoot: string): string {
+	const privateModulePrefix = buildProtectedAssetRoutePrivateModulePrefix(allowedRoot);
+	return [
+		`import { privatePublishManifest } from "${privateModulePrefix}/private-publish-data.js";`,
+		`import { getAsideSessionIdentity, resolvePrivatePublishPermission } from "${privateModulePrefix}/private-publish-runtime.js";`,
+		"",
+		"export async function onRequest(context) {",
+		"\tconst url = new URL(context.request.url);",
+		"\tif (url.pathname === privatePublishManifest.controlPaths.auth) {",
+		"\t\treturn new Response(\"Not Found\", { status: 404 });",
+		"\t}",
+		"\tconst file = findPrivatePublishFileForPath(privatePublishManifest, url.pathname);",
+		"\tif (!file) {",
+		"\t\treturn new Response(\"Not Found\", { status: 404 });",
+		"\t}",
+		"\tconst identity = await getAsideSessionIdentity(context.request, context.env);",
+		"\tconst permission = resolvePrivatePublishPermission(privatePublishManifest.permissionRules, identity, file.publicPath);",
+		"\tif (!permission.canView) {",
+		"\t\treturn Response.json({ error: \"Not authorized to read this published file.\" }, { status: 403 });",
+		"\t}",
+		"\tif (!context.env?.ASSETS || typeof context.env.ASSETS[\"fetch\"] !== \"function\") {",
+		"\t\treturn Response.json({ error: \"Published asset binding is not configured.\" }, { status: 500 });",
+		"\t}",
+		"\tconst assetUrl = new URL(`/${file.assetPath}`, url.origin);",
+		"\treturn context.env.ASSETS[\"fetch\"](new Request(assetUrl, context.request));",
+		"}",
+		"",
+		"function findPrivatePublishFileForPath(manifest, pathname) {",
+		"\tconst normalizedPathname = normalizeRequestPath(pathname);",
+		"\tconst files = Array.isArray(manifest.files) ? manifest.files : [];",
+		"\treturn files.find((file) => {",
+		"\t\treturn normalizeRequestPath(file.routePath) === normalizedPathname || normalizeRequestPath(buildStaticAssetPath(manifest, file)) === normalizedPathname;",
+		"\t}) ?? null;",
+		"}",
+		"",
+		"function buildStaticAssetPath(manifest, file) {",
+		"\treturn `/${manifest.allowedRoot}${file.publicPath}`;",
 		"}",
 		"",
 		"function normalizeRequestPath(pathname) {",
@@ -1164,7 +1270,11 @@ function renderPrivatePublishRuntimeModule(): string {
 		"\tconst files = (Array.isArray(manifest.files) ? manifest.files : [])",
 		"\t\t.map((file) => {",
 		"\t\t\tconst permission = resolvePrivatePublishPermission(permissionRules, normalizedIdentity, file.publicPath);",
-		"\t\t\treturn permission.canView ? { ...file, permission } : null;",
+		"\t\t\tif (!permission.canView) {",
+		"\t\t\t\treturn null;",
+		"\t\t\t}",
+		"\t\t\tconst { assetPath, ...publicFile } = file;",
+		"\t\t\treturn { ...publicFile, permission };",
 		"\t\t})",
 		"\t\t.filter(Boolean);",
 		"\treturn {",
