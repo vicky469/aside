@@ -2,7 +2,10 @@ import * as assert from "node:assert/strict";
 import test from "node:test";
 import { ASIDE_SETTING_CATALOG } from "../src/ui/settings/asideSettingCatalog";
 import { getLegacyAsideSettingKeys } from "../src/ui/settings/asideSettingLegacyAdapter";
-import { getDefinitionAsideSettingKeys } from "../src/ui/settings/asideSettingDefinitionsAdapter";
+import {
+    getAsideSettingDefinitions,
+    getDefinitionAsideSettingKeys,
+} from "../src/ui/settings/asideSettingDefinitionsAdapter";
 import { FeatureFlag } from "../src/core/config/featureFlags";
 
 const EXPECTED_KEYS = [
@@ -83,4 +86,31 @@ test("publishing settings are hidden until the publish feature flag is enabled",
         assert.equal(isVisible(key, disabledContext), false, `${key} should be hidden`);
         assert.equal(isVisible(key, enabledContext), true, `${key} should be visible`);
     }
+});
+
+test("publishing setting definition group follows the publish feature flag", () => {
+    const disabledContext = createCatalogContext({
+        publishFeatureEnabled: false,
+        publishEnabled: true,
+        remotePurgeEnabled: true,
+    });
+    const enabledContext = createCatalogContext({
+        publishFeatureEnabled: true,
+        publishEnabled: true,
+        remotePurgeEnabled: true,
+    });
+
+    const getPublishingGroupVisible = (context: ReturnType<typeof createCatalogContext>): boolean => {
+        const group = getAsideSettingDefinitions(context)
+            .find((item) => "heading" in item && item.heading === "Publishing (experimental)");
+        assert.ok(group, "Publishing settings group should exist");
+        const visible = group.visible;
+        if (typeof visible !== "function") {
+            assert.fail("Publishing settings group should define visible as a function");
+        }
+        return visible();
+    };
+
+    assert.equal(getPublishingGroupVisible(disabledContext), false);
+    assert.equal(getPublishingGroupVisible(enabledContext), true);
 });
