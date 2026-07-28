@@ -68,6 +68,10 @@ import {
 	derivePublishBaseUrlFromProjectName,
 } from "./core/publish/publishSettings";
 import {
+	FeatureFlag,
+	isFeatureFlagEnabled,
+} from "./core/config/featureFlags";
+import {
 	removePublishedPublicArtifactPath,
 	removePublishedPublicArtifactPathsInFolder,
 	renamePublishedPublicArtifactPath as renamePublishedPublicArtifactPathInList,
@@ -476,6 +480,7 @@ export default class Aside extends Plugin {
     }, this.agentRunStore);
     private readonly publicHtmlPublishController = new PublicHtmlPublishController({
         getSettings: () => this.settings,
+        getFeatureFlags: () => this.settings.featureFlags,
         getVaultConfigDir: () => this.app.vault.configDir,
         listMarkdownFiles: (rootPath) => {
             const folderPath = normalizePath(rootPath.replace(/\/+$/u, ""));
@@ -513,7 +518,9 @@ export default class Aside extends Plugin {
     });
     private readonly publicFilePublishActionController = new PublicFilePublishActionController({
         getAllowedRoot: () => this.settings.publishAllowedRoot,
-        getPublishActionStates: (file) => this.publicHtmlPublishController.getFileActionStates(file.path),
+        getPublishActionStates: (file) => this.isPublishFeatureAvailable()
+            ? this.publicHtmlPublishController.getFileActionStates(file.path)
+            : Promise.resolve([]),
         runPublishAction: (file, actionKind) => this.runPublicHtmlPublishAction(file, actionKind),
         showNotice: (message) => {
             this.showNotice(message, "publish", "publish.notice");
@@ -934,6 +941,10 @@ export default class Aside extends Plugin {
             }
         });
         void this.publicFilePublishActionController.refreshViews(views);
+    }
+
+    private isPublishFeatureAvailable(): boolean {
+        return isFeatureFlagEnabled(this.settings.featureFlags, FeatureFlag.publish);
     }
 
     private getPublicHtmlPairContext(filePath: string): PublicHtmlPairContext | null {

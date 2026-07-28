@@ -10,6 +10,10 @@ import {
     DEFAULT_PUBLISH_SETTINGS,
 } from "../src/core/publish/publishSettings";
 import {
+    DEFAULT_FEATURE_FLAGS,
+    FeatureFlag,
+} from "../src/core/config/featureFlags";
+import {
     resolveIndexNotePathChange,
     resolveLoadedSettings,
     shouldApplyNormalizedSettingChange,
@@ -34,6 +38,7 @@ function createSettings(overrides: Partial<AsideSettings> = {}): AsideSettings {
         showTodoSidebarTab: overrides.showTodoSidebarTab ?? true,
         showAgentSidebarTab: overrides.showAgentSidebarTab ?? true,
         publishedPublicArtifactPaths: overrides.publishedPublicArtifactPaths ?? [],
+        featureFlags: overrides.featureFlags ?? DEFAULT_FEATURE_FLAGS,
         publishEnabled: overrides.publishEnabled ?? DEFAULT_PUBLISH_SETTINGS.publishEnabled,
         publishPagesProjectName: overrides.publishPagesProjectName ?? DEFAULT_PUBLISH_SETTINGS.publishPagesProjectName,
         publishBaseUrl: overrides.publishBaseUrl ?? DEFAULT_PUBLISH_SETTINGS.publishBaseUrl,
@@ -75,11 +80,12 @@ test("loaded settings resolution treats blank-like persisted index note paths as
 });
 
 function withPublishDefaults(
-    settings: Omit<AsideSettings, keyof typeof DEFAULT_PUBLISH_SETTINGS | "publishedPublicArtifactPaths">,
+    settings: Omit<AsideSettings, keyof typeof DEFAULT_PUBLISH_SETTINGS | "featureFlags" | "publishedPublicArtifactPaths">,
 ): AsideSettings {
     return {
         ...settings,
         publishedPublicArtifactPaths: [],
+        featureFlags: DEFAULT_FEATURE_FLAGS,
         ...DEFAULT_PUBLISH_SETTINGS,
     };
 }
@@ -655,6 +661,33 @@ test("loaded settings resolution defaults publishing off and public root for new
 
     assert.equal(resolved.settings.publishEnabled, false);
     assert.equal(resolved.settings.publishAllowedRoot, "public/");
+});
+
+test("loaded settings resolution defaults publish feature flag off", () => {
+    const resolved = resolveLoadedSettings({}, createSettings({
+        featureFlags: {
+            [FeatureFlag.publish]: true,
+        },
+    }));
+
+    assert.deepEqual(resolved.settings.featureFlags, {
+        [FeatureFlag.publish]: false,
+    });
+    assert.equal(resolved.shouldRewriteLegacySettings, true);
+});
+
+test("loaded settings resolution preserves normalized publish feature flag", () => {
+    const resolved = resolveLoadedSettings({
+        featureFlags: {
+            [FeatureFlag.publish]: true,
+            unknown: true,
+        },
+    } as PersistedPluginData, createSettings());
+
+    assert.deepEqual(resolved.settings.featureFlags, {
+        [FeatureFlag.publish]: true,
+    });
+    assert.equal(resolved.shouldRewriteLegacySettings, true);
 });
 
 test("index note settings controller saves publish settings without aggregate refreshes", async () => {

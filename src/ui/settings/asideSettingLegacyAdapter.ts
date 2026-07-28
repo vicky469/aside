@@ -15,14 +15,17 @@ export function renderLegacyAsideSettings(
     createSetting: (container: HTMLElement) => Setting,
 ): void {
     for (const section of ASIDE_SETTING_SECTIONS) {
+        const entries = ASIDE_SETTING_CATALOG.filter((entry) =>
+            entry.section === section.key && entry.visible?.(context) !== false);
+        if (entries.length === 0) {
+            continue;
+        }
+
         createSetting(containerEl)
             .setName(section.heading)
             .setHeading();
 
-        for (const entry of ASIDE_SETTING_CATALOG) {
-            if (entry.section !== section.key || entry.visible?.(context) === false) {
-                continue;
-            }
+        for (const entry of entries) {
             const setting = createSetting(containerEl)
                 .setName(entry.name)
                 .setDesc(entry.description);

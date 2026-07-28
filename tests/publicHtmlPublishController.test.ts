@@ -5,6 +5,10 @@ import {
 	type PublicHtmlPublishSnapshotFile,
 } from "../src/publish/publicHtmlPublishController";
 import type { PublishSettings } from "../src/core/publish/publishSettings";
+import {
+	FeatureFlag,
+	type FeatureFlags,
+} from "../src/core/config/featureFlags";
 
 const settings: PublishSettings = {
 	publishEnabled: true,
@@ -18,6 +22,7 @@ const settings: PublishSettings = {
 
 function createHarness(options: {
 	settings?: PublishSettings;
+	featureFlags?: FeatureFlags;
 	files?: Record<string, string>;
 	binaryFiles?: Record<string, string>;
 	publishedArtifactPaths?: string[];
@@ -35,6 +40,7 @@ function createHarness(options: {
 	const purgeCalls: Array<{ url: string; sourcePath: string; event: "unpublish" | "republish" }> = [];
 	const host = {
 		getSettings: () => options.settings ?? settings,
+		getFeatureFlags: () => options.featureFlags ?? { [FeatureFlag.publish]: true },
 		getVaultConfigDir: () => ".obsidian",
 		listMarkdownFiles: async (rootPath: string) => Array.from(files.keys())
 			.filter((path) => path.startsWith(rootPath) && path.endsWith(".md")),
@@ -87,6 +93,28 @@ function decodeSnapshotContents(file: PublicHtmlPublishSnapshotFile): string {
 		? file.contents
 		: new TextDecoder().decode(file.contents);
 }
+
+test("public html publish controller fails closed when the publish feature flag is disabled", async () => {
+	const harness = createHarness({
+		featureFlags: {
+			[FeatureFlag.publish]: false,
+		},
+	});
+
+	assert.deepEqual(await harness.controller.publishHtmlFile("public/page.html"), {
+		ok: false,
+		notice: "Publishing feature is disabled. Run the Aside CLI to enable it.",
+	});
+	assert.deepEqual(await harness.controller.getHtmlFileActionState("public/page.html"), {
+		kind: "disabled",
+		label: "Publish HTML",
+		icon: "upload-cloud",
+		disabled: true,
+		notice: "Publishing feature is disabled. Run the Aside CLI to enable it.",
+	});
+	assert.deepEqual(harness.deployCalls, []);
+	assert.deepEqual(harness.writes, []);
+});
 
 test("public html publish controller publishes one html pair and records enabled frontmatter", async () => {
 	const harness = createHarness();

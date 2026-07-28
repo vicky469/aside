@@ -2,6 +2,10 @@ import {
     normalizeAgentRuntimeModePreference,
 } from "../core/agents/agentRuntimePreferences";
 import {
+    normalizeFeatureFlags,
+    shouldRewriteNormalizedFeatureFlags,
+} from "../core/config/featureFlags";
+import {
     DEFAULT_PUBLISH_SETTINGS,
     normalizePublishSettings,
 } from "../core/publish/publishSettings";
@@ -88,6 +92,7 @@ export function resolveLoadedSettings(
         ? normalizeSidebarTabToggle(loaded?.showAgentSidebarTab)
         : true;
     const publishSettings = normalizePublishSettings(loaded ?? defaults);
+    const featureFlags = normalizeFeatureFlags(loaded?.featureFlags);
 
     return {
         settings: {
@@ -104,6 +109,7 @@ export function resolveLoadedSettings(
             publishedPublicArtifactPaths: normalizePublishedPublicArtifactPaths(
                 loaded?.publishedPublicArtifactPaths ?? defaults.publishedPublicArtifactPaths,
             ),
+            featureFlags,
             ...publishSettings,
         },
         shouldRewriteLegacySettings: hasOwn(loaded ?? {}, "confirmDelete")
@@ -118,6 +124,7 @@ export function resolveLoadedSettings(
             || (hasAgentSidebarTabSetting && typeof loaded?.showAgentSidebarTab !== "boolean")
             || (hasOwn(loaded ?? {}, "agentRuntimeMode")
                 && normalizeAgentRuntimeModePreference(loaded?.agentRuntimeMode) !== loaded?.agentRuntimeMode)
+            || shouldRewriteNormalizedFeatureFlags(loaded?.featureFlags, featureFlags)
             || shouldRewriteNormalizedPublishSettings(loaded, publishSettings),
     };
 }

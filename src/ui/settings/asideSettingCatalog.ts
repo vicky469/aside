@@ -4,6 +4,10 @@ import {
     ALL_COMMENTS_NOTE_IMAGE_CAPTION,
     ALL_COMMENTS_NOTE_IMAGE_URL,
 } from "../../core/derived/allCommentsNote";
+import {
+    FeatureFlag,
+    isFeatureFlagEnabled,
+} from "../../core/config/featureFlags";
 
 export type AsideSettingSection = "sidebar" | "publishing" | "index-note";
 
@@ -42,6 +46,18 @@ function getPublishHost(baseUrl: string): string {
     } catch {
         return "Not configured";
     }
+}
+
+function isPublishFeatureAvailable(context: AsideSettingCatalogContext): boolean {
+    return isFeatureFlagEnabled(context.plugin.settings.featureFlags, FeatureFlag.publish);
+}
+
+function isPublishingSettingVisible(context: AsideSettingCatalogContext): boolean {
+    return isPublishFeatureAvailable(context) && context.plugin.settings.publishEnabled;
+}
+
+function isRemotePurgeSettingVisible(context: AsideSettingCatalogContext): boolean {
+    return isPublishingSettingVisible(context) && context.plugin.settings.publishRemotePurgeEnabled;
 }
 
 export const ASIDE_SETTING_CATALOG: readonly AsideSettingCatalogEntry[] = [
@@ -86,6 +102,7 @@ export const ASIDE_SETTING_CATALOG: readonly AsideSettingCatalogEntry[] = [
         description: "Show experimental publish controls for supported files in the public folder.",
         aliases: ["Cloudflare Pages"],
         keywords: ["public folder", "deploy"],
+        visible: isPublishFeatureAvailable,
         render: (setting, context) => {
             setting.addToggle((toggle) => toggle
                 .setValue(context.plugin.settings.publishEnabled)
@@ -103,7 +120,7 @@ export const ASIDE_SETTING_CATALOG: readonly AsideSettingCatalogEntry[] = [
         description: "Canonical public address for published files. Prefer your custom domain.",
         aliases: ["public URL", "custom domain"],
         keywords: ["https", "Pages address"],
-        visible: ({ plugin }) => plugin.settings.publishEnabled,
+        visible: isPublishingSettingVisible,
         render: (setting, context) => {
             setting.addText((text) => text
                 .setPlaceholder("https://publish.example.com")
@@ -122,7 +139,7 @@ export const ASIDE_SETTING_CATALOG: readonly AsideSettingCatalogEntry[] = [
         description: "Change to your preferred name or keep the default.",
         aliases: ["Pages project"],
         keywords: ["Cloudflare", "deployment"],
-        visible: ({ plugin }) => plugin.settings.publishEnabled,
+        visible: isPublishingSettingVisible,
         render: (setting, context) => {
             setting.addText((text) => text
                 .setPlaceholder(PUBLISH_PROJECT_NAME_PLACEHOLDER)
@@ -140,7 +157,7 @@ export const ASIDE_SETTING_CATALOG: readonly AsideSettingCatalogEntry[] = [
         description: "Purge cached custom-domain pages after unpublish and republish.",
         aliases: ["cache invalidation"],
         keywords: ["Cloudflare", "unpublish", "republish"],
-        visible: ({ plugin }) => plugin.settings.publishEnabled,
+        visible: isPublishingSettingVisible,
         render: (setting, context) => {
             setting.addToggle((toggle) => toggle
                 .setValue(context.plugin.settings.publishRemotePurgeEnabled)
@@ -158,8 +175,7 @@ export const ASIDE_SETTING_CATALOG: readonly AsideSettingCatalogEntry[] = [
         description: "HTTPS endpoint for the deployed Aside cache purge broker.",
         aliases: ["Worker endpoint"],
         keywords: ["Cloudflare", "cache API"],
-        visible: ({ plugin }) => plugin.settings.publishEnabled
-            && plugin.settings.publishRemotePurgeEnabled,
+        visible: isRemotePurgeSettingVisible,
         render: (setting, { plugin }) => {
             setting.addText((text) => text
                 .setPlaceholder("Purge broker URL")
@@ -177,8 +193,7 @@ export const ASIDE_SETTING_CATALOG: readonly AsideSettingCatalogEntry[] = [
         description: "Select or create the broker secret in Obsidian SecretStorage.",
         aliases: ["broker credential"],
         keywords: ["authentication", "SecretStorage"],
-        visible: ({ plugin }) => plugin.settings.publishEnabled
-            && plugin.settings.publishRemotePurgeEnabled,
+        visible: isRemotePurgeSettingVisible,
         render: (setting, context) => {
             context.renderPurgeBrokerSecret(setting);
         },
@@ -190,8 +205,7 @@ export const ASIDE_SETTING_CATALOG: readonly AsideSettingCatalogEntry[] = [
         description: "Host derived from the configured publishing URL.",
         aliases: ["custom domain host"],
         keywords: ["cache scope", "security"],
-        visible: ({ plugin }) => plugin.settings.publishEnabled
-            && plugin.settings.publishRemotePurgeEnabled,
+        visible: isRemotePurgeSettingVisible,
         render: (setting, { plugin }) => {
             setting.setDesc(getPublishHost(plugin.settings.publishBaseUrl));
         },

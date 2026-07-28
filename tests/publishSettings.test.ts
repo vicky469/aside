@@ -5,6 +5,7 @@ import {
 	normalizePublishSettings,
 	validatePublishSettings,
 } from "../src/core/publish/publishSettings";
+import { FeatureFlag } from "../src/core/config/featureFlags";
 
 test("normalizePublishSettings returns safe non-secret defaults", () => {
 	assert.deepEqual(normalizePublishSettings({}), DEFAULT_PUBLISH_SETTINGS);
@@ -110,9 +111,23 @@ test("normalizePublishSettings infers publish base URL from project name", () =>
 });
 
 test("validatePublishSettings treats disabled publishing as explicitly off", () => {
-	assert.deepEqual(validatePublishSettings(DEFAULT_PUBLISH_SETTINGS), {
+	assert.deepEqual(validatePublishSettings(DEFAULT_PUBLISH_SETTINGS, {
+		[FeatureFlag.publish]: true,
+	}), {
 		ok: false,
 		notice: "Turn on Publishing in Aside settings first.",
+	});
+});
+
+test("validatePublishSettings fails closed when the publish feature flag is off", () => {
+	assert.deepEqual(validatePublishSettings(normalizePublishSettings({
+		publishEnabled: true,
+		publishBaseUrl: "https://publish.example.com",
+	}), {
+		[FeatureFlag.publish]: false,
+	}), {
+		ok: false,
+		notice: "Publishing feature is disabled. Run the Aside CLI to enable it.",
 	});
 });
 
@@ -121,7 +136,9 @@ test("validatePublishSettings accepts complete non-secret Cloudflare Pages confi
 		publishEnabled: true,
 		publishBaseUrl: "https://publish.example.com",
 		publishAllowedRoot: "public/",
-	})), {
+	}), {
+		[FeatureFlag.publish]: true,
+	}), {
 		ok: true,
 	});
 });
@@ -132,7 +149,9 @@ test("validatePublishSettings requires an HTTPS broker URL and secret reference 
 		publishBaseUrl: "https://publish.example.com",
 		publishRemotePurgeEnabled: true,
 		publishPurgeBrokerUrl: "http://localhost:8787/purge",
-	})), {
+	}), {
+		[FeatureFlag.publish]: true,
+	}), {
 		ok: false,
 		notice: "Publish settings are invalid: Purge broker URL must be an https:// URL; Purge broker auth secret must be selected.",
 	});
@@ -144,7 +163,9 @@ test("validatePublishSettings rejects incomplete or unsafe publish settings", ()
 		publishPagesProjectName: "bad_project",
 		publishBaseUrl: "http://publish.example.com/path?token=secret",
 		publishAllowedRoot: "../share",
-	})), {
+	}), {
+		[FeatureFlag.publish]: true,
+	}), {
 		ok: false,
 		notice: "Publish settings are invalid: Publish base URL must be an https:// origin with no path, query, or fragment.",
 	});

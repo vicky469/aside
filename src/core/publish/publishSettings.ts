@@ -1,3 +1,9 @@
+import {
+	FeatureFlag,
+	type FeatureFlags,
+	isFeatureFlagEnabled,
+} from "../config/featureFlags";
+
 export interface PublishSettings {
 	publishEnabled: boolean;
 	publishPagesProjectName: string;
@@ -11,6 +17,8 @@ export interface PublishSettings {
 export type PublishSettingsValidation =
 	| { ok: true }
 	| { ok: false; notice: string };
+
+export const PUBLISH_FEATURE_DISABLED_NOTICE = "Publishing feature is disabled. Run the Aside CLI to enable it.";
 
 export const DEFAULT_PUBLISH_SETTINGS: PublishSettings = {
 	publishEnabled: false,
@@ -155,7 +163,17 @@ function isValidAllowedRoot(value: string): boolean {
 		&& segments.every((segment) => segment !== "." && segment !== "..");
 }
 
-export function validatePublishSettings(settings: PublishSettings): PublishSettingsValidation {
+export function validatePublishSettings(
+	settings: PublishSettings,
+	featureFlags?: FeatureFlags,
+): PublishSettingsValidation {
+	if (!isFeatureFlagEnabled(featureFlags, FeatureFlag.publish)) {
+		return {
+			ok: false,
+			notice: PUBLISH_FEATURE_DISABLED_NOTICE,
+		};
+	}
+
 	if (!settings.publishEnabled) {
 		return {
 			ok: false,

@@ -28,6 +28,7 @@
 		"comment:append": "node scripts/append-note-comment-entry.mjs",
 		"comment:resolve": "node scripts/resolve-note-comment.mjs",
 		"comment:update": "node scripts/update-note-comment.mjs",
+		"feature:flag": "node scripts/set-feature-flag.mjs",
 		"fixture:graph-1000": "node scripts/generate-large-graph-fixture.mjs",
 		"release:artifacts:check": "node scripts/check-release-artifacts.mjs",
 		"release:notes:check": "node scripts/check-release-notes.mjs",

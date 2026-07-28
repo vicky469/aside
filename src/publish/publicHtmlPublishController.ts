@@ -1,7 +1,11 @@
-import type { PublishSettings } from "../core/publish/publishSettings";
+import type {
+	PublishSettings,
+	PublishSettingsValidation,
+} from "../core/publish/publishSettings";
 import {
 	validatePublishSettings,
 } from "../core/publish/publishSettings";
+import type { FeatureFlags } from "../core/config/featureFlags";
 import {
 	inspectPublishArtifact,
 } from "../core/publish/publishArtifactGuard";
@@ -73,6 +77,7 @@ export interface PublishHtmlFileOptions {
 
 export interface PublicHtmlPublishHost {
 	getSettings(): PublishSettings;
+	getFeatureFlags(): FeatureFlags;
 	getVaultConfigDir(): string;
 	listMarkdownFiles(rootPath: string): Promise<string[]>;
 	fileExists(path: string): Promise<boolean>;
@@ -139,6 +144,10 @@ function buildHtmlPublishFrontmatter(
 export class PublicHtmlPublishController {
 	constructor(private readonly host: PublicHtmlPublishHost) {}
 
+	private validateSettings(settings: PublishSettings): PublishSettingsValidation {
+		return validatePublishSettings(settings, this.host.getFeatureFlags());
+	}
+
 	public async getFileActionState(filePath: string): Promise<PublicHtmlPublishActionState> {
 		return (await this.getFileActionStates(filePath))[0];
 	}
@@ -169,7 +178,7 @@ export class PublicHtmlPublishController {
 		artifactContext: PublishArtifactContext = "HTML",
 	): Promise<PublicHtmlPublishActionState[]> {
 		const settings = this.host.getSettings();
-		const validation = validatePublishSettings(settings);
+		const validation = this.validateSettings(settings);
 		if (!validation.ok) {
 			return [this.disabledAction(validation.notice, artifactContext)];
 		}
@@ -215,7 +224,7 @@ export class PublicHtmlPublishController {
 
 	public async publishHtmlFile(htmlPath: string, options: PublishHtmlFileOptions = {}): Promise<PublicHtmlPublishResult> {
 		const settings = this.host.getSettings();
-		const validation = validatePublishSettings(settings);
+		const validation = this.validateSettings(settings);
 		if (!validation.ok) {
 			return validation;
 		}
@@ -318,7 +327,7 @@ export class PublicHtmlPublishController {
 
 	private async getMarkdownFileActionStates(sourcePath: string): Promise<PublicHtmlPublishActionState[]> {
 		const settings = this.host.getSettings();
-		const validation = validatePublishSettings(settings);
+		const validation = this.validateSettings(settings);
 		if (!validation.ok) {
 			return [this.disabledAction(validation.notice, "Markdown")];
 		}
@@ -346,7 +355,7 @@ export class PublicHtmlPublishController {
 
 	private async getArtifactFileActionStates(artifactPath: string): Promise<PublicHtmlPublishActionState[]> {
 		const settings = this.host.getSettings();
-		const validation = validatePublishSettings(settings);
+		const validation = this.validateSettings(settings);
 		if (!validation.ok) {
 			return [this.disabledAction(validation.notice, "PDF")];
 		}
@@ -397,7 +406,7 @@ export class PublicHtmlPublishController {
 
 	private async publishMarkdownFile(sourcePath: string): Promise<PublicHtmlPublishResult> {
 		const settings = this.host.getSettings();
-		const validation = validatePublishSettings(settings);
+		const validation = this.validateSettings(settings);
 		if (!validation.ok) {
 			return validation;
 		}
@@ -433,7 +442,7 @@ export class PublicHtmlPublishController {
 
 	private async publishArtifactFile(artifactPath: string): Promise<PublicHtmlPublishResult> {
 		const settings = this.host.getSettings();
-		const validation = validatePublishSettings(settings);
+		const validation = this.validateSettings(settings);
 		if (!validation.ok) {
 			return validation;
 		}
@@ -469,7 +478,7 @@ export class PublicHtmlPublishController {
 
 	public async unpublishHtmlFile(htmlPath: string): Promise<PublicHtmlPublishResult> {
 		const settings = this.host.getSettings();
-		const validation = validatePublishSettings(settings);
+		const validation = this.validateSettings(settings);
 		if (!validation.ok) {
 			return validation;
 		}
@@ -543,7 +552,7 @@ export class PublicHtmlPublishController {
 
 	private async unpublishMarkdownFile(sourcePath: string): Promise<PublicHtmlPublishResult> {
 		const settings = this.host.getSettings();
-		const validation = validatePublishSettings(settings);
+		const validation = this.validateSettings(settings);
 		if (!validation.ok) {
 			return validation;
 		}
@@ -609,7 +618,7 @@ export class PublicHtmlPublishController {
 
 	private async unpublishArtifactFile(artifactPath: string): Promise<PublicHtmlPublishResult> {
 		const settings = this.host.getSettings();
-		const validation = validatePublishSettings(settings);
+		const validation = this.validateSettings(settings);
 		if (!validation.ok) {
 			return validation;
 		}
@@ -634,7 +643,7 @@ export class PublicHtmlPublishController {
 
 	public async updatePublishedHtmlFile(htmlPath: string): Promise<PublicHtmlPublishResult> {
 		const settings = this.host.getSettings();
-		const validation = validatePublishSettings(settings);
+		const validation = this.validateSettings(settings);
 		if (!validation.ok) {
 			return validation;
 		}
@@ -709,7 +718,7 @@ export class PublicHtmlPublishController {
 
 	private async updatePublishedMarkdownFile(sourcePath: string): Promise<PublicHtmlPublishResult> {
 		const settings = this.host.getSettings();
-		const validation = validatePublishSettings(settings);
+		const validation = this.validateSettings(settings);
 		if (!validation.ok) {
 			return validation;
 		}
@@ -770,7 +779,7 @@ export class PublicHtmlPublishController {
 
 	private async updatePublishedArtifactFile(artifactPath: string): Promise<PublicHtmlPublishResult> {
 		const settings = this.host.getSettings();
-		const validation = validatePublishSettings(settings);
+		const validation = this.validateSettings(settings);
 		if (!validation.ok) {
 			return validation;
 		}
