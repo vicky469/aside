@@ -342,6 +342,7 @@ test("buildTagRelatedFileListModel puts the current file once above tag groups",
             filePath: "docs/source.md",
             label: "source (current)",
             current: true,
+            interactive: false,
         },
         groups: [{
             tagDisplay: "project",

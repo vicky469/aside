@@ -76,6 +76,39 @@ test("thought trail source selector uses native Obsidian theme colors", () => {
     assert.doesNotMatch(sourceControlRule.groups.body + sourceOptionRule.groups.body + sourceInputRule.groups.body, /#[0-9a-f]{3,6}|purple|blue/i);
 });
 
+test("thought trail tag related files stay compact", () => {
+    const listRule = css.match(
+        /\.aside-tag-related-files\s*\{(?<body>[\s\S]*?)\}/,
+    );
+    const groupRule = css.match(
+        /\.aside-tag-related-files-group\s*\{(?<body>[\s\S]*?)\}/,
+    );
+    const headerRule = css.match(
+        /\.aside-tag-related-files-tag-header\s*\{(?<body>[\s\S]*?)\}/,
+    );
+    const itemRule = css.match(
+        /\.aside-tag-related-file-item\s*\{(?<body>[\s\S]*?)\}/,
+    );
+    const currentRule = css.match(
+        /\.aside-tag-related-current-file\s*\{(?<body>[\s\S]*?)\}/,
+    );
+
+    assert.ok(listRule?.groups?.body, "missing tag related file list rule");
+    assert.ok(groupRule?.groups?.body, "missing tag related file group rule");
+    assert.ok(headerRule?.groups?.body, "missing tag related file header rule");
+    assert.ok(itemRule?.groups?.body, "missing tag related file item rule");
+    assert.ok(currentRule?.groups?.body, "missing current tag related file rule");
+    assert.match(listRule.groups.body, /gap:\s*4px\s*;/);
+    assert.match(groupRule.groups.body, /gap:\s*1px\s*;/);
+    assert.match(headerRule.groups.body, /font-weight:\s*var\(--font-normal\)\s*;/);
+    assert.match(headerRule.groups.body, /padding:\s*0 2px\s*;/);
+    assert.match(itemRule.groups.body, /padding:\s*2px 4px\s*;/);
+    assert.match(itemRule.groups.body, /font-size:\s*var\(--font-ui-smaller\)\s*;/);
+    assert.match(currentRule.groups.body, /padding:\s*2px 4px\s*;/);
+    assert.match(currentRule.groups.body, /cursor:\s*default\s*;/);
+    assert.doesNotMatch(currentRule.groups.body, /background:/);
+});
+
 test("empty states stay muted without promoted heading text", () => {
     const emptyStateRule = css.match(
         /\.aside-empty-state\s*\{(?<body>[\s\S]*?)\}/,

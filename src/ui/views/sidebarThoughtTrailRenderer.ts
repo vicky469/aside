@@ -110,7 +110,10 @@ function renderTagRelatedFilesList(
     const listEl = container.createDiv("aside-tag-related-files");
 
     if (model.currentFile) {
-        renderTagRelatedFileButton(listEl, model.currentFile.filePath, model.currentFile.label, context, true);
+        listEl.createDiv({
+            cls: "aside-tag-related-current-file",
+            text: model.currentFile.label,
+        }).title = model.currentFile.filePath;
     }
 
     for (const group of model.groups) {
@@ -119,7 +122,7 @@ function renderTagRelatedFilesList(
         const filesEl = groupEl.createDiv("aside-tag-related-files-list");
         for (const filePath of group.filePaths) {
             const label = filePath.replace(/\.md$/i, "").split("/").pop() ?? filePath;
-            renderTagRelatedFileButton(filesEl, filePath, label, context, false);
+            renderTagRelatedFileButton(filesEl, filePath, label, context);
         }
     }
 }
@@ -129,16 +132,12 @@ function renderTagRelatedFileButton(
     filePath: string,
     label: string,
     context: SidebarThoughtTrailRenderContext,
-    isCurrent: boolean,
 ): void {
     const btn = container.createEl("button", {
-        cls: `aside-tag-related-file-item${isCurrent ? " is-current" : ""}`,
+        cls: "aside-tag-related-file-item",
         text: label,
     });
     btn.title = filePath;
-    if (isCurrent) {
-        btn.setAttribute("aria-current", "page");
-    }
     btn.addEventListener("click", () => {
         const url = `obsidian://open?vault=${encodeURIComponent(context.app.vault.getName())}&file=${encodeURIComponent(filePath)}`;
         void openThoughtTrailTarget(url, context);

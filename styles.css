@@ -1141,20 +1141,20 @@ button.aside-filter-chip {
 .aside-tag-related-files {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 4px;
 }
 
 .aside-tag-related-files-group {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 1px;
 }
 
 .aside-tag-related-files-tag-header {
     font-size: var(--font-ui-smaller);
-    font-weight: var(--font-semibold);
-    color: var(--text-muted);
-    padding: 0 4px;
+    font-weight: var(--font-normal);
+    color: var(--text-faint);
+    padding: 0 2px;
 }
 
 .aside-tag-related-files-list {
@@ -1166,13 +1166,13 @@ button.aside-filter-chip {
     display: block;
     width: 100%;
     text-align: left;
-    padding: 3px 8px;
+    padding: 2px 4px;
     border-radius: var(--radius-s);
     background: none;
     border: none;
     cursor: pointer;
     color: var(--text-normal);
-    font-size: var(--font-ui-small);
+    font-size: var(--font-ui-smaller);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1182,10 +1182,14 @@ button.aside-filter-chip {
     background: var(--background-modifier-hover);
 }
 
-.aside-tag-related-file-item.is-current {
+.aside-tag-related-current-file {
+    padding: 2px 4px;
     color: var(--text-muted);
-    background: var(--background-modifier-hover);
-    font-weight: var(--font-medium);
+    cursor: default;
+    font-size: var(--font-ui-smaller);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .aside-comment-section-add-button {

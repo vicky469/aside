@@ -396,6 +396,7 @@ export interface TagRelatedFileListItem {
     filePath: string;
     label: string;
     current: boolean;
+    interactive: boolean;
 }
 
 export interface TagRelatedFileListGroup extends Omit<TagRelatedFileGroup, "filePaths"> {
@@ -481,6 +482,7 @@ export function buildTagRelatedFileListModel(
                 filePath: normalizedSourcePath,
                 label: formatCurrentRelatedFileLabel(normalizedSourcePath),
                 current: true,
+                interactive: false,
             }
             : null,
         groups: groups
