@@ -107,34 +107,38 @@ function renderTagRelatedFilesList(
     context: SidebarThoughtTrailRenderContext,
 ): void {
     const model = buildTagRelatedFileListModel(rootFilePath, groups);
-    const listEl = container.createDiv("aside-tag-related-files");
+    const listEl = container.createEl("ul", { cls: "aside-tag-related-files" });
 
     if (model.currentFile) {
-        listEl.createDiv({
+        const currentRowEl = listEl.createEl("li", {
+            cls: "aside-tag-related-file-row aside-tag-related-file-row--current",
+        });
+        currentRowEl.createSpan({
             cls: "aside-tag-related-current-file",
             text: model.currentFile.label,
         }).title = model.currentFile.filePath;
     }
 
     for (const group of model.groups) {
-        const groupEl = listEl.createDiv("aside-tag-related-files-group");
+        const groupEl = listEl.createEl("li", { cls: "aside-tag-related-files-group" });
         groupEl.createDiv({ cls: "aside-tag-related-files-tag-header", text: group.tagDisplay });
-        const filesEl = groupEl.createDiv("aside-tag-related-files-list");
+        const filesEl = groupEl.createEl("ul", { cls: "aside-tag-related-files-list" });
         for (const filePath of group.filePaths) {
             const label = filePath.replace(/\.md$/i, "").split("/").pop() ?? filePath;
-            renderTagRelatedFileButton(filesEl, filePath, label, context);
+            const rowEl = filesEl.createEl("li", { cls: "aside-tag-related-file-row" });
+            renderTagRelatedFileLink(rowEl, filePath, label, context);
         }
     }
 }
 
-function renderTagRelatedFileButton(
+function renderTagRelatedFileLink(
     container: HTMLElement,
     filePath: string,
     label: string,
     context: SidebarThoughtTrailRenderContext,
 ): void {
     const btn = container.createEl("button", {
-        cls: "aside-tag-related-file-item",
+        cls: "aside-tag-related-file-link",
         text: label,
     });
     btn.title = filePath;
