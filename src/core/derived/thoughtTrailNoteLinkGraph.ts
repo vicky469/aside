@@ -352,5 +352,7 @@ export function buildThoughtTrailNoteLinkLines(
         scopedFileSet.has(edge.sourceFilePath) && scopedFileSet.has(edge.targetFilePath)
     );
 
-    return buildThoughtTrailLinesFromEdges(vaultName, scopedEdges);
+    return buildThoughtTrailLinesFromEdges(vaultName, scopedEdges, {
+        currentFilePath: rootFilePath ?? null,
+    });
 }

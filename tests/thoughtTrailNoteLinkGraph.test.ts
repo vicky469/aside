@@ -85,6 +85,7 @@ test("buildThoughtTrailNoteLinkGraph includes source markdown normal links and r
     ]);
 
     const lines = buildThoughtTrailNoteLinkLines("dev", graph, "docs/a.md");
+    assert.equal(lines.some((line) => /\s+n\d+\["a \(current\)"\]/u.test(line)), true);
     assert.equal(lines.some((line) => line.includes("-->|")), false);
     assert.equal(lines.some((line) => line.includes("Open docs/incoming.md")), true);
     assert.equal(lines.some((line) => line.includes("Open docs/unrelated.md")), false);

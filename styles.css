@@ -1182,6 +1182,12 @@ button.aside-filter-chip {
     background: var(--background-modifier-hover);
 }
 
+.aside-tag-related-file-item.is-current {
+    color: var(--text-muted);
+    background: var(--background-modifier-hover);
+    font-weight: var(--font-medium);
+}
+
 .aside-comment-section-add-button {
     color: var(--icon-color, var(--text-faint, var(--text-muted)));
     opacity: 0.8;

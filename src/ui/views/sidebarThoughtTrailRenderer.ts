@@ -8,6 +8,7 @@ import {
 } from "obsidian";
 import type { Comment, CommentThread } from "../../commentManager";
 import {
+    buildTagRelatedFileListModel,
     buildTagGroupedRelatedFiles,
     extractThoughtTrailMermaidSource,
     getThoughtTrailMermaidRenderConfig,
@@ -101,24 +102,47 @@ function renderThoughtTrailSourceControl(
 
 function renderTagRelatedFilesList(
     container: HTMLDivElement,
+    rootFilePath: string,
     groups: TagRelatedFileGroup[],
     context: SidebarThoughtTrailRenderContext,
 ): void {
+    const model = buildTagRelatedFileListModel(rootFilePath, groups);
     const listEl = container.createDiv("aside-tag-related-files");
-    for (const group of groups) {
+
+    if (model.currentFile) {
+        renderTagRelatedFileButton(listEl, model.currentFile.filePath, model.currentFile.label, context, true);
+    }
+
+    for (const group of model.groups) {
         const groupEl = listEl.createDiv("aside-tag-related-files-group");
         groupEl.createDiv({ cls: "aside-tag-related-files-tag-header", text: group.tagDisplay });
         const filesEl = groupEl.createDiv("aside-tag-related-files-list");
         for (const filePath of group.filePaths) {
             const label = filePath.replace(/\.md$/i, "").split("/").pop() ?? filePath;
-            const btn = filesEl.createEl("button", { cls: "aside-tag-related-file-item", text: label });
-            btn.title = filePath;
-            btn.addEventListener("click", () => {
-                const url = `obsidian://open?vault=${encodeURIComponent(context.app.vault.getName())}&file=${encodeURIComponent(filePath)}`;
-                void openThoughtTrailTarget(url, context);
-            });
+            renderTagRelatedFileButton(filesEl, filePath, label, context, false);
         }
     }
+}
+
+function renderTagRelatedFileButton(
+    container: HTMLElement,
+    filePath: string,
+    label: string,
+    context: SidebarThoughtTrailRenderContext,
+    isCurrent: boolean,
+): void {
+    const btn = container.createEl("button", {
+        cls: `aside-tag-related-file-item${isCurrent ? " is-current" : ""}`,
+        text: label,
+    });
+    btn.title = filePath;
+    if (isCurrent) {
+        btn.setAttribute("aria-current", "page");
+    }
+    btn.addEventListener("click", () => {
+        const url = `obsidian://open?vault=${encodeURIComponent(context.app.vault.getName())}&file=${encodeURIComponent(filePath)}`;
+        void openThoughtTrailTarget(url, context);
+    });
 }
 
 
@@ -158,7 +182,7 @@ export async function renderSidebarThoughtTrail(
     });
     if (options.source === "tags") {
         const sectionEl = thoughtTrailEl.createDiv("aside-thought-trail-section");
-        renderTagRelatedFilesList(sectionEl, tagGroups, context);
+        renderTagRelatedFilesList(sectionEl, rootFilePath, tagGroups, context);
         return;
     }
 

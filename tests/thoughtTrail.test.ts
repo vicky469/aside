@@ -1,6 +1,7 @@
 import * as assert from "node:assert/strict";
 import test from "node:test";
 import {
+    buildTagRelatedFileListModel,
     buildTagGroupedRelatedFiles,
     buildThoughtTrailCommentTagsByFilePath,
     buildTagRelatedFileLines,
@@ -327,6 +328,27 @@ test("buildTagGroupedRelatedFiles excludes the configured index note from tag ma
             filePaths: ["docs/a.md"],
         }],
     );
+});
+
+test("buildTagRelatedFileListModel puts the current file once above tag groups", () => {
+    const groups = [{
+        tagDisplay: "project",
+        tagKey: "project",
+        filePaths: ["docs/a.md", "docs/source.md", "docs/b.md"],
+    }];
+
+    assert.deepEqual(buildTagRelatedFileListModel("docs/source.md", groups), {
+        currentFile: {
+            filePath: "docs/source.md",
+            label: "source (current)",
+            current: true,
+        },
+        groups: [{
+            tagDisplay: "project",
+            tagKey: "project",
+            filePaths: ["docs/a.md", "docs/b.md"],
+        }],
+    });
 });
 
 test("buildTagGroupedRelatedFiles still uses side comment tags when excluding the index note", () => {

@@ -150,6 +150,14 @@ function formatNodeLabel(filePath: string): string {
     return normalizeNotePath(filePath).replace(/\.md$/i, "");
 }
 
+function formatRelatedFileListLabel(filePath: string): string {
+    return formatNodeLabel(filePath).split("/").pop() ?? formatNodeLabel(filePath);
+}
+
+function formatCurrentRelatedFileLabel(filePath: string): string {
+    return `${formatRelatedFileListLabel(filePath)} (current)`;
+}
+
 function splitPathLabelSegments(filePath: string): string[] {
     const normalized = formatNodeLabel(filePath);
     return normalized.split("/").filter(Boolean);
@@ -384,6 +392,21 @@ export interface TagRelatedFileGroup {
     filePaths: string[];
 }
 
+export interface TagRelatedFileListItem {
+    filePath: string;
+    label: string;
+    current: boolean;
+}
+
+export interface TagRelatedFileListGroup extends Omit<TagRelatedFileGroup, "filePaths"> {
+    filePaths: string[];
+}
+
+export interface TagRelatedFileListModel {
+    currentFile: TagRelatedFileListItem | null;
+    groups: TagRelatedFileListGroup[];
+}
+
 export interface ThoughtTrailTagRelatedOptions {
     allCommentsNotePath?: string;
 }
@@ -445,6 +468,31 @@ export function buildTagGroupedRelatedFiles(
             tagKey,
             filePaths: filePaths.sort((a, b) => a.localeCompare(b)),
         }));
+}
+
+export function buildTagRelatedFileListModel(
+    sourceFilePath: string,
+    groups: readonly TagRelatedFileGroup[],
+): TagRelatedFileListModel {
+    const normalizedSourcePath = normalizeNotePath(sourceFilePath);
+    return {
+        currentFile: normalizedSourcePath
+            ? {
+                filePath: normalizedSourcePath,
+                label: formatCurrentRelatedFileLabel(normalizedSourcePath),
+                current: true,
+            }
+            : null,
+        groups: groups
+            .map((group) => ({
+                tagDisplay: group.tagDisplay,
+                tagKey: group.tagKey,
+                filePaths: group.filePaths
+                    .map((filePath) => normalizeNotePath(filePath))
+                    .filter((filePath) => !!filePath && filePath !== normalizedSourcePath),
+            }))
+            .filter((group) => group.filePaths.length > 0),
+    };
 }
 
 export function buildTagRelatedFileLines(
@@ -586,6 +634,9 @@ export function buildThoughtTrailLines(
 export function buildThoughtTrailLinesFromEdges(
     vaultName: string,
     edges: readonly ThoughtTrailRenderableEdge[],
+    options: {
+        currentFilePath?: string | null;
+    } = {},
 ): string[] {
     if (!edges.length) {
         return [];
@@ -614,6 +665,7 @@ export function buildThoughtTrailLinesFromEdges(
     const clickLines: string[] = [];
     const nodeIds = new Map<string, string>();
     const expandedSourceFilePaths = new Set<string>();
+    const normalizedCurrentFilePath = normalizeNotePath(options.currentFilePath ?? "");
 
     const ensureNode = (filePath: string): string => {
         const existing = nodeIds.get(filePath);
@@ -623,7 +675,12 @@ export function buildThoughtTrailLinesFromEdges(
 
         const nodeId = `n${nodeIds.size}`;
         nodeIds.set(filePath, nodeId);
-        const label = JSON.stringify(toMermaidText(nodeLabelByFilePath.get(filePath) ?? formatNodeLabel(filePath)));
+        const baseLabel = nodeLabelByFilePath.get(filePath) ?? formatNodeLabel(filePath);
+        const label = JSON.stringify(toMermaidText(
+            normalizeNotePath(filePath) === normalizedCurrentFilePath
+                ? `${baseLabel} (current)`
+                : baseLabel,
+        ));
         nodeLines.push(`    ${nodeId}[${label}]`);
         clickLines.push(
             `    click ${nodeId} href ${JSON.stringify(buildNoteOpenUrl(vaultName, filePath))} ${JSON.stringify(`Open ${normalizeNotePath(filePath)}`)}`,
