@@ -9,7 +9,7 @@ export function getSidebarCommentCardOpenAction(options: {
         return "reveal-index";
     }
 
-    if (options.isNonDesktopClient || options.isPinnedMarkdownFileSidebar) {
+    if (options.isNonDesktopClient) {
         return "select-only";
     }
 

@@ -2,14 +2,14 @@ import * as assert from "node:assert/strict";
 import test from "node:test";
 import { getSidebarCommentCardOpenAction } from "../src/ui/views/sidebarCommentCardNavigation";
 
-test("pinned markdown-file sidebars select comment cards without switching editor files", () => {
+test("pinned markdown-file sidebars still reveal the source editor on desktop", () => {
     assert.equal(
         getSidebarCommentCardOpenAction({
             isIndexView: false,
             isNonDesktopClient: false,
             isPinnedMarkdownFileSidebar: true,
         }),
-        "select-only",
+        "open-editor",
     );
 });
 
