@@ -1138,7 +1138,7 @@ button.aside-filter-chip {
     padding-right: 0;
 }
 
-.aside-tag-related-files {
+.aside-thought-trail .aside-tag-related-files {
     display: flex;
     flex-direction: column;
     gap: 2px;
@@ -1159,16 +1159,16 @@ button.aside-filter-chip {
     font-size: var(--font-ui-smaller);
     font-weight: var(--font-normal);
     color: var(--text-faint);
-    padding: 0 2px;
+    padding: 0;
 }
 
-.aside-tag-related-files-list {
+.aside-thought-trail .aside-tag-related-files-list {
     display: flex;
     flex-direction: column;
     gap: 1px;
     list-style: none;
     margin: 0;
-    padding: 0 0 0 10px;
+    padding: 0;
 }
 
 .aside-tag-related-file-row {
@@ -1187,7 +1187,7 @@ button.aside-filter-chip {
     min-height: 0;
     margin: 0;
     text-align: left;
-    padding: 1px 2px;
+    padding: 1px 0;
     background: transparent;
     background-image: none;
     border: none;
@@ -1223,7 +1223,7 @@ button.aside-filter-chip {
 
 .aside-tag-related-current-file {
     display: block;
-    padding: 1px 2px;
+    padding: 1px 0;
     color: var(--text-muted);
     cursor: default;
     font-size: var(--font-ui-smaller);

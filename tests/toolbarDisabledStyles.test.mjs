@@ -78,7 +78,7 @@ test("thought trail source selector uses native Obsidian theme colors", () => {
 
 test("thought trail tag related files stay compact", () => {
     const listRule = css.match(
-        /\.aside-tag-related-files\s*\{(?<body>[\s\S]*?)\}/,
+        /\.aside-thought-trail \.aside-tag-related-files\s*\{(?<body>[\s\S]*?)\}/,
     );
     const groupRule = css.match(
         /\.aside-tag-related-files-group\s*\{(?<body>[\s\S]*?)\}/,
@@ -87,7 +87,7 @@ test("thought trail tag related files stay compact", () => {
         /\.aside-tag-related-files-tag-header\s*\{(?<body>[\s\S]*?)\}/,
     );
     const nestedListRule = css.match(
-        /\.aside-tag-related-files-list\s*\{(?<body>[\s\S]*?)\}/,
+        /\.aside-thought-trail \.aside-tag-related-files-list\s*\{(?<body>[\s\S]*?)\}/,
     );
     const linkRule = css.match(
         /button\.aside-tag-related-file-link\s*\{(?<body>[\s\S]*?)\}/,
@@ -112,11 +112,11 @@ test("thought trail tag related files stay compact", () => {
     assert.match(listRule.groups.body, /gap:\s*2px\s*;/);
     assert.match(groupRule.groups.body, /gap:\s*1px\s*;/);
     assert.match(headerRule.groups.body, /font-weight:\s*var\(--font-normal\)\s*;/);
-    assert.match(headerRule.groups.body, /padding:\s*0 2px\s*;/);
+    assert.match(headerRule.groups.body, /padding:\s*0\s*;/);
     assert.match(nestedListRule.groups.body, /list-style:\s*none\s*;/);
     assert.match(nestedListRule.groups.body, /margin:\s*0\s*;/);
-    assert.match(nestedListRule.groups.body, /padding:\s*0 0 0 10px\s*;/);
-    assert.match(linkRule.groups.body, /padding:\s*1px 2px\s*;/);
+    assert.match(nestedListRule.groups.body, /padding:\s*0\s*;/);
+    assert.match(linkRule.groups.body, /padding:\s*1px 0\s*;/);
     assert.match(linkRule.groups.body, /background:\s*transparent\s*;/);
     assert.match(linkRule.groups.body, /background-image:\s*none\s*;/);
     assert.match(linkRule.groups.body, /border:\s*none\s*;/);
@@ -135,7 +135,7 @@ test("thought trail tag related files stay compact", () => {
     assert.match(linkHoverFocusRule.groups.body, /box-shadow:\s*none\s*;/);
     assert.doesNotMatch(linkHoverFocusRule.groups.body, /background-modifier-hover/);
     assert.match(currentRule.groups.body, /display:\s*block\s*;/);
-    assert.match(currentRule.groups.body, /padding:\s*1px 2px\s*;/);
+    assert.match(currentRule.groups.body, /padding:\s*1px 0\s*;/);
     assert.match(currentRule.groups.body, /cursor:\s*default\s*;/);
     assert.doesNotMatch(currentRule.groups.body, /background:/);
 });
