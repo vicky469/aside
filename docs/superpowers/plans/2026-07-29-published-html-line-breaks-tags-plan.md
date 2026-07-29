@@ -13,11 +13,11 @@ placeholders protect code content.
 
 ## Implementation tracking
 
-- [ ] Task 1: Add failing renderer regression coverage.
-- [ ] Task 2: Preserve source lines and render line breaks.
-- [ ] Task 3: Render and style Unicode hashtags.
-- [ ] Task 4: Run focused and full verification.
-- [ ] Task 5: Update implementation tracking and review the diff.
+- [x] Task 1: Add failing renderer regression coverage.
+- [x] Task 2: Preserve source lines and render line breaks.
+- [x] Task 3: Render and style Unicode hashtags.
+- [x] Task 4: Run focused and full verification.
+- [x] Task 5: Update implementation tracking and review the diff.
 
 ## Task 1: Add failing renderer regression coverage
 

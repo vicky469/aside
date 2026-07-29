@@ -5,10 +5,10 @@
 - [x] Reproduce the flattened timestamp lines in the local renderer.
 - [x] Confirm the live published page contains flattened paragraphs and plain hashtags.
 - [x] Agree on source-line preservation and automatic spacing behavior.
-- [ ] Add regression tests for line breaks and Unicode hashtags.
-- [ ] Preserve nonblank source lines within rendered paragraphs.
-- [ ] Render hashtags as blue, non-clickable spans.
-- [ ] Run focused tests, the full suite, and the release artifact guard.
+- [x] Add regression tests for line breaks and Unicode hashtags.
+- [x] Preserve nonblank source lines within rendered paragraphs.
+- [x] Render hashtags as blue, non-clickable spans.
+- [x] Run focused tests, the full suite, and the release artifact guard.
 
 ## Problem
 

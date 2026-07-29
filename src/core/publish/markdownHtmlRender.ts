@@ -12,6 +12,7 @@ interface MarkdownBlock {
 
 const UNSAFE_LINK_PROTOCOL_PATTERN = /^[a-z][a-z\d+.-]*:/iu;
 const SAFE_LINK_PROTOCOL_PATTERN = /^(?:https?:|mailto:)/iu;
+const INLINE_LINE_BREAK_MARKER = "\u0000ASIDE_LINE_BREAK\u0000\n";
 
 export function deriveMarkdownHtmlPublishPath(sourcePath: string): string {
 	return sourcePath.replace(/\.md$/iu, ".html");
@@ -41,6 +42,8 @@ export function renderMarkdownToBasicHtml(options: RenderMarkdownToBasicHtmlOpti
 		"pre{overflow:auto;background:color-mix(in srgb, CanvasText 8%, transparent);padding:1em;border-radius:8px;}pre code{background:transparent;padding:0;}",
 		"img{max-width:100%;height:auto;display:block;margin:1.25em auto;border-radius:8px;}",
 		"a{color:#6d47ff;text-underline-offset:.18em;}",
+		".aside-publish-tag{color:#2563eb;font-weight:500;}",
+		"@media (prefers-color-scheme:dark){.aside-publish-tag{color:#60a5fa;}}",
 		"@media (max-width:640px){main{padding:32px 18px 56px;font-size:16px;}}",
 		"</style>",
 		"</head>",
@@ -79,7 +82,7 @@ function parseBlocks(markdown: string): MarkdownBlock[] {
 		if (paragraph.length === 0) {
 			return;
 		}
-		blocks.push({ type: "paragraph", lines: [paragraph.join(" ")] });
+		blocks.push({ type: "paragraph", lines: paragraph });
 		paragraph = [];
 	};
 	const flushList = () => {
@@ -94,7 +97,7 @@ function parseBlocks(markdown: string): MarkdownBlock[] {
 		if (blockquote.length === 0) {
 			return;
 		}
-		blocks.push({ type: "blockquote", lines: [blockquote.join(" ")] });
+		blocks.push({ type: "blockquote", lines: blockquote });
 		blockquote = [];
 	};
 	const flushTextBlocks = () => {
@@ -188,15 +191,23 @@ function renderBlock(block: MarkdownBlock): string {
 		case "ordered-list":
 			return `<ol>\n${block.lines.map((line) => `<li>${renderInline(line)}</li>`).join("\n")}\n</ol>`;
 		case "blockquote":
-			return `<blockquote>\n<p>${renderInline(block.lines[0])}</p>\n</blockquote>`;
+			return `<blockquote>\n<p>${renderInlineLines(block.lines)}</p>\n</blockquote>`;
 		case "code": {
 			const languageClass = block.language ? ` class="language-${escapeAttribute(block.language)}"` : "";
 			return `<pre><code${languageClass}>${escapeHtml(block.lines.join("\n"))}\n</code></pre>`;
 		}
 		case "paragraph":
 		default:
-			return `<p>${renderInline(block.lines[0])}</p>`;
+			return `<p>${renderInlineLines(block.lines)}</p>`;
 	}
+}
+
+function renderInlineLines(lines: string[]): string {
+	return renderInline(lines.join(INLINE_LINE_BREAK_MARKER));
+}
+
+function replaceInlineLineBreakMarkers(value: string, replacement: string): string {
+	return value.split(INLINE_LINE_BREAK_MARKER).join(replacement);
 }
 
 function renderInline(value: string): string {
@@ -207,12 +218,16 @@ function renderInline(value: string): string {
 		return marker;
 	};
 	let html = value.replace(/`([^`]+)`/gu, (_match, code: string) => {
-		return stashInlineHtml(`<code>${escapeHtml(code)}</code>`);
+		const normalizedCode = replaceInlineLineBreakMarkers(code, "\n");
+		return stashInlineHtml(`<code>${escapeHtml(normalizedCode)}</code>`);
 	});
 
 	html = html.replace(/!\[([^\]]*)\]\(([^)\n]+)\)/gu, (_match, label: string, src: string) => {
+		if (src.includes(INLINE_LINE_BREAK_MARKER)) {
+			return plainText(replaceInlineLineBreakMarkers(label, " "));
+		}
 		const safeSrc = sanitizeImageSrc(src);
-		const alt = plainText(label);
+		const alt = plainText(replaceInlineLineBreakMarkers(label, " "));
 		if (!safeSrc) {
 			return alt;
 		}
@@ -220,17 +235,28 @@ function renderInline(value: string): string {
 	});
 	html = html.replace(/\[([^\]]+)\]\(([^)\n]+)\)/gu, (_match, label: string, href: string) => {
 		const renderedLabel = renderInline(label);
+		if (href.includes(INLINE_LINE_BREAK_MARKER)) {
+			return stashInlineHtml(renderedLabel);
+		}
 		const safeHref = sanitizeHref(href);
-		return safeHref ? stashInlineHtml(`<a href="${escapeAttribute(safeHref)}">${renderedLabel}</a>`) : renderedLabel;
+		return safeHref
+			? stashInlineHtml(`<a href="${escapeAttribute(safeHref)}">${renderedLabel}</a>`)
+			: stashInlineHtml(renderedLabel);
 	});
+	html = html.replace(/\\#/gu, () => stashInlineHtml("#"));
 	html = escapeHtml(unescapeMarkdownPunctuation(html));
+	html = html.replace(
+		/(^|\s)(#[\p{L}\p{M}\p{N}_/-]+)/gu,
+		(_match, prefix: string, tag: string) =>
+			`${prefix}<span class="aside-publish-tag">${tag}</span>`,
+	);
 	html = html.replace(/(^|[^\\])\*\*([^*]+)\*\*/gu, "$1<strong>$2</strong>");
 	html = html.replace(/(^|[^\\])\*([^*]+)\*/gu, "$1<em>$2</em>");
 
 	for (let index = 0; index < inlineHtml.length; index += 1) {
 		html = html.replace(`\u0000INLINE${index}\u0000`, inlineHtml[index]);
 	}
-	return html;
+	return replaceInlineLineBreakMarkers(html, "<br>\n");
 }
 
 function sanitizeImageSrc(value: string): string | null {

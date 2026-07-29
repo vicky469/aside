@@ -113,6 +113,76 @@ test("renderMarkdownToBasicHtml unescapes readable markdown punctuation", () => 
 	assert.doesNotMatch(html, /\\\[/u);
 });
 
+test("renderMarkdownToBasicHtml preserves source lines and styles unicode hashtags", () => {
+	const html = renderMarkdownToBasicHtml({
+		sourcePath: "public/chapters.md",
+		markdown: [
+			"00:00 序言",
+			"04:36 第一章：资金源头的差异",
+			"09:42 第二章：条款里的生死劫",
+			"",
+			"#长鑫科技上市 #A股科创板 #风险投资VC_2026",
+			"Keep `#inside-code` and https://example.com/page#section.",
+			"#第二行标签",
+		].join("\n"),
+	});
+
+	assert.match(
+		html,
+		/<p>00:00 序言<br>\n04:36 第一章：资金源头的差异<br>\n09:42 第二章：条款里的生死劫<\/p>/u,
+	);
+	assert.match(
+		html,
+		/<p><span class="aside-publish-tag">#长鑫科技上市<\/span> <span class="aside-publish-tag">#A股科创板<\/span> <span class="aside-publish-tag">#风险投资VC_2026<\/span><br>/u,
+	);
+	assert.match(html, /<code>#inside-code<\/code>/u);
+	assert.doesNotMatch(html, /page<span class="aside-publish-tag">#section<\/span>/u);
+	assert.match(
+		html,
+		/<br>\n<span class="aside-publish-tag">#第二行标签<\/span><\/p>/u,
+	);
+	assert.match(html, /\.aside-publish-tag\{color:#[0-9a-f]{6};/u);
+});
+
+test("renderMarkdownToBasicHtml preserves multiline inline markdown and literal hashes", () => {
+	const html = renderMarkdownToBasicHtml({
+		sourcePath: "public/multiline.md",
+		markdown: [
+			"This is **bold",
+			"continued** and [linked",
+			"label](https://example.com).",
+			"",
+			"`code",
+			"continued`",
+			"",
+			"\\#literal #cafe\u0301 #नमस्ते",
+			"",
+			"[#unsafe](javascript:foo)",
+			"",
+			"> First quoted line",
+			"> Second quoted line",
+		].join("\n"),
+	});
+
+	assert.match(html, /<strong>bold<br>\ncontinued<\/strong>/u);
+	assert.match(
+		html,
+		/<a href="https:\/\/example\.com">linked<br>\nlabel<\/a>/u,
+	);
+	assert.match(html, /<code>code\ncontinued<\/code>/u);
+	assert.match(html, /<p>#literal /u);
+	assert.doesNotMatch(html, /aside-publish-tag">#literal/u);
+	assert.match(html, /<span class="aside-publish-tag">#café<\/span>/u);
+	assert.match(html, /<span class="aside-publish-tag">#नमस्ते<\/span>/u);
+	assert.match(html, /<p><span class="aside-publish-tag">#unsafe<\/span><\/p>/u);
+	assert.doesNotMatch(html, /&lt;span class=/u);
+	assert.doesNotMatch(html, /href="javascript:foo"/u);
+	assert.match(
+		html,
+		/<blockquote>\n<p>First quoted line<br>\nSecond quoted line<\/p>\n<\/blockquote>/u,
+	);
+});
+
 test("renderMarkdownToBasicHtml falls back to the source basename for title", () => {
 	const html = renderMarkdownToBasicHtml({
 		sourcePath: "public/no-heading.md",
