@@ -1,6 +1,6 @@
 # Local Publish Feature Flag Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Keep the publish feature flag persistent in `data.json` while allowing testers to change it through an exact `"true"` or `"false"` local-storage value and an Aside reload.
 
@@ -16,7 +16,7 @@
 - Create: `src/core/config/featureFlagStorageSync.ts`
 - Create: `tests/featureFlagStorageSync.test.ts`
 
-- [ ] **Step 1: Write failing synchronization tests**
+- [x] **Step 1: Write failing synchronization tests**
 
 Create `tests/featureFlagStorageSync.test.ts` with a small in-memory storage and host harness. Cover:
 
@@ -184,7 +184,7 @@ test("failed mirror writes do not reject synchronization", async () => {
 
 The harness must expose mutable `featureFlags`, `persistCount`, `storageValue`, and captured error operations while implementing the production callback interface with real functions rather than mocks.
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
 Run:
 
@@ -194,7 +194,7 @@ Run:
 
 Expected: TypeScript fails because `src/core/config/featureFlagStorageSync.ts` and its exports do not exist.
 
-- [ ] **Step 3: Implement the synchronization unit**
+- [x] **Step 3: Implement the synchronization unit**
 
 Create `src/core/config/featureFlagStorageSync.ts`:
 
@@ -310,7 +310,7 @@ export async function syncPublishFeatureFlagStorage(
 }
 ```
 
-- [ ] **Step 4: Run the focused test and verify GREEN**
+- [x] **Step 4: Run the focused test and verify GREEN**
 
 Run:
 
@@ -321,7 +321,7 @@ node --test .test-dist/tests/featureFlagStorageSync.test.js
 
 Expected: all feature-flag storage synchronization tests pass.
 
-- [ ] **Step 5: Commit the core unit**
+- [x] **Step 5: Commit the core unit**
 
 ```bash
 git add src/core/config/featureFlagStorageSync.ts tests/featureFlagStorageSync.test.ts
@@ -334,7 +334,7 @@ git commit -m "feat(settings): sync publish flag from local storage"
 - Modify: `src/main.ts`
 - Modify: `tests/pluginStartupOrder.test.ts`
 
-- [ ] **Step 1: Write the failing startup-order test**
+- [x] **Step 1: Write the failing startup-order test**
 
 Extend `tests/pluginStartupOrder.test.ts`:
 
@@ -354,7 +354,7 @@ test("plugin synchronizes the publish feature flag before registering UI", () =>
 });
 ```
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
 Run:
 
@@ -365,7 +365,7 @@ node --test .test-dist/tests/pluginStartupOrder.test.js
 
 Expected: the new test fails because `src/main.ts` does not call `syncPublishFeatureFlagStorage`.
 
-- [ ] **Step 3: Wire synchronization into `src/main.ts`**
+- [x] **Step 3: Wire synchronization into `src/main.ts`**
 
 Import `syncPublishFeatureFlagStorage` from `./core/config/featureFlagStorageSync`.
 
@@ -400,7 +400,7 @@ private async syncPublishFeatureFlagStorage(): Promise<void> {
 
 This uses the existing `saveSettings()` path, so an accepted value becomes canonical in `data.json` without replacing unrelated plugin data. The core synchronizer restores the previous runtime flag if persistence fails.
 
-- [ ] **Step 4: Run focused and settings tests**
+- [x] **Step 4: Run focused and settings tests**
 
 Run:
 
@@ -411,7 +411,7 @@ node --test .test-dist/tests/featureFlagStorageSync.test.js .test-dist/tests/plu
 
 Expected: all selected tests pass.
 
-- [ ] **Step 5: Commit startup wiring**
+- [x] **Step 5: Commit startup wiring**
 
 ```bash
 git add src/main.ts tests/pluginStartupOrder.test.ts
@@ -428,7 +428,7 @@ git commit -m "feat(settings): apply publish flag during startup"
 - Create: `tests/publishFeatureFlagDocs.test.mjs`
 - Modify: `docs/superpowers/specs/2026-07-29-local-publish-feature-flag-design.md`
 
-- [ ] **Step 1: Add a failing governance test for the public instructions**
+- [x] **Step 1: Add a failing governance test for the public instructions**
 
 Create `tests/publishFeatureFlagDocs.test.mjs`:
 
@@ -448,7 +448,7 @@ test("README documents the source-free DevTools publish feature flag workflow", 
 });
 ```
 
-- [ ] **Step 2: Run the documentation test and verify RED**
+- [x] **Step 2: Run the documentation test and verify RED**
 
 Run:
 
@@ -458,7 +458,7 @@ node --test tests/publishFeatureFlagDocs.test.mjs
 
 Expected: the test fails because README still documents `npm run feature:flag`.
 
-- [ ] **Step 3: Replace the README instruction**
+- [x] **Step 3: Replace the README instruction**
 
 Replace the repository-only flag command with a short Developer Tools section containing:
 
@@ -470,7 +470,7 @@ await app.plugins.enablePlugin("aside");
 
 Also document the corresponding `"false"` snippet and state that testers may edit the `aside.feature.publish` value directly under Developer Tools → Application → Local Storage before reloading Aside.
 
-- [ ] **Step 4: Remove the obsolete repository CLI**
+- [x] **Step 4: Remove the obsolete repository CLI**
 
 Remove the `"feature:flag"` package script from `package.json`, then delete:
 
@@ -479,7 +479,7 @@ scripts/set-feature-flag.mjs
 tests/setFeatureFlagScript.test.ts
 ```
 
-- [ ] **Step 5: Run documentation and full verification**
+- [x] **Step 5: Run documentation and full verification**
 
 Run:
 
@@ -490,11 +490,11 @@ npm run build
 
 Expected: the documentation test and the complete build pass, including tests, lint, typecheck, Obsidian compliance, bundling, and release-artifact inspection.
 
-- [ ] **Step 6: Update implementation tracking**
+- [x] **Step 6: Update implementation tracking**
 
 In `docs/superpowers/specs/2026-07-29-local-publish-feature-flag-design.md`, mark the implemented and verified checklist items complete only after the commands in Step 5 pass. Keep the `public/` detection and visibility non-goals unchanged.
 
-- [ ] **Step 7: Commit documentation, cleanup, and verified tracking**
+- [x] **Step 7: Commit documentation, cleanup, and verified tracking**
 
 ```bash
 git add README.md package.json tests/publishFeatureFlagDocs.test.mjs

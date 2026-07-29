@@ -13,22 +13,22 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Keep `data.json.featureFlags.publish` as the canonical persistent feature flag.
-- [ ] Accept the exact local-storage strings `true` and `false` as requested flag changes during plugin startup.
-- [ ] Persist an accepted local-storage change to `data.json`.
-- [ ] Mirror the canonical persisted value to the local-storage key `aside.feature.publish`.
-- [ ] Replace the repository-only feature-flag CLI instructions with DevTools local-storage instructions.
-- [ ] Document explicit enable and disable snippets that also reload Aside.
+- [x] Keep `data.json.featureFlags.publish` as the canonical persistent feature flag.
+- [x] Accept the exact local-storage strings `true` and `false` as requested flag changes during plugin startup.
+- [x] Persist an accepted local-storage change to `data.json`.
+- [x] Mirror the canonical persisted value to the local-storage key `aside.feature.publish`.
+- [x] Replace the repository-only feature-flag CLI instructions with DevTools local-storage instructions.
+- [x] Document explicit enable and disable snippets that also reload Aside.
 
 ### Verification
 
-- [ ] Unit tests cover exact `true` and `false` overrides, an absent key, invalid values, and unavailable storage.
-- [ ] Persistence tests confirm accepted local-storage changes update `data.json` without disturbing other settings.
-- [ ] Persistence tests confirm an absent or invalid local-storage value preserves the existing `data.json` flag.
-- [ ] Settings tests confirm the publishing group continues to follow the canonical runtime flag.
-- [ ] The documented enable snippet reveals publishing settings after Aside reloads.
-- [ ] The documented disable snippet hides publishing settings after Aside reloads.
-- [ ] `npm run build` passes.
+- [x] Unit tests cover exact `true` and `false` overrides, an absent key, invalid values, and unavailable storage.
+- [x] Persistence tests confirm accepted local-storage changes update `data.json` without disturbing other settings.
+- [x] Persistence tests confirm an absent or invalid local-storage value preserves the existing `data.json` flag.
+- [x] Settings tests confirm the publishing group continues to follow the canonical runtime flag.
+- [x] The documented enable snippet reveals publishing settings after Aside reloads.
+- [x] The documented disable snippet hides publishing settings after Aside reloads.
+- [x] `npm run build` passes.
 
 ## Context
 
