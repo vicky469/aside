@@ -72,6 +72,9 @@ import {
 	isFeatureFlagEnabled,
 } from "./core/config/featureFlags";
 import {
+    syncPublishFeatureFlagStorage as syncStoredPublishFeatureFlag,
+} from "./core/config/featureFlagStorageSync";
+import {
 	removePublishedPublicArtifactPath,
 	removePublishedPublicArtifactPathsInFolder,
 	renamePublishedPublicArtifactPath as renamePublishedPublicArtifactPathInList,
@@ -701,6 +704,7 @@ export default class Aside extends Plugin {
 
         this.commentManager = new CommentManager([]);
         await this.loadSettings();
+        await this.syncPublishFeatureFlagStorage();
         this.vaultCapabilityIndex.seed(
             this.app.vault.getMarkdownFiles(),
             (file) => this.getVaultFileTags(file),
@@ -771,6 +775,25 @@ export default class Aside extends Plugin {
 
     async loadSettings() {
         await this.indexNoteSettingsController.loadSettings();
+    }
+
+    private async syncPublishFeatureFlagStorage(): Promise<void> {
+        await syncStoredPublishFeatureFlag({
+            storage: getSafeLocalStorage(),
+            getFeatureFlags: () => this.settings.featureFlags,
+            setFeatureFlags: (featureFlags) => {
+                this.settings.featureFlags = featureFlags;
+            },
+            persist: () => this.saveSettings(),
+            onError: (operation, error) => {
+                this.warn(
+                    `Unable to synchronize the publish feature flag (${operation}).`,
+                    error,
+                    "settings",
+                    `settings.publish-feature-flag.${operation}.warn`,
+                );
+            },
+        });
     }
 
     async saveSettings() {

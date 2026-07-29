@@ -19,3 +19,17 @@ test("plugin registers its UI before expensive startup maintenance", () => {
             < onloadBody.indexOf("this.runStartupPersistenceMaintenance()"),
     );
 });
+
+test("plugin synchronizes the publish feature flag before registering UI", () => {
+    const source = readFileSync("src/main.ts", "utf8");
+    const onloadStart = source.indexOf("async onload()");
+    const unloadStart = source.indexOf("onunload()");
+    const onloadBody = source.slice(onloadStart, unloadStart);
+    const loadSettingsIndex = onloadBody.indexOf("await this.loadSettings();");
+    const syncFeatureFlagIndex = onloadBody.indexOf("await this.syncPublishFeatureFlagStorage();");
+    const registerIndex = onloadBody.indexOf("this.pluginRegistrationController.register();");
+
+    assert.ok(loadSettingsIndex >= 0);
+    assert.ok(syncFeatureFlagIndex > loadSettingsIndex);
+    assert.ok(registerIndex > syncFeatureFlagIndex);
+});
