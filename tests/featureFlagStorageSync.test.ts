@@ -1,6 +1,7 @@
 import * as assert from "node:assert/strict";
 import test from "node:test";
 import {
+    getPublishFeatureFlagStorageKey,
     syncPublishFeatureFlagStorage,
     type FeatureFlagStorage,
     type PublishFeatureFlagStorageSyncOptions,
@@ -13,6 +14,7 @@ import {
 interface HarnessConfig {
     persisted: boolean;
     stored?: string | null;
+    storageKey?: string;
     storage?: null;
     readError?: Error;
     writeError?: Error;
@@ -24,6 +26,7 @@ interface Harness {
     readonly persistCount: number;
     readonly storageValue: string | null;
     readonly operations: string[];
+    readonly storageAccesses: string[];
     readonly options: PublishFeatureFlagStorageSyncOptions;
 }
 
@@ -34,16 +37,19 @@ function createHarness(config: HarnessConfig): Harness {
     let persistCount = 0;
     let storageValue = config.stored ?? null;
     const operations: string[] = [];
+    const storageAccesses: string[] = [];
     const storage: FeatureFlagStorage | null = config.storage === null
         ? null
         : {
-            getItem: () => {
+            getItem: (key) => {
+                storageAccesses.push(`read:${key}`);
                 if (config.readError) {
                     throw config.readError;
                 }
                 return storageValue;
             },
-            setItem: (_key, value) => {
+            setItem: (key, value) => {
+                storageAccesses.push(`write:${key}`);
                 if (config.writeError) {
                     throw config.writeError;
                 }
@@ -62,8 +68,10 @@ function createHarness(config: HarnessConfig): Harness {
             return storageValue;
         },
         operations,
+        storageAccesses,
         options: {
             storage,
+            storageKey: config.storageKey ?? "aside.feature.publish.Test Vault",
             getFeatureFlags: () => featureFlags,
             setFeatureFlags: (nextFeatureFlags) => {
                 featureFlags = nextFeatureFlags;
@@ -81,6 +89,17 @@ function createHarness(config: HarnessConfig): Harness {
     };
 }
 
+test("publish feature flag storage keys are scoped by vault name", () => {
+    assert.equal(
+        getPublishFeatureFlagStorageKey("Vault A"),
+        "aside.feature.publish.Vault A",
+    );
+    assert.equal(
+        getPublishFeatureFlagStorageKey("Vault B"),
+        "aside.feature.publish.Vault B",
+    );
+});
+
 test("true local-storage request persists and mirrors the enabled flag", async () => {
     const harness = createHarness({ persisted: false, stored: "true" });
 
@@ -89,6 +108,10 @@ test("true local-storage request persists and mirrors the enabled flag", async (
     assert.equal(harness.featureFlags.publish, true);
     assert.equal(harness.persistCount, 1);
     assert.equal(harness.storageValue, "true");
+    assert.deepEqual(harness.storageAccesses, [
+        "read:aside.feature.publish.Test Vault",
+        "write:aside.feature.publish.Test Vault",
+    ]);
     assert.deepEqual(result, {
         featureFlags: { publish: true },
         persisted: true,

@@ -4,7 +4,7 @@
 
 **Goal:** Keep the publish feature flag persistent in `data.json` while allowing testers to change it through an exact `"true"` or `"false"` local-storage value and an Aside reload.
 
-**Architecture:** Add a dependency-free synchronization unit beside the existing feature-flag model. Aside loads canonical settings first, then asks the synchronizer to apply a valid local-storage request through the normal settings persistence callback and mirror the resulting canonical value back to local storage before registering publishing UI and actions.
+**Architecture:** Add a dependency-free synchronization unit beside the existing feature-flag model. Aside loads canonical settings first, then asks the settings controller to apply a valid request from the current vault's local-storage key through the normal persistence path and mirror the resulting canonical value before registering publishing UI and actions.
 
 **Tech Stack:** TypeScript, browser `Storage`, Obsidian plugin lifecycle, Node test runner, existing Aside settings persistence.
 
@@ -205,7 +205,11 @@ import {
     type FeatureFlags,
 } from "./featureFlags";
 
-export const PUBLISH_FEATURE_FLAG_STORAGE_KEY = "aside.feature.publish";
+export const PUBLISH_FEATURE_FLAG_STORAGE_PREFIX = "aside.feature.publish";
+
+export function getPublishFeatureFlagStorageKey(vaultName: string): string {
+    return `${PUBLISH_FEATURE_FLAG_STORAGE_PREFIX}.${vaultName}`;
+}
 
 export interface FeatureFlagStorage {
     getItem(key: string): string | null;
@@ -216,6 +220,7 @@ export type FeatureFlagStorageSyncOperation = "read" | "persist" | "write";
 
 export interface PublishFeatureFlagStorageSyncOptions {
     storage: FeatureFlagStorage | null;
+    storageKey: string;
     getFeatureFlags(): unknown;
     setFeatureFlags(featureFlags: FeatureFlags): void;
     persist(): Promise<void>;
@@ -254,7 +259,7 @@ export async function syncPublishFeatureFlagStorage(
 
     let storedValue: string | null;
     try {
-        storedValue = options.storage.getItem(PUBLISH_FEATURE_FLAG_STORAGE_KEY);
+        storedValue = options.storage.getItem(options.storageKey);
     } catch (error) {
         reportError(options, "read", error);
         return {
@@ -294,7 +299,7 @@ export async function syncPublishFeatureFlagStorage(
     let mirrored = false;
     try {
         options.storage.setItem(
-            PUBLISH_FEATURE_FLAG_STORAGE_KEY,
+            options.storageKey,
             String(canonicalFlags[FeatureFlag.publish]),
         );
         mirrored = true;
@@ -332,6 +337,8 @@ git commit -m "feat(settings): sync publish flag from local storage"
 
 **Files:**
 - Modify: `src/main.ts`
+- Modify: `src/settings/indexNoteSettingsController.ts`
+- Modify: `tests/indexNoteSettingsController.test.ts`
 - Modify: `tests/pluginStartupOrder.test.ts`
 
 - [x] **Step 1: Write the failing startup-order test**
@@ -367,7 +374,7 @@ Expected: the new test fails because `src/main.ts` does not call `syncPublishFea
 
 - [x] **Step 3: Wire synchronization into `src/main.ts`**
 
-Import `syncPublishFeatureFlagStorage` from `./core/config/featureFlagStorageSync`.
+Import `getPublishFeatureFlagStorageKey` from `./core/config/featureFlagStorageSync`.
 
 Immediately after `await this.loadSettings();` in `onload`, add:
 
@@ -379,26 +386,22 @@ Add this private method near `loadSettings`:
 
 ```ts
 private async syncPublishFeatureFlagStorage(): Promise<void> {
-    await syncPublishFeatureFlagStorage({
-        storage: getSafeLocalStorage(),
-        getFeatureFlags: () => this.settings.featureFlags,
-        setFeatureFlags: (featureFlags) => {
-            this.settings.featureFlags = featureFlags;
-        },
-        persist: () => this.saveSettings(),
-        onError: (operation, error) => {
+    await this.indexNoteSettingsController.syncPublishFeatureFlagStorage(
+        getSafeLocalStorage(),
+        getPublishFeatureFlagStorageKey(this.app.vault.getName()),
+        (operation, error) => {
             this.warn(
-                `Unable to ${operation} the publish feature flag through local storage.`,
+                `Unable to synchronize the publish feature flag (${operation}).`,
                 error,
                 "settings",
                 `settings.publish-feature-flag.${operation}.warn`,
             );
         },
-    });
+    );
 }
 ```
 
-This uses the existing `saveSettings()` path, so an accepted value becomes canonical in `data.json` without replacing unrelated plugin data. The core synchronizer restores the previous runtime flag if persistence fails.
+Add `IndexNoteSettingsController.syncPublishFeatureFlagStorage()` as the integration boundary around the core synchronizer and its existing `saveSettings()` path. Controller tests assert the complete saved payload for accepted, absent, invalid, and failed requests, proving unrelated plugin data is preserved. The vault-scoped key prevents one vault's mirror from becoming another vault's request.
 
 - [x] **Step 4: Run focused and settings tests**
 
@@ -440,8 +443,9 @@ import test from "node:test";
 test("README documents the source-free DevTools publish feature flag workflow", async () => {
     const readme = await readFile("README.md", "utf8");
 
-    assert.match(readme, /localStorage\.setItem\("aside\.feature\.publish", "true"\)/u);
-    assert.match(readme, /localStorage\.setItem\("aside\.feature\.publish", "false"\)/u);
+    assert.match(readme, /aside\.feature\.publish\.\$\{app\.vault\.getName\(\)\}/u);
+    assert.match(readme, /"true"/u);
+    assert.match(readme, /"false"/u);
     assert.match(readme, /app\.plugins\.disablePlugin\("aside"\)/u);
     assert.match(readme, /app\.plugins\.enablePlugin\("aside"\)/u);
     assert.doesNotMatch(readme, /npm run feature:flag/u);
@@ -463,12 +467,12 @@ Expected: the test fails because README still documents `npm run feature:flag`.
 Replace the repository-only flag command with a short Developer Tools section containing:
 
 ```js
-localStorage.setItem("aside.feature.publish", "true");
+localStorage.setItem(`aside.feature.publish.${app.vault.getName()}`, "true");
 await app.plugins.disablePlugin("aside");
 await app.plugins.enablePlugin("aside");
 ```
 
-Also document the corresponding `"false"` snippet and state that testers may edit the `aside.feature.publish` value directly under Developer Tools → Application → Local Storage before reloading Aside.
+Also document the corresponding `"false"` snippet and state that testers may edit the current `aside.feature.publish.<vault name>` value directly under Developer Tools → Application → Local Storage before reloading Aside.
 
 - [x] **Step 4: Remove the obsolete repository CLI**
 

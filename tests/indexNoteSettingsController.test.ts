@@ -13,6 +13,9 @@ import {
     DEFAULT_FEATURE_FLAGS,
     FeatureFlag,
 } from "../src/core/config/featureFlags";
+import type {
+    FeatureFlagStorage,
+} from "../src/core/config/featureFlagStorageSync";
 import {
     resolveIndexNotePathChange,
     resolveLoadedSettings,
@@ -688,6 +691,106 @@ test("loaded settings resolution preserves normalized publish feature flag", () 
         [FeatureFlag.publish]: true,
     });
     assert.equal(resolved.shouldRewriteLegacySettings, true);
+});
+
+test("feature flag storage synchronization persists through the complete plugin data payload", async () => {
+    const persistedSettings = createSettings({
+        indexHeaderImageCaption: "Keep this caption",
+        featureFlags: {
+            [FeatureFlag.publish]: false,
+        },
+        publishPagesProjectName: "publish-example-com",
+        publishBaseUrl: "https://publish.example.com",
+    });
+    const harness = createControllerHarness({
+        loadedData: persistedSettings,
+    });
+    let storageValue: string | null = "true";
+    const storage: FeatureFlagStorage = {
+        getItem: () => storageValue,
+        setItem: (_key, value) => {
+            storageValue = value;
+        },
+    };
+
+    await harness.controller.loadSettings();
+    await harness.controller.syncPublishFeatureFlagStorage(
+        storage,
+        "aside.feature.publish.Test Vault",
+    );
+
+    assert.equal(storageValue, "true");
+    assert.deepEqual(harness.savedPayloads, [{
+        ...persistedSettings,
+        featureFlags: {
+            [FeatureFlag.publish]: true,
+        },
+    }]);
+});
+
+test("feature flag storage synchronization preserves persisted data for absent and invalid requests", async () => {
+    for (const storedValue of [null, "", "TRUE", "invalid"]) {
+        const persistedSettings = createSettings({
+            indexHeaderImageCaption: "Keep this caption",
+            featureFlags: {
+                [FeatureFlag.publish]: true,
+            },
+        });
+        const harness = createControllerHarness({
+            loadedData: persistedSettings,
+        });
+        let mirroredValue = storedValue;
+        const storage: FeatureFlagStorage = {
+            getItem: () => mirroredValue,
+            setItem: (_key, value) => {
+                mirroredValue = value;
+            },
+        };
+
+        await harness.controller.loadSettings();
+        await harness.controller.syncPublishFeatureFlagStorage(
+            storage,
+            "aside.feature.publish.Test Vault",
+        );
+
+        assert.equal(mirroredValue, "true");
+        assert.equal(harness.getSettings().featureFlags.publish, true);
+        assert.deepEqual(harness.savedPayloads, []);
+    }
+});
+
+test("feature flag storage synchronization restores persisted data when saving fails", async () => {
+    const persistedSettings = createSettings({
+        featureFlags: {
+            [FeatureFlag.publish]: false,
+        },
+    });
+    const harness = createControllerHarness({
+        loadedData: persistedSettings,
+        saveDataError: new Error("save failed"),
+    });
+    let storageValue: string | null = "true";
+    const storage: FeatureFlagStorage = {
+        getItem: () => storageValue,
+        setItem: (_key, value) => {
+            storageValue = value;
+        },
+    };
+    const errors: string[] = [];
+
+    await harness.controller.loadSettings();
+    await harness.controller.syncPublishFeatureFlagStorage(
+        storage,
+        "aside.feature.publish.Test Vault",
+        (operation) => {
+            errors.push(operation);
+        },
+    );
+
+    assert.equal(harness.getSettings().featureFlags.publish, false);
+    assert.equal(storageValue, "false");
+    assert.deepEqual(harness.savedPayloads, []);
+    assert.deepEqual(errors, ["persist"]);
 });
 
 test("index note settings controller saves publish settings without aggregate refreshes", async () => {

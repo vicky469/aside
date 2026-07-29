@@ -72,7 +72,7 @@ import {
 	isFeatureFlagEnabled,
 } from "./core/config/featureFlags";
 import {
-    syncPublishFeatureFlagStorage as syncStoredPublishFeatureFlag,
+    getPublishFeatureFlagStorageKey,
 } from "./core/config/featureFlagStorageSync";
 import {
 	removePublishedPublicArtifactPath,
@@ -778,14 +778,10 @@ export default class Aside extends Plugin {
     }
 
     private async syncPublishFeatureFlagStorage(): Promise<void> {
-        await syncStoredPublishFeatureFlag({
-            storage: getSafeLocalStorage(),
-            getFeatureFlags: () => this.settings.featureFlags,
-            setFeatureFlags: (featureFlags) => {
-                this.settings.featureFlags = featureFlags;
-            },
-            persist: () => this.saveSettings(),
-            onError: (operation, error) => {
+        await this.indexNoteSettingsController.syncPublishFeatureFlagStorage(
+            getSafeLocalStorage(),
+            getPublishFeatureFlagStorageKey(this.app.vault.getName()),
+            (operation, error) => {
                 this.warn(
                     `Unable to synchronize the publish feature flag (${operation}).`,
                     error,
@@ -793,7 +789,7 @@ export default class Aside extends Plugin {
                     `settings.publish-feature-flag.${operation}.warn`,
                 );
             },
-        });
+        );
     }
 
     async saveSettings() {

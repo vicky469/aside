@@ -32,4 +32,8 @@ test("plugin synchronizes the publish feature flag before registering UI", () =>
     assert.ok(loadSettingsIndex >= 0);
     assert.ok(syncFeatureFlagIndex > loadSettingsIndex);
     assert.ok(registerIndex > syncFeatureFlagIndex);
+    assert.match(
+        source,
+        /getPublishFeatureFlagStorageKey\(this\.app\.vault\.getName\(\)\)/u,
+    );
 });

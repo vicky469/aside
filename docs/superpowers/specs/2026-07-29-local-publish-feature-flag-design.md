@@ -16,7 +16,7 @@ Use this section as the working checklist. Mark an item done only after the code
 - [x] Keep `data.json.featureFlags.publish` as the canonical persistent feature flag.
 - [x] Accept the exact local-storage strings `true` and `false` as requested flag changes during plugin startup.
 - [x] Persist an accepted local-storage change to `data.json`.
-- [x] Mirror the canonical persisted value to the local-storage key `aside.feature.publish`.
+- [x] Mirror the canonical persisted value to the vault-scoped local-storage key `aside.feature.publish.<vault name>`.
 - [x] Replace the repository-only feature-flag CLI instructions with DevTools local-storage instructions.
 - [x] Document explicit enable and disable snippets that also reload Aside.
 
@@ -68,13 +68,13 @@ data.json.featureFlags.publish: boolean
 Use one local-storage control entry:
 
 ```text
-Key: aside.feature.publish
+Key: aside.feature.publish.<vault name>
 Accepted values: true or false
 ```
 
 Only the exact strings `"true"` and `"false"` request a change. A missing key, empty value, different capitalization, and every other string leave the persisted flag unchanged.
 
-The local-storage key is global to the current Obsidian browser profile, but it is an input to the currently loading vault's plugin data. After Aside loads, it mirrors that vault's canonical boolean back as `"true"` or `"false"`. Testers working with multiple vaults should change the value and reload Aside in the vault they intend to update.
+The key suffix comes from `app.vault.getName()`. Each vault therefore has a separate control and mirror inside the current Obsidian browser profile. After Aside loads, it mirrors that vault's canonical boolean back as `"true"` or `"false"` without changing another vault's persisted flag.
 
 Clearing Obsidian's browser storage does not disable a persisted opt-in. The next Aside load restores the local-storage mirror from `data.json`.
 
@@ -87,7 +87,7 @@ Add a small dependency-free synchronization planner in the feature-flag module. 
 During plugin startup:
 
 1. Load and normalize settings from `data.json`.
-2. Read `aside.feature.publish` through safe browser local storage.
+2. Read the current vault's `aside.feature.publish.<vault name>` entry through safe browser local storage.
 3. Apply an exact `"true"` or `"false"` as a requested change.
 4. Persist the settings only when the requested value differs from `data.json`.
 5. Mirror the canonical value to local storage.
@@ -106,7 +106,7 @@ An absent or invalid local-storage value must never reset the persisted flag. Ne
 The documented enable snippet sets the flag and reloads Aside:
 
 ```js
-localStorage.setItem("aside.feature.publish", "true");
+localStorage.setItem(`aside.feature.publish.${app.vault.getName()}`, "true");
 await app.plugins.disablePlugin("aside");
 await app.plugins.enablePlugin("aside");
 ```
@@ -114,12 +114,12 @@ await app.plugins.enablePlugin("aside");
 The documented disable snippet sets the flag to false and reloads Aside:
 
 ```js
-localStorage.setItem("aside.feature.publish", "false");
+localStorage.setItem(`aside.feature.publish.${app.vault.getName()}`, "false");
 await app.plugins.disablePlugin("aside");
 await app.plugins.enablePlugin("aside");
 ```
 
-A tester may instead edit `aside.feature.publish` directly under Developer Tools → Application → Local Storage. Aside must still be reloaded afterward.
+A tester may instead edit the current vault's `aside.feature.publish.<vault name>` entry directly under Developer Tools → Application → Local Storage. Aside must still be reloaded afterward.
 
 The README should replace the repository-only `npm run feature:flag` instruction with this workflow. Repository scripts that no longer have a supported consumer should be removed together with their tests and package script.
 
@@ -133,7 +133,7 @@ The DevTools snippets rely on Obsidian's loaded `app` object and plugin manager.
 
 Core feature-flag tests should cover the pure synchronization planner's precedence, exact string matching, persistence decision, and mirrored value.
 
-Settings-planner and controller tests should prove that accepted local-storage changes persist through the normal `data.json` write path without disturbing other settings. They should also prove that absent, invalid, or unavailable storage preserves the persisted flag.
+Settings-controller integration tests should prove that accepted local-storage changes persist through the normal complete `data.json` write path without disturbing other settings. They should also prove that absent, invalid, unavailable, or failed storage changes preserve the persisted flag.
 
 Existing setting-catalog and publish-controller tests should continue verifying behavior against the runtime `FeatureFlags` object. Integration wiring should verify startup overlays that runtime object from local storage before publishing UI or actions are registered.
 

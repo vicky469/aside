@@ -4,7 +4,11 @@ import {
     type FeatureFlags,
 } from "./featureFlags";
 
-export const PUBLISH_FEATURE_FLAG_STORAGE_KEY = "aside.feature.publish";
+export const PUBLISH_FEATURE_FLAG_STORAGE_PREFIX = "aside.feature.publish";
+
+export function getPublishFeatureFlagStorageKey(vaultName: string): string {
+    return `${PUBLISH_FEATURE_FLAG_STORAGE_PREFIX}.${vaultName}`;
+}
 
 export interface FeatureFlagStorage {
     getItem(key: string): string | null;
@@ -15,6 +19,7 @@ export type FeatureFlagStorageSyncOperation = "read" | "persist" | "write";
 
 export interface PublishFeatureFlagStorageSyncOptions {
     storage: FeatureFlagStorage | null;
+    storageKey: string;
     getFeatureFlags(): unknown;
     setFeatureFlags(featureFlags: FeatureFlags): void;
     persist(): Promise<void>;
@@ -53,7 +58,7 @@ export async function syncPublishFeatureFlagStorage(
 
     let storedValue: string | null;
     try {
-        storedValue = options.storage.getItem(PUBLISH_FEATURE_FLAG_STORAGE_KEY);
+        storedValue = options.storage.getItem(options.storageKey);
     } catch (error) {
         reportError(options, "read", error);
         return {
@@ -93,7 +98,7 @@ export async function syncPublishFeatureFlagStorage(
     let mirrored = false;
     try {
         options.storage.setItem(
-            PUBLISH_FEATURE_FLAG_STORAGE_KEY,
+            options.storageKey,
             String(canonicalFlags[FeatureFlag.publish]),
         );
         mirrored = true;

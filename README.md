@@ -89,17 +89,17 @@ Aside reads clipboard data only from a paste event initiated by the user. It wri
    - Create or choose a Cloudflare Pages project.
    - Open Obsidian Developer Tools and run this in the Console to reveal the hidden publishing settings and reload Aside:
      ```js
-     localStorage.setItem("aside.feature.publish", "true");
+     localStorage.setItem(`aside.feature.publish.${app.vault.getName()}`, "true");
      await app.plugins.disablePlugin("aside");
      await app.plugins.enablePlugin("aside");
      ```
    - To hide the publishing settings again, run:
      ```js
-     localStorage.setItem("aside.feature.publish", "false");
+     localStorage.setItem(`aside.feature.publish.${app.vault.getName()}`, "false");
      await app.plugins.disablePlugin("aside");
      await app.plugins.enablePlugin("aside");
      ```
-   - You can also edit `aside.feature.publish` directly under Developer Tools → Application → Local Storage, then reload Aside. Aside persists an exact `true` or `false` value to its plugin data when it loads.
+   - You can also edit the `aside.feature.publish.<vault name>` entry directly under Developer Tools → Application → Local Storage, then reload Aside. Aside persists an exact `true` or `false` value to that vault's plugin data when it loads.
    - If you use a custom domain, attach it to the Pages project in Cloudflare first.
 	- Optional for immediate unpublish cache invalidation on a custom domain:
 	  - Deploy a compatible remote cache-purge broker outside the public plugin repository after setting `ALLOWED_HOSTS` to your publishing hostname. Aside's reference broker source is maintained separately from this marketplace plugin source archive.

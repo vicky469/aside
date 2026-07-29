@@ -4,6 +4,11 @@ import {
     type AgentRuntimeModePreference,
 } from "../core/agents/agentRuntimePreferences";
 import {
+    syncPublishFeatureFlagStorage as syncStoredPublishFeatureFlag,
+    type FeatureFlagStorage,
+    type FeatureFlagStorageSyncOperation,
+} from "../core/config/featureFlagStorageSync";
+import {
     derivePublishBaseUrlFromProjectName,
     isDefaultPagesPublishBaseUrl,
     normalizePublishProjectName,
@@ -83,6 +88,26 @@ export class IndexNoteSettingsController {
         await this.writePersistedPluginData({
             ...this.persistedPluginData,
             ...this.host.getSettings(),
+        });
+    }
+
+    public async syncPublishFeatureFlagStorage(
+        storage: FeatureFlagStorage | null,
+        storageKey: string,
+        onError?: (operation: FeatureFlagStorageSyncOperation, error: unknown) => void,
+    ): Promise<void> {
+        await syncStoredPublishFeatureFlag({
+            storage,
+            storageKey,
+            getFeatureFlags: () => this.host.getSettings().featureFlags,
+            setFeatureFlags: (featureFlags) => {
+                this.host.setSettings({
+                    ...this.host.getSettings(),
+                    featureFlags,
+                });
+            },
+            persist: () => this.saveSettings(),
+            onError,
         });
     }
 
