@@ -13,18 +13,19 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Read the publish feature flag from the browser local-storage key `aside.feature.publish`.
-- [ ] Enable publishing features only when the stored value is the exact string `true`.
-- [ ] Keep the feature flag out of Aside's persisted `data.json`.
-- [ ] Remove any legacy `featureFlags` property from `data.json` during normalized settings persistence.
+- [ ] Keep `data.json.featureFlags.publish` as the canonical persistent feature flag.
+- [ ] Accept the exact local-storage strings `true` and `false` as requested flag changes during plugin startup.
+- [ ] Persist an accepted local-storage change to `data.json`.
+- [ ] Mirror the canonical persisted value to the local-storage key `aside.feature.publish`.
 - [ ] Replace the repository-only feature-flag CLI instructions with DevTools local-storage instructions.
 - [ ] Document explicit enable and disable snippets that also reload Aside.
 
 ### Verification
 
-- [ ] Unit tests cover an absent key, the exact enabled value, and other disabled values.
-- [ ] Settings tests confirm the publishing group follows the local-storage-backed runtime flag.
-- [ ] Persistence tests confirm `featureFlags` is not written to `data.json` and a legacy property is removed.
+- [ ] Unit tests cover exact `true` and `false` overrides, an absent key, invalid values, and unavailable storage.
+- [ ] Persistence tests confirm accepted local-storage changes update `data.json` without disturbing other settings.
+- [ ] Persistence tests confirm an absent or invalid local-storage value preserves the existing `data.json` flag.
+- [ ] Settings tests confirm the publishing group continues to follow the canonical runtime flag.
 - [ ] The documented enable snippet reveals publishing settings after Aside reloads.
 - [ ] The documented disable snippet hides publishing settings after Aside reloads.
 - [ ] `npm run build` passes.
@@ -35,14 +36,14 @@ Aside's experimental publishing controls should remain invisible after a normal 
 
 The existing feature flag is stored in Aside's `data.json` and the documented setter is a repository script invoked through `npm run feature:flag`. Community-plugin releases do not ship that script, so the documented opt-in is unavailable to users who only have the installed plugin.
 
-Obsidian Developer Tools already gives testers a familiar way to reload a plugin. Browser local storage provides a small, durable, device-local opt-in that can be changed either from the console or the Application panel.
+Obsidian Developer Tools already gives testers a familiar way to reload a plugin. Browser local storage provides an easy control surface that can be changed either from the console or the Application panel, while `data.json` remains Aside's persistent settings layer.
 
 ## Goals
 
 - Keep experimental publishing hidden by default.
 - Let a tester enable it with a short DevTools snippet.
 - Let a tester inspect or change the flag directly in Developer Tools local storage.
-- Preserve the opt-in across Aside plugin updates and Obsidian restarts.
+- Persist accepted flag changes in `data.json` across Aside plugin updates and Obsidian restarts.
 - Keep the actual **Enable publishing** setting and publishing configuration vault-local.
 - Provide an equally simple way to disable and hide the feature again.
 
@@ -52,44 +53,53 @@ Obsidian Developer Tools already gives testers a familiar way to reload a plugin
 - Do not add or publish a standalone Aside CLI.
 - Do not treat the visibility flag as authorization to publish content.
 - Do not move normal publishing configuration out of `data.json`.
-- Do not synchronize the feature flag through Obsidian Sync or vault files.
+- Do not inspect `public/`, scan publishing metadata, or infer the flag from existing publish data.
+- Do not add any new visibility behavior beyond the existing settings-group feature gate.
 - Do not react to local-storage changes while Aside is running; a plugin reload is required.
 
 ## Storage Contract
 
-Use one local-storage entry:
+The canonical persisted value remains:
+
+```text
+data.json.featureFlags.publish: boolean
+```
+
+Use one local-storage control entry:
 
 ```text
 Key: aside.feature.publish
-Enabled value: true
+Accepted values: true or false
 ```
 
-`localStorage.getItem("aside.feature.publish") === "true"` is the complete enablement rule. A missing key, an empty value, different capitalization, JSON booleans serialized in another form, and all other strings are disabled.
+Only the exact strings `"true"` and `"false"` request a change. A missing key, empty value, different capitalization, and every other string leave the persisted flag unchanged.
 
-The key is global to the current Obsidian browser profile rather than scoped to a vault. Enabling it therefore reveals the publishing settings group in every vault opened by that profile. This is acceptable because the flag only reveals an experimental UI surface. Each vault retains its own default-off `publishEnabled` value, Pages project, publishing URL, allowed root, and published-artifact state in Aside's normal plugin data.
+The local-storage key is global to the current Obsidian browser profile, but it is an input to the currently loading vault's plugin data. After Aside loads, it mirrors that vault's canonical boolean back as `"true"` or `"false"`. Testers working with multiple vaults should change the value and reload Aside in the vault they intend to update.
 
-Clearing Obsidian's browser storage may remove the opt-in. A plugin update or normal restart must not remove it.
+Clearing Obsidian's browser storage does not disable a persisted opt-in. The next Aside load restores the local-storage mirror from `data.json`.
 
 ## Runtime Design
 
-Keep the existing typed `FeatureFlags` runtime shape so settings visibility and publish validation continue to consume a single flag source.
+Keep the existing typed `FeatureFlags` runtime shape so existing settings visibility and publish validation continue to consume the canonical flag without new visibility behavior.
 
-Add a small dependency-free reader in the feature-flag module. It accepts a minimal storage interface so it can be unit tested without a browser. The reader returns the default-off feature flags when storage is unavailable or throws, and returns `publish: true` only for the exact stored value.
+Add a small dependency-free synchronization planner in the feature-flag module. It accepts the persisted feature flags and the raw local-storage value, then returns the canonical flags, whether persistence is required, and the string that should be mirrored to local storage. This keeps precedence and exact-value handling testable without a browser.
 
-During plugin startup, load normal persisted settings first, then derive `settings.featureFlags` from safe browser local storage before registering publish actions or settings UI. The flag remains runtime-only after that point.
+During plugin startup:
+
+1. Load and normalize settings from `data.json`.
+2. Read `aside.feature.publish` through safe browser local storage.
+3. Apply an exact `"true"` or `"false"` as a requested change.
+4. Persist the settings only when the requested value differs from `data.json`.
+5. Mirror the canonical value to local storage.
+6. Register publish actions and settings UI using the canonical runtime flag.
 
 Aside does not listen for the browser `storage` event. A tester changes the value and reloads Aside, matching the existing Developer Tools plugin-refresh workflow.
 
-## Persistence and Legacy Data
+## Persistence
 
-`featureFlags` must no longer be a canonical `data.json` setting:
+`featureFlags` remains part of Aside's canonical `data.json` settings. Local storage does not replace that layer. Accepted local-storage values update the same normal settings write path used elsewhere, preserving all unrelated plugin data and publishing configuration.
 
-- Loaded legacy values do not enable the feature.
-- Normalized settings use the runtime local-storage value.
-- Every plugin-data write strips the `featureFlags` property.
-- Existing publish configuration remains untouched.
-
-This deliberately requires testers who used the previous repository CLI to opt in once through local storage. It prevents a stale `data.json` flag from competing with the new source of truth.
+An absent or invalid local-storage value must never reset the persisted flag. New installations still default to `publish: false` through the existing feature-flag normalization.
 
 ## DevTools Workflow
 
@@ -101,10 +111,10 @@ await app.plugins.disablePlugin("aside");
 await app.plugins.enablePlugin("aside");
 ```
 
-The documented disable snippet removes the flag and reloads Aside:
+The documented disable snippet sets the flag to false and reloads Aside:
 
 ```js
-localStorage.removeItem("aside.feature.publish");
+localStorage.setItem("aside.feature.publish", "false");
 await app.plugins.disablePlugin("aside");
 await app.plugins.enablePlugin("aside");
 ```
@@ -115,15 +125,15 @@ The README should replace the repository-only `npm run feature:flag` instruction
 
 ## Error Handling
 
-If local storage is unavailable, access is denied, or a storage call throws, Aside treats publishing as disabled and continues loading normally. Feature-flag lookup must never prevent the plugin from starting.
+If local storage is unavailable, access is denied, or a storage call throws, Aside keeps the normalized `data.json` flag and continues loading normally. Feature-flag synchronization must never prevent the plugin from starting.
 
 The DevTools snippets rely on Obsidian's loaded `app` object and plugin manager. A console error is sufficient if Aside is not installed or cannot be re-enabled; no additional plugin UI is required for this advanced workflow.
 
 ## Testing
 
-Core feature-flag tests should use an injected storage stub to prove exact string matching and failure-safe defaults.
+Core feature-flag tests should cover the pure synchronization planner's precedence, exact string matching, persistence decision, and mirrored value.
 
-Settings-planner and controller tests should prove that legacy `data.json` flags cannot enable publishing and that later saves remove `featureFlags` without disturbing other settings.
+Settings-planner and controller tests should prove that accepted local-storage changes persist through the normal `data.json` write path without disturbing other settings. They should also prove that absent, invalid, or unavailable storage preserves the persisted flag.
 
 Existing setting-catalog and publish-controller tests should continue verifying behavior against the runtime `FeatureFlags` object. Integration wiring should verify startup overlays that runtime object from local storage before publishing UI or actions are registered.
 
