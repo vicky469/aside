@@ -1,10 +1,10 @@
 # Local Publish Feature Flag Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Keep the publish feature flag persistent in `data.json` while allowing testers to change it through an exact `"true"` or `"false"` local-storage value and an Aside reload.
 
-**Architecture:** Add a dependency-free synchronization unit beside the existing feature-flag model. Aside loads canonical settings first, then asks the synchronizer to apply a valid local-storage request through the normal settings persistence callback and mirror the resulting canonical value back to local storage before registering publishing UI and actions.
+**Architecture:** Add a dependency-free synchronization unit beside the existing feature-flag model. Aside loads canonical settings first, then asks the settings controller to apply a valid request from the current vault's local-storage key through the normal persistence path and mirror the resulting canonical value before registering publishing UI and actions.
 
 **Tech Stack:** TypeScript, browser `Storage`, Obsidian plugin lifecycle, Node test runner, existing Aside settings persistence.
 
@@ -16,7 +16,7 @@
 - Create: `src/core/config/featureFlagStorageSync.ts`
 - Create: `tests/featureFlagStorageSync.test.ts`
 
-- [ ] **Step 1: Write failing synchronization tests**
+- [x] **Step 1: Write failing synchronization tests**
 
 Create `tests/featureFlagStorageSync.test.ts` with a small in-memory storage and host harness. Cover:
 
@@ -184,7 +184,7 @@ test("failed mirror writes do not reject synchronization", async () => {
 
 The harness must expose mutable `featureFlags`, `persistCount`, `storageValue`, and captured error operations while implementing the production callback interface with real functions rather than mocks.
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
 Run:
 
@@ -194,7 +194,7 @@ Run:
 
 Expected: TypeScript fails because `src/core/config/featureFlagStorageSync.ts` and its exports do not exist.
 
-- [ ] **Step 3: Implement the synchronization unit**
+- [x] **Step 3: Implement the synchronization unit**
 
 Create `src/core/config/featureFlagStorageSync.ts`:
 
@@ -205,7 +205,11 @@ import {
     type FeatureFlags,
 } from "./featureFlags";
 
-export const PUBLISH_FEATURE_FLAG_STORAGE_KEY = "aside.feature.publish";
+export const PUBLISH_FEATURE_FLAG_STORAGE_PREFIX = "aside.feature.publish";
+
+export function getPublishFeatureFlagStorageKey(vaultName: string): string {
+    return `${PUBLISH_FEATURE_FLAG_STORAGE_PREFIX}.${vaultName}`;
+}
 
 export interface FeatureFlagStorage {
     getItem(key: string): string | null;
@@ -216,6 +220,7 @@ export type FeatureFlagStorageSyncOperation = "read" | "persist" | "write";
 
 export interface PublishFeatureFlagStorageSyncOptions {
     storage: FeatureFlagStorage | null;
+    storageKey: string;
     getFeatureFlags(): unknown;
     setFeatureFlags(featureFlags: FeatureFlags): void;
     persist(): Promise<void>;
@@ -254,7 +259,7 @@ export async function syncPublishFeatureFlagStorage(
 
     let storedValue: string | null;
     try {
-        storedValue = options.storage.getItem(PUBLISH_FEATURE_FLAG_STORAGE_KEY);
+        storedValue = options.storage.getItem(options.storageKey);
     } catch (error) {
         reportError(options, "read", error);
         return {
@@ -294,7 +299,7 @@ export async function syncPublishFeatureFlagStorage(
     let mirrored = false;
     try {
         options.storage.setItem(
-            PUBLISH_FEATURE_FLAG_STORAGE_KEY,
+            options.storageKey,
             String(canonicalFlags[FeatureFlag.publish]),
         );
         mirrored = true;
@@ -310,7 +315,7 @@ export async function syncPublishFeatureFlagStorage(
 }
 ```
 
-- [ ] **Step 4: Run the focused test and verify GREEN**
+- [x] **Step 4: Run the focused test and verify GREEN**
 
 Run:
 
@@ -321,7 +326,7 @@ node --test .test-dist/tests/featureFlagStorageSync.test.js
 
 Expected: all feature-flag storage synchronization tests pass.
 
-- [ ] **Step 5: Commit the core unit**
+- [x] **Step 5: Commit the core unit**
 
 ```bash
 git add src/core/config/featureFlagStorageSync.ts tests/featureFlagStorageSync.test.ts
@@ -332,9 +337,11 @@ git commit -m "feat(settings): sync publish flag from local storage"
 
 **Files:**
 - Modify: `src/main.ts`
+- Modify: `src/settings/indexNoteSettingsController.ts`
+- Modify: `tests/indexNoteSettingsController.test.ts`
 - Modify: `tests/pluginStartupOrder.test.ts`
 
-- [ ] **Step 1: Write the failing startup-order test**
+- [x] **Step 1: Write the failing startup-order test**
 
 Extend `tests/pluginStartupOrder.test.ts`:
 
@@ -354,7 +361,7 @@ test("plugin synchronizes the publish feature flag before registering UI", () =>
 });
 ```
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
 Run:
 
@@ -365,9 +372,9 @@ node --test .test-dist/tests/pluginStartupOrder.test.js
 
 Expected: the new test fails because `src/main.ts` does not call `syncPublishFeatureFlagStorage`.
 
-- [ ] **Step 3: Wire synchronization into `src/main.ts`**
+- [x] **Step 3: Wire synchronization into `src/main.ts`**
 
-Import `syncPublishFeatureFlagStorage` from `./core/config/featureFlagStorageSync`.
+Import `getPublishFeatureFlagStorageKey` from `./core/config/featureFlagStorageSync`.
 
 Immediately after `await this.loadSettings();` in `onload`, add:
 
@@ -379,28 +386,24 @@ Add this private method near `loadSettings`:
 
 ```ts
 private async syncPublishFeatureFlagStorage(): Promise<void> {
-    await syncPublishFeatureFlagStorage({
-        storage: getSafeLocalStorage(),
-        getFeatureFlags: () => this.settings.featureFlags,
-        setFeatureFlags: (featureFlags) => {
-            this.settings.featureFlags = featureFlags;
-        },
-        persist: () => this.saveSettings(),
-        onError: (operation, error) => {
+    await this.indexNoteSettingsController.syncPublishFeatureFlagStorage(
+        getSafeLocalStorage(),
+        getPublishFeatureFlagStorageKey(this.app.vault.getName()),
+        (operation, error) => {
             this.warn(
-                `Unable to ${operation} the publish feature flag through local storage.`,
+                `Unable to synchronize the publish feature flag (${operation}).`,
                 error,
                 "settings",
                 `settings.publish-feature-flag.${operation}.warn`,
             );
         },
-    });
+    );
 }
 ```
 
-This uses the existing `saveSettings()` path, so an accepted value becomes canonical in `data.json` without replacing unrelated plugin data. The core synchronizer restores the previous runtime flag if persistence fails.
+Add `IndexNoteSettingsController.syncPublishFeatureFlagStorage()` as the integration boundary around the core synchronizer and its existing `saveSettings()` path. Controller tests assert the complete saved payload for accepted, absent, invalid, and failed requests, proving unrelated plugin data is preserved. The vault-scoped key prevents one vault's mirror from becoming another vault's request.
 
-- [ ] **Step 4: Run focused and settings tests**
+- [x] **Step 4: Run focused and settings tests**
 
 Run:
 
@@ -411,7 +414,7 @@ node --test .test-dist/tests/featureFlagStorageSync.test.js .test-dist/tests/plu
 
 Expected: all selected tests pass.
 
-- [ ] **Step 5: Commit startup wiring**
+- [x] **Step 5: Commit startup wiring**
 
 ```bash
 git add src/main.ts tests/pluginStartupOrder.test.ts
@@ -428,7 +431,7 @@ git commit -m "feat(settings): apply publish flag during startup"
 - Create: `tests/publishFeatureFlagDocs.test.mjs`
 - Modify: `docs/superpowers/specs/2026-07-29-local-publish-feature-flag-design.md`
 
-- [ ] **Step 1: Add a failing governance test for the public instructions**
+- [x] **Step 1: Add a failing governance test for the public instructions**
 
 Create `tests/publishFeatureFlagDocs.test.mjs`:
 
@@ -440,15 +443,16 @@ import test from "node:test";
 test("README documents the source-free DevTools publish feature flag workflow", async () => {
     const readme = await readFile("README.md", "utf8");
 
-    assert.match(readme, /localStorage\.setItem\("aside\.feature\.publish", "true"\)/u);
-    assert.match(readme, /localStorage\.setItem\("aside\.feature\.publish", "false"\)/u);
+    assert.match(readme, /aside\.feature\.publish\.\$\{app\.vault\.getName\(\)\}/u);
+    assert.match(readme, /"true"/u);
+    assert.match(readme, /"false"/u);
     assert.match(readme, /app\.plugins\.disablePlugin\("aside"\)/u);
     assert.match(readme, /app\.plugins\.enablePlugin\("aside"\)/u);
     assert.doesNotMatch(readme, /npm run feature:flag/u);
 });
 ```
 
-- [ ] **Step 2: Run the documentation test and verify RED**
+- [x] **Step 2: Run the documentation test and verify RED**
 
 Run:
 
@@ -458,19 +462,19 @@ node --test tests/publishFeatureFlagDocs.test.mjs
 
 Expected: the test fails because README still documents `npm run feature:flag`.
 
-- [ ] **Step 3: Replace the README instruction**
+- [x] **Step 3: Replace the README instruction**
 
 Replace the repository-only flag command with a short Developer Tools section containing:
 
 ```js
-localStorage.setItem("aside.feature.publish", "true");
+localStorage.setItem(`aside.feature.publish.${app.vault.getName()}`, "true");
 await app.plugins.disablePlugin("aside");
 await app.plugins.enablePlugin("aside");
 ```
 
-Also document the corresponding `"false"` snippet and state that testers may edit the `aside.feature.publish` value directly under Developer Tools → Application → Local Storage before reloading Aside.
+Also document the corresponding `"false"` snippet and state that testers may edit the current `aside.feature.publish.<vault name>` value directly under Developer Tools → Application → Local Storage before reloading Aside.
 
-- [ ] **Step 4: Remove the obsolete repository CLI**
+- [x] **Step 4: Remove the obsolete repository CLI**
 
 Remove the `"feature:flag"` package script from `package.json`, then delete:
 
@@ -479,7 +483,7 @@ scripts/set-feature-flag.mjs
 tests/setFeatureFlagScript.test.ts
 ```
 
-- [ ] **Step 5: Run documentation and full verification**
+- [x] **Step 5: Run documentation and full verification**
 
 Run:
 
@@ -490,11 +494,11 @@ npm run build
 
 Expected: the documentation test and the complete build pass, including tests, lint, typecheck, Obsidian compliance, bundling, and release-artifact inspection.
 
-- [ ] **Step 6: Update implementation tracking**
+- [x] **Step 6: Update implementation tracking**
 
 In `docs/superpowers/specs/2026-07-29-local-publish-feature-flag-design.md`, mark the implemented and verified checklist items complete only after the commands in Step 5 pass. Keep the `public/` detection and visibility non-goals unchanged.
 
-- [ ] **Step 7: Commit documentation, cleanup, and verified tracking**
+- [x] **Step 7: Commit documentation, cleanup, and verified tracking**
 
 ```bash
 git add README.md package.json tests/publishFeatureFlagDocs.test.mjs
