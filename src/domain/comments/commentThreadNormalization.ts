@@ -89,8 +89,13 @@ function deduplicateCommentThreadEntries(entries: CommentThreadEntry[]): Comment
     return deduplicatedEntries;
 }
 
-export function cloneCommentThread(thread: CommentThread): CommentThread {
-    return {
+type CommentThreadFieldWithoutEntries = Exclude<keyof CommentThread, "entries">;
+
+function cloneCommentThreadWithEntries(
+    thread: CommentThread,
+    entries: CommentThreadEntry[],
+): CommentThread {
+    const fields = {
         id: thread.id,
         filePath: thread.filePath,
         startLine: thread.startLine,
@@ -99,14 +104,38 @@ export function cloneCommentThread(thread: CommentThread): CommentThread {
         endChar: thread.endChar,
         selectedText: thread.selectedText,
         selectedTextHash: thread.selectedTextHash,
-        ...(thread.anchorKind !== undefined ? { anchorKind: thread.anchorKind } : {}),
-        ...(thread.orphaned !== undefined ? { orphaned: thread.orphaned } : {}),
-        ...(thread.isPinned !== undefined ? { isPinned: thread.isPinned } : {}),
-        ...(thread.deletedAt !== undefined ? { deletedAt: thread.deletedAt } : {}),
-        entries: thread.entries.map((entry) => cloneCommentThreadEntry(entry)),
+        anchorKind: thread.anchorKind,
+        orphaned: thread.orphaned,
+        isPinned: thread.isPinned,
+        deletedAt: thread.deletedAt,
         createdAt: thread.createdAt,
         updatedAt: thread.updatedAt,
+    } satisfies Record<CommentThreadFieldWithoutEntries, unknown>;
+
+    return {
+        id: fields.id,
+        filePath: fields.filePath,
+        startLine: fields.startLine,
+        startChar: fields.startChar,
+        endLine: fields.endLine,
+        endChar: fields.endChar,
+        selectedText: fields.selectedText,
+        selectedTextHash: fields.selectedTextHash,
+        ...(fields.anchorKind !== undefined ? { anchorKind: fields.anchorKind } : {}),
+        ...(fields.orphaned !== undefined ? { orphaned: fields.orphaned } : {}),
+        ...(fields.isPinned !== undefined ? { isPinned: fields.isPinned } : {}),
+        ...(fields.deletedAt !== undefined ? { deletedAt: fields.deletedAt } : {}),
+        entries,
+        createdAt: fields.createdAt,
+        updatedAt: fields.updatedAt,
     };
+}
+
+export function cloneCommentThread(thread: CommentThread): CommentThread {
+    return cloneCommentThreadWithEntries(
+        thread,
+        thread.entries.map((entry) => cloneCommentThreadEntry(entry)),
+    );
 }
 
 export function cloneCommentThreads(threads: CommentThread[]): CommentThread[] {
@@ -140,10 +169,7 @@ export function normalizeCommentThread(thread: CommentThread): CommentThread {
     const firstEntry = entries[0];
     const latestEntry = entries[entries.length - 1];
 
-    const clonedThread = cloneCommentThread({
-        ...thread,
-        entries,
-    });
+    const clonedThread = cloneCommentThreadWithEntries(thread, entries);
 
     return {
         ...clonedThread,

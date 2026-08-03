@@ -529,6 +529,117 @@ export function getSourceSidecarPath(vaultRoot, sourceId) {
     return path.join(vaultRoot, ".obsidian", "plugins", "aside", "sidenotes", "by-source", shard, `${sourceHash}.json`);
 }
 
+function isRecord(value) {
+    return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function isFiniteNumber(value) {
+    return typeof value === "number" && Number.isFinite(value);
+}
+
+function canonicalizeCommentThreadEntryAnchor(value) {
+    if (
+        !isRecord(value)
+        || typeof value.filePath !== "string"
+        || !isFiniteNumber(value.startLine)
+        || !isFiniteNumber(value.startChar)
+        || !isFiniteNumber(value.endLine)
+        || !isFiniteNumber(value.endChar)
+        || typeof value.selectedText !== "string"
+        || typeof value.selectedTextHash !== "string"
+        || value.anchorKind !== "selection"
+    ) {
+        return null;
+    }
+
+    return {
+        filePath: value.filePath,
+        startLine: value.startLine,
+        startChar: value.startChar,
+        endLine: value.endLine,
+        endChar: value.endChar,
+        selectedText: value.selectedText,
+        selectedTextHash: value.selectedTextHash,
+        anchorKind: "selection",
+        ...(typeof value.orphaned === "boolean" ? { orphaned: value.orphaned } : {}),
+    };
+}
+
+function canonicalizeCommentThreadEntry(value) {
+    if (
+        !isRecord(value)
+        || typeof value.id !== "string"
+        || typeof value.body !== "string"
+        || !isFiniteNumber(value.timestamp)
+    ) {
+        return null;
+    }
+
+    const anchor = canonicalizeCommentThreadEntryAnchor(value.anchor);
+    return {
+        id: value.id,
+        body: value.body,
+        timestamp: value.timestamp,
+        ...(isFiniteNumber(value.deletedAt) && value.deletedAt > 0 ? { deletedAt: value.deletedAt } : {}),
+        ...(anchor ? { anchor } : {}),
+    };
+}
+
+function canonicalizeCommentThread(noteRelativePath, value) {
+    if (
+        !isRecord(value)
+        || typeof value.id !== "string"
+        || !isFiniteNumber(value.startLine)
+        || !isFiniteNumber(value.startChar)
+        || !isFiniteNumber(value.endLine)
+        || !isFiniteNumber(value.endChar)
+        || typeof value.selectedText !== "string"
+        || typeof value.selectedTextHash !== "string"
+        || !Array.isArray(value.entries)
+        || !isFiniteNumber(value.createdAt)
+        || !isFiniteNumber(value.updatedAt)
+    ) {
+        return null;
+    }
+
+    const entries = value.entries
+        .map((entry) => canonicalizeCommentThreadEntry(entry))
+        .filter(Boolean);
+    if (entries.length === 0) {
+        return null;
+    }
+
+    return {
+        id: value.id,
+        filePath: noteRelativePath,
+        startLine: value.startLine,
+        startChar: value.startChar,
+        endLine: value.endLine,
+        endChar: value.endChar,
+        selectedText: value.selectedText,
+        selectedTextHash: value.selectedTextHash,
+        ...(value.anchorKind === "selection" || value.anchorKind === "page"
+            ? { anchorKind: value.anchorKind }
+            : {}),
+        ...(typeof value.orphaned === "boolean" ? { orphaned: value.orphaned } : {}),
+        ...(typeof value.isPinned === "boolean" ? { isPinned: value.isPinned } : {}),
+        ...(isFiniteNumber(value.deletedAt) && value.deletedAt > 0 ? { deletedAt: value.deletedAt } : {}),
+        entries,
+        createdAt: value.createdAt,
+        updatedAt: value.updatedAt,
+    };
+}
+
+function canonicalizeCommentThreads(noteRelativePath, values) {
+    if (!Array.isArray(values)) {
+        return [];
+    }
+
+    return values
+        .map((value) => canonicalizeCommentThread(noteRelativePath, value))
+        .filter(Boolean);
+}
+
 async function readSourceIdForPath(vaultRoot, noteRelativePath) {
     const dataPath = path.join(vaultRoot, ".obsidian", "plugins", "aside", "data.json");
     let parsed;
@@ -603,11 +714,7 @@ export async function readSidecar(vaultRoot, noteRelativePath) {
         if (!parsed || typeof parsed !== "object" || parsed.version !== 1 || !Array.isArray(parsed.threads)) {
             return null;
         }
-        return parsed.threads.map((thread) => ({
-            ...thread,
-            filePath: noteRelativePath,
-            entries: Array.isArray(thread.entries) ? thread.entries.map((entry) => ({ ...entry })) : [],
-        }));
+        return canonicalizeCommentThreads(noteRelativePath, parsed.threads);
     } catch (error) {
         if (error && error.code === "ENOENT") {
             return null;
@@ -620,7 +727,8 @@ export async function writeSidecar(vaultRoot, noteRelativePath, threads) {
     const sidecarPath = getSidecarPath(vaultRoot, noteRelativePath);
     const sourceId = await readSourceIdForPath(vaultRoot, noteRelativePath);
     const sourceSidecarPath = sourceId ? getSourceSidecarPath(vaultRoot, sourceId) : null;
-    if (threads.length === 0) {
+    const canonicalThreads = canonicalizeCommentThreads(noteRelativePath, threads);
+    if (canonicalThreads.length === 0) {
         for (const targetPath of [sidecarPath, sourceSidecarPath].filter(Boolean)) {
             if (await pathExists(targetPath)) {
                 await rm(targetPath, { force: true });
@@ -631,10 +739,7 @@ export async function writeSidecar(vaultRoot, noteRelativePath, threads) {
     const payload = {
         version: 1,
         notePath: noteRelativePath,
-        threads: threads.map((thread) => ({
-            ...thread,
-            filePath: noteRelativePath,
-        })),
+        threads: canonicalThreads,
     };
     await writeSidecarPayload(sidecarPath, payload);
     if (sourceId && sourceSidecarPath) {

@@ -38,7 +38,7 @@ async function readSidecar(vaultRoot: string, noteRelativePath: string): Promise
     }
 }
 
-async function writeSidecar(vaultRoot: string, noteRelativePath: string, threads: CommentThread[]): Promise<void> {
+async function writeSidecar(vaultRoot: string, noteRelativePath: string, threads: unknown[]): Promise<void> {
     const sidecarPath = getSidecarPath(vaultRoot, noteRelativePath);
     await mkdir(path.dirname(sidecarPath), { recursive: true });
     await writeFile(sidecarPath, `${JSON.stringify({
@@ -117,6 +117,54 @@ test("update-note-comment script replaces the targeted comment body", async () =
 
     const noteContent = await readFile(notePath, "utf8");
     assert.equal(noteContent, "# Title\n\nBody text.\n");
+});
+
+test("update-note-comment canonicalizes legacy sidecars and skips malformed threads", async () => {
+    const tempDir = await mkdtemp(path.join(tmpdir(), "aside-comment-update-legacy-script-"));
+    const notePath = path.join(tempDir, "note.md");
+    const commentPath = path.join(tempDir, "comment.md");
+    const scriptPath = path.resolve(process.cwd(), "scripts/update-note-comment.mjs");
+    const thread = commentToThread(createComment());
+
+    await createVaultDir(tempDir);
+    await writeFile(notePath, "# Title\n\nBody text.\n", "utf8");
+    await writeSidecar(tempDir, "note.md", [
+        null,
+        { id: "missing-entries" },
+        {
+            ...thread,
+            resolved: true,
+            legacyOnly: "remove me",
+            entries: thread.entries.map((entry) => ({
+                ...entry,
+                legacyOnly: "remove me too",
+            })),
+        },
+        42,
+    ]);
+    await writeFile(commentPath, "Canonical update\n", "utf8");
+
+    const { stdout } = await execFile("node", [
+        scriptPath,
+        "--file",
+        notePath,
+        "--id",
+        "comment-1",
+        "--comment-file",
+        commentPath,
+    ], {
+        cwd: process.cwd(),
+    });
+
+    assert.match(stdout, /Updated comment comment-1/);
+
+    const sidecar = await readSidecar(tempDir, "note.md");
+    assert.ok(sidecar);
+    assert.deepEqual(sidecar.threads.map((candidate) => candidate.id), ["comment-1"]);
+    assert.equal(sidecar.threads[0].entries[0].body, "Canonical update");
+    assert.equal(Object.prototype.hasOwnProperty.call(sidecar.threads[0], "resolved"), false);
+    assert.equal(Object.prototype.hasOwnProperty.call(sidecar.threads[0], "legacyOnly"), false);
+    assert.equal(Object.prototype.hasOwnProperty.call(sidecar.threads[0].entries[0], "legacyOnly"), false);
 });
 
 test("update-note-comment script can target a stored comment by obsidian Aside URI", async () => {

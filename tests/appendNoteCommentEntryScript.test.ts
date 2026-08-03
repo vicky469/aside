@@ -38,7 +38,7 @@ async function readSidecar(vaultRoot: string, noteRelativePath: string): Promise
     }
 }
 
-async function writeSidecar(vaultRoot: string, noteRelativePath: string, threads: CommentThread[]): Promise<void> {
+async function writeSidecar(vaultRoot: string, noteRelativePath: string, threads: unknown[]): Promise<void> {
     const sidecarPath = getSidecarPath(vaultRoot, noteRelativePath);
     await mkdir(path.dirname(sidecarPath), { recursive: true });
     await writeFile(sidecarPath, `${JSON.stringify({
@@ -118,6 +118,55 @@ test("append-note-comment-entry script appends a new entry to the targeted threa
 
     const noteContent = await readFile(notePath, "utf8");
     assert.equal(noteContent, "# Title\n\nBody text.\n");
+});
+
+test("append-note-comment-entry canonicalizes legacy sidecars and skips malformed threads", async () => {
+    const tempDir = await mkdtemp(path.join(tmpdir(), "aside-comment-append-legacy-script-"));
+    const notePath = path.join(tempDir, "note.md");
+    const commentPath = path.join(tempDir, "reply.md");
+    const scriptPath = path.resolve(process.cwd(), "scripts/append-note-comment-entry.mjs");
+    const thread = commentToThread(createComment());
+
+    await createVaultDir(tempDir);
+    await writeFile(notePath, "# Title\n\nBody text.\n", "utf8");
+    await writeSidecar(tempDir, "note.md", [
+        null,
+        { id: "missing-entries" },
+        {
+            ...thread,
+            resolved: true,
+            legacyOnly: "remove me",
+            entries: thread.entries.map((entry) => ({
+                ...entry,
+                legacyOnly: "remove me too",
+            })),
+        },
+        "malformed",
+    ]);
+    await writeFile(commentPath, "Canonical reply\n", "utf8");
+
+    const { stdout } = await execFile("node", [
+        scriptPath,
+        "--file",
+        notePath,
+        "--id",
+        "comment-1",
+        "--comment-file",
+        commentPath,
+    ], {
+        cwd: process.cwd(),
+    });
+
+    assert.match(stdout, /Appended a new entry to comment comment-1/);
+
+    const sidecar = await readSidecar(tempDir, "note.md");
+    assert.ok(sidecar);
+    assert.deepEqual(sidecar.threads.map((candidate) => candidate.id), ["comment-1"]);
+    assert.equal(sidecar.threads[0].entries.length, 2);
+    assert.equal(sidecar.threads[0].entries[1].body, "Canonical reply");
+    assert.equal(Object.prototype.hasOwnProperty.call(sidecar.threads[0], "resolved"), false);
+    assert.equal(Object.prototype.hasOwnProperty.call(sidecar.threads[0], "legacyOnly"), false);
+    assert.equal(Object.prototype.hasOwnProperty.call(sidecar.threads[0].entries[0], "legacyOnly"), false);
 });
 
 test("append-note-comment-entry script can target a thread by obsidian Aside URI", async () => {
