@@ -887,7 +887,6 @@ export async function runCreateNoteCommentThread(argv, io = { stdout: process.st
         selectedTextHash: hashCommentSelection(selectedText),
         anchorKind: options.page ? "page" : "selection",
         orphaned: false,
-        resolved: false,
         entries: [{
             id: threadId,
             body: normalizeCommentBody(nextCommentBody),
@@ -992,7 +991,6 @@ export async function runCreateNoteCommentThreadWithChildren(argv, io = { stdout
         selectedTextHash,
         anchorKind: options.page ? "page" : "selection",
         orphaned: false,
-        resolved: false,
         entries,
         createdAt: timestamp,
         updatedAt: entries[entries.length - 1]?.timestamp ?? timestamp,

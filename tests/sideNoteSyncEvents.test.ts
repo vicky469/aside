@@ -115,6 +115,42 @@ test("side-note sync reducer applies duplicate events idempotently and keeps del
     assert.equal(reduced.appliedLogicalClocks.has("device-a:1"), true);
 });
 
+test("side-note sync reducer keeps legacy resolution events in the logical clock", () => {
+    const thread = createThread("docs/note.md");
+    const legacyResolution = createEvent({
+        eventId: "event-2",
+        logicalClock: 2,
+        op: "setThreadResolved",
+        payload: {
+            threadId: "thread-1",
+            resolved: true,
+            updatedAt: 1710000000200,
+        },
+    });
+    const laterUpdate = createEvent({
+        eventId: "event-3",
+        logicalClock: 3,
+        op: "updateEntry",
+        payload: {
+            threadId: "thread-1",
+            entryId: "entry-1",
+            entry: {
+                id: "entry-1",
+                body: "updated after legacy resolution",
+                timestamp: 1710000000300,
+            },
+        },
+    });
+
+    const reduced = reduceSideNoteSyncEvents([thread], [legacyResolution, laterUpdate]);
+    const reducedWithoutLegacyResolution = reduceSideNoteSyncEvents([thread], [laterUpdate]);
+
+    assert.equal(reduced.threads[0].entries[0].body, "updated after legacy resolution");
+    assert.deepEqual(reduced.threads, reducedWithoutLegacyResolution.threads);
+    assert.equal(reduced.appliedLogicalClocks.has("device-a:2"), true);
+    assert.equal(reduced.appliedLogicalClocks.has("device-a:3"), true);
+});
+
 test("side-note sync reducer retargets renameSource events that use nextPath", () => {
     const previous = createThread("docs/old.md");
     const renameSource = createEvent({

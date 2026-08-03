@@ -1722,12 +1722,10 @@ export default class Aside extends Plugin {
      * Activate the Aside view, highlight a specific comment, and focus the draft
      */
     async activateViewAndHighlightComment(commentId: string) {
-        await this.ensureCommentSelectionVisible(commentId);
         await this.commentNavigationController.activateViewAndHighlightComment(commentId);
     }
 
     async activateIndexComment(commentId: string, indexFilePath: string, sourceFilePath?: string) {
-        await this.ensureCommentSelectionVisible(commentId, sourceFilePath);
         await this.syncIndexCommentHighlightPair(commentId, indexFilePath);
 
         const indexFile = this.workspaceViewController.getFileByPath(indexFilePath);
@@ -1774,7 +1772,6 @@ export default class Aside extends Plugin {
     }
 
     public async revealIndexCommentFromSidebar(commentId: string, indexFilePath: string) {
-        await this.ensureCommentSelectionVisible(commentId);
         this.commentSessionController.setRevealedCommentState(
             indexFilePath,
             commentId,
@@ -1784,7 +1781,6 @@ export default class Aside extends Plugin {
     }
 
     public async syncIndexCommentHighlightPair(commentId: string, indexFilePath: string) {
-        await this.ensureCommentSelectionVisible(commentId);
         this.commentSessionController.setRevealedCommentState(
             indexFilePath,
             commentId,
@@ -1962,7 +1958,6 @@ export default class Aside extends Plugin {
     }
 
     public async revealComment(comment: Comment) {
-        await this.ensureCommentSelectionVisible(comment.id, comment.filePath);
         await this.commentNavigationController.revealComment(comment);
     }
 
@@ -1971,7 +1966,6 @@ export default class Aside extends Plugin {
     }
 
     public async openCommentById(filePath: string | null, commentId: string) {
-        await this.ensureCommentSelectionVisible(commentId, filePath);
         await this.commentNavigationController.openCommentById(filePath, commentId);
     }
 
@@ -2077,7 +2071,6 @@ export default class Aside extends Plugin {
         commentId: string,
         hostFilePath: string | null = this.getSidebarTargetFile()?.path ?? null,
     ) {
-        await this.ensureCommentSelectionVisible(commentId);
         await this.commentMutationController.startEditDraft(commentId, hostFilePath);
     }
 
@@ -2093,7 +2086,6 @@ export default class Aside extends Plugin {
         threadId: string,
         hostFilePath: string | null = this.getSidebarTargetFile()?.path ?? null,
     ) {
-        await this.ensureCommentSelectionVisible(threadId);
         await this.commentEntryController.startAppendEntryDraft(threadId, hostFilePath);
     }
 
@@ -2140,26 +2132,6 @@ export default class Aside extends Plugin {
     private getKnownThreadById(commentId: string): CommentThread | null {
         return this.commentManager.getThreadById(commentId)
             ?? this.aggregateCommentIndex.getThreadById(commentId);
-    }
-
-    private async loadKnownCommentSelectionTarget(
-        commentId: string,
-        filePath?: string | null,
-    ): Promise<Comment | null> {
-        let comment = this.getKnownCommentById(commentId);
-        if (!comment && filePath) {
-            const file = this.workspaceViewController.getFileByPath(filePath);
-            if (this.isCommentableFile(file)) {
-                await this.loadCommentsForFile(file);
-                comment = this.getKnownCommentById(commentId);
-            }
-        }
-
-        return comment;
-    }
-
-    private async ensureCommentSelectionVisible(_commentId: string, _filePath?: string | null): Promise<void> {
-        // no-op: resolved visibility removed
     }
 
     /**

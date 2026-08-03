@@ -222,7 +222,6 @@ function buildSyntheticThread({
         selectedTextHash: makeHash(selectedText),
         anchorKind: "page",
         orphaned: false,
-        resolved: false,
         entries: [{
             id: `lg-${nodeName}`,
             body,

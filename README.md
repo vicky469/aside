@@ -44,13 +44,12 @@ For durable storage and sync across devices, use Aside with [Obsidian Sync](http
 
 ## Features
 
-- Uses a dedicated sidebar for drafting, editing, resolving, reopening, and deleting comments.
+- Uses a dedicated sidebar for drafting, editing, and deleting comments.
 - Adds page notes to markdown, PDF, and HTML files. Text-anchored notes work in markdown files only.
 - Supports Obsidian-style `[[wikilinks]]` inside side comments to link existing notes or create new markdown notes.
 - Type `#` in a side note to search existing tags or add a new one.
 - Type `@todo` to mark follow-ups that appear in the Todo index tab.
 - Browse, filter, and batch-apply local side-note tags from the active note sidebar.
-- Keeps resolved comments archived instead of removing them.
 - Generates `🐰 Aside Index.md` as a vault-wide comment index.
 - Lets the index sidebar switch between the comment list and a thought-trail graph built from side-note wiki links. The graph follows those links across connected markdown files, so it can show multi-step trails instead of only direct one-hop links.
 - Built-in agent help on desktop Obsidian. Type `@codex` or `@claude` in a thread to get a reply, create anchored side notes, or apply explicit edits to the source note.
@@ -133,9 +132,6 @@ Aside reads clipboard data only from a paste event initiated by the user. It wri
 
 - **`orphaned note`**  
   An anchored thread whose original text can no longer be matched in the file. The thread still exists; its anchor is just currently missing.
-
-- **`resolved note`**  
-  A thread that has been archived instead of deleted.
 
 - **`🐰 Aside Index.md`**
   The generated vault-wide index note. It is derived output, not the source of truth.

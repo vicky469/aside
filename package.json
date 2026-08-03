@@ -26,7 +26,6 @@
 		"comment:create": "node scripts/create-note-comment-thread.mjs",
 		"comment:create-with-children": "node scripts/create-note-comment-thread-with-children.mjs",
 		"comment:append": "node scripts/append-note-comment-entry.mjs",
-		"comment:resolve": "node scripts/resolve-note-comment.mjs",
 		"comment:update": "node scripts/update-note-comment.mjs",
 		"fixture:graph-1000": "node scripts/generate-large-graph-fixture.mjs",
 		"release:artifacts:check": "node scripts/check-release-artifacts.mjs",
