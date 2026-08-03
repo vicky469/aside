@@ -1,5 +1,6 @@
 import {
     collectVaultScriptRegistrations,
+    parseVaultScriptPath,
     VaultScriptRegistration,
 } from "../../shared/vaultScriptPolicy";
 
@@ -9,23 +10,41 @@ export class VaultScriptRegistry {
     private ambiguousMentionNames: string[] = [];
 
     seed(paths: readonly string[]): void {
-        this.paths = new Set(paths);
+        this.paths = new Set();
+        for (const path of paths) {
+            const canonicalPath = this.canonicalize(path);
+            if (canonicalPath) {
+                this.paths.add(canonicalPath);
+            }
+        }
         this.rebuild();
     }
 
     upsert(path: string): void {
-        this.paths.add(path);
+        const canonicalPath = this.canonicalize(path);
+        if (canonicalPath) {
+            this.paths.add(canonicalPath);
+        }
         this.rebuild();
     }
 
     rename(previousPath: string, nextPath: string): void {
-        this.paths.delete(previousPath);
-        this.paths.add(nextPath);
+        const canonicalPreviousPath = this.canonicalize(previousPath);
+        if (canonicalPreviousPath) {
+            this.paths.delete(canonicalPreviousPath);
+        }
+        const canonicalNextPath = this.canonicalize(nextPath);
+        if (canonicalNextPath) {
+            this.paths.add(canonicalNextPath);
+        }
         this.rebuild();
     }
 
     remove(path: string): void {
-        this.paths.delete(path);
+        const canonicalPath = this.canonicalize(path);
+        if (canonicalPath) {
+            this.paths.delete(canonicalPath);
+        }
         this.rebuild();
     }
 
@@ -53,6 +72,10 @@ export class VaultScriptRegistry {
         const collection = collectVaultScriptRegistrations(this.paths);
         this.runnableScripts = collection.runnable;
         this.ambiguousMentionNames = collection.ambiguousMentionNames;
+    }
+
+    private canonicalize(path: string): string | null {
+        return parseVaultScriptPath(path)?.path ?? null;
     }
 
     private normalizeMention(mention: string): string {

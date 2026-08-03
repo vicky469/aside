@@ -2,6 +2,41 @@ import * as assert from "node:assert/strict";
 import test from "node:test";
 import { VaultScriptRegistry } from "../src/vaultScripts/vaultScriptRegistry";
 
+test("seed retains only canonical direct runnable script paths", () => {
+    const registry = new VaultScriptRegistry();
+
+    registry.seed([
+        "README.md",
+        "🛠️ scripts/nested/ignored.js",
+        "🛠️ scripts\\format.js",
+    ]);
+
+    assert.deepEqual(
+        Reflect.get(registry, "paths"),
+        new Set(["🛠️ scripts/format.js"]),
+    );
+});
+
+test("mutations use canonical paths across equivalent separators", () => {
+    const registry = new VaultScriptRegistry();
+
+    registry.seed(["🛠️ scripts\\format.js"]);
+    registry.upsert("🛠️ scripts/format.js");
+    assert.deepEqual(
+        Reflect.get(registry, "paths"),
+        new Set(["🛠️ scripts/format.js"]),
+    );
+
+    registry.rename("🛠️ scripts\\format.js", "🛠️ scripts\\rewrite.cjs");
+    assert.deepEqual(
+        registry.getRunnableScripts().map((script) => script.path),
+        ["🛠️ scripts/rewrite.cjs"],
+    );
+
+    registry.remove("🛠️ scripts\\rewrite.cjs");
+    assert.deepEqual(registry.getRunnableScripts(), []);
+});
+
 test("seed, upsert, rename, and remove keep runnable scripts current", () => {
     const registry = new VaultScriptRegistry();
 
