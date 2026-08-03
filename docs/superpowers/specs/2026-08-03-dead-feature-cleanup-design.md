@@ -21,22 +21,22 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Remove the broken `comment:resolve` package command and stale resolve workflow documentation and prompt policy.
-- [ ] Remove no-op resolved-selection calls and their unused loader from the plugin composition root.
-- [ ] Stop new helper scripts and fixtures from serializing `resolved: false`.
-- [ ] Retain legacy `setThreadResolved` sync-event recognition and reduce it to an explicit no-op.
-- [ ] Remove the unreachable support-report modal, sender, payload/config modules, and modal-only preview code.
-- [ ] Remove support-form-only planner helpers, tests, and CSS while preserving log-inspector behavior.
-- [ ] Remove current README claims that Aside can send support reports.
-- [ ] Mark the older persistent-diagnostics plan and spec as superseded where they describe report submission.
+- [x] Remove the broken `comment:resolve` package command and stale resolve workflow documentation and prompt policy.
+- [x] Remove no-op resolved-selection calls and their unused loader from the plugin composition root.
+- [x] Stop new helper scripts and fixtures from serializing `resolved: false`.
+- [x] Retain legacy `setThreadResolved` sync-event recognition and reduce it to an explicit no-op.
+- [x] Remove the unreachable support-report modal, sender, payload/config modules, and modal-only preview code.
+- [x] Remove support-form-only planner helpers, tests, and CSS while preserving log-inspector behavior.
+- [x] Remove current README claims that Aside can send support reports.
+- [x] Mark the older persistent-diagnostics plan and spec as superseded where they describe report submission.
 
 ### Verification
 
-- [ ] A fail-first package-script test proves direct Node script entries point to existing files.
-- [ ] A fail-first prompt-policy test proves current Aside actions no longer advertise resolve/archive.
-- [ ] Legacy `setThreadResolved` events remain parseable, produce no domain change, and do not block later event clocks.
-- [ ] Repository-wide searches leave no unintended resolve or support-submission surfaces.
-- [ ] Targeted tests, typecheck, lint, Obsidian compliance, bundle, and release-artifact inspection pass.
+- [x] A fail-first package-script test proves direct Node script entries point to existing files.
+- [x] A fail-first prompt-policy test proves current Aside actions no longer advertise resolve/archive.
+- [x] Legacy `setThreadResolved` events remain parseable, produce no domain change, and do not block later event clocks.
+- [x] Repository-wide searches leave no unintended resolve or support-submission surfaces.
+- [x] Targeted tests, typecheck, lint, Obsidian compliance, bundle, and release-artifact inspection pass.
 
 ## Context
 

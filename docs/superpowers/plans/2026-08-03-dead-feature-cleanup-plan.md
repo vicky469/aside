@@ -18,7 +18,7 @@
 - Modify: `tests/sideNotePromptPolicy.test.mjs:27-39`
 - Modify: `tests/sideNoteSyncEvents.test.ts:68-116`
 
-- [ ] **Step 1: Add a generic package-script integrity test**
+- [x] **Step 1: Add a generic package-script integrity test**
 
 Create `tests/packageScriptTargets.test.mjs`:
 
@@ -47,7 +47,7 @@ test("direct Node package scripts point to existing files", () => {
 });
 ```
 
-- [ ] **Step 2: Add a structural regression test for both removed surfaces**
+- [x] **Step 2: Add a structural regression test for both removed surfaces**
 
 Create `tests/deadFeatureResidue.test.mjs`:
 
@@ -92,7 +92,7 @@ test("support-report submission implementation stays removed", () => {
 });
 ```
 
-- [ ] **Step 3: Change the prompt-policy contract to the current action set**
+- [x] **Step 3: Change the prompt-policy contract to the current action set**
 
 Replace the final assertion in `buildSideNotePrompt carries built-in Aside write-mode terminology` with:
 
@@ -102,7 +102,7 @@ Replace the final assertion in `buildSideNotePrompt carries built-in Aside write
     assert.doesNotMatch(prompt, /\b(?:resolve|resolved|archive|archived)\b/i);
 ```
 
-- [ ] **Step 4: Characterize the required legacy sync tombstone**
+- [x] **Step 4: Characterize the required legacy sync tombstone**
 
 Add this test after the reducer idempotency test in `tests/sideNoteSyncEvents.test.ts`:
 
@@ -138,7 +138,7 @@ test("side-note sync reducer ignores legacy resolve events without blocking late
 });
 ```
 
-- [ ] **Step 5: Run the new JavaScript contracts and verify RED**
+- [x] **Step 5: Run the new JavaScript contracts and verify RED**
 
 Run:
 
@@ -148,7 +148,7 @@ node --test tests/packageScriptTargets.test.mjs tests/deadFeatureResidue.test.mj
 
 Expected: FAIL because `comment:resolve`, resolve prompt wording, dead support modules, dead CSS, and dead README claims still exist. The failures must name those existing surfaces rather than syntax or fixture errors.
 
-- [ ] **Step 6: Compile and run the sync-event characterization**
+- [x] **Step 6: Compile and run the sync-event characterization**
 
 Run:
 
@@ -173,7 +173,7 @@ Expected: the new sync tombstone test passes, while the new JavaScript cleanup c
 - Test: `tests/sideNotePromptPolicy.test.mjs`
 - Test: `tests/sideNoteSyncEvents.test.ts`
 
-- [ ] **Step 1: Remove broken and misleading entrypoints**
+- [x] **Step 1: Remove broken and misleading entrypoints**
 
 Delete the `comment:resolve` property from `package.json`. In `AGENTS.md`, delete the resolve/archive trigger bullet, the deleted helper-script line, and the resolve-thread intent mapping. In `README.md`, change the feature line to:
 
@@ -183,7 +183,7 @@ Delete the `comment:resolve` property from `package.json`. In `AGENTS.md`, delet
 
 Delete the separate resolved-comments feature line and the `resolved note` glossary entry.
 
-- [ ] **Step 2: Update the shared prompt policy**
+- [x] **Step 2: Update the shared prompt policy**
 
 Replace the two stale prompt lines with:
 
@@ -197,11 +197,11 @@ and:
         "Do not claim that side notes were added or updated unless you actually made the change.",
 ```
 
-- [ ] **Step 3: Remove new serialized resolved fields**
+- [x] **Step 3: Remove new serialized resolved fields**
 
 Delete each `resolved: false,` property from the thread objects in `scripts/lib/asideRepoScripts.mjs` and `scripts/generate-large-graph-fixture.mjs`. Do not change legacy input parsing or the sync tombstone.
 
-- [ ] **Step 4: Delete the no-op composition-root funnel**
+- [x] **Step 4: Delete the no-op composition-root funnel**
 
 Remove all eight statements of this form from `src/main.ts`:
 
@@ -218,7 +218,7 @@ private async ensureCommentSelectionVisible(...): Promise<void>
 
 Keep the surrounding navigation and draft-controller calls unchanged.
 
-- [ ] **Step 5: Run resolved-surface tests and verify GREEN**
+- [x] **Step 5: Run resolved-surface tests and verify GREEN**
 
 Run:
 
@@ -230,7 +230,7 @@ npm test
 
 Expected: package-script, resolve-residue, prompt-policy, and legacy sync-event tests pass. The support-report residue contract is intentionally deferred until Task 3.
 
-- [ ] **Step 6: Commit the resolved-thread cleanup**
+- [x] **Step 6: Commit the resolved-thread cleanup**
 
 ```bash
 git add package.json src/main.ts shared/sideNotePromptPolicy.js AGENTS.md README.md scripts/lib/asideRepoScripts.mjs scripts/generate-large-graph-fixture.mjs tests/packageScriptTargets.test.mjs tests/deadFeatureResidue.test.mjs tests/sideNotePromptPolicy.test.mjs tests/sideNoteSyncEvents.test.ts
@@ -254,11 +254,11 @@ git commit -m "refactor: finish removing resolved threads"
 - Modify: `README.md:59-75`
 - Test: `tests/deadFeatureResidue.test.mjs`
 
-- [ ] **Step 1: Delete the unreachable modules**
+- [x] **Step 1: Delete the unreachable modules**
 
 Delete the six files listed above. `SupportLogInspectorModal.ts`, `SupportLogPreviewSource`, `truncateLogPreview`, log location actions, and the live sidebar support button must remain.
 
-- [ ] **Step 2: Remove form-only planner code and stale event classifications**
+- [x] **Step 2: Remove form-only planner code and stale event classifications**
 
 From `supportReportPlanner.ts`, delete:
 
@@ -288,7 +288,7 @@ From `classifySupportLogKind`, delete only these obsolete prefixes:
 
 Keep `support.debugger.opened` and all active draft, navigation, index, parsing, filtering, and formatting behavior.
 
-- [ ] **Step 3: Remove tests that only describe deleted submission behavior**
+- [x] **Step 3: Remove tests that only describe deleted submission behavior**
 
 In `tests/supportReportPlanner.test.ts`, remove imports and tests for `validateSupportReportInput`, `validateScreenshotSelection`, and `formatSupportAttachmentSize`. Keep the `truncateLogPreview` assertions and all log model tests.
 
@@ -300,7 +300,7 @@ await service.log("error", "support", "support.log.read.error", {
 });
 ```
 
-- [ ] **Step 4: Remove submission-only CSS**
+- [x] **Step 4: Remove submission-only CSS**
 
 Delete `.aside-support-report-modal`, `.aside-modal-footer`, form field/textarea rules, attachment rules, and `.aside-support-image-preview`. Change the shared selector:
 
@@ -327,7 +327,7 @@ In the mobile media query, remove `.aside-modal-footer` and `.aside-modal-submit
 }
 ```
 
-- [ ] **Step 5: Correct current README network claims**
+- [x] **Step 5: Correct current README network claims**
 
 Replace the network-access paragraph with wording that lists only current actions:
 
@@ -337,7 +337,7 @@ Aside does not send vault contents, note paths, tags, clipboard contents, or loc
 
 Delete the support-report bullet under `External services`.
 
-- [ ] **Step 6: Run targeted tests and verify GREEN**
+- [x] **Step 6: Run targeted tests and verify GREEN**
 
 Run:
 
@@ -348,7 +348,7 @@ npm test
 
 Expected: all cleanup contracts and the full test suite pass.
 
-- [ ] **Step 7: Commit the support-submission cleanup**
+- [x] **Step 7: Commit the support-submission cleanup**
 
 ```bash
 git add src/support src/ui/modals/SupportImagePreviewModal.ts src/ui/modals/SupportLogPreviewModal.ts src/ui/modals/SupportReportModal.ts src/ui/views/supportReportPlanner.ts tests/supportReportPlanner.test.ts tests/noticePolicy.test.ts tests/logService.test.ts tests/deadFeatureResidue.test.mjs styles.css README.md
@@ -362,7 +362,7 @@ git commit -m "refactor: remove dead support submission flow"
 - Modify: `docs/prd/persistent-diagnostics-spec.md:1`
 - Modify: `docs/superpowers/specs/2026-08-03-dead-feature-cleanup-design.md:14-38`
 
-- [ ] **Step 1: Mark old support-submission designs as superseded**
+- [x] **Step 1: Mark old support-submission designs as superseded**
 
 Add this notice immediately below each persistent-diagnostics title:
 
@@ -372,7 +372,7 @@ Add this notice immediately below each persistent-diagnostics title:
 
 Do not rewrite historical sections or remove current local logging guidance.
 
-- [ ] **Step 2: Re-run the change-surface audit searches**
+- [x] **Step 2: Re-run the change-surface audit searches**
 
 Run:
 
@@ -383,7 +383,7 @@ rg -n "setThreadResolved" src tests
 
 Expected: the first command returns no matches. The second returns only the storage operation union, operation validator, explicit no-op reducer case, and regression test.
 
-- [ ] **Step 3: Run compiler, lint, and Obsidian checks**
+- [x] **Step 3: Run compiler, lint, and Obsidian checks**
 
 Run:
 
@@ -395,7 +395,7 @@ npm run check:obsidian
 
 Expected: all three commands exit 0 with no warnings or errors.
 
-- [ ] **Step 4: Build and inspect the exact release artifacts**
+- [x] **Step 4: Build and inspect the exact release artifacts**
 
 Run:
 
@@ -405,18 +405,18 @@ npm run build
 
 Expected: tests, lint, typecheck, Obsidian compliance, production bundle, and release artifact guard all pass. The guard confirms the shipped `main.js`, `manifest.json`, and `styles.css` contain no source-map markers, embedded `sourcesContent`, raw source files, or obvious secret material.
 
-- [ ] **Step 5: Update implementation tracking only after verification**
+- [x] **Step 5: Update implementation tracking only after verification**
 
 In `docs/superpowers/specs/2026-08-03-dead-feature-cleanup-design.md`, mark every completed `To Implement` and `Verification` item `[x]`. Leave an item unchecked if its stated verification did not pass.
 
-- [ ] **Step 6: Commit documentation and verified tracking**
+- [x] **Step 6: Commit documentation and verified tracking**
 
 ```bash
 git add -f docs/prd/persistent-diagnostics-plan.md docs/prd/persistent-diagnostics-spec.md docs/superpowers/specs/2026-08-03-dead-feature-cleanup-design.md docs/superpowers/plans/2026-08-03-dead-feature-cleanup-plan.md
 git commit -m "docs: reconcile removed feature surfaces"
 ```
 
-- [ ] **Step 7: Confirm final repository state**
+- [x] **Step 7: Confirm final repository state**
 
 Run:
 
