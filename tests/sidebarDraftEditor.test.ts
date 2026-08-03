@@ -42,6 +42,8 @@ function createDraftEditorController() {
         updateDraftCommentText: () => {},
         renderComments: async () => {},
         scheduleDraftFocus: () => {},
+        getMentionSuggestions: () => [],
+        openMentionSuggestModal: () => {},
         openLinkSuggestModal: () => {},
         openTagSuggestModal: () => {},
     });
@@ -307,4 +309,51 @@ test("sidebar draft editor controller leaves non-list enter handling native", ()
     assert.equal(textarea.selectionStart, 15);
     assert.equal(textarea.selectionEnd, 15);
     assert.deepEqual(dispatchedEvents, []);
+});
+
+test("sidebar draft editor controller inserts a chosen mention into a disconnected draft", async () => {
+    const updates: Array<{ commentId: string; commentText: string }> = [];
+    const focusedDraftIds: string[] = [];
+    let renderCount = 0;
+    let chooseMention: ((mention: string) => void | Promise<void>) | undefined;
+    const controller = new SidebarDraftEditorController({
+        getAllIndexedComments: () => [],
+        updateDraftCommentText: (commentId, commentText) => {
+            updates.push({ commentId, commentText });
+        },
+        renderComments: async () => {
+            renderCount += 1;
+        },
+        scheduleDraftFocus: (commentId) => {
+            focusedDraftIds.push(commentId);
+        },
+        getMentionSuggestions: () => [],
+        openMentionSuggestModal: (options) => {
+            assert.equal(options.initialQuery, "cle");
+            chooseMention = options.onChooseMention;
+        },
+        openLinkSuggestModal: () => {},
+        openTagSuggestModal: () => {},
+    });
+    const comment = createDraft({
+        id: "draft-mention",
+        comment: "please @cle now",
+    });
+    const textarea = {
+        value: comment.comment,
+        selectionStart: 11,
+        selectionEnd: 11,
+        isConnected: false,
+    } as unknown as HTMLTextAreaElement;
+
+    assert.equal(controller.openDraftMentionSuggest(comment, textarea, false), true);
+    assert.ok(chooseMention);
+    await chooseMention("@clean-links");
+
+    assert.deepEqual(updates, [{
+        commentId: "draft-mention",
+        commentText: "please @clean-links now",
+    }]);
+    assert.equal(renderCount, 1);
+    assert.deepEqual(focusedDraftIds, ["draft-mention"]);
 });

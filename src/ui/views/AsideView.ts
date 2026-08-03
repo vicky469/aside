@@ -31,15 +31,18 @@ import {
 } from "../../core/derived/indexFileFilterGraph";
 import type { DraftComment } from "../../domain/drafts";
 import type Aside from "../../main";
+import type { VaultScriptRegistration } from "../../../shared/vaultScriptPolicy.js";
 import type { AgentStreamUpdate } from "../../agents/commentAgentController";
 import SideNoteFileFilterModal from "../modals/SideNoteFileFilterModal";
 import SideNoteLinkSuggestModal from "../modals/SideNoteLinkSuggestModal";
+import SideNoteMentionSuggestModal from "../modals/SideNoteMentionSuggestModal";
 import SideNoteOpenFileSuggestModal from "../modals/SideNoteOpenFileSuggestModal";
 import SideNoteTagSuggestModal from "../modals/SideNoteTagSuggestModal";
 import { extractTagsFromText, normalizeTagText } from "../../core/text/commentTags";
 import { ASIDE_ICON_ID } from "../asideIcon";
 import { copyTextToClipboard } from "../copyTextToClipboard";
 import { copyCommentLocationToClipboard } from "../copyCommentLocationToClipboard";
+import { buildMentionSuggestions } from "../editor/commentMentionSuggestions";
 import { SidebarDraftEditorController } from "./sidebarDraftEditor";
 import {
     renderDraftCommentCard,
@@ -198,6 +201,10 @@ interface IndexFileFilterState {
     options: IndexFileFilterOption[];
     firstFilePath: string | null;
 }
+
+type AsideWithVaultScriptMentions = Aside & {
+    getRunnableVaultScripts(): readonly VaultScriptRegistration[];
+};
 
 interface IndexDefaultSidebarCacheKey {
     filePath: string;
@@ -368,7 +375,7 @@ export default class AsideView extends ItemView {
     private static readonly NOTE_SIDEBAR_SEARCH_DEBOUNCE_MS = 120;
     private file: TFile | null = null;
     private sidebarEmptyStateReason: SidebarEmptyStateReason | null = null;
-    private plugin: Aside;
+    private plugin: AsideWithVaultScriptMentions;
     private renderVersion = 0;
     private readonly draftEditorController: SidebarDraftEditorController;
     private readonly interactionController: SidebarInteractionController;
@@ -1181,7 +1188,7 @@ export default class AsideView extends ItemView {
 
     constructor(leaf: WorkspaceLeaf, plugin: Aside, file: TFile | null = null) {
         super(leaf);
-        this.plugin = plugin;
+        this.plugin = plugin as AsideWithVaultScriptMentions;
         this.file = file;
         this.interactionController = new SidebarInteractionController({
             app: this.app,
@@ -1215,6 +1222,13 @@ export default class AsideView extends ItemView {
             },
             renderComments: () => this.renderComments(),
             scheduleDraftFocus: (commentId) => this.interactionController.scheduleDraftFocus(commentId),
+            getMentionSuggestions: (query) => buildMentionSuggestions(
+                this.plugin.getRunnableVaultScripts(),
+                query,
+            ),
+            openMentionSuggestModal: (options) => {
+                new SideNoteMentionSuggestModal(this.app, options).open();
+            },
             openLinkSuggestModal: (options) => {
                 new SideNoteLinkSuggestModal(this.app, {
                     ...options,

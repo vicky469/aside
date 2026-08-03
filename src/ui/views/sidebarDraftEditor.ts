@@ -8,6 +8,11 @@ import {
     toggleMarkdownHighlight,
     type TextEditResult,
 } from "../editor/commentEditorFormatting";
+import {
+    findOpenMentionQuery,
+    replaceOpenMentionQuery,
+    type SideNoteMentionSuggestion,
+} from "../editor/commentMentionSuggestions";
 import { findOpenWikiLinkQuery, replaceOpenWikiLinkQuery } from "../editor/commentEditorLinks";
 import { findOpenTagQuery, replaceOpenTagQuery } from "../editor/commentEditorTags";
 
@@ -25,11 +30,20 @@ type TagSuggestCallbacks = {
     onCloseModal: () => void;
 };
 
+type MentionSuggestCallbacks = {
+    initialQuery: string;
+    getSuggestions: (query: string) => SideNoteMentionSuggestion[];
+    onChooseMention: (mention: string) => void | Promise<void>;
+    onCloseModal: () => void;
+};
+
 export interface SidebarDraftEditorHost {
     getAllIndexedComments(): Comment[];
     updateDraftCommentText(commentId: string, commentText: string): void;
     renderComments(): Promise<void>;
     scheduleDraftFocus(commentId: string): void;
+    getMentionSuggestions(query: string): SideNoteMentionSuggestion[];
+    openMentionSuggestModal(options: MentionSuggestCallbacks): void;
     openLinkSuggestModal(options: LinkSuggestCallbacks): void;
     openTagSuggestModal(options: TagSuggestCallbacks): void;
 }
@@ -74,7 +88,7 @@ export function estimateDraftTextareaRows(commentText: string, isEditMode: boole
 }
 
 export class SidebarDraftEditorController {
-    private activeInlineSuggest: "link" | "tag" | null = null;
+    private activeInlineSuggest: "mention" | "link" | "tag" | null = null;
 
     constructor(private readonly host: SidebarDraftEditorHost) {}
 
@@ -119,6 +133,61 @@ export class SidebarDraftEditorController {
         }
 
         this.applyDraftEditorEdit(commentId, textarea, edit, isEditMode);
+        return true;
+    }
+
+    public openDraftMentionSuggest(
+        comment: DraftComment,
+        textarea: HTMLTextAreaElement,
+        isEditMode: boolean,
+    ): boolean {
+        if (this.activeInlineSuggest) {
+            return false;
+        }
+
+        const mentionQuery = findOpenMentionQuery(
+            textarea.value,
+            textarea.selectionStart,
+            textarea.selectionEnd,
+        );
+        if (!mentionQuery) {
+            return false;
+        }
+
+        const initialValue = textarea.value;
+        const initialCursor = mentionQuery.end;
+        let inserted = false;
+        this.activeInlineSuggest = "mention";
+
+        this.host.openMentionSuggestModal({
+            initialQuery: mentionQuery.query,
+            getSuggestions: (query) => this.host.getMentionSuggestions(query),
+            onChooseMention: async (mention) => {
+                inserted = true;
+                const edit = replaceOpenMentionQuery(initialValue, mentionQuery, mention);
+                if (textarea.isConnected) {
+                    this.applyDraftEditorEdit(comment.id, textarea, edit, isEditMode);
+                    textarea.focus();
+                    return;
+                }
+
+                this.host.updateDraftCommentText(comment.id, edit.value);
+                await this.host.renderComments();
+                this.host.scheduleDraftFocus(comment.id);
+            },
+            onCloseModal: () => {
+                this.activeInlineSuggest = null;
+                if (inserted || !textarea.isConnected) {
+                    return;
+                }
+
+                window.requestAnimationFrame(() => {
+                    textarea.focus();
+                    textarea.setSelectionRange(initialCursor, initialCursor);
+                });
+            },
+        });
+
         return true;
     }
 

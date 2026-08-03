@@ -364,6 +364,11 @@ function renderDraftEditor(
             return;
         }
 
+        if (event.data === "@") {
+            draftEditorController.openDraftMentionSuggest(comment, target, comment.mode === "edit");
+            return;
+        }
+
         if (
             event.data === "["
             && target.selectionStart >= 2
@@ -389,7 +394,8 @@ function renderDraftEditor(
 
         if (event.key === "Tab" && !event.shiftKey) {
             if (
-                draftEditorController.openDraftLinkSuggest(comment, textarea, comment.mode === "edit")
+                draftEditorController.openDraftMentionSuggest(comment, textarea, comment.mode === "edit")
+                || draftEditorController.openDraftLinkSuggest(comment, textarea, comment.mode === "edit")
                 || draftEditorController.openDraftTagSuggest(comment, textarea, comment.mode === "edit")
             ) {
                 consumeShortcut();
