@@ -18,6 +18,7 @@
     "src/**/*.d.ts",
     "src/commentManager.ts",
     "src/core/**/*.ts",
-    "shared/sideNotePromptPolicy.js"
+    "shared/sideNotePromptPolicy.js",
+    "shared/vaultScriptPolicy.js"
   ]
 }

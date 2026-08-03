@@ -65,3 +65,14 @@ test("buildSideNotePrompt tells annotation agents to return plugin-owned annotat
     assert.match(prompt, /exact source text/i);
     assert.match(prompt, /Aside will create the anchored notes/i);
 });
+
+test("buildSideNotePrompt keeps reusable scripts in the active vault script folder", () => {
+    const prompt = sideNotePromptPolicy.buildSideNotePrompt({
+        promptText: "@codex create a reusable script",
+        rootLabel: "vault root",
+        rootPath: "/vault",
+    });
+
+    assert.match(prompt, /active vault(?:'s)? `🛠️ scripts\/`/i);
+    assert.match(prompt, /not (?:in )?the plugin repository's internal `scripts\/`/i);
+});
