@@ -126,6 +126,29 @@ test("support planner filters the preview by recent minutes and kind", () => {
     assert.equal(userPreview.rows[0].kind, "user");
 });
 
+test("support planner keeps the live debugger user-classified without preserving obsolete submission events", () => {
+    const content = [
+        JSON.stringify({
+            at: "2026-04-13T16:52:00.000Z",
+            level: "info",
+            area: "support",
+            event: "support.debugger.opened",
+        }),
+        JSON.stringify({
+            at: "2026-04-13T16:53:00.000Z",
+            level: "info",
+            area: "support",
+            event: "support.submit.begin",
+        }),
+    ].join("\n");
+
+    const preview = buildSupportLogPreview(content);
+    const kindsByEvent = Object.fromEntries(preview.rows.map((row) => [row.event, row.kind]));
+
+    assert.equal(kindsByEvent["support.debugger.opened"], "user");
+    assert.equal(kindsByEvent["support.submit.begin"], "system");
+});
+
 test("support planner can reuse a parsed preview source across filter changes", () => {
     const content = [
         JSON.stringify({

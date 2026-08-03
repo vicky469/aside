@@ -1726,7 +1726,7 @@ export default class Aside extends Plugin {
     }
 
     async activateIndexComment(commentId: string, indexFilePath: string, sourceFilePath?: string) {
-        await this.syncIndexCommentHighlightPair(commentId, indexFilePath);
+        this.syncIndexCommentHighlightPair(commentId, indexFilePath);
 
         const indexFile = this.workspaceViewController.getFileByPath(indexFilePath);
         await this.commentNavigationController.syncSidebarSelection(commentId, indexFile, {
@@ -1780,7 +1780,7 @@ export default class Aside extends Plugin {
         await this.commentHighlightController.revealIndexPreviewSelection(indexFilePath, commentId);
     }
 
-    public async syncIndexCommentHighlightPair(commentId: string, indexFilePath: string) {
+    public syncIndexCommentHighlightPair(commentId: string, indexFilePath: string): void {
         this.commentSessionController.setRevealedCommentState(
             indexFilePath,
             commentId,

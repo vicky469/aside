@@ -1392,7 +1392,7 @@ export default class AsideView extends ItemView {
         this.interactionController.highlightComment(commentId, options);
         const currentFilePath = this.file?.path ?? null;
         if (currentFilePath && this.plugin.isAllCommentsNotePath(currentFilePath)) {
-            void this.plugin.syncIndexCommentHighlightPair(commentId, currentFilePath);
+            this.plugin.syncIndexCommentHighlightPair(commentId, currentFilePath);
         }
         if (previousMode === "tags" && this.noteSidebarMode !== "tags" && this.file
             && !this.plugin.isAllCommentsNotePath(this.file.path)) {
