@@ -91,8 +91,21 @@ function deduplicateCommentThreadEntries(entries: CommentThreadEntry[]): Comment
 
 export function cloneCommentThread(thread: CommentThread): CommentThread {
     return {
-        ...thread,
+        id: thread.id,
+        filePath: thread.filePath,
+        startLine: thread.startLine,
+        startChar: thread.startChar,
+        endLine: thread.endLine,
+        endChar: thread.endChar,
+        selectedText: thread.selectedText,
+        selectedTextHash: thread.selectedTextHash,
+        ...(thread.anchorKind !== undefined ? { anchorKind: thread.anchorKind } : {}),
+        ...(thread.orphaned !== undefined ? { orphaned: thread.orphaned } : {}),
+        ...(thread.isPinned !== undefined ? { isPinned: thread.isPinned } : {}),
+        ...(thread.deletedAt !== undefined ? { deletedAt: thread.deletedAt } : {}),
         entries: thread.entries.map((entry) => cloneCommentThreadEntry(entry)),
+        createdAt: thread.createdAt,
+        updatedAt: thread.updatedAt,
     };
 }
 
@@ -127,13 +140,17 @@ export function normalizeCommentThread(thread: CommentThread): CommentThread {
     const firstEntry = entries[0];
     const latestEntry = entries[entries.length - 1];
 
-    return {
+    const clonedThread = cloneCommentThread({
         ...thread,
+        entries,
+    });
+
+    return {
+        ...clonedThread,
         anchorKind: thread.anchorKind === "page" ? "page" : "selection",
         orphaned: thread.anchorKind === "page" ? false : thread.orphaned === true,
         isPinned: thread.isPinned === true,
         deletedAt: normalizeDeletedAt(thread.deletedAt),
-        entries,
         createdAt: thread.createdAt || firstEntry.timestamp,
         updatedAt: thread.updatedAt || latestEntry.timestamp,
     };

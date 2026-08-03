@@ -133,6 +133,40 @@ test("sidecar comment storage writes hashed per-note files and reads them back",
     assert.equal(readThreads[0].entries[0]?.body, "hello");
 });
 
+test("sidecar comment storage strips legacy resolution state on read and rewrite", async () => {
+    const adapter = new FakeAdapter();
+    const storage = new SidecarCommentStorage({
+        adapter: adapter as unknown as DataAdapter,
+        pluginDirPath: ".obsidian/plugins/aside",
+        hashText: async (text) => hashText(text),
+    });
+    const notePath = "books/legacy.md";
+    const storagePath = await storage.getNoteStoragePath(notePath);
+    adapter.files.set(storagePath, JSON.stringify({
+        version: 1,
+        notePath,
+        threads: [{
+            ...createThread(notePath),
+            resolved: true,
+        }],
+    }));
+
+    const readThreads = await storage.read(notePath);
+
+    assert.ok(readThreads);
+    assert.equal(Object.prototype.hasOwnProperty.call(readThreads[0], "resolved"), false);
+
+    await storage.write(notePath, readThreads);
+
+    const rewrittenPayload = JSON.parse(await adapter.read(storagePath)) as {
+        threads: Array<Record<string, unknown>>;
+    };
+    const rereadThreads = await storage.read(notePath);
+    assert.equal(Object.prototype.hasOwnProperty.call(rewrittenPayload.threads[0], "resolved"), false);
+    assert.ok(rereadThreads);
+    assert.equal(Object.prototype.hasOwnProperty.call(rereadThreads[0], "resolved"), false);
+});
+
 test("sidecar comment storage renames the hashed file when the note path changes", async () => {
     const adapter = new FakeAdapter();
     const storage = new SidecarCommentStorage({

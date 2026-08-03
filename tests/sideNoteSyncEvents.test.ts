@@ -3,6 +3,7 @@ import test from "node:test";
 import type { CommentThread } from "../src/commentManager";
 import {
     mergeSideNoteSyncEventStates,
+    normalizeSideNoteSyncEventState,
     SideNoteSyncEventStore,
 } from "../src/sync/sideNoteSyncEventStore";
 import type { PersistedPluginData } from "../src/settings/indexNoteSettingsPlanner";
@@ -651,6 +652,34 @@ test("side-note sync event state merge keeps device logs, max watermarks, and ne
     assert.equal(merged.processedWatermarks["device-a"]?.["device-a"], 1);
     assert.equal(merged.processedWatermarks["device-a"]?.["device-b"], 1);
     assert.equal(merged.noteSnapshots["hash-docs_note.md"]?.threads[0].id, "new-thread");
+});
+
+test("side-note sync event state strips legacy resolution state from snapshots", () => {
+    const legacyThread = {
+        ...createThread("docs/note.md"),
+        resolved: true,
+    };
+
+    const normalized = normalizeSideNoteSyncEventState({
+        schemaVersion: 1,
+        deviceLogs: {},
+        processedWatermarks: {},
+        compactedWatermarks: {},
+        noteSnapshots: {
+            "hash-docs_note.md": {
+                notePath: "docs/note.md",
+                noteHash: "hash-docs_note.md",
+                updatedAt: 1710000000000,
+                coveredWatermarks: {},
+                threads: [legacyThread],
+            },
+        },
+    });
+    const snapshotThread = normalized.noteSnapshots["hash-docs_note.md"]?.threads[0];
+
+    assert.ok(snapshotThread);
+    assert.equal(Object.prototype.hasOwnProperty.call(snapshotThread, "resolved"), false);
+    assert.equal(legacyThread.resolved, true);
 });
 
 test("side-note sync event store exposes remote events until the current device processes them", async () => {

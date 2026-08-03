@@ -1,5 +1,5 @@
 import type { DataAdapter } from "obsidian";
-import { cloneCommentThreads, type CommentThread } from "../../commentManager";
+import { cloneCommentThread, cloneCommentThreads, type CommentThread } from "../../commentManager";
 import { isPathInsideFolder } from "../files/pathScope";
 
 const SIDECAR_STORAGE_VERSION = 1;
@@ -94,7 +94,7 @@ function parseStoredSidecarComments(value: unknown): StoredSidecarComments | nul
 function cloneThreadsForNote(notePath: string, threads: unknown[]): CommentThread[] {
     return threads
         .filter((thread): thread is CommentThread => isRecord(thread))
-        .map((thread) => ({
+        .map((thread) => cloneCommentThread({
             ...thread,
             filePath: notePath,
             entries: Array.isArray(thread.entries)
