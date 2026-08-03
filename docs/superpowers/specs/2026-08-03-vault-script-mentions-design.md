@@ -26,7 +26,7 @@ Use this section as the working checklist. Mark an item done only after the code
 - [ ] Persist script-run records so automatic execution is idempotent and explicit regeneration is traceable.
 - [ ] Render script results distinctly and connect them to the existing Regenerate interaction.
 - [ ] Add the vault script authoring location to the shared built-in agent prompt policy.
-- [ ] Preserve the absence of a Scripts tab and vault-script setting.
+- [ ] Do not add a Scripts tab or setting; expose vault scripts only through `@` suggestions.
 
 ### Verification
 
