@@ -123,7 +123,7 @@ test("AsideLogService swallows write failures so user flows do not throw", async
 
     await assert.doesNotReject(async () => {
         await service.initialize();
-        await service.log("error", "support", "support.submit.error", {
+        await service.log("error", "support", "support.log.read.error", {
             message: "failure",
         });
     });

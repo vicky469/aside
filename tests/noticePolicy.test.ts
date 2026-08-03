@@ -8,7 +8,6 @@ test("notice policy suppresses routine Aside workflow messages", () => {
         { message: "Side notes are limited to 250 words.", area: "draft", event: "draft.notice" },
         { message: "Use only one explicit supported agent target per side note.", area: "agents", event: "agents.notice" },
         { message: "Folder does not exist: docs", area: "index", event: "index.notice" },
-        { message: "Support report sent.", area: "support", event: "support.notice" },
     ];
 
     for (const notice of suppressed) {

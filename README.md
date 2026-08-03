@@ -57,7 +57,7 @@ For durable storage and sync across devices, use Aside with [Obsidian Sync](http
 
 ## Network access
 
-Aside does not send vault contents, note paths, tags, or clipboard contents to an Aside-operated analytics service. Network-capable actions are user initiated: opening an external link, sending a support report in a build where a support endpoint is configured, invoking a local agent CLI, or publishing through the user's local Wrangler installation. The generated Aside index uses the default remote image at `ichef.bbci.co.uk` unless the user replaces or clears that image URL; Obsidian may request that image when it renders the note.
+Aside does not send vault contents, note paths, tags, clipboard contents, or local diagnostic logs to an Aside-operated analytics or support service. Network-capable actions are user initiated: opening an external link, invoking a local agent CLI, or publishing through the user's local Wrangler installation. The generated Aside index uses the default remote image at `ichef.bbci.co.uk` unless the user replaces or clears that image URL; Obsidian may request that image when it renders the note.
 
 ## Local vault indexing
 
@@ -71,7 +71,6 @@ Aside reads clipboard data only from a paste event initiated by the user. It wri
 
 - Local `Codex` and `Claude` agent commands run only after the user saves a side note that explicitly mentions that agent. Those tools may use their own configured services and policies.
 - Experimental publishing runs the user's local Wrangler CLI against the Cloudflare Pages project selected by the user.
-- Support reports are sent only after the user reviews and submits the report, and only when that build has a support endpoint configured.
 - Aside has no hidden telemetry or self-update service.
 
 ## How to Get Started

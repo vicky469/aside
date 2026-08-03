@@ -4,63 +4,12 @@ import {
     buildSupportLogPreview,
     buildSupportLogPreviewFromSource,
     buildSupportLogPreviewSource,
-    formatSupportAttachmentSize,
     formatSupportLogRowTime,
     formatSupportLogSummaryLine,
     truncateLogPreview,
-    validateScreenshotSelection,
-    validateSupportReportInput,
 } from "../src/ui/views/supportReportPlanner";
 
-test("validateSupportReportInput requires email, title, and content", () => {
-    assert.equal(validateSupportReportInput({
-        email: "",
-        title: "Bug",
-        content: "Steps",
-    }).valid, false);
-
-    assert.equal(validateSupportReportInput({
-        email: "user@example.com",
-        title: "Bug",
-        content: "Steps",
-    }).valid, true);
-});
-
-test("validateScreenshotSelection enforces type, size, and count limits", () => {
-    assert.deepEqual(validateScreenshotSelection([
-        { name: "one.png", size: 100, type: "image/png" },
-        { name: "two.jpg", size: 200, type: "image/jpeg" },
-    ], 2), {
-        accepted: [],
-        error: "Attach up to 3 screenshots.",
-    });
-
-    assert.deepEqual(validateScreenshotSelection([
-        { name: "one.gif", size: 100, type: "image/gif" },
-    ], 0), {
-        accepted: [],
-        error: "Only PNG, JPG, JPEG, and WEBP screenshots are supported.",
-    });
-
-    assert.deepEqual(validateScreenshotSelection([
-        { name: "one.png", size: 6 * 1024 * 1024, type: "image/png" },
-    ], 0), {
-        accepted: [],
-        error: "Each screenshot must be 5 MB or smaller.",
-    });
-
-    const valid = validateScreenshotSelection([
-        { name: "one.png", size: 1024, type: "image/png" },
-    ], 0);
-    assert.equal(valid.error, null);
-    assert.equal(valid.accepted.length, 1);
-});
-
-test("support planner formats sizes and truncates large log previews", () => {
-    assert.equal(formatSupportAttachmentSize(512), "512 B");
-    assert.equal(formatSupportAttachmentSize(2048), "2 KB");
-    assert.equal(formatSupportAttachmentSize(2 * 1024 * 1024), "2.0 MB");
-
+test("support planner truncates large log previews", () => {
     const preview = truncateLogPreview("a".repeat(130_000));
     assert.equal(preview.truncated, true);
     assert.match(preview.content, /\[Preview truncated\]$/);

@@ -1,13 +1,5 @@
 import { formatFixedLocalDateTime } from "../../core/time/dateTime";
 
-const SUPPORTED_SCREENSHOT_MIME_TYPES = new Set([
-    "image/png",
-    "image/jpeg",
-    "image/webp",
-]);
-
-export const MAX_SUPPORT_SCREENSHOT_COUNT = 3;
-export const MAX_SUPPORT_SCREENSHOT_BYTES = 5 * 1024 * 1024;
 const LOG_PREVIEW_CHAR_LIMIT = 120_000;
 const LOG_PREVIEW_MAX_EVENTS = 400;
 const LOG_PREVIEW_MAX_TOKENS_PER_ROW = 4;
@@ -85,102 +77,6 @@ const PRETTY_PAYLOAD_LABELS: Record<string, string> = {
     threadCount: "threads",
     titleLength: "title",
 };
-
-export interface ScreenshotFileLike {
-    name: string;
-    size: number;
-    type: string;
-}
-
-export interface SupportValidationInput {
-    email: string;
-    title: string;
-    content: string;
-}
-
-export interface SupportValidationResult {
-    valid: boolean;
-    error: string | null;
-}
-
-export interface ScreenshotSelectionResult<TFile extends ScreenshotFileLike> {
-    accepted: TFile[];
-    error: string | null;
-}
-
-export function validateSupportReportInput(input: SupportValidationInput): SupportValidationResult {
-    if (!input.email.trim()) {
-        return { valid: false, error: "Email is required." };
-    }
-    if (!input.title.trim()) {
-        return { valid: false, error: "Title is required." };
-    }
-    if (!input.content.trim()) {
-        return { valid: false, error: "Content is required." };
-    }
-
-    return { valid: true, error: null };
-}
-
-function inferMimeType(fileName: string): string | null {
-    const extension = fileName.split(".").pop()?.toLowerCase();
-    if (extension === "png") {
-        return "image/png";
-    }
-    if (extension === "jpg" || extension === "jpeg") {
-        return "image/jpeg";
-    }
-    if (extension === "webp") {
-        return "image/webp";
-    }
-
-    return null;
-}
-
-export function validateScreenshotSelection<TFile extends ScreenshotFileLike>(
-    files: readonly TFile[],
-    existingCount: number,
-): ScreenshotSelectionResult<TFile> {
-    if (existingCount + files.length > MAX_SUPPORT_SCREENSHOT_COUNT) {
-        return {
-            accepted: [],
-            error: `Attach up to ${MAX_SUPPORT_SCREENSHOT_COUNT} screenshots.`,
-        };
-    }
-
-    const accepted: TFile[] = [];
-    for (const file of files) {
-        const mimeType = file.type || inferMimeType(file.name);
-        if (!mimeType || !SUPPORTED_SCREENSHOT_MIME_TYPES.has(mimeType)) {
-            return {
-                accepted: [],
-                error: "Only PNG, JPG, JPEG, and WEBP screenshots are supported.",
-            };
-        }
-        if (file.size > MAX_SUPPORT_SCREENSHOT_BYTES) {
-            return {
-                accepted: [],
-                error: "Each screenshot must be 5 MB or smaller.",
-            };
-        }
-        accepted.push(file);
-    }
-
-    return {
-        accepted,
-        error: null,
-    };
-}
-
-export function formatSupportAttachmentSize(sizeBytes: number): string {
-    if (sizeBytes >= 1024 * 1024) {
-        return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
-    }
-    if (sizeBytes >= 1024) {
-        return `${Math.round(sizeBytes / 1024)} KB`;
-    }
-    return `${sizeBytes} B`;
-}
 
 export function truncateLogPreview(content: string): {
     content: string;
@@ -315,8 +211,6 @@ function classifySupportLogKind(entry: ParsedSupportLogEntry): SupportLogKind {
         "draft.append.created",
         "draft.save.begin",
         "draft.edit.begin",
-        "thread.resolve",
-        "thread.reopen",
         "thread.delete",
         "thread.reanchor.begin",
         "navigation.reveal.requested",
@@ -324,9 +218,6 @@ function classifySupportLogKind(entry: ParsedSupportLogEntry): SupportLogKind {
         "index.filter.changed",
         "index.mode.changed",
         "support.debugger.opened",
-        "support.form.opened",
-        "support.log.preview.opened",
-        "support.submit.begin",
     ];
 
     if (userEventPrefixes.some((prefix) => entry.event === prefix || entry.event.startsWith(`${prefix}.`))) {
