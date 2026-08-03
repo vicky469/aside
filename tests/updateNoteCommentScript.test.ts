@@ -10,6 +10,8 @@ import {
     commentToThread,
     type Comment,
     type CommentThread,
+    type CommentThreadEntry,
+    type CommentThreadEntryAnchor,
 } from "../src/commentManager";
 
 const execFile = promisify(execFileCallback);
@@ -165,6 +167,125 @@ test("update-note-comment canonicalizes legacy sidecars and skips malformed thre
     assert.equal(Object.prototype.hasOwnProperty.call(sidecar.threads[0], "resolved"), false);
     assert.equal(Object.prototype.hasOwnProperty.call(sidecar.threads[0], "legacyOnly"), false);
     assert.equal(Object.prototype.hasOwnProperty.call(sidecar.threads[0].entries[0], "legacyOnly"), false);
+});
+
+test("update-note-comment repairs a genuinely empty thread without converting corrupt entries", async () => {
+    const tempDir = await mkdtemp(path.join(tmpdir(), "aside-comment-update-empty-script-"));
+    const notePath = path.join(tempDir, "note.md");
+    const commentPath = path.join(tempDir, "comment.md");
+    const scriptPath = path.resolve(process.cwd(), "scripts/update-note-comment.mjs");
+    const emptyThread = {
+        ...commentToThread(createComment({
+            id: "empty-thread",
+            timestamp: 1710000000100,
+        })),
+        entries: [],
+        updatedAt: 1710000000200,
+    };
+    const corruptThread = {
+        ...commentToThread(createComment({
+            id: "corrupt-thread",
+            timestamp: 1710000000300,
+        })),
+        entries: [null, { id: "broken-entry" }],
+    };
+
+    await createVaultDir(tempDir);
+    await writeFile(notePath, "# Title\n\nBody text.\n", "utf8");
+    await writeSidecar(tempDir, "note.md", [emptyThread, corruptThread]);
+    await writeFile(commentPath, "Recovered update\n", "utf8");
+
+    const { stdout } = await execFile("node", [
+        scriptPath,
+        "--file",
+        notePath,
+        "--id",
+        "empty-thread",
+        "--comment-file",
+        commentPath,
+    ], {
+        cwd: process.cwd(),
+    });
+
+    assert.match(stdout, /Updated comment empty-thread/);
+
+    const sidecar = await readSidecar(tempDir, "note.md");
+    assert.ok(sidecar);
+    assert.deepEqual(sidecar.threads.map((thread) => thread.id), ["empty-thread"]);
+    assert.deepEqual(sidecar.threads[0].entries, [{
+        id: "empty-thread",
+        body: "Recovered update",
+        timestamp: 1710000000200,
+    }]);
+});
+
+test("update-note-comment preserves every current canonical thread field", async () => {
+    const tempDir = await mkdtemp(path.join(tmpdir(), "aside-comment-update-field-parity-script-"));
+    const notePath = path.join(tempDir, "note.md");
+    const commentPath = path.join(tempDir, "comment.md");
+    const scriptPath = path.resolve(process.cwd(), "scripts/update-note-comment.mjs");
+    const anchor = {
+        filePath: "note.md",
+        startLine: 4,
+        startChar: 1,
+        endLine: 4,
+        endChar: 8,
+        selectedText: "anchored",
+        selectedTextHash: "hash-anchored",
+        anchorKind: "selection" as const,
+        orphaned: false,
+    } satisfies Record<keyof CommentThreadEntryAnchor, unknown>;
+    const entry = {
+        id: "entry-1",
+        body: "Original child body",
+        timestamp: 1710000000200,
+        deletedAt: 1710000000250,
+        anchor,
+    } satisfies Record<keyof CommentThreadEntry, unknown>;
+    const thread = {
+        id: "thread-1",
+        filePath: "note.md",
+        startLine: 1,
+        startChar: 2,
+        endLine: 1,
+        endChar: 7,
+        selectedText: "thread target",
+        selectedTextHash: "hash-thread",
+        anchorKind: "selection" as const,
+        orphaned: true,
+        isPinned: true,
+        deletedAt: 1710000000300,
+        entries: [entry],
+        createdAt: 1710000000000,
+        updatedAt: 1710000000200,
+    } satisfies Record<keyof CommentThread, unknown>;
+
+    await createVaultDir(tempDir);
+    await writeFile(notePath, "# Title\n\nBody text.\n", "utf8");
+    await writeSidecar(tempDir, "note.md", [thread]);
+    await writeFile(commentPath, "Updated child body\n", "utf8");
+
+    await execFile("node", [
+        scriptPath,
+        "--file",
+        notePath,
+        "--id",
+        "entry-1",
+        "--comment-file",
+        commentPath,
+    ], {
+        cwd: process.cwd(),
+    });
+
+    const sidecar = await readSidecar(tempDir, "note.md");
+    assert.ok(sidecar);
+    assert.deepEqual(sidecar.threads, [{
+        ...thread,
+        entries: [{
+            ...entry,
+            body: "Updated child body",
+        }],
+    }]);
 });
 
 test("update-note-comment script can target a stored comment by obsidian Aside URI", async () => {

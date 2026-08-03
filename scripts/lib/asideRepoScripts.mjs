@@ -602,10 +602,16 @@ function canonicalizeCommentThread(noteRelativePath, value) {
         return null;
     }
 
-    const entries = value.entries
-        .map((entry) => canonicalizeCommentThreadEntry(entry))
-        .filter(Boolean);
-    if (entries.length === 0) {
+    const entries = value.entries.length === 0
+        ? [{
+            id: value.id,
+            body: "",
+            timestamp: value.updatedAt || value.createdAt,
+        }]
+        : value.entries
+            .map((entry) => canonicalizeCommentThreadEntry(entry))
+            .filter(Boolean);
+    if (value.entries.length > 0 && entries.length === 0) {
         return null;
     }
 
