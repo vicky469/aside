@@ -1,6 +1,6 @@
 # Persistent Diagnostics Spec
 
-> Historical design note: the support-report submission workflow described here was never connected to the public runtime and has been removed. The current supported surface is the local-only log inspector in `docs/superpowers/specs/2026-06-08-debug-log-inspector-spec.md`.
+> Historical design note: the support-report submission workflow described here was never connected to the public runtime and has been removed. The current supported surface is the local-only log inspector implemented in `src/ui/modals/SupportLogInspectorModal.ts` and opened from the sidebar debug button.
 
 ## Status
 

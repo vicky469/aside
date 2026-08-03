@@ -367,7 +367,7 @@ git commit -m "refactor: remove dead support submission flow"
 Add this notice immediately below each persistent-diagnostics title:
 
 ```md
-> Historical design note: the support-report submission workflow described here was never connected to the public runtime and has been removed. The current supported surface is the local-only log inspector in `docs/superpowers/specs/2026-06-08-debug-log-inspector-spec.md`.
+> Historical design note: the support-report submission workflow described here was never connected to the public runtime and has been removed. The current supported surface is the local-only log inspector implemented in `src/ui/modals/SupportLogInspectorModal.ts` and opened from the sidebar debug button.
 ```
 
 Do not rewrite historical sections or remove current local logging guidance.
@@ -377,11 +377,15 @@ Do not rewrite historical sections or remove current local logging guidance.
 Run:
 
 ```bash
-rg -n "comment:resolve|resolve-note-comment|resolved: false|ensureCommentSelectionVisible|loadKnownCommentSelectionTarget|SupportReportModal|sendSupportReport|aside-support-report-modal|aside-support-image-preview" package.json src scripts tests shared README.md AGENTS.md styles.css
+rg -n "comment:resolve|resolve-note-comment|resolved: false|ensureCommentSelectionVisible|loadKnownCommentSelectionTarget|SupportReportModal|sendSupportReport|aside-support-report-modal|aside-support-image-preview" package.json src scripts shared README.md styles.css
+rg -n "comment:resolve|resolve-note-comment|resolved: false|ensureCommentSelectionVisible|loadKnownCommentSelectionTarget|SupportReportModal|sendSupportReport|aside-support-report-modal|aside-support-image-preview" tests/deadFeatureResidue.test.mjs
+if test -f AGENTS.md; then
+    rg -n "comment:resolve|resolve-note-comment|resolved: false|ensureCommentSelectionVisible|loadKnownCommentSelectionTarget|SupportReportModal|sendSupportReport|aside-support-report-modal|aside-support-image-preview" AGENTS.md
+fi
 rg -n "setThreadResolved" src tests
 ```
 
-Expected: the first command returns no matches. The second returns only the storage operation union, operation validator, explicit no-op reducer case, and regression test.
+Expected: the active-surface command returns no matches. The test command returns only intentional structural guard strings. If a local `AGENTS.md` exists, its conditional audit returns no matches. The final command returns only the storage operation union, operation validator, explicit no-op reducer case, and regression test.
 
 - [x] **Step 3: Run compiler, lint, and Obsidian checks**
 

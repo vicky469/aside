@@ -40,9 +40,9 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ## Context
 
-Commit `0cdc6ca` removed resolved comments from the domain and UI, but several callers, scripts, prompts, and documentation surfaces remain. Most visibly, `package.json` still exposes `comment:resolve` even though `scripts/resolve-note-comment.mjs` no longer exists.
+Before this cleanup, commit `0cdc6ca` had removed resolved comments from the domain and UI, but several callers, scripts, prompts, and documentation surfaces still remained. Most visibly, `package.json` still exposed `comment:resolve` even though `scripts/resolve-note-comment.mjs` no longer existed.
 
-The original persistent-diagnostics implementation also introduced a support-report submission form. The current runtime instead opens `SupportLogInspectorModal`, and the later debug log inspector design explicitly states that remote upload and a new support-report workflow are non-goals. The submission modal and transport modules have no production entrypoint.
+Before this cleanup, the original persistent-diagnostics implementation had also introduced a support-report submission form. The current runtime instead opens `SupportLogInspectorModal`; the submission modal and transport modules had no production entrypoint and were removed by this cleanup.
 
 ## Change-Surface Classification
 
