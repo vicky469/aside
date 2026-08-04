@@ -3,7 +3,10 @@ import test from "node:test";
 import { CommentManager, type Comment } from "../src/commentManager";
 import type { ScriptRunRecord } from "../src/core/scripts/scriptRuns";
 import type { PersistedPluginData } from "../src/settings/indexNoteSettingsPlanner";
-import { CommentScriptController } from "../src/vaultScripts/commentScriptController";
+import {
+    CommentScriptController,
+    routeSavedUserEntry,
+} from "../src/vaultScripts/commentScriptController";
 import { ScriptRunStore } from "../src/vaultScripts/scriptRunStore";
 import { VaultScriptRegistry } from "../src/vaultScripts/vaultScriptRegistry";
 import type {
@@ -206,6 +209,73 @@ test("script output handles empty success, truncation, and concise stderr failur
     assert.equal(failed.store.getRuns()[0]?.status, "failed");
     assert.equal(failed.store.getRuns()[0]?.error, "bad input check options");
     assert.equal(failed.appendedEntries[0]?.body, "Script @clean:\n\nbad input check options");
+
+    const blankStderr = createHarness({
+        runVaultScript: async () => Promise.reject(Object.assign(
+            new Error("Command failed"),
+            { stderr: " \n\t " },
+        )),
+    });
+    await blankStderr.controller.handleSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "@clean",
+    });
+    assert.equal(blankStderr.store.getRuns()[0]?.error, "Command failed");
+    assert.equal(blankStderr.appendedEntries[0]?.body, "Script @clean:\n\nCommand failed");
+});
+
+test("saved entry routing sends only unclaimed entries to the agent controller", async () => {
+    const valid = createHarness();
+    const validAgentEvents: string[] = [];
+    await routeSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "@clean",
+    }, valid.controller, {
+        handleSavedUserEntry: async (event) => {
+            validAgentEvents.push(event.entryId);
+        },
+    });
+    assert.deepEqual(validAgentEvents, []);
+
+    const rejected = createHarness();
+    const rejectedAgentEvents: string[] = [];
+    const originalEvent = {
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "@clean and @codex",
+    };
+    const agentController = {
+        handleSavedUserEntry: async (event: typeof originalEvent) => {
+            rejectedAgentEvents.push(event.body);
+        },
+    };
+    await routeSavedUserEntry(originalEvent, rejected.controller, agentController);
+    rejected.registry.remove("🛠️ scripts/clean.mjs");
+    await routeSavedUserEntry({
+        ...originalEvent,
+        body: "@codex after registry refresh",
+    }, rejected.controller, agentController);
+    assert.deepEqual(rejectedAgentEvents, []);
+    assert.equal(rejected.store.getRuns().length, 1);
+
+    const ordinary = createHarness();
+    const ordinaryAgentEvents: string[] = [];
+    await routeSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "ordinary-entry",
+        filePath: "Folder/Note.md",
+        body: "ordinary @person",
+    }, ordinary.controller, {
+        handleSavedUserEntry: async (event) => {
+            ordinaryAgentEvents.push(event.entryId);
+        },
+    });
+    assert.deepEqual(ordinaryAgentEvents, ["ordinary-entry"]);
 });
 
 test("rejected directives persist one failed result and bypass runtime and agent fallback", async () => {

@@ -32,7 +32,10 @@ import { WorkspaceContextController } from "./app/workspaceContextController";
 import type { SidebarUpdateOptions } from "./comments/commentNavigationController";
 import { WorkspaceViewController } from "./app/workspaceViewController";
 import { AgentRunStore } from "./agents/agentRunStore";
-import type { CommentScriptController } from "./vaultScripts/commentScriptController";
+import {
+    routeSavedUserEntry,
+    type CommentScriptController,
+} from "./vaultScripts/commentScriptController";
 import {
     disposeAgentRuntimeProcesses,
     getClaudeRuntimeDiagnostics as probeClaudeRuntimeDiagnostics,
@@ -1511,10 +1514,11 @@ export default class Aside extends Plugin {
     }
 
     private async handleSavedUserEntry(event: SavedUserEntryEvent): Promise<void> {
-        const handledByScript = await this.commentScriptController?.handleSavedUserEntry(event) ?? false;
-        if (!handledByScript) {
-            await this.commentAgentController.handleSavedUserEntry(event);
-        }
+        await routeSavedUserEntry(
+            event,
+            this.commentScriptController,
+            this.commentAgentController,
+        );
     }
 
     private async publishSnapshotArtifacts(files: PublicHtmlPublishSnapshotFile[]): Promise<PublicHtmlDeploySnapshotResult> {

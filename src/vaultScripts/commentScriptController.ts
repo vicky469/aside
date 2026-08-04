@@ -40,6 +40,25 @@ export interface CommentScriptHost {
     runVaultScript(invocation: VaultScriptRuntimeInvocation): Promise<VaultScriptRuntimeResult>;
 }
 
+export interface SavedEntryScriptController {
+    handleSavedUserEntry(event: SavedUserEntryEvent): Promise<boolean>;
+}
+
+export interface SavedEntryAgentController {
+    handleSavedUserEntry(event: SavedUserEntryEvent): Promise<void>;
+}
+
+export async function routeSavedUserEntry(
+    event: SavedUserEntryEvent,
+    scriptController: SavedEntryScriptController | null,
+    agentController: SavedEntryAgentController,
+): Promise<void> {
+    const handledByScript = await scriptController?.handleSavedUserEntry(event) ?? false;
+    if (!handledByScript) {
+        await agentController.handleSavedUserEntry(event);
+    }
+}
+
 function normalizeResultWords(value: string): string[] {
     const normalized = value.trim();
     return normalized ? normalized.split(/\s+/u) : [];
@@ -60,17 +79,12 @@ export function summarizeScriptError(error: unknown): string {
     const errorRecord = error && typeof error === "object"
         ? error as { message?: unknown; stderr?: unknown }
         : null;
-    const stderr = typeof errorRecord?.stderr === "string"
-        ? errorRecord.stderr
+    const normalizeErrorText = (value: unknown): string => typeof value === "string"
+        ? value.replace(/\s+/gu, " ").trim()
         : "";
-    const message = typeof errorRecord?.message === "string"
-        ? errorRecord.message
-        : typeof error === "string"
-            ? error
-            : "";
-    const concise = (stderr || message || "Script failed.")
-        .replace(/\s+/gu, " ")
-        .trim();
+    const stderr = normalizeErrorText(errorRecord?.stderr);
+    const message = normalizeErrorText(errorRecord?.message ?? error);
+    const concise = stderr || message || "Script failed.";
     if (concise.length <= MAX_SCRIPT_ERROR_CHARACTERS) {
         return concise;
     }
@@ -79,7 +93,7 @@ export function summarizeScriptError(error: unknown): string {
 
 export class CommentScriptController {
     private executionQueue: Promise<void> = Promise.resolve();
-    private readonly dispatchingTriggerEntryIds = new Set<string>();
+    private readonly claimingSavedEntryIds = new Set<string>();
     private disposed = false;
 
     constructor(
@@ -93,7 +107,7 @@ export class CommentScriptController {
 
     public dispose(): void {
         this.disposed = true;
-        this.dispatchingTriggerEntryIds.clear();
+        this.claimingSavedEntryIds.clear();
     }
 
     public getRuns(): ScriptRunRecord[] {
@@ -105,21 +119,24 @@ export class CommentScriptController {
     }
 
     public async handleSavedUserEntry(event: SavedUserEntryEvent): Promise<boolean> {
-        if (this.disposed) {
-            return false;
-        }
+        // A stored run is the durable routing receipt for this saved entry. This check
+        // intentionally precedes current body/registry resolution so refreshes, edits,
+        // or storage changes cannot reroute or repeat an already-claimed trigger.
         if (
-            this.dispatchingTriggerEntryIds.has(event.entryId)
+            this.claimingSavedEntryIds.has(event.entryId)
             || getLatestScriptRunForTriggerEntry(this.store.getRuns(), event.entryId)
         ) {
             return true;
+        }
+        if (this.disposed) {
+            return false;
         }
         const resolution = resolveScriptDirective(event.body, this.host.getRegistry());
         if (resolution.kind === "none") {
             return false;
         }
 
-        this.dispatchingTriggerEntryIds.add(event.entryId);
+        this.claimingSavedEntryIds.add(event.entryId);
         try {
             if (resolution.kind === "rejected") {
                 const rejectedRun = this.buildRejectedRun(event, resolution);
@@ -141,7 +158,7 @@ export class CommentScriptController {
             await this.enqueue(run);
             return true;
         } finally {
-            this.dispatchingTriggerEntryIds.delete(event.entryId);
+            this.claimingSavedEntryIds.delete(event.entryId);
         }
     }
 
