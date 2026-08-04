@@ -966,6 +966,7 @@ Build a harness like `commentAgentController.test.ts` with an in-memory `Comment
 
 - first save creates one run and one output entry;
 - repeated handling of the same trigger entry creates no second process;
+- a queued run whose mention becomes missing, ambiguous, or resolves to a different path fails without launching;
 - success prefixes output with `Script @clean:`;
 - empty success reports completion;
 - failure persists `failed` and writes a concise result;
@@ -1210,7 +1211,7 @@ this.commentScriptController.initialize();
 await this.commentScriptController.reconcilePendingRunsFromPreviousSession();
 ```
 
-In the existing vault `create` listener, call `vaultScriptRegistry.upsert(file.path)` for every `TFile`. At the start of rename/delete routing, reseed from `app.vault.getFiles()` so folder moves and deletions are reflected synchronously. On external settings change, reload `scriptRunStore`. On unload, dispose the script controller. Add public getters for runnable scripts, all script runs, latest run for a thread, and `retryScriptRun`.
+In the existing vault `create` listener, call `vaultScriptRegistry.upsert(file.path)` for every `TFile`. At the start of rename/delete routing, reseed from `app.vault.getFiles()` so folder moves and deletions are reflected synchronously. On external settings change, reload `scriptRunStore`. On unload, dispose the script controller before terminating tracked vault-script child processes so no queued work or late output persists. Add public getters for runnable scripts, all script runs, latest run for a thread, and `retryScriptRun`.
 
 Pass `renameScriptRuns` into `PluginLifecycleController` and invoke it beside `renameAgentRuns` when a commentable source note is renamed.
 

@@ -408,6 +408,48 @@ test("script processes execute serially", async () => {
     assert.equal(harness.runtimeCalls.length, 2);
 });
 
+test("queued automatic execution revalidates its script against the live registry", async () => {
+    let releaseFirst = () => {};
+    const harness = createHarness({
+        scripts: ["🛠️ scripts/clean.mjs", "🛠️ scripts/other-script.js"],
+        comments: [
+            createComment({ id: "thread-1", comment: "@clean" }),
+            createComment({ id: "thread-2", comment: "@other-script", timestamp: 20 }),
+        ],
+        runVaultScript: async (invocation) => {
+            if (invocation.scriptPath.endsWith("clean.mjs")) {
+                await new Promise<void>((resolve) => {
+                    releaseFirst = resolve;
+                });
+            }
+            return { stdout: "done", stderr: "" };
+        },
+    });
+    const first = harness.controller.handleSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "@clean",
+    });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    const second = harness.controller.handleSavedUserEntry({
+        threadId: "thread-2",
+        entryId: "thread-2",
+        filePath: "Folder/Note.md",
+        body: "@other-script",
+    });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    harness.registry.upsert("🛠️ scripts/Other-Script.cjs");
+    releaseFirst();
+    await Promise.all([first, second]);
+
+    assert.equal(harness.runtimeCalls.length, 1);
+    const secondRun = harness.store.getRuns().find((run) => run.triggerEntryId === "thread-2");
+    assert.equal(secondRun?.status, "failed");
+    assert.match(secondRun?.error ?? "", /changed or became ambiguous/iu);
+});
+
 test("retryRun reuses output and reloads the latest trigger, thread, note, and script path", async () => {
     const harness = createHarness();
     await harness.controller.handleSavedUserEntry({
@@ -528,7 +570,7 @@ test("retry output edit failure terminalizes once without retrying the edit", as
     assert.deepEqual(harness.notices, ["Unable to replace the previous script result."]);
 });
 
-test("dispose terminalizes queued executions without launching them", async () => {
+test("dispose leaves active receipts for startup reconciliation without launching queued work", async () => {
     let releaseFirst = () => {};
     const harness = createHarness({
         scripts: ["🛠️ scripts/clean.mjs", "🛠️ scripts/other-script.js"],
@@ -565,9 +607,11 @@ test("dispose terminalizes queued executions without launching them", async () =
     await Promise.all([first, second]);
 
     const secondRun = harness.store.getRuns().find((run) => run.triggerEntryId === "thread-2");
+    const firstRun = harness.store.getRuns().find((run) => run.triggerEntryId === "thread-1");
     assert.equal(harness.runtimeCalls.length, 1);
-    assert.equal(secondRun?.status, "failed");
-    assert.equal(typeof secondRun?.endedAt, "number");
+    assert.equal(firstRun?.status, "running");
+    assert.equal(secondRun?.status, "queued");
+    assert.equal(harness.appendedEntries.length, 0);
 });
 
 test("retryRun refuses busy, missing-script, and missing-trigger runs without runtime dispatch", async () => {

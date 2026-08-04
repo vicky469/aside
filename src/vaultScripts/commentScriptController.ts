@@ -18,7 +18,7 @@ const SCRIPT_RETRY_MISSING_NOTICE = "Unable to rerun: the saved trigger or vault
 const SCRIPT_RETRY_REPLACE_NOTICE = "Unable to replace the previous script result.";
 const SCRIPT_RETRY_PERSIST_NOTICE = "Unable to save the script retry.";
 const SCRIPT_SESSION_INTERRUPTED_ERROR = "The previous vault script run did not finish. Regenerate it to run again.";
-const SCRIPT_DISPOSED_ERROR = "Vault script execution stopped because Aside unloaded.";
+const SCRIPT_CHANGED_BEFORE_EXECUTION_ERROR = "The vault script changed or became ambiguous before execution. Regenerate it to run again.";
 
 export interface CommentScriptHost {
     createRunId(): string;
@@ -283,7 +283,11 @@ export class CommentScriptController {
 
     private async execute(run: ScriptRunRecord): Promise<void> {
         if (this.disposed) {
-            await this.terminalizeFailedRun(run.id, SCRIPT_DISPOSED_ERROR);
+            return;
+        }
+        const currentScript = this.host.getRegistry().resolve(run.mentionName);
+        if (!currentScript || currentScript.path !== run.scriptPath) {
+            await this.terminalizeFailedRun(run.id, SCRIPT_CHANGED_BEFORE_EXECUTION_ERROR);
             await this.host.refreshCommentViews();
             return;
         }
@@ -292,6 +296,9 @@ export class CommentScriptController {
             status: "running",
             startedAt: this.host.now(),
         }));
+        if (this.disposed) {
+            return;
+        }
 
         let status: "succeeded" | "failed";
         let body: string;
@@ -313,12 +320,18 @@ export class CommentScriptController {
             status = "failed";
             body = formatScriptResult(run.mentionName, runtimeError);
         }
+        if (this.disposed) {
+            return;
+        }
 
         try {
             const outputEntryId = await this.writeOutput(
                 run,
                 body,
             );
+            if (this.disposed) {
+                return;
+            }
             await this.store.updateRun(run.id, (current) => ({
                 ...current,
                 status,

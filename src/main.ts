@@ -39,6 +39,7 @@ import {
 import { ScriptRunStore } from "./vaultScripts/scriptRunStore";
 import { VaultScriptRegistry } from "./vaultScripts/vaultScriptRegistry";
 import {
+    disposeVaultScriptRuntimeProcesses,
     runVaultScript,
     type VaultScriptRuntimeModules,
 } from "./vaultScripts/vaultScriptRuntime";
@@ -795,6 +796,7 @@ export default class Aside extends Plugin {
         void this.logEvent("info", "startup", "startup.unload");
         disposeAgentRuntimeProcesses();
         this.commentScriptController.dispose();
+        disposeVaultScriptRuntimeProcesses();
         this.commentAgentController.dispose();
         this.commentPersistenceController.dispose();
         this.pluginLifecycleController.handleUnload();

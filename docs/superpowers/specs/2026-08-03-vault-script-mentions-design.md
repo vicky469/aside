@@ -105,6 +105,7 @@ The agent controller must never receive an entry routed to a script or rejected 
 
 The runner resolves all paths from trusted Obsidian vault metadata rather than from the raw mention text. Immediately before launch it revalidates that:
 
+- the queued mention still resolves uniquely to the same registered script path;
 - the script still exists as a registered file;
 - its normalized path is a direct child of the active vault's `🛠️ scripts/` folder;
 - its extension remains supported;
@@ -121,6 +122,8 @@ cwd:        absoluteVaultRoot
 The login shell is consulted only to discover `PATH`; script execution itself uses `execFile`. This preserves paths containing spaces and emoji without interpolation and prevents shell metacharacters from becoming commands. The current note path is the script's only automatic positional argument.
 
 Runs time out after 60 seconds. Captured standard output and standard error are limited to 64 KiB each; exceeding either limit fails the run. Result entries retain at most 250 words and end with an explicit truncation marker when formatting omits captured text. Standard output is preferred for successful result text; standard error and exit details are used for failures. Empty successful output becomes a compact completion message.
+
+Aside tracks active script child processes. Plugin unload marks the controller disposed before terminating those children, preventing queued work from launching and preventing terminated runs from persisting late output. Any queued or running receipt left by unload is terminalized by startup reconciliation and remains explicitly regeneratable.
 
 ## Run Records and Regenerate
 
@@ -151,6 +154,6 @@ The failure remains regeneratable when the original mention can still resolve to
 
 Pure policy, discovery, parsing, and execution-planning functions will be tested without Obsidian or child processes. Registry tests will drive synthetic vault events. Runner tests will inject a process adapter and assert the exact executable, arguments, working directory, timeout, and output handling.
 
-Controller tests will prove run-once automatic routing, explicit reruns, output replacement, agent bypass, and rejection of mixed or multiple directives. Draft-editor tests will cover `@` query detection and replacement. Existing setting-catalog and sidebar-tab tests will be strengthened to make the no-setting/no-tab scope explicit.
+Controller tests will prove run-once automatic routing, queued-run registry revalidation, unload behavior, explicit reruns, output replacement, agent bypass, and rejection of mixed or multiple directives. Runtime tests will cover active-child termination. Draft-editor tests will cover `@` query detection and replacement. Existing setting-catalog and sidebar-tab tests will be strengthened to make the no-setting/no-tab scope explicit.
 
 The final manual smoke test will install the built plugin into a test vault, create a new supported script directly under the vault's `🛠️ scripts/`, confirm that its mention appears without restarting Obsidian, run it against a note, change the note or script, and confirm Regenerate uses the latest data.

@@ -2,6 +2,7 @@ import * as assert from "node:assert/strict";
 import path from "node:path";
 import test from "node:test";
 import {
+    disposeVaultScriptRuntimeProcesses,
     runVaultScript,
     type VaultScriptRuntimeModules,
 } from "../src/vaultScripts/vaultScriptRuntime";
@@ -51,6 +52,7 @@ function createRuntimeHarness(options: {
                 ) => {
                     invocations.push({ file, args, options: execOptions });
                     callback(result.error, result.stdout, result.stderr);
+                    return { kill: () => true };
                 },
             },
             fsPromises: {
@@ -381,4 +383,31 @@ test("runVaultScript preserves an empty successful result", async () => {
         scriptPath: "🛠️ scripts/clean.mjs",
         notePath: "Note.md",
     }), { stdout: "", stderr: "" });
+});
+
+test("disposeVaultScriptRuntimeProcesses terminates active external Node children", async () => {
+    let killedWith: string | number | undefined;
+    let callback: ((error: Error | null, stdout: string, stderr: string) => void) | undefined;
+    const harness = createRuntimeHarness();
+    harness.modules.childProcess.execFile = (_file, _args, _options, nextCallback) => {
+        callback = nextCallback;
+        return {
+            kill: (signal?: string | number) => {
+                killedWith = signal;
+                return true;
+            },
+        };
+    };
+
+    const execution = runVaultScript(harness.modules, {
+        vaultRootPath: "/vault",
+        scriptPath: "🛠️ scripts/clean.mjs",
+        notePath: "Note.md",
+    });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    disposeVaultScriptRuntimeProcesses();
+    assert.equal(killedWith, "SIGTERM");
+    callback?.(Object.assign(new Error("terminated"), { code: "SIGTERM" }), "", "");
+    await assert.rejects(execution, /terminated/u);
 });

@@ -16,6 +16,10 @@ export interface VaultScriptRuntimeResult {
 
 export type VaultScriptRuntimeEnvironment = Readonly<Record<string, string | undefined>>;
 
+export interface VaultScriptRuntimeChildProcess {
+    kill(signal?: string | number): boolean;
+}
+
 export interface VaultScriptRuntimeModules {
     nodeExecutable: string;
     processEnv: VaultScriptRuntimeEnvironment;
@@ -31,7 +35,7 @@ export interface VaultScriptRuntimeModules {
                 env: Record<string, string | undefined>;
             },
             callback: (error: Error | null, stdout: string, stderr: string) => void,
-        ): unknown;
+        ): VaultScriptRuntimeChildProcess;
     };
     fsPromises: {
         realpath(path: string): Promise<string>;
@@ -42,6 +46,20 @@ export interface VaultScriptRuntimeModules {
         resolve(...paths: string[]): string;
         sep: string;
     };
+}
+
+const activeVaultScriptProcesses = new Set<VaultScriptRuntimeChildProcess>();
+
+export function disposeVaultScriptRuntimeProcesses(): void {
+    const processes = Array.from(activeVaultScriptProcesses);
+    activeVaultScriptProcesses.clear();
+    for (const childProcess of processes) {
+        try {
+            childProcess.kill("SIGTERM");
+        } catch {
+            continue;
+        }
+    }
 }
 
 function assertContained(
@@ -90,7 +108,9 @@ export async function runVaultScript(
     }
 
     return await new Promise<VaultScriptRuntimeResult>((resolve, reject) => {
-        modules.childProcess.execFile(
+        let childProcess: VaultScriptRuntimeChildProcess | null = null;
+        let settled = false;
+        childProcess = modules.childProcess.execFile(
             modules.nodeExecutable,
             [realScriptPath, realNotePath],
             {
@@ -101,6 +121,10 @@ export async function runVaultScript(
                 env: { ...modules.processEnv },
             },
             (error, stdout, stderr) => {
+                settled = true;
+                if (childProcess) {
+                    activeVaultScriptProcesses.delete(childProcess);
+                }
                 if (error) {
                     reject(Object.assign(error, { stdout, stderr }));
                     return;
@@ -108,5 +132,8 @@ export async function runVaultScript(
                 resolve({ stdout, stderr });
             },
         );
+        if (!settled) {
+            activeVaultScriptProcesses.add(childProcess);
+        }
     });
 }
