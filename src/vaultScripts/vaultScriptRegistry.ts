@@ -3,6 +3,16 @@ import {
     parseVaultScriptPath,
     VaultScriptRegistration,
 } from "../../shared/vaultScriptPolicy";
+import { getSupportedAgentActors } from "../core/agents/agentActorRegistry";
+
+function normalizeMention(mention: string): string {
+    return mention.trim().replace(/^@/, "").toLowerCase();
+}
+
+const RESERVED_MENTION_NAMES = new Set([
+    "todo",
+    ...getSupportedAgentActors().map((actor) => normalizeMention(actor.directive)),
+]);
 
 export class VaultScriptRegistry {
     private paths = new Set<string>();
@@ -57,7 +67,7 @@ export class VaultScriptRegistry {
     }
 
     resolve(mention: string): VaultScriptRegistration | null {
-        const normalizedMention = this.normalizeMention(mention);
+        const normalizedMention = normalizeMention(mention);
         const registration = this.runnableScripts.find(
             (candidate) => candidate.normalizedMentionName === normalizedMention,
         );
@@ -65,20 +75,20 @@ export class VaultScriptRegistry {
     }
 
     isAmbiguous(mention: string): boolean {
-        return this.ambiguousMentionNames.includes(this.normalizeMention(mention));
+        return this.ambiguousMentionNames.includes(normalizeMention(mention));
     }
 
     private rebuild(): void {
         const collection = collectVaultScriptRegistrations(this.paths);
-        this.runnableScripts = collection.runnable;
-        this.ambiguousMentionNames = collection.ambiguousMentionNames;
+        this.runnableScripts = collection.runnable.filter(
+            (registration) => !RESERVED_MENTION_NAMES.has(registration.normalizedMentionName),
+        );
+        this.ambiguousMentionNames = collection.ambiguousMentionNames.filter(
+            (mentionName) => !RESERVED_MENTION_NAMES.has(mentionName),
+        );
     }
 
     private canonicalize(path: string): string | null {
         return parseVaultScriptPath(path)?.path ?? null;
-    }
-
-    private normalizeMention(mention: string): string {
-        return mention.trim().replace(/^@/, "").toLowerCase();
     }
 }

@@ -97,6 +97,33 @@ test("case-insensitive collisions are ambiguous until one path is removed", () =
     });
 });
 
+test("reserved built-in mentions are never runnable or resolvable", () => {
+    const registry = new VaultScriptRegistry();
+    registry.seed([
+        "🛠️ scripts/ToDo.mjs",
+        "🛠️ scripts/todo.js",
+        "🛠️ scripts/CODEX.js",
+        "🛠️ scripts/Claude.cjs",
+        "🛠️ scripts/clean.mjs",
+    ]);
+
+    assert.deepEqual(
+        registry.getRunnableScripts().map((script) => script.mentionName),
+        ["clean"],
+    );
+    assert.equal(registry.resolve("@TODO"), null);
+    assert.equal(registry.resolve(" @codex "), null);
+    assert.equal(registry.resolve("@CLAUDE"), null);
+    assert.equal(registry.isAmbiguous("@todo"), false);
+    assert.deepEqual(registry.getAmbiguousMentionNames(), []);
+    assert.deepEqual(registry.resolve("@CLEAN"), {
+        path: "🛠️ scripts/clean.mjs",
+        fileName: "clean.mjs",
+        mentionName: "clean",
+        normalizedMentionName: "clean",
+    });
+});
+
 test("returned arrays and registrations are defensive copies", () => {
     const registry = new VaultScriptRegistry();
     registry.seed(["🛠️ scripts/clean.mjs"]);
