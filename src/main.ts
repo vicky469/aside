@@ -32,6 +32,7 @@ import { WorkspaceContextController } from "./app/workspaceContextController";
 import type { SidebarUpdateOptions } from "./comments/commentNavigationController";
 import { WorkspaceViewController } from "./app/workspaceViewController";
 import { AgentRunStore } from "./agents/agentRunStore";
+import type { CommentScriptController } from "./vaultScripts/commentScriptController";
 import {
     disposeAgentRuntimeProcesses,
     getClaudeRuntimeDiagnostics as probeClaudeRuntimeDiagnostics,
@@ -438,6 +439,7 @@ export default class Aside extends Plugin {
         readPersistedPluginData: () => this.indexNoteSettingsController.readPersistedPluginData(),
         updatePersistedPluginData: (updater) => this.indexNoteSettingsController.updatePersistedPluginData(updater),
     });
+    private commentScriptController: CommentScriptController | null = null;
     private readonly commentAgentController: CommentAgentController = new CommentAgentController({
         createCommentId: () => generateCommentId(),
         now: () => Date.now(),
@@ -1509,7 +1511,10 @@ export default class Aside extends Plugin {
     }
 
     private async handleSavedUserEntry(event: SavedUserEntryEvent): Promise<void> {
-        await this.commentAgentController.handleSavedUserEntry(event);
+        const handledByScript = await this.commentScriptController?.handleSavedUserEntry(event) ?? false;
+        if (!handledByScript) {
+            await this.commentAgentController.handleSavedUserEntry(event);
+        }
     }
 
     private async publishSnapshotArtifacts(files: PublicHtmlPublishSnapshotFile[]): Promise<PublicHtmlDeploySnapshotResult> {
