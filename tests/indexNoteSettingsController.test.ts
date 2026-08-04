@@ -344,6 +344,83 @@ test("a failed persisted plugin data update leaves cached data unchanged and doe
     });
 });
 
+test("a queued legacy write patches stale data without overwriting an earlier atomic update", async () => {
+    const releases: Array<() => void> = [];
+    const saveCalls: PersistedPluginData[] = [];
+    const loadedData: PersistedPluginData = {
+        ...createSettings(),
+        agentRuns: [{ id: "agent-run" }],
+    };
+    const harness = createControllerHarness({
+        loadedData,
+        saveData: async (data) => {
+            saveCalls.push(data);
+            await new Promise<void>((resolve) => releases.push(resolve));
+        },
+    });
+    await harness.controller.loadSettings();
+    const staleData = harness.controller.readPersistedPluginData();
+
+    const scriptUpdate = harness.controller.updatePersistedPluginData((data) => ({
+        ...data,
+        scriptRuns: [{ id: "script-run" }],
+    }));
+    const legacyWrite = harness.controller.writePersistedPluginData({
+        ...staleData,
+        showTodoSidebarTab: false,
+    });
+
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(saveCalls.length, 1);
+    releases.shift()?.();
+    await scriptUpdate;
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(saveCalls.length, 2);
+    releases.shift()?.();
+    await legacyWrite;
+
+    const persistedData = harness.controller.readPersistedPluginData();
+    assert.deepEqual(persistedData.agentRuns, [{ id: "agent-run" }]);
+    assert.deepEqual(persistedData.scriptRuns, [{ id: "script-run" }]);
+    assert.equal(persistedData.showTodoSidebarTab, false);
+});
+
+test("legacy persisted data patches preserve deletes and detach nested snapshots", async () => {
+    const loadedData: PersistedPluginData = {
+        ...createSettings(),
+        sourceIdentityState: {
+            nested: { value: "original" },
+        },
+        sourceIdentityMigrationVersions: [1],
+    };
+    const harness = createControllerHarness({ loadedData });
+    await harness.controller.loadSettings();
+    const readSnapshot = harness.controller.readPersistedPluginData();
+    const readState = readSnapshot.sourceIdentityState as { nested: { value: string } };
+    readState.nested.value = "mutated read";
+    assert.equal(
+        (harness.controller.readPersistedPluginData().sourceIdentityState as { nested: { value: string } }).nested.value,
+        "original",
+    );
+
+    const nextState = { nested: { value: "queued" } };
+    const nextData = harness.controller.readPersistedPluginData();
+    nextData.sourceIdentityState = nextState;
+    delete nextData.sourceIdentityMigrationVersions;
+    const write = harness.controller.writePersistedPluginData(nextData);
+    nextState.nested.value = "mutated input";
+    await write;
+
+    const persistedData = harness.controller.readPersistedPluginData();
+    assert.deepEqual(persistedData.sourceIdentityState, {
+        nested: { value: "queued" },
+    });
+    assert.equal(
+        Object.prototype.hasOwnProperty.call(persistedData, "sourceIdentityMigrationVersions"),
+        false,
+    );
+});
+
 test("loaded settings resolution normalizes persisted values and marks legacy confirmDelete for rewrite", () => {
     const resolved = resolveLoadedSettings({
         enableDebugMode: true,

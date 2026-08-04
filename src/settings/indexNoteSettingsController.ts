@@ -67,6 +67,78 @@ class IndexNotePathRollbackError extends Error {
     }
 }
 
+interface PersistedPluginDataPatch {
+    changed: Record<string, unknown>;
+    deletedKeys: string[];
+}
+
+function clonePersistedPluginDataValue(value: unknown): unknown {
+    if (Array.isArray(value)) {
+        return value.map((item) => clonePersistedPluginDataValue(item));
+    }
+    if (!value || typeof value !== "object") {
+        return value;
+    }
+
+    return Object.fromEntries(
+        Object.entries(value).map(([key, item]) => [
+            key,
+            clonePersistedPluginDataValue(item),
+        ]),
+    );
+}
+
+function clonePersistedPluginData(data: PersistedPluginData): PersistedPluginData {
+    return clonePersistedPluginDataValue(data) as PersistedPluginData;
+}
+
+function persistedPluginDataValuesEqual(left: unknown, right: unknown): boolean {
+    if (Object.is(left, right)) {
+        return true;
+    }
+    if (Array.isArray(left) || Array.isArray(right)) {
+        return Array.isArray(left)
+            && Array.isArray(right)
+            && left.length === right.length
+            && left.every((item, index) => persistedPluginDataValuesEqual(item, right[index]));
+    }
+    if (!left || !right || typeof left !== "object" || typeof right !== "object") {
+        return false;
+    }
+
+    const leftRecord = left as Record<string, unknown>;
+    const rightRecord = right as Record<string, unknown>;
+    const leftKeys = Object.keys(leftRecord);
+    const rightKeys = Object.keys(rightRecord);
+    return leftKeys.length === rightKeys.length
+        && leftKeys.every((key) => Object.prototype.hasOwnProperty.call(rightRecord, key)
+            && persistedPluginDataValuesEqual(leftRecord[key], rightRecord[key]));
+}
+
+function buildPersistedPluginDataPatch(
+    currentData: PersistedPluginData,
+    nextData: PersistedPluginData,
+): PersistedPluginDataPatch {
+    const currentRecord = currentData as Record<string, unknown>;
+    const nextRecord = nextData as Record<string, unknown>;
+    const changed: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(nextRecord)) {
+        if (
+            !Object.prototype.hasOwnProperty.call(currentRecord, key)
+            || !persistedPluginDataValuesEqual(currentRecord[key], value)
+        ) {
+            changed[key] = clonePersistedPluginDataValue(value);
+        }
+    }
+
+    return {
+        changed,
+        deletedKeys: Object.keys(currentRecord).filter((key) =>
+            !Object.prototype.hasOwnProperty.call(nextRecord, key)
+        ),
+    };
+}
+
 export class IndexNoteSettingsController {
     private persistedPluginData: PersistedPluginData = {};
     private persistedPluginDataWriteQueue: Promise<void> = Promise.resolve();
@@ -75,7 +147,7 @@ export class IndexNoteSettingsController {
 
     public async loadSettings(): Promise<void> {
         const loaded = await this.host.loadData();
-        this.persistedPluginData = loaded ?? {};
+        this.persistedPluginData = clonePersistedPluginData(loaded ?? {});
         const resolved = resolveLoadedSettings(loaded, this.host.getSettings());
         this.host.setSettings(resolved.settings);
 
@@ -334,30 +406,33 @@ export class IndexNoteSettingsController {
 	}
 
     public readPersistedPluginData(): PersistedPluginData {
-        return {
-            ...this.persistedPluginData,
-        };
+        return clonePersistedPluginData(this.persistedPluginData);
     }
 
     public async writePersistedPluginData(data: PersistedPluginData): Promise<void> {
-        const snapshot = { ...data };
-        await this.updatePersistedPluginData(() => snapshot);
+        const patch = buildPersistedPluginDataPatch(this.persistedPluginData, data);
+        await this.updatePersistedPluginData((currentData) => {
+            const nextData = currentData as Record<string, unknown>;
+            for (const key of patch.deletedKeys) {
+                delete nextData[key];
+            }
+            for (const [key, value] of Object.entries(patch.changed)) {
+                nextData[key] = clonePersistedPluginDataValue(value);
+            }
+            return currentData;
+        });
     }
 
     public updatePersistedPluginData(
         updater: PersistedPluginDataUpdater,
     ): Promise<PersistedPluginData> {
         const result = this.persistedPluginDataWriteQueue.then(async () => {
-            const persistedData = this.sanitizePersistedPluginData(updater({
-                ...this.persistedPluginData,
-            }));
-            await this.host.saveData(persistedData);
-            this.persistedPluginData = {
-                ...persistedData,
-            };
-            return {
-                ...persistedData,
-            };
+            const persistedData = this.sanitizePersistedPluginData(updater(
+                clonePersistedPluginData(this.persistedPluginData),
+            ));
+            await this.host.saveData(clonePersistedPluginData(persistedData));
+            this.persistedPluginData = clonePersistedPluginData(persistedData);
+            return clonePersistedPluginData(persistedData);
         });
         this.persistedPluginDataWriteQueue = result.then(
             () => undefined,
@@ -367,7 +442,7 @@ export class IndexNoteSettingsController {
     }
 
     private sanitizePersistedPluginData(data: PersistedPluginData): PersistedPluginData {
-        const persistedData = { ...data };
+        const persistedData = clonePersistedPluginData(data);
         delete persistedData.confirmDelete;
         delete persistedData.enableDebugMode;
         delete persistedData.preferredAgentTarget;
