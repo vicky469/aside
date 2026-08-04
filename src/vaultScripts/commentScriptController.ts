@@ -285,8 +285,7 @@ export class CommentScriptController {
         if (this.disposed) {
             return;
         }
-        const currentScript = this.host.getRegistry().resolve(run.mentionName);
-        if (!currentScript || currentScript.path !== run.scriptPath) {
+        if (!this.isRunScriptCurrent(run)) {
             await this.terminalizeFailedRun(run.id, SCRIPT_CHANGED_BEFORE_EXECUTION_ERROR);
             await this.host.refreshCommentViews();
             return;
@@ -297,6 +296,11 @@ export class CommentScriptController {
             startedAt: this.host.now(),
         }));
         if (this.disposed) {
+            return;
+        }
+        if (!this.isRunScriptCurrent(run)) {
+            await this.terminalizeFailedRun(run.id, SCRIPT_CHANGED_BEFORE_EXECUTION_ERROR);
+            await this.host.refreshCommentViews();
             return;
         }
 
@@ -345,6 +349,10 @@ export class CommentScriptController {
             this.host.showNotice(message);
         }
         await this.host.refreshCommentViews();
+    }
+
+    private isRunScriptCurrent(run: ScriptRunRecord): boolean {
+        return this.host.getRegistry().resolve(run.mentionName)?.path === run.scriptPath;
     }
 
     private async terminalizeFailedRun(runId: string, error: string): Promise<void> {

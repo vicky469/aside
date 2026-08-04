@@ -411,3 +411,30 @@ test("disposeVaultScriptRuntimeProcesses terminates active external Node childre
     callback?.(Object.assign(new Error("terminated"), { code: "SIGTERM" }), "", "");
     await assert.rejects(execution, /terminated/u);
 });
+
+test("runtime disposal prevents a child from spawning after pending path resolution", async () => {
+    let releaseFirstRealpath = () => {};
+    let realpathCalls = 0;
+    const harness = createRuntimeHarness();
+    harness.modules.fsPromises.realpath = async (target) => {
+        realpathCalls += 1;
+        if (realpathCalls === 1) {
+            await new Promise<void>((resolve) => {
+                releaseFirstRealpath = resolve;
+            });
+        }
+        return target;
+    };
+
+    const execution = runVaultScript(harness.modules, {
+        vaultRootPath: "/vault",
+        scriptPath: "🛠️ scripts/clean.mjs",
+        notePath: "Note.md",
+    });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    disposeVaultScriptRuntimeProcesses();
+    releaseFirstRealpath();
+
+    await assert.rejects(execution, /unloaded/iu);
+    assert.deepEqual(harness.invocations, []);
+});

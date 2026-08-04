@@ -54,6 +54,7 @@ function createHarness(options: {
     editSucceeds?: boolean;
     editResults?: boolean[];
     appendSucceeds?: boolean;
+    beforePersist?: (data: PersistedPluginData) => Promise<void>;
     loadCommentsForFile?: (filePath: string) => Promise<void>;
     runVaultScript?: (invocation: VaultScriptRuntimeInvocation) => Promise<VaultScriptRuntimeResult>;
 } = {}) {
@@ -67,7 +68,9 @@ function createHarness(options: {
                 failNextPersist = false;
                 throw new Error("persist failed");
             }
-            persistedData = updater({ ...persistedData });
+            const nextData = updater({ ...persistedData });
+            await options.beforePersist?.(nextData);
+            persistedData = nextData;
             return { ...persistedData };
         },
     });
@@ -448,6 +451,32 @@ test("queued automatic execution revalidates its script against the live registr
     const secondRun = harness.store.getRuns().find((run) => run.triggerEntryId === "thread-2");
     assert.equal(secondRun?.status, "failed");
     assert.match(secondRun?.error ?? "", /changed or became ambiguous/iu);
+});
+
+test("automatic execution revalidates again after persisting running state", async () => {
+    let mutateRegistry = () => {};
+    const harness = createHarness({
+        scripts: ["🛠️ scripts/clean.mjs"],
+        beforePersist: async (data) => {
+            const run = Array.isArray(data.scriptRuns) ? data.scriptRuns[0] : null;
+            if (run && typeof run === "object" && "status" in run && run.status === "running") {
+                mutateRegistry();
+            }
+        },
+    });
+    mutateRegistry = () => harness.registry.upsert("🛠️ scripts/Clean.cjs");
+
+    await harness.controller.handleSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "@clean",
+    });
+
+    assert.equal(harness.runtimeCalls.length, 0);
+    const run = harness.store.getRuns()[0];
+    assert.equal(run?.status, "failed");
+    assert.match(run?.error ?? "", /changed or became ambiguous/iu);
 });
 
 test("retryRun reuses output and reloads the latest trigger, thread, note, and script path", async () => {

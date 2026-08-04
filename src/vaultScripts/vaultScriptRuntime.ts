@@ -49,8 +49,10 @@ export interface VaultScriptRuntimeModules {
 }
 
 const activeVaultScriptProcesses = new Set<VaultScriptRuntimeChildProcess>();
+let vaultScriptRuntimeGeneration = 0;
 
 export function disposeVaultScriptRuntimeProcesses(): void {
+    vaultScriptRuntimeGeneration += 1;
     const processes = Array.from(activeVaultScriptProcesses);
     activeVaultScriptProcesses.clear();
     for (const childProcess of processes) {
@@ -82,6 +84,7 @@ export async function runVaultScript(
     modules: VaultScriptRuntimeModules,
     invocation: VaultScriptRuntimeInvocation,
 ): Promise<VaultScriptRuntimeResult> {
+    const runtimeGeneration = vaultScriptRuntimeGeneration;
     const registration = parseVaultScriptPath(invocation.scriptPath);
     if (!registration) {
         throw new Error("Script is not a registered direct child of the vault's 🛠️ scripts/ folder.");
@@ -105,6 +108,9 @@ export async function runVaultScript(
         .join(modules.path.sep);
     if (modules.path.relative(realVaultRoot, realScriptPath) !== expectedRelativeScriptPath) {
         throw new Error("Registered vault script resolves outside its direct user-facing path.");
+    }
+    if (runtimeGeneration !== vaultScriptRuntimeGeneration) {
+        throw new Error("Vault script execution was cancelled because Aside unloaded.");
     }
 
     return await new Promise<VaultScriptRuntimeResult>((resolve, reject) => {
