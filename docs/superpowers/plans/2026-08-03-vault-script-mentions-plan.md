@@ -1,6 +1,6 @@
 # Vault Script Mentions Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Make direct JavaScript files in the active vault's `🛠️ scripts/` folder immediately available as `@script-name` side-note directives that run against the current note without invoking an agent.
 
@@ -64,7 +64,7 @@
 - Create: `tests/vaultScriptPolicy.test.mjs`
 - Modify: `tsconfig.test.json`
 
-- [ ] **Step 1: Write failing shared-policy tests**
+- [x] **Step 1: Write failing shared-policy tests**
 
 Create `tests/vaultScriptPolicy.test.mjs`:
 
@@ -120,7 +120,7 @@ test("buildSideNotePrompt directs reusable scripts to the active vault only", ()
 });
 ```
 
-- [ ] **Step 2: Run the tests and verify the missing module/policy failures**
+- [x] **Step 2: Run the tests and verify the missing module/policy failures**
 
 Run:
 
@@ -130,7 +130,7 @@ node --test tests/vaultScriptPolicy.test.mjs tests/sideNotePromptPolicy.test.mjs
 
 Expected: FAIL because `shared/vaultScriptPolicy.js` does not exist and the prompt lacks the vault-script instruction.
 
-- [ ] **Step 3: Implement the shared policy and prompt consumption**
+- [x] **Step 3: Implement the shared policy and prompt consumption**
 
 Create `shared/vaultScriptPolicy.js`:
 
@@ -225,7 +225,7 @@ In `shared/sideNotePromptPolicy.js`, import `VAULT_SCRIPT_FOLDER_PATH` and add t
 
 Add `"shared/vaultScriptPolicy.js"` to `tsconfig.test.json`'s `include` array.
 
-- [ ] **Step 4: Run the shared-policy tests**
+- [x] **Step 4: Run the shared-policy tests**
 
 Run:
 
@@ -235,7 +235,7 @@ node --test tests/vaultScriptPolicy.test.mjs tests/sideNotePromptPolicy.test.mjs
 
 Expected: all policy and prompt tests PASS.
 
-- [ ] **Step 5: Commit the policy slice**
+- [x] **Step 5: Commit the policy slice**
 
 ```bash
 git add shared/vaultScriptPolicy.js shared/vaultScriptPolicy.d.ts shared/sideNotePromptPolicy.js tests/vaultScriptPolicy.test.mjs tests/sideNotePromptPolicy.test.mjs tsconfig.test.json
@@ -248,7 +248,7 @@ git commit -m "feat(scripts): define vault script policy"
 - Create: `src/vaultScripts/vaultScriptRegistry.ts`
 - Create: `tests/vaultScriptRegistry.test.ts`
 
-- [ ] **Step 1: Write failing registry tests**
+- [x] **Step 1: Write failing registry tests**
 
 Create tests that seed irrelevant and valid paths, add a new direct script, rename it, delete it, and introduce/remove a duplicate name:
 
@@ -279,7 +279,7 @@ test("registry withholds collisions until one path is removed", () => {
 });
 ```
 
-- [ ] **Step 2: Run the compiled test and verify failure**
+- [x] **Step 2: Run the compiled test and verify failure**
 
 Run:
 
@@ -290,7 +290,7 @@ node --test .test-dist/tests/vaultScriptRegistry.test.js
 
 Expected: FAIL because `VaultScriptRegistry` does not exist.
 
-- [ ] **Step 3: Implement the minimal registry**
+- [x] **Step 3: Implement the minimal registry**
 
 Implement `src/vaultScripts/vaultScriptRegistry.ts`:
 
@@ -357,11 +357,11 @@ export class VaultScriptRegistry {
 }
 ```
 
-- [ ] **Step 4: Run the registry tests**
+- [x] **Step 4: Run the registry tests**
 
 Run the Task 2 command again. Expected: PASS.
 
-- [ ] **Step 5: Commit the registry slice**
+- [x] **Step 5: Commit the registry slice**
 
 ```bash
 git add src/vaultScripts/vaultScriptRegistry.ts tests/vaultScriptRegistry.test.ts
@@ -379,7 +379,7 @@ git commit -m "feat(scripts): add live vault registry"
 - Create: `tests/commentMentionSuggestions.test.ts`
 - Modify: `tests/sidebarDraftEditor.test.ts`
 
-- [ ] **Step 1: Write failing pure mention tests**
+- [x] **Step 1: Write failing pure mention tests**
 
 Create `tests/commentMentionSuggestions.test.ts` covering a collapsed selection after `@`, an existing `@query`, whitespace boundaries, surrounding text preservation, case-insensitive ranking, and built-in directives before scripts:
 
@@ -398,7 +398,7 @@ assert.deepEqual(buildMentionSuggestions([
 
 Extend `tests/sidebarDraftEditor.test.ts` with a host spy proving `openDraftMentionSuggest()` replaces the query and updates the draft.
 
-- [ ] **Step 2: Compile and verify the missing API failures**
+- [x] **Step 2: Compile and verify the missing API failures**
 
 ```bash
 ./node_modules/.bin/tsc -p tsconfig.test.json
@@ -407,7 +407,7 @@ node --test .test-dist/tests/commentMentionSuggestions.test.js .test-dist/tests/
 
 Expected: FAIL because the mention helpers and controller method do not exist.
 
-- [ ] **Step 3: Implement pure mention parsing and ranking**
+- [x] **Step 3: Implement pure mention parsing and ranking**
 
 Implement the pure helpers in `commentMentionSuggestions.ts`:
 
@@ -481,7 +481,7 @@ export function buildMentionSuggestions(
 }
 ```
 
-- [ ] **Step 4: Implement the modal and controller wiring**
+- [x] **Step 4: Implement the modal and controller wiring**
 
 Create `SideNoteMentionSuggestModal` with this complete behavior:
 
@@ -577,11 +577,11 @@ public openDraftMentionSuggest(comment: DraftComment, textarea: HTMLTextAreaElem
 
 In `sidebarDraftComment.ts`, open mention suggestions when `InputEvent.data === "@"`; on Tab, try mention before link and tag. In `AsideView.ts`, build suggestions from `plugin.getRunnableVaultScripts()` and open the modal.
 
-- [ ] **Step 5: Run the mention-editor tests**
+- [x] **Step 5: Run the mention-editor tests**
 
 Run the Task 3 command again. Expected: PASS.
 
-- [ ] **Step 6: Commit the suggestion slice**
+- [x] **Step 6: Commit the suggestion slice**
 
 ```bash
 git add src/ui/editor/commentMentionSuggestions.ts src/ui/modals/SideNoteMentionSuggestModal.ts src/ui/views/sidebarDraftEditor.ts src/ui/views/sidebarDraftComment.ts src/ui/views/AsideView.ts tests/commentMentionSuggestions.test.ts tests/sidebarDraftEditor.test.ts
@@ -600,7 +600,7 @@ git commit -m "feat(scripts): suggest vault script mentions"
 - Modify: `src/settings/indexNoteSettingsPlanner.ts`
 - Create: `tests/scriptRunStorePlanner.test.ts`
 
-- [ ] **Step 1: Write failing normalization and lookup tests**
+- [x] **Step 1: Write failing normalization and lookup tests**
 
 Cover malformed-record rejection, valid queued/succeeded records, optional retry lineage, output-entry lookup, latest-trigger lookup, and cloning. Use this record shape:
 
@@ -621,7 +621,7 @@ Cover malformed-record rejection, valid queued/succeeded records, optional retry
 }
 ```
 
-- [ ] **Step 2: Compile and verify missing-type failures**
+- [x] **Step 2: Compile and verify missing-type failures**
 
 ```bash
 ./node_modules/.bin/tsc -p tsconfig.test.json
@@ -630,7 +630,7 @@ node --test .test-dist/tests/scriptRunStorePlanner.test.js
 
 Expected: FAIL because script-run modules do not exist.
 
-- [ ] **Step 3: Implement script-run types, planner, and store**
+- [x] **Step 3: Implement script-run types, planner, and store**
 
 Create `src/core/comments/savedUserEntry.ts`:
 
@@ -774,7 +774,7 @@ export class ScriptRunStore {
 
 Update the agent and mutation controllers to import `SavedUserEntryEvent` from its new core file. Add `scriptRuns?: unknown` to `PersistedPluginData`.
 
-- [ ] **Step 4: Run planner tests plus existing agent tests**
+- [x] **Step 4: Run planner tests plus existing agent tests**
 
 ```bash
 ./node_modules/.bin/tsc -p tsconfig.test.json
@@ -783,7 +783,7 @@ node --test .test-dist/tests/scriptRunStorePlanner.test.js .test-dist/tests/agen
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit the persistence slice**
+- [x] **Step 5: Commit the persistence slice**
 
 ```bash
 git add src/core/comments/savedUserEntry.ts src/core/scripts/scriptRuns.ts src/vaultScripts/scriptRunStorePlanner.ts src/vaultScripts/scriptRunStore.ts src/agents/commentAgentController.ts src/comments/commentMutationController.ts src/settings/indexNoteSettingsPlanner.ts tests/scriptRunStorePlanner.test.ts
@@ -796,13 +796,13 @@ git commit -m "feat(scripts): persist script run records"
 - Create: `src/vaultScripts/vaultScriptRuntime.ts`
 - Create: `tests/vaultScriptRuntime.test.ts`
 
-- [ ] **Step 1: Write failing runtime tests with injected modules**
+- [x] **Step 1: Write failing runtime tests with injected modules**
 
 Test that a valid call invokes exactly:
 
 ```ts
 assert.deepEqual(invocation, {
-    file: "/Applications/Obsidian.app/Contents/Frameworks/Obsidian Helper.app/Contents/MacOS/Obsidian Helper",
+    file: "node",
     args: ["/vault/🛠️ scripts/clean.mjs", "/vault/Folder/Note.md"],
     options: {
         cwd: "/vault",
@@ -815,7 +815,7 @@ assert.deepEqual(invocation, {
 
 Also test repository `scripts/`, subfolders, unsupported extensions, non-markdown targets, `realpath` escapes, non-zero exits with stderr, output overflow, and empty success.
 
-- [ ] **Step 2: Compile and verify missing-runtime failures**
+- [x] **Step 2: Compile and verify missing-runtime failures**
 
 ```bash
 ./node_modules/.bin/tsc -p tsconfig.test.json
@@ -824,7 +824,7 @@ node --test .test-dist/tests/vaultScriptRuntime.test.js
 
 Expected: FAIL because `runVaultScript` does not exist.
 
-- [ ] **Step 3: Implement the runtime contract**
+- [x] **Step 3: Implement the runtime contract**
 
 Export injectable interfaces and implement the runtime as follows:
 
@@ -846,12 +846,19 @@ export interface VaultScriptRuntimeResult {
 }
 
 export interface VaultScriptRuntimeModules {
-    execPath: string;
+    nodeExecutable: string;
+    processEnv: Readonly<Record<string, string | undefined>>;
     childProcess: {
         execFile(
             file: string,
             args: string[],
-            options: { cwd: string; timeout: number; maxBuffer: number; windowsHide: boolean },
+            options: {
+                cwd: string;
+                timeout: number;
+                maxBuffer: number;
+                windowsHide: boolean;
+                env: Record<string, string | undefined>;
+            },
             callback: (error: Error | null, stdout: string, stderr: string) => void,
         ): unknown;
     };
@@ -895,13 +902,14 @@ export async function runVaultScript(
 
     return await new Promise<VaultScriptRuntimeResult>((resolve, reject) => {
         modules.childProcess.execFile(
-            modules.execPath,
+            modules.nodeExecutable,
             [realScriptPath, realNotePath],
             {
                 cwd: realVaultRoot,
                 timeout: VAULT_SCRIPT_TIMEOUT_MS,
                 maxBuffer: VAULT_SCRIPT_MAX_BUFFER_BYTES,
                 windowsHide: true,
+                env: { ...modules.processEnv },
             },
             (error, stdout, stderr) => {
                 if (error) {
@@ -915,11 +923,11 @@ export async function runVaultScript(
 }
 ```
 
-- [ ] **Step 4: Run the runtime tests**
+- [x] **Step 4: Run the runtime tests**
 
 Run the Task 5 command again. Expected: PASS.
 
-- [ ] **Step 5: Commit the runtime slice**
+- [x] **Step 5: Commit the runtime slice**
 
 ```bash
 git add src/vaultScripts/vaultScriptRuntime.ts tests/vaultScriptRuntime.test.ts
@@ -935,7 +943,7 @@ git commit -m "feat(scripts): run vault scripts safely"
 - Create: `tests/commentScriptController.test.ts`
 - Modify: `src/main.ts`
 
-- [ ] **Step 1: Write failing directive-routing tests**
+- [x] **Step 1: Write failing directive-routing tests**
 
 Use a registry containing `clean` and an ambiguous `format`. Assert these outcomes:
 
@@ -952,7 +960,7 @@ assert.equal(resolveScriptDirective("@format", registry).kind, "rejected");
 
 The rejected result must include a stable user-facing message and the involved normalized mention names.
 
-- [ ] **Step 2: Write failing controller tests**
+- [x] **Step 2: Write failing controller tests**
 
 Build a harness like `commentAgentController.test.ts` with an in-memory `CommentManager`, `ScriptRunStore`, fake registry, injected `runVaultScript`, append/edit spies, and a fixed clock/id source. Cover:
 
@@ -966,7 +974,7 @@ Build a harness like `commentAgentController.test.ts` with an in-memory `Comment
 - busy runs cannot be retried;
 - missing scripts fail regeneration without invoking an agent.
 
-- [ ] **Step 3: Compile and verify the new tests fail**
+- [x] **Step 3: Compile and verify the new tests fail**
 
 ```bash
 ./node_modules/.bin/tsc -p tsconfig.test.json
@@ -975,7 +983,7 @@ node --test .test-dist/tests/scriptDirectives.test.js .test-dist/tests/commentSc
 
 Expected: FAIL because routing and controller modules do not exist.
 
-- [ ] **Step 4: Implement routing and controller behavior**
+- [x] **Step 4: Implement routing and controller behavior**
 
 Implement boundary-safe saved-entry routing in `scriptDirectives.ts`:
 
@@ -1125,7 +1133,7 @@ private async handleSavedUserEntry(event: SavedUserEntryEvent): Promise<void> {
 }
 ```
 
-- [ ] **Step 5: Run controller tests including agent non-regression**
+- [x] **Step 5: Run controller tests including agent non-regression**
 
 ```bash
 ./node_modules/.bin/tsc -p tsconfig.test.json
@@ -1134,7 +1142,7 @@ node --test .test-dist/tests/scriptDirectives.test.js .test-dist/tests/commentSc
 
 Expected: PASS, including an explicit assertion that mixed script/agent entries never call the agent host.
 
-- [ ] **Step 6: Commit the routing slice**
+- [x] **Step 6: Commit the routing slice**
 
 ```bash
 git add src/vaultScripts/scriptDirectives.ts src/vaultScripts/commentScriptController.ts tests/scriptDirectives.test.ts tests/commentScriptController.test.ts src/main.ts
@@ -1148,11 +1156,11 @@ git commit -m "feat(scripts): dispatch saved script mentions"
 - Modify: `src/app/pluginLifecycleController.ts`
 - Modify: `tests/pluginLifecycleController.test.ts`
 
-- [ ] **Step 1: Add failing lifecycle assertions**
+- [x] **Step 1: Add failing lifecycle assertions**
 
 Extend lifecycle tests so a markdown rename calls both `renameAgentRuns(oldPath, newPath)` and `renameScriptRuns(oldPath, newPath)`. Keep non-commentable script-file renames out of comment persistence while registry refresh remains a main-level concern.
 
-- [ ] **Step 2: Compile and verify the missing host method failure**
+- [x] **Step 2: Compile and verify the missing host method failure**
 
 ```bash
 ./node_modules/.bin/tsc -p tsconfig.test.json
@@ -1161,20 +1169,31 @@ node --test .test-dist/tests/pluginLifecycleController.test.js
 
 Expected: FAIL until `renameScriptRuns` is added to the lifecycle host and handler.
 
-- [ ] **Step 3: Complete main integration**
+- [x] **Step 3: Complete main integration**
 
-Add `VaultScriptRegistry`, `ScriptRunStore`, and `CommentScriptController` fields. The controller host must expose `createRunId: generateCommentId`, `now: Date.now`, `getVaultRootPath`, `getFileByPath`, `getCommentManager`, `loadCommentsForFile`, `appendThreadEntry`, `editComment`, `refreshCommentViews`, `showNotice`, `getRegistry`, and `runVaultScript`. Implement `getVaultScriptRuntimeModules()` by loading exactly `node:child_process`, `node:fs/promises`, `node:path`, and `node:process` through the existing Electron `getNodeRequire()` pattern:
+Add `VaultScriptRegistry`, `ScriptRunStore`, and `CommentScriptController` fields. The controller host must expose `createRunId: generateCommentId`, `now: Date.now`, `getVaultRootPath`, `getFileByPath`, `getCommentManager`, `loadCommentsForFile`, `appendThreadEntry`, `editComment`, `refreshCommentViews`, `showNotice`, `getRegistry`, and `runVaultScript`. Implement `getVaultScriptRuntimeModules()` through the existing Electron `getNodeRequire()` pattern. Resolve the user's login-shell `PATH` with the same environment helper as the agent runtimes, then execute external `node`; packaged Obsidian's renderer helper is not a usable Node CLI:
 
 ```ts
-private getVaultScriptRuntimeModules(): VaultScriptRuntimeModules | null {
+private async getVaultScriptRuntimeModules(): Promise<VaultScriptRuntimeModules | null> {
     const nodeRequire = getNodeRequire();
     if (!nodeRequire || !(this.app.vault.adapter instanceof FileSystemAdapter)) return null;
     try {
+        type AgentExecutionEnvModules = Parameters<typeof resolveAgentExecutionEnv>[0];
+        const rawChildProcess = nodeRequire("node:child_process");
+        const rawFsPromises = nodeRequire("node:fs/promises");
+        const rawPath = nodeRequire("node:path");
+        const executionEnvModules: AgentExecutionEnvModules = {
+            childProcess: rawChildProcess as AgentExecutionEnvModules["childProcess"],
+            fsPromises: rawFsPromises as AgentExecutionEnvModules["fsPromises"],
+            os: nodeRequire("node:os") as AgentExecutionEnvModules["os"],
+            path: rawPath as AgentExecutionEnvModules["path"],
+        };
         return {
-            childProcess: nodeRequire("node:child_process") as VaultScriptRuntimeModules["childProcess"],
-            fsPromises: nodeRequire("node:fs/promises") as VaultScriptRuntimeModules["fsPromises"],
-            path: nodeRequire("node:path") as VaultScriptRuntimeModules["path"],
-            execPath: (nodeRequire("node:process") as { execPath: string }).execPath,
+            childProcess: rawChildProcess as VaultScriptRuntimeModules["childProcess"],
+            fsPromises: rawFsPromises as VaultScriptRuntimeModules["fsPromises"],
+            path: rawPath as VaultScriptRuntimeModules["path"],
+            nodeExecutable: "node",
+            processEnv: await resolveAgentExecutionEnv(executionEnvModules, getProcessEnv()),
         };
     } catch {
         return null;
@@ -1195,7 +1214,7 @@ In the existing vault `create` listener, call `vaultScriptRegistry.upsert(file.p
 
 Pass `renameScriptRuns` into `PluginLifecycleController` and invoke it beside `renameAgentRuns` when a commentable source note is renamed.
 
-- [ ] **Step 4: Run lifecycle, registry, and controller tests**
+- [x] **Step 4: Run lifecycle, registry, and controller tests**
 
 ```bash
 ./node_modules/.bin/tsc -p tsconfig.test.json
@@ -1204,7 +1223,7 @@ node --test .test-dist/tests/pluginLifecycleController.test.js .test-dist/tests/
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit the Obsidian integration slice**
+- [x] **Step 5: Commit the Obsidian integration slice**
 
 ```bash
 git add src/main.ts src/app/pluginLifecycleController.ts tests/pluginLifecycleController.test.ts
@@ -1218,7 +1237,7 @@ git commit -m "feat(scripts): sync vault scripts live"
 - Modify: `src/ui/views/AsideView.ts`
 - Modify: `tests/sidebarPersistedComment.test.ts`
 
-- [ ] **Step 1: Write failing sidebar presentation tests**
+- [x] **Step 1: Write failing sidebar presentation tests**
 
 Add a `createScriptRun()` fixture and assert:
 
@@ -1229,7 +1248,7 @@ Add a `createScriptRun()` fixture and assert:
 - script result children remain visible while nested comments are collapsed;
 - script output is absent from Agent-mode classification and agent metadata.
 
-- [ ] **Step 2: Compile and verify presentation failures**
+- [x] **Step 2: Compile and verify presentation failures**
 
 ```bash
 ./node_modules/.bin/tsc -p tsconfig.test.json
@@ -1238,7 +1257,7 @@ node --test .test-dist/tests/sidebarPersistedComment.test.js
 
 Expected: FAIL because the sidebar host has no script-run awareness.
 
-- [ ] **Step 3: Extend the sidebar host and pure presentation helpers**
+- [x] **Step 3: Extend the sidebar host and pure presentation helpers**
 
 Extend author kind to `"user" | AsideAgentTarget | "script"`, add `threadScriptRuns: ScriptRunRecord[]` and `retryScriptRun(runId)` to the host, and extend the regenerate union:
 
@@ -1253,11 +1272,11 @@ Resolve script output provenance before the default user author. Resolve script 
 
 Count script output entries alongside agent output entries when deciding whether collapsed nested replies must remain visible.
 
-- [ ] **Step 4: Pass per-thread script runs from AsideView**
+- [x] **Step 4: Pass per-thread script runs from AsideView**
 
 Read all script runs once per render next to `allAgentRuns`, derive `getScriptRunsForThread(allScriptRuns, thread)`, and pass the array through `renderPersistedComment()` into `renderPersistedCommentCard`. Wire `retryScriptRun` to the main plugin method.
 
-- [ ] **Step 5: Run sidebar and controller tests**
+- [x] **Step 5: Run sidebar and controller tests**
 
 ```bash
 ./node_modules/.bin/tsc -p tsconfig.test.json
@@ -1266,7 +1285,7 @@ node --test .test-dist/tests/sidebarPersistedComment.test.js .test-dist/tests/co
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit the Regenerate UI slice**
+- [x] **Step 6: Commit the Regenerate UI slice**
 
 ```bash
 git add src/ui/views/sidebarPersistedComment.ts src/ui/views/AsideView.ts tests/sidebarPersistedComment.test.ts
@@ -1280,11 +1299,11 @@ git commit -m "feat(scripts): regenerate script results"
 - Modify: `tests/sidebarModeTabs.test.ts`
 - Modify after verified implementation: `docs/superpowers/specs/2026-08-03-vault-script-mentions-design.md`
 
-- [ ] **Step 1: Add explicit no-tab/no-setting assertions**
+- [x] **Step 1: Add explicit no-tab/no-setting assertions**
 
 In `asideSettingCatalog.test.ts` assert no key contains `script`; in `sidebarModeTabs.test.ts` assert no mode or label contains `script`. Keep the current exact expected arrays unchanged.
 
-- [ ] **Step 2: Run focused feature tests**
+- [x] **Step 2: Run focused feature tests**
 
 ```bash
 rm -rf .test-dist
@@ -1306,7 +1325,7 @@ node --test tests/vaultScriptPolicy.test.mjs tests/sideNotePromptPolicy.test.mjs
 
 Expected: all focused tests PASS.
 
-- [ ] **Step 3: Run repository verification**
+- [x] **Step 3: Run repository verification**
 
 ```bash
 npm test
@@ -1317,7 +1336,7 @@ npm run build
 
 Expected: every command exits 0. `npm run build` must also pass the Obsidian compliance and release-artifact guard; confirm `main.js`, `manifest.json`, and `styles.css` contain no source map markers, embedded sources, raw TypeScript, or secret-bearing files.
 
-- [ ] **Step 4: Install the built plugin and smoke-test the real vault flow**
+- [x] **Step 4: Install the built plugin and smoke-test the real vault flow**
 
 With approval to modify the target vault, run:
 
@@ -1327,11 +1346,11 @@ npm run dev:install-built -- --vault "/Users/wenqingli/Obsidian/lean-startup"
 
 Reload Aside, open `PDM software.md`, type `@`, and confirm `@clean-citation-links` is offered from `/Users/wenqingli/Obsidian/lean-startup/🛠️ scripts/clean-citation-links.mjs`. Create a temporary direct child `🛠️ scripts/aside-live-registry-smoke.mjs` through Obsidian, confirm `@aside-live-registry-smoke` appears without restarting, then move the temporary file to the system trash and confirm the suggestion disappears. Save `@clean-citation-links`, verify Node receives the current note path and no agent run is created, change the current note or script data, click Regenerate, and confirm the existing result entry is replaced from the new run.
 
-- [ ] **Step 5: Update the tracked spec only for verified work**
+- [x] **Step 5: Update the tracked spec only for verified work**
 
 Mark an implementation or verification checkbox `[x]` only when the corresponding code is present and the listed automated/manual evidence has passed. Leave merge-dependent wording unchecked until the branch is integrated.
 
-- [ ] **Step 6: Commit verification guards and tracking evidence**
+- [x] **Step 6: Commit verification guards and tracking evidence**
 
 ```bash
 git add tests/asideSettingCatalog.test.ts tests/sidebarModeTabs.test.ts docs/superpowers/specs/2026-08-03-vault-script-mentions-design.md

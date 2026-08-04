@@ -17,27 +17,27 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Centralize the vault script folder, supported extensions, exclusions, and mention naming in one shared policy.
-- [ ] Discover runnable scripts directly under the active vault's `🛠️ scripts/` folder at plugin startup.
-- [ ] Keep the registry synchronized with vault create, rename, and delete events.
-- [ ] Add filtered `@` suggestions for registered vault scripts alongside built-in directives.
-- [ ] Route one saved registered script mention to direct script execution before agent dispatch.
-- [ ] Pass the absolute current-note path as the script's only automatic argument and use the vault root as the working directory.
-- [ ] Persist script-run records so automatic execution is idempotent and explicit regeneration is traceable.
-- [ ] Render script results distinctly and connect them to the existing Regenerate interaction.
-- [ ] Add the vault script authoring location to the shared built-in agent prompt policy.
-- [ ] Do not add a Scripts tab or setting; expose vault scripts only through `@` suggestions.
+- [x] Centralize the vault script folder, supported extensions, exclusions, and mention naming in one shared policy.
+- [x] Discover runnable scripts directly under the active vault's `🛠️ scripts/` folder at plugin startup.
+- [x] Keep the registry synchronized with vault create, rename, and delete events.
+- [x] Add filtered `@` suggestions for registered vault scripts alongside built-in directives.
+- [x] Route one saved registered script mention to direct script execution before agent dispatch.
+- [x] Pass the absolute current-note path as the script's only automatic argument and use the vault root as the working directory.
+- [x] Persist script-run records so automatic execution is idempotent and explicit regeneration is traceable.
+- [x] Render script results distinctly and connect them to the existing Regenerate interaction.
+- [x] Add the vault script authoring location to the shared built-in agent prompt policy.
+- [x] Do not add a Scripts tab or setting; expose vault scripts only through `@` suggestions.
 
 ### Verification
 
-- [ ] Unit tests cover discovery, extension/test exclusions, mention naming, and duplicate-name ambiguity.
-- [ ] Unit tests cover live create, rename, and delete registry changes.
-- [ ] Unit tests cover suggestion parsing, filtering, selection, and surrounding draft preservation.
-- [ ] Unit tests cover path containment and shell-free Node invocation arguments.
-- [ ] Controller tests cover agent bypass, mixed/multiple mention rejection, automatic idempotency, success, failure, and Regenerate.
-- [ ] Settings and sidebar-tab regression tests confirm no vault-script setting or Scripts tab is introduced.
-- [ ] Build and full automated test suite pass.
-- [ ] A built-plugin smoke test confirms a newly created vault script becomes available without restarting Obsidian.
+- [x] Unit tests cover discovery, extension/test exclusions, mention naming, and duplicate-name ambiguity.
+- [x] Unit tests cover live create, rename, and delete registry changes.
+- [x] Unit tests cover suggestion parsing, filtering, selection, and surrounding draft preservation.
+- [x] Unit tests cover path containment and shell-free Node invocation arguments.
+- [x] Controller tests cover agent bypass, mixed/multiple mention rejection, automatic idempotency, success, failure, and Regenerate.
+- [x] Settings and sidebar-tab regression tests confirm no vault-script setting or Scripts tab is introduced.
+- [x] Build and full automated test suite pass.
+- [x] A built-plugin smoke test confirms a newly created vault script becomes available without restarting Obsidian.
 
 ## Goals
 
@@ -110,15 +110,15 @@ The runner resolves all paths from trusted Obsidian vault metadata rather than f
 - its extension remains supported;
 - the current target is a markdown file inside the active vault.
 
-The runner launches the current Node executable without a shell. Conceptually, the process is:
+The runner resolves the user's external `node` executable from the login-shell `PATH`, matching Aside's existing desktop agent-runtime environment resolution, and launches the script without a shell. This avoids treating Electron's packaged renderer helper as a Node CLI. Conceptually, the process is:
 
 ```text
-executable: process.execPath
+executable: node
 arguments:  [absoluteScriptPath, absoluteCurrentNotePath]
 cwd:        absoluteVaultRoot
 ```
 
-This preserves paths containing spaces and emoji without interpolation and prevents shell metacharacters from becoming commands. The current note path is the script's only automatic positional argument.
+The login shell is consulted only to discover `PATH`; script execution itself uses `execFile`. This preserves paths containing spaces and emoji without interpolation and prevents shell metacharacters from becoming commands. The current note path is the script's only automatic positional argument.
 
 Runs time out after 60 seconds. Captured standard output and standard error are limited to 64 KiB each; exceeding either limit fails the run. Result entries retain at most 250 words and end with an explicit truncation marker when formatting omits captured text. Standard output is preferred for successful result text; standard error and exit details are used for failures. Empty successful output becomes a compact completion message.
 

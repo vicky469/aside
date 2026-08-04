@@ -38,6 +38,16 @@ test("every Aside setting has searchable metadata and one section owner", () => 
     }
 });
 
+test("vault scripts do not introduce a setting", () => {
+    assert.equal(
+        ASIDE_SETTING_CATALOG.some((entry) =>
+            [entry.key, entry.name, entry.description, ...entry.aliases, ...entry.keywords]
+                .some((value) => /script/iu.test(value))
+        ),
+        false,
+    );
+});
+
 function getCatalogEntry(key: string) {
     const entry = ASIDE_SETTING_CATALOG.find((candidate) => candidate.key === key);
     assert.ok(entry, `Missing setting catalog entry: ${key}`);

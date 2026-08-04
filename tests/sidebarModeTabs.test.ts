@@ -19,6 +19,15 @@ test("shared sidebar mode tabs keep index and note headers in the same order", (
     );
 });
 
+test("vault scripts do not introduce a sidebar tab", () => {
+    assert.equal(
+        SHARED_SIDEBAR_MODE_TABS.some((tab) =>
+            /script/iu.test(tab.mode) || /script/iu.test(tab.label)
+        ),
+        false,
+    );
+});
+
 test("sidebar list-like modes include grouped comment tabs", () => {
     assert.equal(isSidebarListLikeMode("list"), true);
     assert.equal(isSidebarListLikeMode("tags"), true);
