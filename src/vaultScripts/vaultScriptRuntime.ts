@@ -14,8 +14,11 @@ export interface VaultScriptRuntimeResult {
     stderr: string;
 }
 
+export type VaultScriptRuntimeEnvironment = Readonly<Record<string, string | undefined>>;
+
 export interface VaultScriptRuntimeModules {
     execPath: string;
+    processEnv: VaultScriptRuntimeEnvironment;
     childProcess: {
         execFile(
             file: string,
@@ -25,6 +28,7 @@ export interface VaultScriptRuntimeModules {
                 timeout: number;
                 maxBuffer: number;
                 windowsHide: boolean;
+                env: Record<string, string | undefined>;
             },
             callback: (error: Error | null, stdout: string, stderr: string) => void,
         ): unknown;
@@ -94,6 +98,10 @@ export async function runVaultScript(
                 timeout: VAULT_SCRIPT_TIMEOUT_MS,
                 maxBuffer: VAULT_SCRIPT_MAX_BUFFER_BYTES,
                 windowsHide: true,
+                env: {
+                    ...modules.processEnv,
+                    ELECTRON_RUN_AS_NODE: "1",
+                },
             },
             (error, stdout, stderr) => {
                 if (error) {

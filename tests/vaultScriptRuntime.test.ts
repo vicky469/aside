@@ -14,6 +14,7 @@ interface CapturedInvocation {
         timeout: number;
         maxBuffer: number;
         windowsHide: boolean;
+        env: Record<string, string | undefined>;
     };
 }
 
@@ -23,6 +24,8 @@ interface RuntimeHarness {
 }
 
 function createRuntimeHarness(options: {
+    pathApi?: VaultScriptRuntimeModules["path"];
+    processEnv?: Readonly<Record<string, string | undefined>>;
     realpaths?: Readonly<Record<string, string>>;
     result?: { error: Error | null; stdout: string; stderr: string };
 } = {}): RuntimeHarness {
@@ -34,6 +37,11 @@ function createRuntimeHarness(options: {
         invocations,
         modules: {
             execPath: "/Applications/Obsidian.app/Contents/Frameworks/Obsidian Helper.app/Contents/MacOS/Obsidian Helper",
+            processEnv: options.processEnv ?? {
+                PATH: "/usr/bin",
+                ASIDE_TEST: "kept",
+                ELECTRON_RUN_AS_NODE: "0",
+            },
             childProcess: {
                 execFile: (
                     file: string,
@@ -48,7 +56,7 @@ function createRuntimeHarness(options: {
             fsPromises: {
                 realpath: async (target: string) => realpaths[target] ?? target,
             },
-            path: path.posix,
+            path: options.pathApi ?? path.posix,
         },
     };
 }
@@ -71,6 +79,11 @@ test("runVaultScript invokes the embedded Node executable with contained absolut
             timeout: 60_000,
             maxBuffer: 64 * 1024,
             windowsHide: true,
+            env: {
+                PATH: "/usr/bin",
+                ASIDE_TEST: "kept",
+                ELECTRON_RUN_AS_NODE: "1",
+            },
         },
     }]);
 });
@@ -171,8 +184,140 @@ test("runVaultScript uses the real vault root for resolution and execution", asy
             timeout: 60_000,
             maxBuffer: 64 * 1024,
             windowsHide: true,
+            env: {
+                PATH: "/usr/bin",
+                ASIDE_TEST: "kept",
+                ELECTRON_RUN_AS_NODE: "1",
+            },
         },
     });
+});
+
+test("runVaultScript preserves the injected environment without mutating it", async () => {
+    const processEnv = {
+        PATH: "/custom/bin",
+        CUSTOM_SETTING: "present",
+        ELECTRON_RUN_AS_NODE: "disabled",
+    } as const;
+    const harness = createRuntimeHarness({ processEnv });
+
+    await runVaultScript(harness.modules, {
+        vaultRootPath: "/vault",
+        scriptPath: "🛠️ scripts/clean.mjs",
+        notePath: "Note.md",
+    });
+
+    assert.deepEqual(harness.invocations[0]?.options.env, {
+        PATH: "/custom/bin",
+        CUSTOM_SETTING: "present",
+        ELECTRON_RUN_AS_NODE: "1",
+    });
+    assert.equal(processEnv.ELECTRON_RUN_AS_NODE, "disabled");
+});
+
+test("runVaultScript contains valid Windows drive-letter and UNC paths", async () => {
+    const cases = [
+        {
+            vaultRootPath: "C:\\vault",
+            expectedScriptPath: "C:\\vault\\🛠️ scripts\\clean.mjs",
+            expectedNotePath: "C:\\vault\\Folder\\Note.md",
+        },
+        {
+            vaultRootPath: "\\\\server\\share\\vault",
+            expectedScriptPath: "\\\\server\\share\\vault\\🛠️ scripts\\clean.mjs",
+            expectedNotePath: "\\\\server\\share\\vault\\Folder\\Note.md",
+        },
+    ];
+
+    for (const testCase of cases) {
+        const harness = createRuntimeHarness({ pathApi: path.win32 });
+
+        await runVaultScript(harness.modules, {
+            vaultRootPath: testCase.vaultRootPath,
+            scriptPath: "🛠️ scripts/clean.mjs",
+            notePath: "Folder/Note.md",
+        });
+
+        assert.deepEqual(harness.invocations[0]?.args, [
+            testCase.expectedScriptPath,
+            testCase.expectedNotePath,
+        ]);
+        assert.equal(harness.invocations[0]?.options.cwd, testCase.vaultRootPath);
+    }
+});
+
+test("runVaultScript rejects Windows drive-letter and UNC realpath escapes", async () => {
+    const cases: Array<{
+        vaultRootPath: string;
+        realpaths: Readonly<Record<string, string>>;
+    }> = [
+        {
+            vaultRootPath: "C:\\vault",
+            realpaths: {
+                "C:\\vault\\🛠️ scripts\\clean.mjs": "D:\\outside\\clean.mjs",
+            },
+        },
+        {
+            vaultRootPath: "\\\\server\\share\\vault",
+            realpaths: {
+                "\\\\server\\share\\vault\\Folder\\Note.md": "\\\\other\\share\\Note.md",
+            },
+        },
+    ];
+
+    for (const testCase of cases) {
+        const harness = createRuntimeHarness({
+            pathApi: path.win32,
+            realpaths: testCase.realpaths,
+        });
+
+        await assert.rejects(
+            runVaultScript(harness.modules, {
+                vaultRootPath: testCase.vaultRootPath,
+                scriptPath: "🛠️ scripts/clean.mjs",
+                notePath: "Folder/Note.md",
+            }),
+            /escapes the active vault/u,
+        );
+        assert.deepEqual(harness.invocations, []);
+    }
+});
+
+test("runVaultScript rejects Windows script aliases at different drive-letter and UNC direct paths", async () => {
+    const cases: Array<{
+        vaultRootPath: string;
+        realpaths: Readonly<Record<string, string>>;
+    }> = [
+        {
+            vaultRootPath: "C:\\vault",
+            realpaths: {
+                "C:\\vault\\🛠️ scripts\\clean.mjs": "C:\\vault\\🛠️ scripts\\actual.mjs",
+            },
+        },
+        {
+            vaultRootPath: "\\\\server\\share\\vault",
+            realpaths: {
+                "\\\\server\\share\\vault\\🛠️ scripts\\clean.mjs": "\\\\server\\share\\vault\\🛠️ scripts\\actual.mjs",
+            },
+        },
+    ];
+
+    for (const testCase of cases) {
+        const harness = createRuntimeHarness({
+            pathApi: path.win32,
+            realpaths: testCase.realpaths,
+        });
+
+        await assert.rejects(
+            runVaultScript(harness.modules, {
+                vaultRootPath: testCase.vaultRootPath,
+                scriptPath: "🛠️ scripts/clean.mjs",
+                notePath: "Note.md",
+            }),
+            /direct user-facing path/u,
+        );
+        assert.deepEqual(harness.invocations, []);
+    }
 });
 
 test("runVaultScript propagates non-zero failures with captured stdout and stderr", async () => {
