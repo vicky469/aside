@@ -319,6 +319,7 @@ function createRenderHost(overrides: Partial<SidebarPersistedCommentHost> = {}):
         restoreComment: () => true,
         clearDeletedComment: () => true,
         canEditEntryInline: () => true,
+        shouldForceRenderEntry: () => false,
         startEditDraft: () => {},
         isPinnedThread: () => false,
         togglePinnedThread: () => {},
@@ -1590,6 +1591,7 @@ test("renderPersistedCommentCard puts agent metadata above status and Add to fil
         restoreComment: () => true,
         clearDeletedComment: () => true,
         canEditEntryInline: () => true,
+        shouldForceRenderEntry: () => false,
         startEditDraft: () => {},
         isPinnedThread: () => false,
         togglePinnedThread: () => {},
@@ -1732,7 +1734,34 @@ test("renderPersistedCommentCard keeps inline edit actions in the note sidebar",
     assert.equal(root.findAllByClass("aside-comment-action-edit").length, 2);
 });
 
-test("renderPersistedCommentCard reveals only editable children without expanding a collapsed thread", async () => {
+test("renderPersistedCommentCard keeps editable note replies hidden when the thread is collapsed", async () => {
+    const thread = createThreadWithEntries({
+        entries: [
+            { id: "comment-1", body: "Parent side note", timestamp: 100 },
+            { id: "entry-2", body: "Hidden reply", timestamp: 110 },
+        ],
+    });
+    const root = new FakeElement("div");
+
+    await renderPersistedCommentCard(
+        root as unknown as HTMLDivElement,
+        thread,
+        createRenderHost({
+            showSourceRedirectAction: false,
+            showNestedComments: false,
+            showNestedCommentsByDefault: false,
+            canEditEntryInline: () => true,
+        }),
+    );
+
+    assert.deepEqual(
+        root.findAllByClass("aside-comment-item").map((element) => element.getAttribute("data-comment-id")),
+        ["comment-1"],
+    );
+    assert.equal(root.findAllByClass("aside-comment-action-edit").length, 1);
+});
+
+test("renderPersistedCommentCard reveals only forced editable children without expanding a collapsed thread", async () => {
     const thread = createThreadWithEntries({
         entries: [
             { id: "comment-1", body: "Parent side note", timestamp: 100 },
@@ -1752,6 +1781,7 @@ test("renderPersistedCommentCard reveals only editable children without expandin
             showNestedComments: false,
             showNestedCommentsByDefault: false,
             canEditEntryInline: (entry) => entry.id === "todo-child",
+            shouldForceRenderEntry: (entry) => entry.id === "todo-child",
             setShowNestedCommentsForThread: (threadId, showNestedComments) => {
                 nestedStateCalls.push({ threadId, showNestedComments });
             },
@@ -1807,6 +1837,7 @@ test("renderPersistedCommentCard reuses toolbar pin styling for page note pins",
         restoreComment: () => true,
         clearDeletedComment: () => true,
         canEditEntryInline: () => true,
+        shouldForceRenderEntry: () => false,
         startEditDraft: () => {},
         isPinnedThread: () => true,
         togglePinnedThread: () => {},

@@ -125,6 +125,7 @@ export interface SidebarPersistedCommentHost {
     restoreComment(commentId: string): Promise<boolean> | Promise<void> | boolean | void;
     clearDeletedComment(commentId: string): Promise<boolean> | Promise<void> | boolean | void;
     canEditEntryInline(entry: CommentThreadEntry): boolean;
+    shouldForceRenderEntry(entry: CommentThreadEntry): boolean;
     startEditDraft(commentId: string, hostFilePath: string | null): void;
     isPinnedThread(threadId: string): boolean;
     togglePinnedThread(threadId: string): Promise<void> | void;
@@ -1394,7 +1395,7 @@ export async function renderPersistedCommentCard(
         : null;
     const forcedVisibleChildEntryIds = new Set(
         entries.slice(1)
-            .filter((entry) => host.canEditEntryInline(entry))
+            .filter((entry) => host.shouldForceRenderEntry(entry))
             .map((entry) => entry.id),
     );
     const shouldRenderAllStoredChildren = host.showNestedComments

@@ -4246,6 +4246,7 @@ export default class AsideView extends ItemView {
             },
             clearDeletedComment: (commentId) => this.clearDeletedSidebarComment(commentId),
             canEditEntryInline: () => !isIndexView,
+            shouldForceRenderEntry: () => false,
             startEditDraft: (commentId, hostFilePath) => {
                 void this.plugin.startEditDraft(commentId, hostFilePath);
             },
