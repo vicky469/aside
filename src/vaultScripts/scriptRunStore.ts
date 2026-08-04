@@ -4,16 +4,20 @@ import {
     getScriptRunById,
     type ScriptRunRecord,
 } from "../core/scripts/scriptRuns";
-import type { PersistedPluginData } from "../settings/indexNoteSettingsPlanner";
+import type {
+    PersistedPluginData,
+    PersistedPluginDataUpdater,
+} from "../settings/indexNoteSettingsPlanner";
 import { normalizePersistedScriptRuns } from "./scriptRunStorePlanner";
 
 export interface ScriptRunStoreHost {
     readPersistedPluginData(): PersistedPluginData | null;
-    writePersistedPluginData(data: PersistedPluginData): Promise<void>;
+    updatePersistedPluginData(updater: PersistedPluginDataUpdater): Promise<PersistedPluginData>;
 }
 
 export class ScriptRunStore {
     private runs: ScriptRunRecord[] = [];
+    private mutationQueue: Promise<void> = Promise.resolve();
 
     constructor(private readonly host: ScriptRunStoreHost) {}
 
@@ -33,54 +37,64 @@ export class ScriptRunStore {
     }
 
     public async addRun(run: ScriptRunRecord): Promise<ScriptRunRecord> {
-        this.runs = this.runs.concat(cloneScriptRunRecord(run));
-        await this.persist();
-        return cloneScriptRunRecord(run);
+        const runSnapshot = cloneScriptRunRecord(run);
+        return this.enqueueMutation(async () => {
+            const nextRuns = this.runs.concat(cloneScriptRunRecord(runSnapshot));
+            await this.persist(nextRuns);
+            this.runs = nextRuns;
+            return cloneScriptRunRecord(runSnapshot);
+        });
     }
 
     public async updateRun(
         runId: string,
         updater: (run: ScriptRunRecord) => ScriptRunRecord,
     ): Promise<ScriptRunRecord | null> {
-        let updatedRun: ScriptRunRecord | null = null;
-        this.runs = this.runs.map((run) => {
-            if (run.id !== runId) {
-                return run;
+        return this.enqueueMutation(async () => {
+            let updatedRun: ScriptRunRecord | null = null;
+            const nextRuns = this.runs.map((run) => {
+                if (run.id !== runId) {
+                    return run;
+                }
+
+                updatedRun = cloneScriptRunRecord(updater(cloneScriptRunRecord(run)));
+                return cloneScriptRunRecord(updatedRun);
+            });
+            if (!updatedRun) {
+                return null;
             }
 
-            updatedRun = cloneScriptRunRecord(updater(cloneScriptRunRecord(run)));
+            await this.persist(nextRuns);
+            this.runs = nextRuns;
             return cloneScriptRunRecord(updatedRun);
         });
-        if (!updatedRun) {
-            return null;
-        }
-
-        await this.persist();
-        return cloneScriptRunRecord(updatedRun);
     }
 
     public async failPendingRuns(error: string, endedAt: number): Promise<boolean> {
-        let changed = false;
-        this.runs = this.runs.map((run) => {
-            if (run.status !== "queued" && run.status !== "running") {
-                return run;
+        return this.enqueueMutation(async () => {
+            let changed = false;
+            const nextRuns = this.runs.map((run) => {
+                if (run.status !== "queued" && run.status !== "running") {
+                    return run;
+                }
+
+                changed = true;
+                return {
+                    ...run,
+                    status: "failed" as const,
+                    endedAt,
+                    error,
+                };
+            });
+
+            if (!changed) {
+                return false;
             }
 
-            changed = true;
-            return {
-                ...run,
-                status: "failed",
-                endedAt,
-                error,
-            };
+            await this.persist(nextRuns);
+            this.runs = nextRuns;
+            return true;
         });
-
-        if (!changed) {
-            return false;
-        }
-
-        await this.persist();
-        return true;
     }
 
     public async renameFile(previousFilePath: string, nextFilePath: string): Promise<boolean> {
@@ -88,32 +102,44 @@ export class ScriptRunStore {
             return false;
         }
 
-        let changed = false;
-        this.runs = this.runs.map((run) => {
-            if (run.filePath !== previousFilePath) {
-                return run;
+
+        return this.enqueueMutation(async () => {
+            let changed = false;
+            const nextRuns = this.runs.map((run) => {
+                if (run.filePath !== previousFilePath) {
+                    return run;
+                }
+
+                changed = true;
+                return {
+                    ...run,
+                    filePath: nextFilePath,
+                };
+            });
+
+            if (!changed) {
+                return false;
             }
 
-            changed = true;
-            return {
-                ...run,
-                filePath: nextFilePath,
-            };
+            await this.persist(nextRuns);
+            this.runs = nextRuns;
+            return true;
         });
-
-        if (!changed) {
-            return false;
-        }
-
-        await this.persist();
-        return true;
     }
 
-    private async persist(): Promise<void> {
-        const persistedData = this.host.readPersistedPluginData() ?? {};
-        await this.host.writePersistedPluginData({
+    private async persist(runs: readonly ScriptRunRecord[]): Promise<void> {
+        await this.host.updatePersistedPluginData((persistedData) => ({
             ...persistedData,
-            scriptRuns: cloneScriptRunRecords(this.runs),
-        });
+            scriptRuns: cloneScriptRunRecords(runs),
+        }));
+    }
+
+    private enqueueMutation<T>(operation: () => Promise<T>): Promise<T> {
+        const result = this.mutationQueue.then(operation);
+        this.mutationQueue = result.then(
+            () => undefined,
+            () => undefined,
+        );
+        return result;
     }
 }

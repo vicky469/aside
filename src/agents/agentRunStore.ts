@@ -4,17 +4,21 @@ import {
     getAgentRunById,
     type AgentRunRecord,
 } from "../core/agents/agentRuns";
-import type { PersistedPluginData } from "../settings/indexNoteSettingsPlanner";
+import type {
+    PersistedPluginData,
+    PersistedPluginDataUpdater,
+} from "../settings/indexNoteSettingsPlanner";
 import { resolveSourceIdentityCurrentPath } from "../sync/sourceIdentityStore";
 import { clonePersistedAgentRuns, normalizePersistedAgentRuns } from "./agentRunStorePlanner";
 
 export interface AgentRunStoreHost {
     readPersistedPluginData(): PersistedPluginData | null;
-    writePersistedPluginData(data: PersistedPluginData): Promise<void>;
+    updatePersistedPluginData(updater: PersistedPluginDataUpdater): Promise<PersistedPluginData>;
 }
 
 export class AgentRunStore {
     private runs: AgentRunRecord[] = [];
+    private mutationQueue: Promise<void> = Promise.resolve();
 
     constructor(private readonly host: AgentRunStoreHost) {}
 
@@ -39,54 +43,64 @@ export class AgentRunStore {
     }
 
     public async addRun(run: AgentRunRecord): Promise<AgentRunRecord> {
-        this.runs = this.runs.concat(cloneAgentRunRecord(run));
-        await this.persist();
-        return cloneAgentRunRecord(run);
+        const runSnapshot = cloneAgentRunRecord(run);
+        return this.enqueueMutation(async () => {
+            const nextRuns = this.runs.concat(cloneAgentRunRecord(runSnapshot));
+            await this.persist(nextRuns);
+            this.runs = nextRuns;
+            return cloneAgentRunRecord(runSnapshot);
+        });
     }
 
     public async updateRun(
         runId: string,
         updater: (run: AgentRunRecord) => AgentRunRecord,
     ): Promise<AgentRunRecord | null> {
-        let updatedRun: AgentRunRecord | null = null;
-        this.runs = this.runs.map((run) => {
-            if (run.id !== runId) {
-                return run;
+        return this.enqueueMutation(async () => {
+            let updatedRun: AgentRunRecord | null = null;
+            const nextRuns = this.runs.map((run) => {
+                if (run.id !== runId) {
+                    return run;
+                }
+
+                updatedRun = cloneAgentRunRecord(updater(cloneAgentRunRecord(run)));
+                return cloneAgentRunRecord(updatedRun);
+            });
+            if (!updatedRun) {
+                return null;
             }
 
-            updatedRun = cloneAgentRunRecord(updater(cloneAgentRunRecord(run)));
+            await this.persist(nextRuns);
+            this.runs = nextRuns;
             return cloneAgentRunRecord(updatedRun);
         });
-        if (!updatedRun) {
-            return null;
-        }
-
-        await this.persist();
-        return cloneAgentRunRecord(updatedRun);
     }
 
     public async failPendingRuns(message: string, endedAt: number): Promise<boolean> {
-        let changed = false;
-        this.runs = this.runs.map((run) => {
-            if (run.status !== "queued" && run.status !== "running") {
-                return run;
+        return this.enqueueMutation(async () => {
+            let changed = false;
+            const nextRuns = this.runs.map((run) => {
+                if (run.status !== "queued" && run.status !== "running") {
+                    return run;
+                }
+
+                changed = true;
+                return {
+                    ...run,
+                    status: "failed" as const,
+                    endedAt,
+                    error: run.error ?? message,
+                };
+            });
+
+            if (!changed) {
+                return false;
             }
 
-            changed = true;
-            return {
-                ...run,
-                status: "failed",
-                endedAt,
-                error: run.error ?? message,
-            };
+            await this.persist(nextRuns);
+            this.runs = nextRuns;
+            return true;
         });
-
-        if (!changed) {
-            return false;
-        }
-
-        await this.persist();
-        return true;
     }
 
     public async renameFile(previousFilePath: string, nextFilePath: string): Promise<boolean> {
@@ -94,32 +108,43 @@ export class AgentRunStore {
             return false;
         }
 
-        let changed = false;
-        this.runs = this.runs.map((run) => {
-            if (run.filePath !== previousFilePath) {
-                return run;
+        return this.enqueueMutation(async () => {
+            let changed = false;
+            const nextRuns = this.runs.map((run) => {
+                if (run.filePath !== previousFilePath) {
+                    return run;
+                }
+
+                changed = true;
+                return {
+                    ...run,
+                    filePath: nextFilePath,
+                };
+            });
+
+            if (!changed) {
+                return false;
             }
 
-            changed = true;
-            return {
-                ...run,
-                filePath: nextFilePath,
-            };
+            await this.persist(nextRuns);
+            this.runs = nextRuns;
+            return true;
         });
-
-        if (!changed) {
-            return false;
-        }
-
-        await this.persist();
-        return true;
     }
 
-    private async persist(): Promise<void> {
-        const persistedData = this.host.readPersistedPluginData() ?? {};
-        await this.host.writePersistedPluginData({
+    private async persist(runs: AgentRunRecord[]): Promise<void> {
+        await this.host.updatePersistedPluginData((persistedData) => ({
             ...persistedData,
-            agentRuns: cloneAgentRunRecords(this.runs),
-        });
+            agentRuns: cloneAgentRunRecords(runs),
+        }));
+    }
+
+    private enqueueMutation<T>(operation: () => Promise<T>): Promise<T> {
+        const result = this.mutationQueue.then(operation);
+        this.mutationQueue = result.then(
+            () => undefined,
+            () => undefined,
+        );
+        return result;
     }
 }

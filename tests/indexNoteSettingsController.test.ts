@@ -103,6 +103,7 @@ function createControllerHarness(options: {
     loadedData?: PersistedPluginData | null;
     renameFileError?: Error;
     saveDataError?: Error;
+    saveData?: (data: PersistedPluginData) => Promise<void>;
 } = {}) {
     let settings = options.settings ?? createSettings();
     let activeSidebarFile = options.activeSidebarFilePath ? createFile(options.activeSidebarFilePath) : null;
@@ -234,6 +235,10 @@ function createControllerHarness(options: {
         },
         loadData: async () => options.loadedData ?? null,
         saveData: async (data: PersistedPluginData) => {
+            if (options.saveData) {
+                await options.saveData(data);
+                return;
+            }
             if (options.saveDataError) {
                 throw options.saveDataError;
             }
@@ -278,6 +283,66 @@ function createControllerHarness(options: {
         hasFolder: (folderPath: string) => folderPaths.has(folderPath),
     };
 }
+
+test("persisted plugin data updates serialize and apply against the latest successful value", async () => {
+    const saveCalls: PersistedPluginData[] = [];
+    const releases: Array<() => void> = [];
+    const harness = createControllerHarness({
+        saveData: async (data) => {
+            saveCalls.push(data);
+            await new Promise<void>((resolve) => releases.push(resolve));
+        },
+    });
+
+    const agentUpdate = harness.controller.updatePersistedPluginData((data) => ({
+        ...data,
+        agentRuns: [{ id: "agent-run" }],
+    }));
+    const scriptUpdate = harness.controller.updatePersistedPluginData((data) => ({
+        ...data,
+        scriptRuns: [{ id: "script-run" }],
+    }));
+
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(saveCalls.length, 1);
+    releases.shift()?.();
+    await agentUpdate;
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.deepEqual(saveCalls[1], {
+        agentRuns: [{ id: "agent-run" }],
+        scriptRuns: [{ id: "script-run" }],
+    });
+    releases.shift()?.();
+    await scriptUpdate;
+    assert.deepEqual(harness.controller.readPersistedPluginData(), saveCalls[1]);
+});
+
+test("a failed persisted plugin data update leaves cached data unchanged and does not poison the queue", async () => {
+    let saveAttempt = 0;
+    const harness = createControllerHarness({
+        saveData: async () => {
+            saveAttempt += 1;
+            if (saveAttempt === 1) {
+                throw new Error("save failed");
+            }
+        },
+    });
+
+    const failedUpdate = harness.controller.updatePersistedPluginData((data) => ({
+        ...data,
+        agentRuns: [{ id: "lost-agent-run" }],
+    }));
+    const succeedingUpdate = harness.controller.updatePersistedPluginData((data) => ({
+        ...data,
+        scriptRuns: [{ id: "script-run" }],
+    }));
+
+    await assert.rejects(failedUpdate, /save failed/u);
+    await succeedingUpdate;
+    assert.deepEqual(harness.controller.readPersistedPluginData(), {
+        scriptRuns: [{ id: "script-run" }],
+    });
+});
 
 test("loaded settings resolution normalizes persisted values and marks legacy confirmDelete for rewrite", () => {
     const resolved = resolveLoadedSettings({

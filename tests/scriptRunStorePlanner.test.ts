@@ -1,5 +1,7 @@
 import * as assert from "node:assert/strict";
 import test from "node:test";
+import { AgentRunStore } from "../src/agents/agentRunStore";
+import type { AgentRunRecord } from "../src/core/agents/agentRuns";
 import {
     cloneScriptRunRecord,
     cloneScriptRunRecords,
@@ -28,6 +30,43 @@ function createRun(overrides: Partial<ScriptRunRecord> = {}): ScriptRunRecord {
         endedAt: 102,
         outputEntryId: "entry-2",
         ...overrides,
+    };
+}
+
+function createAgentRun(overrides: Partial<AgentRunRecord> = {}): AgentRunRecord {
+    return {
+        id: "agent-run-1",
+        threadId: "thread-1",
+        triggerEntryId: "entry-agent",
+        filePath: "Note.md",
+        requestedAgent: "codex",
+        runtime: "direct-cli",
+        status: "queued",
+        promptText: "@codex",
+        createdAt: 100,
+        ...overrides,
+    };
+}
+
+function createAtomicStoreHost(
+    initialData: PersistedPluginData = {},
+    beforeCommit?: (data: PersistedPluginData) => Promise<void>,
+) {
+    let persistedData = initialData;
+    let updateQueue: Promise<void> = Promise.resolve();
+    return {
+        readPersistedPluginData: () => persistedData,
+        updatePersistedPluginData: (updater: (data: PersistedPluginData) => PersistedPluginData) => {
+            const result = updateQueue.then(async () => {
+                const nextData = updater({ ...persistedData });
+                await beforeCommit?.(nextData);
+                persistedData = nextData;
+                return { ...nextData };
+            });
+            updateQueue = result.then(() => undefined, () => undefined);
+            return result;
+        },
+        getPersistedData: () => persistedData,
     };
 }
 
@@ -126,9 +165,10 @@ test("ScriptRunStore mutates through immutable replacements and preserves other 
     const writes: PersistedPluginData[] = [];
     const store = new ScriptRunStore({
         readPersistedPluginData: () => persistedData,
-        writePersistedPluginData: async (data) => {
-            persistedData = data;
-            writes.push(data);
+        updatePersistedPluginData: async (updater) => {
+            persistedData = updater({ ...persistedData });
+            writes.push(persistedData);
+            return { ...persistedData };
         },
     });
     store.load();
@@ -178,4 +218,89 @@ test("ScriptRunStore mutates through immutable replacements and preserves other 
     assert.equal(await store.renameFile("Renamed.md", "Renamed.md"), false);
     assert.equal(writes.length, 4);
     assert.equal(persistedData.agentRuns, retainedAgentRuns);
+});
+
+test("ScriptRunStore serializes overlapping adds and snapshots caller input before awaiting", async () => {
+    let releaseFirstSave = () => {};
+    let persistedData: PersistedPluginData = {};
+    let saveCount = 0;
+    const store = new ScriptRunStore({
+        readPersistedPluginData: () => persistedData,
+        updatePersistedPluginData: async (updater) => {
+            const nextData = updater({ ...persistedData });
+            saveCount += 1;
+            if (saveCount === 1) {
+                await new Promise<void>((resolve) => {
+                    releaseFirstSave = resolve;
+                });
+            }
+            persistedData = nextData;
+            return { ...persistedData };
+        },
+    });
+    const firstInput = createRun({ id: "script-run-a" });
+
+    const firstAdd = store.addRun(firstInput);
+    const secondAdd = store.addRun(createRun({ id: "script-run-b" }));
+    firstInput.mentionName = "caller-mutated";
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(saveCount, 1);
+    releaseFirstSave();
+
+    const [firstResult] = await Promise.all([firstAdd, secondAdd]);
+    assert.equal(firstResult.mentionName, "clean");
+    assert.deepEqual(store.getRuns().map((run) => run.id), ["script-run-a", "script-run-b"]);
+    assert.deepEqual(
+        (persistedData.scriptRuns as ScriptRunRecord[]).map((run) => run.id),
+        ["script-run-a", "script-run-b"],
+    );
+});
+
+test("ScriptRunStore keeps memory unchanged after persistence failure and accepts a later mutation", async () => {
+    let persistedData: PersistedPluginData = {};
+    let shouldFail = true;
+    const store = new ScriptRunStore({
+        readPersistedPluginData: () => persistedData,
+        updatePersistedPluginData: async (updater) => {
+            const nextData = updater({ ...persistedData });
+            if (shouldFail) {
+                shouldFail = false;
+                throw new Error("save failed");
+            }
+            persistedData = nextData;
+            return { ...persistedData };
+        },
+    });
+
+    await assert.rejects(store.addRun(createRun({ id: "failed-run" })), /save failed/u);
+    assert.deepEqual(store.getRuns(), []);
+    await store.addRun(createRun({ id: "saved-run" }));
+    assert.deepEqual(store.getRuns().map((run) => run.id), ["saved-run"]);
+});
+
+test("agent and script run stores preserve both fields through the shared atomic host", async () => {
+    let updateCount = 0;
+    let releaseFirstUpdate = () => {};
+    const host = createAtomicStoreHost({}, async () => {
+        updateCount += 1;
+        if (updateCount === 1) {
+            await new Promise<void>((resolve) => {
+                releaseFirstUpdate = resolve;
+            });
+        }
+    });
+    const agentStore = new AgentRunStore(host);
+    const scriptStore = new ScriptRunStore(host);
+
+    const additions = Promise.all([
+        agentStore.addRun(createAgentRun()),
+        scriptStore.addRun(createRun()),
+    ]);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(updateCount, 1);
+    releaseFirstUpdate();
+    await additions;
+
+    assert.deepEqual((host.getPersistedData().agentRuns as AgentRunRecord[]).map((run) => run.id), ["agent-run-1"]);
+    assert.deepEqual((host.getPersistedData().scriptRuns as ScriptRunRecord[]).map((run) => run.id), ["script-run-1"]);
 });

@@ -436,7 +436,7 @@ export default class Aside extends Plugin {
     });
     private readonly agentRunStore = new AgentRunStore({
         readPersistedPluginData: () => this.indexNoteSettingsController.readPersistedPluginData(),
-        writePersistedPluginData: (data) => this.indexNoteSettingsController.writePersistedPluginData(data),
+        updatePersistedPluginData: (updater) => this.indexNoteSettingsController.updatePersistedPluginData(updater),
     });
     private readonly commentAgentController: CommentAgentController = new CommentAgentController({
         createCommentId: () => generateCommentId(),

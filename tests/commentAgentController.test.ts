@@ -99,8 +99,9 @@ function createHarness(options: {
     const nowIncrement = options.nowIncrement ?? 1;
     const store = new AgentRunStore({
         readPersistedPluginData: () => persistedData,
-        writePersistedPluginData: async (data) => {
-            persistedData = data;
+        updatePersistedPluginData: async (updater) => {
+            persistedData = updater({ ...persistedData });
+            return { ...persistedData };
         },
     });
 

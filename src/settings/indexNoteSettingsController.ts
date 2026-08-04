@@ -33,6 +33,7 @@ import {
     resolveLoadedSettings,
     shouldApplyNormalizedSettingChange,
     type PersistedPluginData,
+    type PersistedPluginDataUpdater,
 } from "./indexNoteSettingsPlanner";
 
 export interface IndexNoteSettingsHost {
@@ -68,6 +69,7 @@ class IndexNotePathRollbackError extends Error {
 
 export class IndexNoteSettingsController {
     private persistedPluginData: PersistedPluginData = {};
+    private persistedPluginDataWriteQueue: Promise<void> = Promise.resolve();
 
     constructor(private readonly host: IndexNoteSettingsHost) {}
 
@@ -338,18 +340,40 @@ export class IndexNoteSettingsController {
     }
 
     public async writePersistedPluginData(data: PersistedPluginData): Promise<void> {
-        const persistedData = {
-            ...data,
-        };
+        const snapshot = { ...data };
+        await this.updatePersistedPluginData(() => snapshot);
+    }
+
+    public updatePersistedPluginData(
+        updater: PersistedPluginDataUpdater,
+    ): Promise<PersistedPluginData> {
+        const result = this.persistedPluginDataWriteQueue.then(async () => {
+            const persistedData = this.sanitizePersistedPluginData(updater({
+                ...this.persistedPluginData,
+            }));
+            await this.host.saveData(persistedData);
+            this.persistedPluginData = {
+                ...persistedData,
+            };
+            return {
+                ...persistedData,
+            };
+        });
+        this.persistedPluginDataWriteQueue = result.then(
+            () => undefined,
+            () => undefined,
+        );
+        return result;
+    }
+
+    private sanitizePersistedPluginData(data: PersistedPluginData): PersistedPluginData {
+        const persistedData = { ...data };
         delete persistedData.confirmDelete;
         delete persistedData.enableDebugMode;
         delete persistedData.preferredAgentTarget;
         delete persistedData.remoteRuntimeBaseUrl;
         delete (persistedData as Record<string, unknown>).publishWranglerCommand;
-        await this.host.saveData(persistedData);
-        this.persistedPluginData = {
-            ...persistedData,
-        };
+        return persistedData;
     }
 
     private async migrateLegacyIndexNotePath(loaded: PersistedPluginData | null): Promise<boolean> {

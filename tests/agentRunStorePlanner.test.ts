@@ -1,6 +1,24 @@
 import * as assert from "node:assert/strict";
 import test from "node:test";
+import { AgentRunStore } from "../src/agents/agentRunStore";
 import { normalizePersistedAgentRuns } from "../src/agents/agentRunStorePlanner";
+import type { AgentRunRecord } from "../src/core/agents/agentRuns";
+import type { PersistedPluginData } from "../src/settings/indexNoteSettingsPlanner";
+
+function createRun(overrides: Partial<AgentRunRecord> = {}): AgentRunRecord {
+    return {
+        id: "agent-run-1",
+        threadId: "thread-1",
+        triggerEntryId: "entry-1",
+        filePath: "Note.md",
+        requestedAgent: "codex",
+        runtime: "direct-cli",
+        status: "queued",
+        promptText: "@codex",
+        createdAt: 100,
+        ...overrides,
+    };
+}
 
 test("normalizePersistedAgentRuns keeps valid records, normalizes legacy remote runs, and drops malformed ones", () => {
     assert.deepEqual(normalizePersistedAgentRuns([
@@ -83,4 +101,39 @@ test("normalizePersistedAgentRuns seeds file metadata from the run file path", (
         promptText: "@codex explain",
         createdAt: 100,
     }])[0]?.usedFiles, ["Folder/Note.md"]);
+});
+
+test("AgentRunStore snapshots add input and leaves memory unchanged when persistence fails", async () => {
+    let persistedData: PersistedPluginData = {};
+    let saveAttempt = 0;
+    let releaseFirstSave = () => {};
+    const store = new AgentRunStore({
+        readPersistedPluginData: () => persistedData,
+        updatePersistedPluginData: async (updater) => {
+            const nextData = updater({ ...persistedData });
+            saveAttempt += 1;
+            if (saveAttempt === 1) {
+                await new Promise<void>((resolve) => {
+                    releaseFirstSave = resolve;
+                });
+                throw new Error("save failed");
+            }
+            persistedData = nextData;
+            return { ...persistedData };
+        },
+    });
+    const failedInput = createRun({ id: "failed-run" });
+
+    const failedAdd = store.addRun(failedInput);
+    failedInput.promptText = "caller-mutated";
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    releaseFirstSave();
+    await assert.rejects(failedAdd, /save failed/u);
+    assert.deepEqual(store.getRuns(), []);
+
+    const savedInput = createRun({ id: "saved-run" });
+    const saved = await store.addRun(savedInput);
+    savedInput.promptText = "mutated after save";
+    assert.equal(saved.promptText, "@codex");
+    assert.deepEqual(store.getRuns().map((run) => run.id), ["saved-run"]);
 });

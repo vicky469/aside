@@ -38,6 +38,10 @@ export type PersistedPluginData = Partial<AsideSettings> & {
     sourceIdentityMigrationVersions?: unknown;
 };
 
+export type PersistedPluginDataUpdater = (
+    data: PersistedPluginData,
+) => PersistedPluginData;
+
 export interface LoadedSettingsResolution {
     settings: AsideSettings;
     shouldRewriteLegacySettings: boolean;
