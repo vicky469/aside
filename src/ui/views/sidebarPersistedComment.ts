@@ -124,6 +124,7 @@ export interface SidebarPersistedCommentHost {
     moveCommentThread(threadId: string, sourceFilePath: string): void;
     restoreComment(commentId: string): Promise<boolean> | Promise<void> | boolean | void;
     clearDeletedComment(commentId: string): Promise<boolean> | Promise<void> | boolean | void;
+    canEditEntryInline(entry: CommentThreadEntry): boolean;
     startEditDraft(commentId: string, hostFilePath: string | null): void;
     isPinnedThread(threadId: string): boolean;
     togglePinnedThread(threadId: string): Promise<void> | void;
@@ -730,6 +731,7 @@ export function shouldRenderNestedThreadEntries(
         hasAgentStream: boolean;
         hasAgentReplies?: boolean;
         hasDeletedEntriesVisible?: boolean;
+        hasForcedVisibleChildEntries?: boolean;
     },
 ): boolean {
     const childEntries = getRenderableThreadEntries(thread).slice(1);
@@ -744,6 +746,7 @@ export function shouldRenderNestedThreadEntries(
         || options.hasEditDraftComment
         || options.hasAppendDraftComment
         || options.hasAgentStream
+        || options.hasForcedVisibleChildEntries
     ) {
         return true;
     }
@@ -1294,7 +1297,7 @@ function renderStoredThreadEntry(
                     host,
                 );
             }
-            if (!host.showSourceRedirectAction) {
+            if (host.canEditEntryInline(entry)) {
                 renderEditButton(entryActionsEl, entryComment.id, host, "Edit side note");
             }
             if (host.enableSoftDeleteActions && !host.showSourceRedirectAction) {
@@ -1389,10 +1392,17 @@ export async function renderPersistedCommentCard(
     const parentEditDraft = host.editDraftComment?.id === comment.id
         ? host.editDraftComment
         : null;
-    const shouldRenderStoredChildren = host.showNestedComments
+    const forcedVisibleChildEntryIds = new Set(
+        entries.slice(1)
+            .filter((entry) => host.canEditEntryInline(entry))
+            .map((entry) => entry.id),
+    );
+    const shouldRenderAllStoredChildren = host.showNestedComments
         || hasChildEditDraft
         || host.agentStream !== null
         || !!host.appendDraftComment;
+    const shouldRenderStoredChildren = shouldRenderAllStoredChildren
+        || forcedVisibleChildEntryIds.size > 0;
     const shouldRenderDetailsToggle = shouldRenderThreadNestedToggle({
         hasStoredChildEntries,
         hasInlineEditDraft: !!parentEditDraft,
@@ -1408,6 +1418,7 @@ export async function renderPersistedCommentCard(
         hasAgentStream: !!host.agentStream,
         hasAgentReplies: hasAgentReplyEntries,
         hasDeletedEntriesVisible: hasVisibleDeletedEntries(thread),
+        hasForcedVisibleChildEntries: forcedVisibleChildEntryIds.size > 0,
     });
     const appendDraftAfterEntryId = getAppendDraftInsertAfterEntryId(thread, host.appendDraftComment);
     const parentAuthor = resolveSidebarCommentAuthor(comment.id, host.threadAgentRuns, host.currentUserLabel);
@@ -1456,7 +1467,7 @@ export async function renderPersistedCommentCard(
                     host,
                 );
             }
-            if (!host.showSourceRedirectAction) {
+            if (host.canEditEntryInline(entries[0])) {
                 renderEditButton(actionsEl, comment.id, host, "Edit side note");
             }
             if (host.enableSoftDeleteActions && !host.showSourceRedirectAction) {
@@ -1505,7 +1516,10 @@ export async function renderPersistedCommentCard(
     const childCommentsEl = threadEl.createDiv("aside-thread-replies");
     let renderedAppendDraft = false;
     if (shouldRenderStoredChildren) {
-        for (const entry of entries.slice(1)) {
+        const childEntries = shouldRenderAllStoredChildren
+            ? entries.slice(1)
+            : entries.slice(1).filter((entry) => forcedVisibleChildEntryIds.has(entry.id));
+        for (const entry of childEntries) {
             const entryEditDraft = host.editDraftComment?.id === entry.id
                 ? host.editDraftComment
                 : null;

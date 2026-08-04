@@ -318,6 +318,7 @@ function createRenderHost(overrides: Partial<SidebarPersistedCommentHost> = {}):
         moveCommentThread: () => {},
         restoreComment: () => true,
         clearDeletedComment: () => true,
+        canEditEntryInline: () => true,
         startEditDraft: () => {},
         isPinnedThread: () => false,
         togglePinnedThread: () => {},
@@ -1588,6 +1589,7 @@ test("renderPersistedCommentCard puts agent metadata above status and Add to fil
         moveCommentThread: () => {},
         restoreComment: () => true,
         clearDeletedComment: () => true,
+        canEditEntryInline: () => true,
         startEditDraft: () => {},
         isPinnedThread: () => false,
         togglePinnedThread: () => {},
@@ -1660,6 +1662,109 @@ test("renderPersistedCommentCard renders source redirects for nested index entri
     assert.deepEqual(openedCommentIds, ["entry-2"]);
 });
 
+test("renderPersistedCommentCard independently renders an authorized child edit beside index redirects", async () => {
+    const thread = createThreadWithEntries({
+        entries: [
+            { id: "comment-1", body: "Parent side note", timestamp: 100 },
+            { id: "entry-2", body: "Todo child", timestamp: 110 },
+        ],
+    });
+    const editCalls: Array<{ commentId: string; hostFilePath: string | null }> = [];
+    const host = createRenderHost({
+        currentFilePath: "Aside index.md",
+        showSourceRedirectAction: true,
+        canEditEntryInline: (entry) => entry.id === "entry-2",
+        startEditDraft: (commentId, hostFilePath) => {
+            editCalls.push({ commentId, hostFilePath });
+        },
+    });
+    const root = new FakeElement("div");
+
+    await renderPersistedCommentCard(root as unknown as HTMLDivElement, thread, host);
+
+    assert.equal(root.findAllByClass("aside-comment-action-redirect").length, 2);
+    const editButtons = root.findAllByClass("aside-comment-action-edit");
+    assert.equal(editButtons.length, 1);
+    await (editButtons[0]?.onclick as (event: { stopPropagation(): void }) => Promise<void>)({
+        stopPropagation() {},
+    });
+    assert.deepEqual(editCalls, [{ commentId: "entry-2", hostFilePath: "Aside index.md" }]);
+});
+
+test("renderPersistedCommentCard keeps index redirects when no entry is editable inline", async () => {
+    const thread = createThreadWithEntries({
+        entries: [
+            { id: "comment-1", body: "Parent side note", timestamp: 100 },
+            { id: "entry-2", body: "Nested side note", timestamp: 110 },
+        ],
+    });
+    const root = new FakeElement("div");
+
+    await renderPersistedCommentCard(
+        root as unknown as HTMLDivElement,
+        thread,
+        createRenderHost({
+            currentFilePath: "Aside index.md",
+            showSourceRedirectAction: true,
+            canEditEntryInline: () => false,
+        }),
+    );
+
+    assert.equal(root.findAllByClass("aside-comment-action-redirect").length, 2);
+    assert.equal(root.findAllByClass("aside-comment-action-edit").length, 0);
+});
+
+test("renderPersistedCommentCard keeps inline edit actions in the note sidebar", async () => {
+    const thread = createThreadWithEntries({
+        entries: [
+            { id: "comment-1", body: "Parent side note", timestamp: 100 },
+            { id: "entry-2", body: "Nested side note", timestamp: 110 },
+        ],
+    });
+    const root = new FakeElement("div");
+
+    await renderPersistedCommentCard(
+        root as unknown as HTMLDivElement,
+        thread,
+        createRenderHost(),
+    );
+
+    assert.equal(root.findAllByClass("aside-comment-action-edit").length, 2);
+});
+
+test("renderPersistedCommentCard reveals only editable children without expanding a collapsed thread", async () => {
+    const thread = createThreadWithEntries({
+        entries: [
+            { id: "comment-1", body: "Parent side note", timestamp: 100 },
+            { id: "todo-child", body: "Todo child", timestamp: 110 },
+            { id: "other-child", body: "Other child", timestamp: 120 },
+        ],
+    });
+    const nestedStateCalls: Array<{ threadId: string; showNestedComments: boolean }> = [];
+    const root = new FakeElement("div");
+
+    await renderPersistedCommentCard(
+        root as unknown as HTMLDivElement,
+        thread,
+        createRenderHost({
+            currentFilePath: "Aside index.md",
+            showSourceRedirectAction: true,
+            showNestedComments: false,
+            showNestedCommentsByDefault: false,
+            canEditEntryInline: (entry) => entry.id === "todo-child",
+            setShowNestedCommentsForThread: (threadId, showNestedComments) => {
+                nestedStateCalls.push({ threadId, showNestedComments });
+            },
+        }),
+    );
+
+    assert.deepEqual(
+        root.findAllByClass("aside-comment-item").map((element) => element.getAttribute("data-comment-id")),
+        ["comment-1", "todo-child"],
+    );
+    assert.deepEqual(nestedStateCalls, []);
+});
+
 test("renderPersistedCommentCard reuses toolbar pin styling for page note pins", async () => {
     const thread = createThreadWithEntries({
         anchorKind: "page",
@@ -1701,6 +1806,7 @@ test("renderPersistedCommentCard reuses toolbar pin styling for page note pins",
         moveCommentThread: () => {},
         restoreComment: () => true,
         clearDeletedComment: () => true,
+        canEditEntryInline: () => true,
         startEditDraft: () => {},
         isPinnedThread: () => true,
         togglePinnedThread: () => {},
