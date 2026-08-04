@@ -1,4 +1,4 @@
-import type { CommentThread } from "../../commentManager";
+import type { CommentThread, CommentThreadEntry } from "../../commentManager";
 import type { SidebarPrimaryMode } from "./viewState";
 
 export type SidebarThreadGroupMode = "todo" | "agent";
@@ -16,14 +16,19 @@ export const EMPTY_SIDEBAR_THREAD_GROUP_COUNTS: SidebarThreadGroupCounts = {
     todo: 0,
 };
 
+export function entryMatchesSidebarTodo(
+    entry: Pick<CommentThreadEntry, "body">,
+): boolean {
+    return TODO_MENTION_PATTERN.test(entry.body);
+}
+
 export function threadMatchesSidebarGroup(
     thread: CommentThread,
     groupMode: SidebarThreadGroupMode,
 ): boolean {
-    const bodyText = getThreadBodyText(thread);
     return groupMode === "todo"
-        ? TODO_MENTION_PATTERN.test(bodyText)
-        : AGENT_MENTION_PATTERN.test(bodyText);
+        ? thread.entries.some((entry) => entryMatchesSidebarTodo(entry))
+        : AGENT_MENTION_PATTERN.test(getThreadBodyText(thread));
 }
 
 export function filterThreadsBySidebarGroupMode(

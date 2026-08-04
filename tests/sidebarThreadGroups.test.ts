@@ -2,6 +2,7 @@ import * as assert from "node:assert/strict";
 import test from "node:test";
 import type { CommentThread } from "../src/commentManager";
 import {
+    entryMatchesSidebarTodo,
     filterThreadsBySidebarGroupMode,
     getSidebarThreadGroupCounts,
     resolveModeWithSidebarGroupAvailability,
@@ -35,8 +36,15 @@ function createThread(
     };
 }
 
+test("entryMatchesSidebarTodo matches todo mentions case-insensitively at the existing token boundary", () => {
+    assert.equal(entryMatchesSidebarTodo({ body: "Ship @TODO" }), true);
+    assert.equal(entryMatchesSidebarTodo({ body: "Ship @todo-now" }), true);
+    assert.equal(entryMatchesSidebarTodo({ body: "Ship @todos" }), false);
+    assert.equal(entryMatchesSidebarTodo({ body: "No marker here" }), false);
+});
+
 test("threadMatchesSidebarGroup finds todo and agent mentions case-insensitively", () => {
-    const todoThread = createThread("todo", ["Need follow-up. @TODO"]);
+    const todoThread = createThread("todo", ["Initial note", "Reply @ToDo"]);
     const codexReplyThread = createThread("codex", ["Initial note", "ask @codex to check"]);
     const claudeThread = createThread("claude", ["Route to @Claude"]);
     const unrelatedThread = createThread("plain", ["No routed marker here."]);
