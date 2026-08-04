@@ -2,6 +2,7 @@ import * as assert from "node:assert/strict";
 import test from "node:test";
 import type { CommentThread } from "../src/commentManager";
 import type { AgentRunRecord } from "../src/core/agents/agentRuns";
+import type { ScriptRunRecord } from "../src/core/scripts/scriptRuns";
 import type { DraftComment } from "../src/domain/drafts";
 import {
     buildPageSidebarDraftRenderSignature,
@@ -69,6 +70,53 @@ function createAgentRun(overrides: Partial<AgentRunRecord> = {}): AgentRunRecord
         usedFiles: overrides.usedFiles,
     };
 }
+
+function createScriptRun(overrides: Partial<ScriptRunRecord> = {}): ScriptRunRecord {
+    return {
+        id: overrides.id ?? "script-run-1",
+        threadId: overrides.threadId ?? "thread-1",
+        triggerEntryId: overrides.triggerEntryId ?? "thread-1",
+        filePath: overrides.filePath ?? "docs/note.md",
+        scriptPath: overrides.scriptPath ?? "🛠️ scripts/clean.mjs",
+        mentionName: overrides.mentionName ?? "clean",
+        status: overrides.status ?? "succeeded",
+        promptText: overrides.promptText ?? "@clean",
+        createdAt: overrides.createdAt ?? 100,
+        startedAt: overrides.startedAt ?? 101,
+        endedAt: overrides.endedAt ?? 102,
+        retryOfRunId: overrides.retryOfRunId,
+        outputEntryId: overrides.outputEntryId ?? "entry-2",
+        error: overrides.error,
+    };
+}
+
+test("buildPageSidebarThreadRenderSignature changes with script retry state", () => {
+    const thread = createThread();
+    const baseOptions = {
+        thread,
+        activeCommentId: null,
+        isPinned: false,
+        showNestedComments: false,
+        showNestedCommentsByDefault: false,
+        isSelectedForTagBatch: false,
+        enableTagSelection: false,
+        enablePageThreadReorder: true,
+        editDraftComment: null,
+        appendDraftComment: null,
+        threadAgentRuns: [],
+    };
+
+    const running = buildPageSidebarThreadRenderSignature({
+        ...baseOptions,
+        threadScriptRuns: [createScriptRun({ status: "running", endedAt: undefined })],
+    });
+    const succeeded = buildPageSidebarThreadRenderSignature({
+        ...baseOptions,
+        threadScriptRuns: [createScriptRun({ status: "succeeded" })],
+    });
+
+    assert.notEqual(running, succeeded);
+});
 
 test("buildPageSidebarThreadRenderSignature ignores unrelated active comment ids", () => {
     const thread = createThread();

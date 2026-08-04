@@ -26,6 +26,10 @@ import {
     type AgentRunRecord,
 } from "../../core/agents/agentRuns";
 import {
+    getScriptRunsForThread,
+    type ScriptRunRecord,
+} from "../../core/scripts/scriptRuns";
+import {
     buildIndexFileFilterGraph,
     type IndexFileFilterGraph,
 } from "../../core/derived/indexFileFilterGraph";
@@ -204,6 +208,8 @@ interface IndexFileFilterState {
 
 type AsideWithVaultScriptMentions = Aside & {
     getRunnableVaultScripts(): readonly VaultScriptRegistration[];
+    getScriptRuns(): ScriptRunRecord[];
+    retryScriptRun(runId: string): Promise<boolean>;
 };
 
 interface IndexDefaultSidebarCacheKey {
@@ -1551,6 +1557,7 @@ export default class AsideView extends ItemView {
                 ? 0
                 : countDeletedComments(pageThreadsWithDeleted);
             const allAgentRuns = this.plugin.getAgentRuns();
+            const allScriptRuns = this.plugin.getScriptRuns();
             this.noteSidebarTagIndex = isAllCommentsView && selectedIndexSourceFile
                 ? this.rebuildNoteSidebarTagIndex(selectedIndexSourceFile.path, persistedThreads)
                 : isAllCommentsView
@@ -1884,6 +1891,7 @@ export default class AsideView extends ItemView {
                 }
 
                 const threadAgentRuns = getAgentRunsForCommentThread(allAgentRuns, item.thread);
+                const threadScriptRuns = getScriptRunsForThread(allScriptRuns, item.thread);
                 await this.renderPersistedComment(
                     commentsBody,
                     item.thread,
@@ -1892,6 +1900,7 @@ export default class AsideView extends ItemView {
                     this.plugin.getActiveAgentStreamForThread(item.thread.id),
                     threadAgentRuns,
                     canInlineEditTodoEntries,
+                    threadScriptRuns,
                     nestedEditDraftThreadId === item.thread.id && visibleDraftComment?.mode === "edit"
                         ? visibleDraftComment
                         : null,
@@ -2046,6 +2055,7 @@ export default class AsideView extends ItemView {
             this.noteSidebarSearchQuery,
         );
         const allAgentRuns = this.plugin.getAgentRuns();
+        const allScriptRuns = this.plugin.getScriptRuns();
         const visibleDraftComment = draftComment
             && matchesPinnedSidebarDraftVisibility(draftComment, this.getPinnedSidebarFilterThreadIds())
             ? draftComment
@@ -2133,6 +2143,7 @@ export default class AsideView extends ItemView {
         ).length;
         const renderDescriptors = this.buildNoteSidebarRenderDescriptors(renderableItems, {
             allAgentRuns,
+            allScriptRuns,
             enablePageThreadReorder: visiblePageThreadCount > 1,
             nestedEditDraftThreadId,
             nestedAppendDraftThreadId,
@@ -2483,6 +2494,7 @@ export default class AsideView extends ItemView {
         renderableItems: SidebarRenderableItem[],
         options: {
             allAgentRuns: AgentRunRecord[];
+            allScriptRuns: ScriptRunRecord[];
             enablePageThreadReorder: boolean;
             nestedEditDraftThreadId: string | null;
             nestedAppendDraftThreadId: string | null;
@@ -2519,6 +2531,7 @@ export default class AsideView extends ItemView {
                 ? options.visibleDraftComment
                 : null;
             const threadAgentRuns = getAgentRunsForCommentThread(options.allAgentRuns, item.thread);
+            const threadScriptRuns = getScriptRunsForThread(options.allScriptRuns, item.thread);
             const showNestedComments = resolveSidebarSearchShowNestedComments(
                 options.searchQuery,
                 this.plugin.shouldShowNestedCommentsForThread(item.thread.id),
@@ -2537,6 +2550,7 @@ export default class AsideView extends ItemView {
                     editDraftComment,
                     appendDraftComment,
                     threadAgentRuns,
+                    threadScriptRuns,
                 }),
                 threadId: item.thread.id,
                 render: async () => {
@@ -2549,6 +2563,7 @@ export default class AsideView extends ItemView {
                         this.plugin.getActiveAgentStreamForThread(item.thread.id),
                         threadAgentRuns,
                         false,
+                        threadScriptRuns,
                         editDraftComment,
                         appendDraftComment,
                         options.searchQuery,
@@ -4173,6 +4188,7 @@ export default class AsideView extends ItemView {
         agentStream: ReturnType<Aside["getActiveAgentStreamForThread"]>,
         threadAgentRuns: AgentRunRecord[],
         canInlineEditTodoEntries: boolean,
+        threadScriptRuns: ScriptRunRecord[],
         editDraftComment: DraftComment | null = null,
         appendDraftComment: DraftComment | null = null,
         searchQuery: string = "",
@@ -4202,6 +4218,7 @@ export default class AsideView extends ItemView {
             agentRun,
             agentStream,
             threadAgentRuns,
+            threadScriptRuns,
             getEventTargetElement: (target) => this.interactionController.getEventTargetElement(target),
             isSelectionInsideSidebarContent: (selection) => this.interactionController.isSelectionInsideSidebarContent(selection),
             claimSidebarInteractionOwnership: (focusTarget) => this.interactionController.claimSidebarInteractionOwnership(focusTarget),
@@ -4285,6 +4302,7 @@ export default class AsideView extends ItemView {
                 void this.plugin.startAppendEntryDraft(commentId, hostFilePath);
             },
             retryAgentRun: (runId) => this.plugin.retryAgentRun(runId),
+            retryScriptRun: (runId) => this.plugin.retryScriptRun(runId),
             retryAgentPromptForComment: (commentId, filePath) => this.plugin.retryAgentPromptForComment(commentId, filePath),
             reanchorCommentThreadToCurrentSelection: (commentId) => {
                 void this.plugin.reanchorCommentThreadToCurrentSelection(commentId);

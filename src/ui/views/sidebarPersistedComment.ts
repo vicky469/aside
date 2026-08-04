@@ -12,6 +12,11 @@ import {
     type AgentRunStreamState,
 } from "../../core/agents/agentRuns";
 import type { AsideAgentTarget } from "../../core/config/agentTargets";
+import {
+    getLatestScriptRunForTriggerEntry,
+    getScriptRunByOutputEntryId,
+    type ScriptRunRecord,
+} from "../../core/scripts/scriptRuns";
 import { getVisibleNoteContent } from "../../core/storage/noteCommentStorage";
 import { parseAgentDirectives } from "../../core/text/agentDirectives";
 import { splitTrailingSideNoteReferenceSection, type TrailingSideNoteReferenceSection } from "../../core/text/commentReferences";
@@ -83,7 +88,7 @@ export interface PersistedThreadEntryPresentation extends BasePersistedCommentPr
 }
 
 export interface SidebarCommentAuthorPresentation {
-    kind: "user" | AsideAgentTarget;
+    kind: "user" | AsideAgentTarget | "script";
     label: string;
 }
 
@@ -105,6 +110,7 @@ export interface SidebarPersistedCommentHost {
     agentRun: AgentRunRecord | null;
     agentStream: AgentRunStreamState | null;
     threadAgentRuns: AgentRunRecord[];
+    threadScriptRuns: ScriptRunRecord[];
     getEventTargetElement(target: EventTarget | null): HTMLElement | null;
     isSelectionInsideSidebarContent(selection?: Selection | null): boolean;
     claimSidebarInteractionOwnership(focusTarget?: HTMLElement | null): void;
@@ -131,6 +137,7 @@ export interface SidebarPersistedCommentHost {
     togglePinnedThread(threadId: string): Promise<void> | void;
     startAppendEntryDraft(commentId: string, hostFilePath: string | null): void;
     retryAgentRun(runId: string): Promise<boolean> | boolean;
+    retryScriptRun(runId: string): Promise<boolean> | boolean;
     retryAgentPromptForComment(commentId: string, filePath: string): Promise<boolean> | boolean;
     reanchorCommentThreadToCurrentSelection(commentId: string): void;
     deleteCommentWithConfirm(commentId: string): Promise<boolean> | Promise<void> | boolean | void;
@@ -146,7 +153,8 @@ export interface AgentRunStatusPresentation {
 
 export type SidebarCommentRegenerateAction =
     | { kind: "agent-run"; runId: string }
-    | { kind: "agent-prompt" };
+    | { kind: "agent-prompt" }
+    | { kind: "script-run"; runId: string };
 
 export function getAgentRunStatusPresentation(status: AgentRunRecord["status"]): AgentRunStatusPresentation {
     switch (status) {
@@ -548,11 +556,25 @@ export function resolveSidebarCommentAuthor(
     commentId: string,
     threadAgentRuns: readonly AgentRunRecord[],
     currentUserLabel: string,
+    threadScriptRuns: readonly ScriptRunRecord[] = [],
 ): SidebarCommentAuthorPresentation {
+    if (getScriptRunByOutputEntryId(threadScriptRuns, commentId)) {
+        return {
+            kind: "script",
+            label: "Script",
+        };
+    }
     return buildSidebarCommentAuthorPresentation(
         currentUserLabel,
         getAgentRunByOutputEntryId(threadAgentRuns, commentId),
     );
+}
+
+export function getRetryableScriptRunForSidebarComment(
+    commentId: string,
+    threadScriptRuns: readonly ScriptRunRecord[],
+): ScriptRunRecord | null {
+    return getLatestScriptRunForTriggerEntry(threadScriptRuns, commentId);
 }
 
 export function getRetryableAgentRunForSidebarComment(
@@ -566,7 +588,15 @@ export function getSidebarCommentRegenerateAction(
     commentId: string,
     commentBody: string,
     threadAgentRuns: readonly AgentRunRecord[],
+    threadScriptRuns: readonly ScriptRunRecord[] = [],
 ): SidebarCommentRegenerateAction | null {
+    const retryableScriptRun = getRetryableScriptRunForSidebarComment(commentId, threadScriptRuns);
+    if (retryableScriptRun) {
+        return {
+            kind: "script-run",
+            runId: retryableScriptRun.id,
+        };
+    }
     const retryableAgentRun = getRetryableAgentRunForSidebarComment(commentId, threadAgentRuns);
     if (retryableAgentRun) {
         return {
@@ -586,8 +616,9 @@ export function shouldShowRetryActionForSidebarComment(
     commentId: string,
     commentBody: string,
     threadAgentRuns: readonly AgentRunRecord[],
+    threadScriptRuns: readonly ScriptRunRecord[] = [],
 ): boolean {
-    return getSidebarCommentRegenerateAction(commentId, commentBody, threadAgentRuns) !== null;
+    return getSidebarCommentRegenerateAction(commentId, commentBody, threadAgentRuns, threadScriptRuns) !== null;
 }
 
 export function getInsertableSidebarCommentMarkdown(
@@ -606,6 +637,10 @@ export function getInsertableSidebarCommentMarkdown(
 }
 
 export function isRetryableAgentRunBusy(run: Pick<AgentRunRecord, "status"> | null): boolean {
+    return run?.status === "queued" || run?.status === "running";
+}
+
+export function isRetryableScriptRunBusy(run: Pick<ScriptRunRecord, "status"> | null): boolean {
     return run?.status === "queued" || run?.status === "running";
 }
 
@@ -731,6 +766,7 @@ export function shouldRenderNestedThreadEntries(
         hasAppendDraftComment: boolean;
         hasAgentStream: boolean;
         hasAgentReplies?: boolean;
+        hasScriptReplies?: boolean;
         hasDeletedEntriesVisible?: boolean;
         hasForcedVisibleChildEntries?: boolean;
     },
@@ -748,6 +784,7 @@ export function shouldRenderNestedThreadEntries(
         || options.hasAppendDraftComment
         || options.hasAgentStream
         || options.hasForcedVisibleChildEntries
+        || options.hasScriptReplies
     ) {
         return true;
     }
@@ -1132,9 +1169,11 @@ function renderThreadFooterActions(
                 retryButton.disabled = options.disableRetryAction === true;
                 return;
             }
-            const started = regenerateAction.kind === "agent-run"
-                ? await host.retryAgentRun(regenerateAction.runId)
-                : await host.retryAgentPromptForComment(comment.id, comment.filePath);
+            const started = regenerateAction.kind === "script-run"
+                ? await host.retryScriptRun(regenerateAction.runId)
+                : regenerateAction.kind === "agent-run"
+                    ? await host.retryAgentRun(regenerateAction.runId)
+                    : await host.retryAgentPromptForComment(comment.id, comment.filePath);
             if (!started) {
                 retryButton.disabled = options.disableRetryAction === true;
             }
@@ -1313,13 +1352,20 @@ function renderStoredThreadEntry(
         })) {
             renderEntryMoveHandle(entryActionsEl, entryComment.id, thread.id, host);
         }
-        const entryAuthor = resolveSidebarCommentAuthor(entryComment.id, host.threadAgentRuns, host.currentUserLabel);
+        const entryAuthor = resolveSidebarCommentAuthor(
+            entryComment.id,
+            host.threadAgentRuns,
+            host.currentUserLabel,
+            host.threadScriptRuns,
+        );
         const entryAgentRun = getAgentRunByOutputEntryId(host.threadAgentRuns, entryComment.id);
         const entryRetryRun = getRetryableAgentRunForSidebarComment(entryComment.id, host.threadAgentRuns);
+        const entryScriptRetryRun = getRetryableScriptRunForSidebarComment(entryComment.id, host.threadScriptRuns);
         const entryRegenerateAction = getSidebarCommentRegenerateAction(
             entryComment.id,
             entryComment.comment,
             host.threadAgentRuns,
+            host.threadScriptRuns,
         );
         const entryInsertMarkdown = !entryComment.deletedAt && !thread.deletedAt
             ? getInsertableSidebarCommentMarkdown(entryComment.id, entry.body || "", host.threadAgentRuns)
@@ -1334,7 +1380,8 @@ function renderStoredThreadEntry(
                 showShareAction: !host.showSourceRedirectAction && !entryComment.deletedAt && !thread.deletedAt,
                 showAddEntryAction: !host.showSourceRedirectAction && !entryComment.deletedAt && !thread.deletedAt,
                 showRetryAction: !!entryRegenerateAction && !host.showSourceRedirectAction && !entryComment.deletedAt && !thread.deletedAt,
-                disableRetryAction: isRetryableAgentRunBusy(entryRetryRun),
+                disableRetryAction: isRetryableAgentRunBusy(entryRetryRun)
+                    || isRetryableScriptRunBusy(entryScriptRetryRun),
                 moveAction: null,
                 insertAction: entryInsertMarkdown && !host.showSourceRedirectAction
                     ? {
@@ -1389,6 +1436,9 @@ export async function renderPersistedCommentCard(
     const hasAgentReplyEntries = entries.slice(1).some((entry) =>
         !!getAgentRunByOutputEntryId(host.threadAgentRuns, entry.id)
     );
+    const hasScriptReplyEntries = entries.slice(1).some((entry) =>
+        !!getScriptRunByOutputEntryId(host.threadScriptRuns, entry.id)
+    );
     const hasStoredChildEntries = entries.length > 1;
     const parentEditDraft = host.editDraftComment?.id === comment.id
         ? host.editDraftComment
@@ -1401,7 +1451,8 @@ export async function renderPersistedCommentCard(
     const shouldRenderAllStoredChildren = host.showNestedComments
         || hasChildEditDraft
         || host.agentStream !== null
-        || !!host.appendDraftComment;
+        || !!host.appendDraftComment
+        || hasScriptReplyEntries;
     const shouldRenderStoredChildren = shouldRenderAllStoredChildren
         || forcedVisibleChildEntryIds.size > 0;
     const shouldRenderDetailsToggle = shouldRenderThreadNestedToggle({
@@ -1418,11 +1469,17 @@ export async function renderPersistedCommentCard(
         hasAppendDraftComment: !!host.appendDraftComment,
         hasAgentStream: !!host.agentStream,
         hasAgentReplies: hasAgentReplyEntries,
+        hasScriptReplies: hasScriptReplyEntries,
         hasDeletedEntriesVisible: hasVisibleDeletedEntries(thread),
         hasForcedVisibleChildEntries: forcedVisibleChildEntryIds.size > 0,
     });
     const appendDraftAfterEntryId = getAppendDraftInsertAfterEntryId(thread, host.appendDraftComment);
-    const parentAuthor = resolveSidebarCommentAuthor(comment.id, host.threadAgentRuns, host.currentUserLabel);
+    const parentAuthor = resolveSidebarCommentAuthor(
+        comment.id,
+        host.threadAgentRuns,
+        host.currentUserLabel,
+        host.threadScriptRuns,
+    );
     const renderTasks: Array<Promise<void>> = [];
     const canShowHeaderPinAction = host.showBookmarkAndPinControls
         && comment.id === thread.id
@@ -1445,10 +1502,12 @@ export async function renderPersistedCommentCard(
     }
     if (!parentEditDraft) {
         const parentRetryRun = getRetryableAgentRunForSidebarComment(comment.id, host.threadAgentRuns);
+        const parentScriptRetryRun = getRetryableScriptRunForSidebarComment(comment.id, host.threadScriptRuns);
         const parentRegenerateAction = getSidebarCommentRegenerateAction(
             comment.id,
             comment.comment,
             host.threadAgentRuns,
+            host.threadScriptRuns,
         );
         const parentInsertMarkdown = !comment.deletedAt && !thread.deletedAt
             ? getInsertableSidebarCommentMarkdown(comment.id, entries[0]?.body || "", host.threadAgentRuns)
@@ -1485,7 +1544,8 @@ export async function renderPersistedCommentCard(
             showShareAction: !host.showSourceRedirectAction && !comment.deletedAt,
             showAddEntryAction: !host.showSourceRedirectAction && !comment.deletedAt,
             showRetryAction: !!parentRegenerateAction && !host.showSourceRedirectAction && !comment.deletedAt && !thread.deletedAt,
-            disableRetryAction: isRetryableAgentRunBusy(parentRetryRun),
+            disableRetryAction: isRetryableAgentRunBusy(parentRetryRun)
+                || isRetryableScriptRunBusy(parentScriptRetryRun),
             nestedToggleAction: shouldRenderDetailsToggle
                 ? {
                     threadId: thread.id,

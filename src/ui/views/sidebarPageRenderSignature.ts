@@ -1,5 +1,6 @@
 import type { CommentThread } from "../../commentManager";
 import type { AgentRunRecord } from "../../core/agents/agentRuns";
+import type { ScriptRunRecord } from "../../core/scripts/scriptRuns";
 import type { DraftComment } from "../../domain/drafts";
 
 function hashString(value: string): number {
@@ -91,6 +92,23 @@ function getAgentRunsIdentity(runs: readonly AgentRunRecord[]): string {
     ].join(":")));
 }
 
+function getScriptRunsIdentity(runs: readonly ScriptRunRecord[]): string {
+    return hashStrings(runs.map((run) => [
+        run.id,
+        run.triggerEntryId,
+        run.filePath,
+        run.scriptPath,
+        run.mentionName,
+        run.status,
+        run.createdAt,
+        run.startedAt ?? "",
+        run.endedAt ?? "",
+        run.retryOfRunId ?? "",
+        run.outputEntryId ?? "",
+        run.error ? getCachedStringHash(run.error) : "",
+    ].join(":")));
+}
+
 function isActiveCommentInThread(thread: CommentThread, activeCommentId: string | null): boolean {
     if (!activeCommentId) {
         return false;
@@ -115,6 +133,7 @@ export function buildPageSidebarThreadRenderSignature(options: {
     editDraftComment: DraftComment | null;
     appendDraftComment: DraftComment | null;
     threadAgentRuns: readonly AgentRunRecord[];
+    threadScriptRuns?: readonly ScriptRunRecord[];
 }): string {
     const { thread } = options;
     return [
@@ -144,6 +163,7 @@ export function buildPageSidebarThreadRenderSignature(options: {
         getDraftIdentity(options.editDraftComment),
         getDraftIdentity(options.appendDraftComment),
         getAgentRunsIdentity(options.threadAgentRuns),
+        getScriptRunsIdentity(options.threadScriptRuns ?? []),
     ].join("|");
 }
 

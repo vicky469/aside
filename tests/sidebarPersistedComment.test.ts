@@ -2,6 +2,7 @@ import * as assert from "node:assert/strict";
 import test from "node:test";
 import { commentToThread, type Comment, type CommentThread } from "../src/commentManager";
 import type { AgentRunRecord } from "../src/core/agents/agentRuns";
+import type { ScriptRunRecord } from "../src/core/scripts/scriptRuns";
 import {
     buildPersistedCommentPresentation,
     buildPersistedCommentPinActionPresentation,
@@ -12,7 +13,10 @@ import {
     getDeletedRenderableThreadEntries,
     getInsertableSidebarCommentMarkdown,
     getRetryableAgentRunForSidebarComment,
+    getRetryableScriptRunForSidebarComment,
+    getSidebarCommentRegenerateAction,
     isRetryableAgentRunBusy,
+    isRetryableScriptRunBusy,
     getAppendDraftInsertAfterEntryId,
     getRenderableThreadEntries,
     getAgentRunStatusPresentation,
@@ -81,6 +85,25 @@ function createAgentRun(overrides: Partial<AgentRunRecord> = {}): AgentRunRecord
         usedFiles: overrides.usedFiles,
         usedUrls: overrides.usedUrls,
         usedToolErrors: overrides.usedToolErrors,
+    };
+}
+
+function createScriptRun(overrides: Partial<ScriptRunRecord> = {}): ScriptRunRecord {
+    return {
+        id: overrides.id ?? "script-run-1",
+        threadId: overrides.threadId ?? "comment-1",
+        triggerEntryId: overrides.triggerEntryId ?? "comment-1",
+        filePath: overrides.filePath ?? "docs/architecture.md",
+        scriptPath: overrides.scriptPath ?? "🛠️ scripts/clean.mjs",
+        mentionName: overrides.mentionName ?? "clean",
+        status: overrides.status ?? "succeeded",
+        promptText: overrides.promptText ?? "@clean",
+        createdAt: overrides.createdAt ?? 100,
+        startedAt: overrides.startedAt,
+        endedAt: overrides.endedAt ?? 200,
+        retryOfRunId: overrides.retryOfRunId,
+        outputEntryId: overrides.outputEntryId ?? "entry-2",
+        error: overrides.error,
     };
 }
 
@@ -302,6 +325,7 @@ function createRenderHost(overrides: Partial<SidebarPersistedCommentHost> = {}):
         agentRun: null,
         agentStream: null,
         threadAgentRuns: [],
+        threadScriptRuns: [],
         getEventTargetElement: () => null,
         isSelectionInsideSidebarContent: () => false,
         claimSidebarInteractionOwnership: () => {},
@@ -325,6 +349,7 @@ function createRenderHost(overrides: Partial<SidebarPersistedCommentHost> = {}):
         togglePinnedThread: () => {},
         startAppendEntryDraft: () => {},
         retryAgentRun: () => true,
+        retryScriptRun: () => true,
         retryAgentPromptForComment: () => true,
         reanchorCommentThreadToCurrentSelection: () => {},
         deleteCommentWithConfirm: () => true,
@@ -1116,6 +1141,21 @@ test("resolveSidebarCommentAuthor labels agent-produced replies from their outpu
     );
 });
 
+test("resolveSidebarCommentAuthor labels script-produced replies without agent metadata", () => {
+    assert.deepEqual(
+        resolveSidebarCommentAuthor(
+            "entry-2",
+            [createAgentRun({ outputEntryId: "agent-entry" })],
+            "You",
+            [createScriptRun({ outputEntryId: "entry-2" })],
+        ),
+        {
+            kind: "script",
+            label: "Script",
+        },
+    );
+});
+
 test("getRetryableAgentRunForSidebarComment resolves runs from the trigger entry instead of the output entry", () => {
     const run = createAgentRun({
         id: "run-1",
@@ -1156,6 +1196,35 @@ test("getRetryableAgentRunForSidebarComment keeps the newest retryable run for t
     );
 });
 
+test("script Regenerate resolves the latest run from its saved trigger entry", () => {
+    const olderRun = createScriptRun({
+        id: "script-run-1",
+        triggerEntryId: "entry-1",
+        outputEntryId: "entry-2",
+        createdAt: 100,
+    });
+    const newerRun = createScriptRun({
+        id: "script-run-2",
+        triggerEntryId: "entry-1",
+        outputEntryId: "entry-2",
+        createdAt: 200,
+        retryOfRunId: "script-run-1",
+    });
+
+    assert.equal(
+        getRetryableScriptRunForSidebarComment("entry-1", [olderRun, newerRun])?.id,
+        "script-run-2",
+    );
+    assert.deepEqual(
+        getSidebarCommentRegenerateAction("entry-1", "@clean", [], [olderRun, newerRun]),
+        { kind: "script-run", runId: "script-run-2" },
+    );
+    assert.equal(
+        getSidebarCommentRegenerateAction("entry-2", "Script @clean:\n\nDone", [], [newerRun]),
+        null,
+    );
+});
+
 test("shouldShowRetryActionForSidebarComment falls back to explicit agent prompts without stored run metadata", () => {
     assert.equal(
         shouldShowRetryActionForSidebarComment("entry-1", "@codex explain this", []),
@@ -1176,6 +1245,65 @@ test("isRetryableAgentRunBusy disables regenerate while a run is queued or runni
     assert.equal(isRetryableAgentRunBusy(createAgentRun({ status: "succeeded" })), false);
     assert.equal(isRetryableAgentRunBusy(createAgentRun({ status: "failed" })), false);
     assert.equal(isRetryableAgentRunBusy(null), false);
+});
+
+test("isRetryableScriptRunBusy disables Regenerate only for active script runs", () => {
+    assert.equal(isRetryableScriptRunBusy(createScriptRun({ status: "queued" })), true);
+    assert.equal(isRetryableScriptRunBusy(createScriptRun({ status: "running" })), true);
+    assert.equal(isRetryableScriptRunBusy(createScriptRun({ status: "succeeded" })), false);
+    assert.equal(isRetryableScriptRunBusy(createScriptRun({ status: "failed" })), false);
+    assert.equal(isRetryableScriptRunBusy(null), false);
+});
+
+test("renderPersistedCommentCard reruns scripts explicitly and keeps collapsed script output visible", async () => {
+    const thread = createThreadWithEntries({
+        entries: [
+            { id: "comment-1", body: "@clean", timestamp: 100 },
+            { id: "entry-2", body: "Script @clean:\n\nDone", timestamp: 110 },
+        ],
+    });
+    const retriedScriptRunIds: string[] = [];
+    const retriedAgentRunIds: string[] = [];
+    const retriedAgentPrompts: string[] = [];
+    const root = new FakeElement("div");
+
+    await renderPersistedCommentCard(root as unknown as HTMLDivElement, thread, createRenderHost({
+        showNestedComments: false,
+        showNestedCommentsByDefault: false,
+        threadScriptRuns: [createScriptRun()],
+        retryScriptRun: (runId) => {
+            retriedScriptRunIds.push(runId);
+            return true;
+        },
+        retryAgentRun: (runId) => {
+            retriedAgentRunIds.push(runId);
+            return true;
+        },
+        retryAgentPromptForComment: (commentId) => {
+            retriedAgentPrompts.push(commentId);
+            return true;
+        },
+    }));
+
+    assert.deepEqual(
+        root.findAllByClass("aside-comment-item").map((element) => element.getAttribute("data-comment-id")),
+        ["comment-1", "entry-2"],
+    );
+    assert.deepEqual(
+        root.findAllByClass("aside-comment-author-indicator").map((element) => element.textContent),
+        ["Script"],
+    );
+    assert.equal(root.findAllByClass("aside-agent-run-metadata-frontmatter").length, 0);
+
+    const regenerateButton = root.findAllByClass("aside-thread-footer-regenerate-button")[0];
+    assert.ok(regenerateButton);
+    await (regenerateButton.onclick as (event: { stopPropagation(): void }) => Promise<void>)({
+        stopPropagation() {},
+    });
+
+    assert.deepEqual(retriedScriptRunIds, ["script-run-1"]);
+    assert.deepEqual(retriedAgentRunIds, []);
+    assert.deepEqual(retriedAgentPrompts, []);
 });
 
 test("getAgentRunStatusPresentation uses compact success and failure markers", () => {
@@ -1284,6 +1412,7 @@ test("renderPersistedCommentCard renders agent run files as clickable file links
                 ],
             }),
         ],
+        threadScriptRuns: [],
         openSidebarInternalLink: async (href, sourcePath, focusTarget) => {
             openedLinks.push({
                 href,
@@ -1376,6 +1505,7 @@ test("renderPersistedCommentCard omits wrapper-only agent run skill metadata", a
                 usedSkills: [{ name: "aside", mode: "write", source: "built-in" }],
             }),
         ],
+        threadScriptRuns: [],
     });
     const root = new FakeElement("div");
 
@@ -1574,6 +1704,7 @@ test("renderPersistedCommentCard puts agent metadata above status and Add to fil
                 usedSkills: [{ name: "aside", mode: "write", source: "built-in" }],
             }),
         ],
+        threadScriptRuns: [],
         getEventTargetElement: () => null,
         isSelectionInsideSidebarContent: () => false,
         claimSidebarInteractionOwnership: () => {},
@@ -1597,6 +1728,7 @@ test("renderPersistedCommentCard puts agent metadata above status and Add to fil
         togglePinnedThread: () => {},
         startAppendEntryDraft: () => {},
         retryAgentRun: () => true,
+        retryScriptRun: () => true,
         retryAgentPromptForComment: () => true,
         reanchorCommentThreadToCurrentSelection: () => {},
         deleteCommentWithConfirm: () => true,
@@ -1820,6 +1952,7 @@ test("renderPersistedCommentCard reuses toolbar pin styling for page note pins",
         agentRun: null,
         agentStream: null,
         threadAgentRuns: [],
+        threadScriptRuns: [],
         getEventTargetElement: () => null,
         isSelectionInsideSidebarContent: () => false,
         claimSidebarInteractionOwnership: () => {},
@@ -1843,6 +1976,7 @@ test("renderPersistedCommentCard reuses toolbar pin styling for page note pins",
         togglePinnedThread: () => {},
         startAppendEntryDraft: () => {},
         retryAgentRun: () => true,
+        retryScriptRun: () => true,
         retryAgentPromptForComment: () => true,
         reanchorCommentThreadToCurrentSelection: () => {},
         deleteCommentWithConfirm: () => true,
