@@ -1877,6 +1877,7 @@ export default class AsideView extends ItemView {
                     threadAgentRuns[0] ?? null,
                     this.plugin.getActiveAgentStreamForThread(item.thread.id),
                     threadAgentRuns,
+                    canInlineEditTodoEntries,
                     nestedEditDraftThreadId === item.thread.id && visibleDraftComment?.mode === "edit"
                         ? visibleDraftComment
                         : null,
@@ -1884,7 +1885,6 @@ export default class AsideView extends ItemView {
                         ? visibleDraftComment
                         : null,
                     isAllCommentsView ? this.indexSidebarSearchQuery : this.noteSidebarSearchQuery,
-                    canInlineEditTodoEntries,
                 );
             });
             await Promise.all(renderPromises);
@@ -2534,6 +2534,7 @@ export default class AsideView extends ItemView {
                         threadAgentRuns[0] ?? null,
                         this.plugin.getActiveAgentStreamForThread(item.thread.id),
                         threadAgentRuns,
+                        false,
                         editDraftComment,
                         appendDraftComment,
                         options.searchQuery,
@@ -4157,10 +4158,10 @@ export default class AsideView extends ItemView {
         agentRun: ReturnType<Aside["getLatestAgentRunForThread"]>,
         agentStream: ReturnType<Aside["getActiveAgentStreamForThread"]>,
         threadAgentRuns: AgentRunRecord[],
+        canInlineEditTodoEntries: boolean,
         editDraftComment: DraftComment | null = null,
         appendDraftComment: DraftComment | null = null,
         searchQuery: string = "",
-        canInlineEditTodoEntries: boolean = false,
     ) {
         const currentFilePath = this.file?.path ?? null;
         const isIndexView = !!currentFilePath && this.plugin.isAllCommentsNotePath(currentFilePath);
