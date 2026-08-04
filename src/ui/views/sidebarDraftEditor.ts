@@ -141,7 +141,11 @@ export class SidebarDraftEditorController {
         textarea: HTMLTextAreaElement,
         isEditMode: boolean,
     ): boolean {
-        if (this.activeInlineSuggest) {
+        if (this.activeInlineSuggest || findOpenWikiLinkQuery(
+            textarea.value,
+            textarea.selectionStart,
+            textarea.selectionEnd,
+        )) {
             return false;
         }
 

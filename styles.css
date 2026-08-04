@@ -2325,7 +2325,8 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
 }
 
 .aside-link-suggest-note,
-.aside-tag-suggest-note {
+.aside-tag-suggest-note,
+.aside-mention-suggest-note {
     margin-top: 2px;
     color: var(--text-muted);
     font-size: var(--font-ui-smaller);

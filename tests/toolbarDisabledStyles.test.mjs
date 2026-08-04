@@ -9,6 +9,16 @@ test("stylesheet avoids important overrides", () => {
     assert.doesNotMatch(css, importantOverridePattern);
 });
 
+test("mention suggestion notes share the muted detail style", () => {
+    const suggestionNoteRule = css.match(
+        /\.aside-link-suggest-note,\s*\.aside-tag-suggest-note,\s*\.aside-mention-suggest-note\s*\{(?<body>[\s\S]*?)\}/,
+    );
+
+    assert.ok(suggestionNoteRule?.groups?.body, "missing shared suggestion note detail rule");
+    assert.match(suggestionNoteRule.groups.body, /color:\s*var\(--text-muted\)\s*;/);
+    assert.match(suggestionNoteRule.groups.body, /font-size:\s*var\(--font-ui-smaller\)\s*;/);
+});
+
 test("disabled toolbar icon buttons are visibly unavailable and non-interactive", () => {
     const disabledRule = css.match(
         /button\.aside-toolbar-icon-button:disabled,[\s\S]*?button\.aside-toolbar-icon-button\[aria-disabled="true"\]\s*\{(?<body>[\s\S]*?)\}/,

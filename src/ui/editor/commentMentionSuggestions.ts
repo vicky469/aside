@@ -75,13 +75,18 @@ export function buildMentionSuggestions(
             label: actor.label,
         })),
     ];
+    const reservedMentionNames = new Set(
+        builtIns.map((suggestion) => suggestion.mention.slice(1).toLowerCase()),
+    );
     const candidates: SideNoteMentionSuggestion[] = builtIns.concat(
-        scripts.map((script) => ({
-            kind: "script" as const,
-            mention: `@${script.mentionName}`,
-            label: script.fileName,
-            scriptPath: script.path,
-        })),
+        scripts
+            .filter((script) => !reservedMentionNames.has(script.normalizedMentionName))
+            .map((script) => ({
+                kind: "script" as const,
+                mention: `@${script.mentionName}`,
+                label: script.fileName,
+                scriptPath: script.path,
+            })),
     );
     const score = (mention: string): number => {
         const name = mention.slice(1).toLowerCase();

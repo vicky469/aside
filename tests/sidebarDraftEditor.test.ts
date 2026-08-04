@@ -357,3 +357,38 @@ test("sidebar draft editor controller inserts a chosen mention into a disconnect
     assert.equal(renderCount, 1);
     assert.deepEqual(focusedDraftIds, ["draft-mention"]);
 });
+
+test("sidebar draft editor controller prioritizes an open wiki link over mention suggestions", () => {
+    let mentionSuggestCount = 0;
+    let linkSuggestCount = 0;
+    const controller = new SidebarDraftEditorController({
+        getAllIndexedComments: () => [],
+        updateDraftCommentText: () => {},
+        renderComments: async () => {},
+        scheduleDraftFocus: () => {},
+        getMentionSuggestions: () => [],
+        openMentionSuggestModal: () => {
+            mentionSuggestCount += 1;
+        },
+        openLinkSuggestModal: (options) => {
+            assert.equal(options.initialQuery, "@");
+            linkSuggestCount += 1;
+        },
+        openTagSuggestModal: () => {},
+    });
+    const comment = createDraft({
+        id: "draft-link-mention",
+        comment: "[[@",
+    });
+    const textarea = {
+        value: comment.comment,
+        selectionStart: 3,
+        selectionEnd: 3,
+        isConnected: false,
+    } as unknown as HTMLTextAreaElement;
+
+    assert.equal(controller.openDraftMentionSuggest(comment, textarea, false), false);
+    assert.equal(controller.openDraftLinkSuggest(comment, textarea, false), true);
+    assert.equal(mentionSuggestCount, 0);
+    assert.equal(linkSuggestCount, 1);
+});

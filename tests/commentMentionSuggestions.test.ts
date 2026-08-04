@@ -75,3 +75,32 @@ test("buildMentionSuggestions keeps todo and supported agents before live script
         ["@claude", "@clean-links"],
     );
 });
+
+test("buildMentionSuggestions omits scripts whose normalized mentions are reserved", () => {
+    const scripts = [
+        cleanLinksScript,
+        {
+            path: "🛠️ scripts/ToDo.mjs",
+            fileName: "ToDo.mjs",
+            mentionName: "ToDo",
+            normalizedMentionName: "todo",
+        },
+        {
+            path: "🛠️ scripts/CODEX.js",
+            fileName: "CODEX.js",
+            mentionName: "CODEX",
+            normalizedMentionName: "codex",
+        },
+        {
+            path: "🛠️ scripts/Claude.cjs",
+            fileName: "Claude.cjs",
+            mentionName: "Claude",
+            normalizedMentionName: "claude",
+        },
+    ];
+
+    assert.deepEqual(
+        buildMentionSuggestions(scripts, "").map((item) => item.mention),
+        ["@todo", "@codex", "@claude", "@clean-links"],
+    );
+});
