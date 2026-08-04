@@ -33,9 +33,15 @@ import type { SidebarUpdateOptions } from "./comments/commentNavigationControlle
 import { WorkspaceViewController } from "./app/workspaceViewController";
 import { AgentRunStore } from "./agents/agentRunStore";
 import {
+    CommentScriptController,
     routeSavedUserEntry,
-    type CommentScriptController,
 } from "./vaultScripts/commentScriptController";
+import { ScriptRunStore } from "./vaultScripts/scriptRunStore";
+import { VaultScriptRegistry } from "./vaultScripts/vaultScriptRegistry";
+import {
+    runVaultScript,
+    type VaultScriptRuntimeModules,
+} from "./vaultScripts/vaultScriptRuntime";
 import {
     disposeAgentRuntimeProcesses,
     getClaudeRuntimeDiagnostics as probeClaudeRuntimeDiagnostics,
@@ -442,7 +448,36 @@ export default class Aside extends Plugin {
         readPersistedPluginData: () => this.indexNoteSettingsController.readPersistedPluginData(),
         updatePersistedPluginData: (updater) => this.indexNoteSettingsController.updatePersistedPluginData(updater),
     });
-    private commentScriptController: CommentScriptController | null = null;
+    private readonly vaultScriptRegistry = new VaultScriptRegistry();
+    private readonly scriptRunStore = new ScriptRunStore({
+        readPersistedPluginData: () => this.indexNoteSettingsController.readPersistedPluginData(),
+        updatePersistedPluginData: (updater) => this.indexNoteSettingsController.updatePersistedPluginData(updater),
+    });
+    private readonly commentScriptController = new CommentScriptController({
+        createRunId: () => generateCommentId(),
+        now: () => Date.now(),
+        getVaultRootPath: () => this.getVaultRootPath(),
+        getCommentManager: () => this.commentManager,
+        loadCommentsForFile: async (filePath) => {
+            await this.loadCommentsForFile(this.workspaceViewController.getFileByPath(filePath));
+        },
+        appendThreadEntry: (threadId, entry, options) =>
+            this.commentMutationController.appendThreadEntry(threadId, entry, options),
+        editComment: (commentId, body, options) =>
+            this.commentMutationController.editComment(commentId, body, options),
+        refreshCommentViews: () => this.workspaceViewController.refreshCommentViews(),
+        showNotice: (message) => {
+            this.showNotice(message, "scripts", "scripts.notice");
+        },
+        getRegistry: () => this.vaultScriptRegistry,
+        runVaultScript: async (invocation) => {
+            const modules = this.getVaultScriptRuntimeModules();
+            if (!modules) {
+                throw new Error("Vault scripts require desktop Obsidian with a filesystem-backed vault.");
+            }
+            return runVaultScript(modules, invocation);
+        },
+    }, this.scriptRunStore);
     private readonly commentAgentController: CommentAgentController = new CommentAgentController({
         createCommentId: () => generateCommentId(),
         now: () => Date.now(),
@@ -540,6 +575,8 @@ export default class Aside extends Plugin {
         getAggregateCommentIndex: () => this.aggregateCommentIndex,
         renameAgentRuns: (previousFilePath, nextFilePath) =>
             this.agentRunStore.renameFile(previousFilePath, nextFilePath),
+        renameScriptRuns: (previousFilePath, nextFilePath) =>
+            this.scriptRunStore.renameFile(previousFilePath, nextFilePath),
         renameStoredComments: (previousFilePath, nextFilePath) =>
             this.commentPersistenceController.renameStoredComments(previousFilePath, nextFilePath),
         deleteStoredComments: (filePath) => this.commentPersistenceController.deleteStoredComments(filePath),
@@ -639,6 +676,7 @@ export default class Aside extends Plugin {
             this.syncPublicFilePublishActions();
         },
         handleFileRename: async (file, oldPath) => {
+            this.vaultScriptRegistry.seed(this.app.vault.getFiles().map((candidate) => candidate.path));
             if (file) {
                 this.vaultCapabilityIndex.rename(file, oldPath, this.getVaultFileTags(file));
             } else {
@@ -649,6 +687,7 @@ export default class Aside extends Plugin {
             this.syncPublicFilePublishActions();
         },
         handleFileDelete: async (file) => {
+            this.vaultScriptRegistry.seed(this.app.vault.getFiles().map((candidate) => candidate.path));
             if (file) {
                 this.vaultCapabilityIndex.remove(file.path);
             }
@@ -709,6 +748,8 @@ export default class Aside extends Plugin {
 
         this.commentManager = new CommentManager([]);
         await this.loadSettings();
+        this.vaultScriptRegistry.seed(this.app.vault.getFiles().map((file) => file.path));
+        this.scriptRunStore.load();
         await this.syncPublishFeatureFlagStorage();
         this.vaultCapabilityIndex.seed(
             this.app.vault.getMarkdownFiles(),
@@ -716,6 +757,7 @@ export default class Aside extends Plugin {
         );
         this.registerEvent(this.app.vault.on("create", (file) => {
             if (file instanceof TFile) {
+                this.vaultScriptRegistry.upsert(file.path);
                 this.vaultCapabilityIndex.upsert(file, this.getVaultFileTags(file));
             }
         }));
@@ -731,6 +773,8 @@ export default class Aside extends Plugin {
         // Also highlight commented text inside rendered Markdown (Live Preview/Reading view)
         this.commentHighlightController.registerMarkdownPreviewHighlights(this);
         await this.syncInstalledSidenoteSkill();
+        this.commentScriptController.initialize();
+        await this.commentScriptController.reconcilePendingRunsFromPreviousSession();
         this.commentAgentController.initialize();
         await this.commentAgentController.reconcilePendingRunsFromPreviousSession();
         await this.logEvent("info", "startup", "startup.settings.loaded", {
@@ -749,6 +793,7 @@ export default class Aside extends Plugin {
         this.unloaded = true;
         void this.logEvent("info", "startup", "startup.unload");
         disposeAgentRuntimeProcesses();
+        this.commentScriptController.dispose();
         this.commentAgentController.dispose();
         this.commentPersistenceController.dispose();
         this.pluginLifecycleController.handleUnload();
@@ -804,6 +849,7 @@ export default class Aside extends Plugin {
     async onExternalSettingsChange() {
         await this.loadSettings();
         this.agentRunStore.load();
+        this.scriptRunStore.load();
         const appliedEventCount = await this.refreshCoordinator.handleExternalPluginDataChange();
         await this.logEvent("info", "persistence", "sync.plugin-data.external-settings", {
             appliedEventCount,
@@ -1099,6 +1145,14 @@ export default class Aside extends Plugin {
         return this.commentAgentController.getAgentRuns();
     }
 
+    public getRunnableVaultScripts() {
+        return this.vaultScriptRegistry.getRunnableScripts();
+    }
+
+    public getScriptRuns() {
+        return this.commentScriptController.getRuns();
+    }
+
     public getLatestAgentRunForThread(threadId: string): AgentRunRecord | null {
         return this.commentAgentController.getLatestAgentRunForThread(threadId);
     }
@@ -1164,6 +1218,10 @@ export default class Aside extends Plugin {
 
     public async retryAgentRun(runId: string): Promise<boolean> {
         return this.commentAgentController.retryRun(runId);
+    }
+
+    public async retryScriptRun(runId: string): Promise<boolean> {
+        return this.commentScriptController.retryRun(runId);
     }
 
     public async retryAgentPromptForComment(commentId: string, filePath: string): Promise<boolean> {
@@ -1397,6 +1455,25 @@ export default class Aside extends Plugin {
                 fsPromises: nodeRequire("node:fs/promises") as PublishRuntimeModules["fsPromises"],
                 os: nodeRequire("node:os") as PublishRuntimeModules["os"],
                 path: nodeRequire("node:path") as PublishRuntimeModules["path"],
+            };
+        } catch {
+            return null;
+        }
+    }
+
+    private getVaultScriptRuntimeModules(): VaultScriptRuntimeModules | null {
+        const nodeRequire = getNodeRequire();
+        if (!nodeRequire || !(this.app.vault.adapter instanceof FileSystemAdapter)) {
+            return null;
+        }
+
+        try {
+            return {
+                childProcess: nodeRequire("node:child_process") as VaultScriptRuntimeModules["childProcess"],
+                fsPromises: nodeRequire("node:fs/promises") as VaultScriptRuntimeModules["fsPromises"],
+                path: nodeRequire("node:path") as VaultScriptRuntimeModules["path"],
+                execPath: (nodeRequire("node:process") as { execPath: string }).execPath,
+                processEnv: getProcessEnv(),
             };
         } catch {
             return null;

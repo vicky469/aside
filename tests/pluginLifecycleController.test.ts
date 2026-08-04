@@ -70,6 +70,7 @@ function createHarness(options: {
     let modifyHandledPath: string | null = null;
     let detachSidebarViewsCount = 0;
     const renamedAgentRuns: Array<{ previousFilePath: string; nextFilePath: string }> = [];
+    const renamedScriptRuns: Array<{ previousFilePath: string; nextFilePath: string }> = [];
     const renamedStoredComments: Array<{ previousFilePath: string; nextFilePath: string }> = [];
     const deletedStoredComments: string[] = [];
     const deletedStoredCommentFolders: string[] = [];
@@ -83,6 +84,10 @@ function createHarness(options: {
         getAggregateCommentIndex: () => aggregateCommentIndex,
         renameAgentRuns: async (previousFilePath, nextFilePath) => {
             renamedAgentRuns.push({ previousFilePath, nextFilePath });
+            return true;
+        },
+        renameScriptRuns: async (previousFilePath, nextFilePath) => {
+            renamedScriptRuns.push({ previousFilePath, nextFilePath });
             return true;
         },
         renameStoredComments: async (previousFilePath, nextFilePath) => {
@@ -176,6 +181,7 @@ function createHarness(options: {
         getDetachSidebarViewsCount: () => detachSidebarViewsCount,
         getModifyHandledPath: () => modifyHandledPath,
         renamedAgentRuns,
+        renamedScriptRuns,
         renamedStoredComments,
         deletedStoredComments,
         deletedStoredCommentFolders,
@@ -211,6 +217,10 @@ test("plugin lifecycle controller keeps renamed comment files and indexes aligne
         previousFilePath: originalFile.path,
         nextFilePath: renamedFile.path,
     }]);
+    assert.deepEqual(harness.renamedScriptRuns, [{
+        previousFilePath: originalFile.path,
+        nextFilePath: renamedFile.path,
+    }]);
     assert.deepEqual(harness.renamedStoredComments, [{
         previousFilePath: originalFile.path,
         nextFilePath: renamedFile.path,
@@ -242,6 +252,10 @@ test("plugin lifecycle controller keeps renamed PDF page-note files and indexes 
     assert.equal(harness.commentManager.getCommentById("comment-1")?.filePath, renamedFile.path);
     assert.equal(harness.aggregateCommentIndex.getCommentById("comment-1")?.filePath, renamedFile.path);
     assert.deepEqual(harness.renamedAgentRuns, [{
+        previousFilePath: originalFile.path,
+        nextFilePath: renamedFile.path,
+    }]);
+    assert.deepEqual(harness.renamedScriptRuns, [{
         previousFilePath: originalFile.path,
         nextFilePath: renamedFile.path,
     }]);
