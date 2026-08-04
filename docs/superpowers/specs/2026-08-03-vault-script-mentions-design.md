@@ -123,7 +123,7 @@ The login shell is consulted only to discover `PATH`; script execution itself us
 
 Runs time out after 60 seconds. Captured standard output and standard error are limited to 64 KiB each; exceeding either limit fails the run. Result entries retain at most 250 words and end with an explicit truncation marker when formatting omits captured text. Standard output is preferred for successful result text; standard error and exit details are used for failures. Empty successful output becomes a compact completion message.
 
-Aside tracks active script child processes. Plugin unload marks the controller disposed before terminating those children, preventing queued work from launching and preventing terminated runs from persisting late output. Any queued or running receipt left by unload is terminalized by startup reconciliation and remains explicitly regeneratable.
+Aside tracks active script child processes. Plugin unload marks the controller disposed before terminating those children, preventing queued work from launching and preventing terminated runs from persisting late output. The plugin adapter rechecks unload after environment resolution, and the runtime synchronously rechecks both unload generation and live registry membership immediately before `execFile`. Any queued or running receipt left by unload is terminalized by startup reconciliation and remains explicitly regeneratable.
 
 ## Run Records and Regenerate
 

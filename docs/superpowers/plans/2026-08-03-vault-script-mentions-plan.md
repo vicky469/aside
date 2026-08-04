@@ -846,6 +846,7 @@ export interface VaultScriptRuntimeResult {
 }
 
 export interface VaultScriptRuntimeModules {
+    isScriptLaunchAllowed(scriptPath: string): boolean;
     nodeExecutable: string;
     processEnv: Readonly<Record<string, string | undefined>>;
     childProcess: {
@@ -1190,6 +1191,8 @@ private async getVaultScriptRuntimeModules(): Promise<VaultScriptRuntimeModules 
             path: rawPath as AgentExecutionEnvModules["path"],
         };
         return {
+            isScriptLaunchAllowed: (scriptPath) => !this.unloaded
+                && this.vaultScriptRegistry.getRunnableScripts().some((script) => script.path === scriptPath),
             childProcess: rawChildProcess as VaultScriptRuntimeModules["childProcess"],
             fsPromises: rawFsPromises as VaultScriptRuntimeModules["fsPromises"],
             path: rawPath as VaultScriptRuntimeModules["path"],

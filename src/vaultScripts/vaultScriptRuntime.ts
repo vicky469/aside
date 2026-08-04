@@ -21,6 +21,7 @@ export interface VaultScriptRuntimeChildProcess {
 }
 
 export interface VaultScriptRuntimeModules {
+    isScriptLaunchAllowed(scriptPath: string): boolean;
     nodeExecutable: string;
     processEnv: VaultScriptRuntimeEnvironment;
     childProcess: {
@@ -111,6 +112,9 @@ export async function runVaultScript(
     }
     if (runtimeGeneration !== vaultScriptRuntimeGeneration) {
         throw new Error("Vault script execution was cancelled because Aside unloaded.");
+    }
+    if (!modules.isScriptLaunchAllowed(invocation.scriptPath)) {
+        throw new Error("Vault script is no longer registered for launch.");
     }
 
     return await new Promise<VaultScriptRuntimeResult>((resolve, reject) => {

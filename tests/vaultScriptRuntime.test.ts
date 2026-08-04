@@ -25,6 +25,7 @@ interface RuntimeHarness {
 }
 
 function createRuntimeHarness(options: {
+    isScriptLaunchAllowed?: () => boolean;
     pathApi?: VaultScriptRuntimeModules["path"];
     processEnv?: Readonly<Record<string, string | undefined>>;
     realpaths?: Readonly<Record<string, string>>;
@@ -37,6 +38,7 @@ function createRuntimeHarness(options: {
     return {
         invocations,
         modules: {
+            isScriptLaunchAllowed: () => options.isScriptLaunchAllowed?.() ?? true,
             nodeExecutable: "node",
             processEnv: options.processEnv ?? {
                 PATH: "/usr/bin",
@@ -436,5 +438,46 @@ test("runtime disposal prevents a child from spawning after pending path resolut
     releaseFirstRealpath();
 
     await assert.rejects(execution, /unloaded/iu);
+    assert.deepEqual(harness.invocations, []);
+});
+
+test("final registration check prevents launch after registry changes during path resolution", async () => {
+    let launchAllowed = true;
+    let releaseFirstRealpath = () => {};
+    let realpathCalls = 0;
+    const harness = createRuntimeHarness({
+        isScriptLaunchAllowed: () => launchAllowed,
+    });
+    harness.modules.fsPromises.realpath = async (target) => {
+        realpathCalls += 1;
+        if (realpathCalls === 1) {
+            await new Promise<void>((resolve) => {
+                releaseFirstRealpath = resolve;
+            });
+        }
+        return target;
+    };
+
+    const execution = runVaultScript(harness.modules, {
+        vaultRootPath: "/vault",
+        scriptPath: "🛠️ scripts/clean.mjs",
+        notePath: "Note.md",
+    });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    launchAllowed = false;
+    releaseFirstRealpath();
+
+    await assert.rejects(execution, /no longer registered/iu);
+    assert.deepEqual(harness.invocations, []);
+});
+
+test("final registration check prevents launch when the plugin already unloaded", async () => {
+    const harness = createRuntimeHarness({ isScriptLaunchAllowed: () => false });
+
+    await assert.rejects(runVaultScript(harness.modules, {
+        vaultRootPath: "/vault",
+        scriptPath: "🛠️ scripts/clean.mjs",
+        notePath: "Note.md",
+    }), /no longer registered/iu);
     assert.deepEqual(harness.invocations, []);
 });

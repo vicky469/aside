@@ -474,6 +474,9 @@ export default class Aside extends Plugin {
         getRegistry: () => this.vaultScriptRegistry,
         runVaultScript: async (invocation) => {
             const modules = await this.getVaultScriptRuntimeModules();
+            if (this.unloaded) {
+                throw new Error("Vault script execution stopped because Aside unloaded.");
+            }
             if (!modules) {
                 throw new Error("Vault scripts require desktop Obsidian with a filesystem-backed vault.");
             }
@@ -1483,6 +1486,9 @@ export default class Aside extends Plugin {
             };
             const processEnv = await resolveAgentExecutionEnv(executionEnvModules, getProcessEnv());
             return {
+                isScriptLaunchAllowed: (scriptPath) => !this.unloaded
+                    && this.vaultScriptRegistry.getRunnableScripts()
+                        .some((script) => script.path === scriptPath),
                 childProcess: rawChildProcess as VaultScriptRuntimeModules["childProcess"],
                 fsPromises: rawFsPromises as VaultScriptRuntimeModules["fsPromises"],
                 path: rawPath as VaultScriptRuntimeModules["path"],
