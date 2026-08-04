@@ -36,7 +36,7 @@ function createRuntimeHarness(options: {
     return {
         invocations,
         modules: {
-            execPath: "/Applications/Obsidian.app/Contents/Frameworks/Obsidian Helper.app/Contents/MacOS/Obsidian Helper",
+            nodeExecutable: "node",
             processEnv: options.processEnv ?? {
                 PATH: "/usr/bin",
                 ASIDE_TEST: "kept",
@@ -61,7 +61,7 @@ function createRuntimeHarness(options: {
     };
 }
 
-test("runVaultScript invokes the embedded Node executable with contained absolute paths", async () => {
+test("runVaultScript invokes external Node with contained absolute paths", async () => {
     const harness = createRuntimeHarness();
 
     const result = await runVaultScript(harness.modules, {
@@ -72,7 +72,7 @@ test("runVaultScript invokes the embedded Node executable with contained absolut
 
     assert.deepEqual(result, { stdout: "cleaned\n", stderr: "" });
     assert.deepEqual(harness.invocations, [{
-        file: "/Applications/Obsidian.app/Contents/Frameworks/Obsidian Helper.app/Contents/MacOS/Obsidian Helper",
+        file: "node",
         args: ["/vault/🛠️ scripts/clean.mjs", "/vault/Folder/Note.md"],
         options: {
             cwd: "/vault",
@@ -82,7 +82,7 @@ test("runVaultScript invokes the embedded Node executable with contained absolut
             env: {
                 PATH: "/usr/bin",
                 ASIDE_TEST: "kept",
-                ELECTRON_RUN_AS_NODE: "1",
+                ELECTRON_RUN_AS_NODE: "0",
             },
         },
     }]);
@@ -177,7 +177,7 @@ test("runVaultScript uses the real vault root for resolution and execution", asy
     });
 
     assert.deepEqual(harness.invocations[0], {
-        file: harness.modules.execPath,
+        file: harness.modules.nodeExecutable,
         args: ["/real/vault/🛠️ scripts/clean.mjs", "/real/vault/Note.md"],
         options: {
             cwd: "/real/vault",
@@ -187,7 +187,7 @@ test("runVaultScript uses the real vault root for resolution and execution", asy
             env: {
                 PATH: "/usr/bin",
                 ASIDE_TEST: "kept",
-                ELECTRON_RUN_AS_NODE: "1",
+                ELECTRON_RUN_AS_NODE: "0",
             },
         },
     });
@@ -210,7 +210,7 @@ test("runVaultScript preserves the injected environment without mutating it", as
     assert.deepEqual(harness.invocations[0]?.options.env, {
         PATH: "/custom/bin",
         CUSTOM_SETTING: "present",
-        ELECTRON_RUN_AS_NODE: "1",
+        ELECTRON_RUN_AS_NODE: "disabled",
     });
     assert.equal(processEnv.ELECTRON_RUN_AS_NODE, "disabled");
 });

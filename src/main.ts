@@ -46,6 +46,7 @@ import {
     disposeAgentRuntimeProcesses,
     getClaudeRuntimeDiagnostics as probeClaudeRuntimeDiagnostics,
     getCodexRuntimeDiagnostics as probeCodexRuntimeDiagnostics,
+    resolveAgentExecutionEnv,
     runAgentRuntime,
     type AgentRuntimeDiagnostics,
 } from "./agents/agentRuntimeAdapter";
@@ -471,7 +472,7 @@ export default class Aside extends Plugin {
         },
         getRegistry: () => this.vaultScriptRegistry,
         runVaultScript: async (invocation) => {
-            const modules = this.getVaultScriptRuntimeModules();
+            const modules = await this.getVaultScriptRuntimeModules();
             if (!modules) {
                 throw new Error("Vault scripts require desktop Obsidian with a filesystem-backed vault.");
             }
@@ -1461,19 +1462,30 @@ export default class Aside extends Plugin {
         }
     }
 
-    private getVaultScriptRuntimeModules(): VaultScriptRuntimeModules | null {
+    private async getVaultScriptRuntimeModules(): Promise<VaultScriptRuntimeModules | null> {
         const nodeRequire = getNodeRequire();
         if (!nodeRequire || !(this.app.vault.adapter instanceof FileSystemAdapter)) {
             return null;
         }
 
         try {
+            type AgentExecutionEnvModules = Parameters<typeof resolveAgentExecutionEnv>[0];
+            const rawChildProcess = nodeRequire("node:child_process");
+            const rawFsPromises = nodeRequire("node:fs/promises");
+            const rawPath = nodeRequire("node:path");
+            const executionEnvModules: AgentExecutionEnvModules = {
+                childProcess: rawChildProcess as AgentExecutionEnvModules["childProcess"],
+                fsPromises: rawFsPromises as AgentExecutionEnvModules["fsPromises"],
+                os: nodeRequire("node:os") as AgentExecutionEnvModules["os"],
+                path: rawPath as AgentExecutionEnvModules["path"],
+            };
+            const processEnv = await resolveAgentExecutionEnv(executionEnvModules, getProcessEnv());
             return {
-                childProcess: nodeRequire("node:child_process") as VaultScriptRuntimeModules["childProcess"],
-                fsPromises: nodeRequire("node:fs/promises") as VaultScriptRuntimeModules["fsPromises"],
-                path: nodeRequire("node:path") as VaultScriptRuntimeModules["path"],
-                execPath: (nodeRequire("node:process") as { execPath: string }).execPath,
-                processEnv: getProcessEnv(),
+                childProcess: rawChildProcess as VaultScriptRuntimeModules["childProcess"],
+                fsPromises: rawFsPromises as VaultScriptRuntimeModules["fsPromises"],
+                path: rawPath as VaultScriptRuntimeModules["path"],
+                nodeExecutable: "node",
+                processEnv,
             };
         } catch {
             return null;

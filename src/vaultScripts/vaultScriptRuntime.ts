@@ -17,7 +17,7 @@ export interface VaultScriptRuntimeResult {
 export type VaultScriptRuntimeEnvironment = Readonly<Record<string, string | undefined>>;
 
 export interface VaultScriptRuntimeModules {
-    execPath: string;
+    nodeExecutable: string;
     processEnv: VaultScriptRuntimeEnvironment;
     childProcess: {
         execFile(
@@ -91,17 +91,14 @@ export async function runVaultScript(
 
     return await new Promise<VaultScriptRuntimeResult>((resolve, reject) => {
         modules.childProcess.execFile(
-            modules.execPath,
+            modules.nodeExecutable,
             [realScriptPath, realNotePath],
             {
                 cwd: realVaultRoot,
                 timeout: VAULT_SCRIPT_TIMEOUT_MS,
                 maxBuffer: VAULT_SCRIPT_MAX_BUFFER_BYTES,
                 windowsHide: true,
-                env: {
-                    ...modules.processEnv,
-                    ELECTRON_RUN_AS_NODE: "1",
-                },
+                env: { ...modules.processEnv },
             },
             (error, stdout, stderr) => {
                 if (error) {
