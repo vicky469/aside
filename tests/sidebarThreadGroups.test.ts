@@ -2,6 +2,7 @@ import * as assert from "node:assert/strict";
 import test from "node:test";
 import type { CommentThread } from "../src/commentManager";
 import {
+    canInlineEditIndexTodoEntries,
     entryMatchesSidebarTodo,
     filterThreadsBySidebarGroupMode,
     getSidebarThreadGroupCounts,
@@ -41,6 +42,15 @@ test("entryMatchesSidebarTodo matches todo mentions case-insensitively at the ex
     assert.equal(entryMatchesSidebarTodo({ body: "Ship @todo-now" }), true);
     assert.equal(entryMatchesSidebarTodo({ body: "Ship @todos" }), false);
     assert.equal(entryMatchesSidebarTodo({ body: "No marker here" }), false);
+});
+
+test("canInlineEditIndexTodoEntries enables inline editing only for the generated index effective Todo mode", () => {
+    assert.equal(canInlineEditIndexTodoEntries(true, "todo"), true);
+    assert.equal(canInlineEditIndexTodoEntries(true, "list"), false);
+    assert.equal(canInlineEditIndexTodoEntries(true, "agent"), false);
+    assert.equal(canInlineEditIndexTodoEntries(true, "thought-trail"), false);
+    assert.equal(canInlineEditIndexTodoEntries(true, "tags"), false);
+    assert.equal(canInlineEditIndexTodoEntries(false, "todo"), false);
 });
 
 test("threadMatchesSidebarGroup finds todo and agent mentions case-insensitively", () => {

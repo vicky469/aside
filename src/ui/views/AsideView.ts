@@ -159,7 +159,9 @@ import {
     type SidebarModeVisibility,
 } from "./sidebarModeTabs";
 import {
+    canInlineEditIndexTodoEntries,
     EMPTY_SIDEBAR_THREAD_GROUP_COUNTS,
+    entryMatchesSidebarTodo,
     filterThreadsBySidebarGroupMode,
     getSidebarThreadGroupCounts,
     resolveModeWithSidebarGroupAvailability,
@@ -1686,6 +1688,10 @@ export default class AsideView extends ItemView {
                     });
                 }
             }
+            const canInlineEditTodoEntries = canInlineEditIndexTodoEntries(
+                isAllCommentsView,
+                effectiveIndexSidebarMode,
+            );
             const groupFilteredScopedVisibleThreads = isAllCommentsView
                 ? filterThreadsBySidebarGroupMode(pinnedScopedVisibleThreads, effectiveIndexSidebarMode)
                 : pinnedScopedVisibleThreads;
@@ -1878,6 +1884,7 @@ export default class AsideView extends ItemView {
                         ? visibleDraftComment
                         : null,
                     isAllCommentsView ? this.indexSidebarSearchQuery : this.noteSidebarSearchQuery,
+                    canInlineEditTodoEntries,
                 );
             });
             await Promise.all(renderPromises);
@@ -4153,6 +4160,7 @@ export default class AsideView extends ItemView {
         editDraftComment: DraftComment | null = null,
         appendDraftComment: DraftComment | null = null,
         searchQuery: string = "",
+        canInlineEditTodoEntries: boolean = false,
     ) {
         const currentFilePath = this.file?.path ?? null;
         const isIndexView = !!currentFilePath && this.plugin.isAllCommentsNotePath(currentFilePath);
@@ -4245,8 +4253,14 @@ export default class AsideView extends ItemView {
                 });
             },
             clearDeletedComment: (commentId) => this.clearDeletedSidebarComment(commentId),
-            canEditEntryInline: () => !isIndexView,
-            shouldForceRenderEntry: () => false,
+            canEditEntryInline: (entry) => isIndexView
+                ? canInlineEditTodoEntries && entryMatchesSidebarTodo(entry)
+                : true,
+            shouldForceRenderEntry: (entry) => (
+                isIndexView
+                && canInlineEditTodoEntries
+                && entryMatchesSidebarTodo(entry)
+            ),
             startEditDraft: (commentId, hostFilePath) => {
                 void this.plugin.startEditDraft(commentId, hostFilePath);
             },

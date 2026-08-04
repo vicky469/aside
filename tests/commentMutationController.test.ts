@@ -8,6 +8,7 @@ import {
 } from "../src/comments/commentMutationController";
 import type { SavedUserEntryEvent } from "../src/agents/commentAgentController";
 import type { DraftComment, DraftSelection } from "../src/domain/drafts";
+import { threadMatchesSidebarGroup } from "../src/ui/views/sidebarThreadGroups";
 
 function createFile(path: string): TFile {
     return {
@@ -850,6 +851,80 @@ test("comment mutation controller keeps child edit drafts attached to their pare
     await host.controller.saveDraft("entry-2");
 
     assert.deepEqual(host.savedUserEntryEvents, []);
+});
+
+test("comment mutation controller saves an index-hosted final Todo edit to the canonical source thread", async () => {
+    const parent = createComment({
+        id: "thread-1",
+        filePath: "docs/source.md",
+        comment: "Parent @todo",
+    });
+    const host = createHost({
+        knownComments: [parent],
+        loadedComments: [parent],
+    });
+
+    const started = await host.controller.startEditDraft(parent.id, "Aside index.md");
+
+    assert.equal(started, true);
+    assert.equal(host.getDraftHostFilePath(), "Aside index.md");
+    assert.equal(host.getDraftComment()?.filePath, "docs/source.md");
+    host.getDraftComment()!.comment = "Parent complete";
+
+    await host.controller.saveDraft(parent.id);
+
+    const canonicalThread = host.manager.getThreadById(parent.id);
+    assert.ok(canonicalThread);
+    assert.equal(canonicalThread.entries[0]?.body, "Parent complete");
+    assert.equal(threadMatchesSidebarGroup(canonicalThread, "todo"), false);
+    assert.deepEqual(host.persistedFiles, [{
+        path: "docs/source.md",
+        immediateAggregateRefresh: false,
+        skipCommentViewRefresh: true,
+        refreshEditorDecorations: false,
+    }]);
+    assert.equal(host.getRefreshCommentViewsCount(), 1);
+});
+
+test("comment mutation controller keeps a canonical thread in Todo after editing one of multiple Todo entries", async () => {
+    const parent = createComment({
+        id: "thread-1",
+        filePath: "docs/source.md",
+        comment: "Parent @todo",
+    });
+    const host = createHost({
+        knownComments: [parent],
+        loadedComments: [parent],
+    });
+    host.manager.appendEntry(parent.id, {
+        id: "todo-child",
+        body: "Child @todo",
+        timestamp: 200,
+    });
+
+    const started = await host.controller.startEditDraft("todo-child", "Aside index.md");
+
+    assert.equal(started, true);
+    assert.equal(host.getDraftHostFilePath(), "Aside index.md");
+    assert.equal(host.getDraftComment()?.filePath, "docs/source.md");
+    host.getDraftComment()!.comment = "Child complete";
+
+    await host.controller.saveDraft("todo-child");
+
+    const canonicalThread = host.manager.getThreadById(parent.id);
+    assert.ok(canonicalThread);
+    assert.equal(
+        canonicalThread.entries.find((entry) => entry.id === "todo-child")?.body,
+        "Child complete",
+    );
+    assert.equal(threadMatchesSidebarGroup(canonicalThread, "todo"), true);
+    assert.deepEqual(host.persistedFiles, [{
+        path: "docs/source.md",
+        immediateAggregateRefresh: false,
+        skipCommentViewRefresh: true,
+        refreshEditorDecorations: false,
+    }]);
+    assert.equal(host.getRefreshCommentViewsCount(), 1);
 });
 
 test("comment mutation controller stores shortened markdown links when saving a draft", async () => {

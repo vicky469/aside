@@ -16,6 +16,13 @@ export const EMPTY_SIDEBAR_THREAD_GROUP_COUNTS: SidebarThreadGroupCounts = {
     todo: 0,
 };
 
+export function canInlineEditIndexTodoEntries(
+    isAllCommentsView: boolean,
+    effectiveMode: SidebarPrimaryMode,
+): boolean {
+    return isAllCommentsView && effectiveMode === "todo";
+}
+
 export function entryMatchesSidebarTodo(
     entry: Pick<CommentThreadEntry, "body">,
 ): boolean {
