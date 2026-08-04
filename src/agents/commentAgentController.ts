@@ -16,6 +16,7 @@ import type { AgentRuntimeModePreference } from "../core/agents/agentRuntimePref
 import { resolveUnsupportedAgentNotice } from "../core/agents/agentActorRegistry";
 import { resolveRequestedAgentRunSkills } from "../core/agents/agentSkillRouting";
 import type { AsideAgentTarget } from "../core/config/agentTargets";
+import type { SavedUserEntryEvent } from "../core/comments/savedUserEntry";
 import { parseAgentDirectives } from "../core/text/agentDirectives";
 import { AgentRunStore } from "./agentRunStore";
 import {
@@ -31,12 +32,7 @@ import {
     type AgentPromptContext,
 } from "./agentPromptContextPlanner";
 
-export interface SavedUserEntryEvent {
-    threadId: string;
-    entryId: string;
-    filePath: string;
-    body: string;
-}
+export type { SavedUserEntryEvent } from "../core/comments/savedUserEntry";
 
 export interface AgentRuntimeResponse extends AgentRunMetadata {
     runtime: AgentRunRuntime;

@@ -8,7 +8,7 @@ import { resolveAnchorRange } from "../core/anchors/anchorResolver";
 import { getVisibleNoteContent } from "../core/storage/noteCommentStorage";
 import { isHtmlPageNotePath } from "../core/rules/commentableFiles";
 import { canSaveDraftWithoutComment, type DraftComment, type DraftSelection } from "../domain/drafts";
-import type { SavedUserEntryEvent } from "../agents/commentAgentController";
+import type { SavedUserEntryEvent } from "../core/comments/savedUserEntry";
 import type { SetDraftCommentOptions } from "./commentSessionController";
 import {
     applyBatchTagToThreads,

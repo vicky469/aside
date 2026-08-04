@@ -26,6 +26,7 @@ import {
 export type PersistedPluginData = Partial<AsideSettings> & {
     preferredAgentTarget?: unknown;
     agentRuns?: unknown;
+    scriptRuns?: unknown;
     confirmDelete?: unknown;
     enableDebugMode?: unknown;
     remoteRuntimeBaseUrl?: unknown;
