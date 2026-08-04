@@ -52,6 +52,9 @@ function createHarness(options: {
     initialRuns?: ScriptRunRecord[];
     vaultRootPath?: string | null;
     editSucceeds?: boolean;
+    editResults?: boolean[];
+    appendSucceeds?: boolean;
+    loadCommentsForFile?: (filePath: string) => Promise<void>;
     runVaultScript?: (invocation: VaultScriptRuntimeInvocation) => Promise<VaultScriptRuntimeResult>;
 } = {}) {
     let persistedData: PersistedPluginData = {
@@ -60,6 +63,10 @@ function createHarness(options: {
     const store = new ScriptRunStore({
         readPersistedPluginData: () => persistedData,
         updatePersistedPluginData: async (updater) => {
+            if (failNextPersist) {
+                failNextPersist = false;
+                throw new Error("persist failed");
+            }
             persistedData = updater({ ...persistedData });
             return { ...persistedData };
         },
@@ -81,6 +88,10 @@ function createHarness(options: {
     let refreshCount = 0;
     let id = 1;
     let now = 100;
+    let failNextPersist = false;
+    let appendSucceeds = options.appendSucceeds ?? true;
+    let editSucceeds = options.editSucceeds ?? true;
+    let editResults = options.editResults?.slice() ?? [];
     const controller = new CommentScriptController({
         createRunId: () => `script-generated-${id++}`,
         now: () => ++now,
@@ -88,6 +99,7 @@ function createHarness(options: {
         getCommentManager: () => commentManager,
         loadCommentsForFile: async (filePath) => {
             loadedFilePaths.push(filePath);
+            await options.loadCommentsForFile?.(filePath);
         },
         appendThreadEntry: async (threadId, entry, appendOptions) => {
             appendedEntries.push({
@@ -98,6 +110,9 @@ function createHarness(options: {
                     ? { insertAfterCommentId: appendOptions.insertAfterCommentId }
                     : {}),
             });
+            if (!appendSucceeds) {
+                return false;
+            }
             commentManager.appendEntry(threadId, entry);
             if (appendOptions?.insertAfterCommentId && appendOptions.insertAfterCommentId !== threadId) {
                 commentManager.reorderThreadEntries(
@@ -111,7 +126,10 @@ function createHarness(options: {
         },
         editComment: async (commentId, body) => {
             editedEntries.push({ id: commentId, body });
-            if (options.editSucceeds === false || !commentManager.getCommentById(commentId)) {
+            const nextEditResult = editResults.length > 0
+                ? editResults.shift()
+                : editSucceeds;
+            if (!nextEditResult || !commentManager.getCommentById(commentId)) {
                 return false;
             }
             commentManager.editComment(commentId, body);
@@ -138,6 +156,18 @@ function createHarness(options: {
         editedEntries,
         loadedFilePaths,
         notices,
+        setAppendSucceeds: (value: boolean) => {
+            appendSucceeds = value;
+        },
+        setEditSucceeds: (value: boolean) => {
+            editSucceeds = value;
+        },
+        setEditResults: (values: boolean[]) => {
+            editResults = values.slice();
+        },
+        failNextPersist: () => {
+            failNextPersist = true;
+        },
         getRefreshCount: () => refreshCount,
         getPersistedData: () => persistedData,
     };
@@ -167,6 +197,26 @@ test("first saved script entry creates one durable run, process, and prefixed ou
     assert.equal(harness.appendedEntries[0]?.body, "Script @clean:\n\ncleaned");
     assert.deepEqual(harness.store.getRuns().map((run) => run.status), ["succeeded"]);
     assert.equal(harness.store.getRuns()[0]?.outputEntryId, harness.appendedEntries[0]?.entryId);
+});
+
+test("output append failure terminalizes the run without retrying the broken write path", async () => {
+    const harness = createHarness({ appendSucceeds: false });
+
+    assert.equal(await harness.controller.handleSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "@clean",
+    }), true);
+
+    const run = harness.store.getRuns()[0];
+    assert.equal(harness.runtimeCalls.length, 1);
+    assert.equal(harness.appendedEntries.length, 1);
+    assert.equal(run?.status, "failed");
+    assert.equal(run?.error, "Unable to save the vault script result.");
+    assert.equal(typeof run?.endedAt, "number");
+    assert.deepEqual(harness.notices, ["Unable to save the vault script result."]);
+    assert.equal(harness.getRefreshCount(), 1);
 });
 
 test("script output handles empty success, truncation, and concise stderr failures", async () => {
@@ -387,6 +437,137 @@ test("retryRun reuses output and reloads the latest trigger, thread, note, and s
         notePath: "Renamed.md",
     });
     assert.deepEqual(harness.editedEntries.map((entry) => entry.body), ["", "Script @clean:\n\ncleaned"]);
+});
+
+test("retryRun claims concurrently before loading and creates only one retry", async () => {
+    let releaseLoad = () => {};
+    const harness = createHarness({
+        initialRuns: [createStoredRun()],
+        loadCommentsForFile: async () => new Promise<void>((resolve) => {
+            releaseLoad = resolve;
+        }),
+    });
+
+    const firstRetry = harness.controller.retryRun("stored-run");
+    const secondRetry = harness.controller.retryRun("stored-run");
+    assert.equal(await secondRetry, false);
+    releaseLoad();
+    assert.equal(await firstRetry, true);
+
+    assert.equal(harness.store.getRuns().length, 2);
+    assert.equal(harness.runtimeCalls.length, 1);
+});
+
+test("retryRun persists before clearing and leaves old output visible when persistence fails", async () => {
+    const harness = createHarness();
+    await harness.controller.handleSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "@clean",
+    });
+    const previous = harness.store.getRuns()[0];
+    const previousOutput = harness.commentManager.getCommentById(previous.outputEntryId ?? "")?.comment;
+    harness.failNextPersist();
+
+    assert.equal(await harness.controller.retryRun(previous.id), false);
+
+    assert.equal(harness.store.getRuns().length, 1);
+    assert.deepEqual(harness.editedEntries, []);
+    assert.equal(
+        harness.commentManager.getCommentById(previous.outputEntryId ?? "")?.comment,
+        previousOutput,
+    );
+    assert.equal(harness.runtimeCalls.length, 1);
+});
+
+test("retryRun terminalizes a durable retry when clearing the old output fails", async () => {
+    const harness = createHarness();
+    await harness.controller.handleSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "@clean",
+    });
+    const previous = harness.store.getRuns()[0];
+    const previousOutput = harness.commentManager.getCommentById(previous.outputEntryId ?? "")?.comment;
+    harness.setEditSucceeds(false);
+
+    assert.equal(await harness.controller.retryRun(previous.id), false);
+
+    const retry = harness.store.getRuns()[1];
+    assert.equal(retry?.status, "failed");
+    assert.equal(retry?.error, "Unable to replace the previous script result.");
+    assert.equal(typeof retry?.endedAt, "number");
+    assert.equal(harness.runtimeCalls.length, 1);
+    assert.equal(
+        harness.commentManager.getCommentById(previous.outputEntryId ?? "")?.comment,
+        previousOutput,
+    );
+    assert.deepEqual(harness.notices, ["Unable to replace the previous script result."]);
+});
+
+test("retry output edit failure terminalizes once without retrying the edit", async () => {
+    const harness = createHarness();
+    await harness.controller.handleSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "@clean",
+    });
+    const previous = harness.store.getRuns()[0];
+    harness.setEditResults([true, false]);
+
+    assert.equal(await harness.controller.retryRun(previous.id), true);
+
+    const retry = harness.store.getRuns()[1];
+    assert.equal(retry?.status, "failed");
+    assert.equal(retry?.error, "Unable to replace the previous script result.");
+    assert.equal(harness.runtimeCalls.length, 2);
+    assert.equal(harness.editedEntries.length, 2);
+    assert.deepEqual(harness.notices, ["Unable to replace the previous script result."]);
+});
+
+test("dispose terminalizes queued executions without launching them", async () => {
+    let releaseFirst = () => {};
+    const harness = createHarness({
+        scripts: ["🛠️ scripts/clean.mjs", "🛠️ scripts/other-script.js"],
+        comments: [
+            createComment({ id: "thread-1", comment: "@clean" }),
+            createComment({ id: "thread-2", comment: "@other-script", timestamp: 20 }),
+        ],
+        runVaultScript: async (invocation) => {
+            if (invocation.scriptPath.endsWith("clean.mjs")) {
+                await new Promise<void>((resolve) => {
+                    releaseFirst = resolve;
+                });
+            }
+            return { stdout: "done", stderr: "" };
+        },
+    });
+    const first = harness.controller.handleSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "@clean",
+    });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    const second = harness.controller.handleSavedUserEntry({
+        threadId: "thread-2",
+        entryId: "thread-2",
+        filePath: "Folder/Note.md",
+        body: "@other-script",
+    });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    harness.controller.dispose();
+    releaseFirst();
+    await Promise.all([first, second]);
+
+    const secondRun = harness.store.getRuns().find((run) => run.triggerEntryId === "thread-2");
+    assert.equal(harness.runtimeCalls.length, 1);
+    assert.equal(secondRun?.status, "failed");
+    assert.equal(typeof secondRun?.endedAt, "number");
 });
 
 test("retryRun refuses busy, missing-script, and missing-trigger runs without runtime dispatch", async () => {

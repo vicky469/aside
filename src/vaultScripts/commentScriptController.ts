@@ -16,7 +16,9 @@ const MAX_SCRIPT_RESULT_WORDS = 250;
 const MAX_SCRIPT_ERROR_CHARACTERS = 500;
 const SCRIPT_RETRY_MISSING_NOTICE = "Unable to rerun: the saved trigger or vault script is no longer available.";
 const SCRIPT_RETRY_REPLACE_NOTICE = "Unable to replace the previous script result.";
+const SCRIPT_RETRY_PERSIST_NOTICE = "Unable to save the script retry.";
 const SCRIPT_SESSION_INTERRUPTED_ERROR = "The previous vault script run did not finish. Regenerate it to run again.";
+const SCRIPT_DISPOSED_ERROR = "Vault script execution stopped because Aside unloaded.";
 
 export interface CommentScriptHost {
     createRunId(): string;
@@ -94,6 +96,7 @@ export function summarizeScriptError(error: unknown): string {
 export class CommentScriptController {
     private executionQueue: Promise<void> = Promise.resolve();
     private readonly claimingSavedEntryIds = new Set<string>();
+    private readonly retryingRunIds = new Set<string>();
     private disposed = false;
 
     constructor(
@@ -108,6 +111,7 @@ export class CommentScriptController {
     public dispose(): void {
         this.disposed = true;
         this.claimingSavedEntryIds.clear();
+        this.retryingRunIds.clear();
     }
 
     public getRuns(): ScriptRunRecord[] {
@@ -163,7 +167,7 @@ export class CommentScriptController {
     }
 
     public async retryRun(runId: string): Promise<boolean> {
-        if (this.disposed) {
+        if (this.disposed || this.retryingRunIds.has(runId)) {
             return false;
         }
         const previous = this.store.getRunById(runId);
@@ -171,44 +175,63 @@ export class CommentScriptController {
             return false;
         }
 
-        await this.host.loadCommentsForFile(previous.filePath);
-        const trigger = this.host.getCommentManager().getCommentById(previous.triggerEntryId);
-        const thread = this.host.getCommentManager().getThreadById(previous.triggerEntryId);
-        const script = this.host.getRegistry().resolve(previous.mentionName);
-        if (!trigger || !thread || !script) {
-            this.host.showNotice(SCRIPT_RETRY_MISSING_NOTICE);
-            return false;
-        }
+        this.retryingRunIds.add(runId);
+        try {
+            await this.host.loadCommentsForFile(previous.filePath);
+            const trigger = this.host.getCommentManager().getCommentById(previous.triggerEntryId);
+            const thread = this.host.getCommentManager().getThreadById(previous.triggerEntryId);
+            const script = this.host.getRegistry().resolve(previous.mentionName);
+            if (!trigger || !thread || !script) {
+                this.host.showNotice(SCRIPT_RETRY_MISSING_NOTICE);
+                return false;
+            }
 
-        const next: ScriptRunRecord = {
-            ...previous,
-            id: this.host.createRunId(),
-            threadId: thread.id,
-            filePath: trigger.filePath,
-            scriptPath: script.path,
-            status: "queued",
-            promptText: trigger.comment,
-            createdAt: this.host.now(),
-            retryOfRunId: previous.id,
-            startedAt: undefined,
-            endedAt: undefined,
-            error: undefined,
-        };
-        if (
-            next.outputEntryId
-            && !(await this.host.editComment(
-                next.outputEntryId,
-                "",
-                { skipCommentViewRefresh: true },
-            ))
-        ) {
-            this.host.showNotice(SCRIPT_RETRY_REPLACE_NOTICE);
-            return false;
-        }
+            const next: ScriptRunRecord = {
+                ...previous,
+                id: this.host.createRunId(),
+                threadId: thread.id,
+                filePath: trigger.filePath,
+                scriptPath: script.path,
+                status: "queued",
+                promptText: trigger.comment,
+                createdAt: this.host.now(),
+                retryOfRunId: previous.id,
+                startedAt: undefined,
+                endedAt: undefined,
+                error: undefined,
+            };
+            try {
+                await this.store.addRun(next);
+            } catch {
+                this.host.showNotice(SCRIPT_RETRY_PERSIST_NOTICE);
+                await this.host.refreshCommentViews();
+                return false;
+            }
 
-        await this.store.addRun(next);
-        await this.enqueue(next);
-        return true;
+            if (next.outputEntryId) {
+                let cleared = false;
+                try {
+                    cleared = await this.host.editComment(
+                        next.outputEntryId,
+                        "",
+                        { skipCommentViewRefresh: true },
+                    );
+                } catch {
+                    cleared = false;
+                }
+                if (!cleared) {
+                    await this.terminalizeFailedRun(next.id, SCRIPT_RETRY_REPLACE_NOTICE);
+                    this.host.showNotice(SCRIPT_RETRY_REPLACE_NOTICE);
+                    await this.host.refreshCommentViews();
+                    return false;
+                }
+            }
+
+            await this.enqueue(next);
+            return true;
+        } finally {
+            this.retryingRunIds.delete(runId);
+        }
     }
 
     private buildQueuedRun(
@@ -259,11 +282,20 @@ export class CommentScriptController {
     }
 
     private async execute(run: ScriptRunRecord): Promise<void> {
+        if (this.disposed) {
+            await this.terminalizeFailedRun(run.id, SCRIPT_DISPOSED_ERROR);
+            await this.host.refreshCommentViews();
+            return;
+        }
         await this.store.updateRun(run.id, (current) => ({
             ...current,
             status: "running",
             startedAt: this.host.now(),
         }));
+
+        let status: "succeeded" | "failed";
+        let body: string;
+        let runtimeError: string | undefined;
         try {
             const vaultRootPath = this.host.getVaultRootPath();
             if (!vaultRootPath) {
@@ -274,31 +306,41 @@ export class CommentScriptController {
                 scriptPath: run.scriptPath,
                 notePath: run.filePath,
             });
-            const outputEntryId = await this.writeOutput(
-                run,
-                formatScriptResult(run.mentionName, result.stdout),
-            );
-            await this.store.updateRun(run.id, (current) => ({
-                ...current,
-                status: "succeeded",
-                endedAt: this.host.now(),
-                outputEntryId,
-            }));
+            status = "succeeded";
+            body = formatScriptResult(run.mentionName, result.stdout);
         } catch (error) {
-            const message = summarizeScriptError(error);
+            runtimeError = summarizeScriptError(error);
+            status = "failed";
+            body = formatScriptResult(run.mentionName, runtimeError);
+        }
+
+        try {
             const outputEntryId = await this.writeOutput(
                 run,
-                formatScriptResult(run.mentionName, message),
+                body,
             );
             await this.store.updateRun(run.id, (current) => ({
                 ...current,
-                status: "failed",
+                status,
                 endedAt: this.host.now(),
                 outputEntryId,
-                error: message,
+                error: runtimeError,
             }));
+        } catch (outputError) {
+            const message = summarizeScriptError(outputError);
+            await this.terminalizeFailedRun(run.id, message);
+            this.host.showNotice(message);
         }
         await this.host.refreshCommentViews();
+    }
+
+    private async terminalizeFailedRun(runId: string, error: string): Promise<void> {
+        await this.store.updateRun(runId, (current) => ({
+            ...current,
+            status: "failed",
+            endedAt: this.host.now(),
+            error,
+        }));
     }
 
     private async writeOutput(run: ScriptRunRecord, body: string): Promise<string> {
