@@ -46,6 +46,21 @@ export function isDraftSaveActionDisabled(
         || (commentText.trim().length === 0 && !allowEmptyComment);
 }
 
+export function shouldAutoOpenDraftMentionSuggest(
+    value: string,
+    selectionStart: number,
+    selectionEnd: number,
+    inputType: string,
+): boolean {
+    const isTextInsertion = inputType === "insertText"
+        || inputType === "insertCompositionText"
+        || inputType === "insertFromComposition";
+    return isTextInsertion
+        && selectionStart === selectionEnd
+        && selectionStart > 0
+        && value.slice(selectionStart - 1, selectionStart) === "@";
+}
+
 export function buildDraftCommentPresentation(
     comment: DraftComment,
     activeCommentId: string | null,
@@ -359,13 +374,21 @@ function renderDraftEditor(
         target.rows = estimateDraftTextareaRows(target.value, comment.mode === "edit");
         syncPreview();
         syncActionState();
+        const inputType = "inputType" in event && typeof event.inputType === "string"
+            ? event.inputType
+            : "";
 
-        if (!nodeInstanceOf(event, InputEvent) || event.inputType !== "insertText" || !event.data) {
+        if (shouldAutoOpenDraftMentionSuggest(
+            target.value,
+            target.selectionStart,
+            target.selectionEnd,
+            inputType,
+        )) {
+            draftEditorController.openDraftMentionSuggest(comment, target, comment.mode === "edit");
             return;
         }
 
-        if (event.data === "@") {
-            draftEditorController.openDraftMentionSuggest(comment, target, comment.mode === "edit");
+        if (!nodeInstanceOf(event, InputEvent) || event.inputType !== "insertText" || !event.data) {
             return;
         }
 

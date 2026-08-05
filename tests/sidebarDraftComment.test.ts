@@ -4,6 +4,7 @@ import type { DraftComment } from "../src/domain/drafts";
 import {
     buildDraftCommentPresentation,
     isDraftSaveActionDisabled,
+    shouldAutoOpenDraftMentionSuggest,
 } from "../src/ui/views/sidebarDraftComment";
 
 function createDraft(overrides: Partial<DraftComment> = {}): DraftComment {
@@ -102,4 +103,21 @@ test("isDraftSaveActionDisabled allows empty new anchored notes but blocks other
 
 test("isDraftSaveActionDisabled blocks over-limit saves", () => {
     assert.equal(isDraftSaveActionDisabled(createDraft(), `${"word ".repeat(301)}`), true);
+});
+
+test("draft mention suggestions auto-open from a bare @ at the caret", () => {
+    assert.equal(shouldAutoOpenDraftMentionSuggest("@", 1, 1, "insertText"), true);
+    assert.equal(shouldAutoOpenDraftMentionSuggest("please @", 8, 8, "insertText"), true);
+    assert.equal(shouldAutoOpenDraftMentionSuggest("please @", 8, 8, "insertCompositionText"), true);
+    assert.equal(shouldAutoOpenDraftMentionSuggest("please @", 8, 8, "insertFromComposition"), true);
+    assert.equal(shouldAutoOpenDraftMentionSuggest("please @c", 9, 9, "insertText"), false);
+    assert.equal(shouldAutoOpenDraftMentionSuggest("please @", 7, 8, "insertText"), false);
+});
+
+test("draft mention suggestions stay closed for non-typing input that leaves a bare @", () => {
+    assert.equal(shouldAutoOpenDraftMentionSuggest("please @", 8, 8, "deleteContentBackward"), false);
+    assert.equal(shouldAutoOpenDraftMentionSuggest("please @", 8, 8, "historyUndo"), false);
+    assert.equal(shouldAutoOpenDraftMentionSuggest("please @", 8, 8, "historyRedo"), false);
+    assert.equal(shouldAutoOpenDraftMentionSuggest("please @", 8, 8, "insertFromPaste"), false);
+    assert.equal(shouldAutoOpenDraftMentionSuggest("please @", 8, 8, ""), false);
 });
