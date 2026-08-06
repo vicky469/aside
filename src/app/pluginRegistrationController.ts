@@ -56,8 +56,6 @@ export interface PluginRegistrationHost {
     startDraftFromEditorSelection(editor: EditorSelectionLike, file: TFile | null): Promise<unknown>;
     openCommentById(filePath: string | null, commentId: string): Promise<void>;
     openIndexNote(): Promise<void> | void;
-    publishActiveFileFolder(): Promise<void> | void;
-    publishPublicRoot(): Promise<void> | void;
 }
 
 export interface CommentProtocolTarget {
@@ -93,22 +91,6 @@ export class PluginRegistrationController {
             icon: this.host.iconId,
             editorCallback: async (editor, view) => {
                 await this.host.startDraftFromEditorSelection(editor, view.file);
-            },
-        });
-        this.host.addCommand({
-            id: "publish-active-file-folder",
-            name: "Publish current public folder",
-            icon: "folder-up",
-            callback: async () => {
-                await this.host.publishActiveFileFolder();
-            },
-        });
-        this.host.addCommand({
-            id: "publish-public-root",
-            name: "Publish all public files",
-            icon: "upload-cloud",
-            callback: async () => {
-                await this.host.publishPublicRoot();
             },
         });
 

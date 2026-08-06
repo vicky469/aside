@@ -1,11 +1,7 @@
 import {
     normalizeDeletedAt,
 } from "../../core/rules/deletedCommentVisibility";
-import type { CommentThread, CommentThreadEntry, CommentThreadEntryAnchor, CommentThreadEntryAuthor } from "./commentThread";
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-    return !!value && typeof value === "object" && !Array.isArray(value);
-}
+import type { CommentThread, CommentThreadEntry, CommentThreadEntryAnchor } from "./commentThread";
 
 export function cloneCommentThreadEntryAnchor(anchor: CommentThreadEntryAnchor): CommentThreadEntryAnchor {
     return {
@@ -21,60 +17,13 @@ export function cloneCommentThreadEntryAnchor(anchor: CommentThreadEntryAnchor):
     };
 }
 
-export function normalizeCommentThreadEntryAuthor(candidate: unknown): CommentThreadEntryAuthor | undefined {
-    if (!isRecord(candidate)) {
-        return undefined;
-    }
-
-    const provider = typeof candidate.provider === "string" ? candidate.provider.trim() : "";
-    const identity = typeof candidate.identity === "string" ? candidate.identity.trim() : "";
-    const displayName = typeof candidate.displayName === "string" ? candidate.displayName.trim() : "";
-    if (!provider || !identity) {
-        return undefined;
-    }
-
-    return {
-        provider,
-        identity: provider === "google" ? identity.toLowerCase() : identity,
-        ...(displayName ? { displayName } : {}),
-    };
-}
-
-export function cloneCommentThreadEntryAuthor(author: CommentThreadEntryAuthor): CommentThreadEntryAuthor {
-    return normalizeCommentThreadEntryAuthor(author) ?? {
-        provider: author.provider,
-        identity: author.identity,
-        ...(author.displayName ? { displayName: author.displayName } : {}),
-    };
-}
-
-export function areCommentThreadEntryAuthorsEqual(
-    left: CommentThreadEntryAuthor | undefined,
-    right: CommentThreadEntryAuthor | undefined,
-): boolean {
-    const normalizedLeft = normalizeCommentThreadEntryAuthor(left);
-    const normalizedRight = normalizeCommentThreadEntryAuthor(right);
-    if (!normalizedLeft && !normalizedRight) {
-        return true;
-    }
-    if (!normalizedLeft || !normalizedRight) {
-        return false;
-    }
-
-    return normalizedLeft.provider === normalizedRight.provider
-        && normalizedLeft.identity === normalizedRight.identity
-        && (normalizedLeft.displayName ?? "") === (normalizedRight.displayName ?? "");
-}
-
 export function cloneCommentThreadEntry(entry: CommentThreadEntry): CommentThreadEntry {
     const deletedAt = normalizeDeletedAt(entry.deletedAt);
-    const author = normalizeCommentThreadEntryAuthor(entry.author);
     return {
         id: entry.id,
         body: entry.body,
         timestamp: entry.timestamp,
         ...(deletedAt !== undefined ? { deletedAt } : {}),
-        ...(author ? { author } : {}),
         ...(entry.anchor ? { anchor: cloneCommentThreadEntryAnchor(entry.anchor) } : {}),
     };
 }
@@ -110,18 +59,12 @@ function mergeDuplicateCommentThreadEntry(
         : current.anchor
             ? cloneCommentThreadEntryAnchor(current.anchor)
             : undefined;
-    const author = next.author && (!current.author || next.timestamp >= current.timestamp)
-        ? cloneCommentThreadEntryAuthor(next.author)
-        : current.author
-            ? cloneCommentThreadEntryAuthor(current.author)
-            : undefined;
 
     return {
         id: current.id,
         body: useNextBody ? next.body : current.body,
         timestamp: Math.max(current.timestamp, next.timestamp),
         ...(deletedAt !== undefined ? { deletedAt } : {}),
-        ...(author ? { author } : {}),
         ...(anchor ? { anchor } : {}),
     };
 }

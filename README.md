@@ -106,28 +106,6 @@ Aside reads clipboard data only from a paste event initiated by the user. It wri
 	  - Remote purge does not support `*.pages.dev`; use a custom domain in a Cloudflare zone you control.
    - In Aside settings, turn on Publishing and set the Publishing URL to your public Pages URL, for example `https://publish.example.com`.
    - Put publishable Markdown, HTML, and PDF files under `public/`. Aside creates `public/` when Publishing is enabled if it does not already exist.
-   - For private published wikis with sign-in and comments:
-     - Create `public/auth.md` with rows like `| google | alice@example.com | / | full |`. The columns are `provider`, `identity`, `path`, and `permission`; permissions are `view`, `comment`, or `full`.
-     - Configure a D1 database binding on the Pages project named `ASIDE_COMMENTS_DB`.
-     - Initialize that D1 database with the generated comment event schema:
-       ```sql
-       CREATE TABLE IF NOT EXISTS aside_comment_events (
-         event_id TEXT PRIMARY KEY,
-         path TEXT NOT NULL,
-         op TEXT NOT NULL,
-         payload_json TEXT NOT NULL,
-         author_provider TEXT NOT NULL,
-         author_identity TEXT NOT NULL,
-         author_display_name TEXT,
-         created_at TEXT NOT NULL
-       );
-       CREATE INDEX IF NOT EXISTS idx_aside_comment_events_path_created
-         ON aside_comment_events (path, created_at, event_id);
-       ```
-     - Create a Google OAuth web client whose redirect URI is `https://your-publish-host/_aside/api/auth/google/callback`.
-     - Store these Pages environment variables/secrets in Cloudflare: `ASIDE_GOOGLE_CLIENT_ID`, `ASIDE_GOOGLE_CLIENT_SECRET`, and a long random `ASIDE_SESSION_SECRET`.
-     - Aside deploys through the local Wrangler direct-upload path. It stages static assets plus `functions/` and private runtime modules, then runs `wrangler pages deploy` for the configured Pages project; Aside does not store Cloudflare API tokens or OAuth secrets in the vault.
-     - If sign-in returns a configuration error, check the three `ASIDE_GOOGLE_*`/session variables. If comments return a D1 error, check the `ASIDE_COMMENTS_DB` binding and schema. The generated owner export endpoint `/_aside/api/comment-events` requires a signed-in `full` permission at `/` and supports `afterCreatedAt` plus `afterEventId` cursor query parameters for local import tooling.
 
 ## Workflow
 

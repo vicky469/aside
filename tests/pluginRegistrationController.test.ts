@@ -77,8 +77,6 @@ function createHarness() {
     const draftCalls: Array<{ selected: boolean; filePath: string | null }> = [];
     const openedCommentTargets: Array<{ filePath: string | null; commentId: string }> = [];
     let openIndexNoteCount = 0;
-    let publishActiveFileFolderCount = 0;
-    let publishPublicRootCount = 0;
 
     const controller = new PluginRegistrationController({
         manifestId: "aside",
@@ -121,12 +119,6 @@ function createHarness() {
         openIndexNote: async () => {
             openIndexNoteCount += 1;
         },
-        publishActiveFileFolder: async () => {
-            publishActiveFileFolderCount += 1;
-        },
-        publishPublicRoot: async () => {
-            publishPublicRootCount += 1;
-        },
     });
 
     return {
@@ -142,8 +134,6 @@ function createHarness() {
         draftCalls,
         openedCommentTargets,
         getOpenIndexNoteCount: () => openIndexNoteCount,
-        getPublishActiveFileFolderCount: () => publishActiveFileFolderCount,
-        getPublishPublicRootCount: () => publishPublicRootCount,
     };
 }
 
@@ -166,16 +156,8 @@ test("plugin registration controller registers views, protocol handler, selectio
         viewType: "aside-public-html-view",
     }]);
     assert.deepEqual(Array.from(harness.protocolHandlers.keys()), ["aside-comment"]);
-    assert.deepEqual(harness.commands.map((command) => command.id), [
-        "add-comment-to-selection",
-        "publish-active-file-folder",
-        "publish-public-root",
-    ]);
-    assert.deepEqual(harness.commands.map((command) => command.name), [
-        "Add comment to selection",
-        "Publish current public folder",
-        "Publish all public files",
-    ]);
+    assert.deepEqual(harness.commands.map((command) => command.id), ["add-comment-to-selection"]);
+    assert.deepEqual(harness.commands.map((command) => command.name), ["Add comment to selection"]);
     assert.deepEqual(harness.ribbonActions.map((action) => action.title), ["Open Aside"]);
 
     await harness.commands[0].callback?.();
@@ -187,10 +169,6 @@ test("plugin registration controller registers views, protocol handler, selectio
         selected: true,
         filePath: editorFile.path,
     }]);
-    await harness.commands[1].callback?.();
-    await harness.commands[2].callback?.();
-    assert.equal(harness.getPublishActiveFileFolderCount(), 1);
-    assert.equal(harness.getPublishPublicRootCount(), 1);
 
     harness.protocolHandlers.get("aside-comment")?.({});
     harness.protocolHandlers.get("aside-comment")?.({

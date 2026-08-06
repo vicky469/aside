@@ -58,17 +58,14 @@ import {
 import {
     PublicHtmlPublishController,
     type PublicHtmlPublishActionState,
-    type PublicHtmlPublishResult,
-	type PublicHtmlDeploySnapshotSupport,
     type PublicHtmlPublishSnapshotFile,
     type PublicHtmlDeploySnapshotResult,
 	type PublicHtmlCachePurgeInput,
-	type PrivatePublishPageCommentSeed,
 } from "./publish/publicHtmlPublishController";
 import {
-	deployPublicHtmlSnapshotToWranglerPages,
-	type PublicHtmlSnapshotDeployRuntimeModules,
-} from "./publish/wranglerPagesSnapshotDeploy";
+    runWranglerPagesDeploy,
+    type WranglerRuntimeModules,
+} from "./publish/wranglerPagesPublisher";
 import {
 	purgeRemoteCache,
 	readRemoteCachePurgeAuthSecret,
@@ -144,7 +141,21 @@ import {
 } from "./logs/logService";
 import bundledAsideSkillContent from "../skills/aside/SKILL.md";
 
-type PublishRuntimeModules = PublicHtmlSnapshotDeployRuntimeModules;
+interface PublishRuntimeModules extends WranglerRuntimeModules {
+    fsPromises: {
+        mkdtemp(prefix: string): Promise<string>;
+        mkdir(path: string, options: { recursive?: boolean }): Promise<void>;
+        writeFile(path: string, contents: string | Uint8Array, encoding?: "utf8"): Promise<void>;
+        rm(path: string, options: { recursive?: boolean; force?: boolean }): Promise<void>;
+    };
+    os: {
+        tmpdir(): string;
+    };
+    path: {
+        dirname(path: string): string;
+        join(...paths: string[]): string;
+    };
+}
 
 const SIDE_NOTE_SYNC_EVENT_MIGRATION_VERSION = 2;
 const SOURCE_IDENTITY_MIGRATION_VERSION = 1;
@@ -526,14 +537,6 @@ export default class Aside extends Plugin {
                 ? this.vaultCapabilityIndex.listMarkdownFilesInFolder(folder).map((file) => file.path)
                 : []);
         },
-        listVaultFiles: (rootPath) => {
-            const folderPath = normalizePath(rootPath.replace(/\/+$/u, ""));
-            const rootPrefix = `${folderPath}/`;
-            return Promise.resolve(this.app.vault.getFiles()
-                .map((file) => file.path)
-                .filter((filePath) => filePath.startsWith(rootPrefix))
-                .sort());
-        },
         fileExists: (filePath) => Promise.resolve(this.getVaultFileByPath(filePath) !== null),
         readVaultFile: async (filePath) => {
             const file = this.getVaultFileByPath(filePath);
@@ -556,20 +559,9 @@ export default class Aside extends Plugin {
             }
             await this.app.vault.modify(file, contents);
         },
-        writeOrCreateVaultFile: async (filePath, contents) => {
-            const normalizedPath = normalizePath(filePath);
-            const file = this.getVaultFileByPath(normalizedPath);
-            if (file) {
-                await this.app.vault.modify(file, contents);
-                return;
-            }
-            await this.app.vault.create(normalizedPath, contents);
-        },
         getPublishedArtifactPaths: () => this.settings.publishedPublicArtifactPaths,
         setPublishedArtifactPaths: (paths) => this.setPublishedPublicArtifactPaths(paths),
-        getCurrentTimestamp: () => new Date().toISOString(),
-        getPrivatePublishPageCommentSeeds: (sourcePath) => this.getPrivatePublishPageCommentSeeds(sourcePath),
-        deploySnapshot: (files, supportFiles) => this.publishSnapshotArtifacts(files, supportFiles),
+        deploySnapshot: (files) => this.publishSnapshotArtifacts(files),
         purgePublicUrlFromCache: (url) => this.purgePublishedPublicUrlCache(url),
     });
     private readonly publicFilePublishActionController = new PublicFilePublishActionController({
@@ -656,8 +648,6 @@ export default class Aside extends Plugin {
             this.commentEntryController.startDraftFromEditorSelection(editor as unknown as Editor, file),
         openCommentById: (filePath, commentId) => this.openCommentById(filePath, commentId),
         openIndexNote: () => this.openIndexNote(),
-        publishActiveFileFolder: () => this.publishActiveFileFolder(),
-        publishPublicRoot: () => this.publishPublicRoot(),
     });
     private readonly workspaceContextController = new WorkspaceContextController({
         app: this.app,
@@ -917,14 +907,8 @@ export default class Aside extends Plugin {
 					nextProjectName,
 				));
 			}
-        }
+		}
         await this.indexNoteSettingsController.setPublishEnabled(enabled);
-        if (enabled) {
-            const indexResult = await this.publicHtmlPublishController.ensurePrivatePublishIndex();
-            if (!indexResult.ok) {
-                this.showNotice(indexResult.notice, "publish", "publish.index.ensure.failed");
-            }
-        }
         this.syncPublicFilePublishActions();
     }
 
@@ -1160,48 +1144,6 @@ export default class Aside extends Plugin {
                 url: result.url,
             },
         );
-        this.syncPublicFilePublishActions();
-    }
-
-    private async publishActiveFileFolder(): Promise<void> {
-        const activeFile = this.app.workspace.getActiveFile();
-        if (!activeFile) {
-            this.showNotice("Open a file inside the publish root first.", "publish", "publish.folder.active-file.missing");
-            return;
-        }
-
-        const folderPath = activeFile.path.includes("/")
-            ? activeFile.path.slice(0, activeFile.path.lastIndexOf("/"))
-            : activeFile.path;
-        await this.runPublicHtmlFolderPublish(folderPath, "publish.folder.active-file");
-    }
-
-    private async publishPublicRoot(): Promise<void> {
-        const result = await this.publicHtmlPublishController.publishRoot();
-        this.handlePublicHtmlFolderPublishResult(result, this.settings.publishAllowedRoot, "publish.root");
-    }
-
-    private async runPublicHtmlFolderPublish(folderPath: string, eventPrefix: string): Promise<void> {
-        const result = await this.publicHtmlPublishController.publishFolder(folderPath);
-        this.handlePublicHtmlFolderPublishResult(result, folderPath, eventPrefix);
-    }
-
-    private handlePublicHtmlFolderPublishResult(
-        result: PublicHtmlPublishResult,
-        folderPath: string,
-        eventPrefix: string,
-    ): void {
-        if (!result.ok) {
-            this.showNotice(result.notice, "publish", `${eventPrefix}.failed`, {
-                vaultRelativePath: folderPath,
-            });
-            return;
-        }
-
-        this.showNotice(result.notice ?? `Published: ${result.url}`, "publish", `${eventPrefix}.published`, {
-            vaultRelativePath: folderPath,
-            url: result.url,
-        });
         this.syncPublicFilePublishActions();
     }
 
@@ -1676,10 +1618,7 @@ export default class Aside extends Plugin {
         );
     }
 
-    private async publishSnapshotArtifacts(
-        files: PublicHtmlPublishSnapshotFile[],
-        supportFiles?: PublicHtmlDeploySnapshotSupport,
-    ): Promise<PublicHtmlDeploySnapshotResult> {
+    private async publishSnapshotArtifacts(files: PublicHtmlPublishSnapshotFile[]): Promise<PublicHtmlDeploySnapshotResult> {
         const modules = this.getPublishRuntimeModules();
         const vaultRootPath = this.getVaultRootPath();
         if (!modules || !vaultRootPath) {
@@ -1689,31 +1628,87 @@ export default class Aside extends Plugin {
             };
         }
 
-        const deployResult = await deployPublicHtmlSnapshotToWranglerPages(modules, {
-            files,
-            staticAssets: supportFiles?.staticAssets,
-            projectFiles: supportFiles?.projectFiles,
-            staticAssetPathByVaultRelativePath: supportFiles?.privateAssetPathByVaultRelativePath,
-            projectName: this.settings.publishPagesProjectName,
-            publishBaseUrl: this.settings.publishBaseUrl,
-            vaultRootPath,
-            env: getProcessEnv(),
-            onResolvedProjectName: (projectName) => this.storeResolvedPublishPagesProjectName(projectName),
-            onCleanupWarning: (error) => this.warn(
-                "Failed to remove Aside public publish staging directory.",
-                error,
-                "publish",
-                "publish.public-html.cleanup.warn",
-            ),
-        });
-        if (!deployResult.ok) {
-            void this.logEvent("warn", "publish", "publish.public-html.wrangler.failed", {
-                fileCount: files.length,
-                vaultRelativePaths: files.map((file) => file.vaultRelativePath),
-                notice: deployResult.notice,
+        const stagedFiles: PublicHtmlPublishSnapshotFile[] = [];
+        for (const file of files) {
+            const normalizedPath = normalizeVaultRelativePublishPath(file.vaultRelativePath);
+            if (!normalizedPath.ok) {
+                return {
+                    ok: false,
+                    notice: "Selected publish path must stay inside the current vault.",
+                };
+            }
+            stagedFiles.push({
+                vaultRelativePath: normalizedPath.path,
+                contents: file.contents,
             });
         }
-        return deployResult;
+
+        let stagingDirPath: string | null = null;
+        try {
+            stagingDirPath = await modules.fsPromises.mkdtemp(
+                modules.path.join(modules.os.tmpdir(), "aside-public-publish-"),
+            );
+            for (const file of stagedFiles) {
+                const stagedFilePath = modules.path.join(
+                    stagingDirPath,
+                    ...file.vaultRelativePath.split("/").filter(Boolean),
+                );
+                await modules.fsPromises.mkdir(modules.path.dirname(stagedFilePath), { recursive: true });
+                if (typeof file.contents === "string") {
+                    await modules.fsPromises.writeFile(stagedFilePath, file.contents, "utf8");
+                } else {
+                    await modules.fsPromises.writeFile(stagedFilePath, new Uint8Array(file.contents));
+                }
+            }
+
+            const deployResult = await runWranglerPagesDeploy(modules, {
+                stagingDirPath,
+                projectName: this.settings.publishPagesProjectName,
+                publishBaseUrl: this.settings.publishBaseUrl,
+                cwd: vaultRootPath,
+                env: getProcessEnv(),
+            });
+            await this.storeResolvedPublishPagesProjectName(deployResult.projectName);
+            if (!deployResult.ok) {
+                void this.logEvent("warn", "publish", "publish.public-html.wrangler.failed", {
+                    fileCount: stagedFiles.length,
+                    vaultRelativePaths: stagedFiles.map((file) => file.vaultRelativePath),
+                    notice: deployResult.notice,
+                });
+                return {
+                    ok: false,
+                    notice: deployResult.notice,
+                };
+            }
+
+            return { ok: true };
+        } catch (error) {
+            const message = error instanceof Error && error.message.trim()
+                ? error.message.trim()
+                : "Unable to stage or deploy the publish snapshot.";
+            void this.logEvent("error", "publish", "publish.public-html.runtime.error", {
+                fileCount: stagedFiles.length,
+                vaultRelativePaths: stagedFiles.map((file) => file.vaultRelativePath),
+                error: message,
+            });
+            return {
+                ok: false,
+                notice: message,
+            };
+        } finally {
+            if (stagingDirPath) {
+                try {
+                    await modules.fsPromises.rm(stagingDirPath, { recursive: true, force: true });
+                } catch (error) {
+                    this.warn(
+                        "Failed to remove Aside public publish staging directory.",
+                        error,
+                        "publish",
+                        "publish.public-html.cleanup.warn",
+                    );
+                }
+            }
+        }
     }
 
 	private async purgePublishedPublicUrlCache(input: PublicHtmlCachePurgeInput): Promise<{ ok: true } | { ok: false; notice: string }> {
@@ -1960,31 +1955,6 @@ export default class Aside extends Plugin {
 
     private clearParsedNoteCache(filePath: string) {
         this.parsedNoteCache.clear(filePath);
-    }
-
-    private async getPrivatePublishPageCommentSeeds(sourcePath: string): Promise<PrivatePublishPageCommentSeed[]> {
-        const file = this.getVaultFileByPath(sourcePath);
-        if (!file || !this.isPageNoteCapableFile(file)) {
-            return [];
-        }
-
-        const comments = await this.commentPersistenceController.loadCommentsForFile(file);
-        return comments
-            .filter((comment) => comment.anchorKind === "page" && comment.deletedAt === undefined)
-            .map((comment) => ({
-                id: comment.id,
-                body: comment.comment,
-                createdAt: Number.isFinite(comment.timestamp)
-                    ? new Date(comment.timestamp).toISOString()
-                    : new Date().toISOString(),
-                ...(comment.author ? {
-                    author: {
-                        provider: comment.author.provider,
-                        identity: comment.author.identity,
-                        ...(comment.author.displayName ? { displayName: comment.author.displayName } : {}),
-                    },
-                } : {}),
-            }));
     }
 
     async loadCommentsForFile(file: TFile | null): Promise<Comment[]> {

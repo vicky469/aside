@@ -1,10 +1,5 @@
 import type { CommentThread, CommentThreadEntry, CommentThreadEntryAnchor } from "../../domain/comments/commentThread";
-import {
-    areCommentThreadEntryAuthorsEqual,
-    cloneCommentThread,
-    cloneCommentThreads,
-    normalizeCommentThreadEntryAuthor,
-} from "../../domain/comments/commentThreadNormalization";
+import { cloneCommentThread, cloneCommentThreads } from "../../domain/comments/commentThreadNormalization";
 import { normalizeDeletedAt, purgeExpiredDeletedThreads } from "../../core/rules/deletedCommentVisibility";
 
 export const SIDE_NOTE_SYNC_EVENT_SCHEMA_VERSION = 1;
@@ -147,13 +142,11 @@ function normalizeThreadEntry(candidate: unknown): CommentThreadEntry | null {
     }
 
     const deletedAt = normalizeDeletedAt(candidate.deletedAt);
-    const author = normalizeCommentThreadEntryAuthor(candidate.author);
     return {
         id: candidate.id,
         body: candidate.body,
         timestamp: candidate.timestamp,
         ...(deletedAt !== undefined ? { deletedAt } : {}),
-        ...(author ? { author } : {}),
         ...(normalizeThreadEntryAnchor(candidate.anchor) ? { anchor: normalizeThreadEntryAnchor(candidate.anchor) } : {}),
     };
 }
@@ -605,7 +598,6 @@ function areEntriesEqual(left: CommentThreadEntry, right: CommentThreadEntry): b
         && left.body === right.body
         && left.timestamp === right.timestamp
         && normalizeDeletedAt(left.deletedAt) === normalizeDeletedAt(right.deletedAt)
-        && areCommentThreadEntryAuthorsEqual(left.author, right.author)
         && areEntryAnchorsEqual(left.anchor, right.anchor);
 }
 
