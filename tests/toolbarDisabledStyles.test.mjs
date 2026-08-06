@@ -38,9 +38,14 @@ test("mention suggestions use a one-line fallback and compact inline geometry", 
     );
     assert.match(mentionModalSource, /getMentionSuggestionPresentation\(suggestion\)/);
     const renderSuggestionSource = mentionModalSource.match(
-        /renderSuggestion\([\s\S]*?\n    }\n\n    onChooseSuggestion/,
+        /renderSuggestion\([\s\S]*?\n[ ]{4}\}\n\n[ ]{4}onChooseSuggestion/,
     )?.[0];
     assert.ok(renderSuggestionSource, "missing mention fallback renderSuggestion");
+    assert.match(
+        renderSuggestionSource,
+        /\bel\.createDiv\s*\(\s*\{\s*text\s*:\s*presentation\.title\s*\}\s*\)\s*;/,
+    );
+    assert.equal(renderSuggestionSource.match(/\bcreateDiv\s*\(/g)?.length ?? 0, 1);
     assert.doesNotMatch(renderSuggestionSource, /\.label|\.scriptPath|aside-mention-suggest-note/);
 
     assert.ok(mentionDropdownRule?.groups?.body, "missing mention dropdown compact rule");
