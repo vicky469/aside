@@ -1,4 +1,5 @@
 import { App, SuggestModal } from "obsidian";
+import { getMentionSuggestionPresentation } from "../editor/commentMentionSuggestions";
 import type { SideNoteMentionSuggestion } from "../editor/commentMentionSuggestions";
 
 export interface SideNoteMentionSuggestModalOptions {
@@ -37,11 +38,8 @@ export default class SideNoteMentionSuggestModal extends SuggestModal<SideNoteMe
     }
 
     renderSuggestion(suggestion: SideNoteMentionSuggestion, el: HTMLElement): void {
-        el.createDiv({ text: suggestion.mention });
-        el.createDiv({
-            cls: "aside-mention-suggest-note",
-            text: suggestion.kind === "script" ? suggestion.scriptPath : suggestion.label,
-        });
+        const presentation = getMentionSuggestionPresentation(suggestion);
+        el.createDiv({ text: presentation.title });
     }
 
     onChooseSuggestion(suggestion: SideNoteMentionSuggestion): void {

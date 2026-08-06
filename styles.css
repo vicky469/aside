@@ -2321,6 +2321,14 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
     overflow: hidden;
 }
 
+.aside-inline-suggest-dropdown.is-mention {
+    justify-self: start;
+    width: fit-content;
+    min-width: min(8.25rem, 100%);
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
 .aside-inline-suggest-list {
     margin: 0;
     padding: 4px 0;
@@ -2336,6 +2344,10 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
     padding: 5px 10px;
     color: var(--text-normal);
     cursor: pointer;
+}
+
+.aside-inline-suggest-dropdown.is-mention .aside-inline-suggest-item {
+    padding: 5px 8px;
 }
 
 .aside-inline-suggest-item + .aside-inline-suggest-item {
@@ -2378,8 +2390,7 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
 }
 
 .aside-link-suggest-note,
-.aside-tag-suggest-note,
-.aside-mention-suggest-note {
+.aside-tag-suggest-note {
     margin-top: 2px;
     color: var(--text-muted);
     font-size: var(--font-ui-smaller);

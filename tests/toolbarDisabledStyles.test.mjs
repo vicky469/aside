@@ -3,20 +3,55 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const css = readFileSync(new URL("../styles.css", import.meta.url), "utf8");
+const mentionModalSource = readFileSync(
+    new URL("../src/ui/modals/SideNoteMentionSuggestModal.ts", import.meta.url),
+    "utf8",
+);
 const importantOverridePattern = new RegExp("!" + "important");
 
 test("stylesheet avoids important overrides", () => {
     assert.doesNotMatch(css, importantOverridePattern);
 });
 
-test("mention suggestion notes share the muted detail style", () => {
+test("link and tag suggestion notes share the muted detail style", () => {
     const suggestionNoteRule = css.match(
-        /\.aside-link-suggest-note,\s*\.aside-tag-suggest-note,\s*\.aside-mention-suggest-note\s*\{(?<body>[\s\S]*?)\}/,
+        /\.aside-link-suggest-note,\s*\.aside-tag-suggest-note\s*\{(?<body>[\s\S]*?)\}/,
     );
 
     assert.ok(suggestionNoteRule?.groups?.body, "missing shared suggestion note detail rule");
     assert.match(suggestionNoteRule.groups.body, /color:\s*var\(--text-muted\)\s*;/);
     assert.match(suggestionNoteRule.groups.body, /font-size:\s*var\(--font-ui-smaller\)\s*;/);
+});
+
+test("mention suggestions use a one-line fallback and compact inline geometry", () => {
+    const mentionDropdownRule = css.match(
+        /\.aside-inline-suggest-dropdown\.is-mention\s*\{(?<body>[\s\S]*?)\}/,
+    );
+    const mentionItemRule = css.match(
+        /\.aside-inline-suggest-dropdown\.is-mention \.aside-inline-suggest-item\s*\{(?<body>[\s\S]*?)\}/,
+    );
+
+    assert.doesNotMatch(css, /\.aside-mention-suggest-note/);
+    assert.match(
+        mentionModalSource,
+        /import\s*\{\s*getMentionSuggestionPresentation\s*\}\s*from\s*["']\.\.\/editor\/commentMentionSuggestions["'];/,
+    );
+    assert.match(mentionModalSource, /getMentionSuggestionPresentation\(suggestion\)/);
+    const renderSuggestionSource = mentionModalSource.match(
+        /renderSuggestion\([\s\S]*?\n    }\n\n    onChooseSuggestion/,
+    )?.[0];
+    assert.ok(renderSuggestionSource, "missing mention fallback renderSuggestion");
+    assert.doesNotMatch(renderSuggestionSource, /\.label|\.scriptPath|aside-mention-suggest-note/);
+
+    assert.ok(mentionDropdownRule?.groups?.body, "missing mention dropdown compact rule");
+    assert.match(mentionDropdownRule.groups.body, /justify-self:\s*start\s*;/);
+    assert.match(mentionDropdownRule.groups.body, /width:\s*fit-content\s*;/);
+    assert.match(mentionDropdownRule.groups.body, /min-width:\s*min\(8\.25rem,\s*100%\)\s*;/);
+    assert.match(mentionDropdownRule.groups.body, /max-width:\s*100%\s*;/);
+    assert.match(mentionDropdownRule.groups.body, /box-sizing:\s*border-box\s*;/);
+
+    assert.ok(mentionItemRule?.groups?.body, "missing mention item compact rule");
+    assert.match(mentionItemRule.groups.body, /padding:\s*5px 8px\s*;/);
 });
 
 test("disabled toolbar icon buttons are visibly unavailable and non-interactive", () => {
