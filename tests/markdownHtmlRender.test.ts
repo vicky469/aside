@@ -58,10 +58,12 @@ test("renderMarkdownToBasicHtml escapes raw html and unsafe links", () => {
 		markdown: [
 			"# Security",
 			"",
-			"<script>alert(1)</script>",
-			"",
-			"[bad](javascript:alert(1))",
-			"[good](/public/page.html)",
+		"<script>alert(1)</script>",
+		"",
+		"[bad](javascript:alert(1))",
+		"[bad-tab](java\tscript:alert(1))",
+		"[bad-carriage-return](java\rscript:alert(1))",
+		"[good](/public/page.html)",
 		].join("\n"),
 	});
 
@@ -69,6 +71,7 @@ test("renderMarkdownToBasicHtml escapes raw html and unsafe links", () => {
 	assert.doesNotMatch(html, /<script>/u);
 	assert.match(html, /bad/u);
 	assert.doesNotMatch(html, /href="javascript:alert\(1\)"/u);
+	assert.doesNotMatch(html, /href="java[\t\r]script:/u);
 	assert.match(html, /<a href="\/public\/page\.html">good<\/a>/u);
 });
 

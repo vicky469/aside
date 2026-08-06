@@ -259,8 +259,22 @@ function renderInline(value: string): string {
 	return replaceInlineLineBreakMarkers(html, "<br>\n");
 }
 
+function containsControlCharacter(value: string): boolean {
+	for (const character of value) {
+		const codePoint = character.codePointAt(0);
+		if (codePoint !== undefined && (codePoint <= 0x1f || codePoint === 0x7f)) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
 function sanitizeImageSrc(value: string): string | null {
 	const trimmed = value.trim();
+	if (containsControlCharacter(trimmed)) {
+		return null;
+	}
 	if (UNSAFE_LINK_PROTOCOL_PATTERN.test(trimmed) && !/^https?:/iu.test(trimmed)) {
 		return null;
 	}
@@ -269,6 +283,9 @@ function sanitizeImageSrc(value: string): string | null {
 
 function sanitizeHref(value: string): string | null {
 	const trimmed = value.trim();
+	if (containsControlCharacter(trimmed)) {
+		return null;
+	}
 	if (UNSAFE_LINK_PROTOCOL_PATTERN.test(trimmed) && !SAFE_LINK_PROTOCOL_PATTERN.test(trimmed)) {
 		return null;
 	}
