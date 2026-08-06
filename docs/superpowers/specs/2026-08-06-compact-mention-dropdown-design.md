@@ -22,22 +22,23 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Define one shared single-line presentation rule for mention and script suggestions.
-- [ ] Consume that rule in the inline dropdown and fallback mention modal.
-- [ ] Let inline suggestion details be optional so tag usage counts remain visible while mention/script details disappear.
-- [ ] Mark the shared inline container with a mention-specific variant for `@` and `/` sessions.
-- [ ] Size the inline dropdown to its content, align it to the editor's left edge, and cap it at the available editor width.
-- [ ] Reduce mention/script row horizontal padding from 10px to 8px without changing the active-row treatment.
-- [ ] Remove obsolete mention-detail styling after both rendering surfaces stop producing that element.
+- [x] Define one shared single-line presentation rule for mention and script suggestions.
+- [x] Consume that rule in the inline dropdown and fallback mention modal.
+- [x] Let inline suggestion details be optional so tag usage counts remain visible while mention/script details disappear.
+- [x] Mark the shared inline container with a mention-specific variant for `@` and `/` sessions.
+- [x] Size the inline dropdown to its content, align it to the editor's left edge, and cap it at the available editor width.
+- [x] Reduce mention/script row horizontal padding from 10px to 8px without changing the active-row treatment.
+- [x] Remove obsolete mention-detail styling after both rendering surfaces stop producing that element.
 
 ### Verification
 
-- [ ] Fail-first tests prove built-in `@` rows and vault-script `/` rows render no secondary detail.
-- [ ] Regression coverage proves tag rows still render their usage-count detail.
-- [ ] CSS regression coverage proves the dropdown is start-aligned, content-sized, width-capped, and uses the approved padding.
-- [ ] Existing keyboard, mouse, focus, lifecycle, and ARIA tests remain green.
-- [ ] The complete repository build and release-artifact guard pass.
-- [ ] The verified build is installed in `lean-startup` and visually checked in the real Aside draft editor.
+- [x] Fail-first tests prove built-in `@` rows and vault-script `/` rows render no secondary detail.
+- [x] Regression coverage proves tag rows still render their usage-count detail.
+- [x] CSS regression coverage proves the dropdown is start-aligned, content-sized, width-capped, and uses the approved padding.
+- [x] Existing keyboard, mouse, focus, lifecycle, and ARIA tests remain green.
+- [x] The complete repository build and release-artifact guard pass.
+- [x] The verified `main.js`, `manifest.json`, and `styles.css` are installed byte-identically in `lean-startup`.
+- [ ] The installed dropdowns are visually checked in the real Aside draft editor after a reliable Obsidian reload.
 
 ## Goals
 
