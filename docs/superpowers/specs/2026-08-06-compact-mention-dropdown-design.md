@@ -6,11 +6,11 @@ Aside will make inline `@` and `/` suggestion menus content-sized instead of edi
 
 This design supersedes only the row-content and editor-width presentation decisions in `2026-08-05-inline-draft-suggestions-design.md`. Mention/script query parsing, ranking, insertion, keyboard behavior, lifecycle handling, and accessibility stay unchanged. Tag suggestions remain separate and keep their usage-count detail.
 
-No current implementation plan covers this compact presentation refinement, so this spec will receive a focused plan after approval.
+`docs/superpowers/plans/2026-08-06-compact-mention-dropdown-plan.md` tracks this focused implementation.
 
 ## Implementation Tracking
 
-Use this section as the working checklist. Mark an item done only after the code is merged or the documented change is complete and the listed verification passes.
+Use this section as the working checklist. Mark an item done only after the documented change is implemented on the working branch and the listed verification passes.
 
 ### Already Done
 
@@ -32,7 +32,7 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### Verification
 
-- [x] Fail-first tests prove built-in `@` rows and vault-script `/` rows render no secondary detail.
+- [x] Automated regression tests cover built-in `@` rows and vault-script `/` rows without secondary detail.
 - [x] Regression coverage proves tag rows still render their usage-count detail.
 - [x] CSS regression coverage proves the dropdown is start-aligned, content-sized, width-capped, and uses the approved padding.
 - [x] Existing keyboard, mouse, focus, lifecycle, and ARIA tests remain green.
