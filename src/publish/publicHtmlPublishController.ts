@@ -33,9 +33,10 @@ import type {
 import {
 	buildPublicPublishIndexPath,
 	isPublicPublishIndexPath,
-	mergePublicPublishIndexEntries,
 	PUBLIC_PUBLISH_INDEX_OWNER_ONLY_NOTICE,
+	readPublicPublishIndexEntries,
 	renderPublicPublishIndex,
+	type PublicPublishIndexEntry,
 	type PublicPublishIndexEntryStatus,
 } from "../core/publish/publicPublishIndex";
 
@@ -153,6 +154,8 @@ function buildHtmlPublishFrontmatter(
 }
 
 export class PublicHtmlPublishController {
+	private publicPublishIndexRefreshQueue: Promise<void> = Promise.resolve();
+
 	constructor(
 		private readonly host: PublicHtmlPublishHost,
 		private readonly now: () => number = Date.now,
@@ -808,25 +811,104 @@ export class PublicHtmlPublishController {
 
 		const settings = this.host.getSettings();
 		const allowedRoot = normalizePublishAllowedRoot(settings.publishAllowedRoot);
+		await this.refreshPublicPublishIndex([{
+			path: filePath.slice(allowedRoot.length),
+			publishedUrl: status === "published" ? result.url : null,
+			status,
+			lastPublishedAt: status === "published" ? new Date(this.now()).toISOString() : null,
+		}]);
+		return result;
+	}
+
+	public refreshPublicPublishIndex(
+		overrides: readonly PublicPublishIndexEntry[] = [],
+	): Promise<void> {
+		const refresh = this.publicPublishIndexRefreshQueue.then(
+			() => this.refreshPublicPublishIndexNow(overrides),
+		);
+		this.publicPublishIndexRefreshQueue = refresh.catch(() => undefined);
+		return refresh;
+	}
+
+	private async refreshPublicPublishIndexNow(
+		overrides: readonly PublicPublishIndexEntry[],
+	): Promise<void> {
+		const settings = this.host.getSettings();
+		if (!this.validateSettings(settings).ok) {
+			return;
+		}
+
+		const allowedRoot = normalizePublishAllowedRoot(settings.publishAllowedRoot);
 		const indexPath = buildPublicPublishIndexPath(allowedRoot);
 		const indexExists = await this.host.fileExists(indexPath);
 		const existingMarkdown = indexExists
 			? await this.host.readVaultFileFresh(indexPath)
 			: null;
-		const entries = mergePublicPublishIndexEntries(existingMarkdown, [{
-			path: filePath.slice(allowedRoot.length),
-			publishedUrl: status === "published" ? result.url : null,
-			type: "file",
-			status,
-			lastPublishedAt: status === "published" ? new Date(this.now()).toISOString() : null,
-		}]);
+		const entriesByPath = new Map<string, PublicPublishIndexEntry>();
+		for (const entry of readPublicPublishIndexEntries(existingMarkdown)) {
+			entriesByPath.set(entry.path, {
+				...entry,
+				publishedUrl: null,
+				status: "unpublished",
+			});
+		}
+
+		const recordPublishedPath = (path: string, publishedArtifactPath: string): void => {
+			if (!path.startsWith(allowedRoot)) {
+				return;
+			}
+			const relativePath = path.slice(allowedRoot.length);
+			const existing = entriesByPath.get(relativePath);
+			entriesByPath.set(relativePath, {
+				path: relativePath,
+				publishedUrl: buildPublishPublicUrl({
+					baseUrl: settings.publishBaseUrl,
+					vaultRelativePath: publishedArtifactPath,
+				}),
+				status: "published",
+				lastPublishedAt: existing?.lastPublishedAt ?? null,
+			});
+		};
+
+		for (const sourcePath of (await this.host.listMarkdownFiles(allowedRoot)).sort()) {
+			if (isPublicPublishIndexPath(sourcePath, allowedRoot)) {
+				continue;
+			}
+			const sourceContents = await this.host.readVaultFile(sourcePath);
+			const frontmatter = readAsidePublishFrontmatter(sourceContents);
+			if (frontmatter.markdownEnabled) {
+				recordPublishedPath(sourcePath, buildPublishedMarkdownArtifactPath(sourcePath));
+			}
+			if (frontmatter.htmlEnabled) {
+				const pair = resolvePublicHtmlPairForSource({
+					sourcePath,
+					frontmatterHtmlPath: frontmatter.html,
+					allowedRoot,
+				});
+				if (pair.ok) {
+					recordPublishedPath(pair.htmlPath, pair.htmlPath);
+				}
+			}
+		}
+
+		for (const artifactPath of this.getNormalizedPublishedArtifactPaths(settings)) {
+			recordPublishedPath(artifactPath, artifactPath);
+		}
+		for (const entry of overrides) {
+			entriesByPath.set(entry.path, entry);
+		}
+		entriesByPath.delete(indexPath.slice(allowedRoot.length));
+
+		const entries = [...entriesByPath.values()];
 		const nextMarkdown = renderPublicPublishIndex(entries);
+		if (existingMarkdown === nextMarkdown) {
+			return;
+		}
 		if (indexExists) {
 			await this.host.writeVaultFile(indexPath, nextMarkdown);
 		} else {
 			await this.host.createVaultFile(indexPath, nextMarkdown);
 		}
-		return result;
 	}
 
 	private async updatePublishedArtifactFile(artifactPath: string): Promise<PublicHtmlPublishResult> {
@@ -1188,6 +1270,9 @@ export class PublicHtmlPublishController {
 		const snapshotFiles: PublicHtmlPublishSnapshotFile[] = [];
 		const ownedHtmlArtifactPaths = new Set<string>();
 		for (const sourcePath of markdownFiles) {
+			if (isPublicPublishIndexPath(sourcePath, settings.publishAllowedRoot)) {
+				continue;
+			}
 			const sourceContents = await this.host.readVaultFile(sourcePath);
 			const frontmatter = options.frontmatterBySourcePath?.get(sourcePath)
 				? options.frontmatterBySourcePath.get(sourcePath) as AsidePublishFrontmatter

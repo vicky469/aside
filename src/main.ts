@@ -829,6 +829,7 @@ export default class Aside extends Plugin {
             if (this.unloaded) {
                 return;
             }
+            await this.publicHtmlPublishController.refreshPublicPublishIndex();
         } catch (error) {
             this.warn(
                 "Failed to finish Aside startup maintenance.",

@@ -37,3 +37,17 @@ test("plugin synchronizes the publish feature flag before registering UI", () =>
         /getPublishFeatureFlagStorageKey\(this\.app\.vault\.getName\(\)\)/u,
     );
 });
+
+test("plugin refreshes the public inventory during startup maintenance", () => {
+    const source = readFileSync("src/main.ts", "utf8");
+    const maintenanceStart = source.indexOf("private async runStartupPersistenceMaintenance()");
+    const loadSettingsStart = source.indexOf("async loadSettings()", maintenanceStart);
+    const maintenanceBody = source.slice(maintenanceStart, loadSettingsStart);
+
+    assert.ok(maintenanceStart >= 0);
+    assert.ok(loadSettingsStart > maintenanceStart);
+    assert.match(
+        maintenanceBody,
+        /await this\.publicHtmlPublishController\.refreshPublicPublishIndex\(\);/u,
+    );
+});

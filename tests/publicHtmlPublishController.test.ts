@@ -28,6 +28,7 @@ function createHarness(options: {
 	files?: Record<string, string>;
 	binaryFiles?: Record<string, string>;
 	writeRequiresExistingFile?: boolean;
+	afterFreshRead?: (path: string, readIndex: number, contents: string) => Promise<void>;
 	publishedArtifactPaths?: string[];
 	deployResult?: { ok: true } | { ok: false; notice: string };
 	purgeResult?: { ok: true } | { ok: false; notice: string };
@@ -40,6 +41,7 @@ function createHarness(options: {
 	let publishedArtifactPaths = [...(options.publishedArtifactPaths ?? [])];
 	const writes: Array<{ path: string; contents: string }> = [];
 	const freshReads: string[] = [];
+	let freshReadCount = 0;
 	const deployCalls: PublicHtmlPublishSnapshotFile[][] = [];
 	const purgeCalls: Array<{ url: string; sourcePath: string; event: "unpublish" | "republish" }> = [];
 	const host = {
@@ -62,6 +64,8 @@ function createHarness(options: {
 			if (contents === undefined) {
 				throw new Error(`Missing file: ${path}`);
 			}
+			freshReadCount += 1;
+			await options.afterFreshRead?.(path, freshReadCount, contents);
 			return contents;
 		},
 		readVaultBinaryFile: async (path: string) => {
@@ -155,10 +159,112 @@ test("public html publish controller records standalone Markdown, HTML, and PDF 
 	assert.equal((await harness.controller.publishFile("public/report.pdf")).ok, true);
 
 	const indexMarkdown = harness.files.get("public/index.md") ?? "";
-	assert.match(indexMarkdown, /\| note\.md \| https:\/\/publish\.example\.com\/public\/note \| file \| published \| 2026-08-06T08:00:00\.000Z \|/u);
-	assert.match(indexMarkdown, /\| page\.html \| https:\/\/publish\.example\.com\/public\/page \| file \| published \| 2026-08-06T08:00:00\.000Z \|/u);
-	assert.match(indexMarkdown, /\| report\.pdf \| https:\/\/publish\.example\.com\/public\/report\.pdf \| file \| published \| 2026-08-06T08:00:00\.000Z \|/u);
+	assert.match(indexMarkdown, /\| note\.md \| https:\/\/publish\.example\.com\/public\/note \| published \| 2026-08-06T08:00:00\.000Z \|/u);
+	assert.match(indexMarkdown, /\| page\.html \| https:\/\/publish\.example\.com\/public\/page \| published \| 2026-08-06T08:00:00\.000Z \|/u);
+	assert.match(indexMarkdown, /\| report\.pdf \| https:\/\/publish\.example\.com\/public\/report\.pdf \| published \| 2026-08-06T08:00:00\.000Z \|/u);
 	assert.doesNotMatch(indexMarkdown, /permission_source|auth\.md|Aside publish index/u);
+});
+
+test("public html publish controller rebuilds the inventory from every published artifact", async () => {
+	const harness = createHarness({
+		files: {
+			"public/index.md": [
+				"permission_source: auth.md",
+				"",
+				"| path                  | published_url | type | status      | last_published_at |",
+				"| --------------------- | ------------- | ---- | ----------- | ----------------- |",
+				"| startup/tech stack.md |               | file | unpublished |                   |",
+			].join("\n"),
+			"public/one.md": "---\nasidePublish:\n  markdownEnabled: true\n  htmlEnabled: false\n---\nOne\n",
+			"public/pair.md": "---\nasidePublish:\n  markdownEnabled: true\n  htmlEnabled: true\n  html: public/pair.zh.html\n---\nPair\n",
+			"public/pair.zh.html": "<!doctype html><html><body>Pair</body></html>",
+			"public/standalone.html": "<!doctype html><html><body>Standalone</body></html>",
+		},
+		binaryFiles: {
+			"public/report.pdf": "PDF bytes",
+		},
+		publishedArtifactPaths: ["public/report.pdf", "public/standalone.html"],
+	});
+	const refreshController = harness.controller as PublicHtmlPublishController & {
+		refreshPublicPublishIndex?: () => Promise<void>;
+	};
+
+	assert.equal(typeof refreshController.refreshPublicPublishIndex, "function");
+	await refreshController.refreshPublicPublishIndex?.();
+
+	const indexMarkdown = harness.files.get("public/index.md") ?? "";
+	assert.match(indexMarkdown, /\| one\.md \| https:\/\/publish\.example\.com\/public\/one \| published \|  \|/u);
+	assert.match(indexMarkdown, /\| pair\.md \| https:\/\/publish\.example\.com\/public\/pair \| published \|  \|/u);
+	assert.match(indexMarkdown, /\| pair\.zh\.html \| https:\/\/publish\.example\.com\/public\/pair\.zh \| published \|  \|/u);
+	assert.match(indexMarkdown, /\| report\.pdf \| https:\/\/publish\.example\.com\/public\/report\.pdf \| published \|  \|/u);
+	assert.match(indexMarkdown, /\| standalone\.html \| https:\/\/publish\.example\.com\/public\/standalone \| published \|  \|/u);
+	assert.match(indexMarkdown, /\| startup\/tech stack\.md \|  \| unpublished \|  \|/u);
+	assert.doesNotMatch(indexMarkdown, /permission_source|auth\.md|\| type \||\| file \|/u);
+	assert.deepEqual(harness.deployCalls, []);
+});
+
+test("public html publish controller never includes the owner-only index in a deployment snapshot", async () => {
+	const harness = createHarness({
+		files: {
+			"public/index.md": [
+				"---",
+				"asidePublish:",
+				"  markdownEnabled: true",
+				"  htmlEnabled: false",
+				"---",
+				"Legacy index",
+				"",
+				"| path | published_url | type | status | last_published_at |",
+				"| --- | --- | --- | --- | --- |",
+				"| index.md | https://publish.example.com/public/index | file | published | 2026-08-05T08:00:00.000Z |",
+			].join("\n"),
+		},
+		binaryFiles: {
+			"public/report.pdf": "PDF bytes",
+		},
+	});
+
+	assert.equal((await harness.controller.publishFile("public/report.pdf")).ok, true);
+	assert.equal(harness.deployCalls.length, 1);
+	assert.deepEqual(harness.deployCalls[0].map((file) => file.vaultRelativePath), ["public/report.pdf"]);
+	assert.doesNotMatch(harness.files.get("public/index.md") ?? "", /\| index\.md \|/u);
+});
+
+test("public html publish controller serializes overlapping inventory refreshes", async () => {
+	let releaseFirstRead: (() => void) | undefined;
+	let markFirstReadStarted: (() => void) | undefined;
+	const firstReadStarted = new Promise<void>((resolve) => {
+		markFirstReadStarted = resolve;
+	});
+	const firstReadBlocked = new Promise<void>((resolve) => {
+		releaseFirstRead = resolve;
+	});
+	const harness = createHarness({
+		files: {
+			"public/index.md": "| path | published_url | status | last_published_at |\n| --- | --- | --- | --- |\n",
+			"public/page.md": "---\nasidePublish:\n  markdownEnabled: true\n  htmlEnabled: false\n---\nPage\n",
+		},
+		afterFreshRead: async (_path, readIndex) => {
+			if (readIndex !== 1) {
+				return;
+			}
+			markFirstReadStarted?.();
+			await firstReadBlocked;
+		},
+	});
+
+	const startupRefresh = harness.controller.refreshPublicPublishIndex();
+	await firstReadStarted;
+	const publishRefresh = harness.controller.refreshPublicPublishIndex([{
+		path: "page.md",
+		publishedUrl: "https://publish.example.com/public/page",
+		status: "published",
+		lastPublishedAt: fixedPublishedAt,
+	}]);
+	releaseFirstRead?.();
+	await Promise.all([startupRefresh, publishRefresh]);
+
+	assert.match(harness.files.get("public/index.md") ?? "", /\| page\.md \| https:\/\/publish\.example\.com\/public\/page \| published \| 2026-08-06T08:00:00\.000Z \|/u);
 });
 
 test("public html publish controller creates the inventory when vault writes require an existing file", async () => {
@@ -170,7 +276,7 @@ test("public html publish controller creates the inventory when vault writes req
 	});
 
 	assert.equal((await harness.controller.publishFile("public/report.pdf")).ok, true);
-	assert.match(harness.files.get("public/index.md") ?? "", /\| report\.pdf \| https:\/\/publish\.example\.com\/public\/report\.pdf \| file \| published \|/u);
+	assert.match(harness.files.get("public/index.md") ?? "", /\| report\.pdf \| https:\/\/publish\.example\.com\/public\/report\.pdf \| published \|/u);
 });
 
 test("public html publish controller keeps the generated inventory owner-only", async () => {
@@ -204,7 +310,7 @@ test("public html publish controller marks an inventory row unpublished", async 
 	});
 
 	assert.equal((await harness.controller.unpublishFile("public/report.pdf")).ok, true);
-	assert.match(harness.files.get("public/index.md") ?? "", /\| report\.pdf \|  \| file \| unpublished \|  \|/u);
+	assert.match(harness.files.get("public/index.md") ?? "", /\| report\.pdf \|  \| unpublished \|  \|/u);
 	assert.deepEqual(harness.freshReads, ["public/index.md"]);
 });
 
