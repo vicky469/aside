@@ -3,6 +3,7 @@ import type {
 	PublishSettingsValidation,
 } from "../core/publish/publishSettings";
 import {
+	normalizePublishAllowedRoot,
 	validatePublishSettings,
 } from "../core/publish/publishSettings";
 import type { FeatureFlags } from "../core/config/featureFlags";
@@ -29,6 +30,14 @@ import {
 import type {
 	AsidePublishFrontmatter,
 } from "../core/publish/publishFrontmatter";
+import {
+	buildPublicPublishIndexPath,
+	isPublicPublishIndexPath,
+	mergePublicPublishIndexEntries,
+	PUBLIC_PUBLISH_INDEX_OWNER_ONLY_NOTICE,
+	renderPublicPublishIndex,
+	type PublicPublishIndexEntryStatus,
+} from "../core/publish/publicPublishIndex";
 
 export interface PublicHtmlPublishSnapshotFile {
 	vaultRelativePath: string;
@@ -82,8 +91,10 @@ export interface PublicHtmlPublishHost {
 	listMarkdownFiles(rootPath: string): Promise<string[]>;
 	fileExists(path: string): Promise<boolean>;
 	readVaultFile(path: string): Promise<string>;
+	readVaultFileFresh(path: string): Promise<string>;
 	readVaultBinaryFile(path: string): Promise<ArrayBuffer>;
 	writeVaultFile(path: string, contents: string): Promise<void>;
+	createVaultFile(path: string, contents: string): Promise<void>;
 	getPublishedArtifactPaths(): string[];
 	setPublishedArtifactPaths(paths: string[]): Promise<void>;
 	deploySnapshot(files: PublicHtmlPublishSnapshotFile[]): Promise<PublicHtmlDeploySnapshotResult>;
@@ -142,7 +153,10 @@ function buildHtmlPublishFrontmatter(
 }
 
 export class PublicHtmlPublishController {
-	constructor(private readonly host: PublicHtmlPublishHost) {}
+	constructor(
+		private readonly host: PublicHtmlPublishHost,
+		private readonly now: () => number = Date.now,
+	) {}
 
 	private validateSettings(settings: PublishSettings): PublishSettingsValidation {
 		return validatePublishSettings(settings, this.host.getFeatureFlags());
@@ -156,6 +170,9 @@ export class PublicHtmlPublishController {
 		const normalizedPath = normalizePublicFilePath(filePath);
 		if (!normalizedPath) {
 			return [this.disabledAction("Publish file path must stay inside the vault.")];
+		}
+		if (isPublicPublishIndexPath(normalizedPath, this.host.getSettings().publishAllowedRoot)) {
+			return [this.disabledAction(PUBLIC_PUBLISH_INDEX_OWNER_ONLY_NOTICE, "Markdown")];
 		}
 		if (isMarkdownPath(normalizedPath)) {
 			return this.getMarkdownFileActionStates(normalizedPath);
@@ -389,19 +406,20 @@ export class PublicHtmlPublishController {
 				notice: "Publish file path must stay inside the vault.",
 			};
 		}
-		if (isMarkdownPath(normalizedPath)) {
-			return this.publishMarkdownFile(normalizedPath);
+		if (isPublicPublishIndexPath(normalizedPath, this.host.getSettings().publishAllowedRoot)) {
+			return { ok: false, notice: PUBLIC_PUBLISH_INDEX_OWNER_ONLY_NOTICE };
 		}
-		if (isHtmlPath(normalizedPath)) {
-			return this.publishHtmlFile(normalizedPath);
-		}
-		if (isPdfPath(normalizedPath)) {
-			return this.publishArtifactFile(normalizedPath);
-		}
-		return {
-			ok: false,
-			notice: "Publish supports Markdown, HTML, and PDF files in this version.",
-		};
+		const result = isMarkdownPath(normalizedPath)
+			? await this.publishMarkdownFile(normalizedPath)
+			: isHtmlPath(normalizedPath)
+				? await this.publishHtmlFile(normalizedPath)
+				: isPdfPath(normalizedPath)
+					? await this.publishArtifactFile(normalizedPath)
+					: {
+						ok: false as const,
+						notice: "Publish supports Markdown, HTML, and PDF files in this version.",
+					};
+		return this.recordPublicPublishResult(normalizedPath, "published", result);
 	}
 
 	private async publishMarkdownFile(sourcePath: string): Promise<PublicHtmlPublishResult> {
@@ -601,19 +619,20 @@ export class PublicHtmlPublishController {
 				notice: "Publish file path must stay inside the vault.",
 			};
 		}
-		if (isMarkdownPath(normalizedPath)) {
-			return this.unpublishMarkdownFile(normalizedPath);
+		if (isPublicPublishIndexPath(normalizedPath, this.host.getSettings().publishAllowedRoot)) {
+			return { ok: false, notice: PUBLIC_PUBLISH_INDEX_OWNER_ONLY_NOTICE };
 		}
-		if (isHtmlPath(normalizedPath)) {
-			return this.unpublishHtmlFile(normalizedPath);
-		}
-		if (isPdfPath(normalizedPath)) {
-			return this.unpublishArtifactFile(normalizedPath);
-		}
-		return {
-			ok: false,
-			notice: "Publish supports Markdown/HTML pairs and PDF files in this version.",
-		};
+		const result = isMarkdownPath(normalizedPath)
+			? await this.unpublishMarkdownFile(normalizedPath)
+			: isHtmlPath(normalizedPath)
+				? await this.unpublishHtmlFile(normalizedPath)
+				: isPdfPath(normalizedPath)
+					? await this.unpublishArtifactFile(normalizedPath)
+					: {
+						ok: false as const,
+						notice: "Publish supports Markdown/HTML pairs and PDF files in this version.",
+					};
+		return this.recordPublicPublishResult(normalizedPath, "unpublished", result);
 	}
 
 	private async unpublishArtifactFile(artifactPath: string): Promise<PublicHtmlPublishResult> {
@@ -762,19 +781,52 @@ export class PublicHtmlPublishController {
 				notice: "Publish file path must stay inside the vault.",
 			};
 		}
-		if (isMarkdownPath(normalizedPath)) {
-			return this.updatePublishedMarkdownFile(normalizedPath);
+		if (isPublicPublishIndexPath(normalizedPath, this.host.getSettings().publishAllowedRoot)) {
+			return { ok: false, notice: PUBLIC_PUBLISH_INDEX_OWNER_ONLY_NOTICE };
 		}
-		if (isHtmlPath(normalizedPath)) {
-			return this.updatePublishedHtmlFile(normalizedPath);
+		const result = isMarkdownPath(normalizedPath)
+			? await this.updatePublishedMarkdownFile(normalizedPath)
+			: isHtmlPath(normalizedPath)
+				? await this.updatePublishedHtmlFile(normalizedPath)
+				: isPdfPath(normalizedPath)
+					? await this.updatePublishedArtifactFile(normalizedPath)
+					: {
+						ok: false as const,
+						notice: "Publish supports Markdown/HTML pairs and PDF files in this version.",
+					};
+		return this.recordPublicPublishResult(normalizedPath, "published", result);
+	}
+
+	private async recordPublicPublishResult(
+		filePath: string,
+		status: PublicPublishIndexEntryStatus,
+		result: PublicHtmlPublishResult,
+	): Promise<PublicHtmlPublishResult> {
+		if (!result.ok) {
+			return result;
 		}
-		if (isPdfPath(normalizedPath)) {
-			return this.updatePublishedArtifactFile(normalizedPath);
+
+		const settings = this.host.getSettings();
+		const allowedRoot = normalizePublishAllowedRoot(settings.publishAllowedRoot);
+		const indexPath = buildPublicPublishIndexPath(allowedRoot);
+		const indexExists = await this.host.fileExists(indexPath);
+		const existingMarkdown = indexExists
+			? await this.host.readVaultFileFresh(indexPath)
+			: null;
+		const entries = mergePublicPublishIndexEntries(existingMarkdown, [{
+			path: filePath.slice(allowedRoot.length),
+			publishedUrl: status === "published" ? result.url : null,
+			type: "file",
+			status,
+			lastPublishedAt: status === "published" ? new Date(this.now()).toISOString() : null,
+		}]);
+		const nextMarkdown = renderPublicPublishIndex(entries);
+		if (indexExists) {
+			await this.host.writeVaultFile(indexPath, nextMarkdown);
+		} else {
+			await this.host.createVaultFile(indexPath, nextMarkdown);
 		}
-		return {
-			ok: false,
-			notice: "Publish supports Markdown/HTML pairs and PDF files in this version.",
-		};
+		return result;
 	}
 
 	private async updatePublishedArtifactFile(artifactPath: string): Promise<PublicHtmlPublishResult> {

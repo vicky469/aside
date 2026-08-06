@@ -3,6 +3,9 @@ import {
 	normalizeVaultRelativePublishPath,
 } from "../../core/publish/publishPath";
 import {
+	isPublicPublishIndexPath,
+} from "../../core/publish/publicPublishIndex";
+import {
 	normalizePublishAllowedRoot,
 } from "../../core/publish/publishSettings";
 import type {
@@ -81,7 +84,9 @@ export function isPublicFilePublishActionPath(filePath: string, allowedRoot: str
 		return false;
 	}
 	const root = normalizePublishAllowedRoot(allowedRoot);
-	return normalized.path.startsWith(root) && isSupportedPublishActionPath(normalized.path);
+	return normalized.path.startsWith(root)
+		&& !isPublicPublishIndexPath(normalized.path, root)
+		&& isSupportedPublishActionPath(normalized.path);
 }
 
 function getHeaderInsertionRank(kind: PublicHtmlPublishActionState["kind"]): number {

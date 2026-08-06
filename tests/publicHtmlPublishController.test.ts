@@ -20,11 +20,14 @@ const settings: PublishSettings = {
 	publishPurgeBrokerSecretName: "aside-purge-broker",
 };
 
+const fixedPublishedAt = "2026-08-06T08:00:00.000Z";
+
 function createHarness(options: {
 	settings?: PublishSettings;
 	featureFlags?: FeatureFlags;
 	files?: Record<string, string>;
 	binaryFiles?: Record<string, string>;
+	writeRequiresExistingFile?: boolean;
 	publishedArtifactPaths?: string[];
 	deployResult?: { ok: true } | { ok: false; notice: string };
 	purgeResult?: { ok: true } | { ok: false; notice: string };
@@ -36,6 +39,7 @@ function createHarness(options: {
 	const binaryFiles = new Map(Object.entries(options.binaryFiles ?? {}));
 	let publishedArtifactPaths = [...(options.publishedArtifactPaths ?? [])];
 	const writes: Array<{ path: string; contents: string }> = [];
+	const freshReads: string[] = [];
 	const deployCalls: PublicHtmlPublishSnapshotFile[][] = [];
 	const purgeCalls: Array<{ url: string; sourcePath: string; event: "unpublish" | "republish" }> = [];
 	const host = {
@@ -52,6 +56,14 @@ function createHarness(options: {
 			}
 			return contents;
 		},
+		readVaultFileFresh: async (path: string) => {
+			freshReads.push(path);
+			const contents = files.get(path);
+			if (contents === undefined) {
+				throw new Error(`Missing file: ${path}`);
+			}
+			return contents;
+		},
 		readVaultBinaryFile: async (path: string) => {
 			const contents = binaryFiles.get(path);
 			if (contents === undefined) {
@@ -60,6 +72,16 @@ function createHarness(options: {
 			return new TextEncoder().encode(contents).buffer;
 		},
 		writeVaultFile: async (path: string, contents: string) => {
+			if (options.writeRequiresExistingFile && !files.has(path)) {
+				throw new Error(`Missing file: ${path}`);
+			}
+			writes.push({ path, contents });
+			files.set(path, contents);
+		},
+		createVaultFile: async (path: string, contents: string) => {
+			if (files.has(path) || binaryFiles.has(path)) {
+				throw new Error(`File already exists: ${path}`);
+			}
 			writes.push({ path, contents });
 			files.set(path, contents);
 		},
@@ -76,13 +98,14 @@ function createHarness(options: {
 			return options.purgeResult ?? { ok: true };
 		},
 	};
-	const controller = new PublicHtmlPublishController(host);
+	const controller = new PublicHtmlPublishController(host, () => Date.parse(fixedPublishedAt));
 
 	return {
 		controller,
 		files,
 		getPublishedArtifactPaths: () => publishedArtifactPaths,
 		writes,
+		freshReads,
 		deployCalls,
 		purgeCalls,
 	};
@@ -114,6 +137,96 @@ test("public html publish controller fails closed when the publish feature flag 
 	});
 	assert.deepEqual(harness.deployCalls, []);
 	assert.deepEqual(harness.writes, []);
+});
+
+test("public html publish controller records standalone Markdown, HTML, and PDF inventory rows", async () => {
+	const harness = createHarness({
+		files: {
+			"public/note.md": "# Note\n",
+			"public/page.html": "<!doctype html><html><body>Page</body></html>",
+		},
+		binaryFiles: {
+			"public/report.pdf": "PDF bytes",
+		},
+	});
+
+	assert.equal((await harness.controller.publishFile("public/note.md")).ok, true);
+	assert.equal((await harness.controller.publishFile("public/page.html")).ok, true);
+	assert.equal((await harness.controller.publishFile("public/report.pdf")).ok, true);
+
+	const indexMarkdown = harness.files.get("public/index.md") ?? "";
+	assert.match(indexMarkdown, /\| note\.md \| https:\/\/publish\.example\.com\/public\/note \| file \| published \| 2026-08-06T08:00:00\.000Z \|/u);
+	assert.match(indexMarkdown, /\| page\.html \| https:\/\/publish\.example\.com\/public\/page \| file \| published \| 2026-08-06T08:00:00\.000Z \|/u);
+	assert.match(indexMarkdown, /\| report\.pdf \| https:\/\/publish\.example\.com\/public\/report\.pdf \| file \| published \| 2026-08-06T08:00:00\.000Z \|/u);
+	assert.doesNotMatch(indexMarkdown, /permission_source|auth\.md|Aside publish index/u);
+});
+
+test("public html publish controller creates the inventory when vault writes require an existing file", async () => {
+	const harness = createHarness({
+		binaryFiles: {
+			"public/report.pdf": "PDF bytes",
+		},
+		writeRequiresExistingFile: true,
+	});
+
+	assert.equal((await harness.controller.publishFile("public/report.pdf")).ok, true);
+	assert.match(harness.files.get("public/index.md") ?? "", /\| report\.pdf \| https:\/\/publish\.example\.com\/public\/report\.pdf \| file \| published \|/u);
+});
+
+test("public html publish controller keeps the generated inventory owner-only", async () => {
+	const harness = createHarness({
+		files: {
+			"public/index.md": "Generated inventory\n",
+		},
+	});
+
+	assert.deepEqual(await harness.controller.publishFile("public/index.md"), {
+		ok: false,
+		notice: "Aside manages public/index.md as an owner-only publish inventory.",
+	});
+	assert.deepEqual(harness.deployCalls, []);
+	assert.deepEqual(harness.writes, []);
+});
+
+test("public html publish controller marks an inventory row unpublished", async () => {
+	const harness = createHarness({
+		files: {
+			"public/index.md": [
+				"| path | published_url | type | status | last_published_at |",
+				"| --- | --- | --- | --- | --- |",
+				"| report.pdf | https://publish.example.com/public/report.pdf | file | published | 2026-08-05T08:00:00.000Z |",
+			].join("\n"),
+		},
+		binaryFiles: {
+			"public/report.pdf": "PDF bytes",
+		},
+		publishedArtifactPaths: ["public/report.pdf"],
+	});
+
+	assert.equal((await harness.controller.unpublishFile("public/report.pdf")).ok, true);
+	assert.match(harness.files.get("public/index.md") ?? "", /\| report\.pdf \|  \| file \| unpublished \|  \|/u);
+	assert.deepEqual(harness.freshReads, ["public/index.md"]);
+});
+
+test("public html publish controller leaves the inventory unchanged when deployment fails", async () => {
+	const harness = createHarness({
+		files: {
+			"public/index.md": "Existing index\n",
+		},
+		binaryFiles: {
+			"public/report.pdf": "PDF bytes",
+		},
+		deployResult: {
+			ok: false,
+			notice: "Deploy failed.",
+		},
+	});
+
+	assert.deepEqual(await harness.controller.publishFile("public/report.pdf"), {
+		ok: false,
+		notice: "Deploy failed.",
+	});
+	assert.equal(harness.files.get("public/index.md"), "Existing index\n");
 });
 
 test("public html publish controller publishes one html pair and records enabled frontmatter", async () => {

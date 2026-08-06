@@ -545,6 +545,13 @@ export default class Aside extends Plugin {
             }
             return this.app.vault.cachedRead(file);
         },
+        readVaultFileFresh: async (filePath) => {
+            const file = this.getVaultFileByPath(filePath);
+            if (!file) {
+                throw new Error(`Missing vault file: ${filePath}`);
+            }
+            return this.app.vault.read(file);
+        },
         readVaultBinaryFile: async (filePath) => {
             const file = this.getVaultFileByPath(filePath);
             if (!file) {
@@ -558,6 +565,9 @@ export default class Aside extends Plugin {
                 throw new Error(`Missing vault file: ${filePath}`);
             }
             await this.app.vault.modify(file, contents);
+        },
+        createVaultFile: async (filePath, contents) => {
+            await this.app.vault.create(filePath, contents);
         },
         getPublishedArtifactPaths: () => this.settings.publishedPublicArtifactPaths,
         setPublishedArtifactPaths: (paths) => this.setPublishedPublicArtifactPaths(paths),

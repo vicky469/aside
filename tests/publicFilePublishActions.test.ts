@@ -168,6 +168,7 @@ test("isPublicFilePublishActionPath supports markdown, html, and pdf files under
 	assert.equal(isPublicFilePublishActionPath("page.md", "public/"), false);
 	assert.equal(isPublicFilePublishActionPath("page.html", "public/"), false);
 	assert.equal(isPublicFilePublishActionPath("notes/page.md", "public/"), false);
+	assert.equal(isPublicFilePublishActionPath("public/index.md", "public/"), false);
 	assert.equal(isPublicFilePublishActionPath("public/image.png", "public/"), false);
 });
 
