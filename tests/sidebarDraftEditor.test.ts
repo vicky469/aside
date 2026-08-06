@@ -34,10 +34,13 @@ function createFakeElement() {
         children: [] as unknown[],
         firstChild: null as unknown,
         className: "",
+        text: "",
         classList: {
             add: () => {},
         },
-        addClass: () => {},
+        addClass: function addClass(name: string) {
+            this.className = `${this.className} ${name}`.trim();
+        },
         setAttribute: () => {},
         removeAttribute: () => {},
         appendChild: () => {},
@@ -53,11 +56,14 @@ function createFakeElement() {
             return target === this || this.children.includes(target);
         },
         addEventListener: () => {},
-        createDiv: function createDiv(clsOrOptions?: string | { cls?: string }) {
+        createDiv: function createDiv(clsOrOptions?: string | { cls?: string; text?: string }) {
             const child = createFakeElement();
             child.className = typeof clsOrOptions === "string"
                 ? clsOrOptions
                 : clsOrOptions?.cls ?? "";
+            child.text = typeof clsOrOptions === "string"
+                ? ""
+                : clsOrOptions?.text ?? "";
             this.children.push(child);
             this.firstChild = this.children[0] ?? null;
             return child;
@@ -444,6 +450,66 @@ test("sidebar draft editor controller matches tag suggestions case-insensitively
     assert.ok(state);
     assert.equal(state.items[0]?.value, "#an-apple");
     assert.equal(state.items.some((item) => item.title.startsWith("Create tag")), false);
+    const container = shell.children[0] as ReturnType<typeof createFakeElement>;
+    const list = container.children[0] as ReturnType<typeof createFakeElement>;
+    const row = list.children[0] as ReturnType<typeof createFakeElement>;
+    assert.doesNotMatch(container.className, /(?:^|\s)is-mention(?:\s|$)/u);
+    assert.deepEqual(row.children.map((child: ReturnType<typeof createFakeElement>) => ({
+        className: child.className,
+        text: child.text,
+    })), [
+        { className: "aside-inline-suggest-title", text: "#an-apple" },
+        { className: "aside-inline-suggest-note", text: "Used 2 times" },
+    ]);
+});
+
+test("sidebar draft editor controller renders connected mention suggestions without detail", () => {
+    const controller = new SidebarDraftEditorController({
+        getAllIndexedComments: () => [],
+        updateDraftCommentText: () => {},
+        renderComments: async () => {},
+        scheduleDraftFocus: () => {},
+        getMentionSuggestions: () => [{
+            kind: "built-in",
+            mention: "@todo",
+            label: "Todo",
+        }],
+        openMentionSuggestModal: () => {},
+        openLinkSuggestModal: () => {},
+        openTagSuggestModal: () => {},
+    });
+    const comment = createDraft({
+        id: "draft-mention-inline",
+        comment: "@t",
+    });
+    const shell = createFakeElement();
+    const textarea = {
+        value: comment.comment,
+        selectionStart: 2,
+        selectionEnd: 2,
+        isConnected: true,
+        ownerDocument: {
+            addEventListener: () => {},
+            removeEventListener: () => {},
+        },
+        setAttribute: () => {},
+        removeAttribute: () => {},
+        closest: () => shell,
+    } as unknown as HTMLTextAreaElement;
+
+    assert.equal(controller.openDraftMentionSuggest(comment, textarea, false), true);
+    const container = shell.children[0] as ReturnType<typeof createFakeElement>;
+    const list = container.children[0] as ReturnType<typeof createFakeElement>;
+    const row = list.children[0] as ReturnType<typeof createFakeElement>;
+
+    assert.match(container.className, /(?:^|\s)is-mention(?:\s|$)/u);
+    assert.deepEqual(row.children.map((child: ReturnType<typeof createFakeElement>) => ({
+        className: child.className,
+        text: child.text,
+    })), [{
+        className: "aside-inline-suggest-title",
+        text: "@todo",
+    }]);
 });
 
 test("sidebar draft editor controller prioritizes an open wiki link over mention suggestions", () => {

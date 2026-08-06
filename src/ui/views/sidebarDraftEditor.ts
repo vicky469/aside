@@ -10,6 +10,7 @@ import {
 } from "../editor/commentEditorFormatting";
 import {
     findOpenMentionQuery,
+    getMentionSuggestionPresentation,
     replaceOpenMentionQuery,
     type OpenMentionQuery,
     type SideNoteMentionSuggestion,
@@ -24,7 +25,7 @@ import {
 interface InlineSuggestionChoice {
     value: string;
     title: string;
-    note: string;
+    note?: string;
 }
 
 interface VaultTagRecord {
@@ -154,10 +155,7 @@ function buildTagSuggestionChoices(rawQuery: string, indexedTags: readonly strin
 function toMentionSuggestionChoices(mentions: readonly SideNoteMentionSuggestion[]): InlineSuggestionChoice[] {
     return mentions.map((mentionSuggestion) => ({
         value: mentionSuggestion.mention,
-        title: mentionSuggestion.mention,
-        note: mentionSuggestion.kind === "script"
-            ? mentionSuggestion.scriptPath
-            : mentionSuggestion.label,
+        ...getMentionSuggestionPresentation(mentionSuggestion),
     }));
 }
 
@@ -493,6 +491,9 @@ export class SidebarDraftEditorController {
 
         const listId = `aside-inline-suggest-list-${nextInlineSuggestionListId++}`;
         const container = editorShell.createDiv("aside-inline-suggest-dropdown");
+        if (kind === "mention") {
+            container.addClass("is-mention");
+        }
         const list = container.createEl("ul", {
             cls: "aside-inline-suggest-list",
         });
@@ -596,10 +597,12 @@ export class SidebarDraftEditorController {
                 cls: "aside-inline-suggest-title",
                 text: item.title,
             });
-            suggestionItem.createDiv({
-                cls: "aside-inline-suggest-note",
-                text: item.note,
-            });
+            if (item.note !== undefined) {
+                suggestionItem.createDiv({
+                    cls: "aside-inline-suggest-note",
+                    text: item.note,
+                });
+            }
 
             suggestionItem.addEventListener("mousedown", (event) => {
                 event.preventDefault();
