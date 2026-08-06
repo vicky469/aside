@@ -22,6 +22,18 @@ export type SideNoteMentionSuggestion =
         scriptPath: string;
     };
 
+export interface MentionSuggestionPresentation {
+    title: string;
+}
+
+export function getMentionSuggestionPresentation(
+    suggestion: SideNoteMentionSuggestion,
+): MentionSuggestionPresentation {
+    return {
+        title: suggestion.mention,
+    };
+}
+
 export function findOpenMentionQuery(
     value: string,
     selectionStart: number,

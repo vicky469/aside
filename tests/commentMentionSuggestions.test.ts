@@ -3,6 +3,7 @@ import test from "node:test";
 import {
     buildMentionSuggestions,
     findOpenMentionQuery,
+    getMentionSuggestionPresentation,
     replaceOpenMentionQuery,
 } from "../src/ui/editor/commentMentionSuggestions";
 
@@ -12,6 +13,24 @@ const cleanLinksScript = {
     mentionName: "clean-links",
     normalizedMentionName: "clean-links",
 };
+
+test("mention presentation exposes only the insertion value", () => {
+    assert.deepEqual(getMentionSuggestionPresentation({
+        kind: "built-in",
+        mention: "@todo",
+        label: "Todo",
+    }), {
+        title: "@todo",
+    });
+    assert.deepEqual(getMentionSuggestionPresentation({
+        kind: "script",
+        mention: "/clean-links",
+        label: "clean-links.mjs",
+        scriptPath: "🛠️ scripts/clean-links.mjs",
+    }), {
+        title: "/clean-links",
+    });
+});
 
 test("findOpenMentionQuery finds a collapsed cursor immediately after /", () => {
     assert.deepEqual(findOpenMentionQuery("/", 1, 1), {
