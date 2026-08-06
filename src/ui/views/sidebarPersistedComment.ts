@@ -1339,7 +1339,7 @@ function renderStoredThreadEntry(
         host.currentUserLabel,
         host.threadScriptRuns,
     );
-    const entryBody = entry.body ?? "";
+    const entryBody = entryAuthor.kind === "script" ? "" : (entry.body ?? "");
     const renderedEntry = renderPersistedEntryCard(container, {
         comment: entryComment,
         thread,
