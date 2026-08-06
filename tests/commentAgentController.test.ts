@@ -736,7 +736,7 @@ test("comment agent controller regenerates a specific reply run using the curren
         commentId: "generated-2",
         body: "Second reply",
     }]);
-    assert.equal(harness.commentManager.getCommentById("generated-2")?.comment, "Second reply");
+    assert.equal(harness.commentManager.getCommentById(latestRun?.outputEntryId ?? "")?.comment, "Second reply");
 });
 
 test("comment agent controller clears the previous retry reply before the regenerated runtime completes", async () => {
@@ -782,7 +782,8 @@ test("comment agent controller clears the previous retry reply before the regene
     resolveSecondReply("Second reply");
     await waitForAgentQueueToDrain(harness.controller);
 
-    assert.equal(harness.commentManager.getCommentById("generated-2")?.comment, "Second reply");
+    const retriedRun = harness.controller.getLatestAgentRunForThread("thread-1");
+    assert.equal(harness.commentManager.getCommentById(retriedRun?.outputEntryId ?? "")?.comment, "Second reply");
 });
 
 test("comment agent controller can retry a saved agent prompt when run metadata is missing", async () => {
@@ -897,7 +898,7 @@ test("comment agent controller keeps failed runs retryable through the same outp
         body: "",
         insertAfterCommentId: "thread-1",
     }]);
-    assert.equal(harness.commentManager.getCommentById("generated-2")?.comment, "Recovered reply");
+    assert.equal(harness.commentManager.getCommentById(retriedRun?.outputEntryId ?? "")?.comment, "Recovered reply");
 });
 
 test("comment agent controller uses the resolved working directory for runtime execution", async () => {

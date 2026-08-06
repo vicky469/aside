@@ -97,7 +97,7 @@ function createScriptRun(overrides: Partial<ScriptRunRecord> = {}): ScriptRunRec
         scriptPath: overrides.scriptPath ?? "🛠️ scripts/clean.mjs",
         mentionName: overrides.mentionName ?? "clean",
         status: overrides.status ?? "succeeded",
-        promptText: overrides.promptText ?? "@clean",
+        promptText: overrides.promptText ?? "/clean",
         createdAt: overrides.createdAt ?? 100,
         startedAt: overrides.startedAt,
         endedAt: overrides.endedAt ?? 200,
@@ -1216,11 +1216,11 @@ test("script Regenerate resolves the latest run from its saved trigger entry", (
         "script-run-2",
     );
     assert.deepEqual(
-        getSidebarCommentRegenerateAction("entry-1", "@clean", [], [olderRun, newerRun]),
+        getSidebarCommentRegenerateAction("entry-1", "/clean", [], [olderRun, newerRun]),
         { kind: "script-run", runId: "script-run-2" },
     );
     assert.equal(
-        getSidebarCommentRegenerateAction("entry-2", "Script @clean:\n\nDone", [], [newerRun]),
+        getSidebarCommentRegenerateAction("entry-2", "Script /clean:\n\nDone", [], [newerRun]),
         null,
     );
 });
@@ -1258,8 +1258,8 @@ test("isRetryableScriptRunBusy disables Regenerate only for active script runs",
 test("renderPersistedCommentCard reruns scripts explicitly and keeps collapsed script output visible", async () => {
     const thread = createThreadWithEntries({
         entries: [
-            { id: "comment-1", body: "@clean", timestamp: 100 },
-            { id: "entry-2", body: "Script @clean:\n\nDone", timestamp: 110 },
+            { id: "comment-1", body: "/clean", timestamp: 100 },
+            { id: "entry-2", body: "Script /clean:\n\nDone", timestamp: 110 },
         ],
     });
     const retriedScriptRunIds: string[] = [];
@@ -1289,6 +1289,9 @@ test("renderPersistedCommentCard reruns scripts explicitly and keeps collapsed s
         root.findAllByClass("aside-comment-item").map((element) => element.getAttribute("data-comment-id")),
         ["comment-1", "entry-2"],
     );
+    const scriptStatusMarks = root.findAllByClass("aside-agent-run-status-mark");
+    assert.equal(scriptStatusMarks.length, 1);
+    assert.equal(scriptStatusMarks[0]?.textContent, "✅");
     assert.deepEqual(
         root.findAllByClass("aside-comment-author-indicator").map((element) => element.textContent),
         ["Script"],

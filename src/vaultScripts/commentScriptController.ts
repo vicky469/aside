@@ -74,7 +74,7 @@ export function formatScriptResult(mentionName: string, value: string): string {
     if (words.length > MAX_SCRIPT_RESULT_WORDS) {
         content += "\n\n[output truncated]";
     }
-    return `Script @${mentionName}:\n\n${content}`;
+    return `Script /${mentionName}:\n\n${content}`;
 }
 
 export function summarizeScriptError(error: unknown): string {
@@ -196,23 +196,25 @@ export class CommentScriptController {
                 promptText: trigger.comment,
                 createdAt: this.host.now(),
                 retryOfRunId: previous.id,
+                outputEntryId: previous.outputEntryId,
                 startedAt: undefined,
                 endedAt: undefined,
                 error: undefined,
             };
             try {
                 await this.store.addRun(next);
+                await this.host.refreshCommentViews();
             } catch {
                 this.host.showNotice(SCRIPT_RETRY_PERSIST_NOTICE);
                 await this.host.refreshCommentViews();
                 return false;
             }
 
-            if (next.outputEntryId) {
+            if (previous.outputEntryId) {
                 let cleared = false;
                 try {
                     cleared = await this.host.editComment(
-                        next.outputEntryId,
+                        previous.outputEntryId,
                         "",
                         { skipCommentViewRefresh: true },
                     );
@@ -225,6 +227,7 @@ export class CommentScriptController {
                     await this.host.refreshCommentViews();
                     return false;
                 }
+                await this.host.refreshCommentViews();
             }
 
             await this.enqueue(next);
@@ -295,6 +298,7 @@ export class CommentScriptController {
             status: "running",
             startedAt: this.host.now(),
         }));
+        await this.host.refreshCommentViews();
         if (this.disposed) {
             return;
         }

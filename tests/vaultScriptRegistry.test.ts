@@ -84,7 +84,7 @@ test("case-insensitive collisions are ambiguous until one path is removed", () =
     assert.deepEqual(registry.getRunnableScripts(), []);
     assert.deepEqual(registry.getAmbiguousMentionNames(), ["clean"]);
     assert.equal(registry.isAmbiguous(" @ClEaN "), true);
-    assert.equal(registry.resolve("@clean"), null);
+    assert.equal(registry.resolve(" @clean "), null);
 
     registry.remove("🛠️ scripts/clean.js");
 
@@ -116,7 +116,7 @@ test("reserved built-in mentions are never runnable or resolvable", () => {
     assert.equal(registry.resolve("@CLAUDE"), null);
     assert.equal(registry.isAmbiguous("@todo"), false);
     assert.deepEqual(registry.getAmbiguousMentionNames(), []);
-    assert.deepEqual(registry.resolve("@CLEAN"), {
+    assert.deepEqual(registry.resolve("CLEAN"), {
         path: "🛠️ scripts/clean.mjs",
         fileName: "clean.mjs",
         mentionName: "clean",
@@ -136,9 +136,9 @@ test("returned arrays and registrations are defensive copies", () => {
         mentionName: "injected",
         normalizedMentionName: "injected",
     });
-    const resolved = registry.resolve("@clean");
+    const resolved = registry.resolve("clean");
     if (!resolved) {
-        assert.fail("expected @clean to resolve");
+        assert.fail("expected clean to resolve");
     }
     resolved.path = "also-changed.js";
 

@@ -189,7 +189,9 @@ export class SidebarInteractionController {
             return false;
         }
 
-        return !!targetEl.closest(".suggestion-container, .modal-container, .prompt, .menu");
+        return !!targetEl.closest(
+            ".aside-inline-suggest-dropdown, .suggestion-container, .modal-container, .prompt, .menu",
+        );
     }
 
     private async handleDraftDismissal(

@@ -4,6 +4,15 @@
 	"version": "2.0.100",
 	"minAppVersion": "1.12.7",
 	"description": "Side comments for humans and agents.",
+	"keywords": [
+		"Annotation",
+		"Sidebar",
+		"AI",
+		"Thinking",
+		"Graph",
+		"Collaboration",
+		"Tags"
+	],
 	"author": "vicky",
 	"fundingUrl": "https://buymeacoffee.com/vickyli",
 	"isDesktopOnly": false

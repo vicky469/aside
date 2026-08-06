@@ -6,6 +6,7 @@ export interface OpenMentionQuery {
     start: number;
     end: number;
     query: string;
+    trigger: "@" | "/";
 }
 
 export type SideNoteMentionSuggestion =
@@ -16,7 +17,7 @@ export type SideNoteMentionSuggestion =
     }
     | {
         kind: "script";
-        mention: `@${string}`;
+        mention: `/${string}`;
         label: string;
         scriptPath: string;
     };
@@ -31,16 +32,18 @@ export function findOpenMentionQuery(
     }
 
     const prefix = value.slice(0, selectionStart);
-    const match = /(^|[^\w])@([A-Za-z0-9_.-]*)$/u.exec(prefix);
+    const match = /(^|[^\w/])([/@])([A-Za-z0-9_.-]*)$/u.exec(prefix);
     if (!match) {
         return null;
     }
+    const trigger = match[2] as "@" | "/";
 
-    const start = selectionStart - (match[2]?.length ?? 0) - 1;
+    const start = selectionStart - (match[3]?.length ?? 0) - 1;
     return {
         start,
         end: selectionStart,
-        query: match[2] ?? "",
+        query: match[3] ?? "",
+        trigger,
     };
 }
 
@@ -49,7 +52,9 @@ export function replaceOpenMentionQuery(
     query: OpenMentionQuery,
     mention: string,
 ): TextEditResult {
-    const normalizedMention = mention.startsWith("@") ? mention : `@${mention}`;
+    const normalizedMention = mention.startsWith("@") || mention.startsWith("/")
+        ? mention
+        : `/${mention}`;
     const cursor = query.start + normalizedMention.length;
     return {
         value: `${value.slice(0, query.start)}${normalizedMention}${value.slice(query.end)}`,
@@ -62,7 +67,11 @@ export function buildMentionSuggestions(
     scripts: readonly VaultScriptRegistration[],
     rawQuery: string,
 ): SideNoteMentionSuggestion[] {
-    const query = rawQuery.trim().replace(/^@/u, "").toLowerCase();
+    const normalizedRawQuery = rawQuery.trim();
+    const query = normalizedRawQuery.replace(/^[@/]/u, "").toLowerCase();
+    const shouldIncludeScripts = !normalizedRawQuery.startsWith("@");
+    const shouldIncludeBuiltIns = !normalizedRawQuery.startsWith("/");
+    const shouldFilterBuiltInsByQuery = normalizedRawQuery !== "" && !normalizedRawQuery.startsWith("@");
     const builtIns: SideNoteMentionSuggestion[] = [
         {
             kind: "built-in",
@@ -78,17 +87,29 @@ export function buildMentionSuggestions(
     const reservedMentionNames = new Set(
         builtIns.map((suggestion) => suggestion.mention.slice(1).toLowerCase()),
     );
-    const candidates: SideNoteMentionSuggestion[] = builtIns.concat(
-        scripts
+    const builtInCandidates = shouldIncludeBuiltIns ? builtIns : [];
+    const scriptCandidates = shouldIncludeScripts
+        ? scripts
             .filter((script) => !reservedMentionNames.has(script.normalizedMentionName))
-            .map((script) => ({
-                kind: "script" as const,
-                mention: `@${script.mentionName}`,
-                label: script.fileName,
-                scriptPath: script.path,
-            })),
-    );
-    const score = (mention: string): number => {
+            .map((script) => {
+                const mention: `/${string}` = `/${script.mentionName}`;
+                return {
+                    kind: "script" as const,
+                    mention,
+                    label: script.fileName,
+                    scriptPath: script.path,
+                };
+            })
+        : [];
+    const candidates: SideNoteMentionSuggestion[] = [
+        ...builtInCandidates,
+        ...scriptCandidates,
+    ];
+    const score = (candidate: SideNoteMentionSuggestion): number => {
+        const mention = candidate.mention;
+        if (candidate.kind === "built-in" && !shouldFilterBuiltInsByQuery) {
+            return 0;
+        }
         const name = mention.slice(1).toLowerCase();
         if (!query || name === query) {
             return 0;
@@ -103,7 +124,7 @@ export function buildMentionSuggestions(
         .map((candidate, index) => ({
             candidate,
             index,
-            score: score(candidate.mention),
+            score: score(candidate),
         }))
         .filter((item) => Number.isFinite(item.score))
         .sort((left, right) => left.score - right.score || left.index - right.index)

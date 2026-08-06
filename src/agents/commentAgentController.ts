@@ -343,8 +343,10 @@ export class CommentAgentController {
             modePreference: runtimeSelection.modePreference,
             promptText: latestComment.comment,
             ...(retryOfRunId ? { retryOfRunId } : {}),
-            ...(retryOutputEntryId ? { outputEntryId: retryOutputEntryId } : {}),
         });
+        if (retryOutputEntryId) {
+            run.outputEntryId = retryOutputEntryId;
+        }
         if (retryOutputEntryId && !(await this.clearRetryOutputEntry(run, retryOutputEntryId))) {
             return false;
         }
@@ -520,20 +522,14 @@ export class CommentAgentController {
         }
 
         const startedAt = queuedRun.startedAt ?? this.host.now();
-        const previousRun = queuedRun.retryOfRunId
-            ? this.store.getRunById(queuedRun.retryOfRunId)
-            : null;
-        const replaceOutputEntryId = previousRun?.outputEntryId
-            && this.host.getCommentManager().getCommentById(previousRun.outputEntryId)
-            ? previousRun.outputEntryId
-            : undefined;
-        const outputEntryId = queuedRun.outputEntryId ?? replaceOutputEntryId ?? this.host.createCommentId();
+        const shouldAppendOutputEntry = !queuedRun.outputEntryId;
+        const replaceOutputEntryId = undefined;
+        const outputEntryId = queuedRun.outputEntryId ?? this.host.createCommentId();
         const runtimeContext = await this.buildRuntimePromptContext(queuedRun);
         const latestQueuedRun = this.store.getRunById(runId);
         if (!latestQueuedRun || latestQueuedRun.status !== "queued") {
             return;
         }
-        const shouldAppendOutputEntry = !queuedRun.outputEntryId && !replaceOutputEntryId;
         if (shouldAppendOutputEntry) {
             const appended = await this.host.appendThreadEntry(queuedRun.threadId, {
                 id: outputEntryId,

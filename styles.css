@@ -2311,6 +2311,59 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
     background: var(--text-selection);
 }
 
+.aside-inline-suggest-dropdown {
+    margin-top: 4px;
+    max-height: 16em;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 8px;
+    background: var(--background-primary);
+    box-shadow: 0 6px 18px color-mix(in srgb, var(--background-modifier-box-shadow) 25%, transparent);
+    overflow: hidden;
+}
+
+.aside-inline-suggest-list {
+    margin: 0;
+    padding: 4px 0;
+    list-style: none;
+    max-height: 16em;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.aside-inline-suggest-item {
+    display: grid;
+    gap: 2px;
+    padding: 5px 10px;
+    color: var(--text-normal);
+    cursor: pointer;
+}
+
+.aside-inline-suggest-item + .aside-inline-suggest-item {
+    border-top: 1px solid color-mix(in srgb, var(--background-modifier-border) 64%, transparent);
+}
+
+.aside-inline-suggest-item.is-selected,
+.aside-inline-suggest-item:hover {
+    background: color-mix(in srgb, var(--interactive-accent) 14%, transparent);
+}
+
+.aside-inline-suggest-title {
+    font-size: var(--font-ui-small);
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.aside-inline-suggest-note {
+    color: var(--text-muted);
+    font-size: var(--font-ui-smaller);
+    line-height: 1.25;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
 .aside-editor-token-bold {
     font-weight: inherit;
     text-shadow:

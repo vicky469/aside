@@ -6,12 +6,16 @@ import {
 import { getSupportedAgentActors } from "../core/agents/agentActorRegistry";
 
 function normalizeMention(mention: string): string {
-    return mention.trim().replace(/^@/, "").toLowerCase();
+    return mention.trim().toLowerCase().replace(/^[@/]/, "");
+}
+
+function normalizeAgentDirective(directive: string): string {
+    return directive.trim().toLowerCase().replace(/^@/, "");
 }
 
 const RESERVED_MENTION_NAMES = new Set([
     "todo",
-    ...getSupportedAgentActors().map((actor) => normalizeMention(actor.directive)),
+    ...getSupportedAgentActors().map((actor) => normalizeAgentDirective(actor.directive)),
 ]);
 
 export class VaultScriptRegistry {

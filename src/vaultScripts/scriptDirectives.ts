@@ -12,7 +12,7 @@ export type ScriptDirectiveResolution =
         message: string;
     };
 
-const MENTION_PATTERN = /(^|[^\w])@([A-Za-z0-9_.-]+)/gu;
+const MENTION_PATTERN = /(^|[^\w/])\/([A-Za-z0-9_.-]+)/gu;
 
 export function resolveScriptDirective(
     text: string,
@@ -39,7 +39,7 @@ export function resolveScriptDirective(
             kind: "rejected",
             mentionName,
             mentionNames,
-            message: `Script @${mentionName} matches more than one vault file.`,
+            message: `Script /${mentionName} matches more than one vault file.`,
         };
     }
 

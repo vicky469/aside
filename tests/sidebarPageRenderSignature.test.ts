@@ -80,7 +80,7 @@ function createScriptRun(overrides: Partial<ScriptRunRecord> = {}): ScriptRunRec
         scriptPath: overrides.scriptPath ?? "🛠️ scripts/clean.mjs",
         mentionName: overrides.mentionName ?? "clean",
         status: overrides.status ?? "succeeded",
-        promptText: overrides.promptText ?? "@clean",
+        promptText: overrides.promptText ?? "/clean",
         createdAt: overrides.createdAt ?? 100,
         startedAt: overrides.startedAt ?? 101,
         endedAt: overrides.endedAt ?? 102,

@@ -73,10 +73,19 @@ test("buildDraftCommentPresentation mentions todo and agent directives in new dr
 		mode: "new",
 	}), null);
 
-	assert.equal(
-		presentation.placeholder,
-		"Write a side note. Use B or H for styling, or type @todo, @codex, or @claude.",
-	);
+    assert.equal(
+        presentation.placeholder,
+        "Write a side note. Use B or H for styling, or type /script-name, @todo, @codex, or @claude.",
+    );
+});
+
+test("draft mention suggestions auto-open from a bare / at the caret", () => {
+    assert.equal(shouldAutoOpenDraftMentionSuggest("/", 1, 1, "insertText"), true);
+    assert.equal(shouldAutoOpenDraftMentionSuggest("please /", 8, 8, "insertText"), true);
+    assert.equal(shouldAutoOpenDraftMentionSuggest("please /", 8, 8, "insertCompositionText"), true);
+    assert.equal(shouldAutoOpenDraftMentionSuggest("please /", 8, 8, "insertFromComposition"), true);
+    assert.equal(shouldAutoOpenDraftMentionSuggest("please /c", 9, 9, "insertText"), false);
+    assert.equal(shouldAutoOpenDraftMentionSuggest("please /", 7, 8, "insertText"), false);
 });
 
 test("isDraftSaveActionDisabled allows empty new anchored notes but blocks other empty drafts", () => {

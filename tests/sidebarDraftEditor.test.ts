@@ -29,6 +29,50 @@ function createComment(overrides: Partial<Comment> = {}): Comment {
     };
 }
 
+function createFakeElement() {
+    return {
+        children: [] as unknown[],
+        firstChild: null as unknown,
+        className: "",
+        classList: {
+            add: () => {},
+        },
+        addClass: () => {},
+        setAttribute: () => {},
+        removeAttribute: () => {},
+        appendChild: () => {},
+        removeChild: function removeChild(child: unknown) {
+            const index = this.children.indexOf(child);
+            if (index >= 0) {
+                this.children.splice(index, 1);
+            }
+            this.firstChild = this.children[0] ?? null;
+        },
+        remove: () => {},
+        contains: function contains(target: unknown): boolean {
+            return target === this || this.children.includes(target);
+        },
+        addEventListener: () => {},
+        createDiv: function createDiv(clsOrOptions?: string | { cls?: string }) {
+            const child = createFakeElement();
+            child.className = typeof clsOrOptions === "string"
+                ? clsOrOptions
+                : clsOrOptions?.cls ?? "";
+            this.children.push(child);
+            this.firstChild = this.children[0] ?? null;
+            return child;
+        },
+        createEl: function createEl(_tag: string, options: { cls?: string; text?: string } = {}) {
+            const child = createFakeElement();
+            child.className = options.cls ?? "";
+            child.text = options.text ?? "";
+            this.children.push(child);
+            this.firstChild = this.children[0] ?? null;
+            return child;
+        },
+    } as any;
+}
+
 function createDraft(overrides: Partial<DraftComment> = {}): DraftComment {
     return {
         ...createComment(overrides),
@@ -337,7 +381,7 @@ test("sidebar draft editor controller inserts a chosen mention into a disconnect
     });
     const comment = createDraft({
         id: "draft-mention",
-        comment: "please @cle now",
+        comment: "please /cle now",
     });
     const textarea = {
         value: comment.comment,
@@ -348,14 +392,58 @@ test("sidebar draft editor controller inserts a chosen mention into a disconnect
 
     assert.equal(controller.openDraftMentionSuggest(comment, textarea, false), true);
     assert.ok(chooseMention);
-    await chooseMention("@clean-links");
+    await chooseMention("/clean-links");
 
     assert.deepEqual(updates, [{
         commentId: "draft-mention",
-        commentText: "please @clean-links now",
+        commentText: "please /clean-links now",
     }]);
     assert.equal(renderCount, 1);
     assert.deepEqual(focusedDraftIds, ["draft-mention"]);
+});
+
+test("sidebar draft editor controller matches tag suggestions case-insensitively and ignores hyphens", async () => {
+    const controller = new SidebarDraftEditorController({
+        getAllIndexedComments: () => [createComment({
+            id: "existing-tag",
+            comment: "We use #an-apple for this",
+        })],
+        updateDraftCommentText: () => {},
+        renderComments: async () => {},
+        scheduleDraftFocus: () => {},
+        getMentionSuggestions: () => [],
+        openMentionSuggestModal: () => {},
+        openLinkSuggestModal: () => {},
+        openTagSuggestModal: () => {},
+    });
+    const comment = createDraft({
+        id: "draft-tag",
+        comment: "#anApple",
+    });
+    const shell = createFakeElement();
+    const textarea = {
+        value: comment.comment,
+        selectionStart: 8,
+        selectionEnd: 8,
+        isConnected: true,
+        ownerDocument: {
+            addEventListener: () => {},
+            removeEventListener: () => {},
+        },
+        setAttribute: () => {},
+        removeAttribute: () => {},
+        closest: () => shell,
+    } as unknown as HTMLTextAreaElement;
+
+    assert.equal(controller.openDraftTagSuggest(comment, textarea, false), true);
+    const state = (controller as unknown as {
+        inlineSuggestionState: {
+            items: Array<{ title: string; value: string }>;
+        } | null;
+    }).inlineSuggestionState;
+    assert.ok(state);
+    assert.equal(state.items[0]?.value, "#an-apple");
+    assert.equal(state.items.some((item) => item.title.startsWith("Create tag")), false);
 });
 
 test("sidebar draft editor controller prioritizes an open wiki link over mention suggestions", () => {

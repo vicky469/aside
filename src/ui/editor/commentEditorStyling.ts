@@ -4,7 +4,7 @@ import {
     createDetachedObsidianFragment,
 } from "../dom/createDetachedObsidianElement";
 
-const COMMENT_MENTION_PATTERN = /(^|[^\w])(@[A-Za-z0-9_/-]+(?:\.[A-Za-z0-9_/-]+)*)/g;
+const COMMENT_MENTION_PATTERN = /(^|[^\w<])(@[A-Za-z0-9_/-]+(?:\.[A-Za-z0-9_/-]+)*|\/[A-Za-z0-9_.-]+(?:\.[A-Za-z0-9_.-]+)*)/g;
 
 function appendMentionNodes(
     document: Document,
@@ -182,7 +182,11 @@ export function decorateRenderedCommentMentions(container: HTMLElement): void {
         nodeFilter.SHOW_TEXT,
         {
             acceptNode: (node) => {
-                if (!nodeInstanceOf(node, Text) || !node.nodeValue || !node.nodeValue.includes("@")) {
+                if (
+                    !nodeInstanceOf(node, Text)
+                    || !node.nodeValue
+                    || (!node.nodeValue.includes("@") && !node.nodeValue.includes("/"))
+                ) {
                     return nodeFilter.FILTER_REJECT;
                 }
 

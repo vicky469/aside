@@ -55,10 +55,11 @@ export function shouldAutoOpenDraftMentionSuggest(
     const isTextInsertion = inputType === "insertText"
         || inputType === "insertCompositionText"
         || inputType === "insertFromComposition";
+    const previousChar = value.slice(selectionStart - 1, selectionStart);
     return isTextInsertion
         && selectionStart === selectionEnd
         && selectionStart > 0
-        && value.slice(selectionStart - 1, selectionStart) === "@";
+        && (previousChar === "@" || previousChar === "/");
 }
 
 export function buildDraftCommentPresentation(
@@ -86,7 +87,7 @@ export function buildDraftCommentPresentation(
         saveLabel: comment.mode === "edit" ? "Save" : "Add",
         placeholder: comment.mode === "append"
             ? "Add another entry to this thread."
-            : "Write a side note. Use B or H for styling, or type @todo, @codex, or @claude.",
+            : "Write a side note. Use B or H for styling, or type /script-name, @todo, @codex, or @claude.",
     };
 }
 
@@ -377,6 +378,17 @@ function renderDraftEditor(
         const inputType = "inputType" in event && typeof event.inputType === "string"
             ? event.inputType
             : "";
+        const inputData = event instanceof InputEvent ? event.data : null;
+
+        if (draftEditorController.handleDraftInputSuggestion(
+            comment,
+            target,
+            comment.mode === "edit",
+            inputType,
+            inputData,
+        )) {
+            return;
+        }
 
         if (shouldAutoOpenDraftMentionSuggest(
             target.value,
@@ -414,6 +426,9 @@ function renderDraftEditor(
         };
 
         event.stopPropagation();
+        if (draftEditorController.handleDraftSuggestionKeydown(event, textarea)) {
+            return;
+        }
 
         if (event.key === "Tab" && !event.shiftKey) {
             if (

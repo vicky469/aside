@@ -15,7 +15,7 @@ export default class SideNoteMentionSuggestModal extends SuggestModal<SideNoteMe
     ) {
         super(app);
         this.limit = 40;
-        this.setPlaceholder("Mention an agent, todo, or vault script");
+        this.setPlaceholder("Mention an agent, todo, or vault script (start with /)");
         this.emptyStateText = "No matching mention.";
     }
 

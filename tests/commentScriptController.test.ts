@@ -24,7 +24,7 @@ function createComment(overrides: Partial<Comment> = {}): Comment {
         endChar: 0,
         selectedText: "Alpha",
         selectedTextHash: "hash:alpha",
-        comment: overrides.comment ?? "@clean",
+        comment: overrides.comment ?? "/clean",
         timestamp: overrides.timestamp ?? 10,
         anchorKind: "page",
     };
@@ -39,7 +39,7 @@ function createStoredRun(overrides: Partial<ScriptRunRecord> = {}): ScriptRunRec
         scriptPath: "🛠️ scripts/clean.mjs",
         mentionName: "clean",
         status: "succeeded",
-        promptText: "@clean",
+        promptText: "/clean",
         createdAt: 10,
         endedAt: 11,
         ...overrides,
@@ -182,7 +182,7 @@ test("first saved script entry creates one durable run, process, and prefixed ou
         threadId: "thread-1",
         entryId: "thread-1",
         filePath: "Folder/Note.md",
-        body: "please @clean",
+        body: "please /clean",
     };
 
     assert.equal(await harness.controller.handleSavedUserEntry(event), true);
@@ -197,7 +197,7 @@ test("first saved script entry creates one durable run, process, and prefixed ou
     });
     assert.equal(harness.appendedEntries.length, 1);
     assert.equal(harness.appendedEntries[0]?.insertAfterCommentId, "thread-1");
-    assert.equal(harness.appendedEntries[0]?.body, "Script @clean:\n\ncleaned");
+    assert.equal(harness.appendedEntries[0]?.body, "Script /clean:\n\ncleaned");
     assert.deepEqual(harness.store.getRuns().map((run) => run.status), ["succeeded"]);
     assert.equal(harness.store.getRuns()[0]?.outputEntryId, harness.appendedEntries[0]?.entryId);
 });
@@ -209,7 +209,7 @@ test("output append failure terminalizes the run without retrying the broken wri
         threadId: "thread-1",
         entryId: "thread-1",
         filePath: "Folder/Note.md",
-        body: "@clean",
+        body: "/clean",
     }), true);
 
     const run = harness.store.getRuns()[0];
@@ -219,7 +219,7 @@ test("output append failure terminalizes the run without retrying the broken wri
     assert.equal(run?.error, "Unable to save the vault script result.");
     assert.equal(typeof run?.endedAt, "number");
     assert.deepEqual(harness.notices, ["Unable to save the vault script result."]);
-    assert.equal(harness.getRefreshCount(), 1);
+    assert.equal(harness.getRefreshCount(), 2);
 });
 
 test("script output handles empty success, truncation, and concise stderr failures", async () => {
@@ -230,9 +230,9 @@ test("script output handles empty success, truncation, and concise stderr failur
         threadId: "thread-1",
         entryId: "thread-1",
         filePath: "Folder/Note.md",
-        body: "@clean",
+        body: "/clean",
     });
-    assert.equal(empty.appendedEntries[0]?.body, "Script @clean:\n\nCompleted.");
+    assert.equal(empty.appendedEntries[0]?.body, "Script /clean:\n\nCompleted.");
 
     const longOutput = Array.from({ length: 260 }, (_, index) => `word-${index}`).join(" ");
     const truncated = createHarness({
@@ -242,7 +242,7 @@ test("script output handles empty success, truncation, and concise stderr failur
         threadId: "thread-1",
         entryId: "thread-1",
         filePath: "Folder/Note.md",
-        body: "@clean",
+        body: "/clean",
     });
     assert.match(truncated.appendedEntries[0]?.body ?? "", /word-249\n\n\[output truncated\]$/u);
     assert.doesNotMatch(truncated.appendedEntries[0]?.body ?? "", /word-250/u);
@@ -257,11 +257,11 @@ test("script output handles empty success, truncation, and concise stderr failur
         threadId: "thread-1",
         entryId: "thread-1",
         filePath: "Folder/Note.md",
-        body: "@clean",
+        body: "/clean",
     });
     assert.equal(failed.store.getRuns()[0]?.status, "failed");
     assert.equal(failed.store.getRuns()[0]?.error, "bad input check options");
-    assert.equal(failed.appendedEntries[0]?.body, "Script @clean:\n\nbad input check options");
+    assert.equal(failed.appendedEntries[0]?.body, "Script /clean:\n\nbad input check options");
 
     const blankStderr = createHarness({
         runVaultScript: async () => Promise.reject(Object.assign(
@@ -273,10 +273,10 @@ test("script output handles empty success, truncation, and concise stderr failur
         threadId: "thread-1",
         entryId: "thread-1",
         filePath: "Folder/Note.md",
-        body: "@clean",
+        body: "/clean",
     });
     assert.equal(blankStderr.store.getRuns()[0]?.error, "Command failed");
-    assert.equal(blankStderr.appendedEntries[0]?.body, "Script @clean:\n\nCommand failed");
+    assert.equal(blankStderr.appendedEntries[0]?.body, "Script /clean:\n\nCommand failed");
 });
 
 test("saved entry routing sends only unclaimed entries to the agent controller", async () => {
@@ -286,7 +286,7 @@ test("saved entry routing sends only unclaimed entries to the agent controller",
         threadId: "thread-1",
         entryId: "thread-1",
         filePath: "Folder/Note.md",
-        body: "@clean",
+        body: "/clean",
     }, valid.controller, {
         handleSavedUserEntry: async (event) => {
             validAgentEvents.push(event.entryId);
@@ -300,7 +300,7 @@ test("saved entry routing sends only unclaimed entries to the agent controller",
         threadId: "thread-1",
         entryId: "thread-1",
         filePath: "Folder/Note.md",
-        body: "@clean and @codex",
+        body: "/clean and @codex",
     };
     const agentController = {
         handleSavedUserEntry: async (event: typeof originalEvent) => {
@@ -334,19 +334,19 @@ test("saved entry routing sends only unclaimed entries to the agent controller",
 test("rejected directives persist one failed result and bypass runtime and agent fallback", async () => {
     const cases = [
         {
-            body: "@clean and @codex",
+            body: "/clean and @codex",
             scripts: ["🛠️ scripts/clean.mjs"],
             message: "Use a vault script or an agent, not both.",
         },
         {
-            body: "@clean then @other-script",
+            body: "/clean then /other-script",
             scripts: ["🛠️ scripts/clean.mjs", "🛠️ scripts/other-script.js"],
             message: "Use only one vault script per side note.",
         },
         {
-            body: "@format",
+            body: "/format",
             scripts: ["🛠️ scripts/format.js", "🛠️ scripts/Format.cjs"],
-            message: "Script @format matches more than one vault file.",
+            message: "Script /format matches more than one vault file.",
         },
     ];
 
@@ -375,8 +375,8 @@ test("script processes execute serially", async () => {
     const harness = createHarness({
         scripts: ["🛠️ scripts/clean.mjs", "🛠️ scripts/other-script.js"],
         comments: [
-            createComment({ id: "thread-1", comment: "@clean" }),
-            createComment({ id: "thread-2", comment: "@other-script", timestamp: 20 }),
+            createComment({ id: "thread-1", comment: "/clean" }),
+            createComment({ id: "thread-2", comment: "/other-script", timestamp: 20 }),
         ],
         runVaultScript: async (invocation) => {
             if (invocation.scriptPath.endsWith("clean.mjs")) {
@@ -392,14 +392,14 @@ test("script processes execute serially", async () => {
         threadId: "thread-1",
         entryId: "thread-1",
         filePath: "Folder/Note.md",
-        body: "@clean",
+        body: "/clean",
     });
     await new Promise<void>((resolve) => setImmediate(resolve));
     const second = harness.controller.handleSavedUserEntry({
         threadId: "thread-2",
         entryId: "thread-2",
         filePath: "Folder/Note.md",
-        body: "@other-script",
+        body: "/other-script",
     });
     await new Promise<void>((resolve) => setImmediate(resolve));
 
@@ -416,8 +416,8 @@ test("queued automatic execution revalidates its script against the live registr
     const harness = createHarness({
         scripts: ["🛠️ scripts/clean.mjs", "🛠️ scripts/other-script.js"],
         comments: [
-            createComment({ id: "thread-1", comment: "@clean" }),
-            createComment({ id: "thread-2", comment: "@other-script", timestamp: 20 }),
+            createComment({ id: "thread-1", comment: "/clean" }),
+            createComment({ id: "thread-2", comment: "/other-script", timestamp: 20 }),
         ],
         runVaultScript: async (invocation) => {
             if (invocation.scriptPath.endsWith("clean.mjs")) {
@@ -432,14 +432,14 @@ test("queued automatic execution revalidates its script against the live registr
         threadId: "thread-1",
         entryId: "thread-1",
         filePath: "Folder/Note.md",
-        body: "@clean",
+        body: "/clean",
     });
     await new Promise<void>((resolve) => setImmediate(resolve));
     const second = harness.controller.handleSavedUserEntry({
         threadId: "thread-2",
         entryId: "thread-2",
         filePath: "Folder/Note.md",
-        body: "@other-script",
+        body: "/other-script",
     });
     await new Promise<void>((resolve) => setImmediate(resolve));
 
@@ -470,7 +470,7 @@ test("automatic execution revalidates again after persisting running state", asy
         threadId: "thread-1",
         entryId: "thread-1",
         filePath: "Folder/Note.md",
-        body: "@clean",
+        body: "/clean",
     });
 
     assert.equal(harness.runtimeCalls.length, 0);
@@ -485,12 +485,12 @@ test("retryRun reuses output and reloads the latest trigger, thread, note, and s
         threadId: "thread-1",
         entryId: "thread-1",
         filePath: "Folder/Note.md",
-        body: "@clean",
+        body: "/clean",
     });
     const previous = harness.store.getRuns()[0];
     assert.ok(previous?.outputEntryId);
     harness.commentManager.renameFile("Folder/Note.md", "Renamed.md");
-    harness.commentManager.editComment("thread-1", "rerun @clean now");
+    harness.commentManager.editComment("thread-1", "rerun /clean now");
     harness.registry.seed(["🛠️ scripts/clean.js"]);
 
     assert.equal(await harness.controller.retryRun(previous.id), true);
@@ -498,7 +498,7 @@ test("retryRun reuses output and reloads the latest trigger, thread, note, and s
     const retry = harness.store.getRuns()[1];
     assert.equal(retry?.retryOfRunId, previous.id);
     assert.equal(retry?.outputEntryId, previous.outputEntryId);
-    assert.equal(retry?.promptText, "rerun @clean now");
+    assert.equal(retry?.promptText, "rerun /clean now");
     assert.equal(retry?.filePath, "Renamed.md");
     assert.equal(retry?.scriptPath, "🛠️ scripts/clean.js");
     assert.deepEqual(harness.loadedFilePaths, ["Folder/Note.md"]);
@@ -507,7 +507,12 @@ test("retryRun reuses output and reloads the latest trigger, thread, note, and s
         scriptPath: "🛠️ scripts/clean.js",
         notePath: "Renamed.md",
     });
-    assert.deepEqual(harness.editedEntries.map((entry) => entry.body), ["", "Script @clean:\n\ncleaned"]);
+    assert.deepEqual(harness.editedEntries.map((entry) => entry.body), [
+        "",
+        "Script /clean:\n\ncleaned",
+    ]);
+    assert.equal(harness.appendedEntries.length, 1);
+    assert.equal(harness.editedEntries.at(-1)?.body, "Script /clean:\n\ncleaned");
 });
 
 test("retryRun claims concurrently before loading and creates only one retry", async () => {
@@ -535,7 +540,7 @@ test("retryRun persists before clearing and leaves old output visible when persi
         threadId: "thread-1",
         entryId: "thread-1",
         filePath: "Folder/Note.md",
-        body: "@clean",
+        body: "/clean",
     });
     const previous = harness.store.getRuns()[0];
     const previousOutput = harness.commentManager.getCommentById(previous.outputEntryId ?? "")?.comment;
@@ -558,7 +563,7 @@ test("retryRun terminalizes a durable retry when clearing the old output fails",
         threadId: "thread-1",
         entryId: "thread-1",
         filePath: "Folder/Note.md",
-        body: "@clean",
+        body: "/clean",
     });
     const previous = harness.store.getRuns()[0];
     const previousOutput = harness.commentManager.getCommentById(previous.outputEntryId ?? "")?.comment;
@@ -578,24 +583,24 @@ test("retryRun terminalizes a durable retry when clearing the old output fails",
     assert.deepEqual(harness.notices, ["Unable to replace the previous script result."]);
 });
 
-test("retry output edit failure terminalizes once without retrying the edit", async () => {
+test("retry output clear failure terminalizes once without retrying the edit", async () => {
     const harness = createHarness();
     await harness.controller.handleSavedUserEntry({
         threadId: "thread-1",
         entryId: "thread-1",
         filePath: "Folder/Note.md",
-        body: "@clean",
+        body: "/clean",
     });
     const previous = harness.store.getRuns()[0];
-    harness.setEditResults([true, false]);
+    harness.setEditResults([false]);
 
-    assert.equal(await harness.controller.retryRun(previous.id), true);
+    assert.equal(await harness.controller.retryRun(previous.id), false);
 
     const retry = harness.store.getRuns()[1];
     assert.equal(retry?.status, "failed");
     assert.equal(retry?.error, "Unable to replace the previous script result.");
-    assert.equal(harness.runtimeCalls.length, 2);
-    assert.equal(harness.editedEntries.length, 2);
+    assert.equal(harness.runtimeCalls.length, 1);
+    assert.equal(harness.editedEntries.length, 1);
     assert.deepEqual(harness.notices, ["Unable to replace the previous script result."]);
 });
 
@@ -604,8 +609,8 @@ test("dispose leaves active receipts for startup reconciliation without launchin
     const harness = createHarness({
         scripts: ["🛠️ scripts/clean.mjs", "🛠️ scripts/other-script.js"],
         comments: [
-            createComment({ id: "thread-1", comment: "@clean" }),
-            createComment({ id: "thread-2", comment: "@other-script", timestamp: 20 }),
+            createComment({ id: "thread-1", comment: "/clean" }),
+            createComment({ id: "thread-2", comment: "/other-script", timestamp: 20 }),
         ],
         runVaultScript: async (invocation) => {
             if (invocation.scriptPath.endsWith("clean.mjs")) {
@@ -620,14 +625,14 @@ test("dispose leaves active receipts for startup reconciliation without launchin
         threadId: "thread-1",
         entryId: "thread-1",
         filePath: "Folder/Note.md",
-        body: "@clean",
+        body: "/clean",
     });
     await new Promise<void>((resolve) => setImmediate(resolve));
     const second = harness.controller.handleSavedUserEntry({
         threadId: "thread-2",
         entryId: "thread-2",
         filePath: "Folder/Note.md",
-        body: "@other-script",
+        body: "/other-script",
     });
     await new Promise<void>((resolve) => setImmediate(resolve));
 

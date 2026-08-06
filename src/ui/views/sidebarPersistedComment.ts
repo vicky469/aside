@@ -15,6 +15,7 @@ import type { AsideAgentTarget } from "../../core/config/agentTargets";
 import {
     getLatestScriptRunForTriggerEntry,
     getScriptRunByOutputEntryId,
+    type ScriptRunStatus,
     type ScriptRunRecord,
 } from "../../core/scripts/scriptRuns";
 import { getVisibleNoteContent } from "../../core/storage/noteCommentStorage";
@@ -151,6 +152,8 @@ export interface AgentRunStatusPresentation {
     markerKind: "text" | "spinner";
 }
 
+type SidebarPersistedRunRecord = AgentRunRecord | ScriptRunRecord;
+
 export type SidebarCommentRegenerateAction =
     | { kind: "agent-run"; runId: string }
     | { kind: "agent-prompt" }
@@ -171,6 +174,25 @@ export function getAgentRunStatusPresentation(status: AgentRunRecord["status"]):
         default:
             return { marker: "?", markerKind: "text" };
     }
+}
+
+function getScriptRunStatusPresentation(status: ScriptRunStatus): AgentRunStatusPresentation {
+    switch (status) {
+        case "queued":
+            return { marker: null, markerKind: "spinner" };
+        case "running":
+            return { marker: null, markerKind: "spinner" };
+        case "succeeded":
+            return { marker: "✅", markerKind: "text" };
+        case "failed":
+            return { marker: "✕", markerKind: "text" };
+        default:
+            return { marker: "?", markerKind: "text" };
+    }
+}
+
+function isAgentRunRecord(run: SidebarPersistedRunRecord): run is AgentRunRecord {
+    return "requestedAgent" in run;
 }
 
 function getAgentLabel(target: AgentRunRecord["requestedAgent"]): string {
@@ -418,11 +440,14 @@ function buildSidebarCommentAuthorPresentation(
     };
 }
 
-function renderAgentRunStatus(
+function renderPersistedRunStatus(
     metaEl: HTMLElement,
-    run: AgentRunRecord,
+    run: SidebarPersistedRunRecord,
 ): void {
-    const presentation = getAgentRunStatusPresentation(run.status);
+    const isAgentRun = isAgentRunRecord(run);
+    const presentation = isAgentRun
+        ? getAgentRunStatusPresentation(run.status)
+        : getScriptRunStatusPresentation(run.status);
     const statusEl = metaEl.createSpan({
         cls: `aside-agent-run-status is-${run.status}`,
     });
@@ -434,8 +459,8 @@ function renderAgentRunStatus(
     } else {
         markEl.setAttribute("aria-hidden", "true");
     }
-    const agentLabel = getAgentLabel(run.requestedAgent);
-    statusEl.setAttribute("aria-label", `${agentLabel} ${run.status}`);
+    const label = isAgentRun ? getAgentLabel(run.requestedAgent) : "Script";
+    statusEl.setAttribute("aria-label", `${label} ${run.status}`);
     if (run.error) {
         statusEl.setAttribute("title", run.error);
     }
@@ -1015,7 +1040,7 @@ function renderThreadFooterActions(
     comment: Comment,
     regenerateAction: SidebarCommentRegenerateAction | null,
     author: SidebarCommentAuthorPresentation,
-    agentRun: AgentRunRecord | null,
+    runRecord: SidebarPersistedRunRecord | null,
     options: {
         showShareAction: boolean;
         showAddEntryAction: boolean;
@@ -1038,7 +1063,7 @@ function renderThreadFooterActions(
 ): void {
     const footerEl = commentEl.createDiv("aside-thread-footer");
     const footerMetaEl = footerEl.createDiv("aside-thread-footer-meta");
-    let agentRunVisibleMetadataElements: HTMLElement[] = [];
+    let runMetadataElements: HTMLElement[] = [];
     let footerActionsEl: HTMLDivElement | null = null;
     const ensureFooterActionsEl = (): HTMLDivElement => {
         if (!footerActionsEl) {
@@ -1055,8 +1080,8 @@ function renderThreadFooterActions(
         );
     }
     renderCommentAuthorIndicator(footerMetaEl, author);
-    if (agentRun) {
-        renderAgentRunStatus(footerMetaEl, agentRun);
+    if (runRecord) {
+        renderPersistedRunStatus(footerMetaEl, runRecord);
     }
     if (options.insertAction) {
         const insertAction = options.insertAction;
@@ -1083,13 +1108,13 @@ function renderThreadFooterActions(
         || options.showAddEntryAction
         || options.showRetryAction
         || options.moveAction
-        || agentRun
+        || runRecord
     ) {
         footerActionsEl = ensureFooterActionsEl();
     }
-    if (agentRun) {
-        renderAgentRunMetadataFrontmatter(footerMetaEl, agentRun);
-        agentRunVisibleMetadataElements = renderAgentRunVisibleMetadata(footerMetaEl, agentRun, {
+    if (runRecord && isAgentRunRecord(runRecord)) {
+        renderAgentRunMetadataFrontmatter(footerMetaEl, runRecord);
+        runMetadataElements = renderAgentRunVisibleMetadata(footerMetaEl, runRecord, {
             sourcePath: comment.filePath,
             host,
         });
@@ -1100,7 +1125,7 @@ function renderThreadFooterActions(
         || options.showAddEntryAction
         || options.showRetryAction
         || options.moveAction
-        || agentRunVisibleMetadataElements.length
+        || runMetadataElements.length
     )) {
         footerActionsEl?.remove();
         return;
@@ -1180,8 +1205,8 @@ function renderThreadFooterActions(
         };
     }
 
-    if (agentRunVisibleMetadataElements.length) {
-        renderAgentRunMetadataToggleButton(footerActionsEl, agentRunVisibleMetadataElements, host);
+    if (runMetadataElements.length) {
+        renderAgentRunMetadataToggleButton(footerActionsEl, runMetadataElements, host);
     }
 }
 
@@ -1308,10 +1333,17 @@ function renderStoredThreadEntry(
 ): Promise<void> {
     const entryComment = threadEntryToComment(thread, entry);
     const entryPresentation = buildPersistedThreadEntryPresentation(thread, entry, host.activeCommentId);
+    const entryAuthor = resolveSidebarCommentAuthor(
+        entryComment.id,
+        host.threadAgentRuns,
+        host.currentUserLabel,
+        host.threadScriptRuns,
+    );
+    const entryBody = entry.body ?? "";
     const renderedEntry = renderPersistedEntryCard(container, {
         comment: entryComment,
         thread,
-        entryBody: entry.body || "",
+        entryBody,
         presentation: entryPresentation,
         host,
         interactive: !thread.deletedAt && (!entryComment.deletedAt || host.showDeletedComments),
@@ -1352,13 +1384,8 @@ function renderStoredThreadEntry(
         })) {
             renderEntryMoveHandle(entryActionsEl, entryComment.id, thread.id, host);
         }
-        const entryAuthor = resolveSidebarCommentAuthor(
-            entryComment.id,
-            host.threadAgentRuns,
-            host.currentUserLabel,
-            host.threadScriptRuns,
-        );
         const entryAgentRun = getAgentRunByOutputEntryId(host.threadAgentRuns, entryComment.id);
+        const entryScriptRun = getScriptRunByOutputEntryId(host.threadScriptRuns, entryComment.id);
         const entryRetryRun = getRetryableAgentRunForSidebarComment(entryComment.id, host.threadAgentRuns);
         const entryScriptRetryRun = getRetryableScriptRunForSidebarComment(entryComment.id, host.threadScriptRuns);
         const entryRegenerateAction = getSidebarCommentRegenerateAction(
@@ -1375,10 +1402,13 @@ function renderStoredThreadEntry(
             entryComment,
             entryRegenerateAction,
             entryAuthor,
-            entryAgentRun,
+            entryAgentRun ?? entryScriptRun,
             {
                 showShareAction: !host.showSourceRedirectAction && !entryComment.deletedAt && !thread.deletedAt,
-                showAddEntryAction: !host.showSourceRedirectAction && !entryComment.deletedAt && !thread.deletedAt,
+                showAddEntryAction: entryAuthor.kind !== "script"
+                    && !host.showSourceRedirectAction
+                    && !entryComment.deletedAt
+                    && !thread.deletedAt,
                 showRetryAction: !!entryRegenerateAction && !host.showSourceRedirectAction && !entryComment.deletedAt && !thread.deletedAt,
                 disableRetryAction: isRetryableAgentRunBusy(entryRetryRun)
                     || isRetryableScriptRunBusy(entryScriptRetryRun),
