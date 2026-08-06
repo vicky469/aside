@@ -681,7 +681,9 @@ export class SidebarDraftEditorController {
             this.activeInlineSuggest = "mention";
             this.host.openMentionSuggestModal({
                 initialQuery: mentionQuery.query,
-                getSuggestions: (nextQuery) => this.host.getMentionSuggestions(nextQuery),
+                getSuggestions: (nextQuery) => this.host.getMentionSuggestions(
+                    `${mentionQuery.trigger}${nextQuery}`,
+                ),
                 onChooseMention: (mention) => {
                     void onChooseMention(mention);
                 },

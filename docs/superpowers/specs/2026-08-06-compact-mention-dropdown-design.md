@@ -35,10 +35,9 @@ Use this section as the working checklist. Mark an item done only after the docu
 - [x] Automated regression tests cover built-in `@` rows and vault-script `/` rows without secondary detail.
 - [x] Regression coverage proves tag rows still render their usage-count detail.
 - [x] CSS regression coverage proves the dropdown is start-aligned, content-sized, width-capped, and uses the approved padding.
-- [x] Existing keyboard, mouse, focus, lifecycle, and ARIA tests remain green.
 - [x] The complete repository build and release-artifact guard pass.
 - [x] The verified `main.js`, `manifest.json`, and `styles.css` are installed byte-identically in `lean-startup`.
-- [ ] The installed dropdowns are visually checked in the real Aside draft editor after a reliable Obsidian reload.
+- [ ] After a reliable Obsidian reload, visually check the installed dropdowns in the real Aside draft editor and directly verify keyboard, mouse, focus, lifecycle, and ARIA behavior.
 
 ## Goals
 
@@ -92,4 +91,4 @@ No persistence, network, or execution path changes. Empty providers, stale texta
 
 Pure presentation tests cover built-in and script suggestions returning one visible title with no detail. A representative inline-renderer test verifies that optional detail is omitted for mentions but still created for tags. Fallback-modal coverage verifies that it consumes the same single-line presentation rule.
 
-Stylesheet coverage asserts content sizing, start alignment, maximum width, and the approved `5px 8px` row padding. The final repository build supplies regression coverage for keyboard navigation, mouse selection, focus retention, lifecycle cleanup, accessibility attributes, lint, type checking, Obsidian compliance, bundling, and release-artifact security.
+Stylesheet coverage asserts content sizing, start alignment, maximum width, and the approved `5px 8px` row padding. The complete repository build runs the available automated tests, lint, type checking, Obsidian compliance, bundling, and release-artifact security. Keyboard, mouse, focus, lifecycle, and ARIA behavior remain assigned to the open real-editor verification check.

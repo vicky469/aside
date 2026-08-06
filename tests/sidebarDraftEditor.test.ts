@@ -2,6 +2,7 @@ import * as assert from "node:assert/strict";
 import test from "node:test";
 import type { Comment } from "../src/commentManager";
 import type { DraftComment } from "../src/domain/drafts";
+import { buildMentionSuggestions } from "../src/ui/editor/commentMentionSuggestions";
 import {
     SidebarDraftEditorController,
     estimateDraftTextareaRows,
@@ -406,6 +407,101 @@ test("sidebar draft editor controller inserts a chosen mention into a disconnect
     }]);
     assert.equal(renderCount, 1);
     assert.deepEqual(focusedDraftIds, ["draft-mention"]);
+});
+
+test("sidebar draft editor controller preserves @ provider scope in the disconnected fallback", () => {
+    const rawQueries: string[] = [];
+    let getSuggestions: ((query: string) => ReturnType<typeof buildMentionSuggestions>) | undefined;
+    const scripts = [{
+        path: "🛠️ scripts/clean-citations.mjs",
+        fileName: "clean-citations.mjs",
+        mentionName: "clean-citations",
+        normalizedMentionName: "clean-citations",
+    }];
+    const controller = new SidebarDraftEditorController({
+        getAllIndexedComments: () => [],
+        updateDraftCommentText: () => {},
+        renderComments: async () => {},
+        scheduleDraftFocus: () => {},
+        getMentionSuggestions: (query) => {
+            rawQueries.push(query);
+            return buildMentionSuggestions(scripts, query);
+        },
+        openMentionSuggestModal: (options) => {
+            assert.equal(options.initialQuery, "c");
+            getSuggestions = options.getSuggestions;
+        },
+        openLinkSuggestModal: () => {},
+        openTagSuggestModal: () => {},
+    });
+    const comment = createDraft({ comment: "@c" });
+    const textarea = {
+        value: comment.comment,
+        selectionStart: 2,
+        selectionEnd: 2,
+        isConnected: false,
+    } as unknown as HTMLTextAreaElement;
+
+    assert.equal(controller.openDraftMentionSuggest(comment, textarea, false), true);
+    assert.ok(getSuggestions);
+    const suggestions = getSuggestions("c");
+
+    assert.deepEqual({
+        rawQueries,
+        mentions: suggestions.map((suggestion) => suggestion.mention),
+    }, {
+        rawQueries: ["@c"],
+        mentions: ["@todo", "@codex", "@claude"],
+    });
+    assert.ok(suggestions.every((suggestion) => suggestion.kind === "built-in"));
+    assert.ok(suggestions.every((suggestion) => suggestion.mention.startsWith("@")));
+});
+
+test("sidebar draft editor controller preserves / provider scope in the disconnected fallback", () => {
+    const rawQueries: string[] = [];
+    let getSuggestions: ((query: string) => ReturnType<typeof buildMentionSuggestions>) | undefined;
+    const scripts = [{
+        path: "🛠️ scripts/clean-citations.mjs",
+        fileName: "clean-citations.mjs",
+        mentionName: "clean-citations",
+        normalizedMentionName: "clean-citations",
+    }];
+    const controller = new SidebarDraftEditorController({
+        getAllIndexedComments: () => [],
+        updateDraftCommentText: () => {},
+        renderComments: async () => {},
+        scheduleDraftFocus: () => {},
+        getMentionSuggestions: (query) => {
+            rawQueries.push(query);
+            return buildMentionSuggestions(scripts, query);
+        },
+        openMentionSuggestModal: (options) => {
+            assert.equal(options.initialQuery, "");
+            getSuggestions = options.getSuggestions;
+        },
+        openLinkSuggestModal: () => {},
+        openTagSuggestModal: () => {},
+    });
+    const comment = createDraft({ comment: "/" });
+    const textarea = {
+        value: comment.comment,
+        selectionStart: 1,
+        selectionEnd: 1,
+        isConnected: false,
+    } as unknown as HTMLTextAreaElement;
+
+    assert.equal(controller.openDraftMentionSuggest(comment, textarea, false), true);
+    assert.ok(getSuggestions);
+    const suggestions = getSuggestions("");
+
+    assert.deepEqual({
+        rawQueries,
+        mentions: suggestions.map((suggestion) => suggestion.mention),
+    }, {
+        rawQueries: ["/"],
+        mentions: ["/clean-citations"],
+    });
+    assert.ok(suggestions.every((suggestion) => suggestion.kind === "script"));
 });
 
 test("sidebar draft editor controller matches tag suggestions case-insensitively and ignores hyphens", async () => {
