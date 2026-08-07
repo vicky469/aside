@@ -19,24 +19,24 @@ Use this section as the working checklist. Mark an item complete only after it i
 
 ### To Implement
 
-- [ ] Route a typed `#` and explicit tag-suggestion requests to the tag modal instead of the inline dropdown.
-- [ ] Preserve the active tag query and draft insertion/focus behavior when the modal opens, selects, or closes.
-- [ ] Move tag normalization and ranking into a pure shared module consumed by the modal.
-- [ ] Rank tags case-insensitively and hyphen-insensitively by exact, prefix, path-segment prefix, substring, then bounded typo-tolerant relevance.
-- [ ] Keep usage frequency only as an invisible tie-breaker after textual relevance.
-- [ ] Remove visible tag usage-count detail from modal rows without removing tag creation.
-- [ ] Remove obsolete inline-tag suggestion state, rendering, and usage-count presentation code.
-- [ ] Remove the `@`/`/` dropdown minimum width and reduce its box and row spacing to a tight content-sized layout.
+- [x] Route a typed `#` and explicit tag-suggestion requests to the tag modal instead of the inline dropdown.
+- [x] Preserve the active tag query and draft insertion/focus behavior when the modal opens, selects, or closes.
+- [x] Move tag normalization and ranking into a pure shared module consumed by the modal.
+- [x] Rank tags case-insensitively and hyphen-insensitively by exact, prefix, path-segment prefix, substring, then bounded typo-tolerant relevance.
+- [x] Keep usage frequency only as an invisible tie-breaker after textual relevance.
+- [x] Remove visible tag usage-count detail from modal rows without removing tag creation.
+- [x] Remove obsolete inline-tag suggestion state, rendering, and usage-count presentation code.
+- [x] Remove the `@`/`/` dropdown minimum width and reduce its box and row spacing to a tight content-sized layout.
 
 ### Verification
 
-- [ ] Pure tests cover case-insensitive, hyphen-insensitive, exact, prefix, segment, substring, and typo-tolerant tag ranking.
-- [ ] Ranking tests prove textual relevance wins before hidden usage frequency and deterministic alphabetical fallback.
-- [ ] Controller tests prove `#` opens the modal while `@` and `/` remain inline.
-- [ ] Controller tests cover tag selection, close/focus restoration, disconnected draft fallback, and precedence over conflicting triggers.
-- [ ] Rendering tests prove tag usage counts are absent and create-tag behavior remains available.
-- [ ] Stylesheet tests prove the inline menu has no minimum width, remains width-capped, and uses the approved compact padding.
-- [ ] The complete repository build and release-artifact guard pass.
+- [x] Pure tests cover case-insensitive, hyphen-insensitive, exact, prefix, segment, substring, and typo-tolerant tag ranking.
+- [x] Ranking tests prove textual relevance wins before hidden usage frequency and deterministic alphabetical fallback.
+- [x] Controller tests prove `#` opens the modal while `@` and `/` remain inline.
+- [x] Controller tests cover tag selection, close/focus restoration, disconnected draft fallback, and precedence over conflicting triggers.
+- [x] Rendering tests prove tag usage counts are absent and create-tag behavior remains available.
+- [x] Stylesheet tests prove the inline menu has no minimum width, remains width-capped, and uses the approved compact padding.
+- [x] The complete repository build and release-artifact guard pass.
 - [ ] The verified build is installed byte-identically in `lean-startup`.
 - [ ] A real Obsidian draft visually confirms the `#` modal and tight `@`/`/` inline dropdown, including keyboard and pointer selection.
 
