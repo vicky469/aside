@@ -49,19 +49,19 @@ function boundedDamerauLevenshtein(left: string, right: string, limit: number): 
         Array<number>(right.length + 1).fill(0)
     ));
     for (let index = 0; index <= left.length; index += 1) {
-        rows[index]![0] = index;
+        rows[index][0] = index;
     }
     for (let index = 0; index <= right.length; index += 1) {
-        rows[0]![index] = index;
+        rows[0][index] = index;
     }
 
     for (let leftIndex = 1; leftIndex <= left.length; leftIndex += 1) {
         for (let rightIndex = 1; rightIndex <= right.length; rightIndex += 1) {
             const substitution = left[leftIndex - 1] === right[rightIndex - 1] ? 0 : 1;
-            rows[leftIndex]![rightIndex] = Math.min(
-                rows[leftIndex - 1]![rightIndex]! + 1,
-                rows[leftIndex]![rightIndex - 1]! + 1,
-                rows[leftIndex - 1]![rightIndex - 1]! + substitution,
+            rows[leftIndex][rightIndex] = Math.min(
+                rows[leftIndex - 1][rightIndex] + 1,
+                rows[leftIndex][rightIndex - 1] + 1,
+                rows[leftIndex - 1][rightIndex - 1] + substitution,
             );
 
             if (
@@ -70,15 +70,15 @@ function boundedDamerauLevenshtein(left: string, right: string, limit: number): 
                 && left[leftIndex - 1] === right[rightIndex - 2]
                 && left[leftIndex - 2] === right[rightIndex - 1]
             ) {
-                rows[leftIndex]![rightIndex] = Math.min(
-                    rows[leftIndex]![rightIndex]!,
-                    rows[leftIndex - 2]![rightIndex - 2]! + 1,
+                rows[leftIndex][rightIndex] = Math.min(
+                    rows[leftIndex][rightIndex],
+                    rows[leftIndex - 2][rightIndex - 2] + 1,
                 );
             }
         }
     }
 
-    return rows[left.length]![right.length]!;
+    return rows[left.length][right.length];
 }
 
 function scoreTag(query: string, tag: TagRecord): MatchScore | null {
