@@ -1,6 +1,6 @@
 import type { Comment } from "../../commentManager";
 import { compareCommentsForSidebarOrder } from "../../core/anchors/commentSectionOrder";
-import { extractTagsFromText, normalizeTagText } from "../../core/text/commentTags";
+import { extractTagsFromText } from "../../core/text/commentTags";
 import type { DraftComment } from "../../domain/drafts";
 import {
     continueMarkdownList,
@@ -28,129 +28,21 @@ interface InlineSuggestionChoice {
     note?: string;
 }
 
-interface VaultTagRecord {
-    normalized: string;
-    canonical: string;
-    usageCount: number;
-    tag: string;
-}
-
 interface InlineSuggestionState {
     listId: string;
-    kind: "mention" | "tag";
     textarea: HTMLTextAreaElement;
     container: HTMLDivElement;
     list: HTMLUListElement;
     optionElements: HTMLElement[];
     selectedIndex: number;
     items: InlineSuggestionChoice[];
-    query: OpenMentionQuery | TagQueryMatch;
-    onChoose: (
-        value: string,
-        query: OpenMentionQuery | TagQueryMatch,
-    ) => Promise<void> | void;
+    query: OpenMentionQuery;
+    onChoose: (value: string, query: OpenMentionQuery) => Promise<void> | void;
     onClose: () => void;
     onOutsideMouseDown: (event: MouseEvent) => void;
 }
 
-type DropdownItemKind = "mention" | "tag";
-
 let nextInlineSuggestionListId = 1;
-
-function normalizeTagQuery(query: string): string {
-    return query.trim().replace(/^#+/, "");
-}
-
-function normalizeTagMatchValue(value: string): string {
-    return normalizeTagText(value)
-        .slice(1)
-        .toLowerCase()
-        .replace(/-/g, "");
-}
-
-function collectTagRecords(indexedTags: readonly string[]): VaultTagRecord[] {
-    const tagCounts = new Map<string, VaultTagRecord>();
-
-    for (const rawTag of indexedTags) {
-        const normalizedTag = normalizeTagText(rawTag);
-        if (!normalizedTag) {
-            continue;
-        }
-
-        const canonical = normalizeTagMatchValue(normalizedTag);
-        const existing = tagCounts.get(canonical);
-        if (existing) {
-            existing.usageCount += 1;
-            continue;
-        }
-
-        tagCounts.set(canonical, {
-            normalized: normalizedTag.slice(1).toLowerCase(),
-            canonical,
-            usageCount: 1,
-            tag: normalizedTag,
-        });
-    }
-
-    return Array.from(tagCounts.values());
-}
-
-function getTagMatchScore(query: string, queryCanonical: string, tag: VaultTagRecord): number {
-    if (!query) {
-        return 0;
-    }
-
-    if (tag.canonical === queryCanonical) {
-        return 0;
-    }
-
-    if (tag.canonical.startsWith(queryCanonical)) {
-        return 1;
-    }
-
-    if (tag.canonical.split("/").some((segment) => {
-        return segment.startsWith(queryCanonical);
-    })) {
-        return 2;
-    }
-
-    if (tag.canonical.includes(queryCanonical)) {
-        return 3;
-    }
-
-    return Number.POSITIVE_INFINITY;
-}
-
-function buildTagSuggestionChoices(rawQuery: string, indexedTags: readonly string[]): InlineSuggestionChoice[] {
-    const normalizedQuery = normalizeTagQuery(rawQuery);
-    const normalizedQueryCanonical = normalizeTagMatchValue(normalizedQuery);
-    const matchingTags = collectTagRecords(indexedTags)
-        .map((tag) => ({
-            tag,
-            score: getTagMatchScore(normalizedQuery, normalizedQueryCanonical, tag),
-        }))
-        .filter((entry) => entry.score !== Number.POSITIVE_INFINITY)
-        .sort((left, right) => {
-            if (normalizedQuery && left.score !== right.score) {
-                return left.score - right.score;
-            }
-
-            if (left.tag.usageCount !== right.tag.usageCount) {
-                return right.tag.usageCount - left.tag.usageCount;
-            }
-
-            return left.tag.tag.localeCompare(right.tag.tag);
-        })
-        .map<InlineSuggestionChoice>(({ tag }) => ({
-            value: tag.tag,
-            title: tag.tag,
-            note: tag.usageCount === 1
-                ? "Used once"
-                : `Used ${tag.usageCount} times`,
-        }));
-
-    return matchingTags;
-}
 
 function toMentionSuggestionChoices(mentions: readonly SideNoteMentionSuggestion[]): InlineSuggestionChoice[] {
     return mentions.map((mentionSuggestion) => ({
@@ -393,69 +285,43 @@ export class SidebarDraftEditorController {
             return false;
         }
 
-        if (state.kind === "mention") {
-            const mentionQuery = findOpenMentionQuery(
-                textarea.value,
-                textarea.selectionStart,
-                textarea.selectionEnd,
-            );
-            if (!mentionQuery || findOpenWikiLinkQuery(
-                textarea.value,
-                textarea.selectionStart,
-                textarea.selectionEnd,
-            )) {
-                this.closeInlineSuggestion();
-                return false;
-            }
-
-            const nextChoices = toMentionSuggestionChoices(
-                this.host.getMentionSuggestions(`${mentionQuery.trigger}${mentionQuery.query}`),
-            ).slice(0, 40);
-            if (!nextChoices.length) {
-                this.closeInlineSuggestion();
-                return false;
-            }
-
-            this.updateInlineSuggestion(state, mentionQuery, nextChoices);
-            return true;
-        }
-
-        const tagQuery = findOpenTagQuery(
+        const mentionQuery = findOpenMentionQuery(
             textarea.value,
             textarea.selectionStart,
             textarea.selectionEnd,
         );
-        if (!tagQuery) {
+        if (!mentionQuery || findOpenWikiLinkQuery(
+            textarea.value,
+            textarea.selectionStart,
+            textarea.selectionEnd,
+        )) {
             this.closeInlineSuggestion();
             return false;
         }
 
-        const nextChoices = buildTagSuggestionChoices(
-            tagQuery.query,
-            [
-                ...this.host.getAllIndexedComments().flatMap((storedComment) => extractTagsFromText(storedComment.comment ?? "")),
-                ...extractTagsFromText(textarea.value),
-            ],
-        );
+        const nextChoices = toMentionSuggestionChoices(
+            this.host.getMentionSuggestions(`${mentionQuery.trigger}${mentionQuery.query}`),
+        ).slice(0, 40);
         if (!nextChoices.length) {
             this.closeInlineSuggestion();
             return false;
         }
 
-        this.updateInlineSuggestion(state, tagQuery, nextChoices);
+        this.updateInlineSuggestion(state, mentionQuery, nextChoices);
         return true;
     }
 
-    private collectTagSources(textarea: HTMLTextAreaElement): string[] {
+    private collectTagSources(value: string, activeQuery: TagQueryMatch): string[] {
+        const valueWithoutActiveQuery = `${value.slice(0, activeQuery.start)}${value.slice(activeQuery.end)}`;
         return [
             ...this.host.getAllIndexedComments().flatMap((storedComment) => extractTagsFromText(storedComment.comment ?? "")),
-            ...extractTagsFromText(textarea.value),
+            ...extractTagsFromText(valueWithoutActiveQuery),
         ];
     }
 
     private updateInlineSuggestion(
         state: InlineSuggestionState,
-        query: OpenMentionQuery | TagQueryMatch,
+        query: OpenMentionQuery,
         items: InlineSuggestionChoice[],
     ): void {
         state.query = query;
@@ -466,13 +332,9 @@ export class SidebarDraftEditorController {
 
     private openInlineSuggestion(
         textarea: HTMLTextAreaElement,
-        kind: DropdownItemKind,
-        initialQuery: OpenMentionQuery | TagQueryMatch,
+        initialQuery: OpenMentionQuery,
         initialChoices: InlineSuggestionChoice[],
-        onChoose: (
-            choiceValue: string,
-            query: OpenMentionQuery | TagQueryMatch,
-        ) => Promise<void> | void,
+        onChoose: (choiceValue: string, query: OpenMentionQuery) => Promise<void> | void,
         onClose: () => void,
     ): boolean {
         if (!initialChoices.length) {
@@ -491,9 +353,7 @@ export class SidebarDraftEditorController {
 
         const listId = `aside-inline-suggest-list-${nextInlineSuggestionListId++}`;
         const container = editorShell.createDiv("aside-inline-suggest-dropdown");
-        if (kind === "mention") {
-            container.addClass("is-mention");
-        }
+        container.addClass("is-mention");
         const list = container.createEl("ul", {
             cls: "aside-inline-suggest-list",
         });
@@ -504,7 +364,6 @@ export class SidebarDraftEditorController {
         textarea.setAttribute("aria-haspopup", "listbox");
         const state: InlineSuggestionState = {
             listId,
-            kind,
             textarea,
             container,
             list,
@@ -518,7 +377,7 @@ export class SidebarDraftEditorController {
         };
 
         this.inlineSuggestionState = state;
-        this.activeInlineSuggest = kind;
+        this.activeInlineSuggest = "mention";
         this.renderInlineSuggestionChoices(state);
 
         const onOutsideMouseDown = (event: MouseEvent) => {
@@ -660,9 +519,9 @@ export class SidebarDraftEditorController {
 
         const onChooseMention = async (
             mention: string,
-            activeQuery: OpenMentionQuery | TagQueryMatch = mentionQuery,
+            activeQuery: OpenMentionQuery = mentionQuery,
         ) => {
-            const edit = replaceOpenMentionQuery(textarea.value, activeQuery as OpenMentionQuery, mention);
+            const edit = replaceOpenMentionQuery(textarea.value, activeQuery, mention);
             if (textarea.isConnected) {
                 this.applyDraftEditorEdit(comment.id, textarea, edit, isEditMode);
                 textarea.focus();
@@ -706,7 +565,6 @@ export class SidebarDraftEditorController {
 
         return this.openInlineSuggestion(
             textarea,
-            "mention",
             mentionQuery,
             choices,
             onChooseMention,
@@ -793,35 +651,40 @@ export class SidebarDraftEditorController {
             return false;
         }
 
-        if (!textarea.isConnected) {
-            return false;
-        }
-
+        const initialValue = textarea.value;
+        const initialCursor = tagQuery.end;
+        let inserted = false;
         this.activeInlineSuggest = "tag";
-        const tagSources = this.collectTagSources(textarea);
-        const initialChoices = buildTagSuggestionChoices(tagQuery.query, tagSources);
-        if (!initialChoices.length) {
-            this.activeInlineSuggest = null;
-            return false;
-        }
+        this.host.openTagSuggestModal({
+            initialQuery: tagQuery.query,
+            extraTags: this.collectTagSources(initialValue, tagQuery),
+            onChooseTag: async (tagText) => {
+                inserted = true;
+                const edit = replaceOpenTagQuery(initialValue, tagQuery, tagText);
+                if (textarea.isConnected) {
+                    this.applyDraftEditorEdit(comment.id, textarea, edit, isEditMode);
+                    textarea.focus();
+                    return;
+                }
 
-        return this.openInlineSuggestion(
-            textarea,
-            "tag",
-            tagQuery,
-            initialChoices,
-            (
-                tagText,
-                activeQuery: OpenMentionQuery | TagQueryMatch = tagQuery,
-            ) => {
-                const edit = replaceOpenTagQuery(textarea.value, activeQuery as TagQueryMatch, tagText);
-                this.applyDraftEditorEdit(comment.id, textarea, edit, isEditMode);
-                textarea.focus();
+                this.host.updateDraftCommentText(comment.id, edit.value);
+                await this.host.renderComments();
+                this.host.scheduleDraftFocus(comment.id);
             },
-            () => {
+            onCloseModal: () => {
                 this.activeInlineSuggest = null;
+                if (inserted || !textarea.isConnected) {
+                    return;
+                }
+
+                window.requestAnimationFrame(() => {
+                    textarea.focus();
+                    textarea.setSelectionRange(initialCursor, initialCursor);
+                });
             },
-        );
+        });
+
+        return true;
     }
 
     private applyDraftEditorEdit(

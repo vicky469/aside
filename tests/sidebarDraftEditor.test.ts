@@ -87,6 +87,48 @@ function createDraft(overrides: Partial<DraftComment> = {}): DraftComment {
     };
 }
 
+interface CapturedTagSuggestCallbacks {
+    extraTags: string[];
+    initialQuery: string;
+    onChooseTag: (tagText: string) => Promise<void>;
+    onCloseModal: () => void;
+}
+
+function createSuggestionTextarea(
+    value: string,
+    cursor = value.length,
+    isConnected = true,
+) {
+    const shell = createFakeElement();
+    const focusCalls: string[] = [];
+    const selectionCalls: Array<[number, number]> = [];
+    const textarea = {
+        value,
+        selectionStart: cursor,
+        selectionEnd: cursor,
+        isConnected,
+        rows: 2,
+        ownerDocument: {
+            addEventListener: () => {},
+            removeEventListener: () => {},
+        },
+        setAttribute: () => {},
+        removeAttribute: () => {},
+        closest: () => shell,
+        focus: () => {
+            focusCalls.push("focus");
+        },
+        dispatchEvent: () => true,
+        setSelectionRange(start: number, end: number) {
+            textarea.selectionStart = start;
+            textarea.selectionEnd = end;
+            selectionCalls.push([start, end]);
+        },
+    } as unknown as HTMLTextAreaElement;
+
+    return { textarea, shell, focusCalls, selectionCalls };
+}
+
 function createDraftEditorController() {
     return new SidebarDraftEditorController({
         getAllIndexedComments: () => [],
@@ -504,59 +546,123 @@ test("sidebar draft editor controller preserves / provider scope in the disconne
     assert.ok(suggestions.every((suggestion) => suggestion.kind === "script"));
 });
 
-test("sidebar draft editor controller matches tag suggestions case-insensitively and ignores hyphens", async () => {
+test("sidebar draft editor routes tags to the modal without an inline box", () => {
+    let captured: CapturedTagSuggestCallbacks | undefined;
     const controller = new SidebarDraftEditorController({
-        getAllIndexedComments: () => [createComment({
-            id: "existing-tag",
-            comment: "We use #an-apple for this",
-        })],
+        getAllIndexedComments: () => [createComment({ comment: "Existing #project" })],
         updateDraftCommentText: () => {},
         renderComments: async () => {},
         scheduleDraftFocus: () => {},
         getMentionSuggestions: () => [],
         openMentionSuggestModal: () => {},
         openLinkSuggestModal: () => {},
-        openTagSuggestModal: () => {},
-    });
-    const comment = createDraft({
-        id: "draft-tag",
-        comment: "#anApple",
-    });
-    const shell = createFakeElement();
-    const textarea = {
-        value: comment.comment,
-        selectionStart: 8,
-        selectionEnd: 8,
-        isConnected: true,
-        ownerDocument: {
-            addEventListener: () => {},
-            removeEventListener: () => {},
+        openTagSuggestModal: (options) => {
+            captured = options;
         },
-        setAttribute: () => {},
-        removeAttribute: () => {},
-        closest: () => shell,
-    } as unknown as HTMLTextAreaElement;
+    });
+    const draft = createDraft({ comment: "#proj" });
+    const { textarea, shell } = createSuggestionTextarea(draft.comment);
 
-    assert.equal(controller.openDraftTagSuggest(comment, textarea, false), true);
-    const state = (controller as unknown as {
-        inlineSuggestionState: {
-            items: Array<{ title: string; value: string }>;
-        } | null;
-    }).inlineSuggestionState;
-    assert.ok(state);
-    assert.equal(state.items[0]?.value, "#an-apple");
-    assert.equal(state.items.some((item) => item.title.startsWith("Create tag")), false);
-    const container = shell.children[0] as ReturnType<typeof createFakeElement>;
-    const list = container.children[0] as ReturnType<typeof createFakeElement>;
-    const row = list.children[0] as ReturnType<typeof createFakeElement>;
-    assert.doesNotMatch(container.className, /(?:^|\s)is-mention(?:\s|$)/u);
-    assert.deepEqual(row.children.map((child: ReturnType<typeof createFakeElement>) => ({
-        className: child.className,
-        text: child.text,
-    })), [
-        { className: "aside-inline-suggest-title", text: "#an-apple" },
-        { className: "aside-inline-suggest-note", text: "Used 2 times" },
-    ]);
+    assert.equal(controller.openDraftTagSuggest(draft, textarea, false), true);
+    assert.equal(captured?.initialQuery, "proj");
+    assert.deepEqual(captured?.extraTags, ["#project"]);
+    assert.equal(shell.children.length, 0);
+});
+
+test("tag modal selection replaces the captured query in a connected draft", async () => {
+    let captured: CapturedTagSuggestCallbacks | undefined;
+    const controller = new SidebarDraftEditorController({
+        getAllIndexedComments: () => [],
+        updateDraftCommentText: () => {},
+        renderComments: async () => {},
+        scheduleDraftFocus: () => {},
+        getMentionSuggestions: () => [],
+        openMentionSuggestModal: () => {},
+        openLinkSuggestModal: () => {},
+        openTagSuggestModal: (options) => {
+            captured = options;
+        },
+    });
+    const draft = createDraft({ id: "draft-tag", comment: "Plan #proj later" });
+    const { textarea, focusCalls } = createSuggestionTextarea(draft.comment, 10);
+
+    assert.equal(controller.openDraftTagSuggest(draft, textarea, false), true);
+    assert.ok(captured);
+    await captured.onChooseTag("#project");
+    assert.equal(textarea.value, "Plan #project later");
+    assert.deepEqual(focusCalls, ["focus"]);
+});
+
+test("tag modal selection updates a disconnected draft through stored state", async () => {
+    let captured: CapturedTagSuggestCallbacks | undefined;
+    const updates: Array<[string, string]> = [];
+    const focusedDrafts: string[] = [];
+    let renderCount = 0;
+    const controller = new SidebarDraftEditorController({
+        getAllIndexedComments: () => [],
+        updateDraftCommentText: (id, text) => {
+            updates.push([id, text]);
+        },
+        renderComments: async () => {
+            renderCount += 1;
+        },
+        scheduleDraftFocus: (id) => {
+            focusedDrafts.push(id);
+        },
+        getMentionSuggestions: () => [],
+        openMentionSuggestModal: () => {},
+        openLinkSuggestModal: () => {},
+        openTagSuggestModal: (options) => {
+            captured = options;
+        },
+    });
+    const draft = createDraft({ id: "draft-tag", comment: "#proj" });
+    const { textarea } = createSuggestionTextarea(draft.comment, draft.comment.length, false);
+
+    assert.equal(controller.openDraftTagSuggest(draft, textarea, false), true);
+    assert.ok(captured);
+    await captured.onChooseTag("#project");
+    assert.deepEqual(updates, [["draft-tag", "#project"]]);
+    assert.equal(renderCount, 1);
+    assert.deepEqual(focusedDrafts, ["draft-tag"]);
+});
+
+test("closing the tag modal restores the captured caret", () => {
+    const originalWindow = globalThis.window;
+    let captured: CapturedTagSuggestCallbacks | undefined;
+    Object.assign(globalThis, {
+        window: {
+            requestAnimationFrame: (callback: FrameRequestCallback) => {
+                callback(0);
+                return 1;
+            },
+        },
+    });
+
+    try {
+        const controller = new SidebarDraftEditorController({
+            getAllIndexedComments: () => [],
+            updateDraftCommentText: () => {},
+            renderComments: async () => {},
+            scheduleDraftFocus: () => {},
+            getMentionSuggestions: () => [],
+            openMentionSuggestModal: () => {},
+            openLinkSuggestModal: () => {},
+            openTagSuggestModal: (options) => {
+                captured = options;
+            },
+        });
+        const draft = createDraft({ comment: "#proj" });
+        const { textarea, focusCalls, selectionCalls } = createSuggestionTextarea(draft.comment);
+
+        assert.equal(controller.openDraftTagSuggest(draft, textarea, false), true);
+        assert.ok(captured);
+        captured.onCloseModal();
+        assert.deepEqual(focusCalls, ["focus"]);
+        assert.deepEqual(selectionCalls, [[5, 5]]);
+    } finally {
+        Object.assign(globalThis, { window: originalWindow });
+    }
 });
 
 test("sidebar draft editor controller renders connected mention suggestions without detail", () => {
@@ -606,6 +712,80 @@ test("sidebar draft editor controller renders connected mention suggestions with
         className: "aside-inline-suggest-title",
         text: "@todo",
     }]);
+});
+
+test("input triggers keep @ and / inline while # opens the tag modal", () => {
+    const cases = [
+        {
+            trigger: "@",
+            suggestion: {
+                kind: "built-in" as const,
+                mention: "@todo" as const,
+                label: "Todo",
+            },
+        },
+        {
+            trigger: "/",
+            suggestion: {
+                kind: "script" as const,
+                mention: "/clean-citations" as const,
+                label: "clean-citations.mjs",
+                scriptPath: "🛠️ scripts/clean-citations.mjs",
+            },
+        },
+    ];
+
+    for (const { trigger, suggestion } of cases) {
+        let tagModalCount = 0;
+        const controller = new SidebarDraftEditorController({
+            getAllIndexedComments: () => [],
+            updateDraftCommentText: () => {},
+            renderComments: async () => {},
+            scheduleDraftFocus: () => {},
+            getMentionSuggestions: () => [suggestion],
+            openMentionSuggestModal: () => {},
+            openLinkSuggestModal: () => {},
+            openTagSuggestModal: () => {
+                tagModalCount += 1;
+            },
+        });
+        const draft = createDraft({ comment: trigger });
+        const { textarea, shell } = createSuggestionTextarea(trigger);
+
+        assert.equal(
+            controller.handleDraftInputSuggestion(draft, textarea, false, "insertText", trigger),
+            true,
+        );
+        assert.equal(tagModalCount, 0);
+        assert.equal(shell.children.length, 1);
+        assert.match(
+            (shell.children[0] as ReturnType<typeof createFakeElement>).className,
+            /(?:^|\s)is-mention(?:\s|$)/u,
+        );
+    }
+
+    let captured: CapturedTagSuggestCallbacks | undefined;
+    const tagController = new SidebarDraftEditorController({
+        getAllIndexedComments: () => [],
+        updateDraftCommentText: () => {},
+        renderComments: async () => {},
+        scheduleDraftFocus: () => {},
+        getMentionSuggestions: () => [],
+        openMentionSuggestModal: () => {},
+        openLinkSuggestModal: () => {},
+        openTagSuggestModal: (options) => {
+            captured = options;
+        },
+    });
+    const draft = createDraft({ comment: "#" });
+    const { textarea, shell } = createSuggestionTextarea(draft.comment);
+
+    assert.equal(
+        tagController.handleDraftInputSuggestion(draft, textarea, false, "insertText", "#"),
+        true,
+    );
+    assert.equal(captured?.initialQuery, "");
+    assert.equal(shell.children.length, 0);
 });
 
 test("sidebar draft editor controller prioritizes an open wiki link over mention suggestions", () => {
