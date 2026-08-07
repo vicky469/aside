@@ -2324,7 +2324,6 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
 .aside-inline-suggest-dropdown.is-mention {
     justify-self: start;
     width: fit-content;
-    min-width: min(8.25rem, 100%);
     max-width: 100%;
     box-sizing: border-box;
 }
@@ -2338,6 +2337,10 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
     overflow-x: hidden;
 }
 
+.aside-inline-suggest-dropdown.is-mention .aside-inline-suggest-list {
+    padding: 2px 0;
+}
+
 .aside-inline-suggest-item {
     display: grid;
     gap: 2px;
@@ -2347,7 +2350,7 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
 }
 
 .aside-inline-suggest-dropdown.is-mention .aside-inline-suggest-item {
-    padding: 5px 8px;
+    padding: 3px 5px;
 }
 
 .aside-inline-suggest-item + .aside-inline-suggest-item {

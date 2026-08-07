@@ -27,6 +27,9 @@ test("mention suggestions use a one-line fallback and compact inline geometry", 
     const mentionDropdownRule = css.match(
         /\.aside-inline-suggest-dropdown\.is-mention\s*\{(?<body>[\s\S]*?)\}/,
     );
+    const mentionListRule = css.match(
+        /\.aside-inline-suggest-dropdown\.is-mention \.aside-inline-suggest-list\s*\{(?<body>[\s\S]*?)\}/,
+    );
     const mentionItemRule = css.match(
         /\.aside-inline-suggest-dropdown\.is-mention \.aside-inline-suggest-item\s*\{(?<body>[\s\S]*?)\}/,
     );
@@ -51,12 +54,15 @@ test("mention suggestions use a one-line fallback and compact inline geometry", 
     assert.ok(mentionDropdownRule?.groups?.body, "missing mention dropdown compact rule");
     assert.match(mentionDropdownRule.groups.body, /justify-self:\s*start\s*;/);
     assert.match(mentionDropdownRule.groups.body, /width:\s*fit-content\s*;/);
-    assert.match(mentionDropdownRule.groups.body, /min-width:\s*min\(8\.25rem,\s*100%\)\s*;/);
+    assert.doesNotMatch(mentionDropdownRule.groups.body, /min-width\s*:/);
     assert.match(mentionDropdownRule.groups.body, /max-width:\s*100%\s*;/);
     assert.match(mentionDropdownRule.groups.body, /box-sizing:\s*border-box\s*;/);
 
+    assert.ok(mentionListRule?.groups?.body, "missing mention list compact rule");
+    assert.match(mentionListRule.groups.body, /padding:\s*2px 0\s*;/);
+
     assert.ok(mentionItemRule?.groups?.body, "missing mention item compact rule");
-    assert.match(mentionItemRule.groups.body, /padding:\s*5px 8px\s*;/);
+    assert.match(mentionItemRule.groups.body, /padding:\s*3px 5px\s*;/);
 });
 
 test("disabled toolbar icon buttons are visibly unavailable and non-interactive", () => {
