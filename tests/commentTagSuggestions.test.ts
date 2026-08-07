@@ -1,4 +1,5 @@
 import * as assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
     buildTagSuggestions,
@@ -118,4 +119,12 @@ test("tag presentation hides usage and keeps create guidance", () => {
         getTagSuggestionPresentation({ type: "create", tag: "#fresh" }),
         { title: "Create tag: #fresh", note: "Insert this new tag into the comment." },
     );
+});
+
+test("tag modal delegates ranking and hides usage detail", () => {
+    const source = readFileSync("src/ui/modals/SideNoteTagSuggestModal.ts", "utf8");
+
+    assert.match(source, /buildTagSuggestions\(/u);
+    assert.match(source, /getTagSuggestionPresentation\(/u);
+    assert.doesNotMatch(source, /Used once|usageCount\s*===|function getMatchScore/u);
 });
