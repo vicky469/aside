@@ -34,6 +34,20 @@ export function resolveThoughtTrailNodeId(dataId: string | null | undefined, ele
     return match?.[1] ?? null;
 }
 
+export function resolveThoughtTrailNodeFilePath(
+    dataId: string | null | undefined,
+    elementId: string | null | undefined,
+    clickTargets: ReadonlyMap<string, string>,
+): string | null {
+    const nodeId = resolveThoughtTrailNodeId(dataId, elementId);
+    if (!nodeId) {
+        return null;
+    }
+
+    const targetUrl = clickTargets.get(nodeId);
+    return targetUrl ? parseThoughtTrailOpenFilePath(targetUrl) : null;
+}
+
 export function parseThoughtTrailOpenFilePath(url: string): string | null {
     try {
         const parsed = new URL(url);

@@ -5,6 +5,7 @@ import {
     TFile,
     WorkspaceLeaf,
     loadMermaid,
+    setTooltip,
 } from "obsidian";
 import type { Comment, CommentThread } from "../../commentManager";
 import {
@@ -17,7 +18,12 @@ import {
 } from "../../core/derived/thoughtTrail";
 import { buildThoughtTrailNoteLinkLines } from "../../core/derived/thoughtTrailNoteLinkGraph";
 import { resolveMermaidRuntime } from "./mermaidRuntime";
-import { extractThoughtTrailClickTargets, parseThoughtTrailOpenFilePath, resolveThoughtTrailNodeId } from "./thoughtTrailNodeLinks";
+import {
+    extractThoughtTrailClickTargets,
+    parseThoughtTrailOpenFilePath,
+    resolveThoughtTrailNodeFilePath,
+    resolveThoughtTrailNodeId,
+} from "./thoughtTrailNodeLinks";
 import { parseTrustedMermaidSvg } from "./thoughtTrailSvg";
 import type { SidebarThoughtTrailSource } from "./sidebarThoughtTrailSource";
 import { nodeInstanceOf } from "../domGuards";
@@ -344,6 +350,14 @@ function bindThoughtTrailNodeLinks(
         }
 
         element.setAttribute("data-aside-thought-trail-node-link", "true");
+        const filePath = resolveThoughtTrailNodeFilePath(
+            element.getAttribute("data-id"),
+            element.getAttribute("id"),
+            clickTargets,
+        );
+        if (filePath) {
+            setTooltip(element as HTMLElement, filePath);
+        }
     });
 
     mermaidEl.addEventListener("click", (event: Event) => {

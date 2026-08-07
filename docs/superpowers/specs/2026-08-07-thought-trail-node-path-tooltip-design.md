@@ -16,17 +16,17 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Attach an Obsidian-native tooltip to every clickable Mermaid file node after rendering.
-- [ ] Show the complete vault-relative file path, including the `.md` extension, as the tooltip text.
-- [ ] Apply the same tooltip behavior to both the direct Mermaid renderer and the Markdown-renderer fallback.
-- [ ] Preserve existing node labels, click navigation, graph layout, and tag-related file-list behavior.
+- [x] Attach an Obsidian-native tooltip to every clickable Mermaid file node after rendering.
+- [x] Show the complete vault-relative file path, including the `.md` extension, as the tooltip text.
+- [x] Apply the same tooltip behavior to both the direct Mermaid renderer and the Markdown-renderer fallback.
+- [x] Preserve existing node labels, click navigation, graph layout, and tag-related file-list behavior.
 
 ### Verification
 
-- [ ] Automated tests prove unique-filename nodes receive their full vault-relative paths.
-- [ ] Automated tests prove same-basename nodes retain unique visible labels and receive their distinct full paths.
-- [ ] Automated tests cover node identification and path extraction for the renderer-independent binding path.
-- [ ] The complete repository build passes.
+- [x] Automated tests prove unique-filename nodes receive their full vault-relative paths.
+- [x] Automated tests prove same-basename nodes retain unique visible labels and receive their distinct full paths.
+- [x] Automated tests cover node identification and path extraction for the renderer-independent binding path.
+- [x] The complete repository build passes.
 
 ## Goals
 

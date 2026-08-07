@@ -41,3 +41,21 @@ test("tag related files render as a semantic list with non-clickable current fil
         "tag related files should not use the old card-like item class",
     );
 });
+
+test("clickable thought trail nodes receive native full-path tooltips", () => {
+    assert.match(
+        source,
+        /import\s*\{[\s\S]*?setTooltip,[\s\S]*?\}\s*from\s*"obsidian";/,
+        "renderer should use Obsidian's native tooltip API",
+    );
+    assert.match(
+        source,
+        /const filePath = resolveThoughtTrailNodeFilePath\([\s\S]*?element\.getAttribute\("data-id"\),[\s\S]*?element\.getAttribute\("id"\),[\s\S]*?clickTargets,[\s\S]*?\);/,
+        "renderer should resolve each node through the shared click-target owner",
+    );
+    assert.match(
+        source,
+        /if \(filePath\) \{\s*setTooltip\(element as HTMLElement, filePath\);\s*\}/,
+        "renderer should attach the complete resolved path to the clickable node",
+    );
+});
