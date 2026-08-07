@@ -37,7 +37,7 @@ Use this section as the working checklist. Mark an item complete only after it i
 - [x] Rendering tests prove tag usage counts are absent and create-tag behavior remains available.
 - [x] Stylesheet tests prove the inline menu has no minimum width, remains width-capped, and uses the approved compact padding.
 - [x] The complete repository build and release-artifact guard pass.
-- [ ] The verified build is installed byte-identically in `lean-startup`.
+- [x] The verified build is installed byte-identically in `lean-startup`.
 - [ ] A real Obsidian draft visually confirms the `#` modal and tight `@`/`/` inline dropdown, including keyboard and pointer selection.
 
 ## Goals

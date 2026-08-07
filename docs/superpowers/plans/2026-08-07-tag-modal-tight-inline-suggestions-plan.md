@@ -16,7 +16,7 @@
 - Create: `src/ui/editor/commentTagSuggestions.ts`
 - Create: `tests/commentTagSuggestions.test.ts`
 
-- [ ] **Step 1: Write failing textual-ranking tests**
+- [x] **Step 1: Write failing textual-ranking tests**
 
 Create `tests/commentTagSuggestions.test.ts`:
 
@@ -55,7 +55,7 @@ test("tag suggestions rank exact prefix segment and substring matches", () => {
 });
 ```
 
-- [ ] **Step 2: Add failing typo-threshold and tie-break tests**
+- [x] **Step 2: Add failing typo-threshold and tie-break tests**
 
 ```ts
 test("tag suggestions tolerate bounded common typos", () => {
@@ -102,7 +102,7 @@ test("tag suggestions use hidden usage only after textual relevance", () => {
 });
 ```
 
-- [ ] **Step 3: Add failing create and presentation tests**
+- [x] **Step 3: Add failing create and presentation tests**
 
 ```ts
 test("tag suggestions deduplicate canonical variants and create only new tags", () => {
@@ -131,7 +131,7 @@ test("tag presentation hides usage and keeps create guidance", () => {
 });
 ```
 
-- [ ] **Step 4: Compile to verify RED**
+- [x] **Step 4: Compile to verify RED**
 
 ```bash
 ./node_modules/.bin/tsc -p tsconfig.test.json
@@ -139,7 +139,7 @@ test("tag presentation hides usage and keeps create guidance", () => {
 
 Expected: FAIL with `TS2307` because `commentTagSuggestions.ts` does not exist.
 
-- [ ] **Step 5: Implement the pure module**
+- [x] **Step 5: Implement the pure module**
 
 Create `src/ui/editor/commentTagSuggestions.ts` with these contracts:
 
@@ -313,7 +313,7 @@ export function getTagSuggestionPresentation(
 }
 ```
 
-- [ ] **Step 6: Run focused tests to verify GREEN**
+- [x] **Step 6: Run focused tests to verify GREEN**
 
 ```bash
 ./node_modules/.bin/tsc -p tsconfig.test.json
@@ -322,7 +322,7 @@ node --test .test-dist/tests/commentTagSuggestions.test.js
 
 Expected: all tag-planning tests PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/ui/editor/commentTagSuggestions.ts tests/commentTagSuggestions.test.ts
@@ -335,7 +335,7 @@ git commit -m "feat(tags): add fuzzy suggestion ranking"
 - Modify: `src/ui/modals/SideNoteTagSuggestModal.ts`
 - Modify: `tests/commentTagSuggestions.test.ts`
 
-- [ ] **Step 1: Add a failing ownership regression test**
+- [x] **Step 1: Add a failing ownership regression test**
 
 ```ts
 import { readFileSync } from "node:fs";
@@ -348,7 +348,7 @@ test("tag modal delegates ranking and hides usage detail", () => {
 });
 ```
 
-- [ ] **Step 2: Run it to verify RED**
+- [x] **Step 2: Run it to verify RED**
 
 ```bash
 ./node_modules/.bin/tsc -p tsconfig.test.json
@@ -357,7 +357,7 @@ node --test .test-dist/tests/commentTagSuggestions.test.js
 
 Expected: FAIL because the modal still owns matching and renders count copy.
 
-- [ ] **Step 3: Refactor the modal**
+- [x] **Step 3: Refactor the modal**
 
 Import `buildTagSuggestions`, `getTagSuggestionPresentation`, and `SideNoteTagSuggestion`. Delete modal-owned suggestion types, tag records, collection, scoring, sorting, and create-candidate helpers. Store raw `extraTags` and `vaultTags`, then use:
 
@@ -382,7 +382,7 @@ renderSuggestion(suggestion: SideNoteTagSuggestion, el: HTMLElement): void {
 
 Keep placeholder, empty state, instructions, modal title, initial-query input dispatch, caret placement, choose callback, and close callback.
 
-- [ ] **Step 4: Verify and commit**
+- [x] **Step 4: Verify and commit**
 
 ```bash
 ./node_modules/.bin/tsc -p tsconfig.test.json
@@ -400,7 +400,7 @@ Expected: tests PASS and no visible usage-count policy remains.
 - Modify: `src/ui/views/sidebarDraftEditor.ts`
 - Modify: `tests/sidebarDraftEditor.test.ts`
 
-- [ ] **Step 1: Replace the inline-tag test with failing modal tests**
+- [x] **Step 1: Replace the inline-tag test with failing modal tests**
 
 Add this reusable fake textarea factory and capture type:
 
@@ -550,7 +550,7 @@ test("closing the tag modal restores the captured caret", () => {
 
 Update input-trigger coverage so `inputData === "#"` opens the modal, while existing `@` and `/` coverage still sees `.aside-inline-suggest-dropdown.is-mention`.
 
-- [ ] **Step 2: Compile and run to verify RED**
+- [x] **Step 2: Compile and run to verify RED**
 
 ```bash
 ./node_modules/.bin/tsc -p tsconfig.test.json
@@ -559,7 +559,7 @@ node --test .test-dist/tests/sidebarDraftEditor.test.js
 
 Expected: FAIL because connected tags still render inline, disconnected tags return false, and modal callbacks are unused.
 
-- [ ] **Step 3: Implement modal routing**
+- [x] **Step 3: Implement modal routing**
 
 Delete `VaultTagRecord`, inline tag matching/choice helpers, `DropdownItemKind`, `InlineSuggestionState.kind`, and the tag branch from `refreshActiveInlineSuggestion`. Make `openInlineSuggestion` mention-only and always add `is-mention`.
 
@@ -582,7 +582,7 @@ onChooseTag: async (tagText) => {
 
 On close, clear the active owner. If nothing was inserted and the textarea remains connected, use `window.requestAnimationFrame` to focus it and restore the captured caret. Keep `[[` precedence and all mention/script keyboard, pointer, outside-click, and ARIA behavior unchanged.
 
-- [ ] **Step 4: Run focused editor verification**
+- [x] **Step 4: Run focused editor verification**
 
 ```bash
 ./node_modules/.bin/tsc -p tsconfig.test.json
@@ -593,7 +593,7 @@ git diff --check
 
 Expected: routing, selection, focus, lifecycle, mention, and script tests PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/ui/views/sidebarDraftEditor.ts tests/sidebarDraftEditor.test.ts
@@ -606,7 +606,7 @@ git commit -m "fix(editor): return tag suggestions to modal"
 - Modify: `styles.css:2314-2354`
 - Modify: `tests/toolbarDisabledStyles.test.mjs:19-59`
 
-- [ ] **Step 1: Change the CSS contract test first**
+- [x] **Step 1: Change the CSS contract test first**
 
 Require retained `justify-self: start`, `width: fit-content`, `max-width: 100%`, and `box-sizing: border-box`, reject any `min-width`, require variant list padding `2px 0`, and require row padding `3px 5px`:
 
@@ -621,7 +621,7 @@ assert.match(mentionListRule.groups.body, /padding:\s*2px 0\s*;/);
 assert.match(mentionItemRule.groups.body, /padding:\s*3px 5px\s*;/);
 ```
 
-- [ ] **Step 2: Run it to verify RED**
+- [x] **Step 2: Run it to verify RED**
 
 ```bash
 node --test tests/toolbarDisabledStyles.test.mjs
@@ -629,7 +629,7 @@ node --test tests/toolbarDisabledStyles.test.mjs
 
 Expected: FAIL on old `8.25rem`, `4px 0`, and `5px 8px` geometry.
 
-- [ ] **Step 3: Apply tight variant CSS**
+- [x] **Step 3: Apply tight variant CSS**
 
 ```css
 .aside-inline-suggest-dropdown.is-mention {
@@ -650,7 +650,7 @@ Expected: FAIL on old `8.25rem`, `4px 0`, and `5px 8px` geometry.
 
 Delete the old minimum width. Preserve theme border/background, selected-row treatment, scroll cap, ellipsis, and width cap.
 
-- [ ] **Step 4: Verify and commit**
+- [x] **Step 4: Verify and commit**
 
 ```bash
 node --test tests/toolbarDisabledStyles.test.mjs
@@ -671,7 +671,7 @@ Expected: presentation and editor tests PASS.
 - Verify only: `manifest.json`
 - Verify only: `styles.css`
 
-- [ ] **Step 1: Run complete focused regression**
+- [x] **Step 1: Run complete focused regression**
 
 ```bash
 ./node_modules/.bin/tsc -p tsconfig.test.json
@@ -681,7 +681,7 @@ node --test tests/toolbarDisabledStyles.test.mjs
 
 Expected: fuzzy ranking, creation, modal lifecycle, trigger split, inline interaction, and CSS tests PASS.
 
-- [ ] **Step 2: Run full build and exact artifact guard**
+- [x] **Step 2: Run full build and exact artifact guard**
 
 ```bash
 npm run build
@@ -691,7 +691,7 @@ test ! -e main.js.map
 
 Expected: all tests, lint, typecheck, Obsidian compliance, bundle, and artifact inspection PASS. The exact install set is `main.js`, `manifest.json`, and `styles.css`, with no source map, embedded source, raw TypeScript/JSX, secrets, keys/certificates, local paths, or local-only fixtures.
 
-- [ ] **Step 3: Update and commit evidence-backed spec status**
+- [x] **Step 3: Update and commit evidence-backed spec status**
 
 Mark implementation/test/build items `[x]` only after commands pass. Leave installation and real-vault visual items unchecked until Steps 4-5 succeed.
 
@@ -700,7 +700,7 @@ git add -f docs/superpowers/specs/2026-08-07-tag-modal-tight-inline-suggestions-
 git commit -m "docs: verify tag modal and tight suggestions"
 ```
 
-- [ ] **Step 4: Install and compare verified build**
+- [x] **Step 4: Install and compare verified build**
 
 ```bash
 node scripts/install-built-plugin.mjs --vault /Users/wenqingli/Obsidian/lean-startup
@@ -717,7 +717,7 @@ In `lean-startup`, use Command Palette → `Reload app without saving` or disabl
 
 Verify `#` opens the modal, filters every keystroke, ranks case/hyphen variants and bounded typos, hides counts, and inserts existing/new tags. Verify `@` and `/` stay inline with tight content width and capped long names. Exercise Arrow keys, Enter, Tab, Escape, pointer selection, outside dismissal, focus, and ARIA behavior. Only then check remaining spec items and commit that final checklist change.
 
-- [ ] **Step 6: Review final scope**
+- [x] **Step 6: Review final scope**
 
 ```bash
 git diff 2f420ec -- src/ui/editor/commentTagSuggestions.ts src/ui/modals/SideNoteTagSuggestModal.ts src/ui/views/sidebarDraftEditor.ts styles.css tests/commentTagSuggestions.test.ts tests/sidebarDraftEditor.test.ts tests/toolbarDisabledStyles.test.mjs docs/superpowers/specs/2026-08-07-tag-modal-tight-inline-suggestions-design.md
