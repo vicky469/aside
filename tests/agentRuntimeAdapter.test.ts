@@ -583,6 +583,28 @@ test("runAgentRuntimeWithModules reports Gemini nonzero stderr", async () => {
     await rejection;
 });
 
+test("runAgentRuntimeWithModules collapses Gemini authentication stacks", async () => {
+    const harness = createGeminiRuntimeHarness();
+    const runPromise = runAgentRuntimeWithModules(harness.modules, GEMINI_TEST_INVOCATION);
+    const rejection = assert.rejects(runPromise, (error: Error) => {
+        assert.equal(
+            error.message,
+            "Gemini authentication failed: This client is no longer supported for Gemini Code Assist for individuals.",
+        );
+        assert.doesNotMatch(error.message, /\/Users\//u);
+        assert.doesNotMatch(error.message, /throwIneligibleOrProjectIdError/u);
+        return true;
+    });
+    const child = await harness.spawned;
+    child.stderr.emitText([
+        "YOLO mode is enabled. All tool calls will be automatically approved.",
+        "Error authenticating: IneligibleTierError: This client is no longer supported for Gemini Code Assist for individuals.",
+        "    at throwIneligibleOrProjectIdError (file:///Users/test/.nvm/gemini-cli.js:10:2)",
+    ].join("\n"));
+    child.emit("close", 1, null);
+    await rejection;
+});
+
 test("runAgentRuntimeWithModules rejects missing Gemini stdin and spawn failures", async () => {
     const stdinHarness = createGeminiRuntimeHarness({
         child: new RuntimeProcessStub({ withStdin: false }),

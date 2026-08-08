@@ -397,6 +397,29 @@ function joinRuntimeDiagnostics(messages: Array<string | null | undefined>): str
     return uniqueMessages.length ? uniqueMessages.join("\n") : null;
 }
 
+function normalizeGeminiFailureDiagnostic(value: string | null): string | null {
+    const normalized = normalizeRuntimeDiagnosticText(value ?? "");
+    if (!normalized) {
+        return null;
+    }
+
+    const authenticationLine = normalized
+        .split("\n")
+        .map((line) => line.trim())
+        .find((line) => /^Error authenticating:/iu.test(line));
+    if (!authenticationLine) {
+        return normalized;
+    }
+
+    const detail = authenticationLine
+        .replace(/^Error authenticating:\s*/iu, "")
+        .replace(/^[A-Za-z][A-Za-z0-9]*Error:\s*/u, "")
+        .trim();
+    return normalizeRuntimeDiagnosticText(
+        detail ? `Gemini authentication failed: ${detail}` : "Gemini authentication failed.",
+    );
+}
+
 export function extractCodexErrorTextFromJsonEvent(event: unknown): string | null {
     if (!isRecord(event)) {
         return null;
@@ -2232,11 +2255,13 @@ async function runGeminiDirect(
             }
 
             const replyText = sanitizeAgentReplyText(streamedText);
-            const diagnosticMessage = joinRuntimeDiagnostics([
-                normalizeRuntimeDiagnosticText(stderrBuffer),
-                ...geminiErrorMessages,
-                ...stdoutDiagnosticLines,
-            ]);
+            const diagnosticMessage = normalizeGeminiFailureDiagnostic(
+                joinRuntimeDiagnostics([
+                    normalizeRuntimeDiagnosticText(stderrBuffer),
+                    ...geminiErrorMessages,
+                    ...stdoutDiagnosticLines,
+                ]),
+            );
             if (code === 0 && resultStatus !== "error" && replyText) {
                 finalizeSuccess(replyText);
                 return;
