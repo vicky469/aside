@@ -52,7 +52,7 @@ For durable storage and sync across devices, use Aside with [Obsidian Sync](http
 - Browse, filter, and batch-apply local side-note tags from the active note sidebar.
 - Generates `🐰 Aside Index.md` as a vault-wide comment index.
 - Lets the index sidebar switch between the comment list and a thought-trail graph built from side-note wiki links. The graph follows those links across connected markdown files, so it can show multi-step trails instead of only direct one-hop links.
-- Built-in agent help on desktop Obsidian. Type `@codex` or `@claude` in a thread to get a reply, create anchored side notes, or apply explicit edits to the source note.
+- Built-in agent help on desktop Obsidian. Type `@codex`, `@claude`, or `@gemini` in a thread to get a reply, create anchored side notes, or apply explicit edits to the source note.
 - Experimental Cloudflare Pages publishing for testers on desktop Obsidian.
 
 ## Network access
@@ -69,7 +69,7 @@ Aside reads clipboard data only from a paste event initiated by the user. It wri
 
 ## External services
 
-- Local `Codex` and `Claude` agent commands run only after the user saves a side note that explicitly mentions that agent. Those tools may use their own configured services and policies.
+- Local `Codex`, `Claude`, and `Gemini` agent commands run only after the user saves a side note that explicitly mentions that agent. Those tools may use their own configured services and policies.
 - Experimental publishing runs the user's local Wrangler CLI against the Cloudflare Pages project selected by the user. If the user enables a remote HTTPS cache-purge broker, Aside sends the configured public URL, vault-relative source path, and purge event to that endpoint after unpublish or republish.
 - Aside has no hidden telemetry or self-update service.
 
@@ -113,7 +113,7 @@ Aside reads clipboard data only from a paste event initiated by the user. It wri
 2. Add a side note.
    In markdown, select text and right-click `Add comment to selection`, or use the sidebar for a page note. In HTML and PDF files, use the sidebar to add a page note for the whole file.
 3. Write your comment in the sidebar.
-   Type `@todo` for follow-ups, `@codex` if you want Codex to take the task, or `@claude` if you want Claude to take it.
+   Type `@todo` for follow-ups, `@codex` if you want Codex to take the task, `@claude` if you want Claude to take it, or `@gemini` if you want Gemini to take it.
 
 ## Glossary
 
@@ -151,7 +151,7 @@ Aside reads clipboard data only from a paste event initiated by the user. It wri
 | Republish public content | Open the published file under `public/`, then click the matching `Republish Markdown`, `Republish HTML`, or `Republish PDF` action. |
 | Unpublish public content | Open the published file under `public/`, then click the matching `Unpublish Markdown`, `Unpublish HTML`, or `Unpublish PDF` action. |
 | Open published content | Open the published file under `public/`, then click the matching `Open published Markdown`, `Open published HTML`, or `Open published PDF` action. |
-| Ask a local agent from a side note | Type `@codex` or `@claude` in the note, then save it. |
+| Ask a local agent from a side note | Type `@codex`, `@claude`, or `@gemini` in the note, then save it. |
 | Link a note | Type `[[` to open note suggestions and insert an Obsidian wikilink. |
 | Add a tag | Type `#` to open tag suggestions and insert a tag. |
 | Reopen link or tag suggestions | Press `Tab` while the cursor is inside an unfinished `[[...` or `#...` token. |

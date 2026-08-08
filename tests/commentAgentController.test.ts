@@ -421,6 +421,35 @@ test("comment agent controller dispatches claude as a peer provider", async () =
     }]);
 });
 
+test("comment agent controller dispatches gemini as a peer provider", async () => {
+    const harness = createHarness({
+        runtimeReplyText: "Gemini reply.",
+    });
+
+    await harness.controller.handleSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "@gemini review this",
+    });
+    await waitForAgentQueueToDrain(harness.controller);
+
+    const latestRun = harness.controller.getLatestAgentRunForThread("thread-1");
+    assert.equal(latestRun?.status, "succeeded");
+    assert.equal(latestRun?.requestedAgent, "gemini");
+    assert.deepEqual(harness.runtimeSelectionCalls, ["gemini"]);
+    assert.equal(harness.runtimeCalls[0]?.target, "gemini");
+    assert.deepEqual(latestRun?.usedSkills, [{
+        name: "aside",
+        mode: "write",
+        source: "built-in",
+    }]);
+    assert.deepEqual(harness.editedEntries, [{
+        commentId: "generated-2",
+        body: "Gemini reply.",
+    }]);
+});
+
 test("comment agent controller treats mixed supported agents as a conflict", async () => {
     const harness = createHarness();
 
