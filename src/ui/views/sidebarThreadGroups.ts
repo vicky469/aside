@@ -1,4 +1,5 @@
 import type { CommentThread, CommentThreadEntry } from "../../commentManager";
+import { getSupportedAgentActors } from "../../core/agents/agentActorRegistry";
 import type { SidebarPrimaryMode } from "./viewState";
 
 export type SidebarThreadGroupMode = "todo" | "agent";
@@ -9,7 +10,9 @@ export interface SidebarThreadGroupCounts {
 }
 
 const TODO_MENTION_PATTERN = /@todo\b/iu;
-const AGENT_MENTION_PATTERN = /@(codex|claude)\b/iu;
+const AGENT_MENTION_PATTERNS = getSupportedAgentActors().map((actor) => (
+    new RegExp(`${escapeRegularExpression(actor.directive)}\\b`, "iu")
+));
 
 export const EMPTY_SIDEBAR_THREAD_GROUP_COUNTS: SidebarThreadGroupCounts = {
     agent: 0,
@@ -35,7 +38,7 @@ export function threadMatchesSidebarGroup(
 ): boolean {
     return groupMode === "todo"
         ? thread.entries.some((entry) => entryMatchesSidebarTodo(entry))
-        : AGENT_MENTION_PATTERN.test(getThreadBodyText(thread));
+        : AGENT_MENTION_PATTERNS.some((pattern) => pattern.test(getThreadBodyText(thread)));
 }
 
 export function filterThreadsBySidebarGroupMode(
@@ -82,4 +85,8 @@ export function resolveModeWithSidebarGroupAvailability(
 
 function getThreadBodyText(thread: CommentThread): string {
     return thread.entries.map((entry) => entry.body).join("\n");
+}
+
+function escapeRegularExpression(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }

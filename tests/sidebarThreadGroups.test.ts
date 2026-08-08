@@ -57,12 +57,14 @@ test("threadMatchesSidebarGroup finds todo and agent mentions case-insensitively
     const todoThread = createThread("todo", ["Initial note", "Reply @ToDo"]);
     const codexReplyThread = createThread("codex", ["Initial note", "ask @codex to check"]);
     const claudeThread = createThread("claude", ["Route to @Claude"]);
+    const geminiThread = createThread("gemini", ["Route to @GeMiNi"]);
     const unrelatedThread = createThread("plain", ["No routed marker here."]);
 
     assert.equal(threadMatchesSidebarGroup(todoThread, "todo"), true);
     assert.equal(threadMatchesSidebarGroup(todoThread, "agent"), false);
     assert.equal(threadMatchesSidebarGroup(codexReplyThread, "agent"), true);
     assert.equal(threadMatchesSidebarGroup(claudeThread, "agent"), true);
+    assert.equal(threadMatchesSidebarGroup(geminiThread, "agent"), true);
     assert.equal(threadMatchesSidebarGroup(unrelatedThread, "todo"), false);
     assert.equal(threadMatchesSidebarGroup(unrelatedThread, "agent"), false);
 });
