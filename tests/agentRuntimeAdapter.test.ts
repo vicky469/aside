@@ -1,5 +1,7 @@
 import * as assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
 import test from "node:test";
+import type { AgentRunMetadata } from "../src/core/agents/agentRuns";
 import {
     buildCodexCliArgs,
     buildClaudeCliArgs,
@@ -25,6 +27,7 @@ import {
     getGeminiRuntimeDiagnostics,
     resetResolvedAgentExecutionEnvForTests,
     resolveAgentExecutionEnv,
+    runAgentRuntimeWithModules,
     sanitizeAgentReplyText,
 } from "../src/agents/agentRuntimeAdapter";
 
@@ -76,6 +79,75 @@ function createRuntimeModules(
         },
     };
 }
+
+class RuntimeStreamStub extends EventEmitter {
+    emitText(value: string): void {
+        this.emit("data", Buffer.from(value));
+    }
+}
+
+class RuntimeProcessStub extends EventEmitter {
+    readonly stdout = new RuntimeStreamStub();
+    readonly stderr = new RuntimeStreamStub();
+    readonly stdinChunks: string[] = [];
+    ended = false;
+    killedWith: string | number | undefined;
+    readonly stdin: {
+        write: (chunk: string | Uint8Array) => boolean;
+        end: () => void;
+    } | null;
+
+    constructor(options: { withStdin?: boolean } = {}) {
+        super();
+        this.stdin = options.withStdin === false ? null : {
+            write: (chunk: string | Uint8Array) => {
+                this.stdinChunks.push(String(chunk));
+                return true;
+            },
+            end: () => {
+                this.ended = true;
+            },
+        };
+    }
+
+    kill(signal?: string | number): boolean {
+        this.killedWith = signal;
+        return true;
+    }
+}
+
+function createGeminiRuntimeHarness(options: {
+    child?: RuntimeProcessStub;
+    spawnError?: Error;
+} = {}) {
+    resetResolvedAgentExecutionEnvForTests();
+    const child = options.child ?? new RuntimeProcessStub();
+    let resolveSpawned!: (value: RuntimeProcessStub) => void;
+    const spawned = new Promise<RuntimeProcessStub>((resolve) => {
+        resolveSpawned = resolve;
+    });
+    const spawnCalls: Array<{ file: string; args: string[]; cwd?: string }> = [];
+    const modules = createRuntimeModules((file, _args, _execOptions, callback) => {
+        callback(null, "/Users/test/.nvm/bin:/usr/bin\n", "");
+        return createTrackedProcessStub();
+    });
+    modules.childProcess.spawn = (file, args, spawnOptions) => {
+        if (options.spawnError) {
+            throw options.spawnError;
+        }
+        spawnCalls.push({ file, args, cwd: spawnOptions.cwd });
+        queueMicrotask(() => resolveSpawned(child));
+        return child;
+    };
+    return { child, modules, spawned, spawnCalls };
+}
+
+const GEMINI_TEST_INVOCATION = {
+    target: "gemini" as const,
+    prompt: "@gemini review this",
+    cwd: "/vault/project",
+    vaultRootPath: "/vault",
+};
 
 test("resolveAgentExecutionEnv prefers PATH from a login shell", async () => {
     resetResolvedAgentExecutionEnvForTests();
@@ -392,6 +464,169 @@ test("buildGeminiCliArgs does not duplicate the working directory", () => {
         "--approval-mode",
         "yolo",
     ]);
+});
+
+test("runAgentRuntimeWithModules streams Gemini replies, progress, metadata, and stdin prompt", async () => {
+    const harness = createGeminiRuntimeHarness();
+    const partials: string[] = [];
+    const progress: string[] = [];
+    const metadata: AgentRunMetadata[] = [];
+    const runPromise = runAgentRuntimeWithModules(harness.modules, {
+        ...GEMINI_TEST_INVOCATION,
+        onPartialText: (value) => partials.push(value),
+        onProgressText: (value) => progress.push(value),
+        onRunMetadata: (value) => metadata.push(value),
+    });
+    const child = await harness.spawned;
+
+    child.stdout.emitText('{"type":"init","session_id":"session-1"}\n{"type":"message","role":"assistant","content":"Hel');
+    child.stdout.emitText('lo","delta":true}\n' + [
+        {
+            type: "tool_use",
+            tool_name: "read_file",
+            tool_id: "call-1",
+            parameters: { file_path: "Raw/Source.md" },
+        },
+        {
+            type: "tool_result",
+            tool_id: "call-1",
+            status: "success",
+            output: "ok",
+        },
+        {
+            type: "message",
+            role: "assistant",
+            content: " world",
+            delta: true,
+        },
+        {
+            type: "result",
+            status: "success",
+            stats: { tool_calls: 1 },
+        },
+    ].map((event) => JSON.stringify(event)).join("\n") + "\n");
+    child.emit("close", 0, null);
+
+    const result = await runPromise;
+    assert.equal(result.runtime, "direct-cli");
+    assert.equal(result.replyText, "Hello world");
+    assert.deepEqual(partials, ["Hello", "Hello world"]);
+    assert.equal(progress.includes("Starting Gemini"), true);
+    assert.equal(progress.includes("Using read_file"), true);
+    assert.deepEqual(result.usedTools, ["read_file"]);
+    assert.deepEqual(result.usedFiles, ["Raw/Source.md"]);
+    assert.equal(metadata.length > 0, true);
+    assert.equal(harness.spawnCalls[0]?.file, "gemini");
+    assert.deepEqual(harness.spawnCalls[0]?.args, buildGeminiCliArgs(GEMINI_TEST_INVOCATION));
+    assert.equal(harness.spawnCalls[0]?.cwd, "/vault/project");
+    assert.equal(child.stdinChunks.join(""), buildSideNotePrompt({
+        promptText: "@gemini review this",
+        vaultRootPath: "/vault",
+    }));
+    assert.equal(child.ended, true);
+});
+
+test("runAgentRuntimeWithModules ignores malformed and unknown Gemini stdout events", async () => {
+    const harness = createGeminiRuntimeHarness();
+    const runPromise = runAgentRuntimeWithModules(harness.modules, GEMINI_TEST_INVOCATION);
+    const child = await harness.spawned;
+    child.stdout.emitText([
+        "not-json",
+        JSON.stringify({ type: "future_event", value: "ignore" }),
+        JSON.stringify({
+            type: "message",
+            role: "assistant",
+            content: "Useful reply",
+            delta: true,
+        }),
+        JSON.stringify({ type: "result", status: "success" }),
+    ].join("\n") + "\n");
+    child.emit("close", 0, null);
+
+    assert.equal((await runPromise).replyText, "Useful reply");
+});
+
+test("runAgentRuntimeWithModules rejects an empty successful Gemini response", async () => {
+    const harness = createGeminiRuntimeHarness();
+    const runPromise = runAgentRuntimeWithModules(harness.modules, GEMINI_TEST_INVOCATION);
+    const rejection = assert.rejects(runPromise, /Gemini returned an empty response\./);
+    const child = await harness.spawned;
+    child.stdout.emitText('{"type":"result","status":"success"}\n');
+    child.emit("close", 0, null);
+    await rejection;
+});
+
+test("runAgentRuntimeWithModules rejects a terminal Gemini error result", async () => {
+    const harness = createGeminiRuntimeHarness();
+    const runPromise = runAgentRuntimeWithModules(harness.modules, GEMINI_TEST_INVOCATION);
+    const rejection = assert.rejects(runPromise, /Maximum session turns exceeded/);
+    const child = await harness.spawned;
+    child.stdout.emitText([
+        JSON.stringify({
+            type: "error",
+            severity: "error",
+            message: "Maximum session turns exceeded",
+        }),
+        JSON.stringify({ type: "result", status: "error" }),
+    ].join("\n") + "\n");
+    child.emit("close", 0, null);
+    await rejection;
+});
+
+test("runAgentRuntimeWithModules reports Gemini nonzero stderr", async () => {
+    const harness = createGeminiRuntimeHarness();
+    const runPromise = runAgentRuntimeWithModules(harness.modules, GEMINI_TEST_INVOCATION);
+    const rejection = assert.rejects(runPromise, /Authentication failed/);
+    const child = await harness.spawned;
+    child.stderr.emitText("Authentication failed");
+    child.emit("close", 1, null);
+    await rejection;
+});
+
+test("runAgentRuntimeWithModules rejects missing Gemini stdin and spawn failures", async () => {
+    const stdinHarness = createGeminiRuntimeHarness({
+        child: new RuntimeProcessStub({ withStdin: false }),
+    });
+    const stdinRun = runAgentRuntimeWithModules(stdinHarness.modules, GEMINI_TEST_INVOCATION);
+    const stdinRejection = assert.rejects(stdinRun, /Gemini CLI did not expose stdin\./);
+    await stdinHarness.spawned;
+    await stdinRejection;
+
+    const spawnHarness = createGeminiRuntimeHarness({
+        spawnError: new Error("spawn failed"),
+    });
+    await assert.rejects(
+        runAgentRuntimeWithModules(spawnHarness.modules, GEMINI_TEST_INVOCATION),
+        /spawn failed/,
+    );
+});
+
+test("runAgentRuntimeWithModules cancels Gemini before and during execution", async () => {
+    const preAbortedController = new AbortController();
+    preAbortedController.abort();
+    const preAbortedHarness = createGeminiRuntimeHarness();
+    await assert.rejects(
+        runAgentRuntimeWithModules(preAbortedHarness.modules, {
+            ...GEMINI_TEST_INVOCATION,
+            abortSignal: preAbortedController.signal,
+        }),
+        { name: "AgentRuntimeCancelledError" },
+    );
+    assert.equal(preAbortedHarness.spawnCalls.length, 0);
+
+    const cancelledController = new AbortController();
+    const cancelledHarness = createGeminiRuntimeHarness();
+    const cancelledRun = runAgentRuntimeWithModules(cancelledHarness.modules, {
+        ...GEMINI_TEST_INVOCATION,
+        abortSignal: cancelledController.signal,
+    });
+    const cancelledRejection = assert.rejects(cancelledRun, {
+        name: "AgentRuntimeCancelledError",
+    });
+    const cancelledChild = await cancelledHarness.spawned;
+    cancelledController.abort();
+    await cancelledRejection;
+    assert.equal(cancelledChild.killedWith, "SIGTERM");
 });
 
 test("extractCodexTextDeltaFromJsonEvent reads assistant deltas from exec json events", () => {

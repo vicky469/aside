@@ -2016,12 +2016,281 @@ async function runClaudeDirect(
     });
 }
 
-export async function runAgentRuntime(invocation: AgentRuntimeInvocation): Promise<AgentRuntimeResult> {
-    const modules = getNodeModules();
-    if (!modules) {
-        throw new Error("Local agent execution is unavailable in this Obsidian environment.");
+async function runGeminiDirect(
+    modules: NodeModules,
+    invocation: AgentRuntimeInvocation,
+): Promise<AgentRuntimeResult> {
+    if (invocation.abortSignal?.aborted) {
+        throw new AgentRuntimeCancelledError();
     }
 
+    const childProcess = await spawnInteractiveAgentRuntimeProcess(
+        modules,
+        "gemini",
+        buildGeminiCliArgs(invocation),
+        {
+            cwd: invocation.cwd,
+        },
+    );
+
+    return await new Promise<AgentRuntimeResult>((resolve, reject) => {
+        let settled = false;
+        let stdoutBuffer = "";
+        let stderrBuffer = "";
+        let streamedText = "";
+        let resultStatus: GeminiResultStatus | null = null;
+        const stdoutDiagnosticLines: string[] = [];
+        const geminiErrorMessages: string[] = [];
+        const toolNamesById = new Map<string, string>();
+        const usedSkills = new Map<string, AgentRunSkillMetadata>();
+        const usedTools = new Set<string>();
+        const usedFiles = new Set<string>();
+        const usedUrls = new Set<string>();
+        const usedToolErrors = new Map<string, AgentRunToolErrorMetadata>();
+        let abortHandler: (() => void) | null = null;
+
+        const getMetadataSnapshot = (): AgentRunMetadata => ({
+            usedSkills: Array.from(usedSkills.values()),
+            usedTools: Array.from(usedTools),
+            usedFiles: Array.from(usedFiles),
+            usedUrls: Array.from(usedUrls),
+            usedToolErrors: Array.from(usedToolErrors.values()),
+        });
+
+        const cleanup = () => {
+            activeAgentRuntimeProcesses.delete(childProcess);
+            if (invocation.abortSignal && abortHandler) {
+                invocation.abortSignal.removeEventListener("abort", abortHandler);
+                abortHandler = null;
+            }
+        };
+
+        const finalizeError = (error: unknown) => {
+            if (settled) {
+                return;
+            }
+
+            settled = true;
+            cleanup();
+            try {
+                childProcess.kill("SIGTERM");
+            } catch {
+                // ignore best-effort cleanup failures
+            }
+            reject(error instanceof Error ? error : new Error(String(error)));
+        };
+
+        const finalizeSuccess = (replyText: string) => {
+            if (settled) {
+                return;
+            }
+
+            settled = true;
+            cleanup();
+            try {
+                childProcess.stdin?.end();
+            } catch {
+                // ignore best-effort shutdown failures
+            }
+            resolve({
+                runtime: "direct-cli",
+                replyText,
+                ...getMetadataSnapshot(),
+            });
+        };
+
+        const publishMetadata = (event: unknown): void => {
+            const metadata = extractGeminiRunMetadataFromJsonEvent(event, toolNamesById);
+            let changed = false;
+            for (const skill of metadata.usedSkills ?? []) {
+                const key = [skill.name, skill.mode ?? "", skill.source ?? ""].join("\u0000");
+                if (!usedSkills.has(key)) {
+                    usedSkills.set(key, skill);
+                    changed = true;
+                }
+            }
+            const recordToolError = (error: AgentRunToolErrorMetadata): void => {
+                const key = [error.name, error.payload].join("\u0000");
+                if (!usedToolErrors.has(key)) {
+                    usedToolErrors.set(key, error);
+                    changed = true;
+                }
+
+                const unavailableToolName = formatUnavailableAgentRunToolName(error.name);
+                const plainToolName = getAgentRunToolBaseName(error.name);
+                if (usedTools.delete(plainToolName)) {
+                    changed = true;
+                }
+                if (!usedTools.has(unavailableToolName)) {
+                    usedTools.add(unavailableToolName);
+                    changed = true;
+                }
+            };
+            for (const tool of metadata.usedTools ?? []) {
+                const baseToolName = getAgentRunToolBaseName(tool);
+                const hasToolError = Array.from(usedToolErrors.values())
+                    .some((error) => error.name === baseToolName);
+                const toolLabel = hasToolError
+                    ? formatUnavailableAgentRunToolName(baseToolName)
+                    : tool;
+                if (!usedTools.has(toolLabel)) {
+                    usedTools.add(toolLabel);
+                    changed = true;
+                }
+            }
+            for (const filePath of metadata.usedFiles ?? []) {
+                if (!usedFiles.has(filePath)) {
+                    usedFiles.add(filePath);
+                    changed = true;
+                }
+            }
+            for (const url of metadata.usedUrls ?? []) {
+                if (!usedUrls.has(url)) {
+                    usedUrls.add(url);
+                    changed = true;
+                }
+            }
+            for (const error of metadata.usedToolErrors ?? []) {
+                recordToolError(error);
+            }
+
+            if (changed) {
+                invocation.onRunMetadata?.(getMetadataSnapshot());
+            }
+        };
+
+        const handleStdoutEvent = (event: unknown): void => {
+            pushUniqueDiagnostic(
+                geminiErrorMessages,
+                extractGeminiErrorTextFromJsonEvent(event),
+            );
+            resultStatus = extractGeminiResultStatusFromJsonEvent(event) ?? resultStatus;
+            publishMetadata(event);
+
+            const progressText = extractGeminiProgressTextFromJsonEvent(event);
+            if (progressText) {
+                invocation.onProgressText?.(progressText);
+            }
+
+            const textDelta = extractGeminiTextDeltaFromJsonEvent(event);
+            if (textDelta) {
+                streamedText += textDelta;
+                invocation.onPartialText?.(sanitizeAgentReplyText(streamedText));
+            }
+        };
+
+        const handleStdoutLine = (line: string): void => {
+            if (!line.trim()) {
+                return;
+            }
+
+            const parsed = parseJsonLine(line);
+            if (parsed !== null) {
+                handleStdoutEvent(parsed);
+                return;
+            }
+
+            pushUniqueDiagnostic(
+                stdoutDiagnosticLines,
+                normalizeRuntimeDiagnosticText(line),
+            );
+        };
+
+        const flushStdoutBuffer = () => {
+            handleStdoutLine(stdoutBuffer);
+            stdoutBuffer = "";
+        };
+
+        childProcess.stdout?.on("data", (chunk) => {
+            const text = typeof chunk === "string" ? chunk : chunk.toString("utf8");
+            stdoutBuffer += text;
+            while (true) {
+                const newlineIndex = stdoutBuffer.indexOf("\n");
+                if (newlineIndex === -1) {
+                    break;
+                }
+
+                const line = stdoutBuffer.slice(0, newlineIndex);
+                stdoutBuffer = stdoutBuffer.slice(newlineIndex + 1);
+                handleStdoutLine(line);
+            }
+        });
+
+        childProcess.stderr?.on("data", (chunk) => {
+            const text = typeof chunk === "string" ? chunk : chunk.toString("utf8");
+            stderrBuffer += text;
+        });
+
+        childProcess.on("error", (error) => {
+            finalizeError(error);
+        });
+
+        childProcess.on("close", (code, signal) => {
+            flushStdoutBuffer();
+            if (settled) {
+                return;
+            }
+
+            const replyText = sanitizeAgentReplyText(streamedText);
+            const diagnosticMessage = joinRuntimeDiagnostics([
+                normalizeRuntimeDiagnosticText(stderrBuffer),
+                ...geminiErrorMessages,
+                ...stdoutDiagnosticLines,
+            ]);
+            if (code === 0 && resultStatus !== "error" && replyText) {
+                finalizeSuccess(replyText);
+                return;
+            }
+
+            if (code === 0 && resultStatus === "error") {
+                finalizeError(new Error(
+                    diagnosticMessage ?? "Gemini reported an unsuccessful result.",
+                ));
+                return;
+            }
+
+            if (code === 0) {
+                finalizeError(new Error("Gemini returned an empty response."));
+                return;
+            }
+
+            finalizeError(new Error(
+                diagnosticMessage
+                    ?? `spawn gemini exited with code ${code ?? "null"}${signal ? ` signal ${signal}` : ""}`,
+            ));
+        });
+
+        if (invocation.abortSignal) {
+            abortHandler = () => {
+                finalizeError(new AgentRuntimeCancelledError());
+            };
+            invocation.abortSignal.addEventListener("abort", abortHandler, { once: true });
+            if (invocation.abortSignal.aborted) {
+                abortHandler();
+                return;
+            }
+        }
+
+        try {
+            const stdin = childProcess.stdin;
+            if (!stdin) {
+                throw new Error("Gemini CLI did not expose stdin.");
+            }
+            stdin.write(buildSideNotePrompt({
+                promptText: invocation.prompt,
+                vaultRootPath: invocation.vaultRootPath,
+            }));
+            stdin.end();
+        } catch (error) {
+            finalizeError(error);
+        }
+    });
+}
+
+export async function runAgentRuntimeWithModules(
+    modules: NodeModules,
+    invocation: AgentRuntimeInvocation,
+): Promise<AgentRuntimeResult> {
     const actor = getAgentActorById(invocation.target);
     if (!actor.supported || actor.runtimeStrategy === "unsupported") {
         throw new Error(actor.unsupportedNotice ?? `${actor.label} is not supported in this build.`);
@@ -2032,7 +2301,18 @@ export async function runAgentRuntime(invocation: AgentRuntimeInvocation): Promi
             return runCodexDirect(modules, invocation);
         case "claude-cli":
             return runClaudeDirect(modules, invocation);
+        case "gemini-cli":
+            return runGeminiDirect(modules, invocation);
         default:
             throw new Error(`${actor.label} does not have an executable runtime strategy.`);
     }
+}
+
+export async function runAgentRuntime(invocation: AgentRuntimeInvocation): Promise<AgentRuntimeResult> {
+    const modules = getNodeModules();
+    if (!modules) {
+        throw new Error("Local agent execution is unavailable in this Obsidian environment.");
+    }
+
+    return runAgentRuntimeWithModules(modules, invocation);
 }
