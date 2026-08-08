@@ -327,7 +327,7 @@ Open the Aside sidebar for `/Users/wenqingli/Obsidian/lean-startup/Raw/The New E
 
 Change every completed `## Implementation Tracking` item to `[x]` only after Steps 1–3 supply its evidence. If GUI smoke automation is unavailable, leave only that smoke item unchecked and report it explicitly instead of claiming completion.
 
-- [ ] **Step 5: Commit the verified tracking update**
+- [x] **Step 5: Commit the verified tracking update**
 
 ```bash
 git add -f \
@@ -336,7 +336,7 @@ git add -f \
 git commit -m "docs: track script highlighting implementation"
 ```
 
-- [ ] **Step 6: Review the final branch diff**
+- [x] **Step 6: Review the final branch diff**
 
 Run:
 
