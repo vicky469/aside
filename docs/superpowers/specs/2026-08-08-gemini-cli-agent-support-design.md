@@ -19,26 +19,27 @@ Use this section as the working checklist. Mark an item complete only after it i
 
 ### To Implement
 
-- [ ] Add a supported Gemini actor with target `gemini`, directive `@gemini`, and runtime strategy `gemini-cli`.
-- [ ] Route Gemini diagnostics and execution through the existing provider-neutral runtime entrypoints.
-- [ ] Build a Gemini headless command that enables `stream-json`, folder trust bypass for the resolved vault workspace, sandboxing, and automatic approval inside the sandbox.
-- [ ] Send the Aside prompt through stdin and include the vault root when it differs from the process working directory.
-- [ ] Translate Gemini init, assistant-message, tool-use, tool-result, error, and result events into existing partial-text, progress, metadata, success, and failure callbacks.
-- [ ] Keep each run independent by starting a new process without `--resume` and without persisting a Gemini session identifier in Aside data.
-- [ ] Replace user-facing hard-coded Codex/Claude directive lists with actor-registry-derived copy where application code owns the list.
-- [ ] Update README usage examples to include `@gemini`.
+- [x] Add a supported Gemini actor with target `gemini`, directive `@gemini`, and runtime strategy `gemini-cli`.
+- [x] Route Gemini diagnostics and execution through the existing provider-neutral runtime entrypoints.
+- [x] Build a Gemini headless command that enables `stream-json`, folder trust bypass for the resolved vault workspace, sandboxing, and automatic approval inside the sandbox.
+- [x] Send the Aside prompt through stdin and include the vault root when it differs from the process working directory.
+- [x] Translate Gemini init, assistant-message, tool-use, tool-result, error, and result events into existing partial-text, progress, metadata, success, and failure callbacks.
+- [x] Keep each run independent by starting a new process without `--resume` and without persisting a Gemini session identifier in Aside data.
+- [x] Replace user-facing hard-coded Codex/Claude directive lists with actor-registry-derived copy where application code owns the list.
+- [x] Update README usage examples to include `@gemini`.
 
 ### Verification
 
-- [ ] Fail-first registry, directive, and mention tests prove `@gemini` is supported case-insensitively and conflicts with another agent directive.
-- [ ] CLI argument tests prove sandboxed headless streaming, automatic in-sandbox approval, deliberate workspace inclusion, and no model/auth/session override.
-- [ ] Diagnostics tests cover an available CLI, a missing binary, and a launch/authentication failure.
-- [ ] JSONL parser tests cover partial chunks, final text, tool metadata, tool failures, error events, malformed lines, and unknown future event types.
-- [ ] Runtime process tests cover successful streaming, empty output, nonzero exit codes, stdin failure, spawn failure, and cancellation.
-- [ ] Controller and presentation tests prove Gemini uses the existing run, retry, cancellation, progress, and persisted-reply flows.
-- [ ] Settings, placeholder, and README checks include Gemini without duplicating provider identity in application code.
-- [ ] The complete repository test suite, build, and release-artifact guard pass.
+- [x] Fail-first registry, directive, and mention tests prove `@gemini` is supported case-insensitively and conflicts with another agent directive.
+- [x] CLI argument tests prove sandboxed headless streaming, automatic in-sandbox approval, deliberate workspace inclusion, and no model/auth/session override.
+- [x] Diagnostics tests cover an available CLI, a missing binary, and a launch/authentication failure.
+- [x] JSONL parser tests cover partial chunks, final text, tool metadata, tool failures, error events, malformed lines, and unknown future event types.
+- [x] Runtime process tests cover successful streaming, empty output, nonzero exit codes, stdin failure, spawn failure, and cancellation.
+- [x] Controller and presentation tests prove Gemini uses the existing run, retry, cancellation, progress, and persisted-reply flows.
+- [x] Settings, placeholder, and README checks include Gemini without duplicating provider identity in application code.
+- [x] The complete repository test suite, build, and release-artifact guard pass.
 - [ ] A built-plugin smoke check in `lean-startup` confirms `@gemini` discovery, execution, streaming, cancellation, and persisted reply behavior with the user's existing Gemini setup.
+  - 2026-08-08: discovery, runtime status, process launch, persisted failure, and cancellation passed. Successful streaming/reply remains blocked because the inherited Gemini CLI account returns `IneligibleTierError` with reason `UNSUPPORTED_CLIENT` before model execution.
 
 ## Goals
 
