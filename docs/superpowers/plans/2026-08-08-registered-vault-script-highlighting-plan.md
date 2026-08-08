@@ -29,7 +29,7 @@
 - Modify: `tests/commentEditorFormatting.test.ts`
 - Modify: `src/ui/editor/commentEditorStyling.ts`
 
-- [ ] **Step 1: Write failing shared-policy tests**
+- [x] **Step 1: Write failing shared-policy tests**
 
 Add tests that inject an allow-list predicate and assert the exact HTML output:
 
@@ -67,7 +67,7 @@ test("renderStyledDraftCommentHtml keeps at mentions independent of the script r
 
 Also assert that omitting the predicate leaves `/clean` plain, establishing the conservative default.
 
-- [ ] **Step 2: Run the focused tests and verify RED**
+- [x] **Step 2: Run the focused tests and verify RED**
 
 Run:
 
@@ -79,7 +79,7 @@ node --test .test-dist/tests/commentEditorFormatting.test.js
 
 Expected: FAIL because `renderStyledDraftCommentHtml` does not accept a predicate and currently highlights slash-shaped path segments.
 
-- [ ] **Step 3: Implement one shared mention iterator**
+- [x] **Step 3: Implement one shared mention iterator**
 
 In `commentEditorStyling.ts`, add the shared predicate type and keep separate boundary semantics for the two mention families:
 
@@ -120,7 +120,7 @@ function getCommentMentionMatches(
 
 Refactor `appendMentionNodes`, `renderMentionHtml`, and `createMentionFragment` to consume `getCommentMentionMatches`. Add the optional predicate parameter to `renderStyledDraftCommentFragment`, `renderStyledDraftCommentHtml`, and `decorateRenderedCommentMentions`, and thread it into all three shared rendering paths. Do not change CSS classes or bold-marker behavior.
 
-- [ ] **Step 4: Run the focused tests and verify GREEN**
+- [x] **Step 4: Run the focused tests and verify GREEN**
 
 Run:
 
@@ -132,7 +132,7 @@ node --test .test-dist/tests/commentEditorFormatting.test.js
 
 Expected: all `commentEditorFormatting` tests PASS, including absolute-path and URL regressions.
 
-- [ ] **Step 5: Commit the shared policy**
+- [x] **Step 5: Commit the shared policy**
 
 ```bash
 git add src/ui/editor/commentEditorStyling.ts tests/commentEditorFormatting.test.ts
@@ -151,7 +151,7 @@ git commit -m "fix: validate highlighted script mentions"
 - Modify: `src/ui/views/sidebarPersistedComment.ts`
 - Modify: `tests/sidebarPersistedComment.test.ts`
 
-- [ ] **Step 1: Write failing registry and wiring tests**
+- [x] **Step 1: Write failing registry and wiring tests**
 
 Add this behavior test to `vaultScriptRegistry.test.ts`:
 
@@ -192,7 +192,7 @@ test("AsideView supplies the plugin live-registry predicate to comment hosts", (
 
 Update `createRenderHost` and the two explicitly typed persisted hosts with a default `isRunnableVaultScriptMention: () => false` so the test suite expresses the required host contract.
 
-- [ ] **Step 2: Run the focused tests and verify RED**
+- [x] **Step 2: Run the focused tests and verify RED**
 
 Run:
 
@@ -204,7 +204,7 @@ node --test .test-dist/tests/vaultScriptRegistry.test.js .test-dist/tests/commen
 
 Expected: FAIL because the boolean registry query and the render-host adapters do not exist.
 
-- [ ] **Step 3: Implement the registry query and plugin adapter**
+- [x] **Step 3: Implement the registry query and plugin adapter**
 
 Add the read-only query to `VaultScriptRegistry`:
 
@@ -224,7 +224,7 @@ public isRunnableVaultScriptMention(mention: string): boolean {
 
 Add the same method signature to `AsideWithVaultScriptMentions` in `AsideView.ts`.
 
-- [ ] **Step 4: Wire the shared predicate through both host types**
+- [x] **Step 4: Wire the shared predicate through both host types**
 
 Add this required member to `SidebarDraftCommentHost` and `SidebarPersistedCommentHost`:
 
@@ -252,7 +252,7 @@ In all three relevant `AsideView` host objects—persisted card, draft card, and
 isRunnableVaultScriptMention: (mention) => this.plugin.isRunnableVaultScriptMention(mention),
 ```
 
-- [ ] **Step 5: Run focused registry, shared-policy, persisted-renderer, and wiring tests**
+- [x] **Step 5: Run focused registry, shared-policy, persisted-renderer, and wiring tests**
 
 Run:
 
@@ -268,7 +268,7 @@ node --test \
 
 Expected: all selected tests PASS.
 
-- [ ] **Step 6: Re-run the change-surface audit**
+- [x] **Step 6: Re-run the change-surface audit**
 
 Run:
 
@@ -278,7 +278,7 @@ rg -n "COMMENT_MENTION_PATTERN|renderStyledDraftCommentFragment|decorateRendered
 
 Expected: `commentEditorStyling.ts` remains the only slash-highlighting policy owner; draft/persisted files are thin consumers; `agentDirectives.ts` remains the intentional `@`-only parser.
 
-- [ ] **Step 7: Commit the live registry wiring**
+- [x] **Step 7: Commit the live registry wiring**
 
 ```bash
 git add \
@@ -298,7 +298,7 @@ git commit -m "fix: wire live script mention highlighting"
 **Files:**
 - Modify: `docs/superpowers/specs/2026-08-08-registered-vault-script-highlighting-design.md`
 
-- [ ] **Step 1: Run the complete build and artifact inspection**
+- [x] **Step 1: Run the complete build and artifact inspection**
 
 Run:
 
@@ -308,22 +308,22 @@ npm run build
 
 Expected: the full test suite, lint, typecheck, Obsidian compliance check, production bundle, and `release:artifacts:check` all PASS. Confirm the exact public artifacts are `main.js`, `manifest.json`, and `styles.css`, with no source map markers, embedded sources, raw TypeScript/JSX-family files, local paths, or secret-bearing files.
 
-- [ ] **Step 2: Install the verified build into the `lean-startup` vault**
+- [x] **Step 2: Install the verified build into the `lean-startup` vault**
 
 Run from the worktree:
 
 ```bash
 node scripts/install-built-plugin.mjs --vault /Users/wenqingli/Obsidian/lean-startup
-obsidian plugin:reload id=aside vault=lean-startup
+obsidian vault=lean-startup plugin:reload id=aside
 ```
 
 Expected: only the verified `main.js`, `manifest.json`, and `styles.css` are installed, and Obsidian reloads Aside successfully.
 
-- [ ] **Step 3: Smoke-check the reported case and a registered script**
+- [x] **Step 3: Smoke-check the reported case and a registered script**
 
 Open the Aside sidebar for `/Users/wenqingli/Obsidian/lean-startup/Raw/The New Era of Startup Funding Has Just Begun.md`. Confirm an Aside draft or persisted comment containing the absolute path renders `/Users` as ordinary text. Find one unique current file under `lean-startup/🛠️ scripts/`, enter its `/script-name` mention, and confirm the full standalone token receives the existing mention styling.
 
-- [ ] **Step 4: Update the spec tracking with fresh evidence**
+- [x] **Step 4: Update the spec tracking with fresh evidence**
 
 Change every completed `## Implementation Tracking` item to `[x]` only after Steps 1–3 supply its evidence. If GUI smoke automation is unavailable, leave only that smoke item unchecked and report it explicitly instead of claiming completion.
 

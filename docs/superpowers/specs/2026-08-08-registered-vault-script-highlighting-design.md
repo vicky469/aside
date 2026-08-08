@@ -19,20 +19,20 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Expose a read-only registry-backed predicate for whether a slash mention currently resolves to a runnable script.
-- [ ] Require slash candidates to be standalone mention tokens rather than segments of paths or URLs.
-- [ ] Make the shared comment highlighter preserve existing `@` styling while applying slash styling only when the registry predicate accepts the token.
-- [ ] Pass the same live predicate through draft-preview and persisted-comment rendering hosts.
-- [ ] Leave mention suggestions, script execution, stored comment bodies, and CSS presentation unchanged.
+- [x] Expose a read-only registry-backed predicate for whether a slash mention currently resolves to a runnable script.
+- [x] Require slash candidates to be standalone mention tokens rather than segments of paths or URLs.
+- [x] Make the shared comment highlighter preserve existing `@` styling while applying slash styling only when the registry predicate accepts the token.
+- [x] Pass the same live predicate through draft-preview and persisted-comment rendering hosts.
+- [x] Leave mention suggestions, script execution, stored comment bodies, and CSS presentation unchanged.
 
 ### Verification
 
-- [ ] Fail-first tests prove registered standalone slash mentions remain highlighted.
-- [ ] Tests prove unregistered, removed, and ambiguous slash mentions remain plain text.
-- [ ] Tests prove macOS absolute paths, slash-separated paths, and HTTP(S) URLs do not receive partial slash highlighting.
-- [ ] Representative caller tests prove both draft previews and persisted comments use the registry-aware shared policy.
-- [ ] The complete repository build and release-artifact guard pass.
-- [ ] A built-plugin smoke check in `lean-startup` confirms `/Users` remains plain while a registered script mention remains highlighted.
+- [x] Fail-first tests prove registered standalone slash mentions remain highlighted.
+- [x] Tests prove unregistered, removed, and ambiguous slash mentions remain plain text.
+- [x] Tests prove macOS absolute paths, slash-separated paths, and HTTP(S) URLs do not receive partial slash highlighting.
+- [x] Representative caller tests prove both draft previews and persisted comments use the registry-aware shared policy.
+- [x] The complete repository build and release-artifact guard pass.
+- [x] A built-plugin smoke check in `lean-startup` confirms `/Users` remains plain while a registered script mention remains highlighted.
 
 ## Goals
 
