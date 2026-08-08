@@ -127,7 +127,7 @@ function createGeminiRuntimeHarness(options: {
         resolveSpawned = resolve;
     });
     const spawnCalls: Array<{ file: string; args: string[]; cwd?: string }> = [];
-    const modules = createRuntimeModules((file, _args, _execOptions, callback) => {
+    const modules = createRuntimeModules((_file, _args, _execOptions, callback) => {
         callback(null, "/Users/test/.nvm/bin:/usr/bin\n", "");
         return createTrackedProcessStub();
     });
