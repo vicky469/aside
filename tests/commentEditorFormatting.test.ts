@@ -205,3 +205,38 @@ test("renderStyledDraftCommentHtml keeps html-like input inert", () => {
     assert.ok(!html.includes("<script>"));
     assert.ok(!html.includes("<img "));
 });
+
+const registeredScripts = new Set(["/clean-youtube-transcript"]);
+const isRunnableVaultScriptMention = (mention: string) => registeredScripts.has(mention.toLowerCase());
+
+test("renderStyledDraftCommentHtml highlights registered standalone slash mentions", () => {
+    assert.equal(
+        renderStyledDraftCommentHtml("Run /CLEAN-YOUTUBE-TRANSCRIPT now", isRunnableVaultScriptMention),
+        "Run <span class=\"aside-editor-token-mention\">/CLEAN-YOUTUBE-TRANSCRIPT</span> now",
+    );
+});
+
+test("renderStyledDraftCommentHtml leaves unregistered slash mentions plain", () => {
+    assert.equal(
+        renderStyledDraftCommentHtml("Run /missing now", isRunnableVaultScriptMention),
+        "Run /missing now",
+    );
+});
+
+test("renderStyledDraftCommentHtml rejects slash mentions without a registry predicate", () => {
+    assert.equal(renderStyledDraftCommentHtml("Run /clean now"), "Run /clean now");
+});
+
+test("renderStyledDraftCommentHtml does not partially highlight paths or urls", () => {
+    const acceptEveryCandidate = () => true;
+    const value = "/Users/wenqingli/note.md folder/clean https://example.com/path C:/Users/name";
+
+    assert.equal(renderStyledDraftCommentHtml(value, acceptEveryCandidate), value);
+});
+
+test("renderStyledDraftCommentHtml keeps at mentions independent of the script registry", () => {
+    assert.equal(
+        renderStyledDraftCommentHtml("@todo /missing", () => false),
+        "<span class=\"aside-editor-token-mention\">@todo</span> /missing",
+    );
+});
