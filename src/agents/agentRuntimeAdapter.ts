@@ -96,6 +96,7 @@ export type AgentRuntimeDiagnostics = {
 };
 export type CodexRuntimeDiagnostics = AgentRuntimeDiagnostics;
 export type ClaudeRuntimeDiagnostics = AgentRuntimeDiagnostics;
+export type GeminiRuntimeDiagnostics = AgentRuntimeDiagnostics;
 
 export class AgentRuntimeCancelledError extends Error {
     constructor(message: string = "Agent execution cancelled.") {
@@ -941,6 +942,48 @@ export async function getClaudeRuntimeDiagnostics(
     }
 }
 
+export async function getGeminiRuntimeDiagnostics(
+    modulesOverride?: NodeModules | null,
+    baseEnv: ExecEnv = getBaseProcessEnv(),
+): Promise<GeminiRuntimeDiagnostics> {
+    const modules = modulesOverride ?? getNodeModules();
+    if (!modules) {
+        return {
+            status: "unsupported",
+            message: "Built-in @gemini requires desktop Obsidian.",
+        };
+    }
+
+    try {
+        const env = await resolveAgentExecutionEnv(modules, baseEnv);
+        await execFileAsync(
+            modules,
+            "gemini",
+            ["--help"],
+            {
+                cwd: env.HOME ?? "/",
+                env,
+            },
+        );
+        return {
+            status: "available",
+            message: "Gemini CLI is available.",
+        };
+    } catch (error) {
+        if (isExecErrorWithCode(error, "ENOENT")) {
+            return {
+                status: "missing",
+                message: "Gemini CLI was not found on PATH.",
+            };
+        }
+
+        return {
+            status: "unavailable",
+            message: "Gemini CLI could not be launched or authenticated from this Obsidian environment.",
+        };
+    }
+}
+
 export function disposeAgentRuntimeProcesses(): void {
     for (const childProcess of activeAgentRuntimeProcesses) {
         try {
@@ -1668,6 +1711,26 @@ export function buildClaudeCliArgs(): string[] {
         "--append-system-prompt",
         CLAUDE_APPEND_SYSTEM_PROMPT,
     ];
+}
+
+export function buildGeminiCliArgs(options: {
+    cwd: string;
+    vaultRootPath?: string | null;
+}): string[] {
+    const args = [
+        "--prompt",
+        "",
+        "--output-format",
+        "stream-json",
+        "--skip-trust",
+        "--sandbox",
+        "--approval-mode",
+        "yolo",
+    ];
+    if (options.vaultRootPath && options.vaultRootPath !== options.cwd) {
+        args.push("--include-directories", options.vaultRootPath);
+    }
+    return args;
 }
 
 async function runClaudeDirect(

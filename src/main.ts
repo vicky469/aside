@@ -47,6 +47,7 @@ import {
     disposeAgentRuntimeProcesses,
     getClaudeRuntimeDiagnostics as probeClaudeRuntimeDiagnostics,
     getCodexRuntimeDiagnostics as probeCodexRuntimeDiagnostics,
+    getGeminiRuntimeDiagnostics as probeGeminiRuntimeDiagnostics,
     resolveAgentExecutionEnv,
     runAgentRuntime,
     type AgentRuntimeDiagnostics,
@@ -1216,6 +1217,8 @@ export default class Aside extends Plugin {
                 return probeCodexRuntimeDiagnostics();
             case "claude-cli":
                 return probeClaudeRuntimeDiagnostics();
+            case "gemini-cli":
+                return probeGeminiRuntimeDiagnostics();
             case "unsupported":
             default:
                 return {

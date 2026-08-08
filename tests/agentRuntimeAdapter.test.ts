@@ -3,6 +3,7 @@ import test from "node:test";
 import {
     buildCodexCliArgs,
     buildClaudeCliArgs,
+    buildGeminiCliArgs,
     extractClaudeProgressTextFromJsonEvent,
     extractClaudeReplyTextFromJsonEvent,
     extractClaudeRunMetadataFromJsonEvent,
@@ -21,6 +22,7 @@ import {
     extractGeminiTextDeltaFromJsonEvent,
     getClaudeRuntimeDiagnostics,
     getCodexRuntimeDiagnostics,
+    getGeminiRuntimeDiagnostics,
     resetResolvedAgentExecutionEnvForTests,
     resolveAgentExecutionEnv,
     sanitizeAgentReplyText,
@@ -233,6 +235,85 @@ test("getClaudeRuntimeDiagnostics reports a missing claude binary clearly", asyn
     });
 });
 
+test("getGeminiRuntimeDiagnostics reports Gemini as available when the process can be launched", async () => {
+    resetResolvedAgentExecutionEnvForTests();
+
+    const modules = createRuntimeModules((file, args, options, callback) => {
+        if (file === "/bin/zsh") {
+            callback(null, "/Users/test/.nvm/bin:/usr/bin\n", "");
+            return createTrackedProcessStub();
+        }
+
+        assert.equal(file, "gemini");
+        assert.deepEqual(args, ["--help"]);
+        assert.equal(options.cwd, "/Users/test");
+        assert.equal(options.env?.PATH, "/Users/test/.nvm/bin:/usr/bin");
+        callback(null, "gemini help", "");
+        return createTrackedProcessStub();
+    });
+
+    const diagnostics = await getGeminiRuntimeDiagnostics(modules, {
+        HOME: "/Users/test",
+        PATH: "/usr/bin",
+        SHELL: "/bin/zsh",
+    });
+
+    assert.deepEqual(diagnostics, {
+        status: "available",
+        message: "Gemini CLI is available.",
+    });
+});
+
+test("getGeminiRuntimeDiagnostics reports a missing gemini binary clearly", async () => {
+    resetResolvedAgentExecutionEnvForTests();
+
+    const modules = createRuntimeModules((file, _args, _options, callback) => {
+        if (file === "/bin/zsh") {
+            callback(null, "/Users/test/.nvm/bin:/usr/bin\n", "");
+            return createTrackedProcessStub();
+        }
+
+        callback(Object.assign(new Error("missing gemini"), { code: "ENOENT" }), "", "");
+        return createTrackedProcessStub();
+    });
+
+    const diagnostics = await getGeminiRuntimeDiagnostics(modules, {
+        HOME: "/Users/test",
+        PATH: "/usr/bin",
+        SHELL: "/bin/zsh",
+    });
+
+    assert.deepEqual(diagnostics, {
+        status: "missing",
+        message: "Gemini CLI was not found on PATH.",
+    });
+});
+
+test("getGeminiRuntimeDiagnostics reports launch or authentication failures", async () => {
+    resetResolvedAgentExecutionEnvForTests();
+
+    const modules = createRuntimeModules((file, _args, _options, callback) => {
+        if (file === "/bin/zsh") {
+            callback(null, "/Users/test/.nvm/bin:/usr/bin\n", "");
+            return createTrackedProcessStub();
+        }
+
+        callback(new Error("authentication failed"), "", "authentication failed");
+        return createTrackedProcessStub();
+    });
+
+    const diagnostics = await getGeminiRuntimeDiagnostics(modules, {
+        HOME: "/Users/test",
+        PATH: "/usr/bin",
+        SHELL: "/bin/zsh",
+    });
+
+    assert.deepEqual(diagnostics, {
+        status: "unavailable",
+        message: "Gemini CLI could not be launched or authenticated from this Obsidian environment.",
+    });
+});
+
 test("buildClaudeCliArgs includes verbose for print stream-json output", () => {
     assert.deepEqual(
         buildClaudeCliArgs(),
@@ -266,6 +347,51 @@ test("buildCodexCliArgs uses one-shot exec instead of app-server", () => {
     const addDirIndex = args.indexOf("--add-dir");
     assert.notEqual(addDirIndex, -1);
     assert.equal(args[addDirIndex + 1], "/vault");
+});
+
+test("buildGeminiCliArgs enables sandboxed headless streaming without overriding local ownership", () => {
+    const args = buildGeminiCliArgs({
+        cwd: "/vault/project",
+        vaultRootPath: "/vault",
+    });
+
+    assert.deepEqual(args, [
+        "--prompt",
+        "",
+        "--output-format",
+        "stream-json",
+        "--skip-trust",
+        "--sandbox",
+        "--approval-mode",
+        "yolo",
+        "--include-directories",
+        "/vault",
+    ]);
+    for (const omittedOption of [
+        "--model",
+        "--extensions",
+        "--allowed-mcp-server-names",
+        "--resume",
+        "--session-id",
+    ]) {
+        assert.equal(args.includes(omittedOption), false);
+    }
+});
+
+test("buildGeminiCliArgs does not duplicate the working directory", () => {
+    assert.deepEqual(buildGeminiCliArgs({
+        cwd: "/vault",
+        vaultRootPath: "/vault",
+    }), [
+        "--prompt",
+        "",
+        "--output-format",
+        "stream-json",
+        "--skip-trust",
+        "--sandbox",
+        "--approval-mode",
+        "yolo",
+    ]);
 });
 
 test("extractCodexTextDeltaFromJsonEvent reads assistant deltas from exec json events", () => {
