@@ -24,7 +24,10 @@ import { splitTrailingSideNoteReferenceSection, type TrailingSideNoteReferenceSe
 import { stripMarkdownLinksForPreview } from "../../core/text/commentUrls";
 import type { DraftComment } from "../../domain/drafts";
 import { normalizeCommentMarkdownForRenderWithOptions } from "../editor/commentMarkdownRendering";
-import { decorateRenderedCommentMentions } from "../editor/commentEditorStyling";
+import {
+    decorateRenderedCommentMentions,
+    type RunnableVaultScriptMentionPredicate,
+} from "../editor/commentEditorStyling";
 import { ASIDE_REGENERATE_ICON_ID } from "../asideIcon";
 import {
     isSidebarCommentOpenBlockingTarget,
@@ -97,7 +100,7 @@ export interface SidebarPersistedCommentHost {
     activeCommentId: string | null;
     currentFilePath: string | null;
     currentUserLabel: string;
-    isRunnableVaultScriptMention(mention: string): boolean;
+    isRunnableVaultScriptMention: RunnableVaultScriptMentionPredicate;
     showSourceRedirectAction: boolean;
     showBookmarkAndPinControls: boolean;
     showDeletedComments: boolean;

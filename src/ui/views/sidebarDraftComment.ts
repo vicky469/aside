@@ -2,7 +2,10 @@ import { isOrphanedComment, isPageComment } from "../../core/anchors/commentAnch
 import { MAX_SIDENOTE_WORDS, countCommentWords, exceedsCommentWordLimit } from "../../core/text/commentWordLimit";
 import { canSaveDraftWithoutComment, type DraftComment } from "../../domain/drafts";
 import { applyDraftPasteEditToTextarea, type HtmlToMarkdownConverter } from "../editor/commentEditorPaste";
-import { renderStyledDraftCommentFragment } from "../editor/commentEditorStyling";
+import {
+    renderStyledDraftCommentFragment,
+    type RunnableVaultScriptMentionPredicate,
+} from "../editor/commentEditorStyling";
 import { nodeInstanceOf } from "../domGuards";
 import { formatSidebarCommentMeta } from "./sidebarCommentSections";
 import type { SidebarDraftEditorController } from "./sidebarDraftEditor";
@@ -18,7 +21,7 @@ export interface DraftCommentPresentation {
 export interface SidebarDraftCommentHost {
     activeCommentId: string | null;
     shouldPinFocusedDraftToTop: boolean;
-    isRunnableVaultScriptMention(mention: string): boolean;
+    isRunnableVaultScriptMention: RunnableVaultScriptMentionPredicate;
     isSavingDraft(commentId: string): boolean;
     updateDraftCommentText(commentId: string, commentText: string): void;
     convertHtmlToMarkdown?: HtmlToMarkdownConverter;
