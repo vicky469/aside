@@ -97,6 +97,7 @@ export interface SidebarPersistedCommentHost {
     activeCommentId: string | null;
     currentFilePath: string | null;
     currentUserLabel: string;
+    isRunnableVaultScriptMention(mention: string): boolean;
     showSourceRedirectAction: boolean;
     showBookmarkAndPinControls: boolean;
     showDeletedComments: boolean;
@@ -738,7 +739,7 @@ async function renderThreadEntryContent(
             container,
             thread.filePath,
         );
-        decorateRenderedCommentMentions(container);
+        decorateRenderedCommentMentions(container, host.isRunnableVaultScriptMention);
         interceptSideNoteProtocolLinks(container, thread.filePath, host);
     }
 }

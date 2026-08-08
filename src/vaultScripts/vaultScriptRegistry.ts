@@ -78,6 +78,10 @@ export class VaultScriptRegistry {
         return registration ? { ...registration } : null;
     }
 
+    isRunnableMention(mention: string): boolean {
+        return this.resolve(mention) !== null;
+    }
+
     isAmbiguous(mention: string): boolean {
         return this.ambiguousMentionNames.includes(normalizeMention(mention));
     }

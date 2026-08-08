@@ -1166,6 +1166,10 @@ export default class Aside extends Plugin {
         return this.vaultScriptRegistry.getRunnableScripts();
     }
 
+    public isRunnableVaultScriptMention(mention: string): boolean {
+        return this.vaultScriptRegistry.isRunnableMention(mention);
+    }
+
     public getScriptRuns() {
         return this.commentScriptController.getRuns();
     }

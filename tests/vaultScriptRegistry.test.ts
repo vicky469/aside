@@ -161,3 +161,19 @@ test("returned arrays and registrations are defensive copies", () => {
     });
     assert.deepEqual(registry.getAmbiguousMentionNames(), []);
 });
+
+test("isRunnableMention follows unique live registry state", () => {
+    const registry = new VaultScriptRegistry();
+    registry.seed(["🛠️ scripts/Clean.mjs"]);
+    assert.equal(registry.isRunnableMention("/clean"), true);
+    assert.equal(registry.isRunnableMention("/CLEAN"), true);
+
+    registry.upsert("🛠️ scripts/clean.js");
+    assert.equal(registry.isRunnableMention("/clean"), false);
+
+    registry.remove("🛠️ scripts/clean.js");
+    assert.equal(registry.isRunnableMention("/clean"), true);
+
+    registry.remove("🛠️ scripts/Clean.mjs");
+    assert.equal(registry.isRunnableMention("/clean"), false);
+});

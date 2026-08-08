@@ -208,6 +208,7 @@ interface IndexFileFilterState {
 
 type AsideWithVaultScriptMentions = Aside & {
     getRunnableVaultScripts(): readonly VaultScriptRegistration[];
+    isRunnableVaultScriptMention(mention: string): boolean;
     getScriptRuns(): ScriptRunRecord[];
     retryScriptRun(runId: string): Promise<boolean>;
 };
@@ -4204,6 +4205,7 @@ export default class AsideView extends ItemView {
             activeCommentId: this.interactionController.getActiveCommentId(),
             currentFilePath,
             currentUserLabel: "You",
+            isRunnableVaultScriptMention: (mention) => this.plugin.isRunnableVaultScriptMention(mention),
             showSourceRedirectAction: isIndexView,
             showBookmarkAndPinControls: !isIndexView,
             showDeletedComments: this.plugin.shouldShowDeletedComments(),
@@ -4665,6 +4667,7 @@ export default class AsideView extends ItemView {
         renderDraftCommentCard(commentsContainer, comment, {
             activeCommentId: this.interactionController.getActiveCommentId(),
             shouldPinFocusedDraftToTop: this.isNonDesktopClient(),
+            isRunnableVaultScriptMention: (mention) => this.plugin.isRunnableVaultScriptMention(mention),
             isSavingDraft: (commentId) => this.plugin.isSavingDraft(commentId),
             updateDraftCommentText: (commentId, commentText) => {
                 this.plugin.updateDraftCommentText(commentId, commentText);
@@ -4687,6 +4690,7 @@ export default class AsideView extends ItemView {
         renderInlineEditDraftContent(commentsContainer, comment, {
             activeCommentId: this.interactionController.getActiveCommentId(),
             shouldPinFocusedDraftToTop: this.isNonDesktopClient(),
+            isRunnableVaultScriptMention: (mention) => this.plugin.isRunnableVaultScriptMention(mention),
             isSavingDraft: (commentId) => this.plugin.isSavingDraft(commentId),
             updateDraftCommentText: (commentId, commentText) => {
                 this.plugin.updateDraftCommentText(commentId, commentText);

@@ -18,6 +18,7 @@ export interface DraftCommentPresentation {
 export interface SidebarDraftCommentHost {
     activeCommentId: string | null;
     shouldPinFocusedDraftToTop: boolean;
+    isRunnableVaultScriptMention(mention: string): boolean;
     isSavingDraft(commentId: string): boolean;
     updateDraftCommentText(commentId: string, commentText: string): void;
     convertHtmlToMarkdown?: HtmlToMarkdownConverter;
@@ -267,7 +268,11 @@ function renderDraftEditor(
             preview.setText(presentation.placeholder);
         } else {
             preview.removeClass("is-empty");
-            preview.replaceChildren(renderStyledDraftCommentFragment(preview.ownerDocument, textarea.value));
+            preview.replaceChildren(renderStyledDraftCommentFragment(
+                preview.ownerDocument,
+                textarea.value,
+                host.isRunnableVaultScriptMention,
+            ));
         }
 
         preview.scrollTop = textarea.scrollTop;
