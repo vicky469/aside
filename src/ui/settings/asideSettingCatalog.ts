@@ -1,5 +1,6 @@
 import type { Setting } from "obsidian";
 import type Aside from "../../main";
+import { getSupportedAgentActors } from "../../core/agents/agentActorRegistry";
 import {
     ALL_COMMENTS_NOTE_IMAGE_CAPTION,
     ALL_COMMENTS_NOTE_IMAGE_URL,
@@ -82,7 +83,7 @@ export const ASIDE_SETTING_CATALOG: readonly AsideSettingCatalogEntry[] = [
         section: "sidebar",
         name: "Show agent tab",
         description: "Show the agent sidebar tab for local agent replies.",
-        aliases: ["Codex tab", "Claude tab"],
+        aliases: getSupportedAgentActors().map((actor) => `${actor.label} tab`),
         keywords: ["local agent", "assistant"],
         render: (setting, context) => {
             setting.addToggle((toggle) => toggle

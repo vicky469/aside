@@ -29,6 +29,24 @@ test("parseAgentDirectives resolves claude as a supported peer target", () => {
     });
 });
 
+test("parseAgentDirectives resolves repeated gemini mentions case-insensitively", () => {
+    assert.deepEqual(parseAgentDirectives("ask @GEMINI twice @gemini"), {
+        target: "gemini",
+        hasConflict: false,
+        matchedTargets: ["gemini"],
+        unsupportedTargets: [],
+    });
+});
+
+test("parseAgentDirectives blocks gemini mixed with another supported target", () => {
+    assert.deepEqual(parseAgentDirectives("ask @codex and @gemini"), {
+        target: null,
+        hasConflict: true,
+        matchedTargets: ["codex", "gemini"],
+        unsupportedTargets: [],
+    });
+});
+
 test("parseAgentDirectives blocks mixed supported agent mentions", () => {
     assert.deepEqual(parseAgentDirectives("ask @codex and @claude"), {
         target: null,

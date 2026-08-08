@@ -15,9 +15,10 @@ test("agent runtime statuses are formatted as one setting description line below
         formatAgentRuntimeStatusLines([
             { directive: "@codex", statusBadge: "..." },
             { directive: "@claude", statusBadge: "✅" },
+            { directive: "@gemini", statusBadge: "❌" },
         ]),
         [
-            "@codex ...    @claude ✅",
+            "@codex ...    @claude ✅    @gemini ❌",
         ],
     );
 });

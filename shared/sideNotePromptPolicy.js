@@ -32,7 +32,7 @@ function buildSideNotePrompt(options) {
         "Use the built-in Aside workflow for this request.",
         "Aside terminology: side note and side comment both mean an Aside thread or entry stored for the current note.",
         "A page note is scoped to the current markdown page, not the whole vault or unrelated files.",
-        "In-note agent requests default to write mode: @codex, @claude, or future agent directives all mean the user is asking the selected local agent to answer in this Aside thread.",
+        "An explicit in-note agent directive means the user is asking the selected local agent to answer in this Aside thread; in-note agent requests default to write mode.",
         "When the user asks to create, append, or update Aside side notes, make that change before replying.",
         "When the user asks to add annotations, comment on this article/note/text, add side comments to specific passages, or says 加批注, create selection-anchored Aside notes on the relevant source text spans.",
         "For annotation requests, return a fenced `aside-annotations` JSON block with an array of objects like {\"selectedText\":\"exact source text from the note\",\"comment\":\"anchored comment text\"}. Use only exact source text from the provided note context. Aside will create the anchored notes from that block.",

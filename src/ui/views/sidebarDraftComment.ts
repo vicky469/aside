@@ -1,4 +1,5 @@
 import { isOrphanedComment, isPageComment } from "../../core/anchors/commentAnchors";
+import { formatSupportedAgentDirectives } from "../../core/agents/agentActorRegistry";
 import { MAX_SIDENOTE_WORDS, countCommentWords, exceedsCommentWordLimit } from "../../core/text/commentWordLimit";
 import { canSaveDraftWithoutComment, type DraftComment } from "../../domain/drafts";
 import { applyDraftPasteEditToTextarea, type HtmlToMarkdownConverter } from "../editor/commentEditorPaste";
@@ -70,6 +71,10 @@ export function buildDraftCommentPresentation(
     comment: DraftComment,
     activeCommentId: string | null,
 ): DraftCommentPresentation {
+    const supportedAgentDirectives = formatSupportedAgentDirectives("or");
+    const newDraftPlaceholder = supportedAgentDirectives
+        ? `Write a side note. Use B or H for styling, or type /script-name, @todo, ${supportedAgentDirectives}.`
+        : "Write a side note. Use B or H for styling, or type /script-name or @todo.";
     const classes = [
         "aside-comment-item",
         "aside-comment-draft",
@@ -91,7 +96,7 @@ export function buildDraftCommentPresentation(
         saveLabel: comment.mode === "edit" ? "Save" : "Add",
         placeholder: comment.mode === "append"
             ? "Add another entry to this thread."
-            : "Write a side note. Use B or H for styling, or type /script-name, @todo, @codex, or @claude.",
+            : newDraftPlaceholder,
     };
 }
 

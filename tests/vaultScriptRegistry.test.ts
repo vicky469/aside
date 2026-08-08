@@ -104,6 +104,7 @@ test("reserved built-in mentions are never runnable or resolvable", () => {
         "🛠️ scripts/todo.js",
         "🛠️ scripts/CODEX.js",
         "🛠️ scripts/Claude.cjs",
+        "🛠️ scripts/Gemini.mjs",
         "🛠️ scripts/clean.mjs",
     ]);
 
@@ -114,6 +115,7 @@ test("reserved built-in mentions are never runnable or resolvable", () => {
     assert.equal(registry.resolve("@TODO"), null);
     assert.equal(registry.resolve(" @codex "), null);
     assert.equal(registry.resolve("@CLAUDE"), null);
+    assert.equal(registry.resolve("@GEMINI"), null);
     assert.equal(registry.isAmbiguous("@todo"), false);
     assert.deepEqual(registry.getAmbiguousMentionNames(), []);
     assert.deepEqual(registry.resolve("CLEAN"), {

@@ -38,6 +38,11 @@ test("every Aside setting has searchable metadata and one section owner", () => 
     }
 });
 
+test("agent tab search aliases derive from every supported agent", () => {
+    const entry = ASIDE_SETTING_CATALOG.find((candidate) => candidate.key === "show-agent-tab");
+    assert.deepEqual(entry?.aliases, ["Codex tab", "Claude tab", "Gemini tab"]);
+});
+
 test("vault scripts do not introduce a setting", () => {
     assert.equal(
         ASIDE_SETTING_CATALOG.some((entry) =>

@@ -1,10 +1,12 @@
 import type { AgentActorDefinition, AsideAgentTarget } from "./agentActorDefinition";
 import { CLAUDE_AGENT_ACTOR } from "./claudeActor";
 import { CODEX_AGENT_ACTOR } from "./codexActor";
+import { GEMINI_AGENT_ACTOR } from "./geminiActor";
 
 export const ASIDE_AGENT_ACTORS: readonly AgentActorDefinition[] = [
     CODEX_AGENT_ACTOR,
     CLAUDE_AGENT_ACTOR,
+    GEMINI_AGENT_ACTOR,
 ];
 
 export const DEFAULT_ASIDE_AGENT_ACTOR_ID: AsideAgentTarget = CODEX_AGENT_ACTOR.id;
@@ -33,6 +35,23 @@ export function getAgentActors(): readonly AgentActorDefinition[] {
 
 export function getSupportedAgentActors(): AgentActorDefinition[] {
     return ASIDE_AGENT_ACTORS.filter((actor) => actor.supported);
+}
+
+function formatDirectiveList(directives: readonly string[], conjunction: "and" | "or"): string {
+    if (directives.length <= 1) {
+        return directives[0] ?? "";
+    }
+    if (directives.length === 2) {
+        return `${directives[0]} ${conjunction} ${directives[1]}`;
+    }
+    return `${directives.slice(0, -1).join(", ")}, ${conjunction} ${directives.at(-1)}`;
+}
+
+export function formatSupportedAgentDirectives(conjunction: "and" | "or" = "and"): string {
+    return formatDirectiveList(
+        getSupportedAgentActors().map((actor) => actor.directive),
+        conjunction,
+    );
 }
 
 export function getPrimarySupportedAgentActor(): AgentActorDefinition {
@@ -82,5 +101,5 @@ export function resolveUnsupportedAgentNotice(targets: readonly AsideAgentTarget
         return "This build does not support Aside agent execution.";
     }
 
-    return `This build currently supports ${supportedDirectives.join(" and ")} only.`;
+    return `This build currently supports ${formatDirectiveList(supportedDirectives, "and")} only.`;
 }

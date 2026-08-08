@@ -6,6 +6,12 @@ import { AgentRunStore } from "../src/agents/agentRunStore";
 import { CommentAgentController } from "../src/agents/commentAgentController";
 import type { PersistedPluginData } from "../src/settings/indexNoteSettingsPlanner";
 import type { AgentRuntimeSelection } from "../src/agents/agentRuntimeSelection";
+import type {
+    AgentRuntimeInvocation,
+    AgentRuntimeResult,
+} from "../src/agents/agentRuntimeAdapter";
+import { getAgentActorLabel } from "../src/core/agents/agentActorRegistry";
+import type { AsideAgentTarget } from "../src/core/config/agentTargets";
 
 function createFile(path: string): TFile {
     return {
@@ -59,23 +65,7 @@ function createHarness(options: {
     initialComments?: Comment[];
     availableFilePaths?: string[];
     runtimeSelection?: AgentRuntimeSelection;
-    customRunAgentRuntime?: (invocation: {
-        target: "codex" | "claude";
-        prompt: string;
-        cwd: string;
-        vaultRootPath?: string | null;
-        onPartialText?: (partialText: string) => void;
-        onProgressText?: (progressText: string) => void;
-        abortSignal?: AbortSignal;
-    }) => Promise<{
-        runtime: "direct-cli";
-        replyText: string;
-        usedSkills?: Array<{ name: string; mode?: string; source?: string }>;
-        usedTools?: string[];
-        usedFiles?: string[];
-        usedUrls?: string[];
-        usedToolErrors?: Array<{ name: string; payload: string }>;
-    }>;
+    customRunAgentRuntime?: (invocation: AgentRuntimeInvocation) => Promise<AgentRuntimeResult>;
 } = {}) {
     let persistedData: PersistedPluginData = options.initialPersistedData ?? {};
     const commentManager = new CommentManager(options.initialComments ?? [createComment()]);
@@ -91,8 +81,8 @@ function createHarness(options: {
         event: string;
         payload?: Record<string, unknown>;
     }> = [];
-    const runtimeCalls: Array<{ target: "codex" | "claude"; prompt: string; cwd: string; vaultRootPath?: string | null }> = [];
-    const runtimeSelectionCalls: Array<"codex" | "claude"> = [];
+    const runtimeCalls: AgentRuntimeInvocation[] = [];
+    const runtimeSelectionCalls: AsideAgentTarget[] = [];
     let refreshCount = 0;
     let idCounter = 1;
     let now = 100;
@@ -180,13 +170,13 @@ function createHarness(options: {
                 replyText: options.runtimeReplyText ?? "Done",
             };
         },
-        resolveAgentRuntimeSelection: async (target: "codex" | "claude") => {
+        resolveAgentRuntimeSelection: async (target: AsideAgentTarget) => {
             runtimeSelectionCalls.push(target);
             return options.runtimeSelection ?? {
                 kind: "resolved",
                 runtime: "direct-cli",
                 modePreference: "auto",
-                ownershipMessage: `Using your local ${target === "claude" ? "Claude" : "Codex"} setup`,
+                ownershipMessage: `Using your local ${getAgentActorLabel(target)} setup`,
             };
         },
         showNotice: (message) => {

@@ -11,6 +11,7 @@ function createRegistry(): VaultScriptRegistry {
         "🛠️ scripts/format.js",
         "🛠️ scripts/Format.cjs",
         "🛠️ scripts/codex.js",
+        "🛠️ scripts/gemini.mjs",
         "🛠️ scripts/todo.js",
     ]);
     return registry;
@@ -56,4 +57,5 @@ test("reserved built-ins never resolve as scripts", () => {
     assert.equal(resolveScriptDirective("/todo", registry).kind, "none");
     assert.equal(resolveScriptDirective("@codex", registry).kind, "none");
     assert.equal(resolveScriptDirective("@claude", registry).kind, "none");
+    assert.equal(resolveScriptDirective("/gemini", registry).kind, "none");
 });
