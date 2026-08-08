@@ -14,6 +14,11 @@ import {
     extractCodexProgressTextFromJsonEvent,
     extractCodexRunMetadataFromThreadItem,
     extractCodexTextDeltaFromJsonEvent,
+    extractGeminiErrorTextFromJsonEvent,
+    extractGeminiProgressTextFromJsonEvent,
+    extractGeminiResultStatusFromJsonEvent,
+    extractGeminiRunMetadataFromJsonEvent,
+    extractGeminiTextDeltaFromJsonEvent,
     getClaudeRuntimeDiagnostics,
     getCodexRuntimeDiagnostics,
     resetResolvedAgentExecutionEnvForTests,
@@ -512,6 +517,113 @@ test("extractClaudeProgressTextFromJsonEvent reports concise tool progress", () 
         }),
         "Starting Claude",
     );
+});
+
+test("extractGeminiTextDeltaFromJsonEvent reads only assistant message chunks", () => {
+    assert.equal(extractGeminiTextDeltaFromJsonEvent({
+        type: "message",
+        role: "assistant",
+        content: "Hello",
+        delta: true,
+    }), "Hello");
+    assert.equal(extractGeminiTextDeltaFromJsonEvent({
+        type: "message",
+        role: "user",
+        content: "ignore",
+    }), null);
+    assert.equal(extractGeminiTextDeltaFromJsonEvent({
+        type: "future_event",
+        content: "ignore",
+    }), null);
+});
+
+test("extractGeminiResultStatusFromJsonEvent reads terminal success and error", () => {
+    assert.equal(extractGeminiResultStatusFromJsonEvent({
+        type: "result",
+        status: "success",
+    }), "success");
+    assert.equal(extractGeminiResultStatusFromJsonEvent({
+        type: "result",
+        status: "error",
+    }), "error");
+    assert.equal(extractGeminiResultStatusFromJsonEvent({
+        type: "error",
+        status: "error",
+    }), null);
+});
+
+test("extractGeminiRunMetadataFromJsonEvent correlates tool results and sanitizes evidence", () => {
+    const toolNamesById = new Map<string, string>();
+    assert.deepEqual(extractGeminiRunMetadataFromJsonEvent({
+        type: "tool_use",
+        tool_name: "read_file",
+        tool_id: "call-1",
+        parameters: {
+            file_path: "Raw/Source.md",
+            url: "https://example.com/page?token=secret#debug",
+        },
+    }, toolNamesById), {
+        usedTools: ["read_file"],
+        usedFiles: ["Raw/Source.md"],
+        usedUrls: ["https://example.com/page"],
+    });
+    assert.deepEqual(extractGeminiRunMetadataFromJsonEvent({
+        type: "tool_result",
+        tool_id: "call-1",
+        status: "error",
+        error: {
+            type: "NOT_FOUND",
+            message: "File missing",
+        },
+    }, toolNamesById), {
+        usedTools: ["read_file (unavailable)"],
+        usedFiles: [],
+        usedUrls: [],
+        usedToolErrors: [{
+            name: "read_file",
+            payload: "File missing",
+        }],
+    });
+});
+
+test("extractGeminiRunMetadataFromJsonEvent records explicit activated skills", () => {
+    assert.deepEqual(extractGeminiRunMetadataFromJsonEvent({
+        type: "tool_use",
+        tool_name: "activate_skill",
+        tool_id: "call-skill",
+        parameters: {
+            skill: "aside",
+        },
+    }), {
+        usedSkills: [{ name: "aside" }],
+        usedTools: ["activate_skill"],
+        usedFiles: [],
+        usedUrls: [],
+    });
+});
+
+test("Gemini event helpers expose concise progress and bounded structured errors", () => {
+    assert.equal(extractGeminiProgressTextFromJsonEvent({
+        type: "init",
+    }), "Starting Gemini");
+    assert.equal(extractGeminiProgressTextFromJsonEvent({
+        type: "tool_use",
+        tool_name: "run_shell_command",
+    }), "Running command");
+    assert.equal(extractGeminiProgressTextFromJsonEvent({
+        type: "tool_use",
+        tool_name: "web_search",
+    }), "Using web_search");
+    assert.equal(extractGeminiErrorTextFromJsonEvent({
+        type: "error",
+        severity: "error",
+        message: "Maximum session turns exceeded",
+    }), "Maximum session turns exceeded");
+    assert.equal(extractGeminiErrorTextFromJsonEvent({
+        type: "message",
+        role: "assistant",
+        content: "normal reply",
+    }), null);
 });
 
 test("extractCodexProgressTextFromJsonEvent reads reasoning summaries and plan updates", () => {

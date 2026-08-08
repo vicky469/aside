@@ -1239,6 +1239,137 @@ export function extractClaudeProgressTextFromJsonEvent(event: unknown): string |
         : normalizeProgressText(`Using ${toolName}`);
 }
 
+type GeminiResultStatus = "success" | "error";
+
+function normalizeGeminiToolName(value: unknown): string | null {
+    if (typeof value !== "string") {
+        return null;
+    }
+
+    const normalized = value.trim();
+    if (!normalized) {
+        return null;
+    }
+
+    return /^(?:run_shell_command|shell|bash)$/iu.test(normalized)
+        ? "shell"
+        : normalized;
+}
+
+export function extractGeminiTextDeltaFromJsonEvent(event: unknown): string | null {
+    if (!isRecord(event) || event.type !== "message" || event.role !== "assistant") {
+        return null;
+    }
+
+    return typeof event.content === "string" && event.content.length > 0
+        ? event.content
+        : null;
+}
+
+export function extractGeminiResultStatusFromJsonEvent(event: unknown): GeminiResultStatus | null {
+    if (!isRecord(event) || event.type !== "result") {
+        return null;
+    }
+
+    return event.status === "success" || event.status === "error"
+        ? event.status
+        : null;
+}
+
+export function extractGeminiErrorTextFromJsonEvent(event: unknown): string | null {
+    if (!isRecord(event) || event.type !== "error") {
+        return null;
+    }
+
+    return normalizeRuntimeDiagnosticText(firstStringAtPaths(event, [
+        ["message"],
+        ["error", "message"],
+        ["error"],
+    ]) ?? "");
+}
+
+export function extractGeminiProgressTextFromJsonEvent(event: unknown): string | null {
+    if (!isRecord(event)) {
+        return null;
+    }
+
+    if (event.type === "init") {
+        return "Starting Gemini";
+    }
+
+    if (event.type !== "tool_use") {
+        return null;
+    }
+
+    const toolName = normalizeGeminiToolName(event.tool_name);
+    if (!toolName) {
+        return null;
+    }
+
+    return toolName === "shell"
+        ? "Running command"
+        : normalizeProgressText(`Using ${toolName}`);
+}
+
+export function extractGeminiRunMetadataFromJsonEvent(
+    event: unknown,
+    toolNamesById: Map<string, string> = new Map<string, string>(),
+): Pick<AgentRunMetadata, "usedSkills" | "usedTools" | "usedFiles" | "usedUrls" | "usedToolErrors"> {
+    if (!isRecord(event) || !(event.type === "tool_use" || event.type === "tool_result")) {
+        return {
+            usedTools: [],
+            usedFiles: [],
+            usedUrls: [],
+        };
+    }
+
+    const toolId = typeof event.tool_id === "string" ? event.tool_id : null;
+    let toolName: string | null = null;
+    let payload: unknown;
+    if (event.type === "tool_use") {
+        toolName = normalizeGeminiToolName(event.tool_name);
+        payload = event.parameters;
+        if (toolId && toolName) {
+            toolNamesById.set(toolId, toolName);
+        }
+    } else {
+        toolName = toolId ? toolNamesById.get(toolId) ?? null : null;
+        payload = {
+            output: event.output,
+            error: event.error,
+        };
+    }
+
+    const fileCandidates: unknown[] = [];
+    collectFilePathStrings(payload, fileCandidates);
+    const urlSet = new Set<string>();
+    collectUrlStrings(payload, urlSet);
+    const isToolError = event.type === "tool_result" && event.status === "error";
+    const errorPayload = isToolError
+        ? getNestedValue(event, ["error", "message"]) ?? event.error ?? event.output
+        : null;
+    const usedToolErrors = toolName && isToolError
+        ? normalizeAgentRunToolErrors([{ name: toolName, payload: errorPayload }])
+        : [];
+    const skillName = event.type === "tool_use" && toolName === "activate_skill"
+        ? firstStringAtPaths(payload, [["skill"], ["name"]])
+        : null;
+    const usedSkills = skillName
+        ? normalizeAgentRunSkillMetadata([{ name: skillName }])
+        : [];
+
+    return {
+        ...(usedSkills.length ? { usedSkills } : {}),
+        usedTools: normalizeAgentRunToolNames([
+            ...(toolName ? [toolName] : []),
+            ...usedToolErrors.map((error) => formatUnavailableAgentRunToolName(error.name)),
+        ]),
+        usedFiles: normalizeAgentRunFilePaths(fileCandidates),
+        usedUrls: Array.from(urlSet),
+        ...(usedToolErrors.length ? { usedToolErrors } : {}),
+    };
+}
+
 async function runCodexDirect(
     modules: NodeModules,
     invocation: AgentRuntimeInvocation,
