@@ -6,7 +6,7 @@ const asideViewSource = readFileSync("src/ui/views/AsideView.ts", "utf8");
 
 test("note and index surfaces consume one shared secondary toolbar renderer", () => {
     const methodSource = asideViewSource.match(
-        /private renderSidebarToolbar\([\s\S]*?\n    private renderNoteSidebarTagFilterRow\(/,
+        /private renderSidebarToolbar\([\s\S]*?\n {4}private renderNoteSidebarTagFilterRow\(/,
     )?.[0];
 
     assert.ok(methodSource, "missing sidebar toolbar composition method");
