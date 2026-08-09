@@ -18,30 +18,32 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Render the shared compact search input in the generated index sidebar only when the effective tab is List.
-- [ ] Keep a transient index search input value and apply it through the existing index search query pipeline.
-- [ ] Clear the index search value and applied query when the user presses Escape or leaves List.
-- [ ] Keep file scoping ahead of search so the query filters only the current index file scope.
-- [ ] Ensure Todo, Agent, and Thought Trail never inherit a hidden List search query.
-- [ ] Replace separate note/index toolbar composition with one shared capability-driven secondary toolbar component.
-- [ ] Show the valid index toolbar actions for each effective mode: file filter, List search, pinned-only filter, nested visibility, and deleted visibility; keep Add page note hidden because an unscoped index has no single write target.
-- [ ] Render Pin, Edit, Delete, and top-level Drag actions on cards in the index List, Todo, and Agent tabs through the existing shared card renderer.
-- [ ] Make index card pinning and the pinned-only filter consume canonical `isPinned` state across files.
-- [ ] Make index card editing and deletion use the existing source-thread mutation paths and refresh the aggregate index after completion.
-- [ ] Allow index drag reorder only when source and target threads belong to the same source file, and reject cross-file drops without mutating either file.
-- [ ] Preserve canonical per-file thread order when rendering each file's index cards so a same-file reorder remains visible after refresh.
-- [ ] Keep child-entry drag/move behavior note-sidebar-only in this change.
+- [x] Render the shared compact search input in the generated index sidebar only when the effective tab is List.
+- [x] Keep a transient index search input value and apply it through the existing index search query pipeline.
+- [x] Clear the index search value and applied query when the user presses Escape or leaves List.
+- [x] Keep file scoping ahead of search so the query filters only the current index file scope.
+- [x] Ensure Todo, Agent, and Thought Trail never inherit a hidden List search query.
+- [x] Replace separate note/index toolbar composition with one shared capability-driven secondary toolbar component.
+- [x] Show the valid index toolbar actions for each effective mode: file filter, List search, pinned-only filter, nested visibility, and deleted visibility; keep Add page note hidden because an unscoped index has no single write target.
+- [x] Render Pin, Edit, Delete, and top-level Drag actions on cards in the index List, Todo, and Agent tabs through the existing shared card renderer.
+- [x] Make index card pinning and the pinned-only filter consume canonical `isPinned` state across files.
+- [x] Make index card editing and deletion use the existing source-thread mutation paths and refresh the aggregate index after completion.
+- [x] Allow index drag reorder only when source and target threads belong to the same source file, and reject cross-file drops without mutating either file.
+- [x] Preserve canonical per-file thread order when rendering each file's index cards so a same-file reorder remains visible after refresh.
+- [x] Keep child-entry drag/move behavior note-sidebar-only in this change.
 
 ### Verification
 
-- [ ] Fail-first tests prove the search field is visible only for the effective index List mode.
-- [ ] Tests prove input, clear, mode-switch, filtering, ranking, nested matching, highlighting, empty-state, and list-cap behavior remain connected.
-- [ ] Tests prove shared toolbar capabilities render the correct action set in note, List, Todo, Agent, and Thought Trail contexts without duplicated markup.
-- [ ] Tests prove index cards expose Pin, Edit, Delete, and top-level Drag in List, Todo, and Agent while keeping child move handles and all card actions out of Thought Trail.
-- [ ] Tests prove pin state is global to the canonical thread, edit/delete refresh index results, same-file drag persists visible order, and cross-file drag is rejected.
-- [ ] The full test suite, lint, typecheck, Obsidian compliance check, production bundle, and release-artifact guard pass.
-- [ ] The built `main.js`, `manifest.json`, and `styles.css` contain no source map, embedded source, local path, or obvious secret exposure.
-- [ ] The verified build is installed into `lean-startup`, matches byte-for-byte, and List-only search plus shared toolbar/card actions are smoke-checked.
+- [x] Fail-first tests prove the search field is visible only for the effective index List mode.
+- [x] Tests prove input, clear, mode-switch, filtering, ranking, nested matching, highlighting, empty-state, and list-cap behavior remain connected.
+- [x] Tests prove shared toolbar capabilities render the correct action set in note, List, Todo, Agent, and Thought Trail contexts without duplicated markup.
+- [x] Tests prove index cards expose Pin, Edit, Delete, and top-level Drag in List, Todo, and Agent while keeping child move handles and all card actions out of Thought Trail.
+- [x] Tests prove pin state is global to the canonical thread, edit/delete refresh index results, same-file drag persists visible order, and cross-file drag is rejected.
+- [x] The full test suite, lint, typecheck, Obsidian compliance check, production bundle, and release-artifact guard pass.
+- [x] The built `main.js`, `manifest.json`, and `styles.css` contain no source map, embedded source, local path, or obvious secret exposure.
+- [x] The verified build is installed into `lean-startup`, matches byte-for-byte, and List-only search plus shared toolbar/card actions are smoke-checked.
+
+Verification on 2026-08-09 used the production build in `lean-startup`. The live smoke check covered List-only input visibility, debounced matching and highlighting, Escape clearing, tab-exit clearing, the toolbar capability differences, the pinned-only filter, and the complete top-level card action set. Edit/delete/drag were verified without mutating vault data through canonical mutation and eligibility tests, including same-file persistence and cross-file rejection.
 
 ## Current State
 
