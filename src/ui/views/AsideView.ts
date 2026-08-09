@@ -66,6 +66,10 @@ import {
     buildPageSidebarDraftRenderSignature,
     buildPageSidebarThreadRenderSignature,
 } from "./sidebarPageRenderSignature";
+import {
+    reconcileSidebarItems,
+    type SidebarItemRenderDescriptor,
+} from "./sidebarItemReconciler";
 import { nodeInstanceOf } from "../domGuards";
 import { createDetachedObsidianElement } from "../dom/createDetachedObsidianElement";
 import {
@@ -303,13 +307,6 @@ type NoteSidebarShell = {
     toolbarSlotEl: HTMLDivElement;
     commentsBodyEl: HTMLDivElement;
     supportSlotEl: HTMLDivElement;
-};
-
-type NoteSidebarRenderDescriptor = {
-    key: string;
-    signature: string;
-    threadId: string | null;
-    render: () => Promise<HTMLElement>;
 };
 
 type OpenMarkdownFileInsertTarget = {
@@ -2244,7 +2241,7 @@ export default class AsideView extends ItemView {
             && item.thread.anchorKind === "page"
             && !item.thread.deletedAt
         ).length;
-        const renderDescriptors = this.buildNoteSidebarRenderDescriptors(renderableItems, {
+        const renderDescriptors = this.buildSidebarRenderDescriptors(renderableItems, {
             allAgentRuns,
             allScriptRuns,
             enablePageThreadReorder: visiblePageThreadCount > 1,
@@ -2253,8 +2250,15 @@ export default class AsideView extends ItemView {
             visibleDraftComment,
             enableTagSelection: this.noteSidebarMode === "tags",
             searchQuery: this.noteSidebarSearchQuery,
+            sidebarMode: this.noteSidebarMode,
         });
-        await this.reconcileNoteSidebarItems(shell.commentsBodyEl, renderDescriptors);
+        const completed = await reconcileSidebarItems(shell.commentsBodyEl, renderDescriptors, {
+            isCurrent: () => renderVersion === this.renderVersion && this.file?.path === file.path,
+            onRemoveThread: (threadId) => this.removeStreamedReplyController(threadId),
+        });
+        if (!completed) {
+            return;
+        }
         this.refreshSidebarSearchHighlights(shell.commentsBodyEl, this.noteSidebarSearchQuery);
         this.renderPageSidebarEmptyState(shell.commentsBodyEl, {
             renderedItemCount: renderableItems.length,
@@ -2593,7 +2597,7 @@ export default class AsideView extends ItemView {
         return this.noteSidebarShell;
     }
 
-    private buildNoteSidebarRenderDescriptors(
+    private buildSidebarRenderDescriptors(
         renderableItems: SidebarRenderableItem[],
         options: {
             allAgentRuns: AgentRunRecord[];
@@ -2604,8 +2608,9 @@ export default class AsideView extends ItemView {
             visibleDraftComment: DraftComment | null;
             enableTagSelection: boolean;
             searchQuery: string;
+            sidebarMode: SidebarPrimaryMode;
         },
-    ): NoteSidebarRenderDescriptor[] {
+    ): SidebarItemRenderDescriptor[] {
         return renderableItems.map((item) => {
             if (item.kind === "draft") {
                 return {
@@ -2670,6 +2675,7 @@ export default class AsideView extends ItemView {
                         editDraftComment,
                         appendDraftComment,
                         options.searchQuery,
+                        options.sidebarMode,
                     );
                     const nextNode = stagingEl.firstElementChild;
                     if (!nodeInstanceOf(nextNode, HTMLElement)) {
@@ -2934,71 +2940,6 @@ export default class AsideView extends ItemView {
                 this.clearNoteSidebarBatchTagSearchInput();
             }
             this.refreshNoteSidebarTagBatchPanel();
-        }
-    }
-
-
-    private async reconcileNoteSidebarItems(
-        commentsBody: HTMLDivElement,
-        descriptors: readonly NoteSidebarRenderDescriptor[],
-    ): Promise<void> {
-        const existingByKey = new Map<string, HTMLElement>();
-        for (const child of Array.from(commentsBody.children)) {
-            if (!nodeInstanceOf(child, HTMLElement)) {
-                continue;
-            }
-
-            const key = child.dataset.asideRenderKey;
-            if (key) {
-                existingByKey.set(key, child);
-                continue;
-            }
-
-            if (child.classList.contains("aside-empty-state")) {
-                child.remove();
-            }
-        }
-
-        const desiredNodes: HTMLElement[] = [];
-        for (const descriptor of descriptors) {
-            const existing = existingByKey.get(descriptor.key) ?? null;
-            existingByKey.delete(descriptor.key);
-            if (existing && existing.dataset.asideRenderSignature === descriptor.signature) {
-                desiredNodes.push(existing);
-                continue;
-            }
-
-            if (descriptor.threadId) {
-                this.removeStreamedReplyController(descriptor.threadId);
-            }
-
-            const nextNode = await descriptor.render();
-            nextNode.dataset.asideRenderKey = descriptor.key;
-            nextNode.dataset.asideRenderSignature = descriptor.signature;
-            desiredNodes.push(nextNode);
-        }
-
-        for (const [key, element] of existingByKey) {
-            if (key.startsWith("thread:")) {
-                this.removeStreamedReplyController(key.slice("thread:".length));
-            }
-            element.remove();
-        }
-
-        desiredNodes.forEach((node, index) => {
-            const currentNode = commentsBody.children.item(index);
-            if (currentNode === node) {
-                return;
-            }
-
-            commentsBody.insertBefore(node, currentNode ?? null);
-        });
-
-        const desiredNodeSet = new Set(desiredNodes);
-        for (const child of Array.from(commentsBody.children)) {
-            if (nodeInstanceOf(child, HTMLElement) && !desiredNodeSet.has(child)) {
-                child.remove();
-            }
         }
     }
 

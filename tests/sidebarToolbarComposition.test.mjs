@@ -30,3 +30,8 @@ test("index search keeps its placeholder without a tooltip-producing label", () 
     assert.match(methodSource, /placeholder:\s*"Search side notes in index"/);
     assert.doesNotMatch(methodSource, /ariaLabel:\s*"Search index side notes"/);
 });
+
+test("note and index card lists consume the shared item reconciler", () => {
+    assert.match(asideViewSource, /reconcileSidebarItems\(/u);
+    assert.doesNotMatch(asideViewSource, /private async reconcileNoteSidebarItems\(/u);
+});
