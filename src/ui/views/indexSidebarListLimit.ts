@@ -5,6 +5,33 @@ export interface IndexSidebarListWindow<T> {
     hiddenCount: number;
 }
 
+export interface IndexSidebarLimitNotice {
+    primary: string;
+    secondary: string;
+}
+
+export function buildIndexSidebarLimitNotice(options: {
+    visibleCount: number;
+    hiddenCount: number;
+    totalCount: number;
+    hasSearchQuery: boolean;
+    hasFileScope: boolean;
+}): IndexSidebarLimitNotice | null {
+    if (options.hiddenCount <= 0) {
+        return null;
+    }
+    if (options.hasSearchQuery && !options.hasFileScope) {
+        return {
+            primary: `${options.visibleCount} of ${options.totalCount} matches shown.`,
+            secondary: "Refine your search or select a file.",
+        };
+    }
+    return {
+        primary: `${options.visibleCount} shown, ${options.hiddenCount} hidden.`,
+        secondary: "Use files to filter the index to see more.",
+    };
+}
+
 export function limitIndexSidebarListItems<T>(
     items: readonly T[],
     limit = INDEX_SIDEBAR_LIST_LIMIT,

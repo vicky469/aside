@@ -5,6 +5,7 @@ import {
     deriveIndexSidebarListFilePaths,
     GENERIC_INDEX_EMPTY_STATE_TEXTS,
     filterIndexThreadsByExistingSourceFiles,
+    resolveIndexSidebarSearchResultLimit,
     resolveIndexSidebarSearchStateForMode,
     scopeIndexThreadsByFilePaths,
     shouldShowGenericIndexEmptyState,
@@ -28,6 +29,29 @@ test("leaving index List clears visible and applied search", () => {
         searchQuery: "",
     });
     assert.deepEqual(resolveIndexSidebarSearchStateForMode(state, "list"), state);
+});
+
+test("global search uses the index list limit only for nonempty unscoped List queries", () => {
+    assert.equal(resolveIndexSidebarSearchResultLimit({
+        mode: "list",
+        rootFilePath: null,
+        query: "design",
+    }), 100);
+    assert.equal(resolveIndexSidebarSearchResultLimit({
+        mode: "list",
+        rootFilePath: "docs/a.md",
+        query: "design",
+    }), undefined);
+    assert.equal(resolveIndexSidebarSearchResultLimit({
+        mode: "list",
+        rootFilePath: null,
+        query: "   ",
+    }), undefined);
+    assert.equal(resolveIndexSidebarSearchResultLimit({
+        mode: "todo",
+        rootFilePath: null,
+        query: "design",
+    }), undefined);
 });
 
 test("the empty-index cache never bypasses live aggregate controls", () => {
