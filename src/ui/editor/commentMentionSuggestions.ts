@@ -83,7 +83,7 @@ export function buildMentionSuggestions(
     const query = normalizedRawQuery.replace(/^[@/]/u, "").toLowerCase();
     const shouldIncludeScripts = !normalizedRawQuery.startsWith("@");
     const shouldIncludeBuiltIns = !normalizedRawQuery.startsWith("/");
-    const shouldFilterBuiltInsByQuery = normalizedRawQuery !== "" && !normalizedRawQuery.startsWith("@");
+    const shouldFilterBuiltInsByQuery = query.length > 0;
     const builtIns: SideNoteMentionSuggestion[] = [
         {
             kind: "built-in",

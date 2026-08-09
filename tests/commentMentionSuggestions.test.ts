@@ -87,6 +87,17 @@ test("buildMentionSuggestions matches case-insensitively and ranks exact before 
     );
 });
 
+test("buildMentionSuggestions filters explicit built-in queries case-insensitively", () => {
+    assert.deepEqual(
+        buildMentionSuggestions([cleanLinksScript], "@co").map((item) => item.mention),
+        ["@codex"],
+    );
+    assert.deepEqual(
+        buildMentionSuggestions([cleanLinksScript], "@CO").map((item) => item.mention),
+        ["@codex"],
+    );
+});
+
 test("buildMentionSuggestions keeps todo and supported agents before live scripts", () => {
     assert.deepEqual(
         buildMentionSuggestions([cleanLinksScript], "").map((item) => item.mention),
@@ -102,7 +113,7 @@ test("buildMentionSuggestions keeps todo and supported agents before live script
     );
     assert.deepEqual(
         buildMentionSuggestions([cleanLinksScript], "@cl").map((item) => item.mention),
-        ["@todo", "@codex", "@claude", "@gemini"],
+        ["@claude"],
     );
 });
 

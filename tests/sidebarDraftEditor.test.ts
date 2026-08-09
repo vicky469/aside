@@ -36,14 +36,19 @@ function createFakeElement() {
         firstChild: null as unknown,
         className: "",
         text: "",
+        attributes: new Map<string, string>(),
         classList: {
             add: () => {},
         },
         addClass: function addClass(name: string) {
             this.className = `${this.className} ${name}`.trim();
         },
-        setAttribute: () => {},
-        removeAttribute: () => {},
+        setAttribute: function setAttribute(name: string, value: string) {
+            this.attributes.set(name, value);
+        },
+        removeAttribute: function removeAttribute(name: string) {
+            this.attributes.delete(name);
+        },
         appendChild: () => {},
         removeChild: function removeChild(child: unknown) {
             const index = this.children.indexOf(child);
@@ -493,7 +498,7 @@ test("sidebar draft editor controller preserves @ provider scope in the disconne
         mentions: suggestions.map((suggestion) => suggestion.mention),
     }, {
         rawQueries: ["@c"],
-        mentions: ["@todo", "@codex", "@claude", "@gemini"],
+        mentions: ["@codex", "@claude"],
     });
     assert.ok(suggestions.every((suggestion) => suggestion.kind === "built-in"));
     assert.ok(suggestions.every((suggestion) => suggestion.mention.startsWith("@")));
@@ -712,6 +717,30 @@ test("sidebar draft editor controller renders connected mention suggestions with
         className: "aside-inline-suggest-title",
         text: "@todo",
     }]);
+});
+
+test("connected mention dropdown activates only the explicit @ query match", () => {
+    const controller = new SidebarDraftEditorController({
+        getAllIndexedComments: () => [],
+        updateDraftCommentText: () => {},
+        renderComments: async () => {},
+        scheduleDraftFocus: () => {},
+        getMentionSuggestions: (query) => buildMentionSuggestions([], query),
+        openMentionSuggestModal: () => {},
+        openLinkSuggestModal: () => {},
+        openTagSuggestModal: () => {},
+    });
+    const draft = createDraft({ comment: "@co" });
+    const { textarea, shell } = createSuggestionTextarea(draft.comment);
+
+    assert.equal(controller.openDraftMentionSuggest(draft, textarea, false), true);
+    const container = shell.children[0] as ReturnType<typeof createFakeElement>;
+    const list = container.children[0] as ReturnType<typeof createFakeElement>;
+    const rows = list.children as ReturnType<typeof createFakeElement>[];
+
+    assert.deepEqual(rows.map((row) => row.children[0]?.text), ["@codex"]);
+    assert.match(rows[0]?.className ?? "", /(?:^|\s)is-selected(?:\s|$)/u);
+    assert.equal(rows[0]?.attributes.get("aria-selected"), "true");
 });
 
 test("input triggers keep @ and / inline while # opens the tag modal", () => {
