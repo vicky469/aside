@@ -12,6 +12,8 @@ import {
     matchesSidebarDraftSearchQuery,
     matchesSidebarContentFilter,
     matchesSidebarThreadSearchQuery,
+    rankSidebarSearchResults,
+    rankThreadsBySidebarSearchQuery,
     resolveSidebarSearchShowNestedComments,
     toggleDeletedSidebarViewState,
     toggleSidebarContentFilterState,
@@ -194,6 +196,68 @@ test("sidebar search keeps the original thread order when scores tie", () => {
         filterThreadsBySidebarSearchQuery([secondThread, firstThread], "alpha").map((thread) => thread.id),
         ["thread-second", "thread-first"],
     );
+});
+
+test("bounded sidebar search returns the exact stable top results and complete count", () => {
+    const threads = Array.from({ length: 137 }, (_, index) => createThread({
+        id: `thread-${index}`,
+        selectedText: index % 7 === 0 ? "architecture" : `section ${index}`,
+        entries: [{
+            id: `entry-${index}`,
+            body: index % 3 === 0 ? "architecture" : `architecture note ${index % 11}`,
+            timestamp: 100 + index,
+        }],
+    }));
+    const complete = rankThreadsBySidebarSearchQuery(threads, "architecture");
+
+    const bounded = rankSidebarSearchResults(threads, "architecture", { limit: 100 });
+
+    assert.deepEqual(
+        bounded.items.map((thread) => thread.id),
+        complete.slice(0, 100).map((thread) => thread.id),
+    );
+    assert.equal(bounded.totalMatchCount, complete.length);
+    assert.equal(bounded.hiddenMatchCount, complete.length - 100);
+});
+
+test("bounded sidebar search preserves input order when scores tie", () => {
+    const threads = Array.from({ length: 5 }, (_, index) => createThread({
+        id: `thread-${index}`,
+        entries: [{
+            id: `entry-${index}`,
+            body: "same architecture body",
+            timestamp: 100 + index,
+        }],
+    }));
+
+    assert.deepEqual(
+        rankSidebarSearchResults(threads, "architecture", { limit: 3 }).items.map((thread) => thread.id),
+        ["thread-0", "thread-1", "thread-2"],
+    );
+});
+
+test("bounded sidebar search handles empty and zero-sized windows", () => {
+    const threads = [
+        createThread({
+            id: "a",
+            entries: [{ id: "entry-a", body: "alpha", timestamp: 100 }],
+        }),
+        createThread({
+            id: "b",
+            entries: [{ id: "entry-b", body: "beta", timestamp: 101 }],
+        }),
+    ];
+
+    assert.deepEqual(rankSidebarSearchResults(threads, "", { limit: 1 }), {
+        items: [threads[0]],
+        totalMatchCount: 2,
+        hiddenMatchCount: 1,
+    });
+    assert.deepEqual(rankSidebarSearchResults(threads, "a", { limit: 0 }), {
+        items: [],
+        totalMatchCount: 2,
+        hiddenMatchCount: 2,
+    });
 });
 
 test("sidebar search renders full matching threads without changing saved nested preference", () => {

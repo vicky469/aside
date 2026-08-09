@@ -276,24 +276,104 @@ export function resolveSidebarSearchShowNestedComments(
         : configuredShowNestedComments;
 }
 
+export interface RankedSidebarSearchResult<T> {
+    items: T[];
+    totalMatchCount: number;
+    hiddenMatchCount: number;
+}
+
+interface RankedSidebarSearchCandidate<T> {
+    thread: T;
+    index: number;
+    score: number;
+}
+
+function compareRankedSidebarSearchCandidates<T>(
+    left: RankedSidebarSearchCandidate<T>,
+    right: RankedSidebarSearchCandidate<T>,
+): number {
+    return right.score - left.score || left.index - right.index;
+}
+
+function findSidebarSearchInsertionIndex<T>(
+    candidates: readonly RankedSidebarSearchCandidate<T>[],
+    candidate: RankedSidebarSearchCandidate<T>,
+): number {
+    let low = 0;
+    let high = candidates.length;
+    while (low < high) {
+        const middle = Math.floor((low + high) / 2);
+        if (compareRankedSidebarSearchCandidates(candidate, candidates[middle]) < 0) {
+            high = middle;
+        } else {
+            low = middle + 1;
+        }
+    }
+    return low;
+}
+
+export function rankSidebarSearchResults<
+    T extends Pick<CommentThread, "selectedText" | "entries">
+>(
+    threads: readonly T[],
+    query: string,
+    options: { limit?: number } = {},
+): RankedSidebarSearchResult<T> {
+    const normalizedQuery = normalizeSidebarSearchText(query);
+    const limit = options.limit === undefined
+        ? Number.POSITIVE_INFINITY
+        : Math.max(0, Math.floor(options.limit));
+    if (!normalizedQuery) {
+        const items = Number.isFinite(limit) ? threads.slice(0, limit) : threads.slice();
+        return {
+            items,
+            totalMatchCount: threads.length,
+            hiddenMatchCount: threads.length - items.length,
+        };
+    }
+
+    const candidates: Array<RankedSidebarSearchCandidate<T>> = [];
+    let totalMatchCount = 0;
+    threads.forEach((thread, index) => {
+        const score = getSidebarThreadSearchScore(thread, normalizedQuery);
+        if (score <= 0) {
+            return;
+        }
+
+        totalMatchCount += 1;
+        const candidate = { thread, index, score };
+        if (!Number.isFinite(limit)) {
+            candidates.push(candidate);
+            return;
+        }
+
+        const insertionIndex = findSidebarSearchInsertionIndex(candidates, candidate);
+        if (insertionIndex >= limit) {
+            return;
+        }
+
+        candidates.splice(insertionIndex, 0, candidate);
+        if (candidates.length > limit) {
+            candidates.pop();
+        }
+    });
+
+    if (!Number.isFinite(limit)) {
+        candidates.sort(compareRankedSidebarSearchCandidates);
+    }
+
+    return {
+        items: candidates.map((candidate) => candidate.thread),
+        totalMatchCount,
+        hiddenMatchCount: Math.max(0, totalMatchCount - candidates.length),
+    };
+}
+
 export function rankThreadsBySidebarSearchQuery<T extends Pick<CommentThread, "selectedText" | "entries">>(
     threads: readonly T[],
     query: string,
 ): T[] {
-    const normalizedQuery = normalizeSidebarSearchText(query);
-    if (!normalizedQuery) {
-        return threads.slice();
-    }
-
-    return threads
-        .map((thread, index) => ({
-            thread,
-            index,
-            score: getSidebarThreadSearchScore(thread, normalizedQuery),
-        }))
-        .filter((candidate) => candidate.score > 0)
-        .sort((left, right) => right.score - left.score || left.index - right.index)
-        .map((candidate) => candidate.thread);
+    return rankSidebarSearchResults(threads, query).items;
 }
 
 export function filterThreadsBySidebarSearchQuery<T extends Pick<CommentThread, "selectedText" | "entries">>(
