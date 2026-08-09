@@ -59,7 +59,7 @@ import {
     shouldLimitIndexSidebarList,
     type IndexFileFilterOption,
 } from "./indexFileFilter";
-import { INDEX_SIDEBAR_LIST_LIMIT, limitIndexSidebarListItems } from "./indexSidebarListLimit";
+import { buildIndexSidebarLimitNotice, limitIndexSidebarListItems } from "./indexSidebarListLimit";
 import { showIndexSidebarListLoadingState } from "./sidebarIndexLoadingState";
 import { SidebarInteractionController } from "./sidebarInteractionController";
 import {
@@ -78,6 +78,7 @@ import {
 import {
     filterThreadsByPinnedSidebarViewState,
     filterThreadsBySidebarContentFilter,
+    rankSidebarSearchResults,
     rankThreadsBySidebarSearchQuery,
     resolveSidebarSearchShowNestedComments,
     toggleDeletedSidebarViewState,
@@ -105,6 +106,7 @@ import {
     deriveIndexSidebarListFilePaths,
     filterIndexThreadsByExistingSourceFiles,
     GENERIC_INDEX_EMPTY_STATE_TEXTS,
+    resolveIndexSidebarSearchResultLimit,
     resolveIndexSidebarSearchStateForMode,
     scopeIndexThreadsByFilePaths,
     shouldShowGenericIndexEmptyState,
@@ -309,6 +311,16 @@ type NoteSidebarShell = {
     supportSlotEl: HTMLDivElement;
 };
 
+type IndexSidebarShell = {
+    filePath: string;
+    commentsContainerEl: HTMLDivElement;
+    toolbarSlotEl: HTMLDivElement;
+    activeFiltersSlotEl: HTMLDivElement;
+    commentsBodyEl: HTMLDivElement;
+    limitNoticeSlotEl: HTMLDivElement;
+    supportSlotEl: HTMLDivElement;
+};
+
 type OpenMarkdownFileInsertTarget = {
     file: TFile;
     leaf: WorkspaceLeaf;
@@ -427,6 +439,7 @@ export default class AsideView extends ItemView {
     private reorderDropIndicatorEl: HTMLElement | null = null;
     private reorderDropIndicatorPlacement: ReorderPlacement | null = null;
     private noteSidebarShell: NoteSidebarShell | null = null;
+    private indexSidebarShell: IndexSidebarShell | null = null;
     private readonly streamedReplyControllers = new Map<string, StreamedAgentReplyController>();
     private unsubscribeFromAgentStreamUpdates: (() => void) | null = null;
 
@@ -548,6 +561,8 @@ export default class AsideView extends ItemView {
             this.noteSidebarSearchInputValue = "";
             this.clearIndexSidebarSearchState();
             this.thoughtTrailSource = getDefaultThoughtTrailSource();
+            this.noteSidebarShell = null;
+            this.indexSidebarShell = null;
         }
         this.file = nextFile;
         if (currentFilePath !== nextFilePath) {
@@ -1384,6 +1399,7 @@ export default class AsideView extends ItemView {
         this.clearNoteSidebarSearchDebounceTimer();
         this.clearIndexSidebarSearchState();
         this.noteSidebarShell = null;
+        this.indexSidebarShell = null;
         this.resetStreamedReplyControllers();
         const doc = this.containerEl.ownerDocument;
         doc.removeEventListener("keydown", this.interactionController.documentKeydownHandler, true);
@@ -1544,6 +1560,7 @@ export default class AsideView extends ItemView {
         skipDataRefresh?: boolean;
     } = {}) {
         const renderVersion = ++this.renderVersion;
+        const indexSearchRequestVersion = this.indexSidebarSearchRequestVersion;
         const normalizedFile = normalizeSidebarViewFile(
             this.file,
             (candidate): candidate is TFile => this.plugin.isSidebarSupportedFile(candidate),
@@ -1559,6 +1576,7 @@ export default class AsideView extends ItemView {
         this.clearReorderDragState();
         if (file && !isAllCommentsView) {
             this.indexFileFilterGraph = null;
+            this.indexSidebarShell = null;
             if (!options.skipDataRefresh) {
                 await this.plugin.loadCommentsForFile(file);
             }
@@ -1571,7 +1589,6 @@ export default class AsideView extends ItemView {
         }
 
         this.noteSidebarShell = null;
-        this.resetStreamedReplyControllers();
         if (file) {
             const showDeleted = this.plugin.shouldShowDeletedComments();
             if (isAllCommentsView && !options.skipDataRefresh) {
@@ -1643,8 +1660,6 @@ export default class AsideView extends ItemView {
                 return;
             }
 
-            this.containerEl.empty();
-            this.syncViewContainerClasses();
             const persistedThreads = isAllCommentsView
                 ? this.plugin.getAllIndexedThreads({ includeDeleted: showDeleted })
                 : this.plugin.getThreadsForFile(file.path, { includeDeleted: showDeleted });
@@ -1810,9 +1825,6 @@ export default class AsideView extends ItemView {
             const groupFilteredScopedVisibleThreads = isAllCommentsView
                 ? filterThreadsBySidebarGroupMode(pinnedScopedVisibleThreads, effectiveIndexSidebarMode)
                 : pinnedScopedVisibleThreads;
-            const groupFilteredScopedAllThreads = isAllCommentsView
-                ? filterThreadsBySidebarGroupMode(pinnedScopedAllThreads, effectiveIndexSidebarMode)
-                : pinnedScopedAllThreads;
             const isIndexTagsMode = isAllCommentsView && effectiveIndexSidebarMode === "tags";
             const indexTagThreadIds = isIndexTagsMode && this.noteSidebarVisibleTagFilterKey
                 ? this.noteSidebarTagIndex?.threadIdsByTag.get(this.noteSidebarVisibleTagFilterKey) ?? null
@@ -1822,19 +1834,17 @@ export default class AsideView extends ItemView {
                     ? groupFilteredScopedVisibleThreads.filter((thread) => indexTagThreadIds.has(thread.id))
                     : []
                 : groupFilteredScopedVisibleThreads;
-            const tagFilteredScopedAllThreads = isIndexTagsMode
-                ? indexTagThreadIds
-                    ? groupFilteredScopedAllThreads.filter((thread) => indexTagThreadIds.has(thread.id))
-                    : []
-                : groupFilteredScopedAllThreads;
-            const searchMatchedVisibleThreads = rankThreadsBySidebarSearchQuery(
+            const indexSearchResultLimit = resolveIndexSidebarSearchResultLimit({
+                mode: effectiveIndexSidebarMode,
+                rootFilePath: selectedIndexFileFilterRootPath,
+                query: this.indexSidebarSearchQuery,
+            });
+            const searchMatchedVisibleResult = rankSidebarSearchResults(
                 tagFilteredScopedVisibleThreads,
                 this.indexSidebarSearchQuery,
+                { limit: indexSearchResultLimit },
             );
-            const searchMatchedAllThreads = rankThreadsBySidebarSearchQuery(
-                tagFilteredScopedAllThreads,
-                this.indexSidebarSearchQuery,
-            );
+            const searchMatchedVisibleThreads = searchMatchedVisibleResult.items;
             const draftComment = this.plugin.getDraftForView(file.path);
             const visibleDraftComment = draftComment
                 && matchesPinnedSidebarDraftVisibility(
@@ -1857,7 +1867,7 @@ export default class AsideView extends ItemView {
                     searchScopedVisibleThreads.push(activeDraftHostThread);
                 }
             }
-            const totalScopedCount = searchMatchedAllThreads.length;
+            const totalScopedCount = searchMatchedVisibleResult.totalMatchCount;
             const hasNestedComments = searchScopedVisibleThreads.some((thread) => thread.entries.length > 1)
                 || visibleDraftComment?.mode === "append";
             const nestedEditDraftThreadId = getNestedThreadIdForEditDraft(
@@ -1903,52 +1913,68 @@ export default class AsideView extends ItemView {
                     hiddenCount: 0,
                 };
             const renderedItems = limitedComments.visibleItems;
-            const commentsContainer = this.containerEl.createDiv("aside-comments-container");
             const supportThreadCount = isAllCommentsView
                 ? persistedThreads.length
                 : this.plugin.getThreadsForFile(file.path).length;
-
-            this.renderSidebarToolbar(commentsContainer, {
-                isAllCommentsView,
-                hasDeletedComments: pageThreadsWithDeleted.some((thread) => hasDeletedComments(thread)),
-                deletedCommentCount,
-                showDeletedComments: showDeleted,
-                hasNestedComments,
-                isAgentMode: false,
-                agentOutcomeCounts: {
-                    succeeded: 0,
-                    failed: 0,
-                },
-                isTagsEnabled: !isAllCommentsView,
-                isThoughtTrailEnabled: isIndexThoughtTrailEnabled,
-                sidebarThreadGroupCounts: indexSidebarThreadGroupCounts,
-                noteSidebarContentFilter: "all",
-                noteSidebarMode: this.noteSidebarMode,
-                effectiveIndexSidebarMode,
-                addPageCommentAction: !isAllCommentsView
-                    ? {
-                        icon: "plus",
-                        ariaLabel: "Add page note",
-                        onClick: () => {
-                            void this.plugin.startPageCommentDraft(file);
-                        },
-                    }
-                    : null,
-                indexFileFilterOptions,
-                selectedIndexFileFilterRootPath,
-                filteredIndexFilePaths: activeIndexFileFilterPaths,
-            });
-
-            if (isAllCommentsView && selectedIndexFileFilterRootPath && activeIndexFileFilterPaths.length) {
-                this.renderActiveFileFilters(
-                    commentsContainer,
-                    selectedIndexFileFilterRootPath,
-                    activeIndexFileFilterPaths,
-                    effectiveIndexSidebarMode === "thought-trail",
-                );
+            if (
+                renderVersion !== this.renderVersion
+                || this.file?.path !== file.path
+                || indexSearchRequestVersion !== this.indexSidebarSearchRequestVersion
+            ) {
+                return;
             }
+            const renderIndexChrome = (
+                toolbarContainer: HTMLElement,
+                activeFiltersContainer: HTMLElement,
+            ): void => {
+                this.renderSidebarToolbar(toolbarContainer, {
+                    isAllCommentsView,
+                    hasDeletedComments: pageThreadsWithDeleted.some((thread) => hasDeletedComments(thread)),
+                    deletedCommentCount,
+                    showDeletedComments: showDeleted,
+                    hasNestedComments,
+                    isAgentMode: false,
+                    agentOutcomeCounts: {
+                        succeeded: 0,
+                        failed: 0,
+                    },
+                    isTagsEnabled: !isAllCommentsView,
+                    isThoughtTrailEnabled: isIndexThoughtTrailEnabled,
+                    sidebarThreadGroupCounts: indexSidebarThreadGroupCounts,
+                    noteSidebarContentFilter: "all",
+                    noteSidebarMode: this.noteSidebarMode,
+                    effectiveIndexSidebarMode,
+                    addPageCommentAction: !isAllCommentsView
+                        ? {
+                            icon: "plus",
+                            ariaLabel: "Add page note",
+                            onClick: () => {
+                                void this.plugin.startPageCommentDraft(file);
+                            },
+                        }
+                        : null,
+                    indexFileFilterOptions,
+                    selectedIndexFileFilterRootPath,
+                    filteredIndexFilePaths: activeIndexFileFilterPaths,
+                });
+
+                if (isAllCommentsView && selectedIndexFileFilterRootPath && activeIndexFileFilterPaths.length) {
+                    this.renderActiveFileFilters(
+                        activeFiltersContainer,
+                        selectedIndexFileFilterRootPath,
+                        activeIndexFileFilterPaths,
+                        effectiveIndexSidebarMode === "thought-trail",
+                    );
+                }
+            };
 
             if (isAllCommentsView && effectiveIndexSidebarMode === "thought-trail") {
+                this.indexSidebarShell = null;
+                this.resetStreamedReplyControllers();
+                this.containerEl.empty();
+                this.syncViewContainerClasses();
+                const commentsContainer = this.containerEl.createDiv("aside-comments-container");
+                renderIndexChrome(commentsContainer, commentsContainer);
                 const trailComments = visiblePersistedThreads;
                 void this.plugin.logEvent("info", "thoughttrail", "thoughttrail.index.render", {
                     filePath: file.path,
@@ -1977,67 +2003,76 @@ export default class AsideView extends ItemView {
                 return;
             }
 
-            const commentsBody = this.renderCommentsList(commentsContainer);
-            this.setupPageThreadReorderInteractions(
-                commentsBody,
-                file.path,
-                isAllCommentsView ? "index" : "note",
-            );
-            const renderPromises = renderedItems.map(async (item) => {
-                if (item.kind === "draft") {
-                    this.renderDraftComment(commentsBody, item.draft);
-                    return;
-                }
+            const shell = this.ensureIndexSidebarShell(file.path);
+            shell.toolbarSlotEl.empty();
+            shell.activeFiltersSlotEl.empty();
+            shell.limitNoticeSlotEl.empty();
+            shell.limitNoticeSlotEl.classList.remove("aside-list-limit-notice");
+            renderIndexChrome(shell.toolbarSlotEl, shell.activeFiltersSlotEl);
 
-                const threadAgentRuns = getAgentRunsForCommentThread(allAgentRuns, item.thread);
-                const threadScriptRuns = getScriptRunsForThread(allScriptRuns, item.thread);
-                await this.renderPersistedComment(
-                    commentsBody,
-                    item.thread,
-                    false,
-                    threadAgentRuns[0] ?? null,
-                    this.plugin.getActiveAgentStreamForThread(item.thread.id),
-                    threadAgentRuns,
-                    canInlineEditTodoEntries,
-                    threadScriptRuns,
-                    nestedEditDraftThreadId === item.thread.id && visibleDraftComment?.mode === "edit"
-                        ? visibleDraftComment
-                        : null,
-                    nestedAppendDraftThreadId === item.thread.id && visibleDraftComment?.mode === "append"
-                        ? visibleDraftComment
-                        : null,
-                    isAllCommentsView ? this.indexSidebarSearchQuery : this.noteSidebarSearchQuery,
-                    isAllCommentsView ? effectiveIndexSidebarMode : this.noteSidebarMode,
-                );
+            const renderDescriptors = this.buildSidebarRenderDescriptors(renderedItems, {
+                allAgentRuns,
+                allScriptRuns,
+                enablePageThreadReorder: true,
+                nestedEditDraftThreadId,
+                nestedAppendDraftThreadId,
+                visibleDraftComment,
+                enableTagSelection: false,
+                canInlineEditTodoEntries,
+                searchQuery: this.indexSidebarSearchQuery,
+                sidebarMode: effectiveIndexSidebarMode,
+                surface: "index",
             });
-            await Promise.all(renderPromises);
-            this.refreshSidebarSearchHighlights(
-                commentsBody,
-                isAllCommentsView ? this.indexSidebarSearchQuery : this.noteSidebarSearchQuery,
-            );
+            const completed = await reconcileSidebarItems(shell.commentsBodyEl, renderDescriptors, {
+                isCurrent: () => (
+                    renderVersion === this.renderVersion
+                    && this.file?.path === file.path
+                    && indexSearchRequestVersion === this.indexSidebarSearchRequestVersion
+                ),
+                onRemoveThread: (threadId) => this.removeStreamedReplyController(threadId),
+            });
+            if (!completed) {
+                return;
+            }
+
+            this.refreshSidebarSearchHighlights(shell.commentsBodyEl, this.indexSidebarSearchQuery);
             this.syncVisibleStreamedReplyControllers();
 
-            if (limitedComments.hiddenCount > 0) {
-                const limitNotice = commentsContainer.createDiv("aside-list-limit-notice");
-                        limitNotice.createEl("p", {
-                            text: `${INDEX_SIDEBAR_LIST_LIMIT} shown, ${limitedComments.hiddenCount} hidden.`,
-                        });
-                        limitNotice.createEl("p", {
-                            text: "Use files to filter the index to see more.",
-                        });
+            const hasIndexSearchQuery = !!this.indexSidebarSearchQuery.trim();
+            const limitNotice = buildIndexSidebarLimitNotice({
+                visibleCount: hasIndexSearchQuery
+                    ? searchMatchedVisibleResult.items.length
+                    : renderedItems.length,
+                hiddenCount: searchMatchedVisibleResult.hiddenMatchCount || limitedComments.hiddenCount,
+                totalCount: searchMatchedVisibleResult.totalMatchCount,
+                hasSearchQuery: hasIndexSearchQuery,
+                hasFileScope: !!selectedIndexFileFilterRootPath,
+            });
+            if (limitNotice) {
+                shell.limitNoticeSlotEl.classList.add("aside-list-limit-notice");
+                shell.limitNoticeSlotEl.createEl("p", { text: limitNotice.primary });
+                shell.limitNoticeSlotEl.createEl("p", { text: limitNotice.secondary });
             }
 
-            if (renderedItems.length === 0) {
-                if (isAllCommentsView) {
-                    this.renderIndexSidebarEmptyState(commentsBody, {
-                        renderedItemCount: renderedItems.length,
-                        totalScopedCount,
-                        filteredIndexFilePaths: indexSidebarListFilePaths,
-                        searchQuery: this.indexSidebarSearchQuery,
-                    });
-                }
+            this.renderIndexSidebarEmptyState(shell.commentsBodyEl, {
+                renderedItemCount: renderedItems.length,
+                totalScopedCount,
+                filteredIndexFilePaths: indexSidebarListFilePaths,
+                searchQuery: this.indexSidebarSearchQuery,
+            });
+
+            shell.supportSlotEl.empty();
+            if (this.plugin.isLocalRuntime()) {
+                renderSupportButtonIn(shell.supportSlotEl, this.plugin, {
+                    filePath: file.path,
+                    isAllCommentsView,
+                    threadCount: supportThreadCount,
+                });
             }
+            return;
         } else {
+            this.noteSidebarShell = null;
+            this.indexSidebarShell = null;
             this.resetStreamedReplyControllers();
             this.syncViewContainerClasses();
             renderNoSidebarFileEmptyState(
@@ -2048,11 +2083,9 @@ export default class AsideView extends ItemView {
 
         if (this.plugin.isLocalRuntime()) {
             renderSupportButton(this.containerEl, this.plugin, {
-                filePath: file?.path ?? null,
-                isAllCommentsView,
-                threadCount: file
-                    ? (isAllCommentsView ? this.plugin.getAllIndexedThreads().length : this.plugin.getThreadsForFile(file.path).length)
-                    : 0,
+                filePath: null,
+                isAllCommentsView: false,
+                threadCount: 0,
             });
         }
     }
@@ -2249,8 +2282,10 @@ export default class AsideView extends ItemView {
             nestedAppendDraftThreadId,
             visibleDraftComment,
             enableTagSelection: this.noteSidebarMode === "tags",
+            canInlineEditTodoEntries: false,
             searchQuery: this.noteSidebarSearchQuery,
             sidebarMode: this.noteSidebarMode,
+            surface: "note",
         });
         const completed = await reconcileSidebarItems(shell.commentsBodyEl, renderDescriptors, {
             isCurrent: () => renderVersion === this.renderVersion && this.file?.path === file.path,
@@ -2597,6 +2632,41 @@ export default class AsideView extends ItemView {
         return this.noteSidebarShell;
     }
 
+    private ensureIndexSidebarShell(filePath: string): IndexSidebarShell {
+        if (
+            this.indexSidebarShell?.filePath === filePath
+            && this.indexSidebarShell.commentsContainerEl.isConnected
+            && this.indexSidebarShell.commentsBodyEl.isConnected
+        ) {
+            this.syncViewContainerClasses();
+            return this.indexSidebarShell;
+        }
+
+        this.indexSidebarShell = null;
+        this.resetStreamedReplyControllers();
+        this.containerEl.empty();
+        this.syncViewContainerClasses();
+
+        const commentsContainerEl = this.containerEl.createDiv("aside-comments-container is-index-sidebar");
+        const toolbarSlotEl = commentsContainerEl.createDiv("aside-index-sidebar-toolbar-slot");
+        const activeFiltersSlotEl = commentsContainerEl.createDiv("aside-index-sidebar-active-filters-slot");
+        const commentsBodyEl = this.renderCommentsList(commentsContainerEl);
+        this.setupPageThreadReorderInteractions(commentsBodyEl, filePath, "index");
+        const limitNoticeSlotEl = commentsContainerEl.createDiv("aside-index-sidebar-limit-notice-slot");
+        const supportSlotEl = this.containerEl.createDiv("aside-support-button-slot");
+
+        this.indexSidebarShell = {
+            filePath,
+            commentsContainerEl,
+            toolbarSlotEl,
+            activeFiltersSlotEl,
+            commentsBodyEl,
+            limitNoticeSlotEl,
+            supportSlotEl,
+        };
+        return this.indexSidebarShell;
+    }
+
     private buildSidebarRenderDescriptors(
         renderableItems: SidebarRenderableItem[],
         options: {
@@ -2607,8 +2677,10 @@ export default class AsideView extends ItemView {
             nestedAppendDraftThreadId: string | null;
             visibleDraftComment: DraftComment | null;
             enableTagSelection: boolean;
+            canInlineEditTodoEntries: boolean;
             searchQuery: string;
             sidebarMode: SidebarPrimaryMode;
+            surface: "note" | "index";
         },
     ): SidebarItemRenderDescriptor[] {
         return renderableItems.map((item) => {
@@ -2659,6 +2731,11 @@ export default class AsideView extends ItemView {
                     appendDraftComment,
                     threadAgentRuns,
                     threadScriptRuns,
+                    presentationKey: [
+                        options.surface,
+                        options.sidebarMode,
+                        options.canInlineEditTodoEntries ? "inline-todo" : "static-todo",
+                    ].join(":"),
                 }),
                 threadId: item.thread.id,
                 render: async () => {
@@ -2670,7 +2747,7 @@ export default class AsideView extends ItemView {
                         threadAgentRuns[0] ?? null,
                         this.plugin.getActiveAgentStreamForThread(item.thread.id),
                         threadAgentRuns,
-                        false,
+                        options.canInlineEditTodoEntries,
                         threadScriptRuns,
                         editDraftComment,
                         appendDraftComment,
@@ -3818,12 +3895,17 @@ export default class AsideView extends ItemView {
     private renderCachedIndexDefaultSidebar(file: TFile, cache: IndexDefaultSidebarCache): void {
         this.indexFileFilterGraph = null;
         this.noteSidebarTagIndex = null;
-        this.containerEl.empty();
-        this.syncViewContainerClasses();
+        const shell = this.ensureIndexSidebarShell(file.path);
+        shell.toolbarSlotEl.empty();
+        shell.activeFiltersSlotEl.empty();
+        shell.commentsBodyEl.empty();
+        shell.limitNoticeSlotEl.empty();
+        shell.limitNoticeSlotEl.classList.remove("aside-list-limit-notice");
+        shell.supportSlotEl.empty();
+        this.resetStreamedReplyControllers();
 
         const liveThreadGroupCounts = getSidebarThreadGroupCounts(this.plugin.getAllIndexedThreads());
-        const commentsContainer = this.containerEl.createDiv("aside-comments-container");
-        this.renderSidebarToolbar(commentsContainer, {
+        this.renderSidebarToolbar(shell.toolbarSlotEl, {
             isAllCommentsView: true,
             hasDeletedComments: false,
             deletedCommentCount: 0,
@@ -3845,8 +3927,7 @@ export default class AsideView extends ItemView {
             filteredIndexFilePaths: [],
         });
 
-        const commentsBody = this.renderCommentsList(commentsContainer);
-        this.renderIndexSidebarEmptyState(commentsBody, {
+        this.renderIndexSidebarEmptyState(shell.commentsBodyEl, {
             renderedItemCount: 0,
             totalScopedCount: 0,
             filteredIndexFilePaths: [],
@@ -3854,7 +3935,7 @@ export default class AsideView extends ItemView {
         });
 
         if (this.plugin.isLocalRuntime()) {
-            renderSupportButton(this.containerEl, this.plugin, {
+            renderSupportButtonIn(shell.supportSlotEl, this.plugin, {
                 filePath: file.path,
                 isAllCommentsView: true,
                 threadCount: cache.storedThreadCount,
@@ -4901,6 +4982,8 @@ export default class AsideView extends ItemView {
 
     onunload() {
         this.clearIndexSidebarSearchState();
+        this.noteSidebarShell = null;
+        this.indexSidebarShell = null;
         const doc = this.containerEl.ownerDocument;
         doc.removeEventListener("keydown", this.interactionController.documentKeydownHandler, true);
         doc.removeEventListener("copy", this.interactionController.documentCopyHandler, true);

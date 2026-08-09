@@ -388,6 +388,34 @@ test("buildPageSidebarThreadRenderSignature changes when search forces nested en
     assert.notEqual(collapsed, expanded);
 });
 
+test("buildPageSidebarThreadRenderSignature changes with the card presentation context", () => {
+    const thread = createThread();
+    const baseOptions = {
+        thread,
+        activeCommentId: null,
+        isPinned: false,
+        showNestedComments: true,
+        showNestedCommentsByDefault: false,
+        isSelectedForTagBatch: false,
+        enableTagSelection: false,
+        enablePageThreadReorder: true,
+        editDraftComment: null,
+        appendDraftComment: null,
+        threadAgentRuns: [],
+    };
+
+    assert.notEqual(
+        buildPageSidebarThreadRenderSignature({
+            ...baseOptions,
+            presentationKey: "index:list:inline-todo:false",
+        }),
+        buildPageSidebarThreadRenderSignature({
+            ...baseOptions,
+            presentationKey: "index:todo:inline-todo:true",
+        }),
+    );
+});
+
 test("buildPageSidebarDraftRenderSignature changes only for the matching active draft", () => {
     const draft = createDraft({ id: "draft-1", mode: "edit", threadId: undefined });
     const inactive = buildPageSidebarDraftRenderSignature(draft, null);

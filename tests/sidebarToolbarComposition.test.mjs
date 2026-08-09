@@ -35,3 +35,10 @@ test("note and index card lists consume the shared item reconciler", () => {
     assert.match(asideViewSource, /reconcileSidebarItems\(/u);
     assert.doesNotMatch(asideViewSource, /private async reconcileNoteSidebarItems\(/u);
 });
+
+test("index card search uses bounded ranking and shared reconciliation", () => {
+    assert.match(asideViewSource, /resolveIndexSidebarSearchResultLimit\(/u);
+    assert.match(asideViewSource, /rankSidebarSearchResults\(/u);
+    assert.match(asideViewSource, /ensureIndexSidebarShell\(/u);
+    assert.doesNotMatch(asideViewSource, /const renderPromises = renderedItems\.map/u);
+});

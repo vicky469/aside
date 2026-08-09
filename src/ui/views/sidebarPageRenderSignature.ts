@@ -134,6 +134,7 @@ export function buildPageSidebarThreadRenderSignature(options: {
     appendDraftComment: DraftComment | null;
     threadAgentRuns: readonly AgentRunRecord[];
     threadScriptRuns?: readonly ScriptRunRecord[];
+    presentationKey?: string;
 }): string {
     const { thread } = options;
     return [
@@ -160,6 +161,7 @@ export function buildPageSidebarThreadRenderSignature(options: {
         options.showNestedCommentsByDefault ? 1 : 0,
         options.enableTagSelection ? 1 : 0,
         options.enablePageThreadReorder ? 1 : 0,
+        options.presentationKey ?? "",
         getDraftIdentity(options.editDraftComment),
         getDraftIdentity(options.appendDraftComment),
         getAgentRunsIdentity(options.threadAgentRuns),

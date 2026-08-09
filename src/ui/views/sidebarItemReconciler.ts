@@ -15,7 +15,7 @@ export async function reconcileSidebarItems(
     descriptors: readonly SidebarItemRenderDescriptor[],
     options: SidebarItemReconcilerOptions = {},
 ): Promise<boolean> {
-    const isCurrent = options.isCurrent ?? (() => true);
+    const isCurrent = (): boolean => options.isCurrent?.() ?? true;
     const existingByKey = new Map<string, HTMLElement>();
     for (const child of Array.from(container.children) as HTMLElement[]) {
         const key = child.dataset.asideRenderKey;
