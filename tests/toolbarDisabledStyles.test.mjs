@@ -87,6 +87,9 @@ test("index shared secondary toolbar stays compact and yields search space first
     const actionRule = css.match(
         /\.aside-sidebar-toolbar-row\.is-index-secondary-row \.aside-sidebar-toolbar-group\.is-action-group\s*\{(?<body>[\s\S]*?)\}/,
     );
+    const narrowIndexFilterRule = css.match(
+        /@container \(max-width: 180px\)[\s\S]*?\.aside-sidebar-toolbar-row\.is-index-secondary-row\.is-search-row \.aside-sidebar-toolbar-group\.is-filter-group\s*\{(?<body>[\s\S]*?)\}/,
+    );
 
     assert.ok(rowRule?.groups?.body, "missing compact index secondary row rule");
     assert.match(rowRule.groups.body, /flex-wrap:\s*nowrap\s*;/);
@@ -99,6 +102,8 @@ test("index shared secondary toolbar stays compact and yields search space first
     assert.ok(actionRule?.groups?.body, "missing index action group flex rule");
     assert.match(actionRule.groups.body, /margin-left:\s*auto\s*;/);
     assert.match(css, /@container \(max-width: 180px\)[\s\S]*\.is-index-secondary-row\.is-search-row \.aside-sidebar-toolbar-group\.is-search-group[\s\S]*display:\s*none\s*;/);
+    assert.ok(narrowIndexFilterRule?.groups?.body, "missing narrow index filter preservation rule");
+    assert.match(narrowIndexFilterRule.groups.body, /flex:\s*0 0 22px\s*;/);
 });
 
 test("public markdown view hides rendered properties without source-mode hacks", () => {

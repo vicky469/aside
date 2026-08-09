@@ -792,10 +792,15 @@ button.aside-sidebar-file-pin-button {
         justify-content: flex-end;
     }
 
-    .aside-sidebar-toolbar-row.is-note-secondary-row.is-search-row .aside-sidebar-toolbar-group.is-filter-group,
-    .aside-sidebar-toolbar-row.is-index-secondary-row.is-search-row .aside-sidebar-toolbar-group.is-filter-group {
+    .aside-sidebar-toolbar-row.is-note-secondary-row.is-search-row .aside-sidebar-toolbar-group.is-filter-group {
         flex: 0 1 0;
         overflow: hidden;
+    }
+
+    .aside-sidebar-toolbar-row.is-index-secondary-row.is-search-row .aside-sidebar-toolbar-group.is-filter-group {
+        flex: 0 0 22px;
+        min-width: 22px;
+        overflow: visible;
     }
 
     .aside-sidebar-toolbar-row.is-note-secondary-row.is-search-row .aside-sidebar-toolbar-group.is-search-group,

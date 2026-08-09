@@ -16,6 +16,10 @@ export function shouldShowIndexSidebarSearch(mode: IndexSidebarMode): boolean {
     return mode === "list";
 }
 
+export function shouldUseEmptyIndexDefaultCache(storedThreadCount: number): boolean {
+    return storedThreadCount === 0;
+}
+
 export function resolveIndexSidebarSearchStateForMode(
     state: IndexSidebarSearchState,
     mode: IndexSidebarMode,

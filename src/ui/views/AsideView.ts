@@ -105,6 +105,7 @@ import {
     scopeIndexThreadsByFilePaths,
     shouldShowGenericIndexEmptyState,
     shouldShowIndexSidebarSearch,
+    shouldUseEmptyIndexDefaultCache,
 } from "./indexSidebarState";
 import { StreamedAgentReplyController } from "./streamedAgentReplyController";
 import {
@@ -228,7 +229,7 @@ interface IndexDefaultSidebarCacheKey {
 interface IndexDefaultSidebarCache {
     key: IndexDefaultSidebarCacheKey;
     indexFileFilterState: IndexFileFilterState;
-    indexedThreadCount: number;
+    storedThreadCount: number;
 }
 
 function indexDefaultSidebarCacheKeysMatch(
@@ -1635,7 +1636,11 @@ export default class AsideView extends ItemView {
             if (
                 isAllCommentsView
                 && indexDefaultSidebarCache
-                && this.canRenderCachedIndexDefaultSidebar(file, selectedIndexFileFilterRootPath)
+                && this.canRenderCachedIndexDefaultSidebar(
+                    file,
+                    selectedIndexFileFilterRootPath,
+                    indexDefaultSidebarCache,
+                )
             ) {
                 this.renderCachedIndexDefaultSidebar(file, indexDefaultSidebarCache);
                 return;
@@ -2005,6 +2010,7 @@ export default class AsideView extends ItemView {
                         ? visibleDraftComment
                         : null,
                     isAllCommentsView ? this.indexSidebarSearchQuery : this.noteSidebarSearchQuery,
+                    isAllCommentsView ? effectiveIndexSidebarMode : this.noteSidebarMode,
                 );
             });
             await Promise.all(renderPromises);
@@ -3846,18 +3852,23 @@ export default class AsideView extends ItemView {
         const cache: IndexDefaultSidebarCache = {
             key,
             indexFileFilterState,
-            indexedThreadCount: this.plugin.getIndexedThreadCount(),
+            storedThreadCount: this.plugin.getAllIndexedThreads({ includeDeleted: true }).length,
         };
         this.indexDefaultSidebarCache = cache;
         return cache;
     }
 
-    private canRenderCachedIndexDefaultSidebar(file: TFile, selectedRootFilePath: string | null): boolean {
+    private canRenderCachedIndexDefaultSidebar(
+        file: TFile,
+        selectedRootFilePath: string | null,
+        cache: IndexDefaultSidebarCache,
+    ): boolean {
         const effectiveIndexSidebarMode = resolveModeWithSidebarModeVisibility(
             this.indexSidebarMode,
             this.getSidebarModeVisibility(),
         );
-        return !selectedRootFilePath
+        return shouldUseEmptyIndexDefaultCache(cache.storedThreadCount)
+            && !selectedRootFilePath
             && effectiveIndexSidebarMode === "list"
             && !this.indexSidebarSearchQuery.trim()
             && !this.noteSidebarVisibleTagFilterKey
@@ -3906,7 +3917,7 @@ export default class AsideView extends ItemView {
             renderSupportButton(this.containerEl, this.plugin, {
                 filePath: file.path,
                 isAllCommentsView: true,
-                threadCount: cache.indexedThreadCount,
+                threadCount: cache.storedThreadCount,
             });
         }
     }
@@ -4273,12 +4284,13 @@ export default class AsideView extends ItemView {
         editDraftComment: DraftComment | null = null,
         appendDraftComment: DraftComment | null = null,
         searchQuery: string = "",
+        sidebarMode?: SidebarPrimaryMode,
     ) {
         const currentFilePath = this.file?.path ?? null;
         const isIndexView = !!currentFilePath && this.plugin.isAllCommentsNotePath(currentFilePath);
         const cardActions = resolveSidebarCardActionState(
             isIndexView ? "index" : "note",
-            isIndexView ? this.indexSidebarMode : this.noteSidebarMode,
+            sidebarMode ?? (isIndexView ? this.indexSidebarMode : this.noteSidebarMode),
         );
         const showNestedComments = resolveSidebarSearchShowNestedComments(
             searchQuery,

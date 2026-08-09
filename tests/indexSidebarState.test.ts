@@ -11,6 +11,7 @@ import {
     shouldShowIndexListToolbarChips,
     shouldShowIndexSidebarSearch,
     shouldShowNestedToolbarChip,
+    shouldUseEmptyIndexDefaultCache,
 } from "../src/ui/views/indexSidebarState";
 
 test("index search is visible only in List", () => {
@@ -27,6 +28,12 @@ test("leaving index List clears visible and applied search", () => {
         searchQuery: "",
     });
     assert.deepEqual(resolveIndexSidebarSearchStateForMode(state, "list"), state);
+});
+
+test("the empty-index cache never bypasses live aggregate controls", () => {
+    assert.equal(shouldUseEmptyIndexDefaultCache(0), true);
+    assert.equal(shouldUseEmptyIndexDefaultCache(1), false);
+    assert.equal(shouldUseEmptyIndexDefaultCache(4), false);
 });
 
 function createComment(overrides: Partial<Comment> = {}): Comment {
