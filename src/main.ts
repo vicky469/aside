@@ -2105,8 +2105,8 @@ export default class Aside extends Plugin {
         return this.aggregateCommentIndex.getAllComments();
     }
 
-    public getAllIndexedThreads(): CommentThread[] {
-        return this.aggregateCommentIndex.getAllThreads();
+    public getAllIndexedThreads(options: { includeDeleted?: boolean } = {}): CommentThread[] {
+        return this.aggregateCommentIndex.getAllThreads(options);
     }
 
     public getIndexedCommentVersion(): number {

@@ -5,7 +5,10 @@ import {
     threadToComment,
     threadEntryToComment,
 } from "../domain/comments/commentProjection";
-import type { CommentThread } from "../domain/comments/commentThread";
+import type {
+    CommentQueryOptions,
+    CommentThread,
+} from "../domain/comments/commentThread";
 import {
     cloneCommentThread,
     getFirstThreadEntry,
@@ -74,16 +77,16 @@ export class AggregateCommentIndex {
         }
     }
 
-    getAllThreads(): CommentThread[] {
+    getAllThreads(options: CommentQueryOptions = {}): CommentThread[] {
         return Array.from(this.threadsByFile.values())
             .flatMap((threads) => threads)
-            .map((thread) => cloneThreadForVisibility(thread))
+            .map((thread) => cloneThreadForVisibility(thread, options))
             .filter((thread): thread is CommentThread => thread !== null);
     }
 
-    getThreadsForFile(filePath: string): CommentThread[] {
+    getThreadsForFile(filePath: string, options: CommentQueryOptions = {}): CommentThread[] {
         return (this.threadsByFile.get(filePath) ?? [])
-            .map((thread) => cloneThreadForVisibility(thread))
+            .map((thread) => cloneThreadForVisibility(thread, options))
             .filter((thread): thread is CommentThread => thread !== null);
     }
 
@@ -130,7 +133,14 @@ export class AggregateCommentIndex {
     }
 }
 
-function cloneThreadForVisibility(thread: CommentThread): CommentThread | null {
+function cloneThreadForVisibility(
+    thread: CommentThread,
+    options: CommentQueryOptions,
+): CommentThread | null {
+    if (options.includeDeleted) {
+        return cloneCommentThread(thread);
+    }
+
     if (isSoftDeleted(thread)) {
         return null;
     }

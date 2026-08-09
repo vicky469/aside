@@ -277,6 +277,19 @@ test("pin state does not narrow the sidebar until pinned-only view is active", (
     );
 });
 
+test("pinned filtering composes with an aggregate cross-file thread list", () => {
+    const threads = [
+        createThread({ id: "a", filePath: "a.md" }),
+        createThread({ id: "b", filePath: "b.md" }),
+    ];
+
+    assert.deepEqual(
+        filterThreadsByPinnedSidebarViewState(threads, new Set(["b"]), true)
+            .map((thread) => thread.id),
+        ["b"],
+    );
+});
+
 test("pin acts as an intersecting filter with agent results once pinned-only view is active", () => {
     const noteThread = createThread({ id: "thread-note" });
     const agentThread = createThread({

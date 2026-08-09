@@ -143,6 +143,17 @@ test("AggregateCommentIndex hides soft-deleted threads and child entries from si
         }],
     );
     assert.equal(index.getAllComments().length, 1);
+    assert.deepEqual(
+        index.getThreadsForFile("a.md", { includeDeleted: true }).map((thread) => ({
+            id: thread.id,
+            entryIds: thread.entries.map((entry) => entry.id),
+        })),
+        [
+            { id: "thread-1", entryIds: ["thread-1", "entry-2"] },
+            { id: "thread-2", entryIds: ["thread-2"] },
+        ],
+    );
+    assert.equal(index.getAllThreads({ includeDeleted: true }).length, 2);
     assert.equal(index.getCommentById("entry-2")?.deletedAt, baseTimestamp + 2000);
     assert.equal(index.getCommentById("thread-2")?.deletedAt, baseTimestamp + 4000);
 });

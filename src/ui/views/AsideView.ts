@@ -1641,14 +1641,12 @@ export default class AsideView extends ItemView {
             this.containerEl.empty();
             this.syncViewContainerClasses();
             const persistedThreads = isAllCommentsView
-                ? this.plugin.getAllIndexedThreads()
+                ? this.plugin.getAllIndexedThreads({ includeDeleted: showDeleted })
                 : this.plugin.getThreadsForFile(file.path, { includeDeleted: showDeleted });
             const pageThreadsWithDeleted = isAllCommentsView
-                ? []
+                ? this.plugin.getAllIndexedThreads({ includeDeleted: true })
                 : this.plugin.getThreadsForFile(file.path, { includeDeleted: true });
-            const deletedCommentCount = isAllCommentsView
-                ? 0
-                : countDeletedComments(pageThreadsWithDeleted);
+            const deletedCommentCount = countDeletedComments(pageThreadsWithDeleted);
             const allAgentRuns = this.plugin.getAgentRuns();
             const allScriptRuns = this.plugin.getScriptRuns();
             this.noteSidebarTagIndex = isAllCommentsView && selectedIndexSourceFile
@@ -1664,11 +1662,9 @@ export default class AsideView extends ItemView {
                 this.noteSidebarVisibleTagFilterKey = null;
             }
             const visiblePersistedThreads = persistedThreads.filter((thread) =>
-                isAllCommentsView
-                    ? !isSoftDeleted(thread)
-                    : matchesPageSidebarVisibility(thread, {
-                        showDeleted,
-                    }));
+                matchesPageSidebarVisibility(thread, {
+                    showDeleted,
+                }));
             const resolveWikiLinkPath = (linkPath: string, sourceFilePath: string): string | null =>
                 this.resolveThoughtTrailWikiLinkPath(linkPath, sourceFilePath);
             const indexFileFilterGraph = isAllCommentsView
@@ -1692,8 +1688,8 @@ export default class AsideView extends ItemView {
                 : indexSidebarListFilePaths;
             const indexFileFilterOptions = indexFileFilterState.options;
             this.syncPinnedSidebarThreadIds(persistedThreads);
-            const pinnedSidebarThreadIds = isAllCommentsView ? EMPTY_PINNED_SIDEBAR_THREAD_IDS : this.pinnedSidebarThreadIds;
-            const showPinnedThreadsOnly = !isAllCommentsView && this.showPinnedSidebarThreadsOnly;
+            const pinnedSidebarThreadIds = this.pinnedSidebarThreadIds;
+            const showPinnedThreadsOnly = this.showPinnedSidebarThreadsOnly;
             const {
                 scopedVisibleThreads,
                 scopedAllThreads,
@@ -1908,7 +1904,7 @@ export default class AsideView extends ItemView {
 
             this.renderSidebarToolbar(commentsContainer, {
                 isAllCommentsView,
-                hasDeletedComments: !isAllCommentsView && pageThreadsWithDeleted.some((thread) => hasDeletedComments(thread)),
+                hasDeletedComments: pageThreadsWithDeleted.some((thread) => hasDeletedComments(thread)),
                 deletedCommentCount,
                 showDeletedComments: showDeleted,
                 hasNestedComments,
@@ -3271,21 +3267,28 @@ export default class AsideView extends ItemView {
         showDeleted: boolean;
         contentFilter: SidebarContentFilter;
     }): Promise<void> {
+        const isIndexView = !!this.file && this.plugin.isAllCommentsNotePath(this.file.path);
         const nextState = toggleDeletedSidebarViewState({
             showDeleted: options.showDeleted,
             contentFilter: options.contentFilter,
             showPinnedThreadsOnly: this.showPinnedSidebarThreadsOnly,
             pinnedThreadIds: this.pinnedSidebarThreadIds,
-            searchQuery: this.noteSidebarSearchQuery,
-            searchInputValue: this.noteSidebarSearchInputValue,
+            searchQuery: isIndexView ? this.indexSidebarSearchQuery : this.noteSidebarSearchQuery,
+            searchInputValue: isIndexView ? this.indexSidebarSearchInputValue : this.noteSidebarSearchInputValue,
         });
         this.noteSidebarContentFilter = nextState.contentFilter;
         this.showPinnedSidebarThreadsOnly = nextState.showPinnedThreadsOnly;
         this.pinnedSidebarThreadIds = nextState.pinnedThreadIds;
         this.savePinnedSidebarStateForFilePath(this.file?.path ?? null);
-        this.clearNoteSidebarSearchDebounceTimer();
-        this.noteSidebarSearchQuery = nextState.searchQuery;
-        this.noteSidebarSearchInputValue = nextState.searchInputValue;
+        if (isIndexView) {
+            this.clearIndexSidebarSearchDebounceTimer();
+            this.indexSidebarSearchQuery = nextState.searchQuery;
+            this.indexSidebarSearchInputValue = nextState.searchInputValue;
+        } else {
+            this.clearNoteSidebarSearchDebounceTimer();
+            this.noteSidebarSearchQuery = nextState.searchQuery;
+            this.noteSidebarSearchInputValue = nextState.searchInputValue;
+        }
         if (nextState.showDeleted !== options.showDeleted) {
             await this.plugin.setShowDeletedComments(nextState.showDeleted);
         }
