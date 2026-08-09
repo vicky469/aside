@@ -99,9 +99,11 @@ import {
     deriveIndexSidebarListFilePaths,
     filterIndexThreadsByExistingSourceFiles,
     GENERIC_INDEX_EMPTY_STATE_TEXTS,
+    resolveIndexSidebarSearchStateForMode,
     scopeIndexThreadsByFilePaths,
     shouldShowGenericIndexEmptyState,
     shouldShowIndexListToolbarChips,
+    shouldShowIndexSidebarSearch,
     shouldShowNestedToolbarChip,
 } from "./indexSidebarState";
 import { StreamedAgentReplyController } from "./streamedAgentReplyController";
@@ -399,6 +401,9 @@ export default class AsideView extends ItemView {
     private noteSidebarBatchTagSearchDebounceTimer: number | null = null;
     private noteSidebarBatchTagSearchRequestVersion = 0;
     private indexSidebarSearchQuery = "";
+    private indexSidebarSearchInputValue = "";
+    private indexSidebarSearchDebounceTimer: number | null = null;
+    private indexSidebarSearchRequestVersion = 0;
     private noteSidebarTagIndex: FileTagIndex | null = null;
     private noteSidebarSelectedTagIds: Set<string> = new Set<string>();
     private noteSidebarVisibleTagFilterKey: string | null = null;
@@ -540,7 +545,7 @@ export default class AsideView extends ItemView {
             this.noteSidebarSearchRequestVersion += 1;
             this.noteSidebarSearchQuery = "";
             this.noteSidebarSearchInputValue = "";
-            this.indexSidebarSearchQuery = "";
+            this.clearIndexSidebarSearchState();
             this.thoughtTrailSource = getDefaultThoughtTrailSource();
         }
         this.file = nextFile;
@@ -1041,6 +1046,22 @@ export default class AsideView extends ItemView {
         this.noteSidebarSearchDebounceTimer = null;
     }
 
+    private clearIndexSidebarSearchDebounceTimer(): void {
+        if (this.indexSidebarSearchDebounceTimer === null) {
+            return;
+        }
+
+        window.clearTimeout(this.indexSidebarSearchDebounceTimer);
+        this.indexSidebarSearchDebounceTimer = null;
+    }
+
+    private clearIndexSidebarSearchState(): void {
+        this.clearIndexSidebarSearchDebounceTimer();
+        this.indexSidebarSearchRequestVersion += 1;
+        this.indexSidebarSearchInputValue = "";
+        this.indexSidebarSearchQuery = "";
+    }
+
     private clearNoteSidebarBatchTagSearchDebounceTimer(): void {
         if (this.noteSidebarBatchTagSearchDebounceTimer === null) {
             return;
@@ -1136,6 +1157,76 @@ export default class AsideView extends ItemView {
             this.noteSidebarSearchDebounceTimer = null;
             void this.applyNoteSidebarSearchQuery(query, requestVersion, options);
         }, AsideView.NOTE_SIDEBAR_SEARCH_DEBOUNCE_MS);
+    }
+
+    private scheduleIndexSidebarSearchQuery(
+        query: string,
+        options: {
+            selectionStart?: number | null;
+            selectionEnd?: number | null;
+        } = {},
+    ): void {
+        this.indexSidebarSearchInputValue = query;
+        const requestVersion = ++this.indexSidebarSearchRequestVersion;
+        this.clearIndexSidebarSearchDebounceTimer();
+        if (this.indexSidebarSearchQuery === query) {
+            return;
+        }
+
+        this.indexSidebarSearchDebounceTimer = window.setTimeout(() => {
+            this.indexSidebarSearchDebounceTimer = null;
+            void this.applyIndexSidebarSearchQuery(query, requestVersion, options);
+        }, AsideView.NOTE_SIDEBAR_SEARCH_DEBOUNCE_MS);
+    }
+
+    private async applyIndexSidebarSearchQuery(
+        query: string,
+        requestVersion: number,
+        options: {
+            selectionStart?: number | null;
+            selectionEnd?: number | null;
+        } = {},
+    ): Promise<void> {
+        if (this.indexSidebarSearchQuery === query) {
+            return;
+        }
+
+        this.indexSidebarSearchInputValue = query;
+        const activeElement = this.containerEl.ownerDocument.activeElement;
+        const shouldRestoreFocus = nodeInstanceOf(activeElement, HTMLInputElement)
+            && activeElement.matches(".is-index-secondary-row .aside-note-search-input")
+            && this.containerEl.contains(activeElement);
+        this.indexSidebarSearchQuery = query;
+        const currentFilePath = this.file?.path ?? null;
+        await this.renderComments({
+            skipDataRefresh: true,
+        });
+        if (requestVersion !== this.indexSidebarSearchRequestVersion) {
+            return;
+        }
+
+        if (
+            !currentFilePath
+            || this.file?.path !== currentFilePath
+            || !this.plugin.isAllCommentsNotePath(currentFilePath)
+            || !shouldShowIndexSidebarSearch(this.indexSidebarMode)
+            || !shouldRestoreFocus
+        ) {
+            return;
+        }
+
+        const inputEl = this.containerEl.querySelector(
+            ".is-index-secondary-row .aside-note-search-input",
+        );
+        if (!(inputEl instanceof HTMLInputElement)) {
+            return;
+        }
+
+        const maxSelection = inputEl.value.length;
+        const selectionStart = Math.max(0, Math.min(options.selectionStart ?? maxSelection, maxSelection));
+        const selectionEnd = Math.max(0, Math.min(options.selectionEnd ?? selectionStart, maxSelection));
+        this.interactionController.claimSidebarInteractionOwnership(inputEl);
+        inputEl.setSelectionRange(selectionStart, selectionEnd);
     }
 
     private async applyNoteSidebarSearchQuery(
@@ -1290,6 +1381,7 @@ export default class AsideView extends ItemView {
         this.unsubscribeFromAgentStreamUpdates?.();
         this.unsubscribeFromAgentStreamUpdates = null;
         this.clearNoteSidebarSearchDebounceTimer();
+        this.clearIndexSidebarSearchState();
         this.noteSidebarShell = null;
         this.resetStreamedReplyControllers();
         const doc = this.containerEl.ownerDocument;
@@ -3313,7 +3405,14 @@ export default class AsideView extends ItemView {
                 groupCounts: sidebarThreadGroupCounts,
                 onChange: (mode) => {
                     this.indexSidebarMode = mode;
-                    if (mode !== "list") {
+                    this.clearIndexSidebarSearchDebounceTimer();
+                    const nextSearchState = resolveIndexSidebarSearchStateForMode({
+                        searchInputValue: this.indexSidebarSearchInputValue,
+                        searchQuery: this.indexSidebarSearchQuery,
+                    }, mode);
+                    this.indexSidebarSearchInputValue = nextSearchState.searchInputValue;
+                    this.indexSidebarSearchQuery = nextSearchState.searchQuery;
+                    if (mode !== "list" && mode !== "todo" && mode !== "agent") {
                         this.showPinnedSidebarThreadsOnly = false;
                         this.savePinnedSidebarStateForFilePath(this.file?.path ?? null);
                     }
@@ -3328,6 +3427,7 @@ export default class AsideView extends ItemView {
             indexChipRow = toolbarEl.createDiv("aside-sidebar-toolbar-row");
             indexChipRow.addClass("is-index-secondary-row");
             indexActionGroup = indexChipRow.createDiv("aside-sidebar-toolbar-group");
+            indexActionGroup.addClass("is-filter-group");
             this.renderToolbarIconButton(indexActionGroup, {
                 icon: "list-filter",
                 active: !!options.selectedIndexFileFilterRootPath,
@@ -3339,6 +3439,9 @@ export default class AsideView extends ItemView {
                     this.openIndexFileFilterModal(options.indexFileFilterOptions);
                 },
             });
+            if (shouldShowIndexSidebarSearch(resolvedIndexSidebarMode)) {
+                this.renderIndexSearchInput(indexActionGroup);
+            }
         } else {
             const modeRow = toolbarEl.createDiv("aside-sidebar-toolbar-row");
             modeRow.addClass("is-note-primary-row");
@@ -3684,6 +3787,26 @@ export default class AsideView extends ItemView {
             },
             onInput: (value, selection) => {
                 this.scheduleNoteSidebarSearchQuery(value, selection);
+            },
+        });
+    }
+
+    private renderIndexSearchInput(container: HTMLElement): void {
+        this.renderSidebarSearchInput(container, {
+            value: this.indexSidebarSearchInputValue,
+            placeholder: "Search side notes in index",
+            ariaLabel: "Search index side notes",
+            onClear: () => {
+                this.clearIndexSidebarSearchDebounceTimer();
+                const requestVersion = ++this.indexSidebarSearchRequestVersion;
+                this.indexSidebarSearchInputValue = "";
+                void this.applyIndexSidebarSearchQuery("", requestVersion, {
+                    selectionStart: 0,
+                    selectionEnd: 0,
+                });
+            },
+            onInput: (value, selection) => {
+                this.scheduleIndexSidebarSearchQuery(value, selection);
             },
         });
     }
@@ -4779,6 +4902,7 @@ export default class AsideView extends ItemView {
     }
 
     onunload() {
+        this.clearIndexSidebarSearchState();
         const doc = this.containerEl.ownerDocument;
         doc.removeEventListener("keydown", this.interactionController.documentKeydownHandler, true);
         doc.removeEventListener("copy", this.interactionController.documentCopyHandler, true);

@@ -5,11 +5,29 @@ import {
     deriveIndexSidebarListFilePaths,
     GENERIC_INDEX_EMPTY_STATE_TEXTS,
     filterIndexThreadsByExistingSourceFiles,
+    resolveIndexSidebarSearchStateForMode,
     scopeIndexThreadsByFilePaths,
     shouldShowGenericIndexEmptyState,
     shouldShowIndexListToolbarChips,
+    shouldShowIndexSidebarSearch,
     shouldShowNestedToolbarChip,
 } from "../src/ui/views/indexSidebarState";
+
+test("index search is visible only in List", () => {
+    assert.equal(shouldShowIndexSidebarSearch("list"), true);
+    for (const mode of ["todo", "agent", "tags", "thought-trail"] as const) {
+        assert.equal(shouldShowIndexSidebarSearch(mode), false);
+    }
+});
+
+test("leaving index List clears visible and applied search", () => {
+    const state = { searchInputValue: "odoo", searchQuery: "odoo" };
+    assert.deepEqual(resolveIndexSidebarSearchStateForMode(state, "todo"), {
+        searchInputValue: "",
+        searchQuery: "",
+    });
+    assert.deepEqual(resolveIndexSidebarSearchStateForMode(state, "list"), state);
+});
 
 function createComment(overrides: Partial<Comment> = {}): Comment {
     return {

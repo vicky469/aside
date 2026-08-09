@@ -7,6 +7,24 @@ export const GENERIC_INDEX_EMPTY_STATE_TEXTS = [
     "Click a file in the index to see its side notes.",
 ] as const;
 
+export interface IndexSidebarSearchState {
+    searchInputValue: string;
+    searchQuery: string;
+}
+
+export function shouldShowIndexSidebarSearch(mode: IndexSidebarMode): boolean {
+    return mode === "list";
+}
+
+export function resolveIndexSidebarSearchStateForMode(
+    state: IndexSidebarSearchState,
+    mode: IndexSidebarMode,
+): IndexSidebarSearchState {
+    return shouldShowIndexSidebarSearch(mode)
+        ? { ...state }
+        : { searchInputValue: "", searchQuery: "" };
+}
+
 export function scopeIndexThreadsByFilePaths(
     visibleThreads: CommentThread[],
     allThreads: CommentThread[],
