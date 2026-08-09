@@ -3546,7 +3546,7 @@ export default class AsideView extends ItemView {
 
                 this.noteSidebarVisibleTagFilterKey = null;
                 if (surface === "index") {
-                    this.indexSidebarSearchQuery = "";
+                    this.clearIndexSidebarSearchState();
                 } else {
                     this.noteSidebarSearchQuery = "";
                     this.noteSidebarSearchInputValue = "";
@@ -3575,7 +3575,7 @@ export default class AsideView extends ItemView {
                         isOpen: false,
                     };
                     if (surface === "index") {
-                        this.indexSidebarSearchQuery = "";
+                        this.clearIndexSidebarSearchState();
                     } else {
                         this.noteSidebarSearchQuery = "";
                         this.noteSidebarSearchInputValue = "";
