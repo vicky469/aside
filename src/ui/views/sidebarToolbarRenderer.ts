@@ -46,6 +46,16 @@ export interface SidebarSearchInputOptions {
     onInput(value: string, selection: { selectionStart: number | null; selectionEnd: number | null }): void;
 }
 
+export interface SidebarSecondaryToolbarOptions {
+    surface: "note" | "index";
+    fileFilter?: ToolbarIconButtonOptions;
+    search?: SidebarSearchInputOptions;
+    pinned?: ToolbarIconButtonOptions;
+    nested?: ToolbarIconButtonOptions;
+    deleted?: ToolbarIconButtonOptions;
+    addPageComment?: ToolbarIconButtonOptions;
+}
+
 export interface SidebarModeControlOptions extends SidebarModeAvailability, SidebarModeVisibility {
     mode: SidebarPrimaryMode;
     surface: SidebarModeTabSurface;
@@ -178,6 +188,38 @@ export function renderSidebarSearchInput(
             selectionEnd: inputEl.selectionEnd,
         });
     });
+}
+
+export function renderSidebarSecondaryToolbar(
+    toolbarEl: HTMLElement,
+    options: SidebarSecondaryToolbarOptions,
+    guard: ToolbarActionGuard,
+): HTMLDivElement {
+    const row = toolbarEl.createDiv(
+        `aside-sidebar-toolbar-row is-${options.surface}-secondary-row${options.search ? " is-search-row" : ""}`,
+    );
+    const filterGroup = row.createDiv("aside-sidebar-toolbar-group is-filter-group");
+    if (options.fileFilter) {
+        renderToolbarIconButton(filterGroup, options.fileFilter, guard);
+    }
+    if (options.search) {
+        renderSidebarSearchInput(filterGroup, options.search);
+    }
+
+    const actionOptions = [
+        options.pinned,
+        options.nested,
+        options.deleted,
+        options.addPageComment,
+    ].filter((action): action is ToolbarIconButtonOptions => Boolean(action));
+    if (actionOptions.length > 0) {
+        const actionGroup = row.createDiv("aside-sidebar-toolbar-group is-action-group");
+        for (const action of actionOptions) {
+            renderToolbarIconButton(actionGroup, action, guard);
+        }
+    }
+
+    return row;
 }
 
 export function renderSidebarModeControl(

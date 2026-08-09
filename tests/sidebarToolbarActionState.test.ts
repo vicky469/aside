@@ -1,6 +1,67 @@
 import * as assert from "node:assert/strict";
 import test from "node:test";
-import { resolveNoteToolbarActionState } from "../src/ui/views/sidebarToolbarState";
+import {
+    resolveNoteToolbarActionState,
+    resolveSidebarSecondaryToolbarPlan,
+} from "../src/ui/views/sidebarToolbarState";
+
+test("secondary toolbar plan shares valid controls across note and index surfaces", () => {
+    const base = {
+        hasNestedComments: true,
+        hasFileFilterOptions: true,
+        hasAddPageCommentAction: true,
+    };
+
+    assert.deepEqual(resolveSidebarSecondaryToolbarPlan({
+        ...base,
+        surface: "index",
+        mode: "list",
+    }), {
+        showRow: true,
+        showFileFilter: true,
+        showSearch: true,
+        showPinned: true,
+        showNested: true,
+        showDeleted: true,
+        showAddPageComment: false,
+    });
+
+    for (const mode of ["todo", "agent"] as const) {
+        assert.deepEqual(resolveSidebarSecondaryToolbarPlan({
+            ...base,
+            surface: "index",
+            mode,
+        }), {
+            showRow: true,
+            showFileFilter: true,
+            showSearch: false,
+            showPinned: true,
+            showNested: true,
+            showDeleted: true,
+            showAddPageComment: false,
+        });
+    }
+
+    assert.deepEqual(resolveSidebarSecondaryToolbarPlan({
+        ...base,
+        surface: "index",
+        mode: "thought-trail",
+    }), {
+        showRow: true,
+        showFileFilter: true,
+        showSearch: false,
+        showPinned: false,
+        showNested: false,
+        showDeleted: false,
+        showAddPageComment: false,
+    });
+
+    assert.equal(resolveSidebarSecondaryToolbarPlan({
+        ...base,
+        surface: "note",
+        mode: "list",
+    }).showAddPageComment, true);
+});
 
 test("note toolbar actions stay enabled when no exclusive mode is active", () => {
     assert.deepEqual(
