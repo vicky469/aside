@@ -50,7 +50,7 @@ test("getSidebarSortCommentForThread keeps the parent entry timestamp for thread
     assert.equal(sortComment.comment, "Comment body");
 });
 
-test("sortSidebarRenderableItems keeps page-note thread order stable after later replies", () => {
+test("sortSidebarRenderableItems preserves canonical same-file order after later replies", () => {
     const olderPageThread = commentToThread(createComment({
         id: "page-note-older",
         timestamp: 100,
@@ -74,9 +74,22 @@ test("sortSidebarRenderableItems keeps page-note thread order stable after later
     const sorted = sortSidebarRenderableItems(items);
 
     assert.deepEqual(sorted.map((item) => item.kind === "thread" ? item.thread.id : item.draft.id), [
-        "page-note-older",
         "page-note-newer",
+        "page-note-older",
     ]);
+});
+
+test("index order groups files while preserving canonical order within each file", () => {
+    const items: SidebarRenderableItem[] = [
+        { kind: "thread", thread: commentToThread(createComment({ id: "b-2", filePath: "b.md", timestamp: 200 })) },
+        { kind: "thread", thread: commentToThread(createComment({ id: "a-2", filePath: "a.md", timestamp: 200 })) },
+        { kind: "thread", thread: commentToThread(createComment({ id: "a-1", filePath: "a.md", timestamp: 100 })) },
+        { kind: "thread", thread: commentToThread(createComment({ id: "b-1", filePath: "b.md", timestamp: 100 })) },
+    ];
+
+    assert.deepEqual(sortSidebarRenderableItems(items).map((item) => (
+        item.kind === "thread" ? item.thread.id : item.draft.id
+    )), ["a-2", "a-1", "b-2", "b-1"]);
 });
 
 test("sortSidebarRenderableItems keeps root files ahead of nested folders to match index note ordering", () => {

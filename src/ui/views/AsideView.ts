@@ -82,6 +82,7 @@ import {
 } from "./sidebarContentFilter";
 import { getSidebarCommentCardOpenAction } from "./sidebarCommentCardNavigation";
 import { resolveSidebarCardActionState } from "./sidebarCardActionState";
+import { canDropIndexThreadOnThread } from "./sidebarIndexReorder";
 import { renderPersistedCommentCard } from "./sidebarPersistedComment";
 import { restoreSidebarComment } from "./sidebarRestoreComment";
 import {
@@ -1879,10 +1880,11 @@ export default class AsideView extends ItemView {
             });
             const renderableItems = isAllCommentsView
                 ? sortSidebarRenderableItems(
-                    searchScopedVisibleThreads
-                        .filter((thread) => thread.id !== replacedThreadId)
-                        .map<SidebarRenderableItem>((thread) => ({ kind: "thread", thread }))
-                        .concat(topLevelDraftComment ? [{ kind: "draft", draft: topLevelDraftComment }] : []),
+                    buildStoredOrderSidebarItems(
+                        searchScopedVisibleThreads,
+                        topLevelDraftComment,
+                        replacedThreadId,
+                    ),
                 )
                 : buildStoredOrderSidebarItems(
                     pinnedScopedVisibleThreads,
@@ -1973,7 +1975,11 @@ export default class AsideView extends ItemView {
             }
 
             const commentsBody = this.renderCommentsList(commentsContainer);
-            this.setupPageThreadReorderInteractions(commentsBody, file.path);
+            this.setupPageThreadReorderInteractions(
+                commentsBody,
+                file.path,
+                isAllCommentsView ? "index" : "note",
+            );
             const renderPromises = renderedItems.map(async (item) => {
                 if (item.kind === "draft") {
                     this.renderDraftComment(commentsBody, item.draft);
@@ -4463,7 +4469,11 @@ export default class AsideView extends ItemView {
         });
     }
 
-    private setupPageThreadReorderInteractions(commentsBody: HTMLDivElement, filePath: string): void {
+    private setupPageThreadReorderInteractions(
+        commentsBody: HTMLDivElement,
+        filePath: string,
+        surface: "note" | "index" = "note",
+    ): void {
         commentsBody.addEventListener("dragstart", (event: DragEvent) => {
             const dragState = this.getSidebarDragStateFromEventTarget(event.target, filePath);
             if (!dragState) {
@@ -4486,6 +4496,21 @@ export default class AsideView extends ItemView {
         });
 
         commentsBody.addEventListener("dragover", (event: DragEvent) => {
+            if (surface === "index") {
+                const indexDropTarget = this.resolveIndexThreadDropTarget(event);
+                if (!indexDropTarget) {
+                    this.clearReorderDropIndicator();
+                    return;
+                }
+
+                event.preventDefault();
+                if (event.dataTransfer) {
+                    event.dataTransfer.dropEffect = "move";
+                }
+                this.setReorderDropIndicator(indexDropTarget.element, indexDropTarget.placement);
+                return;
+            }
+
             const threadDropTarget = this.resolvePageThreadDropTarget(event);
             const threadNestDropTarget = this.resolveThreadNestDropTarget(event);
             const entryDropTarget = this.resolveChildEntryMoveDropTarget(event);
@@ -4513,6 +4538,24 @@ export default class AsideView extends ItemView {
 
         commentsBody.addEventListener("drop", (event: DragEvent) => {
             const dragState = this.reorderDragState;
+            if (surface === "index") {
+                const indexDropTarget = this.resolveIndexThreadDropTarget(event);
+                this.clearReorderDropIndicator();
+                if (!dragState || dragState.kind !== "thread" || !indexDropTarget) {
+                    return;
+                }
+
+                event.preventDefault();
+                this.clearReorderDragState();
+                void this.plugin.reorderThreadsForFile(
+                    dragState.filePath,
+                    dragState.threadId,
+                    indexDropTarget.targetId,
+                    indexDropTarget.placement,
+                );
+                return;
+            }
+
             const threadDropTarget = this.resolvePageThreadDropTarget(event);
             const threadNestDropTarget = this.resolveThreadNestDropTarget(event);
             const entryDropTarget = this.resolveChildEntryMoveDropTarget(event);
@@ -4563,6 +4606,44 @@ export default class AsideView extends ItemView {
         commentsBody.addEventListener("dragend", () => {
             this.clearReorderDragState();
         });
+    }
+
+    private resolveIndexThreadDropTarget(event: DragEvent): {
+        element: HTMLElement;
+        targetId: string;
+        placement: ReorderPlacement;
+    } | null {
+        const dragState = this.reorderDragState;
+        if (!dragState || dragState.kind !== "thread" || !nodeInstanceOf(event.target, Element)) {
+            return null;
+        }
+
+        const threadStackEl = event.target.closest(".aside-thread-stack[data-thread-id]");
+        if (!nodeInstanceOf(threadStackEl, HTMLElement)) {
+            return null;
+        }
+
+        const targetThreadId = threadStackEl.getAttribute("data-thread-id");
+        const targetCommentEl = threadStackEl.firstElementChild;
+        const sourceThread = this.plugin.getThreadById(dragState.threadId);
+        const targetThread = targetThreadId
+            ? this.plugin.getThreadById(targetThreadId)
+            : null;
+        if (
+            !sourceThread
+            || !targetThread
+            || targetThread.deletedAt
+            || !canDropIndexThreadOnThread(sourceThread, targetThread)
+            || !nodeInstanceOf(targetCommentEl, HTMLElement)
+        ) {
+            return null;
+        }
+
+        return {
+            element: targetCommentEl,
+            targetId: targetThread.id,
+            placement: this.resolveReorderPlacement(threadStackEl, event.clientY),
+        };
     }
 
     private getCommentItemFromEventTarget(target: EventTarget | null): HTMLElement | null {

@@ -1,6 +1,6 @@
 import type { Comment, CommentThread } from "../../commentManager";
 import { getFirstThreadEntry, threadEntryToComment } from "../../commentManager";
-import { compareCommentsForSidebarOrder, getCommentSectionKey } from "../../core/anchors/commentSectionOrder";
+import { compareCommentsForSidebarOrder } from "../../core/anchors/commentSectionOrder";
 import type { DraftComment } from "../../domain/drafts";
 
 export type SidebarRenderableItem =
@@ -34,21 +34,7 @@ function compareCommentsForIndexListOrder<T extends Comment>(left: T, right: T):
         return left.filePath.localeCompare(right.filePath);
     }
 
-    const leftSection = getCommentSectionKey(left);
-    const rightSection = getCommentSectionKey(right);
-    if (leftSection !== rightSection) {
-        return leftSection === "page" ? -1 : 1;
-    }
-
-    if (left.startLine !== right.startLine) {
-        return left.startLine - right.startLine;
-    }
-
-    if (left.startChar !== right.startChar) {
-        return left.startChar - right.startChar;
-    }
-
-    return left.timestamp - right.timestamp;
+    return 0;
 }
 
 export function getReplacedThreadIdForEditDraft(
