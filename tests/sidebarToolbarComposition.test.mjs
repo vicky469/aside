@@ -20,3 +20,13 @@ test("index search is supplied only through the shared toolbar plan", () => {
     assert.match(asideViewSource, /\? this\.getIndexSearchInputOptions\(\)/);
     assert.doesNotMatch(asideViewSource, /this\.renderIndexSearchInput\(/);
 });
+
+test("index search keeps its placeholder without a tooltip-producing label", () => {
+    const methodSource = asideViewSource.match(
+        /private getIndexSearchInputOptions\(\): SidebarSearchInputOptions \{[\s\S]*?\n {4}private renderPrimarySidebarModeControl\(/,
+    )?.[0];
+
+    assert.ok(methodSource, "missing index search options method");
+    assert.match(methodSource, /placeholder:\s*"Search side notes in index"/);
+    assert.doesNotMatch(methodSource, /ariaLabel:\s*"Search index side notes"/);
+});

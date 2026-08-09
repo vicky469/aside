@@ -3755,7 +3755,6 @@ export default class AsideView extends ItemView {
         return {
             value: this.indexSidebarSearchInputValue,
             placeholder: "Search side notes in index",
-            ariaLabel: "Search index side notes",
             onFocus: (inputEl) => {
                 this.interactionController.claimSidebarInteractionOwnership(inputEl);
             },
