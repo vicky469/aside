@@ -19,21 +19,23 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Apply the existing built-in match scoring whenever an explicit `@` query contains text.
-- [ ] Remove nonmatching built-ins from a nonempty explicit `@` query.
-- [ ] Keep bare `@` behavior unchanged so it still offers all built-ins.
-- [ ] Keep `/` script filtering and unprefixed compatibility behavior unchanged.
-- [ ] Let the existing inline selection controller select the first filtered result without adding controller special cases.
+- [x] Apply the existing built-in match scoring whenever an explicit `@` query contains text.
+- [x] Remove nonmatching built-ins from a nonempty explicit `@` query.
+- [x] Keep bare `@` behavior unchanged so it still offers all built-ins.
+- [x] Keep `/` script filtering and unprefixed compatibility behavior unchanged.
+- [x] Let the existing inline selection controller select the first filtered result without adding controller special cases.
 
 ### Verification
 
-- [ ] A fail-first regression proves `@co` returns only `@codex` instead of keeping `@todo` first.
-- [ ] Tests prove explicit mention filtering is case-insensitive.
-- [ ] Tests prove bare `@`, `/` scripts, and unprefixed compatibility queries retain their intended behavior.
-- [ ] A controller-level regression proves the first filtered mention is the active listbox option.
-- [ ] The complete test suite, lint, typecheck, Obsidian compliance check, production bundle, and release-artifact guard pass.
-- [ ] The built `main.js`, `manifest.json`, and `styles.css` contain no source map, embedded source, local path, or obvious secret exposure.
-- [ ] The verified build is installed byte-identically in `lean-startup`, where typing `@co` is smoke-tested to show and select only `@codex`.
+- [x] A fail-first regression proves `@co` returns only `@codex` instead of keeping `@todo` first.
+- [x] Tests prove explicit mention filtering is case-insensitive.
+- [x] Tests prove bare `@`, `/` scripts, and unprefixed compatibility queries retain their intended behavior.
+- [x] A controller-level regression proves the first filtered mention is the active listbox option.
+- [x] The complete test suite, lint, typecheck, Obsidian compliance check, production bundle, and release-artifact guard pass.
+- [x] The built `main.js`, `manifest.json`, and `styles.css` contain no source map, embedded source, local path, or obvious secret exposure.
+- [x] The verified build is installed byte-identically in `lean-startup`, where typing `@co` is smoke-tested to show and select only `@codex`.
+
+Verification on 2026-08-09 used the production build in `lean-startup`. Automated coverage first failed on the old four-result `@co` behavior, then passed with 1,093 TypeScript tests and 78 repository checks; lint, typecheck, Obsidian compliance, bundling, and artifact inspection also passed. The installed assets matched byte-for-byte. In the live draft editor, `@co` rendered only a selected `@codex` row, Enter inserted `@codex`, bare `@` rendered all four built-ins, and `/` rendered only registered scripts. The temporary draft was cancelled without saving.
 
 ## Root Cause
 

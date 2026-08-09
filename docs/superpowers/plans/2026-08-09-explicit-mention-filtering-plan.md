@@ -31,7 +31,7 @@
 - Modify: `tests/sidebarDraftEditor.test.ts:33-80,668-715`
 - Modify: `src/ui/editor/commentMentionSuggestions.ts:78-143`
 
-- [ ] **Step 1: Write the failing pure-provider regression**
+- [x] **Step 1: Write the failing pure-provider regression**
 
 In `tests/commentMentionSuggestions.test.ts`, add a focused test after the existing ranking test:
 
@@ -45,16 +45,12 @@ test("buildMentionSuggestions filters explicit built-in queries case-insensitive
         buildMentionSuggestions([cleanLinksScript], "@CO").map((item) => item.mention),
         ["@codex"],
     );
-    assert.deepEqual(
-        buildMentionSuggestions([cleanLinksScript], "@cl").map((item) => item.mention),
-        ["@claude"],
-    );
 });
 ```
 
 Update the explicit `@cl` assertion in `buildMentionSuggestions keeps todo and supported agents before live scripts` so it no longer expects all built-ins. Keep the existing bare-query, unprefixed `cl`, and `/cl` assertions intact; together they guard default order, compatibility calls, and script-only filtering.
 
-- [ ] **Step 2: Make the fake DOM retain accessibility attributes**
+- [x] **Step 2: Make the fake DOM retain accessibility attributes**
 
 In `createFakeElement()` in `tests/sidebarDraftEditor.test.ts`, replace the no-op attribute methods with a local map:
 
@@ -70,7 +66,7 @@ removeAttribute: function removeAttribute(name: string) {
 
 This is test infrastructure only. Do not change the production renderer or its ARIA behavior.
 
-- [ ] **Step 3: Write the failing connected-editor regression**
+- [x] **Step 3: Write the failing connected-editor regression**
 
 Add this test after `sidebar draft editor controller renders connected mention suggestions without detail`:
 
@@ -100,7 +96,7 @@ test("connected mention dropdown activates only the explicit @ query match", () 
 });
 ```
 
-- [ ] **Step 4: Run the tests and verify RED**
+- [x] **Step 4: Run the tests and verify RED**
 
 Run:
 
@@ -108,9 +104,9 @@ Run:
 npm test
 ```
 
-Expected: FAIL in both new regressions. `buildMentionSuggestions([], "@co")` still returns `@todo`, `@codex`, `@claude`, and `@gemini`; the connected dropdown therefore still activates the `@todo` row.
+Expected: FAIL in the new provider and connected-editor regressions and in the updated `@cl` expectation. `buildMentionSuggestions([], "@co")` still returns `@todo`, `@codex`, `@claude`, and `@gemini`; the connected dropdown therefore still activates the `@todo` row.
 
-- [ ] **Step 5: Implement the minimal provider fix**
+- [x] **Step 5: Implement the minimal provider fix**
 
 In `buildMentionSuggestions()` in `src/ui/editor/commentMentionSuggestions.ts`, replace:
 
@@ -126,7 +122,7 @@ const shouldFilterBuiltInsByQuery = query.length > 0;
 
 Do not change `score()`, controller selection state, fallback modal behavior, or script candidate filtering.
 
-- [ ] **Step 6: Run the tests and verify GREEN**
+- [x] **Step 6: Run the tests and verify GREEN**
 
 Run:
 
@@ -136,7 +132,7 @@ npm test
 
 Expected: PASS with 1,093 TypeScript tests and 78 repository checks. The two added regressions pass, and all existing bare `@`, unprefixed query, `/` script, keyboard, mouse, lifecycle, and ARIA tests remain green.
 
-- [ ] **Step 7: Review the change surface**
+- [x] **Step 7: Review the change surface**
 
 Run:
 
@@ -146,7 +142,7 @@ rg -n "shouldFilterBuiltInsByQuery|buildMentionSuggestions\(|aria-selected" src 
 
 Expected: filtering remains owned by `commentMentionSuggestions.ts`; `SidebarDraftEditorController` only renders provider order; the fallback modal and `AsideView` remain thin consumers with no copied matching condition.
 
-- [ ] **Step 8: Commit the tested fix**
+- [x] **Step 8: Commit the tested fix**
 
 ```bash
 git add src/ui/editor/commentMentionSuggestions.ts tests/commentMentionSuggestions.test.ts tests/sidebarDraftEditor.test.ts
@@ -159,7 +155,7 @@ git commit -m "fix(editor): filter explicit mention queries"
 
 - Modify: `docs/superpowers/specs/2026-08-09-explicit-mention-filtering-design.md`
 
-- [ ] **Step 1: Run the complete repository build**
+- [x] **Step 1: Run the complete repository build**
 
 Run:
 
@@ -169,7 +165,7 @@ npm run build
 
 Expected: TypeScript tests, repository checks, lint, typecheck, Obsidian compliance, production bundling, and `release:artifacts:check` all pass.
 
-- [ ] **Step 2: Inspect the exact release artifacts**
+- [x] **Step 2: Inspect the exact release artifacts**
 
 Run each command separately:
 
@@ -187,7 +183,7 @@ rg -n "sourceMappingURL|sourcesContent|/Users/|[A-Za-z]:\\\\Users\\\\|BEGIN (RSA
 
 Expected: the guard passes; the two searches produce no shipped source map, raw source, embedded source, local path, secret-bearing file, private key, or certificate finding. The only shipped public plugin assets remain `main.js`, `manifest.json`, and `styles.css`.
 
-- [ ] **Step 3: Install and compare the verified build**
+- [x] **Step 3: Install and compare the verified build**
 
 Run:
 
@@ -211,7 +207,7 @@ cmp styles.css /Users/wenqingli/Obsidian/lean-startup/.obsidian/plugins/aside/st
 
 Expected: installation succeeds and all three comparisons exit zero.
 
-- [ ] **Step 4: Reload Aside and smoke-test the real dropdown**
+- [x] **Step 4: Reload Aside and smoke-test the real dropdown**
 
 Reload the installed plugin in `lean-startup`, open an Aside draft editor, and type `@co` at a valid token boundary.
 
@@ -225,11 +221,11 @@ Verify all of the following before closing the draft:
 
 If reliable plugin reload or draft automation is unavailable, leave the installed-smoke checkbox open and report the limitation instead of inferring success from unit tests.
 
-- [ ] **Step 5: Update the tracked spec from evidence**
+- [x] **Step 5: Update the tracked spec from evidence**
 
 In `docs/superpowers/specs/2026-08-09-explicit-mention-filtering-design.md`, mark each implementation and verification checkbox complete only when its corresponding test, build, artifact inspection, installation comparison, or live smoke observation has passed. Add one dated evidence paragraph that distinguishes automated checks from the live Obsidian smoke test.
 
-- [ ] **Step 6: Run the final branch audit**
+- [x] **Step 6: Run the final branch audit**
 
 Run each command separately:
 
@@ -247,7 +243,7 @@ git status --short --branch
 
 Expected: no whitespace errors, only the planned source/test/spec/plan changes, and a clean feature branch after the tracking commit.
 
-- [ ] **Step 7: Commit verified tracking**
+- [x] **Step 7: Commit verified tracking**
 
 ```bash
 git add -f docs/superpowers/plans/2026-08-09-explicit-mention-filtering-plan.md docs/superpowers/specs/2026-08-09-explicit-mention-filtering-design.md
