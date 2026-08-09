@@ -16,16 +16,16 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Stop supplying `ariaLabel: "Search index side notes"` from the index search options.
-- [ ] Keep the index search placeholder, field, icon, filtering state, and event handling unchanged.
-- [ ] Add a regression assertion that distinguishes the retained placeholder from the removed tooltip-producing label.
+- [x] Stop supplying `ariaLabel: "Search index side notes"` from the index search options.
+- [x] Keep the index search placeholder, field, icon, filtering state, and event handling unchanged.
+- [x] Add a regression assertion that distinguishes the retained placeholder from the removed tooltip-producing label.
 
 ### Verification
 
-- [ ] Run the focused toolbar composition regression test and observe the new assertion fail before the production edit, then pass afterward.
-- [ ] Run the relevant index sidebar and toolbar test suites.
-- [ ] Run the repository build and release-artifact security guard.
-- [ ] Install the verified build and confirm the index search field remains usable without the black hover tooltip.
+- [x] Run the focused toolbar composition regression test and observe the new assertion fail before the production edit, then pass afterward.
+- [x] Run the relevant index sidebar and toolbar test suites.
+- [x] Run the repository build and release-artifact security guard.
+- [x] Install the verified build and confirm the index search field remains usable without the black hover tooltip.
 
 ## Context
 
