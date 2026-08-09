@@ -37,8 +37,7 @@ test("note and index card lists consume the shared item reconciler", () => {
 });
 
 test("index card search uses bounded ranking and shared reconciliation", () => {
-    assert.match(asideViewSource, /resolveIndexSidebarSearchResultLimit\(/u);
-    assert.match(asideViewSource, /rankSidebarSearchResults\(/u);
+    assert.match(asideViewSource, /buildIndexSidebarSearchWindow\(/u);
     assert.match(asideViewSource, /ensureIndexSidebarShell\(/u);
     assert.doesNotMatch(asideViewSource, /const renderPromises = renderedItems\.map/u);
 });
@@ -56,4 +55,18 @@ test("superseded index search stops before highlights are committed", () => {
             < reconciliationSource.indexOf("this.refreshSidebarSearchHighlights"),
         "stale reconciliation must return before highlighting",
     );
+});
+
+test("toolbar and restored-state mode changes share index search-state cleanup", () => {
+    const setStateSource = asideViewSource.match(
+        /async setState\(state: CustomViewState,[\s\S]*?await super\.setState\(state, result\);/u,
+    )?.[0];
+    const toolbarSource = asideViewSource.match(
+        /if \(options\.isAllCommentsView\) \{[\s\S]*?\n {8}\} else \{/u,
+    )?.[0];
+
+    assert.ok(setStateSource, "missing restored view-state handler");
+    assert.ok(toolbarSource, "missing index toolbar mode handler");
+    assert.match(setStateSource, /this\.applyIndexSidebarSearchStateForMode\(nextMode\)/u);
+    assert.match(toolbarSource, /this\.applyIndexSidebarSearchStateForMode\(mode\)/u);
 });

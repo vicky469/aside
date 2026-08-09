@@ -33,7 +33,7 @@ Use this section as the working checklist. Mark an item done only after the code
 - [x] Fail-first tests prove bounded global results equal the first 100 items from the existing complete exact ranking and report the complete match count.
 - [x] Tests cover fewer than 100 matches, more than 100 matches, stable score ties, empty queries, file-scoped queries, and exact nested-entry matches.
 - [x] Reconciler tests prove unchanged keyed cards retain object identity, removed cards are detached, moved cards are reordered, and only new or signature-changed cards invoke Markdown-card rendering.
-- [x] Index wiring tests prove nonempty unscoped search renders at most 100 cards while file-scoped and individual-file search remain unbounded by the global window.
+- [x] Executable window tests prove nonempty unscoped search retains at most 100 matching threads while file-scoped and individual-file search remain unbounded by the global window; the active-draft host exception is explicit and tested.
 - [x] Cancellation tests prove an obsolete search cannot overwrite the latest result order or highlights.
 - [x] The focused exact-ranking benchmark remains within a 25 ms median for 10,000 representative threads on the development machine.
 - [x] The complete test, lint, typecheck, Obsidian-compliance, production-bundle, and release-artifact guard pipeline passes.
@@ -42,9 +42,10 @@ Use this section as the working checklist. Mark an item done only after the code
 ### Verification Evidence
 
 - Bounded exact ranking over 10,000 three-entry threads retained 100 of 10,000 matches with a 9.65 ms median and 16.90 ms p95 across 20 warmed iterations.
-- The complete build passed 1,101 TypeScript tests and 82 JavaScript/policy tests, followed by lint, typecheck, Obsidian compliance, production bundling, and the release-artifact guard.
+- The complete build passed 1,105 TypeScript tests and 83 JavaScript/policy tests, followed by lint, typecheck, Obsidian compliance, production bundling, and the release-artifact guard.
 - The installed `lean-startup` vault contained 446 indexed threads. Global query `a` rendered 100 of 353 matches in 92.9 ms after debounce and reused 58 mounted result nodes; follow-up query `an` rendered 100 of 237 matches in 89.2 ms and restored input focus and caret.
 - A file-scoped query rendered all 34 of 34 exact matches without a result-window notice. A child-entry-only query rendered its parent plus the matching child, and Escape restored the blank 100-card index window.
+- The final installed-build regression check confirmed the restored-view-state List-to-Todo path clears both search values and invalidates pending work; the same smoke run captured no Obsidian developer errors.
 - The installed `main.js`, `manifest.json`, and `styles.css` exactly matched the verified build. No source map, source-map marker, embedded source content, local path, private-key marker, or obvious secret pattern was present in the shipped assets.
 
 ## Current Problem
@@ -69,6 +70,8 @@ If at most 100 threads match, all matches are shown. If more than 100 match, the
 > 100 of N matches shown. Refine your search or select a file.
 
 The count reflects the current visibility, pinned, and List-mode filters. It does not include threads excluded before search.
+
+If the user is actively editing or appending to a thread outside those 100 matches, Aside also keeps that one host card mounted so an in-progress draft is never hidden or discarded. This temporary card is not counted as a search match; the ranked matching window remains the exact top 100.
 
 ### File-scoped index List
 

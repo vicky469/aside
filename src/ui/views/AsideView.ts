@@ -78,7 +78,6 @@ import {
 import {
     filterThreadsByPinnedSidebarViewState,
     filterThreadsBySidebarContentFilter,
-    rankSidebarSearchResults,
     rankThreadsBySidebarSearchQuery,
     resolveSidebarSearchShowNestedComments,
     toggleDeletedSidebarViewState,
@@ -106,13 +105,16 @@ import {
     deriveIndexSidebarListFilePaths,
     filterIndexThreadsByExistingSourceFiles,
     GENERIC_INDEX_EMPTY_STATE_TEXTS,
-    resolveIndexSidebarSearchResultLimit,
     resolveIndexSidebarSearchStateForMode,
     scopeIndexThreadsByFilePaths,
     shouldShowGenericIndexEmptyState,
     shouldShowIndexSidebarSearch,
     shouldUseEmptyIndexDefaultCache,
 } from "./indexSidebarState";
+import {
+    buildIndexSidebarSearchWindow,
+    includeActiveDraftHostInIndexSearchWindow,
+} from "./indexSidebarSearchWindow";
 import { StreamedAgentReplyController } from "./streamedAgentReplyController";
 import {
     countDeletedComments,
@@ -1078,6 +1080,22 @@ export default class AsideView extends ItemView {
         this.indexSidebarSearchQuery = "";
     }
 
+    private applyIndexSidebarSearchStateForMode(mode: IndexSidebarMode): void {
+        this.clearIndexSidebarSearchDebounceTimer();
+        const nextState = resolveIndexSidebarSearchStateForMode({
+            searchInputValue: this.indexSidebarSearchInputValue,
+            searchQuery: this.indexSidebarSearchQuery,
+        }, mode);
+        if (
+            nextState.searchInputValue !== this.indexSidebarSearchInputValue
+            || nextState.searchQuery !== this.indexSidebarSearchQuery
+        ) {
+            this.indexSidebarSearchRequestVersion += 1;
+        }
+        this.indexSidebarSearchInputValue = nextState.searchInputValue;
+        this.indexSidebarSearchQuery = nextState.searchQuery;
+    }
+
     private clearNoteSidebarBatchTagSearchDebounceTimer(): void {
         if (this.noteSidebarBatchTagSearchDebounceTimer === null) {
             return;
@@ -1438,6 +1456,7 @@ export default class AsideView extends ItemView {
             && nextMode !== this.indexSidebarMode
         ) {
             this.indexSidebarMode = nextMode;
+            this.applyIndexSidebarSearchStateForMode(nextMode);
             void this.plugin.logEvent("info", "index", "index.mode.changed", {
                 mode: nextMode,
                 source: "view-state",
@@ -1834,16 +1853,12 @@ export default class AsideView extends ItemView {
                     ? groupFilteredScopedVisibleThreads.filter((thread) => indexTagThreadIds.has(thread.id))
                     : []
                 : groupFilteredScopedVisibleThreads;
-            const indexSearchResultLimit = resolveIndexSidebarSearchResultLimit({
+            const searchMatchedVisibleResult = buildIndexSidebarSearchWindow({
+                threads: tagFilteredScopedVisibleThreads,
+                query: this.indexSidebarSearchQuery,
                 mode: effectiveIndexSidebarMode,
                 rootFilePath: selectedIndexFileFilterRootPath,
-                query: this.indexSidebarSearchQuery,
             });
-            const searchMatchedVisibleResult = rankSidebarSearchResults(
-                tagFilteredScopedVisibleThreads,
-                this.indexSidebarSearchQuery,
-                { limit: indexSearchResultLimit },
-            );
             const searchMatchedVisibleThreads = searchMatchedVisibleResult.items;
             const draftComment = this.plugin.getDraftForView(file.path);
             const visibleDraftComment = draftComment
@@ -1857,16 +1872,11 @@ export default class AsideView extends ItemView {
             const activeDraftHostThreadId = (visibleDraftComment?.mode === "edit" || visibleDraftComment?.mode === "append")
                 ? visibleDraftComment.threadId ?? null
                 : null;
-            const searchScopedVisibleThreads = searchMatchedVisibleThreads.slice();
-            if (
-                activeDraftHostThreadId
-                && !searchScopedVisibleThreads.some((thread) => thread.id === activeDraftHostThreadId)
-            ) {
-                const activeDraftHostThread = pinnedScopedVisibleThreads.find((thread) => thread.id === activeDraftHostThreadId);
-                if (activeDraftHostThread) {
-                    searchScopedVisibleThreads.push(activeDraftHostThread);
-                }
-            }
+            const searchScopedVisibleThreads = includeActiveDraftHostInIndexSearchWindow(
+                searchMatchedVisibleThreads,
+                pinnedScopedVisibleThreads,
+                activeDraftHostThreadId,
+            );
             const totalScopedCount = searchMatchedVisibleResult.totalMatchCount;
             const hasNestedComments = searchScopedVisibleThreads.some((thread) => thread.entries.length > 1)
                 || visibleDraftComment?.mode === "append";
@@ -2039,15 +2049,15 @@ export default class AsideView extends ItemView {
             this.syncVisibleStreamedReplyControllers();
 
             const hasIndexSearchQuery = !!this.indexSidebarSearchQuery.trim();
-            const limitNotice = buildIndexSidebarLimitNotice({
-                visibleCount: hasIndexSearchQuery
-                    ? searchMatchedVisibleResult.items.length
-                    : renderedItems.length,
-                hiddenCount: searchMatchedVisibleResult.hiddenMatchCount || limitedComments.hiddenCount,
-                totalCount: searchMatchedVisibleResult.totalMatchCount,
-                hasSearchQuery: hasIndexSearchQuery,
-                hasFileScope: !!selectedIndexFileFilterRootPath,
-            });
+            const limitNotice = hasIndexSearchQuery
+                ? searchMatchedVisibleResult.notice
+                : buildIndexSidebarLimitNotice({
+                    visibleCount: renderedItems.length,
+                    hiddenCount: limitedComments.hiddenCount,
+                    totalCount: searchMatchedVisibleResult.totalMatchCount,
+                    hasSearchQuery: false,
+                    hasFileScope: !!selectedIndexFileFilterRootPath,
+                });
             if (limitNotice) {
                 shell.limitNoticeSlotEl.classList.add("aside-list-limit-notice");
                 shell.limitNoticeSlotEl.createEl("p", { text: limitNotice.primary });
@@ -3421,13 +3431,7 @@ export default class AsideView extends ItemView {
                 groupCounts: sidebarThreadGroupCounts,
                 onChange: (mode) => {
                     this.indexSidebarMode = mode;
-                    this.clearIndexSidebarSearchDebounceTimer();
-                    const nextSearchState = resolveIndexSidebarSearchStateForMode({
-                        searchInputValue: this.indexSidebarSearchInputValue,
-                        searchQuery: this.indexSidebarSearchQuery,
-                    }, mode);
-                    this.indexSidebarSearchInputValue = nextSearchState.searchInputValue;
-                    this.indexSidebarSearchQuery = nextSearchState.searchQuery;
+                    this.applyIndexSidebarSearchStateForMode(mode);
                     if (mode !== "list" && mode !== "todo" && mode !== "agent") {
                         this.showPinnedSidebarThreadsOnly = false;
                         this.savePinnedSidebarStateForFilePath(this.file?.path ?? null);
