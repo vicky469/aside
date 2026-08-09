@@ -104,9 +104,7 @@ import {
     resolveIndexSidebarSearchStateForMode,
     scopeIndexThreadsByFilePaths,
     shouldShowGenericIndexEmptyState,
-    shouldShowIndexListToolbarChips,
     shouldShowIndexSidebarSearch,
-    shouldShowNestedToolbarChip,
 } from "./indexSidebarState";
 import { StreamedAgentReplyController } from "./streamedAgentReplyController";
 import {
@@ -181,7 +179,7 @@ import {
 import {
     renderActiveFileFilters,
     renderSidebarModeControl,
-    renderSidebarSearchInput,
+    renderSidebarSecondaryToolbar,
     renderToolbarChip,
     renderToolbarIconButton,
     type SidebarModeControlOptions,
@@ -190,7 +188,10 @@ import {
     type ToolbarChipOptions,
     type ToolbarIconButtonOptions,
 } from "./sidebarToolbarRenderer";
-import { resolveNoteToolbarActionState } from "./sidebarToolbarState";
+import {
+    resolveNoteToolbarActionState,
+    resolveSidebarSecondaryToolbarPlan,
+} from "./sidebarToolbarState";
 import { updateRenderedActiveFileFilters } from "./sidebarActiveFileFilterDom";
 
 const EMPTY_PINNED_SIDEBAR_THREAD_IDS: ReadonlySet<string> = new Set<string>();
@@ -3353,13 +3354,6 @@ export default class AsideView extends ItemView {
             options.noteSidebarMode,
             sidebarModeVisibility,
         );
-        const noteToolbarActionState = resolveNoteToolbarActionState({
-            hasDeletedComments: options.hasDeletedComments,
-            hasPinnedThreads,
-            noteSidebarMode: resolvedNoteSidebarMode,
-            showDeletedComments,
-            showPinnedThreadsOnly,
-        });
         const resolvedIndexSidebarMode = resolveModeWithSidebarModeVisibility(
             options.effectiveIndexSidebarMode ?? this.indexSidebarMode,
             sidebarModeVisibility,
@@ -3368,45 +3362,33 @@ export default class AsideView extends ItemView {
             ? resolvedIndexSidebarMode
             : resolvedNoteSidebarMode;
         const sidebarThreadGroupCounts = options.sidebarThreadGroupCounts ?? EMPTY_SIDEBAR_THREAD_GROUP_COUNTS;
-        const showListOrTagToolbarChips = options.isAllCommentsView
-            ? shouldShowIndexListToolbarChips(options.isAllCommentsView, resolvedIndexSidebarMode)
-            : isSidebarListLikeMode(activePrimaryMode);
-        const shouldShowNoteSearchInput = !options.isAllCommentsView
-            && isSidebarListLikeMode(activePrimaryMode);
-        const shouldShowNoteFileActions = !options.isAllCommentsView
-            && noteToolbarActionState.fileActionsVisible;
-        const shouldShowAddPageCommentAction = !!options.addPageCommentAction
-            && (options.isAllCommentsView || shouldShowNoteFileActions);
-        const shouldShowNestedChip = showListOrTagToolbarChips && shouldShowNestedToolbarChip({
-            hasNestedComments: options.hasNestedComments,
-            isAllCommentsView: options.isAllCommentsView,
-            selectedIndexFileFilterRootPath: options.selectedIndexFileFilterRootPath,
-            filteredIndexFileCount: options.filteredIndexFilePaths.length,
+        const toolbarActionState = resolveNoteToolbarActionState({
+            hasDeletedComments: options.hasDeletedComments,
+            hasPinnedThreads,
+            noteSidebarMode: activePrimaryMode,
+            showDeletedComments,
+            showPinnedThreadsOnly,
         });
-        const isDeletedToolbarMode = !options.isAllCommentsView
-            && showListOrTagToolbarChips
-            && showDeletedComments;
-        const shouldRenderToolbar = options.isAllCommentsView
-            || (!options.isAllCommentsView && isSidebarListLikeMode(activePrimaryMode))
-            || (!options.isAllCommentsView && resolvedNoteSidebarMode === "thought-trail")
-            || shouldShowNestedChip
-            || shouldShowAddPageCommentAction
-            || resolvedNoteSidebarMode === "tags";
-        if (!shouldRenderToolbar) {
-            return;
-        }
+        const toolbarSurface = options.isAllCommentsView ? "index" : "note";
+        const secondaryPlan = resolveSidebarSecondaryToolbarPlan({
+            surface: toolbarSurface,
+            mode: activePrimaryMode,
+            hasNestedComments: options.hasNestedComments,
+            hasFileFilterOptions: options.indexFileFilterOptions.length > 0,
+            hasAddPageCommentAction: !!options.addPageCommentAction,
+        });
+        const isDeletedToolbarMode = secondaryPlan.showDeleted && showDeletedComments;
 
         const toolbarEl = container.createDiv("aside-sidebar-toolbar");
         toolbarEl.classList.toggle("is-index-toolbar", options.isAllCommentsView);
         toolbarEl.classList.toggle("is-note-toolbar", !options.isAllCommentsView);
         toolbarEl.classList.toggle("is-deleted-toolbar-mode", isDeletedToolbarMode);
-        let indexActionGroup: HTMLDivElement | null = null;
-        let indexChipRow: HTMLDivElement | null = null;
-        let noteFilterGroup: HTMLDivElement | null = null;
-        let noteActionGroup: HTMLDivElement | null = null;
+        const modeRow = toolbarEl.createDiv("aside-sidebar-toolbar-row");
+        modeRow.addClass("is-note-primary-row");
         if (options.isAllCommentsView) {
-            const modeRow = toolbarEl.createDiv("aside-sidebar-toolbar-row");
-            modeRow.addClass("is-note-primary-row");
+            modeRow.addClass("is-index-primary-row");
+        }
+        if (options.isAllCommentsView) {
             this.renderPrimarySidebarModeControl(modeRow, {
                 mode: resolvedIndexSidebarMode,
                 surface: "index",
@@ -3433,28 +3415,7 @@ export default class AsideView extends ItemView {
                     void this.renderComments({ skipDataRefresh: true });
                 },
             });
-
-            indexChipRow = toolbarEl.createDiv("aside-sidebar-toolbar-row");
-            indexChipRow.addClass("is-index-secondary-row");
-            indexActionGroup = indexChipRow.createDiv("aside-sidebar-toolbar-group");
-            indexActionGroup.addClass("is-filter-group");
-            this.renderToolbarIconButton(indexActionGroup, {
-                icon: "list-filter",
-                active: !!options.selectedIndexFileFilterRootPath,
-                ariaLabel: options.indexFileFilterOptions.length
-                    ? "Filter index by files"
-                    : "No files with side notes yet",
-                disabled: !options.indexFileFilterOptions.length,
-                onClick: () => {
-                    this.openIndexFileFilterModal(options.indexFileFilterOptions);
-                },
-            });
-            if (shouldShowIndexSidebarSearch(resolvedIndexSidebarMode)) {
-                this.renderIndexSearchInput(indexActionGroup);
-            }
         } else {
-            const modeRow = toolbarEl.createDiv("aside-sidebar-toolbar-row");
-            modeRow.addClass("is-note-primary-row");
             this.renderPrimarySidebarModeControl(modeRow, {
                 mode: resolvedNoteSidebarMode,
                 surface: "note",
@@ -3478,81 +3439,74 @@ export default class AsideView extends ItemView {
                     void this.renderComments({ skipDataRefresh: true });
                 },
             });
-
-            if (shouldShowNoteSearchInput || showListOrTagToolbarChips || shouldShowAddPageCommentAction || resolvedNoteSidebarMode === "tags") {
-                const actionsRow = toolbarEl.createDiv("aside-sidebar-toolbar-row");
-                if (shouldShowNoteSearchInput) {
-                    actionsRow.addClass("is-note-search-row");
-                }
-                actionsRow.addClass("is-note-secondary-row");
-                noteFilterGroup = actionsRow.createDiv("aside-sidebar-toolbar-group is-filter-group");
-                if (shouldShowNoteFileActions || shouldShowNestedChip) {
-                    noteActionGroup = actionsRow.createDiv("aside-sidebar-toolbar-group is-action-group");
-                }
-            }
         }
 
-        if (!showListOrTagToolbarChips && options.isAllCommentsView) {
-            return;
-        }
-
-        const filterGroup = options.isAllCommentsView
-            ? (indexActionGroup ?? (indexChipRow ?? toolbarEl).createDiv("aside-sidebar-toolbar-group"))
-            : noteFilterGroup;
-        const actionGroup = noteActionGroup ?? filterGroup;
-        if (!filterGroup || !actionGroup) {
-            return;
-        }
-
-        if (shouldShowNoteSearchInput) {
-            this.renderNoteSearchInput(filterGroup);
-        }
-        if (shouldShowNoteFileActions) {
-            this.renderToolbarIconButton(actionGroup, {
-                icon: "pin",
-                active: showPinnedThreadsOnly,
-                ariaLabel: showPinnedThreadsOnly ? "Show all side notes" : "Show pinned side notes",
-                disabled: noteToolbarActionState.pinnedDisabled,
-                onClick: () => {
-                    void this.togglePinnedSidebarMode();
-                },
-            });
-        }
-        if (shouldShowNestedChip) {
-            this.renderToolbarIconButton(actionGroup, {
-                icon: showNestedComments ? "chevrons-up" : "chevrons-down",
-                ariaLabel: showNestedComments ? "Hide nested comments" : "Show nested comments",
-                active: showNestedComments,
-                activeVisual: false,
-                onClick: () => {
-                    void this.plugin.setShowNestedComments(!showNestedComments);
-                },
-            });
-        }
-
-        if (shouldShowNoteFileActions) {
-            this.renderToolbarIconButton(actionGroup, {
-                icon: "trash-2",
-                ariaLabel: showDeletedComments ? "Hide deleted notes" : "Show deleted notes",
-                active: showDeletedComments,
-                disabled: noteToolbarActionState.deletedDisabled,
-                onClick: () => {
-                    void this.toggleDeletedSidebarMode({
-                        showDeleted: showDeletedComments,
-                        contentFilter: options.noteSidebarContentFilter,
-                    });
-                },
-            });
-
-        }
-
-        if (shouldShowAddPageCommentAction && options.addPageCommentAction) {
-            this.renderToolbarIconButton(actionGroup, {
-                icon: options.addPageCommentAction.icon,
-                ariaLabel: options.addPageCommentAction.ariaLabel,
-                disabled: !options.isAllCommentsView && noteToolbarActionState.addPageCommentDisabled,
-                onClick: options.addPageCommentAction.onClick,
-            });
+        if (secondaryPlan.showRow) {
+            renderSidebarSecondaryToolbar(toolbarEl, {
+                surface: toolbarSurface,
+                fileFilter: secondaryPlan.showFileFilter
+                    ? {
+                        icon: "list-filter",
+                        active: !!options.selectedIndexFileFilterRootPath,
+                        ariaLabel: options.indexFileFilterOptions.length
+                            ? "Filter index by files"
+                            : "No files with side notes yet",
+                        disabled: !options.indexFileFilterOptions.length,
+                        onClick: () => {
+                            this.openIndexFileFilterModal(options.indexFileFilterOptions);
+                        },
+                    }
+                    : undefined,
+                search: secondaryPlan.showSearch
+                    ? options.isAllCommentsView
+                        ? this.getIndexSearchInputOptions()
+                        : this.getNoteSearchInputOptions()
+                    : undefined,
+                pinned: secondaryPlan.showPinned
+                    ? {
+                        icon: "pin",
+                        active: showPinnedThreadsOnly,
+                        ariaLabel: showPinnedThreadsOnly ? "Show all side notes" : "Show pinned side notes",
+                        disabled: toolbarActionState.pinnedDisabled,
+                        onClick: () => {
+                            void this.togglePinnedSidebarMode();
+                        },
+                    }
+                    : undefined,
+                nested: secondaryPlan.showNested
+                    ? {
+                        icon: showNestedComments ? "chevrons-up" : "chevrons-down",
+                        ariaLabel: showNestedComments ? "Hide nested comments" : "Show nested comments",
+                        active: showNestedComments,
+                        activeVisual: false,
+                        onClick: () => {
+                            void this.plugin.setShowNestedComments(!showNestedComments);
+                        },
+                    }
+                    : undefined,
+                deleted: secondaryPlan.showDeleted
+                    ? {
+                        icon: "trash-2",
+                        ariaLabel: showDeletedComments ? "Hide deleted notes" : "Show deleted notes",
+                        active: showDeletedComments,
+                        disabled: toolbarActionState.deletedDisabled,
+                        onClick: () => {
+                            void this.toggleDeletedSidebarMode({
+                                showDeleted: showDeletedComments,
+                                contentFilter: options.noteSidebarContentFilter,
+                            });
+                        },
+                    }
+                    : undefined,
+                addPageComment: secondaryPlan.showAddPageComment && options.addPageCommentAction
+                    ? {
+                        icon: options.addPageCommentAction.icon,
+                        ariaLabel: options.addPageCommentAction.ariaLabel,
+                        disabled: toolbarActionState.addPageCommentDisabled,
+                        onClick: options.addPageCommentAction.onClick,
+                    }
+                    : undefined,
+            }, this.toolbarActionGuard);
         }
 
         if (isDeletedToolbarMode) {
@@ -3769,23 +3723,13 @@ export default class AsideView extends ItemView {
         });
     }
 
-    private renderSidebarSearchInput(
-        container: HTMLElement,
-        options: SidebarSearchInputOptions,
-    ): void {
-        renderSidebarSearchInput(container, {
-            ...options,
-            onFocus: (inputEl) => {
-                this.interactionController.claimSidebarInteractionOwnership(inputEl);
-                options.onFocus?.(inputEl);
-            },
-        });
-    }
-
-    private renderNoteSearchInput(container: HTMLElement): void {
-        this.renderSidebarSearchInput(container, {
+    private getNoteSearchInputOptions(): SidebarSearchInputOptions {
+        return {
             value: this.noteSidebarSearchInputValue,
             placeholder: "Search side notes in this file",
+            onFocus: (inputEl) => {
+                this.interactionController.claimSidebarInteractionOwnership(inputEl);
+            },
             onClear: () => {
                 this.clearNoteSidebarSearchDebounceTimer();
                 const requestVersion = ++this.noteSidebarSearchRequestVersion;
@@ -3798,14 +3742,17 @@ export default class AsideView extends ItemView {
             onInput: (value, selection) => {
                 this.scheduleNoteSidebarSearchQuery(value, selection);
             },
-        });
+        };
     }
 
-    private renderIndexSearchInput(container: HTMLElement): void {
-        this.renderSidebarSearchInput(container, {
+    private getIndexSearchInputOptions(): SidebarSearchInputOptions {
+        return {
             value: this.indexSidebarSearchInputValue,
             placeholder: "Search side notes in index",
             ariaLabel: "Search index side notes",
+            onFocus: (inputEl) => {
+                this.interactionController.claimSidebarInteractionOwnership(inputEl);
+            },
             onClear: () => {
                 this.clearIndexSidebarSearchDebounceTimer();
                 const requestVersion = ++this.indexSidebarSearchRequestVersion;
@@ -3818,7 +3765,7 @@ export default class AsideView extends ItemView {
             onInput: (value, selection) => {
                 this.scheduleIndexSidebarSearchQuery(value, selection);
             },
-        });
+        };
     }
 
     private renderPrimarySidebarModeControl(

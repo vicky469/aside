@@ -61,6 +61,20 @@ test("secondary toolbar plan shares valid controls across note and index surface
         surface: "note",
         mode: "list",
     }).showAddPageComment, true);
+
+    assert.deepEqual(resolveSidebarSecondaryToolbarPlan({
+        ...base,
+        surface: "note",
+        mode: "todo",
+    }), {
+        showRow: true,
+        showFileFilter: false,
+        showSearch: true,
+        showPinned: false,
+        showNested: true,
+        showDeleted: false,
+        showAddPageComment: false,
+    });
 });
 
 test("note toolbar actions stay enabled when no exclusive mode is active", () => {

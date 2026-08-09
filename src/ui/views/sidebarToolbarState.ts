@@ -24,19 +24,20 @@ export function resolveSidebarSecondaryToolbarPlan(
 ): SidebarSecondaryToolbarPlan {
     const isIndexCardMode = options.surface === "index"
         && (options.mode === "list" || options.mode === "todo" || options.mode === "agent");
-    const isNoteCardMode = options.surface === "note" && isSidebarListLikeMode(options.mode);
+    const isNoteListLikeMode = options.surface === "note" && isSidebarListLikeMode(options.mode);
+    const isNoteFileMode = options.surface === "note" && options.mode === "list";
     const showSearch = options.surface === "index"
         ? options.mode === "list"
         : isSidebarListLikeMode(options.mode);
 
     return {
-        showRow: options.surface === "index" || isNoteCardMode,
+        showRow: options.surface === "index" || isNoteListLikeMode,
         showFileFilter: options.surface === "index",
         showSearch,
-        showPinned: isIndexCardMode || isNoteCardMode,
-        showNested: options.hasNestedComments && (isIndexCardMode || isNoteCardMode),
-        showDeleted: isIndexCardMode || isNoteCardMode,
-        showAddPageComment: isNoteCardMode && options.hasAddPageCommentAction,
+        showPinned: isIndexCardMode || isNoteFileMode,
+        showNested: options.hasNestedComments && (isIndexCardMode || isNoteListLikeMode),
+        showDeleted: isIndexCardMode || isNoteFileMode,
+        showAddPageComment: isNoteFileMode && options.hasAddPageCommentAction,
     };
 }
 

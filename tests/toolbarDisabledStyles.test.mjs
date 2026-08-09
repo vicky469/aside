@@ -77,6 +77,30 @@ test("disabled toolbar icon buttons are visibly unavailable and non-interactive"
     assert.match(disabledRule.groups.body, /pointer-events:\s*none;/);
 });
 
+test("index shared secondary toolbar stays compact and yields search space first", () => {
+    const rowRule = css.match(
+        /\.aside-sidebar-toolbar-row\.is-index-secondary-row\s*\{(?<body>[\s\S]*?)\}/,
+    );
+    const filterRule = css.match(
+        /\.aside-sidebar-toolbar-row\.is-index-secondary-row \.aside-sidebar-toolbar-group\.is-filter-group\s*\{(?<body>[\s\S]*?)\}/,
+    );
+    const actionRule = css.match(
+        /\.aside-sidebar-toolbar-row\.is-index-secondary-row \.aside-sidebar-toolbar-group\.is-action-group\s*\{(?<body>[\s\S]*?)\}/,
+    );
+
+    assert.ok(rowRule?.groups?.body, "missing compact index secondary row rule");
+    assert.match(rowRule.groups.body, /flex-wrap:\s*nowrap\s*;/);
+    assert.match(rowRule.groups.body, /width:\s*100%\s*;/);
+    assert.match(rowRule.groups.body, /min-width:\s*0\s*;/);
+    assert.match(rowRule.groups.body, /max-width:\s*100%\s*;/);
+    assert.ok(filterRule?.groups?.body, "missing index filter group flex rule");
+    assert.match(filterRule.groups.body, /flex:\s*1 1 0\s*;/);
+    assert.match(filterRule.groups.body, /min-width:\s*0\s*;/);
+    assert.ok(actionRule?.groups?.body, "missing index action group flex rule");
+    assert.match(actionRule.groups.body, /margin-left:\s*auto\s*;/);
+    assert.match(css, /@container \(max-width: 180px\)[\s\S]*\.is-index-secondary-row\.is-search-row \.aside-sidebar-toolbar-group\.is-search-group[\s\S]*display:\s*none\s*;/);
+});
+
 test("public markdown view hides rendered properties without source-mode hacks", () => {
     const publicMarkdownPropertiesRule = css.match(
         /\.aside-public-markdown-hide-properties \.metadata-container,[\s\S]*?\.aside-public-markdown-hide-properties \.markdown-preview-view\.show-properties \.metadata-container\s*\{(?<body>[\s\S]*?)\}/,
