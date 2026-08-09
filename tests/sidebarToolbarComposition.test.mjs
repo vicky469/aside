@@ -42,3 +42,18 @@ test("index card search uses bounded ranking and shared reconciliation", () => {
     assert.match(asideViewSource, /ensureIndexSidebarShell\(/u);
     assert.doesNotMatch(asideViewSource, /const renderPromises = renderedItems\.map/u);
 });
+
+test("superseded index search stops before highlights are committed", () => {
+    const reconciliationSource = asideViewSource.match(
+        /const completed = await reconcileSidebarItems\(shell\.commentsBodyEl,[\s\S]*?this\.refreshSidebarSearchHighlights\(shell\.commentsBodyEl, this\.indexSidebarSearchQuery\);/u,
+    )?.[0];
+
+    assert.ok(reconciliationSource, "missing index reconciliation and highlight sequence");
+    assert.match(reconciliationSource, /indexSearchRequestVersion === this\.indexSidebarSearchRequestVersion/u);
+    assert.match(reconciliationSource, /if \(!completed\) \{\s*return;\s*\}/u);
+    assert.ok(
+        reconciliationSource.indexOf("if (!completed)")
+            < reconciliationSource.indexOf("this.refreshSidebarSearchHighlights"),
+        "stale reconciliation must return before highlighting",
+    );
+});

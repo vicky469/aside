@@ -18,26 +18,34 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Add an exact bounded-ranking result that returns the stable top 100 matching threads and the total match count without retaining or sorting every match.
-- [ ] Apply the bounded result only to nonempty, unscoped index List searches; retain full exact results when a file filter is selected and retain current individual-file search behavior.
-- [ ] Extract the keyed sidebar-item reconciler into one shared owner and consume it from both individual-file and index card-list rendering.
-- [ ] Keep an index card-list shell mounted across search updates so unchanged cards are reused instead of clearing and rebuilding the entire index container.
-- [ ] Stop superseded index searches before they commit stale card or highlight results.
-- [ ] Show a search-specific notice when more than 100 global matches exist: `100 of N matches shown. Refine your search or select a file.`
-- [ ] Preserve the current exact matching, score priorities, stable tie behavior, file scope, pinned/group filters, nested-entry reveal behavior, highlighting, empty states, and card actions.
-- [ ] Do not add fuzzy, typo-tolerant, semantic, or approximate matching.
-- [ ] If the installed performance acceptance check still shows a visible typing stall, hide search while no file filter is selected and replace it with guidance to select a file.
+- [x] Add an exact bounded-ranking result that returns the stable top 100 matching threads and the total match count without retaining or sorting every match.
+- [x] Apply the bounded result only to nonempty, unscoped index List searches; retain full exact results when a file filter is selected and retain current individual-file search behavior.
+- [x] Extract the keyed sidebar-item reconciler into one shared owner and consume it from both individual-file and index card-list rendering.
+- [x] Keep an index card-list shell mounted across search updates so unchanged cards are reused instead of clearing and rebuilding the entire index container.
+- [x] Stop superseded index searches before they commit stale card or highlight results.
+- [x] Show a search-specific notice when more than 100 global matches exist: `100 of N matches shown. Refine your search or select a file.`
+- [x] Preserve the current exact matching, score priorities, stable tie behavior, file scope, pinned/group filters, nested-entry reveal behavior, highlighting, empty states, and card actions.
+- [x] Do not add fuzzy, typo-tolerant, semantic, or approximate matching.
+- [x] Evaluate the fallback after installed performance acceptance. It was not invoked because the installed broad and narrow searches settled without a visible typing stall.
 
 ### Verification
 
-- [ ] Fail-first tests prove bounded global results equal the first 100 items from the existing complete exact ranking and report the complete match count.
-- [ ] Tests cover fewer than 100 matches, more than 100 matches, stable score ties, empty queries, file-scoped queries, and exact nested-entry matches.
-- [ ] Reconciler tests prove unchanged keyed cards retain object identity, removed cards are detached, moved cards are reordered, and only new or signature-changed cards invoke Markdown-card rendering.
-- [ ] Index wiring tests prove nonempty unscoped search renders at most 100 cards while file-scoped and individual-file search remain unbounded by the global window.
-- [ ] Cancellation tests prove an obsolete search cannot overwrite the latest result order or highlights.
-- [ ] The focused exact-ranking benchmark remains within a 25 ms median for 10,000 representative threads on the development machine.
-- [ ] The complete test, lint, typecheck, Obsidian-compliance, production-bundle, and release-artifact guard pipeline passes.
-- [ ] The verified build is installed and smoke-tested with blank, broad, narrow, nested-entry, Escape-clear, and file-scoped queries without a visible typing stall.
+- [x] Fail-first tests prove bounded global results equal the first 100 items from the existing complete exact ranking and report the complete match count.
+- [x] Tests cover fewer than 100 matches, more than 100 matches, stable score ties, empty queries, file-scoped queries, and exact nested-entry matches.
+- [x] Reconciler tests prove unchanged keyed cards retain object identity, removed cards are detached, moved cards are reordered, and only new or signature-changed cards invoke Markdown-card rendering.
+- [x] Index wiring tests prove nonempty unscoped search renders at most 100 cards while file-scoped and individual-file search remain unbounded by the global window.
+- [x] Cancellation tests prove an obsolete search cannot overwrite the latest result order or highlights.
+- [x] The focused exact-ranking benchmark remains within a 25 ms median for 10,000 representative threads on the development machine.
+- [x] The complete test, lint, typecheck, Obsidian-compliance, production-bundle, and release-artifact guard pipeline passes.
+- [x] The verified build is installed and smoke-tested with blank, broad, narrow, nested-entry, Escape-clear, and file-scoped queries without a visible typing stall.
+
+### Verification Evidence
+
+- Bounded exact ranking over 10,000 three-entry threads retained 100 of 10,000 matches with a 9.65 ms median and 16.90 ms p95 across 20 warmed iterations.
+- The complete build passed 1,101 TypeScript tests and 82 JavaScript/policy tests, followed by lint, typecheck, Obsidian compliance, production bundling, and the release-artifact guard.
+- The installed `lean-startup` vault contained 446 indexed threads. Global query `a` rendered 100 of 353 matches in 92.9 ms after debounce and reused 58 mounted result nodes; follow-up query `an` rendered 100 of 237 matches in 89.2 ms and restored input focus and caret.
+- A file-scoped query rendered all 34 of 34 exact matches without a result-window notice. A child-entry-only query rendered its parent plus the matching child, and Escape restored the blank 100-card index window.
+- The installed `main.js`, `manifest.json`, and `styles.css` exactly matched the verified build. No source map, source-map marker, embedded source content, local path, private-key marker, or obvious secret pattern was present in the shipped assets.
 
 ## Current Problem
 
