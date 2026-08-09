@@ -105,6 +105,7 @@ export interface SidebarPersistedCommentHost {
     showBookmarkAndPinControls: boolean;
     showDeletedComments: boolean;
     enablePageThreadReorder: boolean;
+    enableTopLevelThreadReorder: boolean;
     enableChildEntryMove: boolean;
     enableSoftDeleteActions: boolean;
     showNestedComments: boolean;
@@ -136,6 +137,7 @@ export interface SidebarPersistedCommentHost {
     restoreComment(commentId: string): Promise<boolean> | Promise<void> | boolean | void;
     clearDeletedComment(commentId: string): Promise<boolean> | Promise<void> | boolean | void;
     canEditEntryInline(entry: CommentThreadEntry): boolean;
+    canDeleteEntryInline(entry: CommentThreadEntry): boolean;
     shouldForceRenderEntry(entry: CommentThreadEntry): boolean;
     startEditDraft(commentId: string, hostFilePath: string | null): void;
     isPinnedThread(threadId: string): boolean;
@@ -1376,7 +1378,7 @@ function renderStoredThreadEntry(
             if (host.canEditEntryInline(entry)) {
                 renderEditButton(entryActionsEl, entryComment.id, host, "Edit side note");
             }
-            if (host.enableSoftDeleteActions && !host.showSourceRedirectAction) {
+            if (host.enableSoftDeleteActions && host.canDeleteEntryInline(entry)) {
                 renderDeleteButton(entryActionsEl, entryComment.id, host, "Delete side note entry");
             }
         }
@@ -1451,18 +1453,15 @@ export async function renderPersistedCommentCard(
         );
         return;
     }
-    const isDraggablePageThread = host.enablePageThreadReorder
+    const canDragTopLevelThread = host.enableTopLevelThreadReorder
+        && !host.showDeletedComments
+        && !comment.deletedAt
+        && !thread.deletedAt;
+    const isDraggablePageThread = canDragTopLevelThread
+        && host.enablePageThreadReorder
         && isPageComment(comment)
-        && !host.showSourceRedirectAction
-        && !host.showDeletedComments
-        && !comment.deletedAt
-        && !thread.deletedAt;
-    const isDraggableAnchoredThread = host.enableChildEntryMove
-        && !isPageComment(comment)
-        && !host.showSourceRedirectAction
-        && !host.showDeletedComments
-        && !comment.deletedAt
-        && !thread.deletedAt;
+    const isDraggableAnchoredThread = canDragTopLevelThread
+        && !isPageComment(comment);
     if (isDraggablePageThread) {
         threadEl.setAttribute("data-aside-page-thread", "true");
     }
@@ -1552,7 +1551,8 @@ export async function renderPersistedCommentCard(
         } else {
             if (canShowHeaderPinAction) {
                 renderPinActionButton(actionsEl, thread.id, host.isPinnedThread(thread.id), host);
-            } else if (host.showSourceRedirectAction && !comment.deletedAt && !thread.deletedAt) {
+            }
+            if (host.showSourceRedirectAction && !comment.deletedAt && !thread.deletedAt) {
                 renderSourceRedirectButton(
                     actionsEl,
                     comment,
@@ -1564,7 +1564,7 @@ export async function renderPersistedCommentCard(
             if (host.canEditEntryInline(entries[0])) {
                 renderEditButton(actionsEl, comment.id, host, "Edit side note");
             }
-            if (host.enableSoftDeleteActions && !host.showSourceRedirectAction) {
+            if (host.enableSoftDeleteActions && host.canDeleteEntryInline(entries[0])) {
                 renderDeleteButton(actionsEl, comment.id, host, "Delete side note thread");
             }
         }

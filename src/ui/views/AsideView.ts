@@ -81,6 +81,7 @@ import {
     type SidebarContentFilter,
 } from "./sidebarContentFilter";
 import { getSidebarCommentCardOpenAction } from "./sidebarCommentCardNavigation";
+import { resolveSidebarCardActionState } from "./sidebarCardActionState";
 import { renderPersistedCommentCard } from "./sidebarPersistedComment";
 import { restoreSidebarComment } from "./sidebarRestoreComment";
 import {
@@ -4322,6 +4323,10 @@ export default class AsideView extends ItemView {
     ) {
         const currentFilePath = this.file?.path ?? null;
         const isIndexView = !!currentFilePath && this.plugin.isAllCommentsNotePath(currentFilePath);
+        const cardActions = resolveSidebarCardActionState(
+            isIndexView ? "index" : "note",
+            isIndexView ? this.indexSidebarMode : this.noteSidebarMode,
+        );
         const showNestedComments = resolveSidebarSearchShowNestedComments(
             searchQuery,
             this.plugin.shouldShowNestedCommentsForThread(thread.id),
@@ -4333,10 +4338,13 @@ export default class AsideView extends ItemView {
             currentUserLabel: "You",
             isRunnableVaultScriptMention: (mention) => this.plugin.isRunnableVaultScriptMention(mention),
             showSourceRedirectAction: isIndexView,
-            showBookmarkAndPinControls: !isIndexView,
+            showBookmarkAndPinControls: cardActions.showPin,
             showDeletedComments: this.plugin.shouldShowDeletedComments(),
-            enablePageThreadReorder,
-            enableChildEntryMove: true,
+            enablePageThreadReorder: isIndexView
+                ? cardActions.enableTopLevelReorder
+                : enablePageThreadReorder,
+            enableTopLevelThreadReorder: cardActions.enableTopLevelReorder,
+            enableChildEntryMove: cardActions.enableChildEntryMove,
             enableSoftDeleteActions: true,
             showNestedComments,
             showNestedCommentsByDefault: this.plugin.shouldShowNestedComments(),
@@ -4413,9 +4421,16 @@ export default class AsideView extends ItemView {
                 });
             },
             clearDeletedComment: (commentId) => this.clearDeletedSidebarComment(commentId),
-            canEditEntryInline: (entry) => isIndexView
-                ? canInlineEditTodoEntries && entryMatchesSidebarTodo(entry)
-                : true,
+            canEditEntryInline: (entry) => (
+                cardActions.canEditParent && (!isIndexView || entry.id === thread.id)
+            ) || (
+                isIndexView
+                && canInlineEditTodoEntries
+                && entryMatchesSidebarTodo(entry)
+            ),
+            canDeleteEntryInline: (entry) => (
+                cardActions.canDeleteParent && (!isIndexView || entry.id === thread.id)
+            ),
             shouldForceRenderEntry: (entry) => (
                 isIndexView
                 && canInlineEditTodoEntries

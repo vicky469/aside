@@ -316,6 +316,7 @@ function createRenderHost(overrides: Partial<SidebarPersistedCommentHost> = {}):
         showBookmarkAndPinControls: false,
         showDeletedComments: false,
         enablePageThreadReorder: false,
+        enableTopLevelThreadReorder: false,
         enableChildEntryMove: false,
         enableSoftDeleteActions: false,
         showNestedComments: true,
@@ -344,6 +345,7 @@ function createRenderHost(overrides: Partial<SidebarPersistedCommentHost> = {}):
         restoreComment: () => true,
         clearDeletedComment: () => true,
         canEditEntryInline: () => true,
+        canDeleteEntryInline: () => true,
         shouldForceRenderEntry: () => false,
         startEditDraft: () => {},
         isPinnedThread: () => false,
@@ -512,6 +514,7 @@ test("renderPersistedCommentCard renders a drag handle for top-level anchored th
         root as unknown as HTMLDivElement,
         createThread(),
         createRenderHost({
+            enableTopLevelThreadReorder: true,
             enableChildEntryMove: true,
         }),
     );
@@ -1694,6 +1697,7 @@ test("renderPersistedCommentCard puts agent metadata above status and Add to fil
         showBookmarkAndPinControls: false,
         showDeletedComments: false,
         enablePageThreadReorder: false,
+        enableTopLevelThreadReorder: false,
         enableChildEntryMove: false,
         enableSoftDeleteActions: false,
         showNestedComments: true,
@@ -1727,6 +1731,7 @@ test("renderPersistedCommentCard puts agent metadata above status and Add to fil
         restoreComment: () => true,
         clearDeletedComment: () => true,
         canEditEntryInline: () => true,
+        canDeleteEntryInline: () => true,
         shouldForceRenderEntry: () => false,
         startEditDraft: () => {},
         isPinnedThread: () => false,
@@ -1828,6 +1833,37 @@ test("renderPersistedCommentCard independently renders an authorized child edit 
         stopPropagation() {},
     });
     assert.deepEqual(editCalls, [{ commentId: "entry-2", hostFilePath: "Aside index.md" }]);
+});
+
+test("renderPersistedCommentCard combines valid index parent actions with the source redirect", async () => {
+    const thread = createThreadWithEntries({
+        entries: [
+            { id: "comment-1", body: "Parent side note", timestamp: 100 },
+            { id: "entry-2", body: "Nested side note", timestamp: 110 },
+        ],
+    });
+    const root = new FakeElement("div");
+
+    await renderPersistedCommentCard(
+        root as unknown as HTMLDivElement,
+        thread,
+        createRenderHost({
+            currentFilePath: "Aside index.md",
+            showSourceRedirectAction: true,
+            showBookmarkAndPinControls: true,
+            enableTopLevelThreadReorder: true,
+            enableChildEntryMove: false,
+            enableSoftDeleteActions: true,
+            canEditEntryInline: (entry) => entry.id === "comment-1",
+            canDeleteEntryInline: (entry) => entry.id === "comment-1",
+        }),
+    );
+
+    assert.equal(root.findAllByClass("aside-comment-action-pin").length, 1);
+    assert.equal(root.findAllByClass("aside-comment-action-redirect").length, 2);
+    assert.equal(root.findAllByClass("aside-comment-action-edit").length, 1);
+    assert.equal(root.findAllByClass("aside-comment-action-delete").length, 1);
+    assert.equal(root.findAllByClass("aside-comment-drag-handle").length, 1);
 });
 
 test("renderPersistedCommentCard keeps index redirects when no entry is editable inline", async () => {
@@ -1948,6 +1984,7 @@ test("renderPersistedCommentCard reuses toolbar pin styling for page note pins",
         showBookmarkAndPinControls: true,
         showDeletedComments: false,
         enablePageThreadReorder: false,
+        enableTopLevelThreadReorder: false,
         enableChildEntryMove: false,
         enableSoftDeleteActions: false,
         showNestedComments: false,
@@ -1976,6 +2013,7 @@ test("renderPersistedCommentCard reuses toolbar pin styling for page note pins",
         restoreComment: () => true,
         clearDeletedComment: () => true,
         canEditEntryInline: () => true,
+        canDeleteEntryInline: () => true,
         shouldForceRenderEntry: () => false,
         startEditDraft: () => {},
         isPinnedThread: () => true,
