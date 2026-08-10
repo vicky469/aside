@@ -19,23 +19,23 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Add one pure Index search-availability policy that derives disabled state and placeholder copy from List mode and the selected file scope.
-- [ ] Render the unscoped Index List search as disabled with `Select a file to search side notes` and no tooltip-producing label.
-- [ ] Enable the search after a file is selected and show `Search side notes in selected file`.
-- [ ] Clear visible and applied search state, cancel pending debounce work, and invalidate stale requests whenever the selected file scope becomes empty or an invalid selected file is removed.
-- [ ] Preserve the current query when switching directly from one selected file to another and apply it within the new file scope.
-- [ ] Extend the shared search renderer with generic disabled-input support without changing note-sidebar search behavior.
-- [ ] Extract the dormant unscoped global-search limit and notice policy into `indexSidebarGlobalSearch.ts` with a top-level `@todo` explaining that a dedicated global-search experience may be restored later.
-- [ ] Keep the existing bounded-ranking and keyed-reconciliation infrastructure as defensive implementation detail, but make unscoped global queries unreachable from the Index UI.
+- [x] Add one pure Index search-availability policy that derives disabled state and placeholder copy from List mode and the selected file scope.
+- [x] Render the unscoped Index List search as disabled with `Select a file to search side notes` and no tooltip-producing label.
+- [x] Enable the search after a file is selected and show `Search side notes in selected file`.
+- [x] Clear visible and applied search state, cancel pending debounce work, and invalidate stale requests whenever the selected file scope becomes empty or an invalid selected file is removed.
+- [x] Preserve the current query when switching directly from one selected file to another and apply it within the new file scope.
+- [x] Extend the shared search renderer with generic disabled-input support without changing note-sidebar search behavior.
+- [x] Extract the dormant unscoped global-search limit and notice policy into `indexSidebarGlobalSearch.ts` with a top-level `@todo` explaining that a dedicated global-search experience may be restored later.
+- [x] Keep the existing bounded-ranking and keyed-reconciliation infrastructure as defensive implementation detail, but make unscoped global queries unreachable from the Index UI.
 
 ### Verification
 
-- [ ] Fail-first policy tests cover unscoped List, scoped List, non-List modes, scope clearing, invalid-scope recovery, and direct file-to-file switching.
-- [ ] Renderer and wiring tests prove the disabled attribute and guidance copy reach only the unscoped Index search while note search remains enabled.
-- [ ] Extraction tests prove the dormant global-search module retains the exact top-100 limit and notice behavior without leaking that policy into active file-scoped search state.
-- [ ] Existing exact search, filtering, highlighting, nested-entry, toolbar, reconciliation, and cancellation tests remain green.
-- [ ] The full test, lint, typecheck, Obsidian-compliance, production-bundle, and release-artifact guard pipeline passes.
-- [ ] The verified build is installed into `lean-startup` and live-smoke-tested for disabled unscoped search, enabled file-scoped search, query preservation across file switches, and clearing when scope is removed.
+- [x] Fail-first policy tests cover unscoped List, scoped List, non-List modes, scope clearing, invalid-scope recovery, and direct file-to-file switching.
+- [x] Renderer and wiring tests prove the disabled attribute and guidance copy reach only the unscoped Index search while note search remains enabled.
+- [x] Extraction tests prove the dormant global-search module retains the exact top-100 limit and notice behavior without leaking that policy into active file-scoped search state.
+- [x] Existing exact search, filtering, highlighting, nested-entry, toolbar, reconciliation, and cancellation tests remain green.
+- [x] The full test, lint, typecheck, Obsidian-compliance, production-bundle, and release-artifact guard pipeline passes.
+- [x] The verified build is installed into `lean-startup` and live-smoke-tested for disabled unscoped search, enabled file-scoped search, query preservation across file switches, and clearing when scope is removed.
 
 ## Context
 
