@@ -21,7 +21,7 @@ test("index search is supplied only through the shared toolbar plan", () => {
     assert.match(asideViewSource, /search:\s*secondaryPlan\.showSearch/);
     assert.match(
         asideViewSource,
-        /\? this\.getIndexSearchInputOptions\(\s*resolvedIndexSidebarMode,\s*options\.selectedIndexFileFilterRootPath,?\s*\)/,
+        /\? this\.getIndexSearchInputOptions\(\)/,
     );
     assert.doesNotMatch(asideViewSource, /this\.renderIndexSearchInput\(/);
 });
@@ -34,16 +34,32 @@ test("shared search rendering supports native disabled semantics", () => {
     assert.match(stylesSource, /\.aside-note-search-field\.is-disabled/);
 });
 
-test("index search derives disabled state and guidance from file scope", () => {
+test("index search renders only inside a selected-file toolbar", () => {
     const methodSource = asideViewSource.match(
         /private getIndexSearchInputOptions\([\s\S]*?\): SidebarSearchInputOptions \{[\s\S]*?\n {4}private renderPrimarySidebarModeControl\(/,
     )?.[0];
 
     assert.ok(methodSource, "missing index search options method");
-    assert.match(methodSource, /resolveIndexSidebarSearchAvailability\(/);
-    assert.match(methodSource, /disabled:\s*availability\.disabled/);
-    assert.match(methodSource, /placeholder:\s*availability\.placeholder/);
+    assert.match(methodSource, /placeholder:\s*INDEX_SIDEBAR_SCOPED_SEARCH_PLACEHOLDER/);
+    assert.doesNotMatch(methodSource, /resolveIndexSidebarSearchAvailability\(/);
+    assert.doesNotMatch(methodSource, /disabled:/);
     assert.doesNotMatch(methodSource, /ariaLabel:/);
+});
+
+test("one index mode scope drives cards, toolbar, and action policy", () => {
+    const renderSource = asideViewSource.match(
+        /public async renderComments\([\s\S]*?\n {4}private async renderPageSidebar\(/,
+    )?.[0];
+    const toolbarSource = asideViewSource.match(
+        /private renderSidebarToolbar\([\s\S]*?\n {4}private renderNoteSidebarTagFilterRow\(/,
+    )?.[0];
+
+    assert.ok(renderSource, "missing renderComments method");
+    assert.ok(toolbarSource, "missing toolbar composition method");
+    assert.match(renderSource, /const indexModeScope = resolveIndexSidebarModeScope\(/);
+    assert.match(renderSource, /scopeIndexThreadsByMode\([\s\S]*?indexModeScope/);
+    assert.match(renderSource, /indexModeScope,\s*\n/);
+    assert.match(toolbarSource, /indexScopeKind:\s*options\.indexModeScope\?\.kind/);
 });
 
 test("note search remains enabled through the shared renderer default", () => {

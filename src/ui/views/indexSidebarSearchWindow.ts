@@ -1,3 +1,5 @@
+// @todo Design global Index search as a separate surface from these file-scoped sidebar tabs.
+
 import type { CommentThread } from "../../commentManager";
 import {
     rankSidebarSearchResults,

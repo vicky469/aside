@@ -12,13 +12,7 @@ export interface IndexSidebarSearchState {
     searchQuery: string;
 }
 
-export const INDEX_SIDEBAR_UNSCOPED_SEARCH_PLACEHOLDER = "Select a file to search side notes";
 export const INDEX_SIDEBAR_SCOPED_SEARCH_PLACEHOLDER = "Search side notes in selected file";
-
-export interface IndexSidebarSearchAvailability {
-    disabled: boolean;
-    placeholder: string;
-}
 
 export type IndexSidebarModeScope =
     | { kind: "unavailable"; rootFilePath: null }
@@ -41,19 +35,6 @@ export function resolveIndexSidebarModeScope(
 
 export function shouldShowIndexSidebarSearch(mode: IndexSidebarMode): boolean {
     return mode === "list";
-}
-
-export function resolveIndexSidebarSearchAvailability(
-    mode: IndexSidebarMode,
-    rootFilePath: string | null | undefined,
-): IndexSidebarSearchAvailability {
-    const enabled = mode === "list" && !!getNormalizedFilterPath(rootFilePath ?? "");
-    return {
-        disabled: !enabled,
-        placeholder: enabled
-            ? INDEX_SIDEBAR_SCOPED_SEARCH_PLACEHOLDER
-            : INDEX_SIDEBAR_UNSCOPED_SEARCH_PLACEHOLDER,
-    };
 }
 
 export function shouldUseEmptyIndexDefaultCache(storedThreadCount: number): boolean {

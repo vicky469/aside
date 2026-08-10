@@ -105,14 +105,16 @@ import {
     deriveIndexSidebarListFilePaths,
     filterIndexThreadsByExistingSourceFiles,
     GENERIC_INDEX_EMPTY_STATE_TEXTS,
-    resolveIndexSidebarSearchAvailability,
+    INDEX_SIDEBAR_SCOPED_SEARCH_PLACEHOLDER,
     resolveIndexSidebarSearchStateForFileScope,
     resolveIndexSidebarSearchStateForMode,
     resolveIndexSidebarModeScope,
     scopeIndexThreadsByFilePaths,
+    scopeIndexThreadsByMode,
     shouldShowGenericIndexEmptyState,
     shouldShowIndexSidebarSearch,
     shouldUseEmptyIndexDefaultCache,
+    type IndexSidebarModeScope,
 } from "./indexSidebarState";
 import {
     buildIndexSidebarSearchWindow,
@@ -1859,13 +1861,22 @@ export default class AsideView extends ItemView {
                     });
                 }
             }
+            const indexModeScope = resolveIndexSidebarModeScope(
+                effectiveIndexSidebarMode,
+                selectedIndexFileFilterRootPath,
+            );
+            const modeScopedThreads = scopeIndexThreadsByMode(
+                pinnedScopedVisibleThreads,
+                pinnedScopedAllThreads,
+                indexModeScope,
+            );
             const canInlineEditTodoEntries = canInlineEditIndexTodoEntries(
                 isAllCommentsView,
                 effectiveIndexSidebarMode,
             );
             const groupFilteredScopedVisibleThreads = isAllCommentsView
-                ? filterThreadsBySidebarGroupMode(pinnedScopedVisibleThreads, effectiveIndexSidebarMode)
-                : pinnedScopedVisibleThreads;
+                ? filterThreadsBySidebarGroupMode(modeScopedThreads.scopedVisibleThreads, effectiveIndexSidebarMode)
+                : modeScopedThreads.scopedVisibleThreads;
             const isIndexTagsMode = isAllCommentsView && effectiveIndexSidebarMode === "tags";
             const indexTagThreadIds = isIndexTagsMode && this.noteSidebarVisibleTagFilterKey
                 ? this.noteSidebarTagIndex?.threadIdsByTag.get(this.noteSidebarVisibleTagFilterKey) ?? null
@@ -1888,6 +1899,7 @@ export default class AsideView extends ItemView {
                     draftComment,
                     showPinnedThreadsOnly ? pinnedSidebarThreadIds : EMPTY_PINNED_SIDEBAR_THREAD_IDS,
                 )
+                && indexModeScope.kind !== "unavailable"
                 && (!indexSidebarListFilePaths.length || indexSidebarListFilePaths.includes(draftComment.filePath))
                 ? draftComment
                 : null;
@@ -1896,7 +1908,7 @@ export default class AsideView extends ItemView {
                 : null;
             const searchScopedVisibleThreads = includeActiveDraftHostInIndexSearchWindow(
                 searchMatchedVisibleThreads,
-                pinnedScopedVisibleThreads,
+                modeScopedThreads.scopedVisibleThreads,
                 activeDraftHostThreadId,
             );
             const totalScopedCount = searchMatchedVisibleResult.totalMatchCount;
@@ -1988,6 +2000,7 @@ export default class AsideView extends ItemView {
                     indexFileFilterOptions,
                     selectedIndexFileFilterRootPath,
                     filteredIndexFilePaths: activeIndexFileFilterPaths,
+                    indexModeScope,
                 });
 
                 if (isAllCommentsView && selectedIndexFileFilterRootPath && activeIndexFileFilterPaths.length) {
@@ -2054,6 +2067,7 @@ export default class AsideView extends ItemView {
                 searchQuery: this.indexSidebarSearchQuery,
                 sidebarMode: effectiveIndexSidebarMode,
                 surface: "index",
+                indexModeScope,
             });
             const completed = await reconcileSidebarItems(shell.commentsBodyEl, renderDescriptors, {
                 isCurrent: () => (
@@ -2296,6 +2310,7 @@ export default class AsideView extends ItemView {
             indexFileFilterOptions: [],
             selectedIndexFileFilterRootPath: null,
             filteredIndexFilePaths: [],
+            indexModeScope: null,
         });
 
         const visiblePageThreadCount = renderableItems.filter((item) =>
@@ -2315,6 +2330,7 @@ export default class AsideView extends ItemView {
             searchQuery: this.noteSidebarSearchQuery,
             sidebarMode: this.noteSidebarMode,
             surface: "note",
+            indexModeScope: null,
         });
         const completed = await reconcileSidebarItems(shell.commentsBodyEl, renderDescriptors, {
             isCurrent: () => renderVersion === this.renderVersion && this.file?.path === file.path,
@@ -2432,6 +2448,7 @@ export default class AsideView extends ItemView {
             indexFileFilterOptions: [],
             selectedIndexFileFilterRootPath: null,
             filteredIndexFilePaths: [],
+            indexModeScope: null,
         });
 
         shell.commentsBodyEl.empty();
@@ -2710,6 +2727,7 @@ export default class AsideView extends ItemView {
             searchQuery: string;
             sidebarMode: SidebarPrimaryMode;
             surface: "note" | "index";
+            indexModeScope: IndexSidebarModeScope | null;
         },
     ): SidebarItemRenderDescriptor[] {
         return renderableItems.map((item) => {
@@ -2782,6 +2800,7 @@ export default class AsideView extends ItemView {
                         appendDraftComment,
                         options.searchQuery,
                         options.sidebarMode,
+                        options.indexModeScope,
                     );
                     const nextNode = stagingEl.firstElementChild;
                     if (!nodeInstanceOf(nextNode, HTMLElement)) {
@@ -3396,6 +3415,7 @@ export default class AsideView extends ItemView {
             indexFileFilterOptions: IndexFileFilterOption[];
             selectedIndexFileFilterRootPath: string | null;
             filteredIndexFilePaths: string[];
+            indexModeScope: IndexSidebarModeScope | null;
         },
     ) {
         const showNestedComments = this.plugin.shouldShowNestedComments();
@@ -3429,6 +3449,7 @@ export default class AsideView extends ItemView {
             hasNestedComments: options.hasNestedComments,
             hasFileFilterOptions: options.indexFileFilterOptions.length > 0,
             hasAddPageCommentAction: !!options.addPageCommentAction,
+            indexScopeKind: options.indexModeScope?.kind,
         });
         const isDeletedToolbarMode = secondaryPlan.showDeleted && showDeletedComments;
 
@@ -3506,10 +3527,7 @@ export default class AsideView extends ItemView {
                     : undefined,
                 search: secondaryPlan.showSearch
                     ? options.isAllCommentsView
-                        ? this.getIndexSearchInputOptions(
-                            resolvedIndexSidebarMode,
-                            options.selectedIndexFileFilterRootPath,
-                        )
+                        ? this.getIndexSearchInputOptions()
                         : this.getNoteSearchInputOptions()
                     : undefined,
                 pinned: secondaryPlan.showPinned
@@ -3795,15 +3813,10 @@ export default class AsideView extends ItemView {
         };
     }
 
-    private getIndexSearchInputOptions(
-        mode: IndexSidebarMode,
-        rootFilePath: string | null,
-    ): SidebarSearchInputOptions {
-        const availability = resolveIndexSidebarSearchAvailability(mode, rootFilePath);
+    private getIndexSearchInputOptions(): SidebarSearchInputOptions {
         return {
             value: this.indexSidebarSearchInputValue,
-            disabled: availability.disabled,
-            placeholder: availability.placeholder,
+            placeholder: INDEX_SIDEBAR_SCOPED_SEARCH_PLACEHOLDER,
             onFocus: (inputEl) => {
                 this.interactionController.claimSidebarInteractionOwnership(inputEl);
             },
@@ -3956,6 +3969,7 @@ export default class AsideView extends ItemView {
             indexFileFilterOptions: cache.indexFileFilterState.options,
             selectedIndexFileFilterRootPath: null,
             filteredIndexFilePaths: [],
+            indexModeScope: { kind: "unavailable", rootFilePath: null },
         });
 
         this.renderIndexSidebarEmptyState(shell.commentsBodyEl, {
@@ -4338,18 +4352,14 @@ export default class AsideView extends ItemView {
         appendDraftComment: DraftComment | null = null,
         searchQuery: string = "",
         sidebarMode?: SidebarPrimaryMode,
+        indexModeScope: IndexSidebarModeScope | null = null,
     ) {
         const currentFilePath = this.file?.path ?? null;
         const isIndexView = !!currentFilePath && this.plugin.isAllCommentsNotePath(currentFilePath);
         const cardActions = resolveSidebarCardActionState(
             isIndexView ? "index" : "note",
             sidebarMode ?? (isIndexView ? this.indexSidebarMode : this.noteSidebarMode),
-            isIndexView
-                ? resolveIndexSidebarModeScope(
-                    sidebarMode ?? this.indexSidebarMode,
-                    this.selectedIndexFileFilterRootPath,
-                ).kind
-                : null,
+            isIndexView ? indexModeScope?.kind ?? "unavailable" : null,
         );
         const showNestedComments = resolveSidebarSearchShowNestedComments(
             searchQuery,
