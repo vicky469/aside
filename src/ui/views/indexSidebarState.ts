@@ -1,6 +1,5 @@
 import type { CommentThread } from "../../commentManager";
 import { filterCommentsByFilePaths, getNormalizedFilterPath } from "./indexFileFilter";
-import { INDEX_SIDEBAR_LIST_LIMIT } from "./indexSidebarListLimit";
 import { isSidebarListLikeMode } from "./sidebarModeTabs";
 import type { IndexSidebarMode } from "./viewState";
 
@@ -36,18 +35,6 @@ export function resolveIndexSidebarSearchAvailability(
             ? INDEX_SIDEBAR_SCOPED_SEARCH_PLACEHOLDER
             : INDEX_SIDEBAR_UNSCOPED_SEARCH_PLACEHOLDER,
     };
-}
-
-export function resolveIndexSidebarSearchResultLimit(options: {
-    mode: IndexSidebarMode;
-    rootFilePath: string | null | undefined;
-    query: string;
-}): number | undefined {
-    return options.mode === "list"
-        && !getNormalizedFilterPath(options.rootFilePath ?? "")
-        && !!options.query.trim()
-        ? INDEX_SIDEBAR_LIST_LIMIT
-        : undefined;
 }
 
 export function shouldUseEmptyIndexDefaultCache(storedThreadCount: number): boolean {

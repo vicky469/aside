@@ -2054,9 +2054,6 @@ export default class AsideView extends ItemView {
                 : buildIndexSidebarLimitNotice({
                     visibleCount: renderedItems.length,
                     hiddenCount: limitedComments.hiddenCount,
-                    totalCount: searchMatchedVisibleResult.totalMatchCount,
-                    hasSearchQuery: false,
-                    hasFileScope: !!selectedIndexFileFilterRootPath,
                 });
             if (limitNotice) {
                 shell.limitNoticeSlotEl.classList.add("aside-list-limit-notice");

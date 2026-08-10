@@ -25,23 +25,10 @@ test("limitIndexSidebarListItems caps oversized lists at the sidebar limit", () 
     assert.equal(limited.hiddenCount, 7);
 });
 
-test("buildIndexSidebarLimitNotice distinguishes global search from the ordinary list window", () => {
+test("buildIndexSidebarLimitNotice describes the ordinary list window", () => {
     assert.deepEqual(buildIndexSidebarLimitNotice({
         visibleCount: 100,
         hiddenCount: 37,
-        totalCount: 137,
-        hasSearchQuery: true,
-        hasFileScope: false,
-    }), {
-        primary: "100 of 137 matches shown.",
-        secondary: "Refine your search or select a file.",
-    });
-    assert.deepEqual(buildIndexSidebarLimitNotice({
-        visibleCount: 100,
-        hiddenCount: 37,
-        totalCount: 137,
-        hasSearchQuery: false,
-        hasFileScope: false,
     }), {
         primary: "100 shown, 37 hidden.",
         secondary: "Use files to filter the index to see more.",
@@ -52,8 +39,5 @@ test("buildIndexSidebarLimitNotice omits the notice when every result is visible
     assert.equal(buildIndexSidebarLimitNotice({
         visibleCount: 12,
         hiddenCount: 0,
-        totalCount: 12,
-        hasSearchQuery: true,
-        hasFileScope: false,
     }), null);
 });

@@ -13,18 +13,9 @@ export interface IndexSidebarLimitNotice {
 export function buildIndexSidebarLimitNotice(options: {
     visibleCount: number;
     hiddenCount: number;
-    totalCount: number;
-    hasSearchQuery: boolean;
-    hasFileScope: boolean;
 }): IndexSidebarLimitNotice | null {
     if (options.hiddenCount <= 0) {
         return null;
-    }
-    if (options.hasSearchQuery && !options.hasFileScope) {
-        return {
-            primary: `${options.visibleCount} of ${options.totalCount} matches shown.`,
-            secondary: "Refine your search or select a file.",
-        };
     }
     return {
         primary: `${options.visibleCount} shown, ${options.hiddenCount} hidden.`,

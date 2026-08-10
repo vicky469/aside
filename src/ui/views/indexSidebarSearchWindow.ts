@@ -4,11 +4,10 @@ import {
     type RankedSidebarSearchResult,
 } from "./sidebarContentFilter";
 import {
-    buildIndexSidebarLimitNotice,
-    type IndexSidebarLimitNotice,
-} from "./indexSidebarListLimit";
-import { getNormalizedFilterPath } from "./indexFileFilter";
-import { resolveIndexSidebarSearchResultLimit } from "./indexSidebarState";
+    buildIndexSidebarGlobalSearchNotice,
+    resolveIndexSidebarGlobalSearchResultLimit,
+} from "./indexSidebarGlobalSearch";
+import type { IndexSidebarLimitNotice } from "./indexSidebarListLimit";
 import type { IndexSidebarMode } from "./viewState";
 
 export interface IndexSidebarSearchWindow<T> extends RankedSidebarSearchResult<T> {
@@ -23,7 +22,7 @@ export function buildIndexSidebarSearchWindow<
     mode: IndexSidebarMode;
     rootFilePath: string | null | undefined;
 }): IndexSidebarSearchWindow<T> {
-    const limit = resolveIndexSidebarSearchResultLimit({
+    const limit = resolveIndexSidebarGlobalSearchResultLimit({
         mode: options.mode,
         rootFilePath: options.rootFilePath,
         query: options.query,
@@ -31,12 +30,12 @@ export function buildIndexSidebarSearchWindow<
     const result = rankSidebarSearchResults(options.threads, options.query, { limit });
     return {
         ...result,
-        notice: buildIndexSidebarLimitNotice({
+        notice: buildIndexSidebarGlobalSearchNotice({
             visibleCount: result.items.length,
             hiddenCount: result.hiddenMatchCount,
             totalCount: result.totalMatchCount,
-            hasSearchQuery: !!options.query.trim(),
-            hasFileScope: !!getNormalizedFilterPath(options.rootFilePath ?? ""),
+            query: options.query,
+            rootFilePath: options.rootFilePath,
         }),
     };
 }
