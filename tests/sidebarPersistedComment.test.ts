@@ -477,31 +477,27 @@ test("buildPersistedCommentPresentation omits anchored preview text for page not
     assert.equal(presentation.metaPreviewText, null);
 });
 
-test("shouldRenderChildEntryMoveHandle hides child drag handles in index/source cards", () => {
+test("shouldRenderChildEntryMoveHandle follows the scoped move capability", () => {
     assert.equal(shouldRenderChildEntryMoveHandle({
         enableChildEntryMove: true,
-        showSourceRedirectAction: true,
-        entryDeleted: false,
-        threadDeleted: false,
-    }), false);
-    assert.equal(shouldRenderChildEntryMoveHandle({
-        enableChildEntryMove: true,
-        showSourceRedirectAction: false,
         entryDeleted: false,
         threadDeleted: false,
     }), true);
+    assert.equal(shouldRenderChildEntryMoveHandle({
+        enableChildEntryMove: false,
+        entryDeleted: false,
+        threadDeleted: false,
+    }), false);
 });
 
 test("shouldRenderChildEntryMoveHandle hides child drag handles for deleted entries", () => {
     assert.equal(shouldRenderChildEntryMoveHandle({
         enableChildEntryMove: true,
-        showSourceRedirectAction: false,
         entryDeleted: true,
         threadDeleted: false,
     }), false);
     assert.equal(shouldRenderChildEntryMoveHandle({
         enableChildEntryMove: true,
-        showSourceRedirectAction: false,
         entryDeleted: false,
         threadDeleted: true,
     }), false);

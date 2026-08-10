@@ -696,12 +696,10 @@ export function buildPersistedThreadEntryPresentation(
 
 export function shouldRenderChildEntryMoveHandle(options: {
     enableChildEntryMove: boolean;
-    showSourceRedirectAction: boolean;
     entryDeleted: boolean;
     threadDeleted: boolean;
 }): boolean {
     return options.enableChildEntryMove
-        && !options.showSourceRedirectAction
         && !options.entryDeleted
         && !options.threadDeleted;
 }
@@ -1384,7 +1382,6 @@ function renderStoredThreadEntry(
         }
         if (shouldRenderChildEntryMoveHandle({
             enableChildEntryMove: host.enableChildEntryMove,
-            showSourceRedirectAction: host.showSourceRedirectAction,
             entryDeleted: !!entryComment.deletedAt,
             threadDeleted: !!thread.deletedAt,
         })) {

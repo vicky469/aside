@@ -108,6 +108,7 @@ import {
     resolveIndexSidebarSearchAvailability,
     resolveIndexSidebarSearchStateForFileScope,
     resolveIndexSidebarSearchStateForMode,
+    resolveIndexSidebarModeScope,
     scopeIndexThreadsByFilePaths,
     shouldShowGenericIndexEmptyState,
     shouldShowIndexSidebarSearch,
@@ -4343,6 +4344,12 @@ export default class AsideView extends ItemView {
         const cardActions = resolveSidebarCardActionState(
             isIndexView ? "index" : "note",
             sidebarMode ?? (isIndexView ? this.indexSidebarMode : this.noteSidebarMode),
+            isIndexView
+                ? resolveIndexSidebarModeScope(
+                    sidebarMode ?? this.indexSidebarMode,
+                    this.selectedIndexFileFilterRootPath,
+                ).kind
+                : null,
         );
         const showNestedComments = resolveSidebarSearchShowNestedComments(
             searchQuery,
@@ -4438,16 +4445,8 @@ export default class AsideView extends ItemView {
                 });
             },
             clearDeletedComment: (commentId) => this.clearDeletedSidebarComment(commentId),
-            canEditEntryInline: (entry) => (
-                cardActions.canEditParent && (!isIndexView || entry.id === thread.id)
-            ) || (
-                isIndexView
-                && canInlineEditTodoEntries
-                && entryMatchesSidebarTodo(entry)
-            ),
-            canDeleteEntryInline: (entry) => (
-                cardActions.canDeleteParent && (!isIndexView || entry.id === thread.id)
-            ),
+            canEditEntryInline: () => cardActions.canEditEntries,
+            canDeleteEntryInline: () => cardActions.canDeleteEntries,
             shouldForceRenderEntry: (entry) => (
                 isIndexView
                 && canInlineEditTodoEntries
