@@ -20,22 +20,22 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Add one pure mode-and-file scope policy with `unavailable`, `global-todo`, and `file` results.
-- [ ] Render no List or Agent cards when no valid file is selected and show the existing file-selection guidance.
-- [ ] Omit the Index secondary toolbar row entirely for unscoped List and Agent.
-- [ ] Keep unscoped Todo global and render its existing non-search toolbar actions.
-- [ ] Scope Todo, List, and Agent to the selected source file whenever a valid file is selected.
-- [ ] Remove the obsolete disabled unscoped Index search presentation while preserving file-scoped search and cancellation.
-- [ ] Make Index card mutation policy consume the same resolved scope so drag controls appear only for file-scoped cards.
+- [x] Add one pure mode-and-file scope policy with `unavailable`, `global-todo`, and `file` results.
+- [x] Render no List or Agent cards when no valid file is selected and show the existing file-selection guidance.
+- [x] Omit the Index secondary toolbar row entirely for unscoped List and Agent.
+- [x] Keep unscoped Todo global and render its existing non-search toolbar actions.
+- [x] Scope Todo, List, and Agent to the selected source file whenever a valid file is selected.
+- [x] Remove the obsolete disabled unscoped Index search presentation while preserving file-scoped search and cancellation.
+- [x] Make Index card mutation policy consume the same resolved scope so drag controls appear only for file-scoped cards.
 
 ### Verification
 
-- [ ] Fail-first pure-policy tests cover every List, Todo, and Agent combination with and without a selected file.
-- [ ] Toolbar-plan tests prove the secondary row is absent for unscoped List and Agent, present for global Todo, and correctly composed for file-scoped modes.
-- [ ] Thread-scope tests prove unscoped Todo is global, unscoped List and Agent are empty, and a selected file scopes all three modes.
-- [ ] Rendering contract tests prove unscoped List and Agent show only the guidance state while file-scoped List restores search.
-- [ ] Card-action tests prove global Todo disables drag and file-scoped card modes receive individual-file action parity.
-- [ ] Focused tests, the complete build, and the release-artifact security guard pass.
+- [x] Fail-first pure-policy tests cover every List, Todo, and Agent combination with and without a selected file.
+- [x] Toolbar-plan tests prove the secondary row is absent for unscoped List and Agent, present for global Todo, and correctly composed for file-scoped modes.
+- [x] Thread-scope tests prove unscoped Todo is global, unscoped List and Agent are empty, and a selected file scopes all three modes.
+- [x] Rendering contract tests prove unscoped List and Agent show only the guidance state while file-scoped List restores search.
+- [x] Card-action tests prove global Todo disables drag and file-scoped card modes receive individual-file action parity.
+- [x] Focused tests, the complete build, and the release-artifact security guard pass.
 
 ## Context
 

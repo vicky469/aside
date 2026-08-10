@@ -19,19 +19,19 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Render the Index source redirect as the final footer action on parent and child cards.
-- [ ] Remove the source redirect from Index card headers without changing its click behavior or presentation.
-- [ ] Permit active Index child entries to expose edit and delete actions in file-scoped List, Todo, and Agent modes and in unscoped global Todo.
-- [ ] Enable the existing child drag handle for file-scoped Index cards while keeping unscoped global Todo drag-free.
-- [ ] Keep non-card Index modes read-only and preserve existing deleted-entry controls.
+- [x] Render the Index source redirect as the final footer action on parent and child cards.
+- [x] Remove the source redirect from Index card headers without changing its click behavior or presentation.
+- [x] Permit active Index child entries to expose edit and delete actions in file-scoped List, Todo, and Agent modes and in unscoped global Todo.
+- [x] Enable the existing child drag handle for file-scoped Index cards while keeping unscoped global Todo drag-free.
+- [x] Keep non-card Index modes read-only and preserve existing deleted-entry controls.
 
 ### Verification
 
-- [ ] Fail-first renderer tests locate both parent and child source redirects in their footer action rows and not in their headers.
-- [ ] Renderer tests prove the footer redirect opens the correct parent or child source entry.
-- [ ] Action-policy and renderer tests prove file-scoped Index children receive edit, delete, and drag controls while unscoped global Todo receives edit and delete without drag.
-- [ ] Tests preserve the read-only policy for non-card Index modes and existing individual-file card behavior.
-- [ ] Relevant focused tests, the full build, and the release-artifact security guard pass.
+- [x] Fail-first renderer tests locate both parent and child source redirects in their footer action rows and not in their headers.
+- [x] Renderer tests prove the footer redirect opens the correct parent or child source entry.
+- [x] Action-policy and renderer tests prove file-scoped Index children receive edit, delete, and drag controls while unscoped global Todo receives edit and delete without drag.
+- [x] Tests preserve the read-only policy for non-card Index modes and existing individual-file card behavior.
+- [x] Relevant focused tests, the full build, and the release-artifact security guard pass.
 
 ## Context
 
