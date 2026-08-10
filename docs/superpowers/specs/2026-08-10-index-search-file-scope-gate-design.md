@@ -25,12 +25,14 @@ Use this section as the working checklist. Mark an item done only after the code
 - [ ] Clear visible and applied search state, cancel pending debounce work, and invalidate stale requests whenever the selected file scope becomes empty or an invalid selected file is removed.
 - [ ] Preserve the current query when switching directly from one selected file to another and apply it within the new file scope.
 - [ ] Extend the shared search renderer with generic disabled-input support without changing note-sidebar search behavior.
-- [ ] Keep the existing global bounded-ranking and keyed-reconciliation infrastructure as defensive implementation detail, but make unscoped global queries unreachable from the Index UI.
+- [ ] Extract the dormant unscoped global-search limit and notice policy into `indexSidebarGlobalSearch.ts` with a top-level `@todo` explaining that a dedicated global-search experience may be restored later.
+- [ ] Keep the existing bounded-ranking and keyed-reconciliation infrastructure as defensive implementation detail, but make unscoped global queries unreachable from the Index UI.
 
 ### Verification
 
 - [ ] Fail-first policy tests cover unscoped List, scoped List, non-List modes, scope clearing, invalid-scope recovery, and direct file-to-file switching.
 - [ ] Renderer and wiring tests prove the disabled attribute and guidance copy reach only the unscoped Index search while note search remains enabled.
+- [ ] Extraction tests prove the dormant global-search module retains the exact top-100 limit and notice behavior without leaking that policy into active file-scoped search state.
 - [ ] Existing exact search, filtering, highlighting, nested-entry, toolbar, reconciliation, and cancellation tests remain green.
 - [ ] The full test, lint, typecheck, Obsidian-compliance, production-bundle, and release-artifact guard pipeline passes.
 - [ ] The verified build is installed into `lean-startup` and live-smoke-tested for disabled unscoped search, enabled file-scoped search, query preservation across file switches, and clearing when scope is removed.
@@ -96,6 +98,17 @@ The policy distinguishes `file A → file B`, which preserves search, from `file
 
 No search event handler runs while the input is disabled. The bounded global-search window remains a defensive guard for stale or programmatically injected state, not a user-facing capability.
 
+### Dormant global-search seam
+
+The unscoped-only limit decision and `N matches shown` notice move out of active Index state and ordinary list-limit modules into `indexSidebarGlobalSearch.ts`. The module starts with:
+
+```typescript
+// @todo Revisit unscoped global Index search after designing a dedicated global-search experience.
+// The active product path requires a selected file; this module is a defensive fallback only.
+```
+
+The existing `indexSidebarSearchWindow.ts` may call this isolated policy when guarding stale or programmatically injected unscoped queries. File-scoped search receives no global result limit or global notice. The generic bounded ranker and shared DOM reconciler remain in their current shared owners because they are reusable infrastructure rather than dormant product policy.
+
 ## Error and Edge Handling
 
 - If no files are available to filter, both the file-filter button and search remain disabled; the search guidance still explains the missing prerequisite.
@@ -111,10 +124,11 @@ Development follows red-green-refactor:
 1. Add pure fail-first tests for search availability and scope transitions.
 2. Add a renderer contract test for native disabled semantics and field styling.
 3. Add representative `AsideView` wiring tests for disabled copy, selected-scope copy, clear-on-empty-scope, and preserve-on-file-switch.
-4. Implement the smallest policy and renderer changes.
-5. Re-run the existing bounded-ranking, Index search-window, toolbar, highlighting, reconciliation, and cancellation suites to prove the defensive infrastructure and scoped behavior remain intact.
-6. Run the complete build and exact three-file artifact-security checks.
-7. Install and smoke-test the verified build in the real Index sidebar without persisting note or comment mutations.
+4. Add fail-first extraction tests around the new dormant global-search module, including the required top-level `@todo` contract.
+5. Implement the smallest policy, extraction, and renderer changes.
+6. Re-run the existing bounded-ranking, Index search-window, toolbar, highlighting, reconciliation, and cancellation suites to prove the defensive infrastructure and scoped behavior remain intact.
+7. Run the complete build and exact three-file artifact-security checks.
+8. Install and smoke-test the verified build in the real Index sidebar without persisting note or comment mutations.
 
 ## Out of Scope
 
@@ -123,5 +137,6 @@ Development follows red-green-refactor:
 - Fuzzy, semantic, typo-tolerant, or approximate matching.
 - Changing exact-match scoring or result-card presentation.
 - Removing the recently added shared reconciler or bounded-ranking utility.
+- Designing or exposing the future dedicated global-search surface.
 - Persisting search queries across sessions.
 - Changing note-sidebar search.
