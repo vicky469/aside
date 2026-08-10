@@ -7,6 +7,21 @@ export const GENERIC_INDEX_EMPTY_STATE_TEXTS = [
     "Click a file in the index to see its side notes.",
 ] as const;
 
+const GLOBAL_INDEX_TODO_EMPTY_STATE_TEXTS = [
+    "No todo side notes yet.",
+    "Add @todo to any side note or reply to show it here.",
+] as const;
+
+const FILE_INDEX_TODO_EMPTY_STATE_TEXTS = [
+    "No todo side notes in this file yet.",
+    "Add @todo to any side note or reply to show it here.",
+] as const;
+
+const FILE_INDEX_AGENT_EMPTY_STATE_TEXTS = [
+    "No agent side notes in this file yet.",
+    "Add an agent mention to any side note or reply to show it here.",
+] as const;
+
 export interface IndexSidebarSearchState {
     searchInputValue: string;
     searchQuery: string;
@@ -31,6 +46,25 @@ export function resolveIndexSidebarModeScope(
     return mode === "todo"
         ? { kind: "global-todo", rootFilePath: null }
         : { kind: "unavailable", rootFilePath: null };
+}
+
+export function resolveIndexSidebarEmptyStateTexts(options: {
+    mode: IndexSidebarMode;
+    scopeKind: IndexSidebarModeScope["kind"];
+}): readonly string[] | null {
+    if (options.scopeKind === "unavailable") {
+        return GENERIC_INDEX_EMPTY_STATE_TEXTS;
+    }
+    if (options.scopeKind === "global-todo") {
+        return options.mode === "todo" ? GLOBAL_INDEX_TODO_EMPTY_STATE_TEXTS : null;
+    }
+    if (options.mode === "todo") {
+        return FILE_INDEX_TODO_EMPTY_STATE_TEXTS;
+    }
+    if (options.mode === "agent") {
+        return FILE_INDEX_AGENT_EMPTY_STATE_TEXTS;
+    }
+    return null;
 }
 
 export function shouldShowIndexSidebarSearch(mode: IndexSidebarMode): boolean {

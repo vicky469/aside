@@ -53,13 +53,39 @@ test("one index mode scope drives cards, toolbar, and action policy", () => {
     const toolbarSource = asideViewSource.match(
         /private renderSidebarToolbar\([\s\S]*?\n {4}private renderNoteSidebarTagFilterRow\(/,
     )?.[0];
+    const descriptorSource = asideViewSource.match(
+        /private buildSidebarRenderDescriptors\([\s\S]*?\n {4}private toggleNoteSidebarTagSelection\(/,
+    )?.[0];
 
     assert.ok(renderSource, "missing renderComments method");
     assert.ok(toolbarSource, "missing toolbar composition method");
+    assert.ok(descriptorSource, "missing sidebar render descriptor builder");
     assert.match(renderSource, /const indexModeScope = resolveIndexSidebarModeScope\(/);
     assert.match(renderSource, /scopeIndexThreadsByMode\([\s\S]*?indexModeScope/);
     assert.match(renderSource, /indexModeScope,\s*\n/);
+    assert.match(
+        descriptorSource,
+        /presentationKey:\s*\[[\s\S]*?options\.indexModeScope\?\.kind/,
+    );
+    assert.doesNotMatch(
+        renderSource,
+        /effectiveIndexSidebarMode = resolveModeWithSidebarGroupAvailability\(/,
+    );
+    assert.match(
+        renderSource,
+        /this\.renderIndexSidebarEmptyState\([\s\S]*?effectiveIndexSidebarMode,[\s\S]*?indexModeScope,/,
+    );
     assert.match(toolbarSource, /indexScopeKind:\s*options\.indexModeScope\?\.kind/);
+});
+
+test("Index Todo and Agent tabs remain available for meaningful empty states", () => {
+    const methodSource = asideViewSource.match(
+        /private renderPrimarySidebarModeControl\([\s\S]*?\n {4}private renderSidebarModeControl\(/,
+    )?.[0];
+
+    assert.ok(methodSource, "missing primary mode control adapter");
+    assert.match(methodSource, /isTodoEnabled:\s*options\.surface === "index"\s*\|\|/);
+    assert.match(methodSource, /isAgentEnabled:\s*options\.surface === "index"\s*\|\|/);
 });
 
 test("note search remains enabled through the shared renderer default", () => {

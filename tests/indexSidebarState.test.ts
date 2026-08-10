@@ -5,6 +5,7 @@ import {
     deriveIndexSidebarListFilePaths,
     GENERIC_INDEX_EMPTY_STATE_TEXTS,
     filterIndexThreadsByExistingSourceFiles,
+    resolveIndexSidebarEmptyStateTexts,
     resolveIndexSidebarModeScope,
     resolveIndexSidebarSearchStateForFileScope,
     resolveIndexSidebarSearchStateForMode,
@@ -253,4 +254,40 @@ test("generic index empty state points users to file filtering", () => {
     assert.equal(GENERIC_INDEX_EMPTY_STATE_TEXTS.includes("Choose a file"), false);
     assert.equal(GENERIC_INDEX_EMPTY_STATE_TEXTS.includes("No side notes yet"), false);
     assert.equal(GENERIC_INDEX_EMPTY_STATE_TEXTS.some((text) => text.includes("populate the index")), false);
+});
+
+test("index empty states distinguish unavailable, global Todo, and selected-file scopes", () => {
+    assert.deepEqual(resolveIndexSidebarEmptyStateTexts({
+        mode: "list",
+        scopeKind: "unavailable",
+    }), GENERIC_INDEX_EMPTY_STATE_TEXTS);
+    assert.deepEqual(resolveIndexSidebarEmptyStateTexts({
+        mode: "agent",
+        scopeKind: "unavailable",
+    }), GENERIC_INDEX_EMPTY_STATE_TEXTS);
+    assert.deepEqual(resolveIndexSidebarEmptyStateTexts({
+        mode: "todo",
+        scopeKind: "global-todo",
+    }), [
+        "No todo side notes yet.",
+        "Add @todo to any side note or reply to show it here.",
+    ]);
+    assert.deepEqual(resolveIndexSidebarEmptyStateTexts({
+        mode: "todo",
+        scopeKind: "file",
+    }), [
+        "No todo side notes in this file yet.",
+        "Add @todo to any side note or reply to show it here.",
+    ]);
+    assert.deepEqual(resolveIndexSidebarEmptyStateTexts({
+        mode: "agent",
+        scopeKind: "file",
+    }), [
+        "No agent side notes in this file yet.",
+        "Add an agent mention to any side note or reply to show it here.",
+    ]);
+    assert.equal(resolveIndexSidebarEmptyStateTexts({
+        mode: "list",
+        scopeKind: "file",
+    }), null);
 });

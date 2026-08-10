@@ -104,8 +104,8 @@ import { clearSidebarSearchHighlights, highlightSidebarSearchMatches } from "./s
 import {
     deriveIndexSidebarListFilePaths,
     filterIndexThreadsByExistingSourceFiles,
-    GENERIC_INDEX_EMPTY_STATE_TEXTS,
     INDEX_SIDEBAR_SCOPED_SEARCH_PLACEHOLDER,
+    resolveIndexSidebarEmptyStateTexts,
     resolveIndexSidebarSearchStateForFileScope,
     resolveIndexSidebarSearchStateForMode,
     resolveIndexSidebarModeScope,
@@ -1843,10 +1843,6 @@ export default class AsideView extends ItemView {
                     effectiveIndexSidebarMode,
                     isIndexThoughtTrailEnabled,
                 );
-                effectiveIndexSidebarMode = resolveModeWithSidebarGroupAvailability(
-                    effectiveIndexSidebarMode,
-                    indexSidebarThreadGroupCounts,
-                );
                 if (effectiveIndexSidebarMode === "tags") {
                     effectiveIndexSidebarMode = "list";
                 }
@@ -2102,6 +2098,8 @@ export default class AsideView extends ItemView {
                 totalScopedCount,
                 filteredIndexFilePaths: indexSidebarListFilePaths,
                 searchQuery: this.indexSidebarSearchQuery,
+                sidebarMode: effectiveIndexSidebarMode,
+                indexModeScope,
             });
 
             shell.supportSlotEl.empty();
@@ -2782,6 +2780,7 @@ export default class AsideView extends ItemView {
                         options.surface,
                         options.sidebarMode,
                         options.canInlineEditTodoEntries ? "inline-todo" : "static-todo",
+                        options.indexModeScope?.kind ?? "note",
                     ].join(":"),
                 }),
                 threadId: item.thread.id,
@@ -3200,6 +3199,8 @@ export default class AsideView extends ItemView {
             totalScopedCount: number;
             filteredIndexFilePaths: readonly string[];
             searchQuery: string;
+            sidebarMode: IndexSidebarMode;
+            indexModeScope: IndexSidebarModeScope;
         },
     ): void {
         for (const child of Array.from(commentsBody.children)) {
@@ -3216,6 +3217,17 @@ export default class AsideView extends ItemView {
         const hasSearchQuery = trimmedSearchQuery.length > 0;
         const hasFileFilter = options.filteredIndexFilePaths.length > 0;
         const scopeLabel = hasFileFilter ? "the selected file filter" : "the current index view";
+        const modeEmptyStateTexts = resolveIndexSidebarEmptyStateTexts({
+            mode: options.sidebarMode,
+            scopeKind: options.indexModeScope.kind,
+        });
+        if (!hasSearchQuery && modeEmptyStateTexts) {
+            const emptyStateEl = commentsBody.createDiv("aside-empty-state aside-section-empty-state");
+            for (const text of modeEmptyStateTexts) {
+                emptyStateEl.createEl("p", { text });
+            }
+            return;
+        }
         if (
             !shouldShowGenericIndexEmptyState({
                 hasFileFilter,
@@ -3239,9 +3251,7 @@ export default class AsideView extends ItemView {
             return;
         }
 
-        for (const text of GENERIC_INDEX_EMPTY_STATE_TEXTS) {
-            emptyStateEl.createEl("p", { text });
-        }
+        // Search-specific empty copy is handled above; file-scoped List stays intentionally blank.
     }
 
     private getNoteSidebarContentFilterLabel(filter: SidebarContentFilter): string {
@@ -3848,8 +3858,8 @@ export default class AsideView extends ItemView {
     ): void {
         const availability: SidebarModeAvailability & SidebarModeVisibility = {
             isTagsEnabled: options.isTagsEnabled,
-            isTodoEnabled: options.groupCounts.todo > 0,
-            isAgentEnabled: options.groupCounts.agent > 0,
+            isTodoEnabled: options.surface === "index" || options.groupCounts.todo > 0,
+            isAgentEnabled: options.surface === "index" || options.groupCounts.agent > 0,
             isThoughtTrailEnabled: options.isThoughtTrailEnabled,
             ...this.getSidebarModeVisibility(),
         };
@@ -3977,6 +3987,8 @@ export default class AsideView extends ItemView {
             totalScopedCount: 0,
             filteredIndexFilePaths: [],
             searchQuery: "",
+            sidebarMode: "list",
+            indexModeScope: { kind: "unavailable", rootFilePath: null },
         });
 
         if (this.plugin.isLocalRuntime()) {
@@ -4518,7 +4530,8 @@ export default class AsideView extends ItemView {
         commentsBody.addEventListener("dragover", (event: DragEvent) => {
             if (surface === "index") {
                 const indexDropTarget = this.resolveIndexThreadDropTarget(event);
-                if (!indexDropTarget) {
+                const entryDropTarget = this.resolveChildEntryMoveDropTarget(event);
+                if (!indexDropTarget && !entryDropTarget) {
                     this.clearReorderDropIndicator();
                     return;
                 }
@@ -4527,7 +4540,11 @@ export default class AsideView extends ItemView {
                 if (event.dataTransfer) {
                     event.dataTransfer.dropEffect = "move";
                 }
-                this.setReorderDropIndicator(indexDropTarget.element, indexDropTarget.placement);
+                if (indexDropTarget) {
+                    this.setReorderDropIndicator(indexDropTarget.element, indexDropTarget.placement);
+                } else if (entryDropTarget) {
+                    this.setReorderDropIndicator(entryDropTarget.element, entryDropTarget.placement);
+                }
                 return;
             }
 
@@ -4560,19 +4577,41 @@ export default class AsideView extends ItemView {
             const dragState = this.reorderDragState;
             if (surface === "index") {
                 const indexDropTarget = this.resolveIndexThreadDropTarget(event);
+                const entryDropTarget = this.resolveChildEntryMoveDropTarget(event);
                 this.clearReorderDropIndicator();
-                if (!dragState || dragState.kind !== "thread" || !indexDropTarget) {
+                if (!dragState || (!indexDropTarget && !entryDropTarget)) {
                     return;
                 }
 
                 event.preventDefault();
                 this.clearReorderDragState();
-                void this.plugin.reorderThreadsForFile(
-                    dragState.filePath,
-                    dragState.threadId,
-                    indexDropTarget.targetId,
-                    indexDropTarget.placement,
-                );
+                if (dragState.kind === "thread" && indexDropTarget) {
+                    void this.plugin.reorderThreadsForFile(
+                        dragState.filePath,
+                        dragState.threadId,
+                        indexDropTarget.targetId,
+                        indexDropTarget.placement,
+                    );
+                    return;
+                }
+                if (dragState.kind === "thread-entry" && entryDropTarget) {
+                    if (entryDropTarget.targetThreadId === dragState.sourceThreadId && entryDropTarget.insertAfterEntryId) {
+                        void this.plugin.reorderThreadEntries(
+                            dragState.filePath,
+                            dragState.sourceThreadId,
+                            dragState.entryId,
+                            entryDropTarget.insertAfterEntryId,
+                            entryDropTarget.placement,
+                        );
+                        return;
+                    }
+
+                    void this.moveSidebarCommentEntryToThread(
+                        dragState.entryId,
+                        entryDropTarget.targetThreadId,
+                        entryDropTarget.insertAfterEntryId,
+                    );
+                }
                 return;
             }
 
