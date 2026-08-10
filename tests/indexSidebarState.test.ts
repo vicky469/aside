@@ -5,10 +5,11 @@ import {
     deriveIndexSidebarListFilePaths,
     GENERIC_INDEX_EMPTY_STATE_TEXTS,
     filterIndexThreadsByExistingSourceFiles,
-    resolveIndexSidebarSearchAvailability,
+    resolveIndexSidebarModeScope,
     resolveIndexSidebarSearchStateForFileScope,
     resolveIndexSidebarSearchStateForMode,
     scopeIndexThreadsByFilePaths,
+    scopeIndexThreadsByMode,
     shouldShowGenericIndexEmptyState,
     shouldShowIndexListToolbarChips,
     shouldShowIndexSidebarSearch,
@@ -32,19 +33,28 @@ test("leaving index List clears visible and applied search", () => {
     assert.deepEqual(resolveIndexSidebarSearchStateForMode(state, "list"), state);
 });
 
-test("index search requires a selected file in List mode", () => {
-    assert.deepEqual(resolveIndexSidebarSearchAvailability("list", null), {
-        disabled: true,
-        placeholder: "Select a file to search side notes",
+test("index card modes resolve global todo and gated local modes without a file", () => {
+    assert.deepEqual(resolveIndexSidebarModeScope("list", null), {
+        kind: "unavailable",
+        rootFilePath: null,
     });
-    assert.deepEqual(resolveIndexSidebarSearchAvailability("list", " docs\\a.md "), {
-        disabled: false,
-        placeholder: "Search side notes in selected file",
+    assert.deepEqual(resolveIndexSidebarModeScope("agent", "   "), {
+        kind: "unavailable",
+        rootFilePath: null,
     });
-    assert.deepEqual(resolveIndexSidebarSearchAvailability("todo", "docs/a.md"), {
-        disabled: true,
-        placeholder: "Select a file to search side notes",
+    assert.deepEqual(resolveIndexSidebarModeScope("todo", null), {
+        kind: "global-todo",
+        rootFilePath: null,
     });
+});
+
+test("a selected file scopes every index card mode", () => {
+    for (const mode of ["list", "todo", "agent"] as const) {
+        assert.deepEqual(resolveIndexSidebarModeScope(mode, " docs\\b.md "), {
+            kind: "file",
+            rootFilePath: "docs/b.md",
+        });
+    }
 });
 
 test("empty or invalid file scope clears index search state", () => {
@@ -86,6 +96,32 @@ function createComment(overrides: Partial<Comment> = {}): Comment {
         orphaned: overrides.orphaned ?? false,
     };
 }
+
+test("index mode scope selects empty, global, or file threads", () => {
+    const visibleThreads = [
+        commentToThread(createComment({ id: "todo-a", filePath: "docs/a.md", comment: "@todo A" })),
+        commentToThread(createComment({ id: "agent-b", filePath: "docs/b.md", comment: "@codex B" })),
+    ];
+    const allThreads = visibleThreads.concat([
+        commentToThread(createComment({ id: "todo-b", filePath: "docs/b.md", comment: "@todo B" })),
+    ]);
+
+    assert.deepEqual(
+        scopeIndexThreadsByMode(visibleThreads, allThreads, resolveIndexSidebarModeScope("list", null))
+            .scopedVisibleThreads,
+        [],
+    );
+    assert.deepEqual(
+        scopeIndexThreadsByMode(visibleThreads, allThreads, resolveIndexSidebarModeScope("todo", null))
+            .scopedAllThreads.map((thread) => thread.id),
+        ["todo-a", "agent-b", "todo-b"],
+    );
+    assert.deepEqual(
+        scopeIndexThreadsByMode(visibleThreads, allThreads, resolveIndexSidebarModeScope("todo", "docs/b.md"))
+            .scopedAllThreads.map((thread) => thread.id),
+        ["agent-b", "todo-b"],
+    );
+});
 
 test("scopeIndexThreadsByFilePaths keeps all threads when no file filter is selected", () => {
     const visibleThreads = [

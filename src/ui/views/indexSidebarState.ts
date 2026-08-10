@@ -20,6 +20,25 @@ export interface IndexSidebarSearchAvailability {
     placeholder: string;
 }
 
+export type IndexSidebarModeScope =
+    | { kind: "unavailable"; rootFilePath: null }
+    | { kind: "global-todo"; rootFilePath: null }
+    | { kind: "file"; rootFilePath: string };
+
+export function resolveIndexSidebarModeScope(
+    mode: IndexSidebarMode,
+    rootFilePath: string | null | undefined,
+): IndexSidebarModeScope {
+    const normalizedRootPath = getNormalizedFilterPath(rootFilePath ?? "");
+    if (normalizedRootPath) {
+        return { kind: "file", rootFilePath: normalizedRootPath };
+    }
+
+    return mode === "todo"
+        ? { kind: "global-todo", rootFilePath: null }
+        : { kind: "unavailable", rootFilePath: null };
+}
+
 export function shouldShowIndexSidebarSearch(mode: IndexSidebarMode): boolean {
     return mode === "list";
 }
@@ -71,6 +90,35 @@ export function scopeIndexThreadsByFilePaths(
         scopedVisibleThreads: filterCommentsByFilePaths(visibleThreads, selectedFilePaths),
         scopedAllThreads: filterCommentsByFilePaths(allThreads, selectedFilePaths),
     };
+}
+
+export function scopeIndexThreadsByMode(
+    visibleThreads: CommentThread[],
+    allThreads: CommentThread[],
+    scope: IndexSidebarModeScope,
+): {
+    scopedVisibleThreads: CommentThread[];
+    scopedAllThreads: CommentThread[];
+} {
+    if (scope.kind === "unavailable") {
+        return {
+            scopedVisibleThreads: [],
+            scopedAllThreads: [],
+        };
+    }
+
+    if (scope.kind === "global-todo") {
+        return {
+            scopedVisibleThreads: visibleThreads.slice(),
+            scopedAllThreads: allThreads.slice(),
+        };
+    }
+
+    return scopeIndexThreadsByFilePaths(
+        visibleThreads,
+        allThreads,
+        [scope.rootFilePath],
+    );
 }
 
 export function deriveIndexSidebarListFilePaths(rootFilePath: string | null | undefined): string[] {
