@@ -1,5 +1,6 @@
 import type { SidebarPrimaryMode } from "./viewState";
 import { isSidebarListLikeMode } from "./sidebarModeTabs";
+import type { IndexSidebarModeScope } from "./indexSidebarState";
 
 export interface SidebarSecondaryToolbarPlanOptions {
     surface: "note" | "index";
@@ -7,6 +8,7 @@ export interface SidebarSecondaryToolbarPlanOptions {
     hasNestedComments: boolean;
     hasFileFilterOptions: boolean;
     hasAddPageCommentAction: boolean;
+    indexScopeKind?: IndexSidebarModeScope["kind"];
 }
 
 export interface SidebarSecondaryToolbarPlan {
@@ -22,6 +24,21 @@ export interface SidebarSecondaryToolbarPlan {
 export function resolveSidebarSecondaryToolbarPlan(
     options: SidebarSecondaryToolbarPlanOptions,
 ): SidebarSecondaryToolbarPlan {
+    const isGatedIndexMode = options.surface === "index"
+        && options.indexScopeKind === "unavailable"
+        && (options.mode === "list" || options.mode === "agent");
+    if (isGatedIndexMode) {
+        return {
+            showRow: false,
+            showFileFilter: false,
+            showSearch: false,
+            showPinned: false,
+            showNested: false,
+            showDeleted: false,
+            showAddPageComment: false,
+        };
+    }
+
     const isIndexCardMode = options.surface === "index"
         && (options.mode === "list" || options.mode === "todo" || options.mode === "agent");
     const isNoteListLikeMode = options.surface === "note" && isSidebarListLikeMode(options.mode);

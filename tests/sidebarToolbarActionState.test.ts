@@ -16,6 +16,7 @@ test("secondary toolbar plan shares valid controls across note and index surface
         ...base,
         surface: "index",
         mode: "list",
+        indexScopeKind: "file",
     }), {
         showRow: true,
         showFileFilter: true,
@@ -31,6 +32,7 @@ test("secondary toolbar plan shares valid controls across note and index surface
             ...base,
             surface: "index",
             mode,
+            indexScopeKind: "file",
         }), {
             showRow: true,
             showFileFilter: true,
@@ -46,6 +48,7 @@ test("secondary toolbar plan shares valid controls across note and index surface
         ...base,
         surface: "index",
         mode: "thought-trail",
+        indexScopeKind: "file",
     }), {
         showRow: true,
         showFileFilter: true,
@@ -73,6 +76,46 @@ test("secondary toolbar plan shares valid controls across note and index surface
         showPinned: false,
         showNested: true,
         showDeleted: false,
+        showAddPageComment: false,
+    });
+});
+
+test("unscoped Index List and Agent omit the secondary row while Todo stays global", () => {
+    const base = {
+        hasNestedComments: true,
+        hasFileFilterOptions: true,
+        hasAddPageCommentAction: false,
+    };
+
+    for (const mode of ["list", "agent"] as const) {
+        assert.deepEqual(resolveSidebarSecondaryToolbarPlan({
+            ...base,
+            surface: "index",
+            mode,
+            indexScopeKind: "unavailable",
+        }), {
+            showRow: false,
+            showFileFilter: false,
+            showSearch: false,
+            showPinned: false,
+            showNested: false,
+            showDeleted: false,
+            showAddPageComment: false,
+        });
+    }
+
+    assert.deepEqual(resolveSidebarSecondaryToolbarPlan({
+        ...base,
+        surface: "index",
+        mode: "todo",
+        indexScopeKind: "global-todo",
+    }), {
+        showRow: true,
+        showFileFilter: true,
+        showSearch: false,
+        showPinned: true,
+        showNested: true,
+        showDeleted: true,
         showAddPageComment: false,
     });
 });
