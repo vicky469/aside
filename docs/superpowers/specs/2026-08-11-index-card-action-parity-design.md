@@ -2,7 +2,7 @@
 
 ## Summary
 
-Aside will move each Index card's **Open source** action from the card header to the bottom-right footer action row. Index child cards will expose the same edit, delete, and drag controls as child cards in an individual-file sidebar whenever the current Index mode renders interactive cards.
+Aside will move each Index card's **Open source** action from the card header to the bottom-right footer action row. File-scoped Index child cards will expose the same edit, delete, and drag controls as child cards in an individual-file sidebar whenever the current Index mode renders interactive cards. The unscoped global Todo surface remains editable and deletable but does not expose drag controls.
 
 Each rendered Index card still represents one canonical thread entry from one source file. Entry mutations continue to resolve that canonical source by comment ID, while the existing move controller remains responsible for rejecting a drop whose source and destination belong to different files.
 
@@ -15,21 +15,21 @@ Use this section as the working checklist. Mark an item done only after the code
 - [x] Parent and child Index cards share the persisted-card renderer used by individual-file sidebars.
 - [x] Edit, delete, and move handlers resolve stored entries through their canonical comment and thread IDs.
 - [x] The move controller rejects child moves between different source files.
-- [x] Index List, Todo, and Agent modes already share an explicit interactive-card action policy.
+- [x] Index List, Todo, and Agent modes already share an explicit card-action policy that can be extended with scope.
 
 ### To Implement
 
 - [ ] Render the Index source redirect as the final footer action on parent and child cards.
 - [ ] Remove the source redirect from Index card headers without changing its click behavior or presentation.
-- [ ] Permit active Index child entries to expose edit and delete actions in List, Todo, and Agent modes.
-- [ ] Enable the existing child drag handle in those same Index card modes.
+- [ ] Permit active Index child entries to expose edit and delete actions in file-scoped List, Todo, and Agent modes and in unscoped global Todo.
+- [ ] Enable the existing child drag handle for file-scoped Index cards while keeping unscoped global Todo drag-free.
 - [ ] Keep non-card Index modes read-only and preserve existing deleted-entry controls.
 
 ### Verification
 
 - [ ] Fail-first renderer tests locate both parent and child source redirects in their footer action rows and not in their headers.
 - [ ] Renderer tests prove the footer redirect opens the correct parent or child source entry.
-- [ ] Action-policy and renderer tests prove Index children receive edit, delete, and drag controls in List, Todo, and Agent modes.
+- [ ] Action-policy and renderer tests prove file-scoped Index children receive edit, delete, and drag controls while unscoped global Todo receives edit and delete without drag.
 - [ ] Tests preserve the read-only policy for non-card Index modes and existing individual-file card behavior.
 - [ ] Relevant focused tests, the full build, and the release-artifact security guard pass.
 
@@ -67,13 +67,15 @@ The button keeps its current classes, icon selection, accessible label, draft-sa
 
 ### Child action parity
 
-The shared card-action state will represent permission for active entries rather than treating Index permission as parent-only. In Index List, Todo, and Agent modes:
+The shared card-action state will represent permission for active entries rather than treating Index permission as parent-only. It will also accept the resolved Index scope from `2026-08-11-index-mode-scope-gate-design.md`. In file-scoped Index List, Todo, and Agent modes:
 
 - parent and child entries can be edited;
 - parent and child entries can be soft-deleted through the existing confirmation path; and
 - child entries render the same drag handle used in an individual-file sidebar.
 
-The previous Todo-only child-edit exception becomes unnecessary because Todo mode receives the same entry policy as the other interactive card modes. Collapsed children remain collapsed unless existing visibility rules reveal them; enabling an action does not implicitly expand a thread.
+In unscoped global Todo, parent and child entries can still be edited and soft-deleted, and every card retains **Open source**. Top-level and child drag handles remain hidden because a mixed-file aggregate has no single visible order. The previous Todo-only child-edit exception becomes unnecessary because both global and file-scoped Todo authorize active-entry editing.
+
+Collapsed children remain collapsed unless existing visibility rules reveal them; enabling an action does not implicitly expand a thread.
 
 Thought Trail, Tags, and any other non-card mode retain the current no-mutation action state. Deleted children continue to show restore and permanent-delete controls instead of active-entry actions.
 
@@ -81,13 +83,13 @@ Thought Trail, Tags, and any other non-card mode retain the current no-mutation 
 
 No persistence or mutation implementation changes are required. Edit and delete continue to locate the canonical entry by ID. Child dragging continues through the existing entry-move controller, which persists the canonical source file and refuses a target thread from another file.
 
-This guard remains relevant when the unfiltered Index happens to display cards from multiple source files. The UI can expose the same handle consistently, but an invalid cross-file drop cannot mutate either file.
+The cross-file guard remains a defensive boundary. The UI exposes drag handles only after one file is selected, so ordinary Index dragging has same-file targets and matches the individual-file sidebar.
 
 ## Testing
 
 Focused renderer tests will distinguish header and footer ownership rather than checking only the global redirect count. They will verify one redirect per rendered parent or child, rightmost footer placement, and navigation with the correct entry ID.
 
-Card-action state tests will cover Index List, Todo, and Agent parity plus read-only modes. Persisted-card tests will cover child edit, delete, and drag attributes on the Index surface while retaining the existing note-sidebar and deleted-entry assertions.
+Card-action state tests will cover file-scoped Index List, Todo, and Agent parity, unscoped global Todo's no-drag exception, and read-only modes. Persisted-card tests will cover child edit, delete, and drag attributes on the Index surface while retaining the existing note-sidebar and deleted-entry assertions.
 
 Existing mutation-controller coverage remains the source of truth for canonical-file persistence and cross-file move rejection. The final verification run will include focused tests, the repository build, and the release artifact guard even though this change does not itself publish a release.
 

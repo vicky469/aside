@@ -1,5 +1,7 @@
 # Index Search File-Scope Gate Design
 
+> **Superseded product behavior (2026-08-11):** The disabled unscoped search field is replaced by the mode-aware gate in `2026-08-11-index-mode-scope-gate-design.md`. Unscoped List now renders no secondary toolbar or cards; file-scoped List search and the state-cancellation behavior documented here remain active.
+
 ## Summary
 
 The Aside Index List will no longer offer interactive global search across every indexed file. The search field remains visible to preserve toolbar stability, but it is disabled until the user selects a file through the adjacent file-filter control. File-scoped exact search remains unchanged.
