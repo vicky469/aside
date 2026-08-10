@@ -476,9 +476,25 @@
     transition: border-color 0.12s ease, background-color 0.12s ease, box-shadow 0.12s ease;
 }
 
+.aside-note-search-field.is-disabled {
+    background: var(--background-modifier-form-field);
+    opacity: 0.62;
+}
+
 .aside-note-search-field:focus-within {
     border-color: color-mix(in srgb, var(--aside-luxury-accent) 62%, var(--aside-note-toolbar-border) 38%);
     box-shadow: inset 0 0 0 1px var(--aside-luxury-accent-soft);
+}
+
+.aside-note-search-field.is-disabled:focus-within {
+    border-color: var(--aside-note-toolbar-border);
+    box-shadow: none;
+}
+
+.aside-note-search-field.is-disabled .aside-note-search-icon,
+.aside-note-search-field.is-disabled > input.aside-note-search-input {
+    color: var(--text-faint);
+    cursor: not-allowed;
 }
 
 .aside-note-search-icon {

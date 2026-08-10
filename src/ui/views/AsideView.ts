@@ -105,6 +105,8 @@ import {
     deriveIndexSidebarListFilePaths,
     filterIndexThreadsByExistingSourceFiles,
     GENERIC_INDEX_EMPTY_STATE_TEXTS,
+    resolveIndexSidebarSearchAvailability,
+    resolveIndexSidebarSearchStateForFileScope,
     resolveIndexSidebarSearchStateForMode,
     scopeIndexThreadsByFilePaths,
     shouldShowGenericIndexEmptyState,
@@ -1096,6 +1098,20 @@ export default class AsideView extends ItemView {
         this.indexSidebarSearchQuery = nextState.searchQuery;
     }
 
+    private applyIndexSidebarSearchStateForFileScope(rootFilePath: string | null | undefined): void {
+        const nextState = resolveIndexSidebarSearchStateForFileScope({
+            searchInputValue: this.indexSidebarSearchInputValue,
+            searchQuery: this.indexSidebarSearchQuery,
+        }, rootFilePath);
+        if (
+            nextState.searchInputValue === this.indexSidebarSearchInputValue
+            && nextState.searchQuery === this.indexSidebarSearchQuery
+        ) {
+            return;
+        }
+        this.clearIndexSidebarSearchState();
+    }
+
     private clearNoteSidebarBatchTagSearchDebounceTimer(): void {
         if (this.noteSidebarBatchTagSearchDebounceTimer === null) {
             return;
@@ -1481,6 +1497,7 @@ export default class AsideView extends ItemView {
         if (nextRootPath !== undefined && nextRootPath !== this.selectedIndexFileFilterRootPath) {
             this.selectedIndexFileFilterRootPath = nextRootPath;
             this.indexFileFilterAutoSelectSuppressed = nextRootPath === null;
+            this.applyIndexSidebarSearchStateForFileScope(nextRootPath);
             void this.plugin.logEvent("info", "index", "index.filter.changed", {
                 rootFilePath: nextRootPath,
                 source: "view-state",
@@ -1579,7 +1596,6 @@ export default class AsideView extends ItemView {
         skipDataRefresh?: boolean;
     } = {}) {
         const renderVersion = ++this.renderVersion;
-        const indexSearchRequestVersion = this.indexSidebarSearchRequestVersion;
         const normalizedFile = normalizeSidebarViewFile(
             this.file,
             (candidate): candidate is TFile => this.plugin.isSidebarSupportedFile(candidate),
@@ -1640,6 +1656,9 @@ export default class AsideView extends ItemView {
                 this.selectedIndexFileFilterRootPath = selectedIndexFileFilterRootPath;
                 this.plugin.syncIndexPreviewFileScope(file.path);
             }
+            if (isAllCommentsView) {
+                this.applyIndexSidebarSearchStateForFileScope(selectedIndexFileFilterRootPath);
+            }
 
             if (isAllCommentsView && selectedIndexFileFilterRootPath) {
                 const sourceFile = this.app.vault.getAbstractFileByPath(selectedIndexFileFilterRootPath);
@@ -1652,9 +1671,11 @@ export default class AsideView extends ItemView {
                     selectedIndexFileFilterRootPath = null;
                     this.selectedIndexFileFilterRootPath = null;
                     this.indexFileFilterAutoSelectSuppressed = true;
+                    this.applyIndexSidebarSearchStateForFileScope(selectedIndexFileFilterRootPath);
                     this.plugin.syncIndexPreviewFileScope(file.path);
                 }
             }
+            const indexSearchRequestVersion = this.indexSidebarSearchRequestVersion;
 
             if (isAllCommentsView) {
                 this.indexFileFilterGraph = null;
@@ -3484,7 +3505,10 @@ export default class AsideView extends ItemView {
                     : undefined,
                 search: secondaryPlan.showSearch
                     ? options.isAllCommentsView
-                        ? this.getIndexSearchInputOptions()
+                        ? this.getIndexSearchInputOptions(
+                            resolvedIndexSidebarMode,
+                            options.selectedIndexFileFilterRootPath,
+                        )
                         : this.getNoteSearchInputOptions()
                     : undefined,
                 pinned: secondaryPlan.showPinned
@@ -3770,10 +3794,15 @@ export default class AsideView extends ItemView {
         };
     }
 
-    private getIndexSearchInputOptions(): SidebarSearchInputOptions {
+    private getIndexSearchInputOptions(
+        mode: IndexSidebarMode,
+        rootFilePath: string | null,
+    ): SidebarSearchInputOptions {
+        const availability = resolveIndexSidebarSearchAvailability(mode, rootFilePath);
         return {
             value: this.indexSidebarSearchInputValue,
-            placeholder: "Search side notes in index",
+            disabled: availability.disabled,
+            placeholder: availability.placeholder,
             onFocus: (inputEl) => {
                 this.interactionController.claimSidebarInteractionOwnership(inputEl);
             },
@@ -4068,6 +4097,7 @@ export default class AsideView extends ItemView {
 
 		const didChangeFilter = this.selectedIndexFileFilterRootPath !== normalizedRootPath;
 		this.selectedIndexFileFilterRootPath = normalizedRootPath;
+        this.applyIndexSidebarSearchStateForFileScope(normalizedRootPath);
         this.updateRenderedIndexFileFilterImmediately(normalizedRootPath);
         if (this.file) {
             this.plugin.syncIndexPreviewFileScope(this.file.path);

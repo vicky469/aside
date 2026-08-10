@@ -39,6 +39,7 @@ export interface ToolbarIconButtonOptions {
 
 export interface SidebarSearchInputOptions {
     value: string;
+    disabled?: boolean;
     ariaLabel?: string;
     placeholder: string;
     onClear: () => void;
@@ -165,15 +166,23 @@ export function renderSidebarSearchInput(
     });
     inputEl.type = "search";
     inputEl.value = options.value;
+    inputEl.disabled = options.disabled ?? false;
+    fieldEl.classList.toggle("is-disabled", inputEl.disabled);
     inputEl.spellcheck = false;
     inputEl.placeholder = options.placeholder;
     if (options.ariaLabel) {
         inputEl.setAttribute("aria-label", options.ariaLabel);
     }
     inputEl.addEventListener("focus", () => {
+        if (inputEl.disabled) {
+            return;
+        }
         options.onFocus?.(inputEl);
     });
     inputEl.addEventListener("keydown", (event) => {
+        if (inputEl.disabled) {
+            return;
+        }
         if (event.key !== "Escape" || !inputEl.value) {
             return;
         }
@@ -183,6 +192,9 @@ export function renderSidebarSearchInput(
         options.onClear();
     });
     inputEl.addEventListener("input", () => {
+        if (inputEl.disabled) {
+            return;
+        }
         options.onInput(inputEl.value, {
             selectionStart: inputEl.selectionStart,
             selectionEnd: inputEl.selectionEnd,

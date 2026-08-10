@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const asideViewSource = readFileSync("src/ui/views/AsideView.ts", "utf8");
+const rendererSource = readFileSync("src/ui/views/sidebarToolbarRenderer.ts", "utf8");
+const stylesSource = readFileSync("styles.css", "utf8");
 
 test("note and index surfaces consume one shared secondary toolbar renderer", () => {
     const methodSource = asideViewSource.match(
@@ -17,18 +19,64 @@ test("note and index surfaces consume one shared secondary toolbar renderer", ()
 
 test("index search is supplied only through the shared toolbar plan", () => {
     assert.match(asideViewSource, /search:\s*secondaryPlan\.showSearch/);
-    assert.match(asideViewSource, /\? this\.getIndexSearchInputOptions\(\)/);
+    assert.match(
+        asideViewSource,
+        /\? this\.getIndexSearchInputOptions\(\s*resolvedIndexSidebarMode,\s*options\.selectedIndexFileFilterRootPath,?\s*\)/,
+    );
     assert.doesNotMatch(asideViewSource, /this\.renderIndexSearchInput\(/);
 });
 
-test("index search keeps its placeholder without a tooltip-producing label", () => {
+test("shared search rendering supports native disabled semantics", () => {
+    assert.match(rendererSource, /export interface SidebarSearchInputOptions \{[\s\S]*?disabled\?: boolean;/);
+    assert.match(rendererSource, /inputEl\.disabled = options\.disabled \?\? false;/);
+    assert.match(rendererSource, /fieldEl\.classList\.toggle\("is-disabled", inputEl\.disabled\);/);
+    assert.equal(rendererSource.match(/if \(inputEl\.disabled\) \{/g)?.length, 3);
+    assert.match(stylesSource, /\.aside-note-search-field\.is-disabled/);
+});
+
+test("index search derives disabled state and guidance from file scope", () => {
     const methodSource = asideViewSource.match(
-        /private getIndexSearchInputOptions\(\): SidebarSearchInputOptions \{[\s\S]*?\n {4}private renderPrimarySidebarModeControl\(/,
+        /private getIndexSearchInputOptions\([\s\S]*?\): SidebarSearchInputOptions \{[\s\S]*?\n {4}private renderPrimarySidebarModeControl\(/,
     )?.[0];
 
     assert.ok(methodSource, "missing index search options method");
-    assert.match(methodSource, /placeholder:\s*"Search side notes in index"/);
-    assert.doesNotMatch(methodSource, /ariaLabel:\s*"Search index side notes"/);
+    assert.match(methodSource, /resolveIndexSidebarSearchAvailability\(/);
+    assert.match(methodSource, /disabled:\s*availability\.disabled/);
+    assert.match(methodSource, /placeholder:\s*availability\.placeholder/);
+    assert.doesNotMatch(methodSource, /ariaLabel:/);
+});
+
+test("note search remains enabled through the shared renderer default", () => {
+    const methodSource = asideViewSource.match(
+        /private getNoteSearchInputOptions\(\): SidebarSearchInputOptions \{[\s\S]*?\n {4}private getIndexSearchInputOptions\(/,
+    )?.[0];
+
+    assert.ok(methodSource, "missing note search options method");
+    assert.doesNotMatch(methodSource, /disabled:/);
+    assert.match(rendererSource, /inputEl\.disabled = options\.disabled \?\? false;/);
+});
+
+test("index file-scope changes share search-state cleanup", () => {
+    assert.match(asideViewSource, /private applyIndexSidebarSearchStateForFileScope\(/);
+    assert.match(asideViewSource, /this\.applyIndexSidebarSearchStateForFileScope\(nextRootPath\)/);
+    assert.match(asideViewSource, /this\.applyIndexSidebarSearchStateForFileScope\(normalizedRootPath\)/);
+    assert.match(asideViewSource, /this\.applyIndexSidebarSearchStateForFileScope\(selectedIndexFileFilterRootPath\)/);
+});
+
+test("scope recovery completes before index search request version is captured", () => {
+    const renderSource = asideViewSource.match(
+        /public async renderComments\([\s\S]*?\n {4}private async renderPageSidebar\(/,
+    )?.[0];
+
+    assert.ok(renderSource, "missing renderComments method");
+    const scopeRecoveryIndex = renderSource.lastIndexOf(
+        "this.applyIndexSidebarSearchStateForFileScope(selectedIndexFileFilterRootPath)",
+    );
+    const requestCaptureIndex = renderSource.indexOf(
+        "const indexSearchRequestVersion = this.indexSidebarSearchRequestVersion",
+    );
+    assert.ok(scopeRecoveryIndex >= 0, "missing scope recovery");
+    assert.ok(requestCaptureIndex > scopeRecoveryIndex, "request version must be captured after scope recovery");
 });
 
 test("note and index card lists consume the shared item reconciler", () => {
