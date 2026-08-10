@@ -1062,6 +1062,10 @@ function renderThreadFooterActions(
         insertAction?: {
             markdown: string;
         } | null;
+        sourceRedirectAction?: {
+            ariaLabel: string;
+            icon: string;
+        } | null;
     },
     host: SidebarPersistedCommentHost,
 ): void {
@@ -1112,6 +1116,7 @@ function renderThreadFooterActions(
         || options.showAddEntryAction
         || options.showRetryAction
         || options.moveAction
+        || options.sourceRedirectAction
         || runRecord
     ) {
         footerActionsEl = ensureFooterActionsEl();
@@ -1129,6 +1134,7 @@ function renderThreadFooterActions(
         || options.showAddEntryAction
         || options.showRetryAction
         || options.moveAction
+        || options.sourceRedirectAction
         || runMetadataElements.length
     )) {
         footerActionsEl?.remove();
@@ -1211,6 +1217,15 @@ function renderThreadFooterActions(
 
     if (runMetadataElements.length) {
         renderAgentRunMetadataToggleButton(footerActionsEl, runMetadataElements, host);
+    }
+    if (options.sourceRedirectAction) {
+        renderSourceRedirectButton(
+            footerActionsEl,
+            comment,
+            options.sourceRedirectAction.ariaLabel,
+            options.sourceRedirectAction.icon,
+            host,
+        );
     }
 }
 
@@ -1364,15 +1379,6 @@ function renderStoredThreadEntry(
             renderRestoreButton(entryActionsEl, entryComment.id, host, "Restore deleted side note entry");
             renderPermanentDeleteButton(entryActionsEl, entryComment.id, host, "Permanently delete side note entry");
         } else {
-            if (host.showSourceRedirectAction && !entryComment.deletedAt && !thread.deletedAt) {
-                renderSourceRedirectButton(
-                    entryActionsEl,
-                    entryComment,
-                    entryPresentation.redirectHint.ariaLabel,
-                    entryPresentation.redirectHint.icon,
-                    host,
-                );
-            }
             if (host.canEditEntryInline(entry)) {
                 renderEditButton(entryActionsEl, entryComment.id, host, "Edit side note");
             }
@@ -1420,6 +1426,11 @@ function renderStoredThreadEntry(
                     ? {
                         markdown: entryInsertMarkdown,
                     }
+                    : null,
+                sourceRedirectAction: host.showSourceRedirectAction
+                    && !entryComment.deletedAt
+                    && !thread.deletedAt
+                    ? entryPresentation.redirectHint
                     : null,
             },
             host,
@@ -1549,15 +1560,6 @@ export async function renderPersistedCommentCard(
             if (canShowHeaderPinAction) {
                 renderPinActionButton(actionsEl, thread.id, host.isPinnedThread(thread.id), host);
             }
-            if (host.showSourceRedirectAction && !comment.deletedAt && !thread.deletedAt) {
-                renderSourceRedirectButton(
-                    actionsEl,
-                    comment,
-                    presentation.redirectHint.ariaLabel,
-                    presentation.redirectHint.icon,
-                    host,
-                );
-            }
             if (host.canEditEntryInline(entries[0])) {
                 renderEditButton(actionsEl, comment.id, host, "Edit side note");
             }
@@ -1596,6 +1598,11 @@ export async function renderPersistedCommentCard(
                 ? {
                     markdown: parentInsertMarkdown,
                 }
+                : null,
+            sourceRedirectAction: host.showSourceRedirectAction
+                && !comment.deletedAt
+                && !thread.deletedAt
+                ? presentation.redirectHint
                 : null,
         }, host);
     }

@@ -1774,7 +1774,7 @@ test("renderPersistedCommentCard puts agent metadata above status and Add to fil
     ), false);
 });
 
-test("renderPersistedCommentCard renders source redirects for nested index entries", async () => {
+test("renderPersistedCommentCard renders source redirects last in each index card footer", async () => {
     const thread = createThreadWithEntries({
         entries: [
             { id: "comment-1", body: "Parent side note", timestamp: 100 },
@@ -1794,12 +1794,22 @@ test("renderPersistedCommentCard renders source redirects for nested index entri
 
     const redirectButtons = root.findAllByClass("aside-comment-action-redirect");
     assert.equal(redirectButtons.length, 2);
-    const childRedirectButton = redirectButtons[1];
-    assert.ok(childRedirectButton);
-    await (childRedirectButton.onclick as (event: { stopPropagation(): void }) => Promise<void>)({
-        stopPropagation() {},
-    });
-    assert.deepEqual(openedCommentIds, ["entry-2"]);
+    for (const redirectButton of redirectButtons) {
+        const actions = redirectButton.parentElement;
+        assert.ok(actions);
+        assert.ok(actions.classList.contains("aside-thread-footer-actions"));
+        assert.equal(actions.children[actions.children.length - 1], redirectButton);
+    }
+    for (const header of root.findAllByClass("aside-comment-header")) {
+        assert.equal(header.findAllByClass("aside-comment-action-redirect").length, 0);
+    }
+
+    for (const redirectButton of redirectButtons) {
+        await (redirectButton.onclick as (event: { stopPropagation(): void }) => Promise<void>)({
+            stopPropagation() {},
+        });
+    }
+    assert.deepEqual(openedCommentIds, ["comment-1", "entry-2"]);
 });
 
 test("renderPersistedCommentCard independently renders an authorized child edit beside index redirects", async () => {
