@@ -1,6 +1,8 @@
 # Index Sidebar Bounded Global Search Performance Design
 
-## Goal
+> **Superseded product behavior (2026-08-10):** Unscoped global Index search is replaced by the file-scope gate in `2026-08-10-index-search-file-scope-gate-design.md`. The bounded-ranking and reconciliation work documented here remains as defensive performance infrastructure, but users must select a file before Index search is enabled.
+
+## Historical Goal
 
 Make unscoped index-sidebar search feel as responsive as individual-file sidebar search without weakening match accuracy. Global search keeps the existing exact matcher, returns the true highest-ranked 100 matches, and updates cards through the same incremental reconciliation boundary used by the individual-file sidebar.
 
