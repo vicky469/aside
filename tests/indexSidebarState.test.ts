@@ -5,7 +5,8 @@ import {
     deriveIndexSidebarListFilePaths,
     GENERIC_INDEX_EMPTY_STATE_TEXTS,
     filterIndexThreadsByExistingSourceFiles,
-    resolveIndexSidebarSearchResultLimit,
+    resolveIndexSidebarSearchAvailability,
+    resolveIndexSidebarSearchStateForFileScope,
     resolveIndexSidebarSearchStateForMode,
     scopeIndexThreadsByFilePaths,
     shouldShowGenericIndexEmptyState,
@@ -31,27 +32,36 @@ test("leaving index List clears visible and applied search", () => {
     assert.deepEqual(resolveIndexSidebarSearchStateForMode(state, "list"), state);
 });
 
-test("global search uses the index list limit only for nonempty unscoped List queries", () => {
-    assert.equal(resolveIndexSidebarSearchResultLimit({
-        mode: "list",
-        rootFilePath: null,
-        query: "design",
-    }), 100);
-    assert.equal(resolveIndexSidebarSearchResultLimit({
-        mode: "list",
-        rootFilePath: "docs/a.md",
-        query: "design",
-    }), undefined);
-    assert.equal(resolveIndexSidebarSearchResultLimit({
-        mode: "list",
-        rootFilePath: null,
-        query: "   ",
-    }), undefined);
-    assert.equal(resolveIndexSidebarSearchResultLimit({
-        mode: "todo",
-        rootFilePath: null,
-        query: "design",
-    }), undefined);
+test("index search requires a selected file in List mode", () => {
+    assert.deepEqual(resolveIndexSidebarSearchAvailability("list", null), {
+        disabled: true,
+        placeholder: "Select a file to search side notes",
+    });
+    assert.deepEqual(resolveIndexSidebarSearchAvailability("list", " docs\\a.md "), {
+        disabled: false,
+        placeholder: "Search side notes in selected file",
+    });
+    assert.deepEqual(resolveIndexSidebarSearchAvailability("todo", "docs/a.md"), {
+        disabled: true,
+        placeholder: "Select a file to search side notes",
+    });
+});
+
+test("empty or invalid file scope clears index search state", () => {
+    const state = { searchInputValue: "odoo", searchQuery: "odoo" };
+    assert.deepEqual(resolveIndexSidebarSearchStateForFileScope(state, null), {
+        searchInputValue: "",
+        searchQuery: "",
+    });
+    assert.deepEqual(resolveIndexSidebarSearchStateForFileScope(state, "   "), {
+        searchInputValue: "",
+        searchQuery: "",
+    });
+});
+
+test("switching directly between selected files preserves index search state", () => {
+    const state = { searchInputValue: "odoo", searchQuery: "odoo" };
+    assert.deepEqual(resolveIndexSidebarSearchStateForFileScope(state, "docs/b.md"), state);
 });
 
 test("the empty-index cache never bypasses live aggregate controls", () => {
