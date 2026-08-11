@@ -16,7 +16,7 @@
 - Create: `tests/indexNoteOpenController.test.ts`
 - Create: `src/app/indexNoteOpenController.ts`
 
-- [ ] **Step 1: Write the failing coordinator tests**
+- [x] **Step 1: Write the failing coordinator tests**
 
 Create `tests/indexNoteOpenController.test.ts`:
 
@@ -172,7 +172,7 @@ test("background refresh failure is handled after an existing index opens", asyn
 });
 ```
 
-- [ ] **Step 2: Compile to verify the test fails for the missing coordinator**
+- [x] **Step 2: Compile to verify the test fails for the missing coordinator**
 
 Run:
 
@@ -183,7 +183,7 @@ rm -rf .test-dist
 
 Expected: TypeScript fails because `../src/app/indexNoteOpenController` does not exist.
 
-- [ ] **Step 3: Implement the minimal coordinator**
+- [x] **Step 3: Implement the minimal coordinator**
 
 Create `src/app/indexNoteOpenController.ts`:
 
@@ -237,7 +237,7 @@ export class IndexNoteOpenController<FocusTarget> {
 }
 ```
 
-- [ ] **Step 4: Run the focused coordinator tests**
+- [x] **Step 4: Run the focused coordinator tests**
 
 Run:
 
@@ -249,7 +249,7 @@ node --test .test-dist/tests/indexNoteOpenController.test.js
 
 Expected: 4 tests pass.
 
-- [ ] **Step 5: Commit the coordinator and regression tests**
+- [x] **Step 5: Commit the coordinator and regression tests**
 
 ```bash
 git add src/app/indexNoteOpenController.ts tests/indexNoteOpenController.test.ts
@@ -263,7 +263,7 @@ git commit -m "test: lock instant index open ordering"
 - Modify: `src/main.ts:380-450`
 - Modify: `src/main.ts:2260-2320`
 
-- [ ] **Step 1: Import and construct the index-open coordinator**
+- [x] **Step 1: Import and construct the index-open coordinator**
 
 Add the import beside the other `src/app` controllers:
 
@@ -293,7 +293,7 @@ After `commentNavigationController`, construct the coordinator:
     });
 ```
 
-- [ ] **Step 2: Extract the Obsidian leaf adapter and delegate `openIndexNote()`**
+- [x] **Step 2: Extract the Obsidian leaf adapter and delegate `openIndexNote()`**
 
 Replace the current `openIndexNote()` body and keep the existing preferred-leaf selection helper:
 
@@ -333,7 +333,7 @@ Replace the current `openIndexNote()` body and keep the existing preferred-leaf 
 
 The coordinator now reveals an existing file before starting aggregate refresh. The first-run path still creates the file before `revealIndexNote()` is called, and the same leaf is restored after sidebar activation.
 
-- [ ] **Step 3: Run focused tests, type-check, and lint**
+- [x] **Step 3: Run focused tests, type-check, and lint**
 
 Run:
 
@@ -347,7 +347,7 @@ npm run lint
 
 Expected: 4 coordinator tests and 3 plugin-registration tests pass; type-check and lint exit successfully.
 
-- [ ] **Step 4: Inspect the production diff for ordering and unrelated changes**
+- [x] **Step 4: Inspect the production diff for ordering and unrelated changes**
 
 Run:
 
@@ -358,7 +358,7 @@ git diff -- src/main.ts src/app/indexNoteOpenController.ts tests/indexNoteOpenCo
 
 Expected: no whitespace errors; the existing-index path calls `revealIndexNote()` before `refreshAggregateNoteNow()` and no unrelated files are changed.
 
-- [ ] **Step 5: Commit the plugin wiring**
+- [x] **Step 5: Commit the plugin wiring**
 
 ```bash
 git add src/main.ts
@@ -371,7 +371,7 @@ git commit -m "fix: open existing index before refresh"
 - Modify: `docs/superpowers/specs/2026-08-11-index-ribbon-instant-open-design.md`
 - Modify: `docs/superpowers/plans/2026-08-11-index-ribbon-instant-open-plan.md`
 
-- [ ] **Step 1: Run the full production pipeline**
+- [x] **Step 1: Run the full production pipeline**
 
 Run:
 
@@ -381,7 +381,7 @@ npm run build
 
 Expected: all compiled TypeScript tests and contract tests pass; ESLint, TypeScript, Obsidian compliance, production bundling, and the release artifact guard all exit successfully.
 
-- [ ] **Step 2: Inspect the exact shipped plugin assets**
+- [x] **Step 2: Inspect the exact shipped plugin assets**
 
 Run:
 
@@ -393,13 +393,13 @@ find . -maxdepth 1 -type f \( -name '*.map' -o -name '*.ts' -o -name '*.tsx' -o 
 
 Expected: the three shipped assets exist; the exposure scan and root-level forbidden-file scan produce no output.
 
-- [ ] **Step 3: Mark verified implementation tracking complete**
+- [x] **Step 3: Mark verified implementation tracking complete**
 
 In `docs/superpowers/specs/2026-08-11-index-ribbon-instant-open-design.md`, change every unchecked item under `### To Implement` and `### Verification` to `[x]` only after Steps 1 and 2 pass.
 
 In this plan, mark each executed step `[x]` only after its listed command or edit succeeds.
 
-- [ ] **Step 4: Confirm the final worktree state**
+- [x] **Step 4: Confirm the final worktree state**
 
 Run:
 
@@ -411,13 +411,13 @@ git log -5 --oneline --decorate
 
 Expected: only the completed spec and plan tracking edits remain unstaged, and the two implementation commits appear in the recent log.
 
-- [ ] **Step 5: Commit completed tracking**
+- [x] **Step 5: Commit completed tracking**
 
 ```bash
 git add -f docs/superpowers/specs/2026-08-11-index-ribbon-instant-open-design.md docs/superpowers/plans/2026-08-11-index-ribbon-instant-open-plan.md
 git commit -m "docs: complete instant index opening plan"
 ```
 
-- [ ] **Step 6: Report verification evidence**
+- [x] **Step 6: Report verification evidence**
 
 Report the focused test counts, full pipeline result, artifact-guard result, and exact exposure scans. Do not claim a vault installation, release, tag, or push because those actions are outside this plan.

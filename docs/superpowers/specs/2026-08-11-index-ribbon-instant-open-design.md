@@ -13,19 +13,19 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Give existing index files an immediate reveal path that does not await aggregate refresh.
-- [ ] Start aggregate refresh asynchronously after an existing index is visible.
-- [ ] Preserve first-run behavior by awaiting refresh when the index file does not yet exist, then opening the newly created file.
-- [ ] Preserve index-sidebar activation and final index-leaf focus behavior.
-- [ ] Handle asynchronous refresh failures without producing an unhandled promise rejection.
+- [x] Give existing index files an immediate reveal path that does not await aggregate refresh.
+- [x] Start aggregate refresh asynchronously after an existing index is visible.
+- [x] Preserve first-run behavior by awaiting refresh when the index file does not yet exist, then opening the newly created file.
+- [x] Preserve index-sidebar activation and final index-leaf focus behavior.
+- [x] Handle asynchronous refresh failures without producing an unhandled promise rejection.
 
 ### Verification
 
-- [ ] Add a regression test with an unresolved refresh promise proving that an existing index becomes visible before refresh completes.
-- [ ] Test the missing-index path waits for creation before attempting to open the file.
-- [ ] Test that refresh failure does not prevent an existing index from opening.
-- [ ] Run focused index-opening tests.
-- [ ] Run the full test, lint, type-check, Obsidian compliance, production bundle, and artifact-guard pipeline.
+- [x] Add a regression test with an unresolved refresh promise proving that an existing index becomes visible before refresh completes.
+- [x] Test the missing-index path waits for creation before attempting to open the file.
+- [x] Test that refresh failure does not prevent an existing index from opening.
+- [x] Run focused index-opening tests.
+- [x] Run the full test, lint, type-check, Obsidian compliance, production bundle, and artifact-guard pipeline.
 
 ## Goal
 
