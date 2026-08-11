@@ -27,6 +27,10 @@ import type { PersistedPluginData } from "./settings/indexNoteSettingsPlanner";
 import { PluginEventRouter } from "./app/pluginEventRouter";
 import { PluginLifecycleController } from "./app/pluginLifecycleController";
 import { PluginRegistrationController } from "./app/pluginRegistrationController";
+import {
+    IndexNoteOpenController,
+    type IndexNoteRefreshContext,
+} from "./app/indexNoteOpenController";
 import { RefreshCoordinator } from "./app/refreshCoordinator";
 import { WorkspaceContextController } from "./app/workspaceContextController";
 import type { SidebarUpdateOptions } from "./comments/commentNavigationController";
@@ -389,6 +393,20 @@ export default class Aside extends Plugin {
             this.showNotice(message, "navigation", "navigation.notice");
         },
         log: (level, area, event, payload) => this.logEvent(level, area, event, payload),
+    });
+    private readonly indexNoteOpenController = new IndexNoteOpenController<WorkspaceLeaf | null>({
+        getIndexNotePath: () => this.getAllCommentsNotePath(),
+        hasIndexNote: (filePath) => !!this.workspaceViewController.getMarkdownFileByPath(filePath),
+        revealIndexNote: (filePath) => this.revealIndexNote(filePath),
+        refreshAggregateNoteNow: () => this.refreshAggregateNoteNow(),
+        activateIndexSidebar: () => this.commentNavigationController.activateView(false),
+        restoreIndexFocus: (indexLeaf, filePath) => this.focusIndexLeaf(indexLeaf, filePath),
+        reportMissingIndex: (filePath) => {
+            this.showNotice(`Unable to open ${filePath}.`, "index", "index.open.error", {
+                filePath,
+            });
+        },
+        handleRefreshError: (error, context) => this.handleIndexOpenRefreshError(error, context),
     });
     private commentPersistenceController: CommentPersistenceController = new CommentPersistenceController({
         app: this.app,
@@ -2289,30 +2307,36 @@ export default class Aside extends Plugin {
         return pickPreferredFileLeafCandidate(candidates, filePath);
     }
 
-    async openIndexNote() {
-        const indexFilePath = this.getAllCommentsNotePath();
-        await this.refreshAggregateNoteNow();
-        if (!this.workspaceViewController.getMarkdownFileByPath(indexFilePath)) {
-            this.showNotice(`Unable to open ${indexFilePath}.`, "index", "index.open.error", {
-                filePath: indexFilePath,
-            });
-            return;
+    private focusIndexLeaf(indexLeaf: WorkspaceLeaf | null, indexFilePath: string): void {
+        if (indexLeaf && indexLeaf.view instanceof MarkdownView && indexLeaf.view.file?.path === indexFilePath) {
+            this.app.workspace.setActiveLeaf(indexLeaf, { focus: true });
         }
+    }
 
-        const workspace = this.app.workspace;
+    private async revealIndexNote(indexFilePath: string): Promise<WorkspaceLeaf | null> {
         let indexLeaf = this.getPreferredMarkdownLeafByPath(indexFilePath);
         if (indexLeaf && indexLeaf.view instanceof MarkdownView && indexLeaf.view.file?.path === indexFilePath) {
-            workspace.setActiveLeaf(indexLeaf, { focus: true });
-        } else {
-            await workspace.openLinkText(indexFilePath, "", "tab");
-            indexLeaf = this.getPreferredMarkdownLeafByPath(indexFilePath);
+            this.focusIndexLeaf(indexLeaf, indexFilePath);
+            return indexLeaf;
         }
 
-        await this.commentNavigationController.activateView(false);
+        await this.app.workspace.openLinkText(indexFilePath, "", "tab");
+        indexLeaf = this.getPreferredMarkdownLeafByPath(indexFilePath);
+        return indexLeaf;
+    }
 
-        if (indexLeaf && indexLeaf.view instanceof MarkdownView && indexLeaf.view.file?.path === indexFilePath) {
-            workspace.setActiveLeaf(indexLeaf, { focus: true });
-        }
+    private handleIndexOpenRefreshError(error: unknown, context: IndexNoteRefreshContext): void {
+        const timing = context === "creation" ? "while creating" : "after opening";
+        this.warn(
+            `Unable to refresh ${this.getAllCommentsNotePath()} ${timing} the Aside index.`,
+            error,
+            "index",
+            `index.open.refresh.${context}.warn`,
+        );
+    }
+
+    async openIndexNote(): Promise<void> {
+        await this.indexNoteOpenController.open();
     }
 
     async addComment(newComment: Comment): Promise<boolean> {
