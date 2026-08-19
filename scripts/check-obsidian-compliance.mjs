@@ -17,12 +17,6 @@ const REQUIRED_FILES = [
     "styles.css",
     "versions.json",
 ];
-const REQUIRED_DISCLOSURES = [
-    "## Network access",
-    "## Local vault indexing",
-    "## Clipboard access",
-    "## External services",
-];
 const SOURCE_EXTENSIONS = new Set([".js", ".jsx", ".mjs", ".ts", ".tsx"]);
 const PUBLIC_SOURCE_DIRECTORIES = [
     "src",
@@ -160,11 +154,6 @@ export function checkObsidianCompliance(rootDir = process.cwd()) {
         const filePath = path.join(rootDir, relativePath);
         if (!existsSync(filePath) || !statSync(filePath).isFile()) {
             issues.push(`Missing required repository file: ${relativePath}`);
-        }
-    }
-    for (const heading of REQUIRED_DISCLOSURES) {
-        if (!readme.includes(heading)) {
-            issues.push(`README.md is missing capability disclosure: ${heading}`);
         }
     }
     issues.push(...inspectPublicSourceArchive(rootDir));

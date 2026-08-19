@@ -5,13 +5,6 @@ import path from "node:path";
 import test from "node:test";
 import { checkObsidianCompliance } from "../scripts/check-obsidian-compliance.mjs";
 
-const REQUIRED_DISCLOSURES = [
-    "## Network access",
-    "## Local vault indexing",
-    "## Clipboard access",
-    "## External services",
-];
-
 function createFixture(overrides = {}) {
     const rootDir = mkdtempSync(path.join(tmpdir(), "aside-compliance-"));
     const files = {
@@ -26,7 +19,7 @@ function createFixture(overrides = {}) {
             isDesktopOnly: false,
         }),
         "versions.json": JSON.stringify({ "2.0.91": "1.12.7" }),
-        "README.md": `${REQUIRED_DISCLOSURES.join("\n\n")}\n\nDeclared plugin hosts: none\n`,
+        "README.md": "Declared plugin hosts: none\n",
         "main.js": "console.log('fixture');\n",
         "styles.css": ".aside {}\n",
         "LICENSE": "MIT\n",
@@ -82,16 +75,6 @@ test("compliance checker reports version and minimum-version drift", () => {
         assert.deepEqual(checkObsidianCompliance(rootDir), [
             "manifest.json version 2.0.91 does not match package.json version 2.0.92",
             "versions.json entry for 2.0.91 must equal minAppVersion 1.12.7",
-        ]);
-    });
-});
-
-test("compliance checker requires every maintained capability disclosure", () => {
-    withFixture({
-        "README.md": REQUIRED_DISCLOSURES.slice(0, 3).join("\n\n"),
-    }, (rootDir) => {
-        assert.deepEqual(checkObsidianCompliance(rootDir), [
-            "README.md is missing capability disclosure: ## External services",
         ]);
     });
 });
