@@ -912,8 +912,16 @@ export default class Aside extends Plugin {
         return this.indexNoteSettingsController.getAgentRuntimeMode();
     }
 
+    public getDefaultAgent(): AsideAgentTarget {
+        return this.indexNoteSettingsController.getDefaultAgent();
+    }
+
     public async setAgentRuntimeMode(nextMode: AgentRuntimeModePreference): Promise<void> {
         await this.indexNoteSettingsController.setAgentRuntimeMode(nextMode);
+    }
+
+    public async setDefaultAgent(target: AsideAgentTarget): Promise<void> {
+        await this.indexNoteSettingsController.setDefaultAgent(target);
     }
 
     public async setShowTodoSidebarTab(visible: boolean): Promise<void> {

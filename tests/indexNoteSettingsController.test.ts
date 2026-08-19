@@ -38,6 +38,7 @@ function createSettings(overrides: Partial<AsideSettings> = {}): AsideSettings {
         indexHeaderImageUrl: overrides.indexHeaderImageUrl ?? "https://example.com/default.webp",
         indexHeaderImageCaption: overrides.indexHeaderImageCaption ?? "Default caption",
         agentRuntimeMode: overrides.agentRuntimeMode ?? "auto",
+        defaultAgent: overrides.defaultAgent ?? "codex",
         showTodoSidebarTab: overrides.showTodoSidebarTab ?? true,
         showAgentSidebarTab: overrides.showAgentSidebarTab ?? true,
         publishedPublicArtifactPaths: overrides.publishedPublicArtifactPaths ?? [],
@@ -82,11 +83,22 @@ test("loaded settings resolution treats blank-like persisted index note paths as
     }
 });
 
+test("loaded settings normalize the default agent and rewrite invalid values", () => {
+    const resolved = resolveLoadedSettings({
+        indexNotePath: ALL_COMMENTS_NOTE_PATH,
+        defaultAgent: " GEMINI ",
+    } as unknown as PersistedPluginData, createSettings());
+
+    assert.equal(resolved.settings.defaultAgent, "gemini");
+    assert.equal(resolved.shouldRewriteLegacySettings, true);
+});
+
 function withPublishDefaults(
-    settings: Omit<AsideSettings, keyof typeof DEFAULT_PUBLISH_SETTINGS | "featureFlags" | "publishedPublicArtifactPaths">,
+    settings: Omit<AsideSettings, keyof typeof DEFAULT_PUBLISH_SETTINGS | "featureFlags" | "publishedPublicArtifactPaths" | "defaultAgent">,
 ): AsideSettings {
     return {
         ...settings,
+        defaultAgent: "codex",
         publishedPublicArtifactPaths: [],
         featureFlags: DEFAULT_FEATURE_FLAGS,
         ...DEFAULT_PUBLISH_SETTINGS,
@@ -754,6 +766,15 @@ test("index note settings controller saves local runtime setting without aggrega
         showTodoSidebarTab: true,
         showAgentSidebarTab: true,
     }));
+});
+
+test("index note settings controller persists the default agent", async () => {
+    const harness = createControllerHarness();
+
+    await harness.controller.setDefaultAgent("claude");
+
+    assert.equal(harness.getSettings().defaultAgent, "claude");
+    assert.equal(harness.savedPayloads.at(-1)?.defaultAgent, "claude");
 });
 
 test("index note settings controller saves sidebar tab toggles and refreshes open sidebars", async () => {

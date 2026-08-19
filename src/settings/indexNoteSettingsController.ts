@@ -4,6 +4,10 @@ import {
     type AgentRuntimeModePreference,
 } from "../core/agents/agentRuntimePreferences";
 import {
+    normalizeSupportedAgentTarget,
+} from "../core/agents/agentActorRegistry";
+import type { AsideAgentTarget } from "../core/config/agentTargets";
+import {
     syncPublishFeatureFlagStorage as syncStoredPublishFeatureFlag,
     type FeatureFlagStorage,
     type FeatureFlagStorageSyncOperation,
@@ -201,6 +205,10 @@ export class IndexNoteSettingsController {
         return normalizeAgentRuntimeModePreference(this.host.getSettings().agentRuntimeMode);
     }
 
+    public getDefaultAgent(): AsideAgentTarget {
+        return normalizeSupportedAgentTarget(this.host.getSettings().defaultAgent);
+    }
+
     public isAllCommentsNotePath(filePath: string): boolean {
         return isAllCommentsNotePath(filePath, this.getAllCommentsNotePath());
     }
@@ -316,6 +324,20 @@ export class IndexNoteSettingsController {
         this.host.setSettings({
             ...settings,
             agentRuntimeMode: nextMode,
+        });
+        await this.saveSettings();
+    }
+
+    public async setDefaultAgent(target: AsideAgentTarget): Promise<void> {
+        const settings = this.host.getSettings();
+        const defaultAgent = normalizeSupportedAgentTarget(target);
+        if (settings.defaultAgent === defaultAgent) {
+            return;
+        }
+
+        this.host.setSettings({
+            ...settings,
+            defaultAgent,
         });
         await this.saveSettings();
     }

@@ -17,7 +17,10 @@ import {
     DEFAULT_PUBLISH_SETTINGS,
     type PublishSettings,
 } from "../../core/publish/publishSettings";
-import { getSupportedAgentActors } from "../../core/agents/agentActorRegistry";
+import {
+    DEFAULT_ASIDE_AGENT_ACTOR_ID,
+    getSupportedAgentActors,
+} from "../../core/agents/agentActorRegistry";
 import type { AsideAgentTarget } from "../../core/config/agentTargets";
 import {
     normalizeAllCommentsNoteImageCaption,
@@ -40,6 +43,7 @@ export interface AsideSettings extends PublishSettings {
     indexHeaderImageUrl: string;
     indexHeaderImageCaption: string;
     agentRuntimeMode: AgentRuntimeModePreference;
+    defaultAgent: AsideAgentTarget;
     showTodoSidebarTab: boolean;
     showAgentSidebarTab: boolean;
     featureFlags: FeatureFlags;
@@ -51,6 +55,7 @@ export const DEFAULT_SETTINGS: AsideSettings = {
     indexHeaderImageUrl: normalizeAllCommentsNoteImageUrl(""),
     indexHeaderImageCaption: normalizeAllCommentsNoteImageCaption(null),
     agentRuntimeMode: normalizeAgentRuntimeModePreference("auto"),
+    defaultAgent: DEFAULT_ASIDE_AGENT_ACTOR_ID,
     showTodoSidebarTab: true,
     showAgentSidebarTab: true,
     featureFlags: DEFAULT_FEATURE_FLAGS,
