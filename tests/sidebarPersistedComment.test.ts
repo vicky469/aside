@@ -292,6 +292,23 @@ class FakeElement {
     }
 }
 
+async function clickFakeButtonWithTimerWindow(button: FakeElement): Promise<void> {
+    const onclick = button.onclick;
+    assert.equal(typeof onclick, "function");
+    const previousDefaultView = FakeElement.defaultView;
+    FakeElement.defaultView = {
+        setTimeout: (() => 1) as Window["setTimeout"],
+        clearTimeout: (() => {}) as Window["clearTimeout"],
+    };
+    try {
+        await (onclick as (event: { stopPropagation(): void }) => Promise<void>)({
+            stopPropagation: () => {},
+        });
+    } finally {
+        FakeElement.defaultView = previousDefaultView;
+    }
+}
+
 function mergeClassName(current: string, tokens: string[]): string {
     return Array.from(new Set([
         ...current.split(/\s+/).filter(Boolean),
@@ -1639,11 +1656,7 @@ test("renderPersistedCommentCard keeps Share available during parent inline edit
 
     const shareButtons = root.findAllByClass("aside-thread-share-button");
     assert.equal(shareButtons.length, 1);
-    const onclick = shareButtons[0]?.onclick;
-    assert.equal(typeof onclick, "function");
-    await (onclick as (event: { stopPropagation(): void }) => Promise<void>)({
-        stopPropagation: () => {},
-    });
+    await clickFakeButtonWithTimerWindow(shareButtons[0]);
 
     assert.deepEqual(sharedCommentIds, ["comment-1"]);
     assert.equal(saveVisibleDraftCalls, 0);
@@ -1690,11 +1703,7 @@ test("renderPersistedCommentCard keeps Share available during child inline editi
     assert.ok(childCard);
     const shareButtons = childCard.findAllByClass("aside-thread-share-button");
     assert.equal(shareButtons.length, 1);
-    const onclick = shareButtons[0]?.onclick;
-    assert.equal(typeof onclick, "function");
-    await (onclick as (event: { stopPropagation(): void }) => Promise<void>)({
-        stopPropagation: () => {},
-    });
+    await clickFakeButtonWithTimerWindow(shareButtons[0]);
 
     assert.deepEqual(sharedCommentIds, ["entry-2"]);
     assert.equal(saveVisibleDraftCalls, 0);

@@ -1436,6 +1436,15 @@ function renderStoredThreadEntry(
             host,
         );
     }
+    if (entryEditDraft) {
+        renderThreadFooterActions(entryEl, entryComment, null, entryAuthor, null, {
+            showShareAction: !host.showSourceRedirectAction
+                && !entryComment.deletedAt
+                && !thread.deletedAt,
+            showAddEntryAction: false,
+            showRetryAction: false,
+        }, host);
+    }
 
     return renderedEntry.renderTask;
 }
@@ -1604,6 +1613,13 @@ export async function renderPersistedCommentCard(
                 && !thread.deletedAt
                 ? presentation.redirectHint
                 : null,
+        }, host);
+    }
+    if (parentEditDraft) {
+        renderThreadFooterActions(commentEl, comment, null, parentAuthor, null, {
+            showShareAction: !host.showSourceRedirectAction && !comment.deletedAt,
+            showAddEntryAction: false,
+            showRetryAction: false,
         }, host);
     }
 
