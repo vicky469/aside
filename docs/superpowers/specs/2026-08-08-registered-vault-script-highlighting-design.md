@@ -2,7 +2,7 @@
 
 ## Summary
 
-Aside will style slash-prefixed text as a vault-script mention only when it is a standalone token that currently resolves to one runnable, unambiguous script in the live vault-script registry. Absolute paths such as `/Users/wenqingli/...`, URLs such as `https://example.com/...`, unregistered `/name` tokens, removed scripts, and ambiguous script names remain ordinary text.
+Aside will style slash-prefixed text as a vault-script mention only when it is a standalone token that currently resolves to one runnable, unambiguous script in the live vault-script registry. Absolute paths such as `/Users/example/...`, URLs such as `https://example.com/...`, unregistered `/name` tokens, removed scripts, and ambiguous script names remain ordinary text.
 
 This design narrows only the visual highlighting policy from the existing vault-script mention feature. Suggestion filtering, insertion, saved-entry routing, execution, and Regenerate behavior remain unchanged.
 
@@ -55,7 +55,7 @@ The shared tokenizer continues to recognize `@` mentions using the current behav
 1. It has standalone `/name` syntax and is not immediately embedded in a slash-separated path or URL.
 2. The complete token resolves case-insensitively to exactly one current runnable script in the live registry.
 
-For example, `/clean-youtube-transcript` is highlighted only while `🛠️ scripts/clean-youtube-transcript.mjs`, `.js`, or `.cjs` resolves uniquely. `/Users/wenqingli/...`, `https://example.com/path`, `/missing-script`, and a colliding `/clean` mention remain plain.
+For example, `/clean-youtube-transcript` is highlighted only while `🛠️ scripts/clean-youtube-transcript.mjs`, `.js`, or `.cjs` resolves uniquely. `/Users/example/...`, `https://example.com/path`, `/missing-script`, and a colliding `/clean` mention remain plain.
 
 Persisted comments are intentionally live rather than historical: deleting or ambiguating a script removes the highlight on the next render, while creating or restoring a unique registration enables it. The stored Markdown text never changes.
 

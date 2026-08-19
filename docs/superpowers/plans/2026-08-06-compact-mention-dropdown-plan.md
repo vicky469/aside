@@ -282,10 +282,10 @@ Expected: the guard passes; the exposure searches print no shipped source map, e
 - [ ] **Step 4: Install the verified build into the real vault**
 
 ```bash
-npm run dev:install-built -- --vault /Users/wenqingli/Obsidian/lean-startup
-cmp main.js /Users/wenqingli/Obsidian/lean-startup/.obsidian/plugins/aside/main.js
-cmp manifest.json /Users/wenqingli/Obsidian/lean-startup/.obsidian/plugins/aside/manifest.json
-cmp styles.css /Users/wenqingli/Obsidian/lean-startup/.obsidian/plugins/aside/styles.css
+npm run dev:install-built -- --vault /Users/example/Obsidian/lean-startup
+cmp main.js /Users/example/Obsidian/lean-startup/.obsidian/plugins/aside/main.js
+cmp manifest.json /Users/example/Obsidian/lean-startup/.obsidian/plugins/aside/manifest.json
+cmp styles.css /Users/example/Obsidian/lean-startup/.obsidian/plugins/aside/styles.css
 ```
 
 Expected: installation succeeds and all three comparisons exit 0.

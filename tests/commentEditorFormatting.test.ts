@@ -230,7 +230,7 @@ test("renderStyledDraftCommentHtml rejects slash mentions without a registry pre
 test("renderStyledDraftCommentHtml does not partially highlight paths or urls", () => {
     const acceptEveryCandidate = () => true;
     const value = [
-        "/Users/wenqingli/note.md",
+        "/Users/example/note.md",
         "folder/clean",
         "https://example.com/path",
         "C:/Users/name",

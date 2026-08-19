@@ -148,17 +148,17 @@ Expected: no `main.js.map`; `rg` exits with no matches; hashes are printed for t
 Run:
 
 ```bash
-node scripts/install-built-plugin.mjs --vault /Users/wenqingli/Obsidian/lean-startup
+node scripts/install-built-plugin.mjs --vault /Users/example/Obsidian/lean-startup
 ```
 
-Expected: the installer reports copying only `main.js`, `manifest.json`, and `styles.css` into `/Users/wenqingli/Obsidian/lean-startup/.obsidian/plugins/aside`.
+Expected: the installer reports copying only `main.js`, `manifest.json`, and `styles.css` into `/Users/example/Obsidian/lean-startup/.obsidian/plugins/aside`.
 
 - [ ] **Step 2: Verify installed hashes match the built files**
 
 Run:
 
 ```bash
-shasum -a 256 main.js manifest.json styles.css /Users/wenqingli/Obsidian/lean-startup/.obsidian/plugins/aside/main.js /Users/wenqingli/Obsidian/lean-startup/.obsidian/plugins/aside/manifest.json /Users/wenqingli/Obsidian/lean-startup/.obsidian/plugins/aside/styles.css
+shasum -a 256 main.js manifest.json styles.css /Users/example/Obsidian/lean-startup/.obsidian/plugins/aside/main.js /Users/example/Obsidian/lean-startup/.obsidian/plugins/aside/manifest.json /Users/example/Obsidian/lean-startup/.obsidian/plugins/aside/styles.css
 ```
 
 Expected: each installed file has the same hash as its repository counterpart.
