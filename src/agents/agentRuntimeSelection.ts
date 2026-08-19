@@ -27,6 +27,20 @@ export type AgentRuntimeSelection =
     | ResolvedAgentRuntimeSelection
     | BlockedAgentRuntimeSelection;
 
+export type DefaultAgentRuntimeSelection =
+    | {
+        kind: "resolved";
+        selectedAgent: AsideAgentTarget;
+        preferredAgent: AsideAgentTarget;
+        usedFallback: boolean;
+        runtime: AgentRunRuntime;
+        modePreference: AgentRuntimeModePreference;
+    }
+    | {
+        kind: "none";
+        preferredAgent: AsideAgentTarget;
+    };
+
 export function getAgentRuntimeOwnershipMessage(runtime: AgentRunRuntime, target: AsideAgentTarget): string {
     return `Using your local ${getAgentActorLabel(target)} setup`;
 }

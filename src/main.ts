@@ -6,6 +6,7 @@ import {
     type AgentStreamUpdate,
     type SavedUserEntryEvent,
 } from "./agents/commentAgentController";
+import { CreateScriptCommandController } from "./agents/createScriptCommandController";
 import { CommentHighlightController } from "./comments/commentHighlightController";
 import {
     CommentMutationController,
@@ -59,6 +60,7 @@ import {
 import {
     resolveAgentRuntimeSelection as resolveAgentRuntimeSelectionPlan,
     type AgentRuntimeSelection,
+    type DefaultAgentRuntimeSelection,
 } from "./agents/agentRuntimeSelection";
 import {
     PublicHtmlPublishController,
@@ -107,7 +109,8 @@ import {
     type AgentRuntimeModePreference,
 } from "./core/agents/agentRuntimePreferences";
 import type { AsideAgentTarget } from "./core/config/agentTargets";
-import { getAgentActorById } from "./core/agents/agentActorRegistry";
+import { getAgentActorById, getSupportedAgentActors } from "./core/agents/agentActorRegistry";
+import { resolveDefaultAgentSelection } from "./core/agents/defaultAgentSelection";
 import { DraftComment, DraftSelection } from "./domain/drafts";
 import { parsePromptDeleteSetting } from "./core/config/appConfig";
 import { DerivedCommentMetadataManager } from "./core/derived/derivedCommentMetadata";
@@ -540,11 +543,27 @@ export default class Aside extends Plugin {
         },
         runAgentRuntime: (invocation) => runAgentRuntime(invocation),
         resolveAgentRuntimeSelection: (target) => this.resolveAgentRuntimeSelection(target),
+        resolveDefaultAgentRuntimeSelection: () => this.resolveDefaultAgentRuntimeSelection(),
         showNotice: (message) => {
             this.showNotice(message, "agents", "agents.notice");
         },
         log: (level, area, event, payload) => this.logEvent(level, area, event, payload),
     }, this.agentRunStore);
+    private readonly createScriptCommandController = new CreateScriptCommandController({
+        getRegistry: () => this.vaultScriptRegistry,
+        appendReply: async (event, body) => {
+            await this.commentMutationController.appendThreadEntry(event.threadId, {
+                id: generateCommentId(),
+                body,
+                timestamp: Date.now(),
+            }, {
+                insertAfterCommentId: event.entryId,
+                alwaysInsertAfterTarget: true,
+            });
+        },
+        dispatchRequest: (event, requestText) =>
+            this.commentAgentController.handleCreateScriptRequest(event, requestText),
+    });
     private readonly publicHtmlPublishController = new PublicHtmlPublishController({
         getSettings: () => this.settings,
         getFeatureFlags: () => this.settings.featureFlags,
@@ -807,6 +826,7 @@ export default class Aside extends Plugin {
         // Also highlight commented text inside rendered Markdown (Live Preview/Reading view)
         this.commentHighlightController.registerMarkdownPreviewHighlights(this);
         await this.syncInstalledSidenoteSkill();
+        this.createScriptCommandController.initialize();
         this.commentScriptController.initialize();
         await this.commentScriptController.reconcilePendingRunsFromPreviousSession();
         this.commentAgentController.initialize();
@@ -827,6 +847,7 @@ export default class Aside extends Plugin {
         this.unloaded = true;
         void this.logEvent("info", "startup", "startup.unload");
         disposeAgentRuntimeProcesses();
+        this.createScriptCommandController.dispose();
         this.commentScriptController.dispose();
         disposeVaultScriptRuntimeProcesses();
         this.commentAgentController.dispose();
@@ -1266,6 +1287,52 @@ export default class Aside extends Plugin {
         });
     }
 
+    public async resolveDefaultAgentRuntimeSelection(): Promise<DefaultAgentRuntimeSelection> {
+        const preferredAgent = this.getDefaultAgent();
+        const actors = getSupportedAgentActors();
+        const diagnosticsEntries = await Promise.all(actors.map(async (actor) => {
+            try {
+                return [actor.id, await this.getAgentRuntimeDiagnostics(actor.id)] as const;
+            } catch (error) {
+                return [actor.id, {
+                    status: "unavailable" as const,
+                    message: error instanceof Error && error.message.trim()
+                        ? error.message.trim()
+                        : `${actor.label} is unavailable.`,
+                }] as const;
+            }
+        }));
+        const diagnosticsByTarget = new Map(diagnosticsEntries);
+        const selection = resolveDefaultAgentSelection(preferredAgent, diagnosticsByTarget);
+        if (selection.kind === "none") {
+            return selection;
+        }
+
+        const runtimeSelection = resolveAgentRuntimeSelectionPlan({
+            target: selection.selectedAgent,
+            modePreference: this.getAgentRuntimeMode(),
+            localDiagnostics: diagnosticsByTarget.get(selection.selectedAgent) ?? {
+                status: "unavailable",
+                message: `${getAgentActorById(selection.selectedAgent).label} is unavailable.`,
+            },
+        });
+        if (runtimeSelection.kind === "blocked") {
+            return {
+                kind: "none",
+                preferredAgent,
+            };
+        }
+
+        return {
+            kind: "resolved",
+            selectedAgent: selection.selectedAgent,
+            preferredAgent,
+            usedFallback: selection.kind === "fallback",
+            runtime: runtimeSelection.runtime,
+            modePreference: runtimeSelection.modePreference,
+        };
+    }
+
     public async retryAgentRun(runId: string): Promise<boolean> {
         return this.commentAgentController.retryRun(runId);
     }
@@ -1657,6 +1724,7 @@ export default class Aside extends Plugin {
     private async handleSavedUserEntry(event: SavedUserEntryEvent): Promise<void> {
         await routeSavedUserEntry(
             event,
+            this.createScriptCommandController,
             this.commentScriptController,
             this.commentAgentController,
         );

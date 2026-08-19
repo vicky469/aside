@@ -9,6 +9,7 @@ import {
     mergeAgentRunMetadata,
     type AgentRunMetadata,
     type AgentRunRecord,
+    type AgentRunRequestKind,
     type AgentRunRuntime,
     type AgentRunStreamState,
 } from "../core/agents/agentRuns";
@@ -18,6 +19,7 @@ import { resolveRequestedAgentRunSkills } from "../core/agents/agentSkillRouting
 import type { AsideAgentTarget } from "../core/config/agentTargets";
 import type { SavedUserEntryEvent } from "../core/comments/savedUserEntry";
 import { parseAgentDirectives } from "../core/text/agentDirectives";
+import { CREATE_SCRIPT_NO_AGENT } from "../core/text/createScriptDirective";
 import { AgentRunStore } from "./agentRunStore";
 import {
     extractAgentAnnotationProposals,
@@ -25,6 +27,7 @@ import {
 } from "./agentAnnotationProposals";
 import {
     type AgentRuntimeSelection,
+    type DefaultAgentRuntimeSelection,
 } from "./agentRuntimeSelection";
 import { isAgentRuntimeCancelledError } from "./agentRuntimeAdapter";
 import {
@@ -83,12 +86,14 @@ export interface CommentAgentHost {
         prompt: string;
         cwd: string;
         vaultRootPath?: string | null;
+        requestKind?: AgentRunRequestKind;
         onPartialText?: (partialText: string) => void;
         onProgressText?: (progressText: string) => void;
         onRunMetadata?: (metadata: AgentRunMetadata) => void;
         abortSignal?: AbortSignal;
     }): Promise<AgentRuntimeResponse>;
     resolveAgentRuntimeSelection(target: AsideAgentTarget): Promise<AgentRuntimeSelection>;
+    resolveDefaultAgentRuntimeSelection(): Promise<DefaultAgentRuntimeSelection>;
     showNotice(message: string): void;
     log?(level: "info" | "warn" | "error", area: string, event: string, payload?: Record<string, unknown>): Promise<void>;
 }
@@ -260,6 +265,35 @@ export class CommentAgentController {
             requestedAgent: run.requestedAgent,
             runtime: run.runtime,
         });
+    }
+
+    public async handleCreateScriptRequest(
+        event: SavedUserEntryEvent,
+        requestText: string,
+    ): Promise<void> {
+        if (getLatestAgentRunForTriggerEntry(this.store.getRuns(), event.entryId)) {
+            return;
+        }
+
+        const selection = await this.host.resolveDefaultAgentRuntimeSelection();
+        if (selection.kind === "none") {
+            await this.appendCommandReply(event, CREATE_SCRIPT_NO_AGENT);
+            return;
+        }
+
+        const run = this.buildQueuedRun({
+            threadId: event.threadId,
+            triggerEntryId: event.entryId,
+            filePath: event.filePath,
+            requestedAgent: selection.selectedAgent,
+            ...(selection.usedFallback ? { preferredAgent: selection.preferredAgent } : {}),
+            requestKind: "create-script",
+            runtime: selection.runtime,
+            modePreference: selection.modePreference,
+            promptText: requestText,
+        });
+        await this.enqueueRun(run);
+        this.logBuiltInAsideSkillSelected(run, event.entryId);
     }
 
     public async retryRun(runId: string): Promise<boolean> {
@@ -670,6 +704,7 @@ export class CommentAgentController {
             prompt: options.runtimePrompt,
             cwd: workingDirectory,
             vaultRootPath: this.host.getVaultRootPath(),
+            requestKind: options.run.requestKind,
             abortSignal: options.execution.abortController.signal,
             onProgressText: (progressText) => {
                 if (this.isRunCancellationRequested(options.run.id)) {
@@ -1101,6 +1136,8 @@ export class CommentAgentController {
         triggerEntryId: string;
         filePath: string;
         requestedAgent: AsideAgentTarget;
+        preferredAgent?: AsideAgentTarget;
+        requestKind?: AgentRunRequestKind;
         runtime: AgentRunRuntime;
         modePreference: AgentRuntimeModePreference;
         promptText: string;
@@ -1113,6 +1150,8 @@ export class CommentAgentController {
             triggerEntryId: options.triggerEntryId,
             filePath: options.filePath,
             requestedAgent: options.requestedAgent,
+            ...(options.preferredAgent ? { preferredAgent: options.preferredAgent } : {}),
+            ...(options.requestKind ? { requestKind: options.requestKind } : {}),
             runtime: options.runtime,
             status: "queued",
             promptText: options.promptText,
@@ -1133,7 +1172,7 @@ export class CommentAgentController {
     }
 
     private buildRunStreamState(
-        run: Pick<AgentRunRecord, "id" | "threadId" | "requestedAgent" | "runtime"> & AgentRunMetadata,
+        run: Pick<AgentRunRecord, "id" | "threadId" | "requestedAgent" | "preferredAgent" | "requestKind" | "runtime"> & AgentRunMetadata,
         options: {
             status: AgentRunRecord["status"];
             statusText?: string;
@@ -1151,6 +1190,8 @@ export class CommentAgentController {
             runId: run.id,
             threadId: run.threadId,
             requestedAgent: run.requestedAgent,
+            preferredAgent: run.preferredAgent,
+            requestKind: run.requestKind,
             runtime: run.runtime,
             status: options.status,
             statusText: options.statusText,
@@ -1175,6 +1216,17 @@ export class CommentAgentController {
             runtime: run.runtime,
         });
         void this.processQueue();
+    }
+
+    private async appendCommandReply(event: SavedUserEntryEvent, body: string): Promise<void> {
+        await this.host.appendThreadEntry(event.threadId, {
+            id: this.host.createCommentId(),
+            body,
+            timestamp: this.host.now(),
+        }, {
+            insertAfterCommentId: event.entryId,
+            alwaysInsertAfterTarget: true,
+        });
     }
 
     private async refreshStatusViews(): Promise<void> {
