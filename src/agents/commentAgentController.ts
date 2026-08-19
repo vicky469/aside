@@ -19,7 +19,11 @@ import { resolveRequestedAgentRunSkills } from "../core/agents/agentSkillRouting
 import type { AsideAgentTarget } from "../core/config/agentTargets";
 import type { SavedUserEntryEvent } from "../core/comments/savedUserEntry";
 import { parseAgentDirectives } from "../core/text/agentDirectives";
-import { CREATE_SCRIPT_NO_AGENT } from "../core/text/createScriptDirective";
+import {
+    CREATE_SCRIPT_NO_AGENT,
+    CREATE_SCRIPT_USAGE,
+    parseCreateScriptDirective,
+} from "../core/text/createScriptDirective";
 import { AgentRunStore } from "./agentRunStore";
 import {
     extractAgentAnnotationProposals,
@@ -348,19 +352,64 @@ export class CommentAgentController {
             return false;
         }
 
-        const resolution = parseAgentDirectives(latestComment.comment);
-        const resolvedTarget = this.resolveRetryTarget(resolution);
-        if (!resolvedTarget) {
-            return false;
-        }
-        const runtimeSelection = await this.host.resolveAgentRuntimeSelection(resolvedTarget);
-        if (runtimeSelection.kind === "blocked") {
-            this.host.showNotice(runtimeSelection.notice);
-            return false;
-        }
-
         const retryOfRunId = options.retryOfRunId
             ?? getLatestAgentRunForTriggerEntry(this.store.getRuns(), latestComment.id)?.id;
+        const previousRun = retryOfRunId
+            ? this.store.getRunById(retryOfRunId)
+            : null;
+        let requestedAgent: AsideAgentTarget;
+        let runtime: AgentRunRuntime;
+        let modePreference: AgentRuntimeModePreference;
+        let promptText: string;
+        let preferredAgent: AsideAgentTarget | undefined;
+        let requestKind: AgentRunRequestKind | undefined;
+
+        if (previousRun?.requestKind === "create-script") {
+            const createResolution = parseCreateScriptDirective(latestComment.comment);
+            if (createResolution.kind !== "request") {
+                this.host.showNotice(
+                    createResolution.kind === "rejected"
+                        ? createResolution.message
+                        : CREATE_SCRIPT_USAGE,
+                );
+                return false;
+            }
+
+            const selection = await this.host.resolveDefaultAgentRuntimeSelection();
+            if (selection.kind === "none") {
+                await this.appendCommandReply({
+                    threadId: thread.id,
+                    entryId: latestComment.id,
+                    filePath: latestComment.filePath,
+                    body: latestComment.comment,
+                }, CREATE_SCRIPT_NO_AGENT);
+                return false;
+            }
+            requestedAgent = selection.selectedAgent;
+            runtime = selection.runtime;
+            modePreference = selection.modePreference;
+            promptText = createResolution.requestText;
+            preferredAgent = selection.usedFallback
+                ? selection.preferredAgent
+                : undefined;
+            requestKind = "create-script";
+        } else {
+            const resolution = parseAgentDirectives(latestComment.comment);
+            const resolvedTarget = this.resolveRetryTarget(resolution);
+            if (!resolvedTarget) {
+                return false;
+            }
+            const runtimeSelection = await this.host.resolveAgentRuntimeSelection(resolvedTarget);
+            if (runtimeSelection.kind === "blocked") {
+                this.host.showNotice(runtimeSelection.notice);
+                return false;
+            }
+            requestedAgent = resolvedTarget;
+            runtime = runtimeSelection.runtime;
+            modePreference = runtimeSelection.modePreference;
+            promptText = latestComment.comment;
+        }
+
         const storedRetryOutputEntryId = retryOfRunId
             ? this.store.getRunById(retryOfRunId)?.outputEntryId
             : undefined;
@@ -372,10 +421,12 @@ export class CommentAgentController {
             threadId: thread.id,
             triggerEntryId: latestComment.id,
             filePath: latestComment.filePath,
-            requestedAgent: resolvedTarget,
-            runtime: runtimeSelection.runtime,
-            modePreference: runtimeSelection.modePreference,
-            promptText: latestComment.comment,
+            requestedAgent,
+            ...(preferredAgent ? { preferredAgent } : {}),
+            ...(requestKind ? { requestKind } : {}),
+            runtime,
+            modePreference,
+            promptText,
             ...(retryOfRunId ? { retryOfRunId } : {}),
         });
         if (retryOutputEntryId) {

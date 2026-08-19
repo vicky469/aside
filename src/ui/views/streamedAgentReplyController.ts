@@ -1,6 +1,6 @@
 import type { AgentRunStreamState } from "../../core/agents/agentRuns";
-import { getAgentActorLabel } from "../../core/agents/agentActorRegistry";
 import { getAgentRunStatusPresentation } from "./sidebarPersistedComment";
+import { getAgentRunAuthorLabel } from "./agentRunAuthor";
 import { formatSidebarCommentMeta } from "./sidebarCommentSections";
 import { nodeInstanceOf } from "../domGuards";
 import { createDetachedObsidianElement } from "../dom/createDetachedObsidianElement";
@@ -100,7 +100,7 @@ export class StreamedAgentReplyController {
             metaValueEl.textContent = metaText;
         }
 
-        const label = getAgentActorLabel(stream.requestedAgent);
+        const label = getAgentRunAuthorLabel(stream);
         labelEl.className = `aside-comment-author-indicator aside-agent-stream-author is-${stream.requestedAgent}`;
         if (labelEl.textContent !== label) {
             labelEl.textContent = label;

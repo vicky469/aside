@@ -854,6 +854,64 @@ test("comment agent controller regenerates a specific reply run using the curren
     assert.equal(harness.commentManager.getCommentById(latestRun?.outputEntryId ?? "")?.comment, "Second reply");
 });
 
+test("comment agent controller re-resolves the default fallback for create-script regenerate", async () => {
+    let selection: DefaultAgentRuntimeSelection = {
+        kind: "resolved",
+        selectedAgent: "codex",
+        preferredAgent: "gemini",
+        usedFallback: true,
+        runtime: "direct-cli",
+        modePreference: "auto",
+    };
+    let runtimeAttempt = 0;
+    const harness = createHarness({
+        initialComments: [createComment({
+            comment: "/create-script build a cleaner",
+        })],
+        resolveDefaultAgentRuntimeSelection: async () => selection,
+        customRunAgentRuntime: async () => {
+            runtimeAttempt += 1;
+            if (runtimeAttempt === 1) {
+                throw new Error("Codex failed after launch");
+            }
+            return {
+                runtime: "direct-cli",
+                replyText: "Created /cleaner.",
+            };
+        },
+    });
+
+    await harness.controller.handleCreateScriptRequest({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "/create-script build a cleaner",
+    }, "build a cleaner");
+    await waitForAgentQueueToDrain(harness.controller);
+
+    const previous = harness.controller.getLatestAgentRunForThread("thread-1");
+    assert.equal(previous?.status, "failed");
+    selection = {
+        kind: "resolved",
+        selectedAgent: "claude",
+        preferredAgent: "gemini",
+        usedFallback: true,
+        runtime: "direct-cli",
+        modePreference: "auto",
+    };
+
+    assert.equal(await harness.controller.retryRun(previous?.id ?? ""), true);
+    await waitForAgentQueueToDrain(harness.controller);
+
+    const retry = harness.controller.getLatestAgentRunForThread("thread-1");
+    assert.equal(retry?.requestKind, "create-script");
+    assert.equal(retry?.requestedAgent, "claude");
+    assert.equal(retry?.preferredAgent, "gemini");
+    assert.equal(retry?.outputEntryId, previous?.outputEntryId);
+    assert.equal(retry?.retryOfRunId, previous?.id);
+    assert.equal(harness.runtimeCalls.at(-1)?.requestKind, "create-script");
+});
+
 test("comment agent controller clears the previous retry reply before the regenerated runtime completes", async () => {
     let resolveSecondReply!: (replyText: string) => void;
     const secondReply = new Promise<string>((resolve) => {

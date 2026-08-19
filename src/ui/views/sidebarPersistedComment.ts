@@ -1,7 +1,6 @@
 import type { Comment, CommentThread, CommentThreadEntry } from "../../commentManager";
 import { getFirstThreadEntry, threadEntryToComment } from "../../commentManager";
 import { isOrphanedComment, isPageComment } from "../../core/anchors/commentAnchors";
-import { getAgentActorLabel } from "../../core/agents/agentActorRegistry";
 import {
     getAgentRunByOutputEntryId,
     getLatestAgentRunForTriggerEntry,
@@ -34,6 +33,7 @@ import {
     shouldRefocusSidebarCommentContent,
     shouldActivateSidebarComment,
 } from "./commentPointerAction";
+import { getAgentRunAuthorLabel } from "./agentRunAuthor";
 import {
     attachSidebarActionButtonInteractions,
     renderAddEntryButton,
@@ -199,10 +199,6 @@ function getScriptRunStatusPresentation(status: ScriptRunStatus): AgentRunStatus
 
 function isAgentRunRecord(run: SidebarPersistedRunRecord): run is AgentRunRecord {
     return "requestedAgent" in run;
-}
-
-function getAgentLabel(target: AgentRunRecord["requestedAgent"]): string {
-    return getAgentActorLabel(target);
 }
 
 function formatSkillMetadataLabel(skill: { name: string; mode?: string }): string {
@@ -442,7 +438,7 @@ function buildSidebarCommentAuthorPresentation(
 
     return {
         kind: run.requestedAgent,
-        label: getAgentLabel(run.requestedAgent),
+        label: getAgentRunAuthorLabel(run),
     };
 }
 
@@ -465,7 +461,7 @@ function renderPersistedRunStatus(
     } else {
         markEl.setAttribute("aria-hidden", "true");
     }
-    const label = isAgentRun ? getAgentLabel(run.requestedAgent) : "Script";
+    const label = isAgentRun ? getAgentRunAuthorLabel(run) : "Script";
     statusEl.setAttribute("aria-label", `${label} ${run.status}`);
     if (run.error) {
         statusEl.setAttribute("title", run.error);
