@@ -20,7 +20,7 @@ Use this section as the working checklist. Mark an item done only after the code
 - [x] Render Share for an inline-edited child entry without restoring unrelated footer actions.
 - [x] Let Share copy the stable persisted location without saving, cancelling, or closing the active draft.
 - [x] Propagate clipboard success or failure to the footer and show Copied feedback only on success.
-- [ ] Merge the verified feature branch back into `main` and remove the temporary branch/worktree.
+- [x] Merge the verified feature branch back into `main` and remove the temporary branch/worktree.
 
 ### Verification
 
@@ -28,7 +28,7 @@ Use this section as the working checklist. Mark an item done only after the code
 - [x] A child edit-mode regression test proves Share stays visible, copies the child URI, and does not invoke draft saving.
 - [x] A clipboard-failure regression test proves false success feedback is not shown.
 - [x] Existing non-edit Share feedback behavior continues to pass.
-- [ ] Full test, lint, typecheck, Obsidian compliance, and production bundle checks pass on the feature branch and merged `main`.
+- [x] Full test, lint, typecheck, Obsidian compliance, and production bundle checks pass on the feature branch and merged `main`.
 
 ## Context
 

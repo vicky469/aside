@@ -161,7 +161,7 @@ git diff --stat main...HEAD
 git status --short
 ```
 
-- [ ] Commit tracking updates if they changed:
+- [x] Commit tracking updates if they changed:
 
 ```bash
 git add -f docs/superpowers/specs/2026-08-19-share-during-inline-edit-design.md docs/superpowers/plans/2026-08-19-share-during-inline-edit.md
@@ -174,31 +174,31 @@ git commit -m "docs: record inline share verification"
 - Modify: `docs/superpowers/specs/2026-08-19-share-during-inline-edit-design.md`
 - Modify: `docs/superpowers/plans/2026-08-19-share-during-inline-edit.md`
 
-- [ ] Confirm both the main worktree and feature worktree are clean, and confirm `main` still points to the feature branch's original base or contains only understood changes.
+- [x] Confirm both the main worktree and feature worktree are clean, and confirm `main` still points to the feature branch's original base or contains only understood changes.
 
-- [ ] From the main worktree, merge without pushing:
+- [x] From the main worktree, merge without pushing:
 
 ```bash
 git merge --no-ff fix/share-during-inline-edit
 ```
 
-- [ ] Re-run integrated verification on `main`:
+- [x] Re-run integrated verification on `main`:
 
 ```bash
 npm test
 npm run build
 ```
 
-- [ ] Mark the merge and merged-main verification checklist items complete in the design specification and this plan, then commit the tracking update on `main`.
+- [x] Mark the merge and merged-main verification checklist items complete in the design specification and this plan, then commit the tracking update on `main`.
 
-- [ ] Remove the clean temporary worktree and merged feature branch:
+- [x] Remove the clean temporary worktree and merged feature branch:
 
 ```bash
 git worktree remove .worktrees/fix-share-during-inline-edit
 git branch -d fix/share-during-inline-edit
 ```
 
-- [ ] Confirm final state and that no remote push occurred:
+- [x] Confirm final state and that no remote push occurred:
 
 ```bash
 git status --short --branch
