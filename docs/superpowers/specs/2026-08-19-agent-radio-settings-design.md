@@ -1,7 +1,7 @@
 # Agent Radio Settings Design
 
 **Date:** 2026-08-19
-**Status:** Approved design; implementation pending
+**Status:** Implemented; frontend acceptance pending
 
 ## Implementation Tracking
 
@@ -15,18 +15,18 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Replace the default-agent dropdown with a compact native radio group ordered Codex, Claude Code, Gemini.
-- [ ] Render each agent as one aligned row with its radio, name, and text availability status.
-- [ ] Disable unavailable and checking choices while keeping every supported agent visible.
-- [ ] Preserve a checked but disabled saved preference when that agent becomes unavailable, with the effective fallback below the group.
-- [ ] Use Obsidian theme variables and responsive wrapping without changing persistence or agent-selection policy.
+- [x] Replace the default-agent dropdown with a compact native radio group ordered Codex, Claude Code, Gemini.
+- [x] Render each agent as one aligned row with its radio, name, and text availability status.
+- [x] Disable unavailable and checking choices while keeping every supported agent visible.
+- [x] Preserve a checked but disabled saved preference when that agent becomes unavailable, with the effective fallback below the group.
+- [x] Use Obsidian theme variables and responsive wrapping without changing persistence or agent-selection policy.
 
 ### Verification
 
-- [ ] Presentation tests cover order, selected preference, checking, available, and unavailable radio states.
-- [ ] Interaction tests prove only available rows can change and persist the default agent.
-- [ ] Settings and CSS regression tests pass alongside the existing agent fallback tests.
-- [ ] The full automated suite, production bundle, Obsidian compliance check, and release artifact guard pass.
+- [x] Presentation tests cover order, selected preference, checking, available, and unavailable radio states.
+- [x] Interaction tests prove only available rows can change and persist the default agent.
+- [x] Settings and CSS regression tests pass alongside the existing agent fallback tests.
+- [x] The full automated suite, production bundle, Obsidian compliance check, and release artifact guard pass.
 - [ ] The installed plugin is visually checked in Obsidian at normal and narrow settings widths.
 
 ## Context
