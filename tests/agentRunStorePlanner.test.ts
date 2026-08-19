@@ -103,6 +103,39 @@ test("normalizePersistedAgentRuns seeds file metadata from the run file path", (
     }])[0]?.usedFiles, ["Folder/Note.md"]);
 });
 
+test("normalizePersistedAgentRuns keeps supported create-script fallback metadata", () => {
+    const runs = normalizePersistedAgentRuns([{
+        id: "run-1",
+        threadId: "thread-1",
+        triggerEntryId: "entry-1",
+        filePath: "Folder/Note.md",
+        requestedAgent: "claude",
+        preferredAgent: " GEMINI ",
+        requestKind: "create-script",
+        runtime: "direct-cli",
+        status: "queued",
+        promptText: "build a cleaner",
+        createdAt: 100,
+    }, {
+        id: "run-2",
+        threadId: "thread-2",
+        triggerEntryId: "entry-2",
+        filePath: "Folder/Other.md",
+        requestedAgent: "codex",
+        preferredAgent: "unknown",
+        requestKind: "unknown",
+        runtime: "direct-cli",
+        status: "queued",
+        promptText: "@codex explain",
+        createdAt: 101,
+    }]);
+
+    assert.equal(runs[0]?.requestKind, "create-script");
+    assert.equal(runs[0]?.preferredAgent, "gemini");
+    assert.equal(runs[1]?.requestKind, undefined);
+    assert.equal(runs[1]?.preferredAgent, undefined);
+});
+
 test("AgentRunStore snapshots add input and leaves memory unchanged when persistence fails", async () => {
     let persistedData: PersistedPluginData = {};
     let saveAttempt = 0;
