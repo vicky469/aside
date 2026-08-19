@@ -76,7 +76,7 @@ test("resolveAgentRuntimeSelection blocks in explicit local mode with the real l
 
 test("agent runtime labels stay local and ownership-explicit", () => {
     assert.equal(getAgentRuntimeOwnershipMessage("direct-cli", "codex"), "Using your local Codex setup");
-    assert.equal(getAgentRuntimeOwnershipMessage("direct-cli", "claude"), "Using your local Claude setup");
+    assert.equal(getAgentRuntimeOwnershipMessage("direct-cli", "claude"), "Using your local Claude Code setup");
     assert.equal(getAgentRuntimeStatusLabel("direct-cli"), "Runtime: Local");
     assert.equal(getAgentRuntimeCapabilityLabel("direct-cli"), "Capability: Workspace-aware");
 });

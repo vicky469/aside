@@ -546,9 +546,10 @@ test("sidebar draft editor controller preserves / provider scope in the disconne
         mentions: suggestions.map((suggestion) => suggestion.mention),
     }, {
         rawQueries: ["/"],
-        mentions: ["/clean-citations"],
+        mentions: ["/create-script", "/clean-citations"],
     });
-    assert.ok(suggestions.every((suggestion) => suggestion.kind === "script"));
+    assert.equal(suggestions[0]?.kind, "built-in");
+    assert.equal(suggestions[1]?.kind, "script");
 });
 
 test("sidebar draft editor routes tags to the modal without an inline box", () => {

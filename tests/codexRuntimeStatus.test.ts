@@ -28,7 +28,7 @@ test("agent runtime status presentation reports claude availability clearly", ()
             message: "Claude CLI is available.",
         }),
         {
-            title: "Claude runtime: Available",
+            title: "Claude Code runtime: Available",
             description: "Built-in @claude can run in this Obsidian environment.",
         },
     );

@@ -62,18 +62,20 @@ function isRemotePurgeSettingVisible(context: AsideSettingCatalogContext): boole
     return isPublishingSettingVisible(context) && context.plugin.settings.publishRemotePurgeEnabled;
 }
 
+const DEFAULT_AGENT_SETTING_DESCRIPTION = "Preferred local agent for /create-script.";
+
 export const ASIDE_SETTING_CATALOG: readonly AsideSettingCatalogEntry[] = [
     {
         key: "default-agent",
         section: "agents",
         name: "Default agent",
-        description: "Preferred local agent for /create-script.",
+        description: DEFAULT_AGENT_SETTING_DESCRIPTION,
         aliases: getSupportedAgentActors().map((actor) => actor.label),
         keywords: ["runtime", "availability", "fallback"],
         render: (setting, context) => {
             context.renderDefaultAgentSettings(
                 setting,
-                "Preferred local agent for /create-script.",
+                DEFAULT_AGENT_SETTING_DESCRIPTION,
             );
         },
     },
