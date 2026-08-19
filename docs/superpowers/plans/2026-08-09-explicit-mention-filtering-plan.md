@@ -188,21 +188,21 @@ Expected: the guard passes; the two searches produce no shipped source map, raw 
 Run:
 
 ```bash
-npm run dev:install-built -- --vault /Users/wenqingli/Obsidian/lean-startup
+npm run dev:install-built -- --vault /Users/example/Obsidian/lean-startup
 ```
 
 Then run each comparison separately:
 
 ```bash
-cmp main.js /Users/wenqingli/Obsidian/lean-startup/.obsidian/plugins/aside/main.js
+cmp main.js /Users/example/Obsidian/lean-startup/.obsidian/plugins/aside/main.js
 ```
 
 ```bash
-cmp manifest.json /Users/wenqingli/Obsidian/lean-startup/.obsidian/plugins/aside/manifest.json
+cmp manifest.json /Users/example/Obsidian/lean-startup/.obsidian/plugins/aside/manifest.json
 ```
 
 ```bash
-cmp styles.css /Users/wenqingli/Obsidian/lean-startup/.obsidian/plugins/aside/styles.css
+cmp styles.css /Users/example/Obsidian/lean-startup/.obsidian/plugins/aside/styles.css
 ```
 
 Expected: installation succeeds and all three comparisons exit zero.

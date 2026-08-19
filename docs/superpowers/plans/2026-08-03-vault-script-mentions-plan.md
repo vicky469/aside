@@ -1345,10 +1345,10 @@ Expected: every command exits 0. `npm run build` must also pass the Obsidian com
 With approval to modify the target vault, run:
 
 ```bash
-npm run dev:install-built -- --vault "/Users/wenqingli/Obsidian/lean-startup"
+npm run dev:install-built -- --vault "/Users/example/Obsidian/lean-startup"
 ```
 
-Reload Aside, open `PDM software.md`, type `@`, and confirm `@clean-citation-links` is offered from `/Users/wenqingli/Obsidian/lean-startup/🛠️ scripts/clean-citation-links.mjs`. Create a temporary direct child `🛠️ scripts/aside-live-registry-smoke.mjs` through Obsidian, confirm `@aside-live-registry-smoke` appears without restarting, then move the temporary file to the system trash and confirm the suggestion disappears. Save `@clean-citation-links`, verify Node receives the current note path and no agent run is created, change the current note or script data, click Regenerate, and confirm the existing result entry is replaced from the new run.
+Reload Aside, open `PDM software.md`, type `@`, and confirm `@clean-citation-links` is offered from `/Users/example/Obsidian/lean-startup/🛠️ scripts/clean-citation-links.mjs`. Create a temporary direct child `🛠️ scripts/aside-live-registry-smoke.mjs` through Obsidian, confirm `@aside-live-registry-smoke` appears without restarting, then move the temporary file to the system trash and confirm the suggestion disappears. Save `@clean-citation-links`, verify Node receives the current note path and no agent run is created, change the current note or script data, click Regenerate, and confirm the existing result entry is replaced from the new run.
 
 - [x] **Step 5: Update the tracked spec only for verified work**
 

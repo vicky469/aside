@@ -53,7 +53,7 @@ test("renderStyledDraftCommentHtml leaves unregistered slash mentions plain", ()
 
 test("renderStyledDraftCommentHtml does not partially highlight paths or urls", () => {
     const acceptEveryCandidate = () => true;
-    const value = "/Users/wenqingli/note.md folder/clean https://example.com/path C:/Users/name";
+    const value = "/Users/example/note.md folder/clean https://example.com/path C:/Users/name";
     assert.equal(renderStyledDraftCommentHtml(value, acceptEveryCandidate), value);
 });
 
@@ -313,7 +313,7 @@ Expected: the full test suite, lint, typecheck, Obsidian compliance check, produ
 Run from the worktree:
 
 ```bash
-node scripts/install-built-plugin.mjs --vault /Users/wenqingli/Obsidian/lean-startup
+node scripts/install-built-plugin.mjs --vault /Users/example/Obsidian/lean-startup
 obsidian vault=lean-startup plugin:reload id=aside
 ```
 
@@ -321,7 +321,7 @@ Expected: only the verified `main.js`, `manifest.json`, and `styles.css` are ins
 
 - [x] **Step 3: Smoke-check the reported case and a registered script**
 
-Open the Aside sidebar for `/Users/wenqingli/Obsidian/lean-startup/Raw/The New Era of Startup Funding Has Just Begun.md`. Confirm an Aside draft or persisted comment containing the absolute path renders `/Users` as ordinary text. Find one unique current file under `lean-startup/🛠️ scripts/`, enter its `/script-name` mention, and confirm the full standalone token receives the existing mention styling.
+Open the Aside sidebar for `/Users/example/Obsidian/lean-startup/Raw/The New Era of Startup Funding Has Just Begun.md`. Confirm an Aside draft or persisted comment containing the absolute path renders `/Users` as ordinary text. Find one unique current file under `lean-startup/🛠️ scripts/`, enter its `/script-name` mention, and confirm the full standalone token receives the existing mention styling.
 
 - [x] **Step 4: Update the spec tracking with fresh evidence**
 

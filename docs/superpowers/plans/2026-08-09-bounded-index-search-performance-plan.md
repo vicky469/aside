@@ -836,10 +836,10 @@ Expected: all tests, ESLint, typecheck, Obsidian compliance, production bundle, 
 Run:
 
 ```bash
-node scripts/install-built-plugin.mjs --vault /Users/wenqingli/Obsidian/lean-startup
-cmp -s main.js /Users/wenqingli/Obsidian/lean-startup/.obsidian/plugins/aside/main.js
-cmp -s manifest.json /Users/wenqingli/Obsidian/lean-startup/.obsidian/plugins/aside/manifest.json
-cmp -s styles.css /Users/wenqingli/Obsidian/lean-startup/.obsidian/plugins/aside/styles.css
+node scripts/install-built-plugin.mjs --vault /Users/example/Obsidian/lean-startup
+cmp -s main.js /Users/example/Obsidian/lean-startup/.obsidian/plugins/aside/main.js
+cmp -s manifest.json /Users/example/Obsidian/lean-startup/.obsidian/plugins/aside/manifest.json
+cmp -s styles.css /Users/example/Obsidian/lean-startup/.obsidian/plugins/aside/styles.css
 obsidian vault=lean-startup plugin:reload id=aside
 ```
 

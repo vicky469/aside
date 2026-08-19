@@ -860,8 +860,8 @@ git commit -m "fix(publish): track metadata across vault lifecycle"
 - Verify only: `main.js`
 - Verify only: `manifest.json`
 - Verify only: `styles.css`
-- Verify only: `/Users/wenqingli/Obsidian/lean-startup/.obsidian/plugins/aside/data.json`
-- Verify only: `/Users/wenqingli/Obsidian/lean-startup/public/index.md`
+- Verify only: `/Users/example/Obsidian/lean-startup/.obsidian/plugins/aside/data.json`
+- Verify only: `/Users/example/Obsidian/lean-startup/public/index.md`
 
 - [ ] **Step 1: Run the complete focused regression group**
 
@@ -903,10 +903,10 @@ git commit -m "docs: verify publish metadata registry"
 - [ ] **Step 6: Install the verified three-file build into lean-startup**
 
 ```bash
-node scripts/install-built-plugin.mjs --vault /Users/wenqingli/Obsidian/lean-startup
-cmp -s main.js /Users/wenqingli/Obsidian/lean-startup/.obsidian/plugins/aside/main.js
-cmp -s manifest.json /Users/wenqingli/Obsidian/lean-startup/.obsidian/plugins/aside/manifest.json
-cmp -s styles.css /Users/wenqingli/Obsidian/lean-startup/.obsidian/plugins/aside/styles.css
+node scripts/install-built-plugin.mjs --vault /Users/example/Obsidian/lean-startup
+cmp -s main.js /Users/example/Obsidian/lean-startup/.obsidian/plugins/aside/main.js
+cmp -s manifest.json /Users/example/Obsidian/lean-startup/.obsidian/plugins/aside/manifest.json
+cmp -s styles.css /Users/example/Obsidian/lean-startup/.obsidian/plugins/aside/styles.css
 ```
 
 Expected: install succeeds and all three `cmp` commands exit 0, proving byte-identical installed artifacts.
@@ -918,8 +918,8 @@ Reload the Aside plugin from Obsidian's Community Plugins UI so startup maintena
 Inspect:
 
 ```bash
-rg -n -A 80 '"publicPublishMetadataRecords"' /Users/wenqingli/Obsidian/lean-startup/.obsidian/plugins/aside/data.json
-sed -n '1,120p' /Users/wenqingli/Obsidian/lean-startup/public/index.md
+rg -n -A 80 '"publicPublishMetadataRecords"' /Users/example/Obsidian/lean-startup/.obsidian/plugins/aside/data.json
+sed -n '1,120p' /Users/example/Obsidian/lean-startup/public/index.md
 ```
 
 Expected:
