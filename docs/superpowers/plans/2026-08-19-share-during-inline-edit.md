@@ -15,15 +15,15 @@
 **Files:**
 - Modify: `tests/sidebarPersistedComment.test.ts`
 
-- [ ] Change the default renderer host stub to model the real clipboard result:
+- [x] Change the default renderer host stub to model the real clipboard result:
 
 ```ts
 shareComment: async () => true,
 ```
 
-- [ ] Update the existing successful-share test override to return `true` after recording the shared comment id.
+- [x] Update the existing successful-share test override to return `true` after recording the shared comment id.
 
-- [ ] Add a parent edit-mode regression test that renders an active `editDraftComment`, clicks the card's Share button, and proves:
+- [x] Add a parent edit-mode regression test that renders an active `editDraftComment`, clicks the card's Share button, and proves:
 
 ```ts
 assert.equal(shareButtons.length, 1);
@@ -32,19 +32,20 @@ assert.equal(saveVisibleDraftCalls, 0);
 assert.equal(host.editDraftComment?.id, "comment-1");
 ```
 
-- [ ] Add a child edit-mode regression test using a two-entry thread. Select the card whose `data-comment-id` is `entry-2`, click its Share button, and prove the child id is shared without saving the visible draft.
+- [x] Add a child edit-mode regression test using a two-entry thread. Select the card whose `data-comment-id` is `entry-2`, click its Share button, and prove the child id is shared without saving the visible draft.
 
-- [ ] Add a clipboard-failure regression test with `shareComment: async () => false`; after the click, prove that the Share label/icon remain normal, the status stays hidden, and no feedback reset timer is scheduled.
+- [x] Add a clipboard-failure regression test with `shareComment: async () => false`; after the click, prove that the Share label/icon remain normal, the status stays hidden, and no feedback reset timer is scheduled.
 
-- [ ] Run the focused test and confirm RED for the intended reasons:
+- [x] Run the focused test and confirm RED for the intended reasons:
 
 ```bash
-npm run test:compiled -- --test-name-pattern "sharing a side note|inline editing|clipboard fails"
+./node_modules/.bin/tsc -p tsconfig.test.json
+node --test --test-name-pattern "sharing a side note|inline editing|clipboard fails" .test-dist/tests/sidebarPersistedComment.test.js
 ```
 
 Expected: parent/child edit tests fail because the Share button is absent; the failure-feedback test fails because the current handler reports Copied regardless of the clipboard result.
 
-- [ ] Commit the failing regression tests:
+- [x] Commit the failing regression tests:
 
 ```bash
 git add tests/sidebarPersistedComment.test.ts
@@ -58,13 +59,13 @@ git commit -m "test: cover sharing during inline edits"
 - Modify: `src/ui/views/AsideView.ts`
 - Modify: `tests/sidebarPersistedComment.test.ts` only if the compiler exposes a missed mock signature
 
-- [ ] Change the host contract from `Promise<void>` to `Promise<boolean>`:
+- [x] Change the host contract from `Promise<void>` to `Promise<boolean>`:
 
 ```ts
 shareComment(comment: Comment): Promise<boolean>;
 ```
 
-- [ ] Make the Share click handler use the clipboard result directly, without `saveVisibleDraftIfPresent`:
+- [x] Make the Share click handler use the clipboard result directly, without `saveVisibleDraftIfPresent`:
 
 ```ts
 const copied = await host.shareComment(comment);
@@ -78,11 +79,11 @@ shareCopiedResetTimer = renderShareCopiedFeedback(
 );
 ```
 
-- [ ] Return `copyCommentLocationToClipboard(...)` from the real `AsideView` host adapter instead of awaiting and discarding its boolean result.
+- [x] Return `copyCommentLocationToClipboard(...)` from the real `AsideView` host adapter instead of awaiting and discarding its boolean result.
 
-- [ ] Run the focused tests again. Expected: the clipboard-failure and existing non-edit success tests pass; edit-mode tests still fail because no Share action is rendered during editing.
+- [x] Run the focused tests again. Expected: the clipboard-failure and existing non-edit success tests pass; edit-mode tests still fail because no Share action is rendered during editing.
 
-- [ ] Commit the clipboard-result boundary change:
+- [x] Commit the clipboard-result boundary change:
 
 ```bash
 git add src/ui/views/sidebarPersistedComment.ts src/ui/views/AsideView.ts tests/sidebarPersistedComment.test.ts
@@ -94,7 +95,7 @@ git commit -m "fix: report share clipboard failures"
 **Files:**
 - Modify: `src/ui/views/sidebarPersistedComment.ts`
 
-- [ ] After the normal child `if (!entryEditDraft)` actions, add an edit-state footer using the same renderer with no regeneration/run metadata and only Share enabled:
+- [x] After the normal child `if (!entryEditDraft)` actions, add an edit-state footer using the same renderer with no regeneration/run metadata and only Share enabled:
 
 ```ts
 if (entryEditDraft) {
@@ -108,21 +109,22 @@ if (entryEditDraft) {
 }
 ```
 
-- [ ] After the normal parent `if (!parentEditDraft)` actions, add the equivalent Share-only edit-state footer, preserving the existing parent Share visibility policy.
+- [x] After the normal parent `if (!parentEditDraft)` actions, add the equivalent Share-only edit-state footer, preserving the existing parent Share visibility policy.
 
-- [ ] Run the focused tests and confirm GREEN:
-
-```bash
-npm run test:compiled -- --test-name-pattern "sharing a side note|inline editing|clipboard fails"
-```
-
-- [ ] Run the full compiled renderer suite:
+- [x] Run the focused tests and confirm GREEN:
 
 ```bash
-npm run test:compiled -- --test-name-pattern "renderPersistedCommentCard"
+./node_modules/.bin/tsc -p tsconfig.test.json
+node --test --test-name-pattern "sharing a side note|inline editing|clipboard fails" .test-dist/tests/sidebarPersistedComment.test.js
 ```
 
-- [ ] Commit the rendering fix:
+- [x] Run the full compiled renderer suite:
+
+```bash
+node --test --test-name-pattern "renderPersistedCommentCard" .test-dist/tests/sidebarPersistedComment.test.js
+```
+
+- [x] Commit the rendering fix:
 
 ```bash
 git add src/ui/views/sidebarPersistedComment.ts
@@ -135,13 +137,13 @@ git commit -m "fix: keep share available while editing"
 - Modify: `docs/superpowers/specs/2026-08-19-share-during-inline-edit-design.md`
 - Modify: `docs/superpowers/plans/2026-08-19-share-during-inline-edit.md`
 
-- [ ] Run the complete test suite:
+- [x] Run the complete test suite:
 
 ```bash
 npm test
 ```
 
-- [ ] Run lint, typecheck, Obsidian compliance, production bundling, and release-artifact inspection through the repository build:
+- [x] Run lint, typecheck, Obsidian compliance, production bundling, and release-artifact inspection through the repository build:
 
 ```bash
 npm run build
@@ -149,9 +151,9 @@ npm run build
 
 Expected: build succeeds; shipped `main.js`, `manifest.json`, and `styles.css` exist; no `main.js.map`, `sourceMappingURL`, `sourcesContent`, raw TS/JSX-family source, `.env*`, `.npmrc`, private keys, or certificates are present in the release artifact set.
 
-- [ ] Mark the implemented behavior and feature-branch verification items complete in the design specification. Leave merge/main verification pending.
+- [x] Mark the implemented behavior and feature-branch verification items complete in the design specification. Leave merge/main verification pending.
 
-- [ ] Review the branch diff for unrelated changes:
+- [x] Review the branch diff for unrelated changes:
 
 ```bash
 git diff --check main...HEAD
