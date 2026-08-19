@@ -53,25 +53,8 @@ For durable storage and sync across devices, use Aside with [Obsidian Sync](http
 - Generates `🐰 Aside Index.md` as a vault-wide comment index.
 - Lets the index sidebar switch between the comment list and a thought-trail graph built from side-note wiki links. The graph follows those links across connected markdown files, so it can show multi-step trails instead of only direct one-hop links.
 - Built-in agent help on desktop Obsidian. Type `@codex`, `@claude`, or `@gemini` in a thread to get a reply, create anchored side notes, or apply explicit edits to the source note.
-- Experimental Cloudflare Pages publishing for testers on desktop Obsidian.
 
-## Network access
-
-Aside does not send vault contents, note paths, tags, clipboard contents, or local diagnostic logs to an Aside-operated analytics or support service. Network-capable actions are user initiated: opening an external link, invoking a local agent CLI, publishing through the user's local Wrangler installation, or requesting cache invalidation through an optional remote HTTPS broker configured by the user. Cache-purge requests send that broker the configured public URL, vault-relative source path, and purge event. The generated Aside index uses the default remote image at `ichef.bbci.co.uk` unless the user replaces or clears that image URL; Obsidian may request that image when it renders the note.
-
-## Local vault indexing
-
-Aside indexes markdown note paths and cached tags locally so link suggestions, tag suggestions, move targets, Thought Trail, and the generated comment index stay current. The index is seeded once when the plugin loads and then updated from Obsidian vault and metadata events. Publishing traverses only the configured publishing folder. Aside does not transmit the local note or tag index.
-
-## Clipboard access
-
-Aside reads clipboard data only from a paste event initiated by the user. It writes clipboard text only after an explicit copy action and uses a temporary, detached textarea when the async clipboard API is unavailable. Aside does not poll, read, persist, or log clipboard contents in the background.
-
-## External services
-
-- Local `Codex`, `Claude`, and `Gemini` agent commands run only after the user saves a side note that explicitly mentions that agent. Those tools may use their own configured services and policies.
-- Experimental publishing runs the user's local Wrangler CLI against the Cloudflare Pages project selected by the user. If the user enables a remote HTTPS cache-purge broker, Aside sends the configured public URL, vault-relative source path, and purge event to that endpoint after unpublish or republish.
-- Aside has no hidden telemetry or self-update service.
+[Experimental Features](EXPERIMENTAL_FEATURES.md) are documented separately.
 
 ## How to Get Started
 
@@ -81,31 +64,6 @@ Aside reads clipboard data only from a paste event initiated by the user. It wri
    ```
    $skill-installer install https://github.com/vicky469/aside/tree/main/skills/aside
    ```
-4. Experimental, for testers only: configure Cloudflare Pages publishing.
-   - Install Wrangler so `wrangler --version` works in Terminal.
-   - Run `wrangler login` with the Cloudflare account that owns the Pages project.
-   - Create or choose a Cloudflare Pages project.
-   - Open Obsidian Developer Tools and run this in the Console to reveal the hidden publishing settings and reload Aside:
-     ```js
-     localStorage.setItem(`aside.feature.publish.${app.vault.getName()}`, "true");
-     await app.plugins.disablePlugin("aside");
-     await app.plugins.enablePlugin("aside");
-     ```
-   - To hide the publishing settings again, run:
-     ```js
-     localStorage.setItem(`aside.feature.publish.${app.vault.getName()}`, "false");
-     await app.plugins.disablePlugin("aside");
-     await app.plugins.enablePlugin("aside");
-     ```
-   - You can also edit the `aside.feature.publish.<vault name>` entry directly under Developer Tools → Application → Local Storage, then reload Aside. Aside persists an exact `true` or `false` value to that vault's plugin data when it loads.
-   - If you use a custom domain, attach it to the Pages project in Cloudflare first.
-	- Optional for immediate unpublish cache invalidation on a custom domain:
-	  - Deploy a compatible remote cache-purge broker outside the public plugin repository after setting `ALLOWED_HOSTS` to your publishing hostname. Aside's reference broker source is maintained separately from this marketplace plugin source archive.
-	  - Store `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ZONE_ID`, and `BROKER_AUTH_SECRET` as Worker secrets. The API token needs Cloudflare's Cache Purge permission for that zone.
-	  - In Aside settings, enter the deployed broker's `/purge` URL and select an Obsidian SecretStorage entry containing the same broker auth secret.
-	  - Remote purge does not support `*.pages.dev`; use a custom domain in a Cloudflare zone you control.
-   - In Aside settings, turn on Publishing and set the Publishing URL to your public Pages URL, for example `https://publish.example.com`.
-   - Put publishable Markdown, HTML, and PDF files under `public/`. Aside creates `public/` when Publishing is enabled if it does not already exist.
 
 ## Workflow
 
@@ -145,12 +103,6 @@ Aside reads clipboard data only from a paste event initiated by the user. It wri
 | Save draft | Click `Save`. |
 | Insert a newline | Press `Enter`. |
 | Mark a todo | Type `@todo` in the note. |
-| Publish public Markdown | Put the `.md` file under `public/`, open it, then click `Publish Markdown` in the pane header. |
-| Publish public HTML | Put the `.html` file under `public/`, open it, then click `Publish HTML` in the pane header. If it is generated from Markdown, keep the source `.md` under `public/` too. |
-| Publish a public PDF | Put the `.pdf` file under `public/`, open it, then click `Publish PDF` in the pane header. |
-| Republish public content | Open the published file under `public/`, then click the matching `Republish Markdown`, `Republish HTML`, or `Republish PDF` action. |
-| Unpublish public content | Open the published file under `public/`, then click the matching `Unpublish Markdown`, `Unpublish HTML`, or `Unpublish PDF` action. |
-| Open published content | Open the published file under `public/`, then click the matching `Open published Markdown`, `Open published HTML`, or `Open published PDF` action. |
 | Ask a local agent from a side note | Type `@codex`, `@claude`, or `@gemini` in the note, then save it. |
 | Link a note | Type `[[` to open note suggestions and insert an Obsidian wikilink. |
 | Add a tag | Type `#` to open tag suggestions and insert a tag. |
