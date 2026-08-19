@@ -1,24 +1,37 @@
 import * as assert from "node:assert/strict";
 import test from "node:test";
 import {
+    buildDefaultAgentOptions,
+    formatDefaultAgentFallback,
     formatAgentRuntimeStatusLines,
-    shouldRenderAgentRuntimeStatus,
 } from "../src/ui/settings/agentRuntimeSettings";
 
-test("agent runtime status is rendered only while the agent sidebar tab is shown", () => {
-    assert.equal(shouldRenderAgentRuntimeStatus({ showAgentSidebarTab: true }), true);
-    assert.equal(shouldRenderAgentRuntimeStatus({ showAgentSidebarTab: false }), false);
+test("default agent options keep registry order and disable unavailable choices", () => {
+    assert.deepEqual(buildDefaultAgentOptions("gemini", new Map([
+        ["codex", { status: "available", message: "Ready" }],
+        ["claude", { status: "unavailable", message: "Missing" }],
+        ["gemini", { status: "unavailable", message: "Missing" }],
+    ])), [
+        { target: "codex", label: "Codex", available: true, selected: false },
+        { target: "claude", label: "Claude Code", available: false, selected: false },
+        { target: "gemini", label: "Gemini", available: false, selected: true },
+    ]);
 });
 
 test("agent runtime statuses are formatted as one setting description line below the label", () => {
     assert.deepEqual(
         formatAgentRuntimeStatusLines([
-            { directive: "@codex", statusBadge: "..." },
-            { directive: "@claude", statusBadge: "✅" },
-            { directive: "@gemini", statusBadge: "❌" },
+            { label: "Codex", statusBadge: "..." },
+            { label: "Claude Code", statusBadge: "✅" },
+            { label: "Gemini", statusBadge: "❌" },
         ]),
         [
-            "@codex ...    @claude ✅    @gemini ❌",
+            "Codex ...    Claude Code ✅    Gemini ❌",
         ],
     );
+});
+
+test("default agent fallback copy identifies the effective provider", () => {
+    assert.equal(formatDefaultAgentFallback("codex", "claude"), "Using Claude Code while Codex is unavailable.");
+    assert.equal(formatDefaultAgentFallback("codex", "codex"), "");
 });

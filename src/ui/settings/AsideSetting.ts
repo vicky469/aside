@@ -21,6 +21,9 @@ import {
     DEFAULT_ASIDE_AGENT_ACTOR_ID,
     getSupportedAgentActors,
 } from "../../core/agents/agentActorRegistry";
+import {
+    resolveDefaultAgentSelection,
+} from "../../core/agents/defaultAgentSelection";
 import type { AsideAgentTarget } from "../../core/config/agentTargets";
 import {
     normalizeAllCommentsNoteImageCaption,
@@ -30,8 +33,9 @@ import {
 import type { AgentRuntimeDiagnostics } from "../../agents/agentRuntimeAdapter";
 import { createCheckingAgentRuntimeDiagnostics } from "./codexRuntimeStatus";
 import {
+    buildDefaultAgentOptions,
+    formatDefaultAgentFallback,
     formatAgentRuntimeStatusLines,
-    shouldRenderAgentRuntimeStatus,
 } from "./agentRuntimeSettings";
 import { type AsideSettingCatalogContext } from "./asideSettingCatalog";
 import { getAsideSettingDefinitions } from "./asideSettingDefinitionsAdapter";
@@ -94,11 +98,8 @@ export default class AsideSetting extends PluginSettingTab {
         return {
             plugin: this.plugin,
             refresh: () => this.refreshSettings(),
-            renderAgentRuntimeStatus: (setting, baseDescription) => {
-                setting.setDesc(this.getAgentTabDescription(baseDescription));
-                if (shouldRenderAgentRuntimeStatus(this.plugin.settings)) {
-                    this.renderAgentRuntimeStatus(setting, baseDescription);
-                }
+            renderDefaultAgentSettings: (setting, baseDescription) => {
+                this.renderDefaultAgentSettings(setting, baseDescription);
             },
             renderPurgeBrokerSecret: (setting) => {
                 setting.addComponent((containerEl) => {
@@ -125,7 +126,7 @@ export default class AsideSetting extends PluginSettingTab {
         this.renderLegacySettings();
     }
 
-    private getAgentTabDescription(
+    private getAgentSettingsDescription(
         baseDescription: string,
         runtimeStatusLines?: string[],
     ): string | DocumentFragment {
@@ -144,14 +145,29 @@ export default class AsideSetting extends PluginSettingTab {
         return fragment;
     }
 
-    private renderAgentRuntimeStatus(
-        agentTabSetting: Setting,
+    private renderDefaultAgentSettings(
+        agentSetting: Setting,
         baseDescription: string,
     ): void {
         const supportedActors = getSupportedAgentActors();
         const localDiagnosticsByTarget = new Map<AsideAgentTarget, AgentRuntimeDiagnostics>(
             supportedActors.map((actor) => [actor.id, createCheckingAgentRuntimeDiagnostics(actor.id)]),
         );
+        let selectEl: HTMLSelectElement | null = null;
+
+        agentSetting.addDropdown((dropdown) => {
+            for (const actor of supportedActors) {
+                dropdown.addOption(actor.id, actor.label);
+            }
+            dropdown
+                .setValue(this.plugin.settings.defaultAgent)
+                .onChange(async (value) => {
+                    await this.plugin.setDefaultAgent(value as AsideAgentTarget);
+                    dropdown.setValue(this.plugin.settings.defaultAgent);
+                    renderRuntimeSetting();
+                });
+            selectEl = dropdown.selectEl;
+        });
 
         const getStatusBadge = (diagnostics: AgentRuntimeDiagnostics): string => {
             switch (diagnostics.status) {
@@ -162,18 +178,46 @@ export default class AsideSetting extends PluginSettingTab {
         };
 
         const renderRuntimeSetting = (): void => {
-            agentTabSetting.setDesc(this.getAgentTabDescription(
+            if (selectEl) {
+                for (const option of buildDefaultAgentOptions(
+                    this.plugin.settings.defaultAgent,
+                    localDiagnosticsByTarget,
+                )) {
+                    const optionEl = Array.from(selectEl.options)
+                        .find((candidate) => candidate.value === option.target);
+                    if (!optionEl) {
+                        continue;
+                    }
+                    optionEl.disabled = !option.available;
+                    optionEl.text = option.available
+                        ? option.label
+                        : `${option.label} (unavailable)`;
+                }
+                selectEl.value = this.plugin.settings.defaultAgent;
+            }
+
+            const selection = resolveDefaultAgentSelection(
+                this.plugin.settings.defaultAgent,
+                localDiagnosticsByTarget,
+            );
+            const fallbackLine = selection.kind === "fallback"
+                ? formatDefaultAgentFallback(selection.preferredAgent, selection.selectedAgent)
+                : "";
+            agentSetting.setDesc(this.getAgentSettingsDescription(
                 baseDescription,
-                formatAgentRuntimeStatusLines(
+                [
+                    ...formatAgentRuntimeStatusLines(
                     supportedActors.map((actor) => {
                         const diagnostics = localDiagnosticsByTarget.get(actor.id)
                             ?? createCheckingAgentRuntimeDiagnostics(actor.id);
                         return {
-                            directive: actor.directive,
+                            label: actor.label,
                             statusBadge: getStatusBadge(diagnostics),
                         };
                     }),
-                ),
+                    ),
+                    ...(fallbackLine ? [fallbackLine] : []),
+                ],
             ));
         };
         const refreshRuntimeSetting = async () => {

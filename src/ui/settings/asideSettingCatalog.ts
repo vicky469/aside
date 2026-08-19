@@ -10,12 +10,12 @@ import {
     isFeatureFlagEnabled,
 } from "../../core/config/featureFlags";
 
-export type AsideSettingSection = "sidebar" | "publishing" | "index-note";
+export type AsideSettingSection = "agents" | "sidebar" | "publishing" | "index-note";
 
 export interface AsideSettingCatalogContext {
     plugin: Aside;
     refresh(): void;
-    renderAgentRuntimeStatus(setting: Setting, baseDescription: string): void;
+    renderDefaultAgentSettings(setting: Setting, baseDescription: string): void;
     renderPurgeBrokerSecret(setting: Setting): void;
 }
 
@@ -34,6 +34,7 @@ export const ASIDE_SETTING_SECTIONS: ReadonlyArray<{
     key: AsideSettingSection;
     heading: string;
 }> = [
+    { key: "agents", heading: "Agents" },
     { key: "sidebar", heading: "Sidebar tabs" },
     { key: "publishing", heading: "Publishing (experimental)" },
     { key: "index-note", heading: "Index note" },
@@ -62,6 +63,20 @@ function isRemotePurgeSettingVisible(context: AsideSettingCatalogContext): boole
 }
 
 export const ASIDE_SETTING_CATALOG: readonly AsideSettingCatalogEntry[] = [
+    {
+        key: "default-agent",
+        section: "agents",
+        name: "Default agent",
+        description: "Preferred local agent for /create-script.",
+        aliases: getSupportedAgentActors().map((actor) => actor.label),
+        keywords: ["runtime", "availability", "fallback"],
+        render: (setting, context) => {
+            context.renderDefaultAgentSettings(
+                setting,
+                "Preferred local agent for /create-script.",
+            );
+        },
+    },
     {
         key: "show-todo-tab",
         section: "sidebar",
@@ -93,7 +108,6 @@ export const ASIDE_SETTING_CATALOG: readonly AsideSettingCatalogEntry[] = [
                     toggle.setValue(context.plugin.settings.showAgentSidebarTab);
                     context.refresh();
                 }));
-            context.renderAgentRuntimeStatus(setting, "Show the agent sidebar tab for local agent replies.");
         },
     },
     {
