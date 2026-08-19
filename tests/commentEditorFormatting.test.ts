@@ -216,6 +216,13 @@ test("renderStyledDraftCommentHtml highlights registered standalone slash mentio
     );
 });
 
+test("renderStyledDraftCommentHtml highlights built-in create-script without registry registration", () => {
+    assert.equal(
+        renderStyledDraftCommentHtml("Use /create-script to build it", () => false),
+        "Use <span class=\"aside-editor-token-mention\">/create-script</span> to build it",
+    );
+});
+
 test("renderStyledDraftCommentHtml leaves unregistered slash mentions plain", () => {
     assert.equal(
         renderStyledDraftCommentHtml("Run /missing now", isRunnableVaultScriptMention),
