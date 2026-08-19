@@ -338,7 +338,7 @@ function createRenderHost(overrides: Partial<SidebarPersistedCommentHost> = {}):
         openSidebarInternalLink: async () => {},
         openCommentFromCard: async () => {},
         openCommentInEditor: async () => {},
-        shareComment: async () => true as never,
+        shareComment: async () => true,
         saveVisibleDraftIfPresent: async () => true,
         setShowNestedCommentsForThread: () => {},
         moveCommentThread: () => {},
@@ -1552,7 +1552,7 @@ test("renderPersistedCommentCard shows copied feedback after sharing a side note
         const host = createRenderHost({
             shareComment: async (comment) => {
                 sharedCommentIds.push(comment.id);
-                return true as never;
+                return true;
             },
             setIcon: (element, icon) => {
                 iconUpdates.push({
@@ -1626,7 +1626,7 @@ test("renderPersistedCommentCard keeps Share available during parent inline edit
         },
         shareComment: async (comment) => {
             sharedCommentIds.push(comment.id);
-            return true as never;
+            return true;
         },
         saveVisibleDraftIfPresent: async () => {
             saveVisibleDraftCalls += 1;
@@ -1674,7 +1674,7 @@ test("renderPersistedCommentCard keeps Share available during child inline editi
         },
         shareComment: async (comment) => {
             sharedCommentIds.push(comment.id);
-            return true as never;
+            return true;
         },
         saveVisibleDraftIfPresent: async () => {
             saveVisibleDraftCalls += 1;
@@ -1725,7 +1725,7 @@ test("renderPersistedCommentCard does not show copied feedback when clipboard fa
             root as unknown as HTMLDivElement,
             thread,
             createRenderHost({
-                shareComment: async () => false as never,
+                shareComment: async () => false,
             }),
         );
 
@@ -1862,7 +1862,7 @@ test("renderPersistedCommentCard puts agent metadata above status and Add to fil
         openSidebarInternalLink: async () => {},
         openCommentFromCard: async () => {},
         openCommentInEditor: async () => {},
-        shareComment: async () => {},
+        shareComment: async () => true,
         saveVisibleDraftIfPresent: async () => true,
         setShowNestedCommentsForThread: () => {},
         moveCommentThread: () => {},
@@ -2154,7 +2154,7 @@ test("renderPersistedCommentCard reuses toolbar pin styling for page note pins",
         openSidebarInternalLink: async () => {},
         openCommentFromCard: async () => {},
         openCommentInEditor: async () => {},
-        shareComment: async () => {},
+        shareComment: async () => true,
         saveVisibleDraftIfPresent: async () => true,
         setShowNestedCommentsForThread: () => {},
         moveCommentThread: () => {},

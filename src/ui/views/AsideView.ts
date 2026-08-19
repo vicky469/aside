@@ -4440,8 +4440,8 @@ export default class AsideView extends ItemView {
                 }
             },
             openCommentInEditor: (persistedComment) => this.interactionController.openCommentInEditor(persistedComment),
-            shareComment: async (persistedComment) => {
-                await copyCommentLocationToClipboard(
+            shareComment: (persistedComment) => {
+                return copyCommentLocationToClipboard(
                     this.app.vault.getName(),
                     persistedComment,
                     copyTextToClipboard,

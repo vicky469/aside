@@ -130,7 +130,7 @@ export interface SidebarPersistedCommentHost {
     ): Promise<void>;
     openCommentFromCard(comment: Comment): Promise<void>;
     openCommentInEditor(comment: Comment): Promise<void>;
-    shareComment(comment: Comment): Promise<void>;
+    shareComment(comment: Comment): Promise<boolean>;
     saveVisibleDraftIfPresent(): Promise<boolean>;
     setShowNestedCommentsForThread(threadId: string, showNestedComments: boolean): void;
     moveCommentThread(threadId: string, sourceFilePath: string): void;
@@ -1166,10 +1166,10 @@ function renderThreadFooterActions(
         host.setIcon(shareButton, "share");
         shareButton.onclick = async (event) => {
             event.stopPropagation();
-            if (!(await host.saveVisibleDraftIfPresent())) {
+            const copied = await host.shareComment(comment);
+            if (!copied) {
                 return;
             }
-            await host.shareComment(comment);
             shareCopiedResetTimer = renderShareCopiedFeedback(
                 shareButton,
                 shareStatusEl,
