@@ -35,7 +35,7 @@ import { createCheckingAgentRuntimeDiagnostics } from "./codexRuntimeStatus";
 import {
     buildDefaultAgentOptions,
     formatDefaultAgentFallback,
-    formatAgentRuntimeStatusLines,
+    resolveDefaultAgentRadioSelection,
 } from "./agentRuntimeSettings";
 import { type AsideSettingCatalogContext } from "./asideSettingCatalog";
 import { getAsideSettingDefinitions } from "./asideSettingDefinitionsAdapter";
@@ -128,17 +128,17 @@ export default class AsideSetting extends PluginSettingTab {
 
     private getAgentSettingsDescription(
         baseDescription: string,
-        runtimeStatusLines?: string[],
+        supplementalLines?: string[],
     ): string | DocumentFragment {
-        if (!runtimeStatusLines?.length) {
+        if (!supplementalLines?.length) {
             return baseDescription;
         }
 
         const fragment = createFragment();
         fragment.append(baseDescription);
-        for (const line of runtimeStatusLines) {
+        for (const line of supplementalLines) {
             const lineEl = createDiv();
-            lineEl.addClass("aside-agent-runtime-status-line");
+            lineEl.addClass("aside-default-agent-fallback");
             lineEl.textContent = line;
             fragment.append(lineEl);
         }
@@ -153,47 +153,74 @@ export default class AsideSetting extends PluginSettingTab {
         const localDiagnosticsByTarget = new Map<AsideAgentTarget, AgentRuntimeDiagnostics>(
             supportedActors.map((actor) => [actor.id, createCheckingAgentRuntimeDiagnostics(actor.id)]),
         );
-        let selectEl: HTMLSelectElement | null = null;
-
-        agentSetting.addDropdown((dropdown) => {
-            for (const actor of supportedActors) {
-                dropdown.addOption(actor.id, actor.label);
-            }
-            dropdown
-                .setValue(this.plugin.settings.defaultAgent)
-                .onChange(async (value) => {
-                    await this.plugin.setDefaultAgent(value as AsideAgentTarget);
-                    dropdown.setValue(this.plugin.settings.defaultAgent);
-                    renderRuntimeSetting();
-                });
-            selectEl = dropdown.selectEl;
+        agentSetting.settingEl.addClass("aside-default-agent-setting");
+        const groupEl = agentSetting.controlEl.createDiv({
+            cls: "aside-default-agent-radio-group",
+            attr: {
+                role: "radiogroup",
+                "aria-label": "Default agent",
+            },
         });
+        const radioRows = new Map<AsideAgentTarget, {
+            rowEl: HTMLLabelElement;
+            inputEl: HTMLInputElement;
+            statusEl: HTMLSpanElement;
+        }>();
 
-        const getStatusBadge = (diagnostics: AgentRuntimeDiagnostics): string => {
-            switch (diagnostics.status) {
-                case "available": return "✅";
-                case "checking": return "...";
-                default: return "❌";
-            }
-        };
-
-        const renderRuntimeSetting = (): void => {
-            if (selectEl) {
-                for (const option of buildDefaultAgentOptions(
+        for (const actor of supportedActors) {
+            const rowEl = groupEl.createEl("label", {
+                cls: "aside-default-agent-option",
+            });
+            const inputEl = rowEl.createEl("input", {
+                type: "radio",
+                attr: {
+                    name: "aside-default-agent",
+                    value: actor.id,
+                },
+            });
+            rowEl.createSpan({
+                cls: "aside-default-agent-option-name",
+                text: actor.label,
+            });
+            const statusEl = rowEl.createSpan({
+                cls: "aside-default-agent-option-status",
+            });
+            inputEl.addEventListener("change", () => {
+                const options = buildDefaultAgentOptions(
                     this.plugin.settings.defaultAgent,
                     localDiagnosticsByTarget,
-                )) {
-                    const optionEl = Array.from(selectEl.options)
-                        .find((candidate) => candidate.value === option.target);
-                    if (!optionEl) {
-                        continue;
-                    }
-                    optionEl.disabled = !option.available;
-                    optionEl.text = option.available
-                        ? option.label
-                        : `${option.label} (unavailable)`;
+                );
+                const target = resolveDefaultAgentRadioSelection(options, actor.id);
+                if (!inputEl.checked || !target) {
+                    renderRuntimeSetting();
+                    return;
                 }
-                selectEl.value = this.plugin.settings.defaultAgent;
+                void this.plugin.setDefaultAgent(target).then(
+                    renderRuntimeSetting,
+                    renderRuntimeSetting,
+                );
+            });
+            radioRows.set(actor.id, { rowEl, inputEl, statusEl });
+        }
+
+        const renderRuntimeSetting = (): void => {
+            const options = buildDefaultAgentOptions(
+                this.plugin.settings.defaultAgent,
+                localDiagnosticsByTarget,
+            );
+            for (const option of options) {
+                const row = radioRows.get(option.target);
+                if (!row) {
+                    continue;
+                }
+                row.inputEl.checked = option.selected;
+                row.inputEl.disabled = option.disabled;
+                row.rowEl.toggleClass("is-selected", option.selected);
+                row.rowEl.toggleClass("is-disabled", option.disabled);
+                row.rowEl.toggleClass("is-checking", option.status === "checking");
+                row.rowEl.toggleClass("is-available", option.status === "available");
+                row.rowEl.toggleClass("is-unavailable", option.status === "unavailable");
+                row.statusEl.textContent = option.statusLabel;
             }
 
             const selection = resolveDefaultAgentSelection(
@@ -205,19 +232,7 @@ export default class AsideSetting extends PluginSettingTab {
                 : "";
             agentSetting.setDesc(this.getAgentSettingsDescription(
                 baseDescription,
-                [
-                    ...formatAgentRuntimeStatusLines(
-                    supportedActors.map((actor) => {
-                        const diagnostics = localDiagnosticsByTarget.get(actor.id)
-                            ?? createCheckingAgentRuntimeDiagnostics(actor.id);
-                        return {
-                            label: actor.label,
-                            statusBadge: getStatusBadge(diagnostics),
-                        };
-                    }),
-                    ),
-                    ...(fallbackLine ? [fallbackLine] : []),
-                ],
+                fallbackLine ? [fallbackLine] : undefined,
             ));
         };
         const refreshRuntimeSetting = async () => {

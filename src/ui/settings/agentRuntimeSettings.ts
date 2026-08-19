@@ -5,11 +5,6 @@ import {
 } from "../../core/agents/agentActorRegistry";
 import type { AsideAgentTarget } from "../../core/config/agentTargets";
 
-export interface AgentRuntimeStatusLineInput {
-    label: string;
-    statusBadge: string;
-}
-
 export type DefaultAgentOptionStatus = "checking" | "available" | "unavailable";
 
 export interface DefaultAgentOptionPresentation {
@@ -21,8 +16,6 @@ export interface DefaultAgentOptionPresentation {
     disabled: boolean;
     selected: boolean;
 }
-
-export const AGENT_RUNTIME_STATUS_SEPARATOR = "    ";
 
 function resolveDefaultAgentOptionStatus(
     diagnostics: AgentRuntimeDiagnostics | undefined,
@@ -77,8 +70,4 @@ export function formatDefaultAgentFallback(
     return preferredAgent === selectedAgent
         ? ""
         : `Using ${getAgentActorLabel(selectedAgent)} while ${getAgentActorLabel(preferredAgent)} is unavailable.`;
-}
-
-export function formatAgentRuntimeStatusLines(items: AgentRuntimeStatusLineInput[]): string[] {
-    return [items.map((item) => `${item.label} ${item.statusBadge}`).join(AGENT_RUNTIME_STATUS_SEPARATOR)];
 }

@@ -1709,8 +1709,82 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
     cursor: default;
 }
 
-.aside-agent-runtime-status-line {
-    white-space: pre-wrap;
+.aside-default-agent-setting {
+    align-items: flex-start;
+}
+
+.aside-default-agent-setting .setting-item-control {
+    flex: 0 1 19rem;
+    width: min(19rem, 100%);
+}
+
+.aside-default-agent-radio-group {
+    display: grid;
+    gap: var(--size-2-1);
+    width: 100%;
+}
+
+.aside-default-agent-option {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--size-4-2);
+    min-height: var(--input-height);
+    padding: 0 var(--size-4-2);
+    border-radius: var(--radius-s);
+    cursor: pointer;
+}
+
+.aside-default-agent-option:hover:not(.is-disabled) {
+    background: var(--background-modifier-hover);
+}
+
+.aside-default-agent-option input[type="radio"] {
+    margin: 0;
+}
+
+.aside-default-agent-option-name {
+    min-width: 0;
+    color: var(--text-normal);
+}
+
+.aside-default-agent-option-status {
+    color: var(--text-muted);
+    font-size: var(--font-ui-smaller);
+    white-space: nowrap;
+}
+
+.aside-default-agent-option.is-available .aside-default-agent-option-status {
+    color: var(--text-success);
+}
+
+.aside-default-agent-option.is-disabled {
+    cursor: default;
+}
+
+.aside-default-agent-fallback {
+    margin-top: var(--size-2-2);
+}
+
+@media (max-width: 600px) {
+    .aside-default-agent-setting {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .aside-default-agent-setting .setting-item-control {
+        width: 100%;
+        margin-top: var(--size-4-2);
+    }
+
+    .aside-default-agent-option {
+        grid-template-columns: auto minmax(0, 1fr);
+    }
+
+    .aside-default-agent-option-status {
+        grid-column: 2;
+        white-space: normal;
+    }
 }
 
 .aside-agent-stream-content {
