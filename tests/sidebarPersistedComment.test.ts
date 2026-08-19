@@ -292,6 +292,23 @@ class FakeElement {
     }
 }
 
+async function clickFakeButtonWithTimerWindow(button: FakeElement): Promise<void> {
+    const onclick = button.onclick;
+    assert.equal(typeof onclick, "function");
+    const previousDefaultView = FakeElement.defaultView;
+    FakeElement.defaultView = {
+        setTimeout: (() => 1) as Window["setTimeout"],
+        clearTimeout: (() => {}) as Window["clearTimeout"],
+    };
+    try {
+        await (onclick as (event: { stopPropagation(): void }) => Promise<void>)({
+            stopPropagation: () => {},
+        });
+    } finally {
+        FakeElement.defaultView = previousDefaultView;
+    }
+}
+
 function mergeClassName(current: string, tokens: string[]): string {
     return Array.from(new Set([
         ...current.split(/\s+/).filter(Boolean),
@@ -338,7 +355,7 @@ function createRenderHost(overrides: Partial<SidebarPersistedCommentHost> = {}):
         openSidebarInternalLink: async () => {},
         openCommentFromCard: async () => {},
         openCommentInEditor: async () => {},
-        shareComment: async () => {},
+        shareComment: async () => true,
         saveVisibleDraftIfPresent: async () => true,
         setShowNestedCommentsForThread: () => {},
         moveCommentThread: () => {},
@@ -1552,6 +1569,7 @@ test("renderPersistedCommentCard shows copied feedback after sharing a side note
         const host = createRenderHost({
             shareComment: async (comment) => {
                 sharedCommentIds.push(comment.id);
+                return true;
             },
             setIcon: (element, icon) => {
                 iconUpdates.push({
@@ -1604,6 +1622,139 @@ test("renderPersistedCommentCard shows copied feedback after sharing a side note
         assert.equal(shareButton.hidden, false);
         assert.equal(copiedLabel.hidden, true);
         assert.equal(copiedLabel.textContent, "");
+    } finally {
+        FakeElement.defaultView = null;
+    }
+});
+
+test("renderPersistedCommentCard keeps Share available during parent inline editing", async () => {
+    const thread = createThreadWithEntries({
+        entries: [
+            { id: "comment-1", body: "Parent side note", timestamp: 100 },
+        ],
+    });
+    const sharedCommentIds: string[] = [];
+    let saveVisibleDraftCalls = 0;
+    const host = createRenderHost({
+        editDraftComment: {
+            ...createComment({ comment: "Edited parent side note" }),
+            mode: "edit",
+            threadId: "comment-1",
+        },
+        shareComment: async (comment) => {
+            sharedCommentIds.push(comment.id);
+            return true;
+        },
+        saveVisibleDraftIfPresent: async () => {
+            saveVisibleDraftCalls += 1;
+            return true;
+        },
+    });
+    const root = new FakeElement("div");
+
+    await renderPersistedCommentCard(root as unknown as HTMLDivElement, thread, host);
+
+    const shareButtons = root.findAllByClass("aside-thread-share-button");
+    assert.equal(shareButtons.length, 1);
+    await clickFakeButtonWithTimerWindow(shareButtons[0]);
+
+    assert.deepEqual(sharedCommentIds, ["comment-1"]);
+    assert.equal(saveVisibleDraftCalls, 0);
+    assert.equal(host.editDraftComment?.id, "comment-1");
+    assert.equal(root.findAllByClass("aside-comment-action-edit").length, 0);
+    assert.equal(root.findAllByClass("aside-comment-action-delete").length, 0);
+    assert.equal(root.findAllByClass("aside-thread-add-entry-button").length, 0);
+});
+
+test("renderPersistedCommentCard keeps Share available during child inline editing", async () => {
+    const thread = createThreadWithEntries({
+        entries: [
+            { id: "comment-1", body: "Parent side note", timestamp: 100 },
+            { id: "entry-2", body: "Nested side note", timestamp: 110 },
+        ],
+    });
+    const sharedCommentIds: string[] = [];
+    let saveVisibleDraftCalls = 0;
+    const host = createRenderHost({
+        editDraftComment: {
+            ...createComment({
+                id: "entry-2",
+                comment: "Edited nested side note",
+                timestamp: 110,
+            }),
+            mode: "edit",
+            threadId: "comment-1",
+        },
+        shareComment: async (comment) => {
+            sharedCommentIds.push(comment.id);
+            return true;
+        },
+        saveVisibleDraftIfPresent: async () => {
+            saveVisibleDraftCalls += 1;
+            return true;
+        },
+    });
+    const root = new FakeElement("div");
+
+    await renderPersistedCommentCard(root as unknown as HTMLDivElement, thread, host);
+
+    const childCard = root.findAllByClass("aside-comment-item")
+        .find((element) => element.getAttribute("data-comment-id") === "entry-2");
+    assert.ok(childCard);
+    const shareButtons = childCard.findAllByClass("aside-thread-share-button");
+    assert.equal(shareButtons.length, 1);
+    await clickFakeButtonWithTimerWindow(shareButtons[0]);
+
+    assert.deepEqual(sharedCommentIds, ["entry-2"]);
+    assert.equal(saveVisibleDraftCalls, 0);
+    assert.equal(host.editDraftComment?.id, "entry-2");
+    assert.equal(childCard.findAllByClass("aside-comment-action-edit").length, 0);
+    assert.equal(childCard.findAllByClass("aside-comment-action-delete").length, 0);
+    assert.equal(childCard.findAllByClass("aside-thread-add-entry-button").length, 0);
+});
+
+test("renderPersistedCommentCard does not show copied feedback when clipboard fails", async () => {
+    const thread = createThreadWithEntries({
+        entries: [
+            { id: "comment-1", body: "Share this", timestamp: 100 },
+        ],
+    });
+    let scheduledTimeouts = 0;
+    FakeElement.defaultView = {
+        setTimeout: (() => {
+            scheduledTimeouts += 1;
+            return scheduledTimeouts;
+        }) as Window["setTimeout"],
+        clearTimeout: (() => {}) as Window["clearTimeout"],
+    };
+
+    try {
+        const root = new FakeElement("div");
+        await renderPersistedCommentCard(
+            root as unknown as HTMLDivElement,
+            thread,
+            createRenderHost({
+                shareComment: async () => false,
+            }),
+        );
+
+        const shareButton = root.findAllByClass("aside-thread-share-button")[0];
+        const copiedLabel = root.findAllByClass("aside-thread-share-status")[0];
+        assert.ok(shareButton);
+        assert.ok(copiedLabel);
+        const onclick = shareButton.onclick;
+        assert.equal(typeof onclick, "function");
+        await (onclick as (event: { stopPropagation(): void }) => Promise<void>)({
+            stopPropagation: () => {},
+        });
+
+        assert.equal(shareButton.getAttribute("aria-label"), "Share side note");
+        assert.equal(shareButton.getAttribute("title"), "Share side note");
+        assert.equal(shareButton.classList.contains("is-copied"), false);
+        assert.equal(shareButton.hidden, false);
+        assert.equal(copiedLabel.hidden, true);
+        assert.equal(copiedLabel.textContent, "");
+        assert.equal(scheduledTimeouts, 0);
     } finally {
         FakeElement.defaultView = null;
     }
@@ -1720,7 +1871,7 @@ test("renderPersistedCommentCard puts agent metadata above status and Add to fil
         openSidebarInternalLink: async () => {},
         openCommentFromCard: async () => {},
         openCommentInEditor: async () => {},
-        shareComment: async () => {},
+        shareComment: async () => true,
         saveVisibleDraftIfPresent: async () => true,
         setShowNestedCommentsForThread: () => {},
         moveCommentThread: () => {},
@@ -2012,7 +2163,7 @@ test("renderPersistedCommentCard reuses toolbar pin styling for page note pins",
         openSidebarInternalLink: async () => {},
         openCommentFromCard: async () => {},
         openCommentInEditor: async () => {},
-        shareComment: async () => {},
+        shareComment: async () => true,
         saveVisibleDraftIfPresent: async () => true,
         setShowNestedCommentsForThread: () => {},
         moveCommentThread: () => {},
