@@ -105,7 +105,7 @@ test("buildMentionSuggestions filters explicit built-in queries case-insensitive
 test("buildMentionSuggestions keeps todo and supported agents before live scripts", () => {
     assert.deepEqual(
         buildMentionSuggestions([cleanLinksScript], "").map((item) => item.mention),
-        ["@todo", "@codex", "@claude", "@gemini", "/clean-links"],
+        ["@todo", "@codex", "@claude", "@gemini", "/create-script", "/clean-links"],
     );
     assert.deepEqual(
         buildMentionSuggestions([cleanLinksScript], "cl").map((item) => item.mention),
@@ -114,6 +114,10 @@ test("buildMentionSuggestions keeps todo and supported agents before live script
     assert.deepEqual(
         buildMentionSuggestions([cleanLinksScript], "/cl").map((item) => item.mention),
         ["/clean-links"],
+    );
+    assert.deepEqual(
+        buildMentionSuggestions([cleanLinksScript], "/").map((item) => item.mention),
+        ["/create-script", "/clean-links"],
     );
     assert.deepEqual(
         buildMentionSuggestions([cleanLinksScript], "@cl").map((item) => item.mention),
@@ -148,10 +152,16 @@ test("buildMentionSuggestions omits scripts whose normalized mentions are reserv
             mentionName: "Gemini",
             normalizedMentionName: "gemini",
         },
+        {
+            path: "🛠️ scripts/create-script.mjs",
+            fileName: "create-script.mjs",
+            mentionName: "create-script",
+            normalizedMentionName: "create-script",
+        },
     ];
 
     assert.deepEqual(
         buildMentionSuggestions(scripts, "").map((item) => item.mention),
-        ["@todo", "@codex", "@claude", "@gemini", "/clean-links"],
+        ["@todo", "@codex", "@claude", "@gemini", "/create-script", "/clean-links"],
     );
 });

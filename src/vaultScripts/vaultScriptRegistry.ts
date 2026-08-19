@@ -4,6 +4,7 @@ import {
     VaultScriptRegistration,
 } from "../../shared/vaultScriptPolicy";
 import { getSupportedAgentActors } from "../core/agents/agentActorRegistry";
+import { RESERVED_BUILT_IN_SLASH_MENTION_NAMES } from "../core/text/createScriptDirective";
 
 function normalizeMention(mention: string): string {
     return mention.trim().toLowerCase().replace(/^[@/]/, "");
@@ -15,6 +16,7 @@ function normalizeAgentDirective(directive: string): string {
 
 const RESERVED_MENTION_NAMES = new Set([
     "todo",
+    ...RESERVED_BUILT_IN_SLASH_MENTION_NAMES,
     ...getSupportedAgentActors().map((actor) => normalizeAgentDirective(actor.directive)),
 ]);
 

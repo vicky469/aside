@@ -1,5 +1,6 @@
 import type { VaultScriptRegistration } from "../../../shared/vaultScriptPolicy.js";
 import { getSupportedAgentActors } from "../../core/agents/agentActorRegistry";
+import { CREATE_SCRIPT_DIRECTIVE } from "../../core/text/createScriptDirective";
 import type { TextEditResult } from "./commentEditorFormatting";
 
 export interface OpenMentionQuery {
@@ -12,7 +13,7 @@ export interface OpenMentionQuery {
 export type SideNoteMentionSuggestion =
     | {
         kind: "built-in";
-        mention: "@todo" | `@${string}`;
+        mention: "@todo" | `@${string}` | typeof CREATE_SCRIPT_DIRECTIVE;
         label: string;
     }
     | {
@@ -82,9 +83,10 @@ export function buildMentionSuggestions(
     const normalizedRawQuery = rawQuery.trim();
     const query = normalizedRawQuery.replace(/^[@/]/u, "").toLowerCase();
     const shouldIncludeScripts = !normalizedRawQuery.startsWith("@");
-    const shouldIncludeBuiltIns = !normalizedRawQuery.startsWith("/");
+    const shouldIncludeAtBuiltIns = !normalizedRawQuery.startsWith("/");
+    const shouldIncludeSlashBuiltIns = !normalizedRawQuery.startsWith("@");
     const shouldFilterBuiltInsByQuery = query.length > 0;
-    const builtIns: SideNoteMentionSuggestion[] = [
+    const atBuiltIns: SideNoteMentionSuggestion[] = [
         {
             kind: "built-in",
             mention: "@todo",
@@ -96,10 +98,19 @@ export function buildMentionSuggestions(
             label: actor.label,
         })),
     ];
+    const slashBuiltIns: SideNoteMentionSuggestion[] = [{
+        kind: "built-in",
+        mention: CREATE_SCRIPT_DIRECTIVE,
+        label: "Create script",
+    }];
+    const builtIns = [...atBuiltIns, ...slashBuiltIns];
     const reservedMentionNames = new Set(
         builtIns.map((suggestion) => suggestion.mention.slice(1).toLowerCase()),
     );
-    const builtInCandidates = shouldIncludeBuiltIns ? builtIns : [];
+    const builtInCandidates = [
+        ...(shouldIncludeAtBuiltIns ? atBuiltIns : []),
+        ...(shouldIncludeSlashBuiltIns ? slashBuiltIns : []),
+    ];
     const scriptCandidates = shouldIncludeScripts
         ? scripts
             .filter((script) => !reservedMentionNames.has(script.normalizedMentionName))

@@ -73,8 +73,8 @@ export function buildDraftCommentPresentation(
 ): DraftCommentPresentation {
     const supportedAgentDirectives = formatSupportedAgentDirectives("or");
     const newDraftPlaceholder = supportedAgentDirectives
-        ? `Write a side note. Use B or H for styling, or type /script-name, @todo, ${supportedAgentDirectives}.`
-        : "Write a side note. Use B or H for styling, or type /script-name or @todo.";
+        ? `Write a side note. Use B or H for styling, or type /create-script, /script-name, @todo, ${supportedAgentDirectives}.`
+        : "Write a side note. Use B or H for styling, or type /create-script, /script-name, or @todo.";
     const classes = [
         "aside-comment-item",
         "aside-comment-draft",
