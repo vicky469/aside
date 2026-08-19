@@ -96,6 +96,10 @@ test("buildMentionSuggestions filters explicit built-in queries case-insensitive
         buildMentionSuggestions([cleanLinksScript], "@CO").map((item) => item.mention),
         ["@codex"],
     );
+    assert.equal(
+        buildMentionSuggestions([cleanLinksScript], "@claude")[0]?.label,
+        "Claude Code",
+    );
 });
 
 test("buildMentionSuggestions keeps todo and supported agents before live scripts", () => {
