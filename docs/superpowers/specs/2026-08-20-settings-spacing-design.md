@@ -20,11 +20,12 @@ Use this section as the working checklist. Mark an item done only after the code
 - [x] Place the Default agent name and normal description on one wrapping line above the controls.
 - [x] Change the radio group from a vertical grid to one compact, left-aligned horizontal row.
 - [x] Keep each radio, agent name, and textual status together as one content-sized option; wrap only between options when width is constrained.
+- [x] Match Obsidian's native control font family, size, weight, and line height across each agent option; distinguish availability by color rather than a second font size.
 - [x] Preserve default-agent selection, disabled states, availability text, fallback copy, persistence, and routing behavior.
 
 ### Verification
 
-- [x] A focused stylesheet regression test proves inline wrapping setting copy, horizontal flex controls, content-sized options, and option-boundary wrapping.
+- [x] A focused stylesheet regression test proves inline wrapping setting copy, horizontal flex controls, content-sized options, option-boundary wrapping, and native control typography.
 - [x] Existing agent radio presentation, interaction, fallback, and settings-catalog tests pass unchanged.
 - [x] The full automated suite, lint, typecheck, Obsidian compliance check, production bundle, and release artifact guard pass.
 - [ ] The installed plugin is visually checked at normal and narrow settings widths for heading spacing, left alignment, vertical rhythm, and whole-option wrapping.
@@ -46,7 +47,7 @@ Default agent  Preferred local agent for /create-script.
 ○ Codex Available   ○ Claude Code Available   ○ Gemini Unavailable
 ```
 
-The information block remains first. Its name and normal description share a baseline when space permits and wrap naturally when needed. The radio group follows with a modest theme-token gap and shares the same left edge. It is a wrapping flex row, not a full-width grid. Each option keeps its native radio, agent name, and status together using content-sized columns.
+The information block remains first. Its name and normal description share a baseline when space permits and wrap naturally when needed. The radio group follows with a modest theme-token gap and shares the same left edge. It is a wrapping flex row, not a full-width grid. Each option keeps its native radio, agent name, and status together using content-sized columns. Agent names and statuses share Obsidian's native small control typography; status color communicates availability without introducing a mismatched smaller font.
 
 At narrow widths, the group wraps between complete agent options. A radio never becomes separated from its name or availability label, and the layout never returns to a stretched full-width control. A fallback message for a saved unavailable preference remains a supplemental line within the description block.
 
@@ -68,6 +69,7 @@ The existing `.aside-default-agent-setting`, `.setting-item-info`, `.setting-ite
 
 - Native radio inputs, labels, checked states, and disabled states remain unchanged.
 - Availability remains text, not color-only communication.
+- Agent names and statuses use the same native control typography, preserving theme and interface-font compatibility.
 - Option height and vertical spacing preserve usable pointer targets.
 - The group has a maximum width of 100% and wraps only between complete options.
 - The setting name and description can wrap onto separate lines when the pane is narrow.

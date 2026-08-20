@@ -43,6 +43,27 @@ test("agent settings radio choices form a horizontal wrapping row", () => {
     );
 });
 
+test("agent radio text uses Obsidian control typography", () => {
+    const option = styles.match(
+        /\.aside-default-agent-option\s*\{(?<body>[\s\S]*?)\}/,
+    );
+    const status = styles.match(
+        /\.aside-default-agent-option-status\s*\{(?<body>[\s\S]*?)\}/,
+    );
+
+    assert.match(option?.groups?.body ?? "", /font-family:\s*inherit\s*;/);
+    assert.match(option?.groups?.body ?? "", /font-size:\s*var\(--font-ui-small\)\s*;/);
+    assert.match(
+        option?.groups?.body ?? "",
+        /font-weight:\s*var\(--input-font-weight\)\s*;/,
+    );
+    assert.match(
+        option?.groups?.body ?? "",
+        /line-height:\s*var\(--line-height-tight\)\s*;/,
+    );
+    assert.doesNotMatch(status?.groups?.body ?? "", /font-(?:family|size|weight)\s*:/);
+});
+
 test("default agent settings render a labeled native radio group", () => {
     assert.match(settingSource, /role:\s*"radiogroup"/);
     assert.match(settingSource, /type:\s*"radio"/);

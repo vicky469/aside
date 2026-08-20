@@ -1758,6 +1758,10 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
     padding: var(--size-2-1) 0;
     border-radius: var(--radius-s);
     cursor: pointer;
+    font-family: inherit;
+    font-size: var(--font-ui-small);
+    font-weight: var(--input-font-weight);
+    line-height: var(--line-height-tight);
     white-space: nowrap;
 }
 
@@ -1776,7 +1780,6 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
 
 .aside-default-agent-option-status {
     color: var(--text-muted);
-    font-size: var(--font-ui-smaller);
     white-space: nowrap;
 }
 
