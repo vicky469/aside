@@ -199,13 +199,15 @@ git status --short --branch
 
 Expected: only the parser, targeted tests, and tracked design/plan files differ.
 
-- [ ] **Step 5: Commit tracking updates**
+- [x] **Step 5: Commit tracking updates**
 
 ```bash
 git add -f docs/superpowers/specs/2026-08-20-trailing-newline-anchor-design.md docs/superpowers/plans/2026-08-20-trailing-newline-anchor.md
 git commit -m "docs: record trailing newline anchor verification"
 ```
 
-- [ ] **Step 6: Use the finishing-a-development-branch workflow**
+- [x] **Step 6: Use the finishing-a-development-branch workflow**
 
 Merge `fix/trailing-newline-anchor-orphaning` locally into the current `main` without pushing, re-run `npm run build` on the merged result, remove the clean merged worktree/branch, and record final integration status. If `main` changed after the branch point, inspect and preserve all newer work before merging.
+
+Integration result (2026-08-20): merged locally into `main` as `a8e47a5`; the post-merge build and artifact inspection passed, the clean worktree and merged branch were removed, and nothing was pushed.

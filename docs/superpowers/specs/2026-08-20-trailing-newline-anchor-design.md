@@ -18,18 +18,18 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Preserve all trailing source characters while normalizing CRLF line endings for Markdown comment parsing.
-- [ ] Keep full-file selections anchored through the same persistence synchronization path that previously marked them orphaned.
-- [ ] Allow a previously false-orphaned thread to clear `orphaned` when its exact stored selection still exists.
-- [ ] Preserve current behavior for truly changed or missing anchor text.
+- [x] Preserve all trailing source characters while normalizing CRLF line endings for Markdown comment parsing.
+- [x] Keep full-file selections anchored through the same persistence synchronization path that previously marked them orphaned.
+- [x] Allow a previously false-orphaned thread to clear `orphaned` when its exact stored selection still exists.
+- [x] Preserve current behavior for truly changed or missing anchor text.
 
 ### Verification
 
-- [ ] A parser regression test proves trailing newlines and spaces remain in `mainContent`.
-- [ ] A synchronization regression test proves a full-file selection ending at the final newline remains anchored.
-- [ ] A synchronization regression test proves a matching stored false orphan is healed.
-- [ ] Existing missing-text orphan tests continue to pass.
-- [ ] Full test, lint, typecheck, Obsidian compliance, production bundle, and release-artifact checks pass.
+- [x] A parser regression test proves trailing newlines and spaces remain in `mainContent`.
+- [x] A synchronization regression test proves a full-file selection ending at the final newline remains anchored.
+- [x] A synchronization regression test proves a matching stored false orphan is healed.
+- [x] Existing missing-text orphan tests continue to pass.
+- [x] Full test, lint, typecheck, Obsidian compliance, production bundle, and release-artifact checks pass.
 
 ## Context
 
