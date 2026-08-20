@@ -7,7 +7,7 @@ export interface ParsedNoteComments {
 }
 
 function normalizeSourceContent(noteContent: string): string {
-    return noteContent.replace(/\r\n/g, "\n").trimEnd();
+    return noteContent.replace(/\r\n/g, "\n");
 }
 
 export function sortCommentsByPosition(comments: Comment[]): Comment[] {
