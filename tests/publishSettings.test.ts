@@ -113,6 +113,7 @@ test("normalizePublishSettings infers publish base URL from project name", () =>
 test("validatePublishSettings treats disabled publishing as explicitly off", () => {
 	assert.deepEqual(validatePublishSettings(DEFAULT_PUBLISH_SETTINGS, {
 		[FeatureFlag.publish]: true,
+		[FeatureFlag.agents]: false,
 	}), {
 		ok: false,
 		notice: "Turn on Publishing in Aside settings first.",
@@ -125,6 +126,7 @@ test("validatePublishSettings fails closed when the publish feature flag is off"
 		publishBaseUrl: "https://publish.example.com",
 	}), {
 		[FeatureFlag.publish]: false,
+		[FeatureFlag.agents]: false,
 	}), {
 		ok: false,
 		notice: "Publishing feature is disabled. Run the Aside CLI to enable it.",
@@ -138,6 +140,7 @@ test("validatePublishSettings accepts complete non-secret Cloudflare Pages confi
 		publishAllowedRoot: "public/",
 	}), {
 		[FeatureFlag.publish]: true,
+		[FeatureFlag.agents]: false,
 	}), {
 		ok: true,
 	});
@@ -151,6 +154,7 @@ test("validatePublishSettings requires an HTTPS broker URL and secret reference 
 		publishPurgeBrokerUrl: "http://localhost:8787/purge",
 	}), {
 		[FeatureFlag.publish]: true,
+		[FeatureFlag.agents]: false,
 	}), {
 		ok: false,
 		notice: "Publish settings are invalid: Purge broker URL must be an https:// URL; Purge broker auth secret must be selected.",
@@ -165,6 +169,7 @@ test("validatePublishSettings rejects incomplete or unsafe publish settings", ()
 		publishAllowedRoot: "../share",
 	}), {
 		[FeatureFlag.publish]: true,
+		[FeatureFlag.agents]: false,
 	}), {
 		ok: false,
 		notice: "Publish settings are invalid: Publish base URL must be an https:// origin with no path, query, or fragment.",

@@ -833,11 +833,13 @@ test("loaded settings resolution defaults publish feature flag off", () => {
     const resolved = resolveLoadedSettings({}, createSettings({
         featureFlags: {
             [FeatureFlag.publish]: true,
+            [FeatureFlag.agents]: false,
         },
     }));
 
     assert.deepEqual(resolved.settings.featureFlags, {
         [FeatureFlag.publish]: false,
+        [FeatureFlag.agents]: false,
     });
     assert.equal(resolved.shouldRewriteLegacySettings, true);
 });
@@ -846,12 +848,14 @@ test("loaded settings resolution preserves normalized publish feature flag", () 
     const resolved = resolveLoadedSettings({
         featureFlags: {
             [FeatureFlag.publish]: true,
+            [FeatureFlag.agents]: false,
             unknown: true,
         },
-    } as PersistedPluginData, createSettings());
+    } as unknown as PersistedPluginData, createSettings());
 
     assert.deepEqual(resolved.settings.featureFlags, {
         [FeatureFlag.publish]: true,
+        [FeatureFlag.agents]: false,
     });
     assert.equal(resolved.shouldRewriteLegacySettings, true);
 });
@@ -861,6 +865,7 @@ test("feature flag storage synchronization persists through the complete plugin 
         indexHeaderImageCaption: "Keep this caption",
         featureFlags: {
             [FeatureFlag.publish]: false,
+            [FeatureFlag.agents]: false,
         },
         publishPagesProjectName: "publish-example-com",
         publishBaseUrl: "https://publish.example.com",
@@ -887,6 +892,7 @@ test("feature flag storage synchronization persists through the complete plugin 
         ...persistedSettings,
         featureFlags: {
             [FeatureFlag.publish]: true,
+            [FeatureFlag.agents]: false,
         },
     }]);
 });
@@ -897,6 +903,7 @@ test("feature flag storage synchronization preserves persisted data for absent a
             indexHeaderImageCaption: "Keep this caption",
             featureFlags: {
                 [FeatureFlag.publish]: true,
+                [FeatureFlag.agents]: false,
             },
         });
         const harness = createControllerHarness({
@@ -926,6 +933,7 @@ test("feature flag storage synchronization restores persisted data when saving f
     const persistedSettings = createSettings({
         featureFlags: {
             [FeatureFlag.publish]: false,
+            [FeatureFlag.agents]: false,
         },
     });
     const harness = createControllerHarness({

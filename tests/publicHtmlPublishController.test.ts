@@ -46,7 +46,10 @@ function createHarness(options: {
 	const purgeCalls: Array<{ url: string; sourcePath: string; event: "unpublish" | "republish" }> = [];
 	const host = {
 		getSettings: () => options.settings ?? settings,
-		getFeatureFlags: () => options.featureFlags ?? { [FeatureFlag.publish]: true },
+		getFeatureFlags: () => options.featureFlags ?? {
+			[FeatureFlag.publish]: true,
+			[FeatureFlag.agents]: false,
+		},
 		getVaultConfigDir: () => ".obsidian",
 		listMarkdownFiles: async (rootPath: string) => Array.from(files.keys())
 			.filter((path) => path.startsWith(rootPath) && path.endsWith(".md")),
@@ -125,6 +128,7 @@ test("public html publish controller fails closed when the publish feature flag 
 	const harness = createHarness({
 		featureFlags: {
 			[FeatureFlag.publish]: false,
+			[FeatureFlag.agents]: false,
 		},
 	});
 

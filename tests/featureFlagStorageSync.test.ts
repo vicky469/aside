@@ -1,18 +1,20 @@
 import * as assert from "node:assert/strict";
 import test from "node:test";
 import {
-    getPublishFeatureFlagStorageKey,
-    syncPublishFeatureFlagStorage,
+    getFeatureFlagStorageKey,
+    syncFeatureFlagStorage,
     type FeatureFlagStorage,
-    type PublishFeatureFlagStorageSyncOptions,
+    type FeatureFlagStorageSyncOptions,
 } from "../src/core/config/featureFlagStorageSync";
 import {
     FeatureFlag,
+    type FeatureFlagKey,
     type FeatureFlags,
 } from "../src/core/config/featureFlags";
 
 interface HarnessConfig {
-    persisted: boolean;
+    flag?: FeatureFlagKey;
+    persisted?: FeatureFlags;
     stored?: string | null;
     storageKey?: string;
     storage?: null;
@@ -27,12 +29,14 @@ interface Harness {
     readonly storageValue: string | null;
     readonly operations: string[];
     readonly storageAccesses: string[];
-    readonly options: PublishFeatureFlagStorageSyncOptions;
+    readonly options: FeatureFlagStorageSyncOptions;
 }
 
-function createHarness(config: HarnessConfig): Harness {
-    let featureFlags: FeatureFlags = {
-        [FeatureFlag.publish]: config.persisted,
+function createHarness(config: HarnessConfig = {}): Harness {
+    const flag = config.flag ?? FeatureFlag.publish;
+    let featureFlags: FeatureFlags = config.persisted ?? {
+        [FeatureFlag.publish]: false,
+        [FeatureFlag.agents]: false,
     };
     let persistCount = 0;
     let storageValue = config.stored ?? null;
@@ -70,8 +74,9 @@ function createHarness(config: HarnessConfig): Harness {
         operations,
         storageAccesses,
         options: {
+            flag,
             storage,
-            storageKey: config.storageKey ?? "aside.feature.publish.Test Vault",
+            storageKey: config.storageKey ?? getFeatureFlagStorageKey(flag, "Test Vault"),
             getFeatureFlags: () => featureFlags,
             setFeatureFlags: (nextFeatureFlags) => {
                 featureFlags = nextFeatureFlags;
@@ -89,23 +94,26 @@ function createHarness(config: HarnessConfig): Harness {
     };
 }
 
-test("publish feature flag storage keys are scoped by vault name", () => {
+test("feature flag storage keys are scoped by flag and vault name", () => {
     assert.equal(
-        getPublishFeatureFlagStorageKey("Vault A"),
+        getFeatureFlagStorageKey(FeatureFlag.publish, "Vault A"),
         "aside.feature.publish.Vault A",
     );
     assert.equal(
-        getPublishFeatureFlagStorageKey("Vault B"),
-        "aside.feature.publish.Vault B",
+        getFeatureFlagStorageKey(FeatureFlag.agents, "Vault A"),
+        "aside.feature.agents.Vault A",
     );
 });
 
-test("true local-storage request persists and mirrors the enabled flag", async () => {
-    const harness = createHarness({ persisted: false, stored: "true" });
+test("publish override persists and mirrors without changing agents", async () => {
+    const harness = createHarness({
+        persisted: { publish: false, agents: true },
+        stored: "true",
+    });
 
-    const result = await syncPublishFeatureFlagStorage(harness.options);
+    const result = await syncFeatureFlagStorage(harness.options);
 
-    assert.equal(harness.featureFlags.publish, true);
+    assert.deepEqual(harness.featureFlags, { publish: true, agents: true });
     assert.equal(harness.persistCount, 1);
     assert.equal(harness.storageValue, "true");
     assert.deepEqual(harness.storageAccesses, [
@@ -113,69 +121,94 @@ test("true local-storage request persists and mirrors the enabled flag", async (
         "write:aside.feature.publish.Test Vault",
     ]);
     assert.deepEqual(result, {
-        featureFlags: { publish: true },
+        featureFlags: { publish: true, agents: true },
         persisted: true,
         mirrored: true,
     });
 });
 
-test("false local-storage request persists and mirrors the disabled flag", async () => {
-    const harness = createHarness({ persisted: true, stored: "false" });
+test("agents override changes only agents and preserves publish", async () => {
+    const harness = createHarness({
+        flag: FeatureFlag.agents,
+        persisted: { publish: true, agents: false },
+        stored: "true",
+    });
 
-    await syncPublishFeatureFlagStorage(harness.options);
+    const result = await syncFeatureFlagStorage(harness.options);
 
-    assert.equal(harness.featureFlags.publish, false);
+    assert.deepEqual(harness.featureFlags, { publish: true, agents: true });
+    assert.deepEqual(result.featureFlags, { publish: true, agents: true });
+    assert.deepEqual(harness.storageAccesses, [
+        "read:aside.feature.agents.Test Vault",
+        "write:aside.feature.agents.Test Vault",
+    ]);
+});
+
+test("false local-storage request persists and mirrors the selected flag", async () => {
+    const harness = createHarness({
+        persisted: { publish: true, agents: true },
+        stored: "false",
+    });
+
+    await syncFeatureFlagStorage(harness.options);
+
+    assert.deepEqual(harness.featureFlags, { publish: false, agents: true });
     assert.equal(harness.persistCount, 1);
     assert.equal(harness.storageValue, "false");
 });
 
 test("missing or invalid local-storage requests preserve persisted flags", async () => {
     for (const stored of [null, "", "TRUE", "invalid"]) {
-        const harness = createHarness({ persisted: true, stored });
-        await syncPublishFeatureFlagStorage(harness.options);
-        assert.equal(harness.featureFlags.publish, true);
+        const harness = createHarness({
+            persisted: { publish: true, agents: false },
+            stored,
+        });
+        await syncFeatureFlagStorage(harness.options);
+        assert.deepEqual(harness.featureFlags, { publish: true, agents: false });
         assert.equal(harness.persistCount, 0);
         assert.equal(harness.storageValue, "true");
     }
 });
 
 test("unavailable or unreadable storage preserves persisted flags", async () => {
-    const unavailable = createHarness({ persisted: true, storage: null });
-    await syncPublishFeatureFlagStorage(unavailable.options);
-    assert.equal(unavailable.featureFlags.publish, true);
+    const persisted = { publish: true, agents: false };
+    const unavailable = createHarness({ persisted, storage: null });
+    await syncFeatureFlagStorage(unavailable.options);
+    assert.deepEqual(unavailable.featureFlags, persisted);
     assert.equal(unavailable.persistCount, 0);
 
-    const unreadable = createHarness({ persisted: true, readError: new Error("denied") });
-    await syncPublishFeatureFlagStorage(unreadable.options);
-    assert.equal(unreadable.featureFlags.publish, true);
+    const unreadable = createHarness({ persisted, readError: new Error("denied") });
+    await syncFeatureFlagStorage(unreadable.options);
+    assert.deepEqual(unreadable.featureFlags, persisted);
     assert.equal(unreadable.persistCount, 0);
     assert.deepEqual(unreadable.operations, ["read"]);
 });
 
-test("failed persistence restores and mirrors the previous canonical flag", async () => {
+test("failed persistence restores and mirrors the previous complete flag object", async () => {
     const harness = createHarness({
-        persisted: false,
+        flag: FeatureFlag.agents,
+        persisted: { publish: true, agents: false },
         stored: "true",
         persistError: new Error("save failed"),
     });
 
-    await syncPublishFeatureFlagStorage(harness.options);
+    await syncFeatureFlagStorage(harness.options);
 
-    assert.equal(harness.featureFlags.publish, false);
+    assert.deepEqual(harness.featureFlags, { publish: true, agents: false });
     assert.equal(harness.storageValue, "false");
     assert.deepEqual(harness.operations, ["persist"]);
 });
 
 test("failed mirror writes do not reject synchronization", async () => {
     const harness = createHarness({
-        persisted: false,
+        persisted: { publish: false, agents: false },
         stored: "true",
         writeError: new Error("denied"),
     });
 
-    const result = await syncPublishFeatureFlagStorage(harness.options);
+    const result = await syncFeatureFlagStorage(harness.options);
 
-    assert.equal(harness.featureFlags.publish, true);
+    assert.deepEqual(harness.featureFlags, { publish: true, agents: false });
     assert.equal(harness.persistCount, 1);
     assert.equal(result.mirrored, false);
     assert.deepEqual(harness.operations, ["write"]);

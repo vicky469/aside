@@ -1,13 +1,17 @@
 export const FeatureFlag = {
 	publish: "publish",
+	agents: "agents",
 } as const;
 
 export type FeatureFlagKey = typeof FeatureFlag[keyof typeof FeatureFlag];
+
+export const FEATURE_FLAG_KEYS: readonly FeatureFlagKey[] = Object.values(FeatureFlag);
 
 export type FeatureFlags = Record<FeatureFlagKey, boolean>;
 
 export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
 	[FeatureFlag.publish]: false,
+	[FeatureFlag.agents]: false,
 };
 
 export function normalizeFeatureFlags(value: unknown): FeatureFlags {
@@ -16,6 +20,7 @@ export function normalizeFeatureFlags(value: unknown): FeatureFlags {
 		: {};
 	return {
 		[FeatureFlag.publish]: source[FeatureFlag.publish] === true,
+		[FeatureFlag.agents]: source[FeatureFlag.agents] === true,
 	};
 }
 
@@ -31,7 +36,6 @@ export function shouldRewriteNormalizedFeatureFlags(
 		return loadedValue !== undefined;
 	}
 	const source = loadedValue as Record<string, unknown>;
-	const knownFlags = Object.values(FeatureFlag);
-	return Object.keys(source).some((key) => !knownFlags.some((flag) => flag === key))
-		|| knownFlags.some((flag) => source[flag] !== normalized[flag]);
+	return Object.keys(source).some((key) => !FEATURE_FLAG_KEYS.some((flag) => flag === key))
+		|| FEATURE_FLAG_KEYS.some((flag) => source[flag] !== normalized[flag]);
 }

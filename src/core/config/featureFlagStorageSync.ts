@@ -1,13 +1,14 @@
 import {
-    FeatureFlag,
     normalizeFeatureFlags,
+    type FeatureFlagKey,
     type FeatureFlags,
 } from "./featureFlags";
 
-export const PUBLISH_FEATURE_FLAG_STORAGE_PREFIX = "aside.feature.publish";
-
-export function getPublishFeatureFlagStorageKey(vaultName: string): string {
-    return `${PUBLISH_FEATURE_FLAG_STORAGE_PREFIX}.${vaultName}`;
+export function getFeatureFlagStorageKey(
+    flag: FeatureFlagKey,
+    vaultName: string,
+): string {
+    return `aside.feature.${flag}.${vaultName}`;
 }
 
 export interface FeatureFlagStorage {
@@ -17,7 +18,8 @@ export interface FeatureFlagStorage {
 
 export type FeatureFlagStorageSyncOperation = "read" | "persist" | "write";
 
-export interface PublishFeatureFlagStorageSyncOptions {
+export interface FeatureFlagStorageSyncOptions {
+    flag: FeatureFlagKey;
     storage: FeatureFlagStorage | null;
     storageKey: string;
     getFeatureFlags(): unknown;
@@ -26,14 +28,14 @@ export interface PublishFeatureFlagStorageSyncOptions {
     onError?(operation: FeatureFlagStorageSyncOperation, error: unknown): void;
 }
 
-export interface PublishFeatureFlagStorageSyncResult {
+export interface FeatureFlagStorageSyncResult {
     featureFlags: FeatureFlags;
     persisted: boolean;
     mirrored: boolean;
 }
 
 function reportError(
-    options: PublishFeatureFlagStorageSyncOptions,
+    options: FeatureFlagStorageSyncOptions,
     operation: FeatureFlagStorageSyncOperation,
     error: unknown,
 ): void {
@@ -44,9 +46,9 @@ function reportError(
     }
 }
 
-export async function syncPublishFeatureFlagStorage(
-    options: PublishFeatureFlagStorageSyncOptions,
-): Promise<PublishFeatureFlagStorageSyncResult> {
+export async function syncFeatureFlagStorage(
+    options: FeatureFlagStorageSyncOptions,
+): Promise<FeatureFlagStorageSyncResult> {
     const previousFlags = normalizeFeatureFlags(options.getFeatureFlags());
     if (!options.storage) {
         return {
@@ -78,11 +80,11 @@ export async function syncPublishFeatureFlagStorage(
 
     if (
         requestedValue !== null
-        && requestedValue !== previousFlags[FeatureFlag.publish]
+        && requestedValue !== previousFlags[options.flag]
     ) {
         const requestedFlags = {
             ...previousFlags,
-            [FeatureFlag.publish]: requestedValue,
+            [options.flag]: requestedValue,
         };
         options.setFeatureFlags(requestedFlags);
         try {
@@ -99,7 +101,7 @@ export async function syncPublishFeatureFlagStorage(
     try {
         options.storage.setItem(
             options.storageKey,
-            String(canonicalFlags[FeatureFlag.publish]),
+            String(canonicalFlags[options.flag]),
         );
         mirrored = true;
     } catch (error) {
@@ -111,4 +113,19 @@ export async function syncPublishFeatureFlagStorage(
         persisted,
         mirrored,
     };
+}
+
+export function getPublishFeatureFlagStorageKey(vaultName: string): string {
+    return getFeatureFlagStorageKey("publish", vaultName);
+}
+
+export type PublishFeatureFlagStorageSyncOptions = Omit<FeatureFlagStorageSyncOptions, "flag">;
+
+export async function syncPublishFeatureFlagStorage(
+    options: PublishFeatureFlagStorageSyncOptions,
+): Promise<FeatureFlagStorageSyncResult> {
+    return syncFeatureFlagStorage({
+        ...options,
+        flag: "publish",
+    });
 }
