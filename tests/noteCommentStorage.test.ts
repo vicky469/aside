@@ -23,10 +23,10 @@ function createComment(overrides: Partial<Comment> = {}): Comment {
     };
 }
 
-test("parseNoteComments treats source markdown as note content only", () => {
-    const parsed = parseNoteComments("# Title\r\n\r\nBody\r\n", "note.md");
+test("parseNoteComments preserves the source ending while normalizing CRLF", () => {
+    const parsed = parseNoteComments("# Title\r\n\r\nBody  \r\n", "note.md");
 
-    assert.equal(parsed.mainContent, "# Title\n\nBody");
+    assert.equal(parsed.mainContent, "# Title\n\nBody  \n");
     assert.deepEqual(parsed.comments, []);
     assert.deepEqual(parsed.threads, []);
 });

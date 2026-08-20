@@ -130,7 +130,7 @@ export interface SidebarPersistedCommentHost {
     ): Promise<void>;
     openCommentFromCard(comment: Comment): Promise<void>;
     openCommentInEditor(comment: Comment): Promise<void>;
-    shareComment(comment: Comment): Promise<void>;
+    shareComment(comment: Comment): Promise<boolean>;
     saveVisibleDraftIfPresent(): Promise<boolean>;
     setShowNestedCommentsForThread(threadId: string, showNestedComments: boolean): void;
     moveCommentThread(threadId: string, sourceFilePath: string): void;
@@ -1162,10 +1162,10 @@ function renderThreadFooterActions(
         host.setIcon(shareButton, "share");
         shareButton.onclick = async (event) => {
             event.stopPropagation();
-            if (!(await host.saveVisibleDraftIfPresent())) {
+            const copied = await host.shareComment(comment);
+            if (!copied) {
                 return;
             }
-            await host.shareComment(comment);
             shareCopiedResetTimer = renderShareCopiedFeedback(
                 shareButton,
                 shareStatusEl,
@@ -1432,6 +1432,15 @@ function renderStoredThreadEntry(
             host,
         );
     }
+    if (entryEditDraft) {
+        renderThreadFooterActions(entryEl, entryComment, null, entryAuthor, null, {
+            showShareAction: !host.showSourceRedirectAction
+                && !entryComment.deletedAt
+                && !thread.deletedAt,
+            showAddEntryAction: false,
+            showRetryAction: false,
+        }, host);
+    }
 
     return renderedEntry.renderTask;
 }
@@ -1600,6 +1609,13 @@ export async function renderPersistedCommentCard(
                 && !thread.deletedAt
                 ? presentation.redirectHint
                 : null,
+        }, host);
+    }
+    if (parentEditDraft) {
+        renderThreadFooterActions(commentEl, comment, null, parentAuthor, null, {
+            showShareAction: !host.showSourceRedirectAction && !comment.deletedAt,
+            showAddEntryAction: false,
+            showRetryAction: false,
         }, host);
     }
 
