@@ -882,7 +882,8 @@ test("feature flag storage synchronization persists through the complete plugin 
     };
 
     await harness.controller.loadSettings();
-    await harness.controller.syncPublishFeatureFlagStorage(
+    await harness.controller.syncFeatureFlagStorage(
+        FeatureFlag.publish,
         storage,
         "aside.feature.publish.Test Vault",
     );
@@ -918,7 +919,8 @@ test("feature flag storage synchronization preserves persisted data for absent a
         };
 
         await harness.controller.loadSettings();
-        await harness.controller.syncPublishFeatureFlagStorage(
+        await harness.controller.syncFeatureFlagStorage(
+            FeatureFlag.publish,
             storage,
             "aside.feature.publish.Test Vault",
         );
@@ -950,7 +952,8 @@ test("feature flag storage synchronization restores persisted data when saving f
     const errors: string[] = [];
 
     await harness.controller.loadSettings();
-    await harness.controller.syncPublishFeatureFlagStorage(
+    await harness.controller.syncFeatureFlagStorage(
+        FeatureFlag.publish,
         storage,
         "aside.feature.publish.Test Vault",
         (operation) => {
@@ -962,6 +965,39 @@ test("feature flag storage synchronization restores persisted data when saving f
     assert.equal(storageValue, "false");
     assert.deepEqual(harness.savedPayloads, []);
     assert.deepEqual(errors, ["persist"]);
+});
+
+test("feature flag storage synchronization persists agents without changing publish", async () => {
+    const persistedSettings = createSettings({
+        featureFlags: {
+            [FeatureFlag.publish]: true,
+            [FeatureFlag.agents]: false,
+        },
+    });
+    const harness = createControllerHarness({ loadedData: persistedSettings });
+    let storageValue: string | null = "true";
+    const storage: FeatureFlagStorage = {
+        getItem: () => storageValue,
+        setItem: (_key, value) => {
+            storageValue = value;
+        },
+    };
+
+    await harness.controller.loadSettings();
+    await harness.controller.syncFeatureFlagStorage(
+        FeatureFlag.agents,
+        storage,
+        "aside.feature.agents.Test Vault",
+    );
+
+    assert.deepEqual(harness.getSettings().featureFlags, {
+        publish: true,
+        agents: true,
+    });
+    assert.deepEqual(harness.savedPayloads.at(-1)?.featureFlags, {
+        publish: true,
+        agents: true,
+    });
 });
 
 test("index note settings controller saves publish settings without aggregate refreshes", async () => {

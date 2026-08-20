@@ -114,18 +114,3 @@ export async function syncFeatureFlagStorage(
         mirrored,
     };
 }
-
-export function getPublishFeatureFlagStorageKey(vaultName: string): string {
-    return getFeatureFlagStorageKey("publish", vaultName);
-}
-
-export type PublishFeatureFlagStorageSyncOptions = Omit<FeatureFlagStorageSyncOptions, "flag">;
-
-export async function syncPublishFeatureFlagStorage(
-    options: PublishFeatureFlagStorageSyncOptions,
-): Promise<FeatureFlagStorageSyncResult> {
-    return syncFeatureFlagStorage({
-        ...options,
-        flag: "publish",
-    });
-}

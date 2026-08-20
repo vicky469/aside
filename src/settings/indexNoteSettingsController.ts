@@ -8,10 +8,11 @@ import {
 } from "../core/agents/agentActorRegistry";
 import type { AsideAgentTarget } from "../core/config/agentTargets";
 import {
-    syncPublishFeatureFlagStorage as syncStoredPublishFeatureFlag,
+    syncFeatureFlagStorage as syncStoredFeatureFlag,
     type FeatureFlagStorage,
     type FeatureFlagStorageSyncOperation,
 } from "../core/config/featureFlagStorageSync";
+import type { FeatureFlagKey } from "../core/config/featureFlags";
 import {
     derivePublishBaseUrlFromProjectName,
     isDefaultPagesPublishBaseUrl,
@@ -169,12 +170,14 @@ export class IndexNoteSettingsController {
         });
     }
 
-    public async syncPublishFeatureFlagStorage(
+    public async syncFeatureFlagStorage(
+        flag: FeatureFlagKey,
         storage: FeatureFlagStorage | null,
         storageKey: string,
         onError?: (operation: FeatureFlagStorageSyncOperation, error: unknown) => void,
     ): Promise<void> {
-        await syncStoredPublishFeatureFlag({
+        await syncStoredFeatureFlag({
+            flag,
             storage,
             storageKey,
             getFeatureFlags: () => this.host.getSettings().featureFlags,
