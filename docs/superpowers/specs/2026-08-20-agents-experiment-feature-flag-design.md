@@ -1,7 +1,7 @@
 # Agents Experiment Feature Flag Design
 
 **Date:** 2026-08-20
-**Status:** Implemented and repository-verified; installed acceptance pending
+**Status:** Implemented, verified, and installed
 
 ## Implementation Tracking
 
@@ -22,7 +22,7 @@
 - [x] Remove agent mentions and `/create-script` from suggestions and draft guidance while preserving `@todo` and vault-script suggestions.
 - [x] Fail closed before agent diagnostics or runtime selection when a disabled agent directive, create-script command, or regenerate action is invoked.
 - [x] Preserve stored agent preferences, existing agent runs, and existing agent-authored comments while the experiment is disabled.
-- [ ] Enable `aside.feature.agents.lean-startup` through the same local-storage override used by Publishing and reload the installed plugin.
+- [x] Enable `aside.feature.agents.lean-startup` through the same local-storage override used by Publishing and reload the installed plugin.
 
 ### Verification
 
@@ -33,7 +33,7 @@
 - [x] Sidebar tests prove the Agent tab cannot appear or remain selected while the flag is disabled.
 - [x] Existing Publishing behavior and storage keys remain unchanged.
 - [x] The full test, typecheck, lint, compliance, build, and release-artifact checks pass.
-- [ ] The installed `lean-startup` build has the Agents flag enabled and shipped assets match the verified build.
+- [x] The installed `lean-startup` build has the Agents flag enabled and shipped assets match the verified build.
 
 ## Repository Verification
 
@@ -44,6 +44,12 @@ Verified on 2026-08-21:
 - `npm run build`: tests, lint, typecheck, Obsidian compliance, production bundle, and release-artifact inspection all exited zero.
 - Public artifact inspection passed for exactly `main.js`, `manifest.json`, and `styles.css`, with no source map, `sourceMappingURL`, `sourcesContent`, raw TypeScript/JSX-family source, local path, or secret-bearing file exposure.
 - SHA-256: `main.js` `d7e4af36e4f6f11231b7967479eed6fe256ea7c6aea59489f1cbccd52fec4dff`; `manifest.json` `4f192021a6dd3bf8f90ed8486eb342f1e7524863faedb9c5f8924c253bf54528`; `styles.css` `f8177522020c0d3108e15c8d8d91b96927d0bddec99a526eda700a8088ebb425`.
+
+Installed acceptance on 2026-08-21:
+
+- The installer copied only `main.js`, `manifest.json`, and `styles.css` into the `lean-startup` Aside plugin directory.
+- After setting `aside.feature.agents.lean-startup` to `true` and reloading Aside, the live plugin reported `{"stored":"true","persisted":true,"available":true}`.
+- Byte-for-byte comparisons of all three installed artifacts exited zero.
 
 ## Context
 

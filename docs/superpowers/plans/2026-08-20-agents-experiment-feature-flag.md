@@ -764,7 +764,7 @@ git add -f docs/superpowers/specs/2026-08-20-agents-experiment-feature-flag-desi
 git commit -m "docs(agents): record feature flag verification"
 ```
 
-- [ ] **Step 6: Install the verified artifacts into `lean-startup`**
+- [x] **Step 6: Install the verified artifacts into `lean-startup`**
 
 Run:
 
@@ -774,7 +774,7 @@ node scripts/install-built-plugin.mjs --vault "/Users/example/Obsidian/lean-star
 
 Expected: only `main.js`, `manifest.json`, and `styles.css` are copied into the installed Aside plugin directory.
 
-- [ ] **Step 7: Enable the vault-scoped override and reload Aside**
+- [x] **Step 7: Enable the vault-scoped override and reload Aside**
 
 Run:
 
@@ -790,7 +790,7 @@ Expected:
 => {"stored":"true","persisted":true,"available":true}
 ```
 
-- [ ] **Step 8: Compare installed artifacts byte-for-byte**
+- [x] **Step 8: Compare installed artifacts byte-for-byte**
 
 Run:
 
@@ -802,7 +802,7 @@ cmp styles.css "/Users/example/Obsidian/lean-startup/.obsidian/plugins/aside/sty
 
 Expected: all three commands exit zero with no differences.
 
-- [ ] **Step 9: Record acceptance and commit final tracking**
+- [x] **Step 9: Record acceptance and commit final tracking**
 
 Mark the installed-build verification items complete, record the exact test counts and artifact result, and commit:
 
