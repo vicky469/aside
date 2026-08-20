@@ -1,7 +1,7 @@
 # Agents Experiment Feature Flag Design
 
 **Date:** 2026-08-20
-**Status:** Approved; implementation pending
+**Status:** Implemented and repository-verified; installed acceptance pending
 
 ## Implementation Tracking
 
@@ -14,26 +14,36 @@
 
 ### To Implement
 
-- [ ] Add the canonical `agents` feature flag with a default value of `false`.
-- [ ] Generalize the publish-only storage synchronizer so every declared feature flag uses `aside.feature.<flag>.<vault name>`.
-- [ ] Synchronize all declared feature flags after settings load and before UI registration.
-- [ ] Label the settings group **Agents (experimental)** and hide it while the flag is disabled.
-- [ ] Hide **Show agent tab** and the Agent sidebar tab while the flag is disabled.
-- [ ] Remove agent mentions and `/create-script` from suggestions and draft guidance while preserving `@todo` and vault-script suggestions.
-- [ ] Fail closed before agent diagnostics or runtime selection when a disabled agent directive, create-script command, or regenerate action is invoked.
-- [ ] Preserve stored agent preferences, existing agent runs, and existing agent-authored comments while the experiment is disabled.
+- [x] Add the canonical `agents` feature flag with a default value of `false`.
+- [x] Generalize the publish-only storage synchronizer so every declared feature flag uses `aside.feature.<flag>.<vault name>`.
+- [x] Synchronize all declared feature flags after settings load and before UI registration.
+- [x] Label the settings group **Agents (experimental)** and hide it while the flag is disabled.
+- [x] Hide **Show agent tab** and the Agent sidebar tab while the flag is disabled.
+- [x] Remove agent mentions and `/create-script` from suggestions and draft guidance while preserving `@todo` and vault-script suggestions.
+- [x] Fail closed before agent diagnostics or runtime selection when a disabled agent directive, create-script command, or regenerate action is invoked.
+- [x] Preserve stored agent preferences, existing agent runs, and existing agent-authored comments while the experiment is disabled.
 - [ ] Enable `aside.feature.agents.lean-startup` through the same local-storage override used by Publishing and reload the installed plugin.
 
 ### Verification
 
-- [ ] Feature-flag normalization and storage synchronization tests cover both `publish` and `agents`.
-- [ ] Settings tests prove both Agents rows and the Agents group follow the flag.
-- [ ] Suggestion and draft-presentation tests prove disabled mode exposes no agent/create-script affordance.
-- [ ] Agent and create-script controller tests prove disabled mode performs no diagnostics or runtime launch.
-- [ ] Sidebar tests prove the Agent tab cannot appear or remain selected while the flag is disabled.
-- [ ] Existing Publishing behavior and storage keys remain unchanged.
-- [ ] The full test, typecheck, lint, compliance, build, and release-artifact checks pass.
+- [x] Feature-flag normalization and storage synchronization tests cover both `publish` and `agents`.
+- [x] Settings tests prove both Agents rows and the Agents group follow the flag.
+- [x] Suggestion and draft-presentation tests prove disabled mode exposes no agent/create-script affordance.
+- [x] Agent and create-script controller tests prove disabled mode performs no diagnostics or runtime launch.
+- [x] Sidebar tests prove the Agent tab cannot appear or remain selected while the flag is disabled.
+- [x] Existing Publishing behavior and storage keys remain unchanged.
+- [x] The full test, typecheck, lint, compliance, build, and release-artifact checks pass.
 - [ ] The installed `lean-startup` build has the Agents flag enabled and shipped assets match the verified build.
+
+## Repository Verification
+
+Verified on 2026-08-21:
+
+- Focused cross-surface verification: 144 tests passed, 0 failed.
+- Complete suite: 1,165 compiled tests and 95 contract tests passed, 0 failed.
+- `npm run build`: tests, lint, typecheck, Obsidian compliance, production bundle, and release-artifact inspection all exited zero.
+- Public artifact inspection passed for exactly `main.js`, `manifest.json`, and `styles.css`, with no source map, `sourceMappingURL`, `sourcesContent`, raw TypeScript/JSX-family source, local path, or secret-bearing file exposure.
+- SHA-256: `main.js` `d7e4af36e4f6f11231b7967479eed6fe256ea7c6aea59489f1cbccd52fec4dff`; `manifest.json` `4f192021a6dd3bf8f90ed8486eb342f1e7524863faedb9c5f8924c253bf54528`; `styles.css` `f8177522020c0d3108e15c8d8d91b96927d0bddec99a526eda700a8088ebb425`.
 
 ## Context
 
@@ -144,4 +154,3 @@ Tests follow red-green-refactor slices:
 4. Add controller tests that assert the disabled path handles only targeted directives and never reaches diagnostics, dispatch, or retry selection.
 5. Add sidebar-mode tests that force Agent visibility and selection off when the capability is false.
 6. Run the complete project verification gate, build exact release assets, inspect them for source exposure, install them into `lean-startup`, enable the vault-scoped override, reload Aside, and compare installed assets byte-for-byte.
-

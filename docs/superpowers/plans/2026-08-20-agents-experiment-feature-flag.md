@@ -22,7 +22,7 @@
 - Modify: `src/core/config/featureFlags.ts`
 - Modify: `src/core/config/featureFlagStorageSync.ts`
 
-- [ ] **Step 1: Add failing registry tests for the `agents` flag**
+- [x] **Step 1: Add failing registry tests for the `agents` flag**
 
 Create `tests/featureFlags.test.ts`:
 
@@ -62,7 +62,7 @@ test("feature flag normalization preserves known booleans and drops unknown keys
 });
 ```
 
-- [ ] **Step 2: Replace publish-only storage tests with flag-parameterized cases**
+- [x] **Step 2: Replace publish-only storage tests with flag-parameterized cases**
 
 Update `tests/featureFlagStorageSync.test.ts` to import `getFeatureFlagStorageKey`, `syncFeatureFlagStorage`, and `FeatureFlagStorageSyncOptions`. Give the harness both canonical flags and a `flag` option. Add these assertions while retaining the read, write, invalid-value, and failed-persistence cases:
 
@@ -98,7 +98,7 @@ test("agents override changes only agents and preserves publish", async () => {
 
 For the existing Publishing cases, pass `flag: FeatureFlag.publish` and continue asserting the exact `aside.feature.publish.<vault>` key and rollback behavior.
 
-- [ ] **Step 3: Run the focused tests to verify RED**
+- [x] **Step 3: Run the focused tests to verify RED**
 
 Run:
 
@@ -109,7 +109,7 @@ node --test .test-dist/tests/featureFlags.test.js .test-dist/tests/featureFlagSt
 
 Expected: compilation fails because `FeatureFlag.agents`, `FEATURE_FLAG_KEYS`, and the generic storage APIs do not exist.
 
-- [ ] **Step 4: Implement the canonical two-flag registry**
+- [x] **Step 4: Implement the canonical two-flag registry**
 
 Change `src/core/config/featureFlags.ts` to:
 
@@ -145,7 +145,7 @@ Keep `isFeatureFlagEnabled` and `shouldRewriteNormalizedFeatureFlags`, but make 
 
 Update existing typed `FeatureFlags` fixtures in `tests/publishSettings.test.ts`, `tests/publicHtmlPublishController.test.ts`, `tests/indexNoteSettingsController.test.ts`, and `tests/asideSettingCatalog.test.ts` to include `[FeatureFlag.agents]: false`. This is a compile-only schema migration; Publishing assertions remain unchanged.
 
-- [ ] **Step 5: Implement the generic storage synchronizer**
+- [x] **Step 5: Implement the generic storage synchronizer**
 
 Replace publish-specific exports in `src/core/config/featureFlagStorageSync.ts` with:
 
@@ -190,7 +190,7 @@ options.storage.setItem(
 
 Preserve the current read-error, invalid-value, persistence rollback, and mirror-error semantics exactly.
 
-- [ ] **Step 6: Run the focused tests to verify GREEN**
+- [x] **Step 6: Run the focused tests to verify GREEN**
 
 Run:
 
@@ -201,7 +201,7 @@ node --test .test-dist/tests/featureFlags.test.js .test-dist/tests/featureFlagSt
 
 Expected: all feature-flag registry and synchronization tests pass.
 
-- [ ] **Step 7: Commit the generic feature-flag core**
+- [x] **Step 7: Commit the generic feature-flag core**
 
 ```bash
 git add src/core/config/featureFlags.ts src/core/config/featureFlagStorageSync.ts tests/featureFlags.test.ts tests/featureFlagStorageSync.test.ts tests/publishSettings.test.ts tests/publicHtmlPublishController.test.ts tests/indexNoteSettingsController.test.ts tests/asideSettingCatalog.test.ts
@@ -216,7 +216,7 @@ git commit -m "feat(flags): generalize vault feature flags"
 - Modify: `src/settings/indexNoteSettingsController.ts`
 - Modify: `src/main.ts`
 
-- [ ] **Step 1: Add failing controller tests for independent flag persistence**
+- [x] **Step 1: Add failing controller tests for independent flag persistence**
 
 Update the settings harness fixtures so every `FeatureFlags` object contains both keys. Replace calls to `syncPublishFeatureFlagStorage` with `syncFeatureFlagStorage(flag, storage, storageKey, onError)`. Add:
 
@@ -257,7 +257,7 @@ test("feature flag storage synchronization persists agents without changing publ
 
 Also update loaded-settings assertions so absent `agents` normalizes to `false`, unknown keys are dropped, and saved `defaultAgent` plus `showAgentSidebarTab` remain unchanged.
 
-- [ ] **Step 2: Replace the startup-order test with registry-wide synchronization**
+- [x] **Step 2: Replace the startup-order test with registry-wide synchronization**
 
 Change `tests/pluginStartupOrder.test.ts` to require `await this.syncFeatureFlagStorage();` between settings load and `pluginRegistrationController.register()`. Assert that `src/main.ts` iterates `FEATURE_FLAG_KEYS` and calls:
 
@@ -265,7 +265,7 @@ Change `tests/pluginStartupOrder.test.ts` to require `await this.syncFeatureFlag
 getFeatureFlagStorageKey(flag, this.app.vault.getName())
 ```
 
-- [ ] **Step 3: Run the focused tests to verify RED**
+- [x] **Step 3: Run the focused tests to verify RED**
 
 Run:
 
@@ -276,7 +276,7 @@ node --test .test-dist/tests/indexNoteSettingsController.test.js .test-dist/test
 
 Expected: compilation or assertions fail because the controller and startup still expose publish-only synchronization.
 
-- [ ] **Step 4: Generalize the settings controller entry point**
+- [x] **Step 4: Generalize the settings controller entry point**
 
 In `src/settings/indexNoteSettingsController.ts`, import `syncFeatureFlagStorage` and `FeatureFlagKey`, then expose:
 
@@ -304,7 +304,7 @@ public async syncFeatureFlagStorage(
 }
 ```
 
-- [ ] **Step 5: Iterate the canonical registry during startup**
+- [x] **Step 5: Iterate the canonical registry during startup**
 
 In `src/main.ts`, import `FEATURE_FLAG_KEYS` and `getFeatureFlagStorageKey`. Replace `syncPublishFeatureFlagStorage` with:
 
@@ -331,7 +331,7 @@ private async syncFeatureFlagStorage(): Promise<void> {
 
 Call it immediately after loading settings and run-store initialization, before vault capability seeding and UI registration.
 
-- [ ] **Step 6: Run the focused tests to verify GREEN**
+- [x] **Step 6: Run the focused tests to verify GREEN**
 
 Run:
 
@@ -342,7 +342,7 @@ node --test .test-dist/tests/indexNoteSettingsController.test.js .test-dist/test
 
 Expected: both the complete payload persistence tests and startup-order tests pass for Publishing and Agents.
 
-- [ ] **Step 7: Commit startup synchronization**
+- [x] **Step 7: Commit startup synchronization**
 
 ```bash
 git add src/settings/indexNoteSettingsController.ts src/main.ts tests/indexNoteSettingsController.test.ts tests/pluginStartupOrder.test.ts
@@ -360,7 +360,7 @@ git commit -m "feat(flags): sync every vault feature flag"
 - Modify: `src/ui/views/sidebarDraftComment.ts`
 - Modify: `src/ui/views/AsideView.ts`
 
-- [ ] **Step 1: Add failing settings visibility tests**
+- [x] **Step 1: Add failing settings visibility tests**
 
 Extend `createCatalogContext` with `agentsFeatureEnabled`. Add:
 
@@ -389,7 +389,7 @@ test("Agents settings and group follow the agents feature flag", () => {
 });
 ```
 
-- [ ] **Step 2: Add failing capability tests for suggestions and placeholder copy**
+- [x] **Step 2: Add failing capability tests for suggestions and placeholder copy**
 
 Make the capability argument required in tests. Add:
 
@@ -412,7 +412,7 @@ Write a side note. Use B or H for styling, or type /script-name or @todo.
 
 Pass `true` to the existing enabled placeholder test and keep its current text unchanged.
 
-- [ ] **Step 3: Run the focused tests to verify RED**
+- [x] **Step 3: Run the focused tests to verify RED**
 
 Run:
 
@@ -423,7 +423,7 @@ node --test .test-dist/tests/asideSettingCatalog.test.js .test-dist/tests/commen
 
 Expected: Agents settings remain visible, and suggestions/placeholders still expose agent directives and `/create-script`.
 
-- [ ] **Step 4: Gate the settings catalog**
+- [x] **Step 4: Gate the settings catalog**
 
 In `src/ui/settings/asideSettingCatalog.ts`:
 
@@ -435,7 +435,7 @@ function isAgentsFeatureAvailable(context: AsideSettingCatalogContext): boolean 
 
 Change the section heading to **Agents (experimental)** and assign `visible: isAgentsFeatureAvailable` to both `default-agent` and `show-agent-tab`. Leave stored preference values untouched.
 
-- [ ] **Step 5: Gate pure mention suggestions without releasing reserved names**
+- [x] **Step 5: Gate pure mention suggestions without releasing reserved names**
 
 Change the builder signature to:
 
@@ -449,13 +449,13 @@ export function buildMentionSuggestions(
 
 Always build the complete reserved-name set from `@todo`, all supported agents, and `/create-script`. Only include agent actors and `/create-script` in candidate arrays when `agentsFeatureAvailable` is true. This keeps hidden built-in names unavailable to vault scripts.
 
-- [ ] **Step 6: Gate draft guidance and wire the runtime capability**
+- [x] **Step 6: Gate draft guidance and wire the runtime capability**
 
 Change `buildDraftCommentPresentation` to require `agentsFeatureAvailable: boolean`. Use the existing copy when true and the todo/script-only copy when false. Add `isAgentsFeatureAvailable(): boolean` to `SidebarDraftCommentHost` and pass it from both card and inline-edit renderers.
 
 In `src/ui/views/AsideView.ts`, add `isAgentsFeatureAvailable()` to `AsideWithVaultScriptMentions`, pass it to `buildMentionSuggestions`, and expose it through both draft render hosts.
 
-- [ ] **Step 7: Run the focused tests and compile all call sites**
+- [x] **Step 7: Run the focused tests and compile all call sites**
 
 Run:
 
@@ -466,7 +466,7 @@ node --test .test-dist/tests/asideSettingCatalog.test.js .test-dist/tests/commen
 
 Expected: disabled mode exposes only `@todo` and registered non-reserved scripts; enabled behavior remains unchanged.
 
-- [ ] **Step 8: Commit hidden Agents affordances**
+- [x] **Step 8: Commit hidden Agents affordances**
 
 ```bash
 git add src/ui/settings/asideSettingCatalog.ts src/ui/editor/commentMentionSuggestions.ts src/ui/views/sidebarDraftComment.ts src/ui/views/AsideView.ts tests/asideSettingCatalog.test.ts tests/commentMentionSuggestions.test.ts tests/sidebarDraftComment.test.ts
@@ -481,7 +481,7 @@ git commit -m "feat(agents): hide disabled affordances"
 - Modify: `src/ui/views/AsideView.ts`
 - Modify: `src/main.ts`
 
-- [ ] **Step 1: Add failing sidebar capability tests**
+- [x] **Step 1: Add failing sidebar capability tests**
 
 Add `agentsFeatureAvailable` to every `SidebarModeVisibility` fixture. Add:
 
@@ -508,7 +508,7 @@ test("disabled Agents capability hides the tab and falls active agent mode back 
 
 Retain the enabled case with `agentsFeatureAvailable: true`.
 
-- [ ] **Step 2: Run the focused test to verify RED**
+- [x] **Step 2: Run the focused test to verify RED**
 
 Run:
 
@@ -519,7 +519,7 @@ node --test .test-dist/tests/sidebarModeTabs.test.js
 
 Expected: Agent remains visible because mode visibility does not know the feature capability.
 
-- [ ] **Step 3: Add the capability to sidebar visibility policy**
+- [x] **Step 3: Add the capability to sidebar visibility policy**
 
 In `src/ui/views/sidebarModeTabs.ts`, require:
 
@@ -533,7 +533,7 @@ export interface SidebarModeVisibility {
 
 Change `SidebarModeTabOptions` to `SidebarModeAvailability & SidebarModeVisibility` so callers cannot omit the capability. The Agent tab is visible only when both `showAgentSidebarTab` and `agentsFeatureAvailable` are true. `resolveModeWithSidebarModeVisibility("agent", visibility)` returns `"list"` when either is false.
 
-- [ ] **Step 4: Expose and wire the canonical runtime query**
+- [x] **Step 4: Expose and wire the canonical runtime query**
 
 Add to `src/main.ts`:
 
@@ -551,7 +551,7 @@ agentsFeatureAvailable: this.plugin.isAgentsFeatureAvailable(),
 
 Every existing mode restore, render, and cached-index path already consumes this one helper, so the active `agent` mode falls back without rewriting `showAgentSidebarTab`.
 
-- [ ] **Step 5: Run sidebar and view-state tests to verify GREEN**
+- [x] **Step 5: Run sidebar and view-state tests to verify GREEN**
 
 Run:
 
@@ -562,7 +562,7 @@ node --test .test-dist/tests/sidebarModeTabs.test.js .test-dist/tests/indexSideb
 
 Expected: disabled Agents cannot render or restore the Agent tab; enabled and non-Agent modes remain unchanged.
 
-- [ ] **Step 6: Commit sidebar gating**
+- [x] **Step 6: Commit sidebar gating**
 
 ```bash
 git add src/ui/views/sidebarModeTabs.ts src/ui/views/AsideView.ts src/main.ts tests/sidebarModeTabs.test.ts
@@ -579,7 +579,7 @@ git commit -m "feat(agents): gate the Agent sidebar tab"
 - Modify: `src/agents/commentAgentController.ts`
 - Modify: `src/main.ts`
 
-- [ ] **Step 1: Add disabled `/create-script` controller tests**
+- [x] **Step 1: Add disabled `/create-script` controller tests**
 
 Extend the create-script harness with `agentsFeatureAvailable` and notices. Add:
 
@@ -598,7 +598,7 @@ test("disabled create-script is handled without dispatch or a generated reply", 
 
 Also prove an ordinary note still returns `false`, allowing vault-script and todo routing to continue.
 
-- [ ] **Step 2: Add disabled agent dispatch, create request, and retry tests**
+- [x] **Step 2: Add disabled agent dispatch, create request, and retry tests**
 
 Extend the CommentAgent harness with `agentsFeatureAvailable` and wire `isAgentsFeatureAvailable: () => options.agentsFeatureAvailable ?? true`. Add these three tests:
 
@@ -661,7 +661,7 @@ test("disabled regenerate preserves the existing run without diagnostics", async
 });
 ```
 
-- [ ] **Step 3: Run the focused tests to verify RED**
+- [x] **Step 3: Run the focused tests to verify RED**
 
 Run:
 
@@ -672,7 +672,7 @@ node --test .test-dist/tests/createScriptCommandController.test.js .test-dist/te
 
 Expected: disabled requests still reach selection or dispatch because controller hosts lack the capability.
 
-- [ ] **Step 4: Define one disabled notice and gate `/create-script`**
+- [x] **Step 4: Define one disabled notice and gate `/create-script`**
 
 Create `src/core/agents/agentsFeaturePolicy.ts`:
 
@@ -682,7 +682,7 @@ export const AGENTS_EXPERIMENT_DISABLED_NOTICE = "Agents experiment is disabled.
 
 Add `isAgentsFeatureAvailable(): boolean` and `showNotice(message: string): void` to `CreateScriptCommandHost`. After parsing confirms `/create-script` but before usage validation or dispatch, return handled and show the shared notice when unavailable. Preserve entry-id deduplication.
 
-- [ ] **Step 5: Gate every CommentAgent entry point before selection**
+- [x] **Step 5: Gate every CommentAgent entry point before selection**
 
 Add `isAgentsFeatureAvailable(): boolean` to `CommentAgentHost`.
 
@@ -692,11 +692,11 @@ Add `isAgentsFeatureAvailable(): boolean` to `CommentAgentHost`.
 
 Do not mutate `defaultAgent`, `showAgentSidebarTab`, persisted runs, streams, or comment entries on these disabled paths.
 
-- [ ] **Step 6: Wire capability hosts and add a defensive diagnostics boundary**
+- [x] **Step 6: Wire capability hosts and add a defensive diagnostics boundary**
 
 In `src/main.ts`, pass `isAgentsFeatureAvailable` and `showNotice` to both controllers. At the start of `getAgentRuntimeDiagnostics`, return an unsupported diagnostic containing the shared disabled notice when the feature is off, ensuring direct settings or programmatic calls cannot launch provider probes.
 
-- [ ] **Step 7: Run controller tests to verify GREEN**
+- [x] **Step 7: Run controller tests to verify GREEN**
 
 Run:
 
@@ -707,7 +707,7 @@ node --test .test-dist/tests/createScriptCommandController.test.js .test-dist/te
 
 Expected: disabled agent and create-script routes produce one notice, no selection/diagnostic/runtime calls, no data mutation, and ordinary registered vault scripts remain runnable.
 
-- [ ] **Step 8: Commit runtime fail-closed behavior**
+- [x] **Step 8: Commit runtime fail-closed behavior**
 
 ```bash
 git add src/core/agents/agentsFeaturePolicy.ts src/agents/createScriptCommandController.ts src/agents/commentAgentController.ts src/main.ts tests/createScriptCommandController.test.ts tests/commentAgentController.test.ts
@@ -721,7 +721,7 @@ git commit -m "feat(agents): fail closed when experiment is off"
 - Modify: `docs/superpowers/plans/2026-08-20-agents-experiment-feature-flag.md`
 - Install exact artifacts to: `/Users/example/Obsidian/lean-startup/.obsidian/plugins/aside/`
 
-- [ ] **Step 1: Run focused cross-surface verification**
+- [x] **Step 1: Run focused cross-surface verification**
 
 Run:
 
@@ -732,7 +732,7 @@ node --test .test-dist/tests/featureFlags.test.js .test-dist/tests/featureFlagSt
 
 Expected: all feature-flag, UI, sidebar, and runtime boundary tests pass.
 
-- [ ] **Step 2: Run the complete test suite**
+- [x] **Step 2: Run the complete test suite**
 
 Run:
 
@@ -742,7 +742,7 @@ npm test
 
 Expected: all compiled and contract tests pass with zero failures.
 
-- [ ] **Step 3: Build and inspect the exact public artifacts**
+- [x] **Step 3: Build and inspect the exact public artifacts**
 
 Run:
 
@@ -753,11 +753,11 @@ node scripts/check-release-artifacts.mjs
 
 Expected: lint, typecheck, Obsidian compliance, bundle, and artifact inspection pass. The exact public set is `main.js`, `manifest.json`, and `styles.css`, with no `main.js.map`, `sourceMappingURL`, `sourcesContent`, raw TypeScript/JSX-family source, or secret-bearing files.
 
-- [ ] **Step 4: Update tracked implementation status**
+- [x] **Step 4: Update tracked implementation status**
 
 Mark implementation and repository verification items complete in the design spec and this plan. Keep installation/acceptance items pending until the installed build is verified.
 
-- [ ] **Step 5: Commit repository verification records**
+- [x] **Step 5: Commit repository verification records**
 
 ```bash
 git add -f docs/superpowers/specs/2026-08-20-agents-experiment-feature-flag-design.md docs/superpowers/plans/2026-08-20-agents-experiment-feature-flag.md
