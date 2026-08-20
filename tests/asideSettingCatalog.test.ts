@@ -42,7 +42,7 @@ test("every Aside setting has searchable metadata and one section owner", () => 
     }
 });
 
-test("Agents is the first settings section", () => {
+test("Agents experiment is the first settings section", () => {
     assert.deepEqual(ASIDE_SETTING_SECTIONS.map((section) => section.key), [
         "agents",
         "sidebar",
@@ -71,6 +71,7 @@ function getCatalogEntry(key: string) {
 
 function createCatalogContext(options: {
     publishFeatureEnabled: boolean;
+    agentsFeatureEnabled?: boolean;
     publishEnabled?: boolean;
     remotePurgeEnabled?: boolean;
 }) {
@@ -79,6 +80,7 @@ function createCatalogContext(options: {
             settings: {
                 featureFlags: {
                     [FeatureFlag.publish]: options.publishFeatureEnabled,
+                    [FeatureFlag.agents]: options.agentsFeatureEnabled ?? false,
                 },
                 publishEnabled: options.publishEnabled ?? false,
                 publishRemotePurgeEnabled: options.remotePurgeEnabled ?? false,
@@ -89,6 +91,29 @@ function createCatalogContext(options: {
         renderPurgeBrokerSecret: () => undefined,
     } as unknown as Parameters<NonNullable<(typeof ASIDE_SETTING_CATALOG)[number]["visible"]>>[0];
 }
+
+test("Agents settings and group follow the agents feature flag", () => {
+    const disabled = createCatalogContext({
+        agentsFeatureEnabled: false,
+        publishFeatureEnabled: false,
+    });
+    const enabled = createCatalogContext({
+        agentsFeatureEnabled: true,
+        publishFeatureEnabled: false,
+    });
+
+    assert.equal(isVisible("default-agent", disabled), false);
+    assert.equal(isVisible("show-agent-tab", disabled), false);
+    assert.equal(isVisible("default-agent", enabled), true);
+    assert.equal(isVisible("show-agent-tab", enabled), true);
+
+    const group = getAsideSettingDefinitions(disabled)
+        .find((item) => "heading" in item && item.heading === "Agents (experimental)");
+    if (!group || typeof group.visible !== "function") {
+        assert.fail("Agents settings group should define feature visibility");
+    }
+    assert.equal(group.visible(), false);
+});
 
 function isVisible(key: string, context: ReturnType<typeof createCatalogContext>): boolean {
     const entry = getCatalogEntry(key);

@@ -472,7 +472,7 @@ test("sidebar draft editor controller preserves @ provider scope in the disconne
         scheduleDraftFocus: () => {},
         getMentionSuggestions: (query) => {
             rawQueries.push(query);
-            return buildMentionSuggestions(scripts, query);
+            return buildMentionSuggestions(scripts, query, true);
         },
         openMentionSuggestModal: (options) => {
             assert.equal(options.initialQuery, "c");
@@ -520,7 +520,7 @@ test("sidebar draft editor controller preserves / provider scope in the disconne
         scheduleDraftFocus: () => {},
         getMentionSuggestions: (query) => {
             rawQueries.push(query);
-            return buildMentionSuggestions(scripts, query);
+            return buildMentionSuggestions(scripts, query, true);
         },
         openMentionSuggestModal: (options) => {
             assert.equal(options.initialQuery, "");
@@ -726,7 +726,7 @@ test("connected mention dropdown activates only the explicit @ query match", () 
         updateDraftCommentText: () => {},
         renderComments: async () => {},
         scheduleDraftFocus: () => {},
-        getMentionSuggestions: (query) => buildMentionSuggestions([], query),
+        getMentionSuggestions: (query) => buildMentionSuggestions([], query, true),
         openMentionSuggestModal: () => {},
         openLinkSuggestModal: () => {},
         openTagSuggestModal: () => {},

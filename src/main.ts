@@ -1087,6 +1087,10 @@ export default class Aside extends Plugin {
         return isFeatureFlagEnabled(this.settings.featureFlags, FeatureFlag.publish);
     }
 
+    public isAgentsFeatureAvailable(): boolean {
+        return isFeatureFlagEnabled(this.settings.featureFlags, FeatureFlag.agents);
+    }
+
     private getPublicHtmlPairContext(filePath: string): PublicHtmlPairContext | null {
         const normalizedPathResult = normalizeVaultRelativePublishPath(filePath);
         if (!normalizedPathResult.ok) {

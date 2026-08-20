@@ -23,6 +23,7 @@ export interface SidebarDraftCommentHost {
     activeCommentId: string | null;
     shouldPinFocusedDraftToTop: boolean;
     isRunnableVaultScriptMention: RunnableVaultScriptMentionPredicate;
+    isAgentsFeatureAvailable(): boolean;
     isSavingDraft(commentId: string): boolean;
     updateDraftCommentText(commentId: string, commentText: string): void;
     convertHtmlToMarkdown?: HtmlToMarkdownConverter;
@@ -70,11 +71,16 @@ export function shouldAutoOpenDraftMentionSuggest(
 export function buildDraftCommentPresentation(
     comment: DraftComment,
     activeCommentId: string | null,
+    agentsFeatureAvailable: boolean,
 ): DraftCommentPresentation {
-    const supportedAgentDirectives = formatSupportedAgentDirectives("or");
-    const newDraftPlaceholder = supportedAgentDirectives
-        ? `Write a side note. Use B or H for styling, or type /create-script, /script-name, @todo, ${supportedAgentDirectives}.`
-        : "Write a side note. Use B or H for styling, or type /create-script, /script-name, or @todo.";
+    const supportedAgentDirectives = agentsFeatureAvailable
+        ? formatSupportedAgentDirectives("or")
+        : "";
+    const newDraftPlaceholder = !agentsFeatureAvailable
+        ? "Write a side note. Use B or H for styling, or type /script-name or @todo."
+        : supportedAgentDirectives
+            ? `Write a side note. Use B or H for styling, or type /create-script, /script-name, @todo, ${supportedAgentDirectives}.`
+            : "Write a side note. Use B or H for styling, or type /create-script, /script-name, or @todo.";
     const classes = [
         "aside-comment-item",
         "aside-comment-draft",
@@ -106,7 +112,11 @@ export function renderDraftCommentCard(
     host: SidebarDraftCommentHost,
     draftEditorController: SidebarDraftEditorController,
 ): void {
-    const presentation = buildDraftCommentPresentation(comment, host.activeCommentId);
+    const presentation = buildDraftCommentPresentation(
+        comment,
+        host.activeCommentId,
+        host.isAgentsFeatureAvailable(),
+    );
     const commentEl = commentsContainer.createDiv(presentation.classes.join(" "));
     commentEl.setAttribute("data-draft-id", comment.id);
     commentEl.setAttribute("data-start-line", String(comment.startLine));
@@ -126,7 +136,11 @@ export function renderInlineEditDraftContent(
     host: SidebarDraftCommentHost,
     draftEditorController: SidebarDraftEditorController,
 ): void {
-    const presentation = buildDraftCommentPresentation(comment, host.activeCommentId);
+    const presentation = buildDraftCommentPresentation(
+        comment,
+        host.activeCommentId,
+        host.isAgentsFeatureAvailable(),
+    );
     renderDraftEditor(container, comment, presentation, host, draftEditorController, "inline-edit");
 }
 

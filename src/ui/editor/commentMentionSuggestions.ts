@@ -79,6 +79,7 @@ export function replaceOpenMentionQuery(
 export function buildMentionSuggestions(
     scripts: readonly VaultScriptRegistration[],
     rawQuery: string,
+    agentsFeatureAvailable: boolean,
 ): SideNoteMentionSuggestion[] {
     const normalizedRawQuery = rawQuery.trim();
     const query = normalizedRawQuery.replace(/^[@/]/u, "").toLowerCase();
@@ -86,26 +87,29 @@ export function buildMentionSuggestions(
     const shouldIncludeAtBuiltIns = !normalizedRawQuery.startsWith("/");
     const shouldIncludeSlashBuiltIns = !normalizedRawQuery.startsWith("@");
     const shouldFilterBuiltInsByQuery = query.length > 0;
-    const atBuiltIns: SideNoteMentionSuggestion[] = [
-        {
-            kind: "built-in",
-            mention: "@todo",
-            label: "Todo",
-        },
-        ...getSupportedAgentActors().map((actor) => ({
+    const todoBuiltIn: SideNoteMentionSuggestion = {
+        kind: "built-in",
+        mention: "@todo",
+        label: "Todo",
+    };
+    const agentBuiltIns: SideNoteMentionSuggestion[] = getSupportedAgentActors().map((actor) => ({
             kind: "built-in" as const,
             mention: actor.directive,
             label: actor.label,
-        })),
-    ];
-    const slashBuiltIns: SideNoteMentionSuggestion[] = [{
+        }));
+    const createScriptBuiltIn: SideNoteMentionSuggestion = {
         kind: "built-in",
         mention: CREATE_SCRIPT_DIRECTIVE,
         label: "Create script",
-    }];
-    const builtIns = [...atBuiltIns, ...slashBuiltIns];
+    };
+    const atBuiltIns = [
+        todoBuiltIn,
+        ...(agentsFeatureAvailable ? agentBuiltIns : []),
+    ];
+    const slashBuiltIns = agentsFeatureAvailable ? [createScriptBuiltIn] : [];
+    const allBuiltIns = [todoBuiltIn, ...agentBuiltIns, createScriptBuiltIn];
     const reservedMentionNames = new Set(
-        builtIns.map((suggestion) => suggestion.mention.slice(1).toLowerCase()),
+        allBuiltIns.map((suggestion) => suggestion.mention.slice(1).toLowerCase()),
     );
     const builtInCandidates = [
         ...(shouldIncludeAtBuiltIns ? atBuiltIns : []),

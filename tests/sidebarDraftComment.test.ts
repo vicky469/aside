@@ -29,12 +29,12 @@ test("buildDraftCommentPresentation includes draft state classes and add/save la
     const createPresentation = buildDraftCommentPresentation(createDraft({
         anchorKind: "page",
         mode: "new",
-    }), "draft-1");
+    }), "draft-1", true);
     const editPresentation = buildDraftCommentPresentation(createDraft({
         id: "draft-2",
         orphaned: true,
         mode: "edit",
-    }), null);
+    }), null, true);
 
     assert.deepEqual(createPresentation.classes, [
         "aside-comment-item",
@@ -57,7 +57,7 @@ test("buildDraftCommentPresentation includes draft state classes and add/save la
 test("buildDraftCommentPresentation keeps append drafts distinct from new drafts", () => {
     const appendPresentation = buildDraftCommentPresentation(createDraft({
         mode: "append",
-    }), null);
+    }), null, true);
 
     assert.deepEqual(appendPresentation.classes, [
         "aside-comment-item",
@@ -71,11 +71,22 @@ test("buildDraftCommentPresentation keeps append drafts distinct from new drafts
 test("buildDraftCommentPresentation mentions todo and agent directives in new draft placeholder", () => {
 	const presentation = buildDraftCommentPresentation(createDraft({
 		mode: "new",
-	}), null);
+	}), null, true);
 
     assert.equal(
         presentation.placeholder,
         "Write a side note. Use B or H for styling, or type /create-script, /script-name, @todo, @codex, @claude, or @gemini.",
+    );
+});
+
+test("buildDraftCommentPresentation hides agent guidance when Agents is disabled", () => {
+    const presentation = buildDraftCommentPresentation(createDraft({
+        mode: "new",
+    }), null, false);
+
+    assert.equal(
+        presentation.placeholder,
+        "Write a side note. Use B or H for styling, or type /script-name or @todo.",
     );
 });
 
