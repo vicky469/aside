@@ -1,9 +1,13 @@
 import { App, SuggestModal } from "obsidian";
-import { getMentionSuggestionPresentation } from "../editor/commentMentionSuggestions";
+import {
+    getMentionSuggestionPlaceholder,
+    getMentionSuggestionPresentation,
+} from "../editor/commentMentionSuggestions";
 import type { SideNoteMentionSuggestion } from "../editor/commentMentionSuggestions";
 
 export interface SideNoteMentionSuggestModalOptions {
     initialQuery: string;
+    agentsFeatureAvailable: boolean;
     getSuggestions(query: string): SideNoteMentionSuggestion[];
     onChooseMention(mention: string): void | Promise<void>;
     onCloseModal(): void;
@@ -16,7 +20,7 @@ export default class SideNoteMentionSuggestModal extends SuggestModal<SideNoteMe
     ) {
         super(app);
         this.limit = 40;
-        this.setPlaceholder("Mention an agent, todo, /create-script, or a vault script");
+        this.setPlaceholder(getMentionSuggestionPlaceholder(options.agentsFeatureAvailable));
         this.emptyStateText = "No matching mention.";
     }
 

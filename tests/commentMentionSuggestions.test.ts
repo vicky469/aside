@@ -4,6 +4,7 @@ import {
     buildMentionSuggestions,
     findOpenMentionQuery,
     getMentionSuggestionPresentation,
+    getMentionSuggestionPlaceholder,
     replaceOpenMentionQuery,
 } from "../src/ui/editor/commentMentionSuggestions";
 
@@ -30,6 +31,17 @@ test("mention presentation exposes only the insertion value", () => {
     }), {
         title: "/clean-links",
     });
+});
+
+test("mention modal guidance follows the Agents capability", () => {
+    assert.equal(
+        getMentionSuggestionPlaceholder(true),
+        "Mention an agent, todo, /create-script, or a vault script",
+    );
+    assert.equal(
+        getMentionSuggestionPlaceholder(false),
+        "Mention todo or a vault script",
+    );
 });
 
 test("findOpenMentionQuery finds a collapsed cursor immediately after /", () => {

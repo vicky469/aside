@@ -1380,7 +1380,10 @@ export default class AsideView extends ItemView {
                 this.plugin.isAgentsFeatureAvailable(),
             ),
             openMentionSuggestModal: (options) => {
-                new SideNoteMentionSuggestModal(this.app, options).open();
+                new SideNoteMentionSuggestModal(this.app, {
+                    ...options,
+                    agentsFeatureAvailable: this.plugin.isAgentsFeatureAvailable(),
+                }).open();
             },
             openLinkSuggestModal: (options) => {
                 new SideNoteLinkSuggestModal(this.app, {
