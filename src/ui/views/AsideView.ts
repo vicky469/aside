@@ -3397,6 +3397,7 @@ export default class AsideView extends ItemView {
         return {
             showTodoSidebarTab: this.plugin.settings.showTodoSidebarTab,
             showAgentSidebarTab: this.plugin.settings.showAgentSidebarTab,
+            agentsFeatureAvailable: this.plugin.isAgentsFeatureAvailable(),
         };
     }
 
