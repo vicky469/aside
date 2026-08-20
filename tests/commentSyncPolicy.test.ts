@@ -6,6 +6,7 @@ import {
     shouldDeferManagedCommentPersist,
     syncLoadedCommentsForCurrentNote,
 } from "../src/core/rules/commentSyncPolicy";
+import { parseNoteComments } from "../src/core/storage/noteCommentStorage";
 
 function createComment(overrides: Partial<Comment> = {}): Comment {
     return {
@@ -105,6 +106,58 @@ test("syncLoadedCommentsForCurrentNote re-resolves stale parsed coordinates befo
     assert.equal(indexedFilePath, "note.md");
     assert.equal(indexedThreads.length, 1);
     assert.equal(threadToComment(indexedThreads[0]).startLine, 1);
+});
+
+test("syncLoadedCommentsForCurrentNote keeps a full-file trailing-newline anchor attached", async () => {
+    const noteContent = "Alpha target omega\n";
+    const parsed = parseNoteComments(noteContent, "note.md");
+    const manager = new CommentManager([]);
+
+    const syncedState = await syncLoadedCommentsForCurrentNote(
+        "note.md",
+        parsed.mainContent,
+        [commentToThread(createComment({
+            startLine: 0,
+            startChar: 0,
+            endLine: 1,
+            endChar: 0,
+            selectedText: noteContent,
+            selectedTextHash: "hash-full-file",
+            orphaned: false,
+        }))],
+        manager,
+        { updateFile: () => {} },
+    );
+
+    assert.equal(syncedState.threads[0]?.orphaned, false);
+    assert.equal(syncedState.comments[0]?.selectedText, noteContent);
+    assert.equal(syncedState.comments[0]?.endLine, 1);
+    assert.equal(syncedState.comments[0]?.endChar, 0);
+});
+
+test("syncLoadedCommentsForCurrentNote heals a matching trailing-newline false orphan", async () => {
+    const noteContent = "Alpha target omega\n";
+    const parsed = parseNoteComments(noteContent, "note.md");
+    const manager = new CommentManager([]);
+
+    const syncedState = await syncLoadedCommentsForCurrentNote(
+        "note.md",
+        parsed.mainContent,
+        [commentToThread(createComment({
+            startLine: 0,
+            startChar: 0,
+            endLine: 1,
+            endChar: 0,
+            selectedText: noteContent,
+            selectedTextHash: "hash-full-file",
+            orphaned: true,
+        }))],
+        manager,
+        { updateFile: () => {} },
+    );
+
+    assert.equal(syncedState.threads[0]?.orphaned, false);
+    assert.equal(manager.getCommentsForFile("note.md")[0]?.orphaned, false);
 });
 
 test("syncLoadedCommentsForCurrentNote preserves soft-deleted threads for sidecar persistence", async () => {

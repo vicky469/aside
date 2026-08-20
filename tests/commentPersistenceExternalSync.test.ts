@@ -206,7 +206,7 @@ test("comment persistence controller syncs external sidecar updates into an open
         assert.equal(refreshMarkdownPreviewsCount, 1);
         assert.deepEqual(derivedSyncCalls, [{
             filePath: file.path,
-            noteContent: noteBody.trimEnd(),
+            noteContent: noteBody,
             commentCount: 1,
         }]);
     } finally {
