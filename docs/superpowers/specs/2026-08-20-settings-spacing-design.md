@@ -1,7 +1,7 @@
 # Aside Settings Spacing Design
 
 **Date:** 2026-08-20
-**Status:** Implemented; frontend acceptance pending
+**Status:** Revision approved; written-spec review pending
 
 ## Implementation Tracking
 
@@ -10,52 +10,49 @@ Use this section as the working checklist. Mark an item done only after the code
 ### Already Done
 
 - [x] Aside owns its section headings through one shared settings catalog consumed by the legacy and declarative adapters.
-- [x] The default-agent renderer already exposes one `aside-default-agent-setting` hook and native radio rows.
-- [x] The user approved zero padding for every Aside section heading and a stacked, left-aligned Default agent setting.
+- [x] The default-agent renderer exposes one `aside-default-agent-setting` hook and native radio rows in the fixed Codex, Claude Code, Gemini order.
+- [x] Every Aside settings heading has a scoped zero-padding rule.
+- [x] The Default agent information block and controls are stacked and share the same left edge.
+- [x] The user selected visual option A on 2026-08-20: inline setting copy above one horizontal agent row.
 
 ### To Implement
 
-- [x] Add one Aside-specific class to the settings-tab root so layout overrides cannot affect Obsidian or other plugins.
-- [x] Remove all padding from every Aside `.setting-item.setting-item-heading` row through the scoped settings-tab selector.
-- [x] Stack the Default agent name and description above its radio group with a modest vertical gap.
-- [x] Keep the radio group and its radio/name/status columns compact and left aligned while preserving comfortable row height and narrow-width wrapping.
-- [x] Preserve default-agent selection, disabled states, availability text, fallback copy, persistence, and routing behavior.
+- [ ] Place the Default agent name and normal description on one wrapping line above the controls.
+- [ ] Change the radio group from a vertical grid to one compact, left-aligned horizontal row.
+- [ ] Keep each radio, agent name, and textual status together as one content-sized option; wrap only between options when width is constrained.
+- [ ] Preserve default-agent selection, disabled states, availability text, fallback copy, persistence, and routing behavior.
 
 ### Verification
 
-- [x] Settings source and stylesheet tests prove the scope class, zero-padding heading rule, stacked Default agent layout, compact columns, and absence of an unscoped heading override.
-- [x] Existing agent radio presentation, interaction, fallback, and settings-catalog tests pass unchanged.
-- [x] The full automated suite, lint, typecheck, Obsidian compliance check, production bundle, and release artifact guard pass.
-- [ ] The installed plugin is visually checked at normal and narrow settings widths for heading spacing, left alignment, vertical rhythm, and status wrapping.
+- [ ] A focused stylesheet regression test proves inline wrapping setting copy, horizontal flex controls, content-sized options, and option-boundary wrapping.
+- [ ] Existing agent radio presentation, interaction, fallback, and settings-catalog tests pass unchanged.
+- [ ] The full automated suite, lint, typecheck, Obsidian compliance check, production bundle, and release artifact guard pass.
+- [ ] The installed plugin is visually checked at normal and narrow settings widths for heading spacing, left alignment, vertical rhythm, and whole-option wrapping.
 
 ## Context
 
-Obsidian renders each Aside settings section as a `.setting-item.setting-item-heading` row with default padding. In the current Aside layout that padding makes the headings, especially the first **Agents** heading, look detached from their settings.
+Obsidian renders each Aside settings section as a `.setting-item.setting-item-heading` row with default padding. Aside now removes that padding through a settings-tab-scoped rule, and the user accepted that heading treatment.
 
-The Default agent setting also uses Obsidian's horizontal setting row: its information stays on the left while a fixed-width 19rem radio group sits on the right. Inside each row, a flexible middle column pushes availability status to the far edge. The result is visually spread out even though the setting contains only three compact choices.
+The first Default agent revision stacked three full radio rows under the setting copy. It fixed the earlier stretched two-column layout, but frontend review found the result too tall. The three short choices should read as one compact group without losing textual availability or native radio behavior.
 
 ## Approved Layout
 
-Every visible Aside section heading—**Agents**, **Sidebar tabs**, **Publishing (experimental)**, and **Index note**—has zero padding. The override applies only inside the Aside settings tab.
+Every visible Aside section heading—**Agents**, **Sidebar tabs**, **Publishing (experimental)**, and **Index note**—continues to have zero padding. The override applies only inside the Aside settings tab.
 
-The Default agent setting uses a vertical flow:
+The Default agent setting uses two compact, left-aligned lines:
 
 ```text
-Default agent
-Preferred local agent for /create-script.
-
-○ Codex       Available
-○ Claude Code Available
-○ Gemini      Unavailable
+Default agent  Preferred local agent for /create-script.
+○ Codex Available   ○ Claude Code Available   ○ Gemini Unavailable
 ```
 
-The information block remains first. The radio group follows below it with a modest theme-token gap and shares the same left edge. The group sizes to its content up to the available width instead of reserving 19rem. On ordinary widths, each radio, agent name, and availability label uses compact auto-sized columns. Rows retain a comfortable minimum height and vertical padding without horizontal inset, so the radios align with the setting copy.
+The information block remains first. Its name and normal description share a baseline when space permits and wrap naturally when needed. The radio group follows with a modest theme-token gap and shares the same left edge. It is a wrapping flex row, not a full-width grid. Each option keeps its native radio, agent name, and status together using content-sized columns.
 
-At narrow widths, the status may wrap below the agent name while the radio stays aligned with the label. The layout never returns to a stretched full-width control.
+At narrow widths, the group wraps between complete agent options. A radio never becomes separated from its name or availability label, and the layout never returns to a stretched full-width control. A fallback message for a saved unavailable preference remains a supplemental line within the description block.
 
 ## Architecture
 
-`AsideSetting` adds one stable `aside-settings-tab` class to its existing `containerEl`. Because the class belongs to the tab instance rather than an individual legacy heading, it scopes both legacy rendering and Obsidian's declarative settings rendering.
+`AsideSetting` already adds one stable `aside-settings-tab` class to its existing `containerEl`. Because the class belongs to the tab instance rather than an individual legacy heading, it scopes both legacy rendering and Obsidian's declarative settings rendering.
 
 `styles.css` owns both layout changes:
 
@@ -65,25 +62,26 @@ At narrow widths, the status may wrap below the agent name while the radio stays
 }
 ```
 
-The existing `.aside-default-agent-setting`, `.setting-item-control`, `.aside-default-agent-radio-group`, and `.aside-default-agent-option` selectors are refined rather than adding another renderer or changing markup. Runtime probing and selection code remain untouched.
+The existing `.aside-default-agent-setting`, `.setting-item-info`, `.setting-item-control`, `.aside-default-agent-radio-group`, and `.aside-default-agent-option` selectors are refined rather than adding another renderer or changing markup. The setting stays a column so information remains above controls. CSS makes the information block an inline wrapping row, the radio group a wrapping flex row, and each option a content-sized three-column unit. Runtime probing and selection code remain untouched.
 
 ## Accessibility and Responsive Behavior
 
 - Native radio inputs, labels, checked states, and disabled states remain unchanged.
 - Availability remains text, not color-only communication.
-- Row height and vertical spacing preserve usable pointer targets.
-- The group has a maximum width of 100% and status wrapping remains available at narrow widths.
+- Option height and vertical spacing preserve usable pointer targets.
+- The group has a maximum width of 100% and wraps only between complete options.
+- The setting name and description can wrap onto separate lines when the pane is narrow.
 - No global `.setting-item-heading` rule is introduced.
 
 ## Testing Strategy
 
-A focused source-and-stylesheet regression test verifies that the tab root receives `aside-settings-tab`, the heading selector is scoped and declares `padding: 0`, and no unscoped heading rule exists. The same test verifies that the Default agent setting uses column flow, left alignment, content-sized control/group widths, compact ordinary-width columns, vertical-only row padding, and the existing narrow status wrap.
+A focused source-and-stylesheet regression test continues to verify that the tab root receives `aside-settings-tab`, the heading selector is scoped and declares `padding: 0`, and no unscoped heading rule exists. It is revised to verify column flow for the overall setting, inline wrapping flow for the information block, horizontal wrapping flex flow for the radio group, content-sized option columns, and the absence of the obsolete narrow status-under-name rule.
 
 Existing behavioral tests continue to prove agent ordering, availability, disabled choices, preference persistence, and fallback selection. Full repository and release-artifact checks remain required because the production bundle is installed into the test vault.
 
 ## Error Handling
 
-The change is CSS-only apart from attaching the tab scope class. If Obsidian changes the heading markup, the scoped rule simply stops matching rather than leaking elsewhere. Runtime diagnostic failures continue to render the existing unavailable state and do not affect layout ownership.
+This revision is CSS-only. If Obsidian changes the heading markup, the scoped rule simply stops matching rather than leaking elsewhere. Runtime diagnostic failures continue to render the existing unavailable state and do not affect layout ownership.
 
 ## Non-Goals
 
