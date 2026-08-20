@@ -811,7 +811,7 @@ git add -f docs/superpowers/specs/2026-08-20-agents-experiment-feature-flag-desi
 git commit -m "docs(agents): complete feature flag acceptance"
 ```
 
-- [ ] **Step 10: Review the branch and use the finishing workflow**
+- [x] **Step 10: Review the branch and use the finishing workflow**
 
 Run:
 
