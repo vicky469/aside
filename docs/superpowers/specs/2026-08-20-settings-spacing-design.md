@@ -1,7 +1,7 @@
 # Aside Settings Spacing Design
 
 **Date:** 2026-08-20
-**Status:** Revision approved; written-spec review pending
+**Status:** Approved; implementation pending
 
 ## Implementation Tracking
 
