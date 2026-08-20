@@ -74,6 +74,7 @@ export default class AsideSetting extends PluginSettingTab {
     constructor(app: App, plugin: Aside) {
         super(app, plugin);
         this.plugin = plugin;
+        this.containerEl.addClass("aside-settings-tab");
     }
 
     getSettingDefinitions(): SettingDefinitionItem[] {

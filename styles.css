@@ -1709,28 +1709,37 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
     cursor: default;
 }
 
+.aside-settings-tab .setting-item.setting-item-heading {
+    padding: 0;
+}
+
 .aside-default-agent-setting {
+    flex-direction: column;
     align-items: flex-start;
+    gap: var(--size-4-2);
 }
 
 .aside-default-agent-setting .setting-item-control {
-    flex: 0 1 19rem;
-    width: min(19rem, 100%);
+    flex: none;
+    width: fit-content;
+    max-width: 100%;
+    margin: 0;
 }
 
 .aside-default-agent-radio-group {
     display: grid;
     gap: var(--size-2-1);
-    width: 100%;
+    width: fit-content;
+    max-width: 100%;
 }
 
 .aside-default-agent-option {
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-columns: auto auto auto;
     align-items: center;
     gap: var(--size-4-2);
     min-height: var(--input-height);
-    padding: 0 var(--size-4-2);
+    padding: var(--size-2-1) 0;
     border-radius: var(--radius-s);
     cursor: pointer;
 }
@@ -1767,16 +1776,6 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
 }
 
 @media (max-width: 600px) {
-    .aside-default-agent-setting {
-        flex-direction: column;
-        align-items: stretch;
-    }
-
-    .aside-default-agent-setting .setting-item-control {
-        width: 100%;
-        margin-top: var(--size-4-2);
-    }
-
     .aside-default-agent-option {
         grid-template-columns: auto minmax(0, 1fr);
     }

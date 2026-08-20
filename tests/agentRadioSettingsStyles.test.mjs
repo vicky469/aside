@@ -33,3 +33,36 @@ test("default agent settings render a labeled native radio group", () => {
     assert.match(settingSource, /resolveDefaultAgentRadioSelection/);
     assert.doesNotMatch(settingSource, /agentSetting\.addDropdown/);
 });
+
+test("Aside headings and default agent controls use scoped left-aligned spacing", () => {
+    assert.match(settingSource, /this\.containerEl\.addClass\("aside-settings-tab"\)/);
+
+    const heading = styles.match(
+        /\.aside-settings-tab \.setting-item\.setting-item-heading\s*\{(?<body>[\s\S]*?)\}/,
+    );
+    const setting = styles.match(
+        /\.aside-default-agent-setting\s*\{(?<body>[\s\S]*?)\}/,
+    );
+    const control = styles.match(
+        /\.aside-default-agent-setting \.setting-item-control\s*\{(?<body>[\s\S]*?)\}/,
+    );
+    const group = styles.match(
+        /\.aside-default-agent-radio-group\s*\{(?<body>[\s\S]*?)\}/,
+    );
+    const option = styles.match(
+        /\.aside-default-agent-option\s*\{(?<body>[\s\S]*?)\}/,
+    );
+
+    assert.match(heading?.groups?.body ?? "", /padding:\s*0\s*;/);
+    assert.doesNotMatch(styles, /(?:^|\})\s*\.setting-item\.setting-item-heading\s*\{/m);
+    assert.match(setting?.groups?.body ?? "", /flex-direction:\s*column\s*;/);
+    assert.match(setting?.groups?.body ?? "", /align-items:\s*flex-start\s*;/);
+    assert.match(setting?.groups?.body ?? "", /gap:\s*var\(--size-4-2\)\s*;/);
+    assert.match(control?.groups?.body ?? "", /flex:\s*none\s*;/);
+    assert.match(control?.groups?.body ?? "", /width:\s*fit-content\s*;/);
+    assert.match(control?.groups?.body ?? "", /max-width:\s*100%\s*;/);
+    assert.match(group?.groups?.body ?? "", /width:\s*fit-content\s*;/);
+    assert.match(group?.groups?.body ?? "", /max-width:\s*100%\s*;/);
+    assert.match(option?.groups?.body ?? "", /grid-template-columns:\s*auto auto auto\s*;/);
+    assert.match(option?.groups?.body ?? "", /padding:\s*var\(--size-2-1\) 0\s*;/);
+});
