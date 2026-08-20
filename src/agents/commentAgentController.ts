@@ -761,7 +761,10 @@ export class CommentAgentController {
         runtimePrompt: string;
         execution: ActiveRunExecution;
     }): Promise<void> {
-        const workingDirectory = this.host.getRuntimeWorkingDirectory(options.run.filePath);
+        const vaultRootPath = this.host.getVaultRootPath();
+        const workingDirectory = options.run.requestKind === "create-script"
+            ? vaultRootPath
+            : this.host.getRuntimeWorkingDirectory(options.run.filePath);
         if (!workingDirectory) {
             await this.failRun(options.run.id, options.run, AGENT_DESKTOP_RUNTIME_NOTICE);
             return;
@@ -771,7 +774,7 @@ export class CommentAgentController {
             target: options.run.requestedAgent,
             prompt: options.runtimePrompt,
             cwd: workingDirectory,
-            vaultRootPath: this.host.getVaultRootPath(),
+            vaultRootPath,
             requestKind: options.run.requestKind,
             abortSignal: options.execution.abortController.signal,
             onProgressText: (progressText) => {

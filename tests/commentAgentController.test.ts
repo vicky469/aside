@@ -312,6 +312,31 @@ test("create-script agent request queues the preferred available agent", async (
     assert.equal(harness.runtimeCalls[0]?.requestKind, "create-script");
 });
 
+test("create-script runs from the vault root instead of a nested note or repository directory", async () => {
+    const harness = createHarness({
+        runtimeWorkingDirectory: "/vault-root/Projects/NestedRepo",
+        defaultRuntimeSelection: {
+            kind: "resolved",
+            selectedAgent: "codex",
+            preferredAgent: "codex",
+            usedFallback: false,
+            runtime: "direct-cli",
+            modePreference: "auto",
+        },
+    });
+
+    await harness.controller.handleCreateScriptRequest({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Projects/NestedRepo/Folder/Note.md",
+        body: "/create-script build a cleaner",
+    }, "build a cleaner");
+    await waitForAgentQueueToDrain(harness.controller);
+
+    assert.equal(harness.runtimeCalls[0]?.cwd, "/vault-root");
+    assert.equal(harness.runtimeCalls[0]?.vaultRootPath, "/vault-root");
+});
+
 test("create-script agent request records fallback agent metadata", async () => {
     const harness = createHarness({
         defaultRuntimeSelection: {
