@@ -1,7 +1,7 @@
 # Aside Settings Spacing Design
 
 **Date:** 2026-08-20
-**Status:** Approved design; implementation pending
+**Status:** Implemented; frontend acceptance pending
 
 ## Implementation Tracking
 
@@ -15,17 +15,17 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Add one Aside-specific class to the settings-tab root so layout overrides cannot affect Obsidian or other plugins.
-- [ ] Remove all padding from every Aside `.setting-item.setting-item-heading` row through the scoped settings-tab selector.
-- [ ] Stack the Default agent name and description above its radio group with a modest vertical gap.
-- [ ] Keep the radio group and its radio/name/status columns compact and left aligned while preserving comfortable row height and narrow-width wrapping.
-- [ ] Preserve default-agent selection, disabled states, availability text, fallback copy, persistence, and routing behavior.
+- [x] Add one Aside-specific class to the settings-tab root so layout overrides cannot affect Obsidian or other plugins.
+- [x] Remove all padding from every Aside `.setting-item.setting-item-heading` row through the scoped settings-tab selector.
+- [x] Stack the Default agent name and description above its radio group with a modest vertical gap.
+- [x] Keep the radio group and its radio/name/status columns compact and left aligned while preserving comfortable row height and narrow-width wrapping.
+- [x] Preserve default-agent selection, disabled states, availability text, fallback copy, persistence, and routing behavior.
 
 ### Verification
 
-- [ ] Settings source and stylesheet tests prove the scope class, zero-padding heading rule, stacked Default agent layout, compact columns, and absence of an unscoped heading override.
-- [ ] Existing agent radio presentation, interaction, fallback, and settings-catalog tests pass unchanged.
-- [ ] The full automated suite, lint, typecheck, Obsidian compliance check, production bundle, and release artifact guard pass.
+- [x] Settings source and stylesheet tests prove the scope class, zero-padding heading rule, stacked Default agent layout, compact columns, and absence of an unscoped heading override.
+- [x] Existing agent radio presentation, interaction, fallback, and settings-catalog tests pass unchanged.
+- [x] The full automated suite, lint, typecheck, Obsidian compliance check, production bundle, and release artifact guard pass.
 - [ ] The installed plugin is visually checked at normal and narrow settings widths for heading spacing, left alignment, vertical rhythm, and status wrapping.
 
 ## Context
