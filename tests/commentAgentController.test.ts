@@ -71,6 +71,7 @@ function createHarness(options: {
     defaultRuntimeSelection?: DefaultAgentRuntimeSelection;
     resolveDefaultAgentRuntimeSelection?: () => Promise<DefaultAgentRuntimeSelection>;
     customRunAgentRuntime?: (invocation: AgentRuntimeInvocation) => Promise<AgentRuntimeResult>;
+    agentsFeatureAvailable?: boolean;
 } = {}) {
     let persistedData: PersistedPluginData = options.initialPersistedData ?? {};
     const commentManager = new CommentManager(options.initialComments ?? [createComment()]);
@@ -198,6 +199,7 @@ function createHarness(options: {
                     modePreference: "auto",
                 };
         },
+        isAgentsFeatureAvailable: () => options.agentsFeatureAvailable ?? true,
         showNotice: (message) => {
             notices.push(message);
         },
@@ -223,6 +225,64 @@ function createHarness(options: {
         getPersistedData: () => persistedData,
     };
 }
+
+test("disabled agent directive performs no runtime selection or launch", async () => {
+    const harness = createHarness({ agentsFeatureAvailable: false });
+
+    await harness.controller.handleSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "@codex say hi",
+    });
+
+    assert.deepEqual(harness.runtimeSelectionCalls, []);
+    assert.deepEqual(harness.runtimeCalls, []);
+    assert.deepEqual(harness.controller.getAgentRuns(), []);
+    assert.deepEqual(harness.notices, ["Agents experiment is disabled."]);
+});
+
+test("disabled create-script request performs no default-agent selection", async () => {
+    const harness = createHarness({ agentsFeatureAvailable: false });
+
+    await harness.controller.handleCreateScriptRequest({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "/create-script build a cleaner",
+    }, "build a cleaner");
+
+    assert.equal(harness.getDefaultRuntimeSelectionCalls(), 0);
+    assert.deepEqual(harness.runtimeCalls, []);
+    assert.deepEqual(harness.notices, ["Agents experiment is disabled."]);
+});
+
+test("disabled regenerate preserves the existing run without diagnostics", async () => {
+    const existingRun = {
+        id: "run-old",
+        threadId: "thread-1",
+        triggerEntryId: "thread-1",
+        filePath: "Folder/Note.md",
+        requestedAgent: "codex" as const,
+        runtime: "direct-cli" as const,
+        status: "succeeded" as const,
+        promptText: "@codex say hi",
+        createdAt: 10,
+        startedAt: 11,
+        endedAt: 12,
+    };
+    const harness = createHarness({
+        agentsFeatureAvailable: false,
+        initialPersistedData: { agentRuns: [existingRun] },
+    });
+    const runsBeforeRetry = harness.controller.getAgentRuns();
+
+    assert.equal(await harness.controller.retryRun("run-old"), false);
+    assert.deepEqual(harness.runtimeSelectionCalls, []);
+    assert.deepEqual(harness.runtimeCalls, []);
+    assert.deepEqual(harness.controller.getAgentRuns(), runsBeforeRetry);
+    assert.deepEqual(harness.notices, ["Agents experiment is disabled."]);
+});
 
 test("create-script agent request queues the preferred available agent", async () => {
     const harness = createHarness({

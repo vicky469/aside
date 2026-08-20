@@ -112,6 +112,7 @@ import {
 import type { AsideAgentTarget } from "./core/config/agentTargets";
 import { getAgentActorById, getSupportedAgentActors } from "./core/agents/agentActorRegistry";
 import { resolveDefaultAgentSelection } from "./core/agents/defaultAgentSelection";
+import { AGENTS_EXPERIMENT_DISABLED_NOTICE } from "./core/agents/agentsFeaturePolicy";
 import { DraftComment, DraftSelection } from "./domain/drafts";
 import { parsePromptDeleteSetting } from "./core/config/appConfig";
 import { DerivedCommentMetadataManager } from "./core/derived/derivedCommentMetadata";
@@ -545,6 +546,7 @@ export default class Aside extends Plugin {
         runAgentRuntime: (invocation) => runAgentRuntime(invocation),
         resolveAgentRuntimeSelection: (target) => this.resolveAgentRuntimeSelection(target),
         resolveDefaultAgentRuntimeSelection: () => this.resolveDefaultAgentRuntimeSelection(),
+        isAgentsFeatureAvailable: () => this.isAgentsFeatureAvailable(),
         showNotice: (message) => {
             this.showNotice(message, "agents", "agents.notice");
         },
@@ -552,6 +554,10 @@ export default class Aside extends Plugin {
     }, this.agentRunStore);
     private readonly createScriptCommandController = new CreateScriptCommandController({
         getRegistry: () => this.vaultScriptRegistry,
+        isAgentsFeatureAvailable: () => this.isAgentsFeatureAvailable(),
+        showNotice: (message) => {
+            this.showNotice(message, "agents", "agents.notice");
+        },
         appendReply: async (event, body) => {
             await this.commentMutationController.appendThreadEntry(event.threadId, {
                 id: generateCommentId(),
@@ -1260,6 +1266,12 @@ export default class Aside extends Plugin {
     }
 
     public async getAgentRuntimeDiagnostics(target: AsideAgentTarget): Promise<AgentRuntimeDiagnostics> {
+        if (!this.isAgentsFeatureAvailable()) {
+            return {
+                status: "unsupported",
+                message: AGENTS_EXPERIMENT_DISABLED_NOTICE,
+            };
+        }
         const actor = getAgentActorById(target);
         if (!(this.app.vault.adapter instanceof FileSystemAdapter)) {
             return {

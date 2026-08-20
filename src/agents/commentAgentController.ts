@@ -14,6 +14,7 @@ import {
     type AgentRunStreamState,
 } from "../core/agents/agentRuns";
 import type { AgentRuntimeModePreference } from "../core/agents/agentRuntimePreferences";
+import { AGENTS_EXPERIMENT_DISABLED_NOTICE } from "../core/agents/agentsFeaturePolicy";
 import { resolveUnsupportedAgentNotice } from "../core/agents/agentActorRegistry";
 import { resolveRequestedAgentRunSkills } from "../core/agents/agentSkillRouting";
 import type { AsideAgentTarget } from "../core/config/agentTargets";
@@ -98,6 +99,7 @@ export interface CommentAgentHost {
     }): Promise<AgentRuntimeResponse>;
     resolveAgentRuntimeSelection(target: AsideAgentTarget): Promise<AgentRuntimeSelection>;
     resolveDefaultAgentRuntimeSelection(): Promise<DefaultAgentRuntimeSelection>;
+    isAgentsFeatureAvailable(): boolean;
     showNotice(message: string): void;
     log?(level: "info" | "warn" | "error", area: string, event: string, payload?: Record<string, unknown>): Promise<void>;
 }
@@ -242,6 +244,13 @@ export class CommentAgentController {
 
     public async handleSavedUserEntry(event: SavedUserEntryEvent): Promise<void> {
         const resolution = parseAgentDirectives(event.body);
+        if (
+            (resolution.matchedTargets.length > 0 || resolution.unsupportedTargets.length > 0)
+            && !this.host.isAgentsFeatureAvailable()
+        ) {
+            this.host.showNotice(AGENTS_EXPERIMENT_DISABLED_NOTICE);
+            return;
+        }
         const resolvedTarget = this.resolveDispatchTarget(resolution, event);
         if (!resolvedTarget) {
             return;
@@ -275,6 +284,10 @@ export class CommentAgentController {
         event: SavedUserEntryEvent,
         requestText: string,
     ): Promise<void> {
+        if (!this.host.isAgentsFeatureAvailable()) {
+            this.host.showNotice(AGENTS_EXPERIMENT_DISABLED_NOTICE);
+            return;
+        }
         if (getLatestAgentRunForTriggerEntry(this.store.getRuns(), event.entryId)) {
             return;
         }
@@ -333,6 +346,10 @@ export class CommentAgentController {
         missingFileNotice: string;
         missingCommentNotice: string;
     }): Promise<boolean> {
+        if (!this.host.isAgentsFeatureAvailable()) {
+            this.host.showNotice(AGENTS_EXPERIMENT_DISABLED_NOTICE);
+            return false;
+        }
         const file = this.host.getFileByPath(options.filePath);
         if (!this.host.isCommentableFile(file)) {
             this.host.showNotice(options.missingFileNotice);

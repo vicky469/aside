@@ -1,4 +1,5 @@
 import type { SavedUserEntryEvent } from "../core/comments/savedUserEntry";
+import { AGENTS_EXPERIMENT_DISABLED_NOTICE } from "../core/agents/agentsFeaturePolicy";
 import { parseAgentDirectives } from "../core/text/agentDirectives";
 import {
     CREATE_SCRIPT_MIXED_AGENT,
@@ -11,6 +12,8 @@ import type { VaultScriptRegistry } from "../vaultScripts/vaultScriptRegistry";
 
 export interface CreateScriptCommandHost {
     getRegistry(): VaultScriptRegistry;
+    isAgentsFeatureAvailable(): boolean;
+    showNotice(message: string): void;
     appendReply(event: SavedUserEntryEvent, body: string): Promise<void>;
     dispatchRequest(event: SavedUserEntryEvent, requestText: string): Promise<void>;
 }
@@ -38,6 +41,10 @@ export class CreateScriptCommandController {
         }
 
         this.handledEntryIds.add(event.entryId);
+        if (!this.host.isAgentsFeatureAvailable()) {
+            this.host.showNotice(AGENTS_EXPERIMENT_DISABLED_NOTICE);
+            return true;
+        }
         if (resolution.kind === "empty") {
             await this.host.appendReply(event, CREATE_SCRIPT_USAGE);
             return true;
