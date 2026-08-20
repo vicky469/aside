@@ -1,3 +1,4 @@
+import { RESERVED_BUILT_IN_SLASH_MENTION_NAMES } from "../../core/text/createScriptDirective";
 import { nodeInstanceOf } from "../domGuards";
 import {
     createDetachedObsidianElement,
@@ -15,6 +16,15 @@ interface CommentMentionMatch {
     mention: string;
 }
 
+function isSupportedSlashMention(
+    mention: string,
+    isRunnableVaultScriptMention?: RunnableVaultScriptMentionPredicate,
+): boolean {
+    const normalizedMention = mention.slice(1).toLowerCase();
+    return RESERVED_BUILT_IN_SLASH_MENTION_NAMES.has(normalizedMention)
+        || Boolean(isRunnableVaultScriptMention?.(mention));
+}
+
 function getCommentMentionMatches(
     value: string,
     isRunnableVaultScriptMention?: RunnableVaultScriptMentionPredicate,
@@ -25,7 +35,7 @@ function getCommentMentionMatches(
     for (let match = COMMENT_MENTION_PATTERN.exec(value); match; match = COMMENT_MENTION_PATTERN.exec(value)) {
         const prefix = match[1] ?? match[3] ?? "";
         const mention = match[2] ?? match[4] ?? "";
-        if (mention.startsWith("/") && !isRunnableVaultScriptMention?.(mention)) {
+        if (mention.startsWith("/") && !isSupportedSlashMention(mention, isRunnableVaultScriptMention)) {
             continue;
         }
 

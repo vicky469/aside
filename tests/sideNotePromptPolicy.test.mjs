@@ -77,3 +77,22 @@ test("buildSideNotePrompt keeps reusable scripts in the active vault script fold
     assert.match(prompt, /active vault(?:'s)? `🛠️ scripts\/`/i);
     assert.match(prompt, /not (?:in )?the plugin repository's internal `scripts\/`/i);
 });
+
+test("buildSideNotePrompt adds the shared create-script contract only for create-script runs", () => {
+    const createPrompt = sideNotePromptPolicy.buildSideNotePrompt({
+        promptText: "build a cleaner",
+        rootLabel: "vault root",
+        rootPath: "/vault",
+        requestKind: "create-script",
+    });
+    assert.match(createPrompt, /first positional argument/i);
+    assert.match(createPrompt, /standard output/i);
+    assert.match(createPrompt, /\/script-name/i);
+
+    const ordinaryPrompt = sideNotePromptPolicy.buildSideNotePrompt({
+        promptText: "explain this",
+        rootLabel: "vault root",
+        rootPath: "/vault",
+    });
+    assert.doesNotMatch(ordinaryPrompt, /first positional argument/i);
+});

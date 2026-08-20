@@ -2,6 +2,9 @@ import {
     normalizeAgentRuntimeModePreference,
 } from "../core/agents/agentRuntimePreferences";
 import {
+    normalizeSupportedAgentTarget,
+} from "../core/agents/agentActorRegistry";
+import {
     normalizeFeatureFlags,
     shouldRewriteNormalizedFeatureFlags,
 } from "../core/config/featureFlags";
@@ -90,6 +93,7 @@ export function resolveLoadedSettings(
             : LEGACY_ALL_COMMENTS_NOTE_PATH);
     const hasTodoSidebarTabSetting = hasOwn(loaded ?? {}, "showTodoSidebarTab");
     const hasAgentSidebarTabSetting = hasOwn(loaded ?? {}, "showAgentSidebarTab");
+    const hasDefaultAgentSetting = hasOwn(loaded ?? {}, "defaultAgent");
     const showTodoSidebarTab = hasTodoSidebarTabSetting
         ? normalizeSidebarTabToggle(loaded?.showTodoSidebarTab)
         : true;
@@ -98,6 +102,9 @@ export function resolveLoadedSettings(
         : true;
     const publishSettings = normalizePublishSettings(loaded ?? defaults);
     const featureFlags = normalizeFeatureFlags(loaded?.featureFlags);
+    const defaultAgent = normalizeSupportedAgentTarget(
+        hasDefaultAgentSetting ? loaded?.defaultAgent : defaults.defaultAgent,
+    );
 
     return {
         settings: {
@@ -109,6 +116,7 @@ export function resolveLoadedSettings(
             agentRuntimeMode: hasOwn(loaded ?? {}, "agentRuntimeMode")
                 ? normalizeAgentRuntimeModePreference(loaded?.agentRuntimeMode)
                 : defaults.agentRuntimeMode,
+            defaultAgent,
             showTodoSidebarTab,
             showAgentSidebarTab,
             publishedPublicArtifactPaths: normalizePublishedPublicArtifactPaths(
@@ -125,10 +133,12 @@ export function resolveLoadedSettings(
             || (loaded !== null && !hasIndexNotePathSetting)
             || !hasTodoSidebarTabSetting
             || !hasAgentSidebarTabSetting
+            || (loaded !== null && !hasDefaultAgentSetting)
             || (hasTodoSidebarTabSetting && typeof loaded?.showTodoSidebarTab !== "boolean")
             || (hasAgentSidebarTabSetting && typeof loaded?.showAgentSidebarTab !== "boolean")
             || (hasOwn(loaded ?? {}, "agentRuntimeMode")
                 && normalizeAgentRuntimeModePreference(loaded?.agentRuntimeMode) !== loaded?.agentRuntimeMode)
+            || (hasDefaultAgentSetting && defaultAgent !== loaded?.defaultAgent)
             || shouldRewriteNormalizedFeatureFlags(loaded?.featureFlags, featureFlags)
             || shouldRewriteNormalizedPublishSettings(loaded, publishSettings),
     };

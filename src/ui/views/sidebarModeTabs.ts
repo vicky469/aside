@@ -20,9 +20,10 @@ export interface SidebarModeAvailability {
 export interface SidebarModeVisibility {
     showTodoSidebarTab: boolean;
     showAgentSidebarTab: boolean;
+    agentsFeatureAvailable: boolean;
 }
 
-type SidebarModeTabOptions = SidebarModeAvailability & Partial<SidebarModeVisibility>;
+type SidebarModeTabOptions = SidebarModeAvailability & SidebarModeVisibility;
 
 export type SidebarModeTabSurface = "note" | "index";
 
@@ -36,14 +37,12 @@ export const SHARED_SIDEBAR_MODE_TABS: readonly SidebarModeTabDefinition[] = [
 export const TAGS_SIDEBAR_MODE_TAB: SidebarModeTabDefinition = { mode: "tags", label: "Tags" };
 
 export function getSidebarModeTabs(options: SidebarModeTabOptions): SidebarModeTabDefinition[] {
-    const showTodoSidebarTab = options.showTodoSidebarTab ?? true;
-    const showAgentSidebarTab = options.showAgentSidebarTab ?? true;
     const optionalTabs = SHARED_SIDEBAR_MODE_TABS.slice(1).filter((tab) => {
         if (tab.mode === "todo") {
-            return showTodoSidebarTab;
+            return options.showTodoSidebarTab;
         }
         if (tab.mode === "agent") {
-            return showAgentSidebarTab;
+            return options.showAgentSidebarTab && options.agentsFeatureAvailable;
         }
         return true;
     });
@@ -109,7 +108,7 @@ export function resolveModeWithSidebarModeVisibility(
     if (mode === "todo" && !visibility.showTodoSidebarTab) {
         return "list";
     }
-    if (mode === "agent" && !visibility.showAgentSidebarTab) {
+    if (mode === "agent" && (!visibility.showAgentSidebarTab || !visibility.agentsFeatureAvailable)) {
         return "list";
     }
 

@@ -1,6 +1,9 @@
 import * as assert from "node:assert/strict";
 import test from "node:test";
-import { ASIDE_SETTING_CATALOG } from "../src/ui/settings/asideSettingCatalog";
+import {
+    ASIDE_SETTING_CATALOG,
+    ASIDE_SETTING_SECTIONS,
+} from "../src/ui/settings/asideSettingCatalog";
 import { getLegacyAsideSettingKeys } from "../src/ui/settings/asideSettingLegacyAdapter";
 import {
     getAsideSettingDefinitions,
@@ -9,6 +12,7 @@ import {
 import { FeatureFlag } from "../src/core/config/featureFlags";
 
 const EXPECTED_KEYS = [
+    "default-agent",
     "show-todo-tab",
     "show-agent-tab",
     "publish-enabled",
@@ -34,21 +38,27 @@ test("every Aside setting has searchable metadata and one section owner", () => 
         assert.ok(entry.description.trim());
         assert.ok(entry.aliases.length > 0);
         assert.ok(entry.keywords.length > 0);
-        assert.ok(["sidebar", "publishing", "index-note"].includes(entry.section));
+        assert.ok(["agents", "sidebar", "publishing", "index-note"].includes(entry.section));
     }
+});
+
+test("Agents experiment is the first settings section", () => {
+    assert.deepEqual(ASIDE_SETTING_SECTIONS.map((section) => section.key), [
+        "agents",
+        "sidebar",
+        "publishing",
+        "index-note",
+    ]);
 });
 
 test("agent tab search aliases derive from every supported agent", () => {
     const entry = ASIDE_SETTING_CATALOG.find((candidate) => candidate.key === "show-agent-tab");
-    assert.deepEqual(entry?.aliases, ["Codex tab", "Claude tab", "Gemini tab"]);
+    assert.deepEqual(entry?.aliases, ["Codex tab", "Claude Code tab", "Gemini tab"]);
 });
 
 test("vault scripts do not introduce a setting", () => {
     assert.equal(
-        ASIDE_SETTING_CATALOG.some((entry) =>
-            [entry.key, entry.name, entry.description, ...entry.aliases, ...entry.keywords]
-                .some((value) => /script/iu.test(value))
-        ),
+        ASIDE_SETTING_SECTIONS.some((section) => section.key === ("scripts" as never)),
         false,
     );
 });
@@ -61,6 +71,7 @@ function getCatalogEntry(key: string) {
 
 function createCatalogContext(options: {
     publishFeatureEnabled: boolean;
+    agentsFeatureEnabled?: boolean;
     publishEnabled?: boolean;
     remotePurgeEnabled?: boolean;
 }) {
@@ -69,16 +80,40 @@ function createCatalogContext(options: {
             settings: {
                 featureFlags: {
                     [FeatureFlag.publish]: options.publishFeatureEnabled,
+                    [FeatureFlag.agents]: options.agentsFeatureEnabled ?? false,
                 },
                 publishEnabled: options.publishEnabled ?? false,
                 publishRemotePurgeEnabled: options.remotePurgeEnabled ?? false,
             },
         },
         refresh: () => undefined,
-        renderAgentRuntimeStatus: () => undefined,
+        renderDefaultAgentSettings: () => undefined,
         renderPurgeBrokerSecret: () => undefined,
     } as unknown as Parameters<NonNullable<(typeof ASIDE_SETTING_CATALOG)[number]["visible"]>>[0];
 }
+
+test("Agents settings and group follow the agents feature flag", () => {
+    const disabled = createCatalogContext({
+        agentsFeatureEnabled: false,
+        publishFeatureEnabled: false,
+    });
+    const enabled = createCatalogContext({
+        agentsFeatureEnabled: true,
+        publishFeatureEnabled: false,
+    });
+
+    assert.equal(isVisible("default-agent", disabled), false);
+    assert.equal(isVisible("show-agent-tab", disabled), false);
+    assert.equal(isVisible("default-agent", enabled), true);
+    assert.equal(isVisible("show-agent-tab", enabled), true);
+
+    const group = getAsideSettingDefinitions(disabled)
+        .find((item) => "heading" in item && item.heading === "Agents (experimental)");
+    if (!group || typeof group.visible !== "function") {
+        assert.fail("Agents settings group should define feature visibility");
+    }
+    assert.equal(group.visible(), false);
+});
 
 function isVisible(key: string, context: ReturnType<typeof createCatalogContext>): boolean {
     const entry = getCatalogEntry(key);

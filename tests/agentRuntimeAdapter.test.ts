@@ -1114,6 +1114,17 @@ test("buildSideNotePrompt allows visual assets and points them to vault-root Att
     assert.doesNotMatch(prompt, /compact ASCII diagram that fits comfortably in the sidebar/);
 });
 
+test("buildSideNotePrompt forwards create-script request kind to the shared policy", () => {
+    const prompt = buildSideNotePrompt({
+        promptText: "build a cleaner",
+        vaultRootPath: "/vault",
+        requestKind: "create-script",
+    });
+
+    assert.match(prompt, /first positional argument/i);
+    assert.match(prompt, /\/script-name/i);
+});
+
 test("createWorkspaceWriteSandboxPolicy includes extra writable roots without duplicates", () => {
     assert.deepEqual(
         createWorkspaceWriteSandboxPolicy("/vault/project", ["/vault", "/vault/project", "/vault"]).writableRoots,

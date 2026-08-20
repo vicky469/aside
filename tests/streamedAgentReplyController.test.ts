@@ -44,6 +44,19 @@ class FakeContainerElement {
     }
 }
 
+class FakeStreamElement extends FakeContainerElement {
+    public textContent = "";
+    public hidden = false;
+    public style = { display: "" };
+    public classList = {
+        toggle() {},
+    };
+
+    public instanceOf(type: { name: string }): boolean {
+        return type.name === "HTMLSpanElement" || type.name === "HTMLDivElement";
+    }
+}
+
 class FakeStatusChildElement extends FakeContainerElement {
     public textContent = "";
 }
@@ -175,4 +188,66 @@ test("streamed agent reply controller shows only the latest process line as stat
         statusEl.getAttribute("aria-label"),
         "Codex Running command: rg \"Codex\" src. running",
     );
+});
+
+test("streamed agent reply controller identifies the fallback author", () => {
+    const previousSpan = Object.getOwnPropertyDescriptor(globalThis, "HTMLSpanElement");
+    const previousDiv = Object.getOwnPropertyDescriptor(globalThis, "HTMLDivElement");
+    Object.defineProperty(globalThis, "HTMLSpanElement", {
+        configurable: true,
+        value: class HTMLSpanElement {},
+    });
+    Object.defineProperty(globalThis, "HTMLDivElement", {
+        configurable: true,
+        value: class HTMLDivElement {},
+    });
+    const controller = new StreamedAgentReplyController("thread-1") as any;
+    const metaValueEl = new FakeStreamElement();
+    const labelEl = new FakeStreamElement();
+    const statusEl = new FakeStreamElement();
+    const contentEl = new FakeStreamElement();
+    const actionsEl = new FakeStreamElement();
+    const cardEl = new FakeStreamElement();
+
+    controller.findThreadElement = () => new FakeStreamElement();
+    controller.ensureRepliesContainer = () => new FakeStreamElement();
+    controller.ensureCard = () => {
+        controller.metaValueEl = metaValueEl;
+        controller.labelEl = labelEl;
+        controller.statusEl = statusEl;
+        controller.contentEl = contentEl;
+        controller.actionsEl = actionsEl;
+        return cardEl;
+    };
+    controller.syncBorrowedFooterMeta = () => undefined;
+    controller.syncStatus = () => undefined;
+    controller.syncActions = () => undefined;
+
+    try {
+        controller.sync(new FakeStreamElement(), {
+            runId: "run-1",
+            threadId: "thread-1",
+            requestedAgent: "claude",
+            preferredAgent: "gemini",
+            requestKind: "create-script",
+            runtime: "direct-cli",
+            status: "succeeded",
+            partialText: "Created.",
+            startedAt: 100,
+            updatedAt: 101,
+        });
+
+        assert.equal(labelEl.textContent, "Claude Code (fallback for Gemini)");
+    } finally {
+        if (previousSpan) {
+            Object.defineProperty(globalThis, "HTMLSpanElement", previousSpan);
+        } else {
+            Reflect.deleteProperty(globalThis, "HTMLSpanElement");
+        }
+        if (previousDiv) {
+            Object.defineProperty(globalThis, "HTMLDivElement", previousDiv);
+        } else {
+            Reflect.deleteProperty(globalThis, "HTMLDivElement");
+        }
+    }
 });

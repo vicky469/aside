@@ -472,7 +472,7 @@ test("sidebar draft editor controller preserves @ provider scope in the disconne
         scheduleDraftFocus: () => {},
         getMentionSuggestions: (query) => {
             rawQueries.push(query);
-            return buildMentionSuggestions(scripts, query);
+            return buildMentionSuggestions(scripts, query, true);
         },
         openMentionSuggestModal: (options) => {
             assert.equal(options.initialQuery, "c");
@@ -520,7 +520,7 @@ test("sidebar draft editor controller preserves / provider scope in the disconne
         scheduleDraftFocus: () => {},
         getMentionSuggestions: (query) => {
             rawQueries.push(query);
-            return buildMentionSuggestions(scripts, query);
+            return buildMentionSuggestions(scripts, query, true);
         },
         openMentionSuggestModal: (options) => {
             assert.equal(options.initialQuery, "");
@@ -546,9 +546,10 @@ test("sidebar draft editor controller preserves / provider scope in the disconne
         mentions: suggestions.map((suggestion) => suggestion.mention),
     }, {
         rawQueries: ["/"],
-        mentions: ["/clean-citations"],
+        mentions: ["/create-script", "/clean-citations"],
     });
-    assert.ok(suggestions.every((suggestion) => suggestion.kind === "script"));
+    assert.equal(suggestions[0]?.kind, "built-in");
+    assert.equal(suggestions[1]?.kind, "script");
 });
 
 test("sidebar draft editor routes tags to the modal without an inline box", () => {
@@ -725,7 +726,7 @@ test("connected mention dropdown activates only the explicit @ query match", () 
         updateDraftCommentText: () => {},
         renderComments: async () => {},
         scheduleDraftFocus: () => {},
-        getMentionSuggestions: (query) => buildMentionSuggestions([], query),
+        getMentionSuggestions: (query) => buildMentionSuggestions([], query, true),
         openMentionSuggestModal: () => {},
         openLinkSuggestModal: () => {},
         openTagSuggestModal: () => {},

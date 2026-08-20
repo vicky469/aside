@@ -37,7 +37,7 @@ test("mention suggestions use a one-line fallback and compact inline geometry", 
     assert.doesNotMatch(css, /\.aside-mention-suggest-note/);
     assert.match(
         mentionModalSource,
-        /import\s*\{\s*getMentionSuggestionPresentation\s*\}\s*from\s*["']\.\.\/editor\/commentMentionSuggestions["'];/,
+        /import\s*\{[^}]*\bgetMentionSuggestionPresentation\b[^}]*\}\s*from\s*["']\.\.\/editor\/commentMentionSuggestions["'];/,
     );
     assert.match(mentionModalSource, /getMentionSuggestionPresentation\(suggestion\)/);
     const renderSuggestionSource = mentionModalSource.match(

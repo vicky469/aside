@@ -230,6 +230,7 @@ type AsideWithVaultScriptMentions = Aside & {
     isRunnableVaultScriptMention(mention: string): boolean;
     getScriptRuns(): ScriptRunRecord[];
     retryScriptRun(runId: string): Promise<boolean>;
+    isAgentsFeatureAvailable(): boolean;
 };
 
 interface IndexDefaultSidebarCacheKey {
@@ -1376,9 +1377,13 @@ export default class AsideView extends ItemView {
             getMentionSuggestions: (query) => buildMentionSuggestions(
                 this.plugin.getRunnableVaultScripts(),
                 query,
+                this.plugin.isAgentsFeatureAvailable(),
             ),
             openMentionSuggestModal: (options) => {
-                new SideNoteMentionSuggestModal(this.app, options).open();
+                new SideNoteMentionSuggestModal(this.app, {
+                    ...options,
+                    agentsFeatureAvailable: this.plugin.isAgentsFeatureAvailable(),
+                }).open();
             },
             openLinkSuggestModal: (options) => {
                 new SideNoteLinkSuggestModal(this.app, {
@@ -3395,6 +3400,7 @@ export default class AsideView extends ItemView {
         return {
             showTodoSidebarTab: this.plugin.settings.showTodoSidebarTab,
             showAgentSidebarTab: this.plugin.settings.showAgentSidebarTab,
+            agentsFeatureAvailable: this.plugin.isAgentsFeatureAvailable(),
         };
     }
 
@@ -4949,6 +4955,7 @@ export default class AsideView extends ItemView {
             activeCommentId: this.interactionController.getActiveCommentId(),
             shouldPinFocusedDraftToTop: this.isNonDesktopClient(),
             isRunnableVaultScriptMention: (mention) => this.plugin.isRunnableVaultScriptMention(mention),
+            isAgentsFeatureAvailable: () => this.plugin.isAgentsFeatureAvailable(),
             isSavingDraft: (commentId) => this.plugin.isSavingDraft(commentId),
             updateDraftCommentText: (commentId, commentText) => {
                 this.plugin.updateDraftCommentText(commentId, commentText);
@@ -4972,6 +4979,7 @@ export default class AsideView extends ItemView {
             activeCommentId: this.interactionController.getActiveCommentId(),
             shouldPinFocusedDraftToTop: this.isNonDesktopClient(),
             isRunnableVaultScriptMention: (mention) => this.plugin.isRunnableVaultScriptMention(mention),
+            isAgentsFeatureAvailable: () => this.plugin.isAgentsFeatureAvailable(),
             isSavingDraft: (commentId) => this.plugin.isSavingDraft(commentId),
             updateDraftCommentText: (commentId, commentText) => {
                 this.plugin.updateDraftCommentText(commentId, commentText);

@@ -6,6 +6,7 @@ import {
     type AgentStreamUpdate,
     type SavedUserEntryEvent,
 } from "./agents/commentAgentController";
+import { CreateScriptCommandController } from "./agents/createScriptCommandController";
 import { CommentHighlightController } from "./comments/commentHighlightController";
 import {
     CommentMutationController,
@@ -59,6 +60,7 @@ import {
 import {
     resolveAgentRuntimeSelection as resolveAgentRuntimeSelectionPlan,
     type AgentRuntimeSelection,
+    type DefaultAgentRuntimeSelection,
 } from "./agents/agentRuntimeSelection";
 import {
     PublicHtmlPublishController,
@@ -85,11 +87,12 @@ import {
 	derivePublishBaseUrlFromProjectName,
 } from "./core/publish/publishSettings";
 import {
+	FEATURE_FLAG_KEYS,
 	FeatureFlag,
 	isFeatureFlagEnabled,
 } from "./core/config/featureFlags";
 import {
-    getPublishFeatureFlagStorageKey,
+    getFeatureFlagStorageKey,
 } from "./core/config/featureFlagStorageSync";
 import {
 	removePublishedPublicArtifactPath,
@@ -107,7 +110,9 @@ import {
     type AgentRuntimeModePreference,
 } from "./core/agents/agentRuntimePreferences";
 import type { AsideAgentTarget } from "./core/config/agentTargets";
-import { getAgentActorById } from "./core/agents/agentActorRegistry";
+import { getAgentActorById, getSupportedAgentActors } from "./core/agents/agentActorRegistry";
+import { resolveDefaultAgentSelection } from "./core/agents/defaultAgentSelection";
+import { AGENTS_EXPERIMENT_DISABLED_NOTICE } from "./core/agents/agentsFeaturePolicy";
 import { DraftComment, DraftSelection } from "./domain/drafts";
 import { parsePromptDeleteSetting } from "./core/config/appConfig";
 import { DerivedCommentMetadataManager } from "./core/derived/derivedCommentMetadata";
@@ -540,11 +545,32 @@ export default class Aside extends Plugin {
         },
         runAgentRuntime: (invocation) => runAgentRuntime(invocation),
         resolveAgentRuntimeSelection: (target) => this.resolveAgentRuntimeSelection(target),
+        resolveDefaultAgentRuntimeSelection: () => this.resolveDefaultAgentRuntimeSelection(),
+        isAgentsFeatureAvailable: () => this.isAgentsFeatureAvailable(),
         showNotice: (message) => {
             this.showNotice(message, "agents", "agents.notice");
         },
         log: (level, area, event, payload) => this.logEvent(level, area, event, payload),
     }, this.agentRunStore);
+    private readonly createScriptCommandController = new CreateScriptCommandController({
+        getRegistry: () => this.vaultScriptRegistry,
+        isAgentsFeatureAvailable: () => this.isAgentsFeatureAvailable(),
+        showNotice: (message) => {
+            this.showNotice(message, "agents", "agents.notice");
+        },
+        appendReply: async (event, body) => {
+            await this.commentMutationController.appendThreadEntry(event.threadId, {
+                id: generateCommentId(),
+                body,
+                timestamp: Date.now(),
+            }, {
+                insertAfterCommentId: event.entryId,
+                alwaysInsertAfterTarget: true,
+            });
+        },
+        dispatchRequest: (event, requestText) =>
+            this.commentAgentController.handleCreateScriptRequest(event, requestText),
+    });
     private readonly publicHtmlPublishController = new PublicHtmlPublishController({
         getSettings: () => this.settings,
         getFeatureFlags: () => this.settings.featureFlags,
@@ -784,7 +810,7 @@ export default class Aside extends Plugin {
         await this.loadSettings();
         this.vaultScriptRegistry.seed(this.app.vault.getFiles().map((file) => file.path));
         this.scriptRunStore.load();
-        await this.syncPublishFeatureFlagStorage();
+        await this.syncFeatureFlagStorage();
         this.vaultCapabilityIndex.seed(
             this.app.vault.getMarkdownFiles(),
             (file) => this.getVaultFileTags(file),
@@ -807,6 +833,7 @@ export default class Aside extends Plugin {
         // Also highlight commented text inside rendered Markdown (Live Preview/Reading view)
         this.commentHighlightController.registerMarkdownPreviewHighlights(this);
         await this.syncInstalledSidenoteSkill();
+        this.createScriptCommandController.initialize();
         this.commentScriptController.initialize();
         await this.commentScriptController.reconcilePendingRunsFromPreviousSession();
         this.commentAgentController.initialize();
@@ -827,6 +854,7 @@ export default class Aside extends Plugin {
         this.unloaded = true;
         void this.logEvent("info", "startup", "startup.unload");
         disposeAgentRuntimeProcesses();
+        this.createScriptCommandController.dispose();
         this.commentScriptController.dispose();
         disposeVaultScriptRuntimeProcesses();
         this.commentAgentController.dispose();
@@ -863,19 +891,23 @@ export default class Aside extends Plugin {
         await this.indexNoteSettingsController.loadSettings();
     }
 
-    private async syncPublishFeatureFlagStorage(): Promise<void> {
-        await this.indexNoteSettingsController.syncPublishFeatureFlagStorage(
-            getSafeLocalStorage(),
-            getPublishFeatureFlagStorageKey(this.app.vault.getName()),
-            (operation, error) => {
-                this.warn(
-                    `Unable to synchronize the publish feature flag (${operation}).`,
-                    error,
-                    "settings",
-                    `settings.publish-feature-flag.${operation}.warn`,
-                );
-            },
-        );
+    private async syncFeatureFlagStorage(): Promise<void> {
+        const storage = getSafeLocalStorage();
+        for (const flag of FEATURE_FLAG_KEYS) {
+            await this.indexNoteSettingsController.syncFeatureFlagStorage(
+                flag,
+                storage,
+                getFeatureFlagStorageKey(flag, this.app.vault.getName()),
+                (operation, error) => {
+                    this.warn(
+                        `Unable to synchronize the ${flag} feature flag (${operation}).`,
+                        error,
+                        "settings",
+                        `settings.${flag}-feature-flag.${operation}.warn`,
+                    );
+                },
+            );
+        }
     }
 
     async saveSettings() {
@@ -912,8 +944,16 @@ export default class Aside extends Plugin {
         return this.indexNoteSettingsController.getAgentRuntimeMode();
     }
 
+    public getDefaultAgent(): AsideAgentTarget {
+        return this.indexNoteSettingsController.getDefaultAgent();
+    }
+
     public async setAgentRuntimeMode(nextMode: AgentRuntimeModePreference): Promise<void> {
         await this.indexNoteSettingsController.setAgentRuntimeMode(nextMode);
+    }
+
+    public async setDefaultAgent(target: AsideAgentTarget): Promise<void> {
+        await this.indexNoteSettingsController.setDefaultAgent(target);
     }
 
     public async setShowTodoSidebarTab(visible: boolean): Promise<void> {
@@ -1051,6 +1091,10 @@ export default class Aside extends Plugin {
 
     private isPublishFeatureAvailable(): boolean {
         return isFeatureFlagEnabled(this.settings.featureFlags, FeatureFlag.publish);
+    }
+
+    public isAgentsFeatureAvailable(): boolean {
+        return isFeatureFlagEnabled(this.settings.featureFlags, FeatureFlag.agents);
     }
 
     private getPublicHtmlPairContext(filePath: string): PublicHtmlPairContext | null {
@@ -1222,6 +1266,12 @@ export default class Aside extends Plugin {
     }
 
     public async getAgentRuntimeDiagnostics(target: AsideAgentTarget): Promise<AgentRuntimeDiagnostics> {
+        if (!this.isAgentsFeatureAvailable()) {
+            return {
+                status: "unsupported",
+                message: AGENTS_EXPERIMENT_DISABLED_NOTICE,
+            };
+        }
         const actor = getAgentActorById(target);
         if (!(this.app.vault.adapter instanceof FileSystemAdapter)) {
             return {
@@ -1256,6 +1306,52 @@ export default class Aside extends Plugin {
             modePreference: this.getAgentRuntimeMode(),
             localDiagnostics: await this.getAgentRuntimeDiagnostics(target),
         });
+    }
+
+    public async resolveDefaultAgentRuntimeSelection(): Promise<DefaultAgentRuntimeSelection> {
+        const preferredAgent = this.getDefaultAgent();
+        const actors = getSupportedAgentActors();
+        const diagnosticsEntries = await Promise.all(actors.map(async (actor) => {
+            try {
+                return [actor.id, await this.getAgentRuntimeDiagnostics(actor.id)] as const;
+            } catch (error) {
+                return [actor.id, {
+                    status: "unavailable" as const,
+                    message: error instanceof Error && error.message.trim()
+                        ? error.message.trim()
+                        : `${actor.label} is unavailable.`,
+                }] as const;
+            }
+        }));
+        const diagnosticsByTarget = new Map(diagnosticsEntries);
+        const selection = resolveDefaultAgentSelection(preferredAgent, diagnosticsByTarget);
+        if (selection.kind === "none") {
+            return selection;
+        }
+
+        const runtimeSelection = resolveAgentRuntimeSelectionPlan({
+            target: selection.selectedAgent,
+            modePreference: this.getAgentRuntimeMode(),
+            localDiagnostics: diagnosticsByTarget.get(selection.selectedAgent) ?? {
+                status: "unavailable",
+                message: `${getAgentActorById(selection.selectedAgent).label} is unavailable.`,
+            },
+        });
+        if (runtimeSelection.kind === "blocked") {
+            return {
+                kind: "none",
+                preferredAgent,
+            };
+        }
+
+        return {
+            kind: "resolved",
+            selectedAgent: selection.selectedAgent,
+            preferredAgent,
+            usedFallback: selection.kind === "fallback",
+            runtime: runtimeSelection.runtime,
+            modePreference: runtimeSelection.modePreference,
+        };
     }
 
     public async retryAgentRun(runId: string): Promise<boolean> {
@@ -1649,6 +1745,7 @@ export default class Aside extends Plugin {
     private async handleSavedUserEntry(event: SavedUserEntryEvent): Promise<void> {
         await routeSavedUserEntry(
             event,
+            this.createScriptCommandController,
             this.commentScriptController,
             this.commentAgentController,
         );

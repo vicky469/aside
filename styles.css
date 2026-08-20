@@ -1709,8 +1709,90 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
     cursor: default;
 }
 
-.aside-agent-runtime-status-line {
-    white-space: pre-wrap;
+.aside-settings-tab .setting-item.setting-item-heading {
+    padding: 0;
+}
+
+.aside-default-agent-setting {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--size-4-2);
+}
+
+.aside-default-agent-setting .setting-item-info {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: var(--size-2-1) var(--size-4-2);
+    max-width: 100%;
+}
+
+.aside-default-agent-setting .setting-item-description {
+    min-width: 0;
+}
+
+.aside-default-agent-setting .setting-item-control {
+    flex: none;
+    width: fit-content;
+    max-width: 100%;
+    margin: 0;
+}
+
+.aside-default-agent-radio-group {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    row-gap: var(--size-2-1);
+    column-gap: calc(var(--size-4-2) * 2);
+    width: fit-content;
+    max-width: 100%;
+}
+
+.aside-default-agent-option {
+    display: grid;
+    grid-template-columns: auto auto auto;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: var(--size-4-2);
+    min-height: var(--input-height);
+    padding: var(--size-2-1) 0;
+    border-radius: var(--radius-s);
+    cursor: pointer;
+    font-family: inherit;
+    font-size: var(--font-ui-small);
+    font-weight: var(--input-font-weight);
+    line-height: var(--line-height-tight);
+    white-space: nowrap;
+}
+
+.aside-default-agent-option:hover:not(.is-disabled) {
+    background: var(--background-modifier-hover);
+}
+
+.aside-default-agent-option input[type="radio"] {
+    margin: 0;
+}
+
+.aside-default-agent-option-name {
+    min-width: 0;
+    color: var(--text-normal);
+}
+
+.aside-default-agent-option-status {
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+.aside-default-agent-option.is-available .aside-default-agent-option-status {
+    color: var(--text-success);
+}
+
+.aside-default-agent-option.is-disabled {
+    cursor: default;
+}
+
+.aside-default-agent-fallback {
+    margin-top: var(--size-2-2);
 }
 
 .aside-agent-stream-content {

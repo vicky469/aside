@@ -46,15 +46,24 @@ export interface SavedEntryScriptController {
     handleSavedUserEntry(event: SavedUserEntryEvent): Promise<boolean>;
 }
 
+export interface SavedEntryBuiltInController {
+    handleSavedUserEntry(event: SavedUserEntryEvent): Promise<boolean>;
+}
+
 export interface SavedEntryAgentController {
     handleSavedUserEntry(event: SavedUserEntryEvent): Promise<void>;
 }
 
 export async function routeSavedUserEntry(
     event: SavedUserEntryEvent,
+    builtInController: SavedEntryBuiltInController | null,
     scriptController: SavedEntryScriptController | null,
     agentController: SavedEntryAgentController,
 ): Promise<void> {
+    const handledByBuiltIn = await builtInController?.handleSavedUserEntry(event) ?? false;
+    if (handledByBuiltIn) {
+        return;
+    }
     const handledByScript = await scriptController?.handleSavedUserEntry(event) ?? false;
     if (!handledByScript) {
         await agentController.handleSavedUserEntry(event);

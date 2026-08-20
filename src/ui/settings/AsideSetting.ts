@@ -17,7 +17,13 @@ import {
     DEFAULT_PUBLISH_SETTINGS,
     type PublishSettings,
 } from "../../core/publish/publishSettings";
-import { getSupportedAgentActors } from "../../core/agents/agentActorRegistry";
+import {
+    DEFAULT_ASIDE_AGENT_ACTOR_ID,
+    getSupportedAgentActors,
+} from "../../core/agents/agentActorRegistry";
+import {
+    resolveDefaultAgentSelection,
+} from "../../core/agents/defaultAgentSelection";
 import type { AsideAgentTarget } from "../../core/config/agentTargets";
 import {
     normalizeAllCommentsNoteImageCaption,
@@ -27,8 +33,9 @@ import {
 import type { AgentRuntimeDiagnostics } from "../../agents/agentRuntimeAdapter";
 import { createCheckingAgentRuntimeDiagnostics } from "./codexRuntimeStatus";
 import {
-    formatAgentRuntimeStatusLines,
-    shouldRenderAgentRuntimeStatus,
+    buildDefaultAgentOptions,
+    formatDefaultAgentFallback,
+    resolveDefaultAgentRadioSelection,
 } from "./agentRuntimeSettings";
 import { type AsideSettingCatalogContext } from "./asideSettingCatalog";
 import { getAsideSettingDefinitions } from "./asideSettingDefinitionsAdapter";
@@ -40,6 +47,7 @@ export interface AsideSettings extends PublishSettings {
     indexHeaderImageUrl: string;
     indexHeaderImageCaption: string;
     agentRuntimeMode: AgentRuntimeModePreference;
+    defaultAgent: AsideAgentTarget;
     showTodoSidebarTab: boolean;
     showAgentSidebarTab: boolean;
     featureFlags: FeatureFlags;
@@ -51,6 +59,7 @@ export const DEFAULT_SETTINGS: AsideSettings = {
     indexHeaderImageUrl: normalizeAllCommentsNoteImageUrl(""),
     indexHeaderImageCaption: normalizeAllCommentsNoteImageCaption(null),
     agentRuntimeMode: normalizeAgentRuntimeModePreference("auto"),
+    defaultAgent: DEFAULT_ASIDE_AGENT_ACTOR_ID,
     showTodoSidebarTab: true,
     showAgentSidebarTab: true,
     featureFlags: DEFAULT_FEATURE_FLAGS,
@@ -65,6 +74,7 @@ export default class AsideSetting extends PluginSettingTab {
     constructor(app: App, plugin: Aside) {
         super(app, plugin);
         this.plugin = plugin;
+        this.containerEl.addClass("aside-settings-tab");
     }
 
     getSettingDefinitions(): SettingDefinitionItem[] {
@@ -89,11 +99,8 @@ export default class AsideSetting extends PluginSettingTab {
         return {
             plugin: this.plugin,
             refresh: () => this.refreshSettings(),
-            renderAgentRuntimeStatus: (setting, baseDescription) => {
-                setting.setDesc(this.getAgentTabDescription(baseDescription));
-                if (shouldRenderAgentRuntimeStatus(this.plugin.settings)) {
-                    this.renderAgentRuntimeStatus(setting, baseDescription);
-                }
+            renderDefaultAgentSettings: (setting, baseDescription) => {
+                this.renderDefaultAgentSettings(setting, baseDescription);
             },
             renderPurgeBrokerSecret: (setting) => {
                 setting.addComponent((containerEl) => {
@@ -120,55 +127,113 @@ export default class AsideSetting extends PluginSettingTab {
         this.renderLegacySettings();
     }
 
-    private getAgentTabDescription(
+    private getAgentSettingsDescription(
         baseDescription: string,
-        runtimeStatusLines?: string[],
+        supplementalLines?: string[],
     ): string | DocumentFragment {
-        if (!runtimeStatusLines?.length) {
+        if (!supplementalLines?.length) {
             return baseDescription;
         }
 
         const fragment = createFragment();
         fragment.append(baseDescription);
-        for (const line of runtimeStatusLines) {
+        for (const line of supplementalLines) {
             const lineEl = createDiv();
-            lineEl.addClass("aside-agent-runtime-status-line");
+            lineEl.addClass("aside-default-agent-fallback");
             lineEl.textContent = line;
             fragment.append(lineEl);
         }
         return fragment;
     }
 
-    private renderAgentRuntimeStatus(
-        agentTabSetting: Setting,
+    private renderDefaultAgentSettings(
+        agentSetting: Setting,
         baseDescription: string,
     ): void {
         const supportedActors = getSupportedAgentActors();
         const localDiagnosticsByTarget = new Map<AsideAgentTarget, AgentRuntimeDiagnostics>(
             supportedActors.map((actor) => [actor.id, createCheckingAgentRuntimeDiagnostics(actor.id)]),
         );
+        agentSetting.settingEl.addClass("aside-default-agent-setting");
+        const groupEl = agentSetting.controlEl.createDiv({
+            cls: "aside-default-agent-radio-group",
+            attr: {
+                role: "radiogroup",
+                "aria-label": "Default agent",
+            },
+        });
+        const radioRows = new Map<AsideAgentTarget, {
+            rowEl: HTMLLabelElement;
+            inputEl: HTMLInputElement;
+            statusEl: HTMLSpanElement;
+        }>();
 
-        const getStatusBadge = (diagnostics: AgentRuntimeDiagnostics): string => {
-            switch (diagnostics.status) {
-                case "available": return "✅";
-                case "checking": return "...";
-                default: return "❌";
-            }
-        };
+        for (const actor of supportedActors) {
+            const rowEl = groupEl.createEl("label", {
+                cls: "aside-default-agent-option",
+            });
+            const inputEl = rowEl.createEl("input", {
+                type: "radio",
+                attr: {
+                    name: "aside-default-agent",
+                    value: actor.id,
+                },
+            });
+            rowEl.createSpan({
+                cls: "aside-default-agent-option-name",
+                text: actor.label,
+            });
+            const statusEl = rowEl.createSpan({
+                cls: "aside-default-agent-option-status",
+            });
+            inputEl.addEventListener("change", () => {
+                const options = buildDefaultAgentOptions(
+                    this.plugin.settings.defaultAgent,
+                    localDiagnosticsByTarget,
+                );
+                const target = resolveDefaultAgentRadioSelection(options, actor.id);
+                if (!inputEl.checked || !target) {
+                    renderRuntimeSetting();
+                    return;
+                }
+                void this.plugin.setDefaultAgent(target).then(
+                    renderRuntimeSetting,
+                    renderRuntimeSetting,
+                );
+            });
+            radioRows.set(actor.id, { rowEl, inputEl, statusEl });
+        }
 
         const renderRuntimeSetting = (): void => {
-            agentTabSetting.setDesc(this.getAgentTabDescription(
+            const options = buildDefaultAgentOptions(
+                this.plugin.settings.defaultAgent,
+                localDiagnosticsByTarget,
+            );
+            for (const option of options) {
+                const row = radioRows.get(option.target);
+                if (!row) {
+                    continue;
+                }
+                row.inputEl.checked = option.selected;
+                row.inputEl.disabled = option.disabled;
+                row.rowEl.toggleClass("is-selected", option.selected);
+                row.rowEl.toggleClass("is-disabled", option.disabled);
+                row.rowEl.toggleClass("is-checking", option.status === "checking");
+                row.rowEl.toggleClass("is-available", option.status === "available");
+                row.rowEl.toggleClass("is-unavailable", option.status === "unavailable");
+                row.statusEl.textContent = option.statusLabel;
+            }
+
+            const selection = resolveDefaultAgentSelection(
+                this.plugin.settings.defaultAgent,
+                localDiagnosticsByTarget,
+            );
+            const fallbackLine = selection.kind === "fallback"
+                ? formatDefaultAgentFallback(selection.preferredAgent, selection.selectedAgent)
+                : "";
+            agentSetting.setDesc(this.getAgentSettingsDescription(
                 baseDescription,
-                formatAgentRuntimeStatusLines(
-                    supportedActors.map((actor) => {
-                        const diagnostics = localDiagnosticsByTarget.get(actor.id)
-                            ?? createCheckingAgentRuntimeDiagnostics(actor.id);
-                        return {
-                            directive: actor.directive,
-                            statusBadge: getStatusBadge(diagnostics),
-                        };
-                    }),
-                ),
+                fallbackLine ? [fallbackLine] : undefined,
             ));
         };
         const refreshRuntimeSetting = async () => {

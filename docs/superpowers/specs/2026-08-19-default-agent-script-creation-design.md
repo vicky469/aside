@@ -1,7 +1,7 @@
 # Default-Agent Script Creation Design
 
 **Date:** 2026-08-19
-**Status:** Approved design; implementation pending
+**Status:** Implemented; frontend acceptance pending
 
 ## Implementation Tracking
 
@@ -15,23 +15,25 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Add a shared, availability-aware default-agent selection policy with the order Codex → Claude Code → Gemini.
-- [ ] Change the shared Claude actor label to **Claude Code** so every consumer uses the approved product name.
-- [ ] Persist and normalize a user-selectable `defaultAgent` setting without changing existing explicit `@agent` behavior.
-- [ ] Add a top-level **Agents** settings section with the default-agent picker and independent runtime status.
-- [ ] Add `/create-script` as a reserved built-in directive and a first-class slash suggestion.
-- [ ] Route `/create-script <request>` through the selected available agent with a shared script-creation prompt contract.
-- [ ] Add the empty-request response, no-agent fast return, fallback attribution, and explicit Regenerate behavior.
-- [ ] Preserve all existing `/script-name`, `@codex`, `@claude`, `@gemini`, and ordinary side-note routing.
+- [x] Add a shared, availability-aware default-agent selection policy with the order Codex → Claude Code → Gemini.
+- [x] Change the shared Claude actor label to **Claude Code** so every consumer uses the approved product name.
+- [x] Persist and normalize a user-selectable `defaultAgent` setting without changing existing explicit `@agent` behavior.
+- [x] Add a top-level **Agents** settings section with the default-agent picker and independent runtime status.
+- [x] Add `/create-script` as a reserved built-in directive and a first-class slash suggestion.
+- [x] Route `/create-script <request>` through the selected available agent with a shared script-creation prompt contract.
+- [x] Add the empty-request response, no-agent fast return, fallback attribution, and explicit Regenerate behavior.
+- [x] Preserve all existing `/script-name`, `@codex`, `@claude`, `@gemini`, and ordinary side-note routing.
+- [x] Highlight the built-in `/create-script` directive like registered `/script-name` mentions in both draft and saved-comment previews without making it a runnable vault script.
 
 ### Verification
 
-- [ ] Unit tests cover agent preference, ordered fallback, and no-agent selection.
-- [ ] Directive and registry tests cover `/create-script`, reserved-name handling, mixed directives, and existing vault scripts.
-- [ ] Controller and run-store tests cover queueing, fallback metadata, fast returns, runtime failure, and Regenerate.
-- [ ] Settings tests cover migration, persistence, status relocation, available choices, disabled unavailable choices, and fallback display.
-- [ ] Prompt tests prove that one shared script-creation contract reaches Codex, Claude Code, and Gemini.
-- [ ] The full automated test suite and production build pass.
+- [x] Unit tests cover agent preference, ordered fallback, and no-agent selection.
+- [x] Directive and registry tests cover `/create-script`, reserved-name handling, mixed directives, and existing vault scripts.
+- [x] Controller and run-store tests cover queueing, fallback metadata, fast returns, runtime failure, and Regenerate.
+- [x] Settings tests cover migration, persistence, status relocation, available choices, disabled unavailable choices, and fallback display.
+- [x] Prompt tests prove that one shared script-creation contract reaches Codex, Claude Code, and Gemini.
+- [x] The full automated test suite and production build pass.
+- [x] A regression test proves `/create-script` is highlighted when the live vault-script registry rejects it, while unknown slash tokens remain plain.
 - [ ] An installed-plugin smoke test creates a script from the Aside frontend and then runs it through `/script-name`.
 
 ## Context
@@ -78,6 +80,10 @@ Created `🛠️ scripts/image-to-markdown.mjs`. Run it with `/image-to-markdown
 ```
 
 The existing vault file-event path registers the new script without restarting Obsidian. The new `/script-name` suggestion and execution behavior remain owned by the existing vault-script registry and controller.
+
+### Preview styling
+
+`/create-script` uses the same blue mention presentation as a registered `/script-name` in both the live draft preview and persisted comments. The shared comment mention matcher recognizes reserved built-in slash directives before consulting the live vault-script predicate. The registry continues to reject a physical `🛠️ scripts/create-script.mjs`, and unknown slash tokens, paths, and URLs remain unstyled.
 
 ### Choosing the default agent
 

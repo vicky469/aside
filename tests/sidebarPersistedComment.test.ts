@@ -71,6 +71,8 @@ function createAgentRun(overrides: Partial<AgentRunRecord> = {}): AgentRunRecord
         triggerEntryId: overrides.triggerEntryId ?? "comment-1",
         filePath: overrides.filePath ?? "docs/architecture.md",
         requestedAgent: overrides.requestedAgent ?? "codex",
+        preferredAgent: overrides.preferredAgent,
+        requestKind: overrides.requestKind,
         runtime: overrides.runtime ?? "direct-cli",
         status: overrides.status ?? "succeeded",
         promptText: overrides.promptText ?? "@codex do it",
@@ -1153,7 +1155,26 @@ test("resolveSidebarCommentAuthor labels agent-produced replies from their outpu
         ),
         {
             kind: "claude",
-            label: "Claude",
+            label: "Claude Code",
+        },
+    );
+});
+
+test("resolveSidebarCommentAuthor identifies fallback agent replies", () => {
+    assert.deepEqual(
+        resolveSidebarCommentAuthor(
+            "entry-2",
+            [createAgentRun({
+                requestedAgent: "claude",
+                preferredAgent: "gemini",
+                requestKind: "create-script",
+                outputEntryId: "entry-2",
+            })],
+            "You",
+        ),
+        {
+            kind: "claude",
+            label: "Claude Code (fallback for Gemini)",
         },
     );
 });

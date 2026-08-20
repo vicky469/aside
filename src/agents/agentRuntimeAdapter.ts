@@ -7,6 +7,7 @@ import {
     normalizeAgentRunToolNames,
     normalizeAgentRunUrls,
     type AgentRunMetadata,
+    type AgentRunRequestKind,
     type AgentRunSkillMetadata,
     type AgentRunToolErrorMetadata,
     type AgentRunRuntime,
@@ -79,6 +80,7 @@ export interface AgentRuntimeInvocation {
     prompt: string;
     cwd: string;
     vaultRootPath?: string | null;
+    requestKind?: AgentRunRequestKind;
     onPartialText?: (partialText: string) => void;
     onProgressText?: (progressText: string) => void;
     onRunMetadata?: (metadata: AgentRunMetadata) => void;
@@ -187,11 +189,13 @@ function execFileAsync(
 export function buildSideNotePrompt(options: {
     promptText: string;
     vaultRootPath?: string | null;
+    requestKind?: AgentRunRequestKind;
 }): string {
     return sideNotePromptPolicy.buildSideNotePrompt({
         promptText: options.promptText,
         rootLabel: "vault root",
         rootPath: options.vaultRootPath ?? null,
+        requestKind: options.requestKind,
     });
 }
 
@@ -1681,6 +1685,7 @@ async function runCodexDirect(
             stdin.write(buildSideNotePrompt({
                 promptText: invocation.prompt,
                 vaultRootPath: invocation.vaultRootPath,
+                requestKind: invocation.requestKind,
             }));
             stdin.end();
         } catch (error) {
@@ -2031,6 +2036,7 @@ async function runClaudeDirect(
             stdin.write(buildSideNotePrompt({
                 promptText: invocation.prompt,
                 vaultRootPath: invocation.vaultRootPath,
+                requestKind: invocation.requestKind,
             }));
             stdin.end();
         } catch (error) {
@@ -2304,6 +2310,7 @@ async function runGeminiDirect(
             stdin.write(buildSideNotePrompt({
                 promptText: invocation.prompt,
                 vaultRootPath: invocation.vaultRootPath,
+                requestKind: invocation.requestKind,
             }));
             stdin.end();
         } catch (error) {

@@ -61,6 +61,18 @@ function buildSideNotePrompt(options) {
         "Do not mention reading notes, locating threads, loading context, or using the workspace.",
     ];
 
+    if (options?.requestKind === "create-script") {
+        promptLines.push(
+            "This is a /create-script request. Create the requested reusable vault script now.",
+            `Create a collision-free direct child of the active vault's \`${VAULT_SCRIPT_FOLDER_PATH}/\` using .mjs, .js, or .cjs.`,
+            "Do not use the reserved create-script name, raw TypeScript, JSX-family files, nested script folders, or a case-insensitive mention collision.",
+            "The script receives the current Markdown note's absolute path as its first positional argument and runs with the vault root as its working directory.",
+            "Write concise user-facing results to standard output and failures to standard error.",
+            "In the Aside reply, report the created vault-relative path and its /script-name invocation.",
+            "If a previous attempt already created matching work, inspect and finish that file instead of creating a duplicate.",
+        );
+    }
+
     if (rootPath) {
         promptLines.push(`The active ${rootLabel} is: ${rootPath}`);
     }

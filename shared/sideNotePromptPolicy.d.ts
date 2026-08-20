@@ -4,4 +4,5 @@ export function buildSideNotePrompt(options: {
     promptText: string;
     rootLabel?: string | null;
     rootPath?: string | null;
+    requestKind?: "create-script";
 }): string;

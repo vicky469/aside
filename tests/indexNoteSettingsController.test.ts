@@ -38,6 +38,7 @@ function createSettings(overrides: Partial<AsideSettings> = {}): AsideSettings {
         indexHeaderImageUrl: overrides.indexHeaderImageUrl ?? "https://example.com/default.webp",
         indexHeaderImageCaption: overrides.indexHeaderImageCaption ?? "Default caption",
         agentRuntimeMode: overrides.agentRuntimeMode ?? "auto",
+        defaultAgent: overrides.defaultAgent ?? "codex",
         showTodoSidebarTab: overrides.showTodoSidebarTab ?? true,
         showAgentSidebarTab: overrides.showAgentSidebarTab ?? true,
         publishedPublicArtifactPaths: overrides.publishedPublicArtifactPaths ?? [],
@@ -82,11 +83,22 @@ test("loaded settings resolution treats blank-like persisted index note paths as
     }
 });
 
+test("loaded settings normalize the default agent and rewrite invalid values", () => {
+    const resolved = resolveLoadedSettings({
+        indexNotePath: ALL_COMMENTS_NOTE_PATH,
+        defaultAgent: " GEMINI ",
+    } as unknown as PersistedPluginData, createSettings());
+
+    assert.equal(resolved.settings.defaultAgent, "gemini");
+    assert.equal(resolved.shouldRewriteLegacySettings, true);
+});
+
 function withPublishDefaults(
-    settings: Omit<AsideSettings, keyof typeof DEFAULT_PUBLISH_SETTINGS | "featureFlags" | "publishedPublicArtifactPaths">,
+    settings: Omit<AsideSettings, keyof typeof DEFAULT_PUBLISH_SETTINGS | "featureFlags" | "publishedPublicArtifactPaths" | "defaultAgent">,
 ): AsideSettings {
     return {
         ...settings,
+        defaultAgent: "codex",
         publishedPublicArtifactPaths: [],
         featureFlags: DEFAULT_FEATURE_FLAGS,
         ...DEFAULT_PUBLISH_SETTINGS,
@@ -756,6 +768,15 @@ test("index note settings controller saves local runtime setting without aggrega
     }));
 });
 
+test("index note settings controller persists the default agent", async () => {
+    const harness = createControllerHarness();
+
+    await harness.controller.setDefaultAgent("claude");
+
+    assert.equal(harness.getSettings().defaultAgent, "claude");
+    assert.equal(harness.savedPayloads.at(-1)?.defaultAgent, "claude");
+});
+
 test("index note settings controller saves sidebar tab toggles and refreshes open sidebars", async () => {
     const harness = createControllerHarness({
         activeSidebarFilePath: "docs/source.md",
@@ -812,11 +833,13 @@ test("loaded settings resolution defaults publish feature flag off", () => {
     const resolved = resolveLoadedSettings({}, createSettings({
         featureFlags: {
             [FeatureFlag.publish]: true,
+            [FeatureFlag.agents]: false,
         },
     }));
 
     assert.deepEqual(resolved.settings.featureFlags, {
         [FeatureFlag.publish]: false,
+        [FeatureFlag.agents]: false,
     });
     assert.equal(resolved.shouldRewriteLegacySettings, true);
 });
@@ -825,12 +848,14 @@ test("loaded settings resolution preserves normalized publish feature flag", () 
     const resolved = resolveLoadedSettings({
         featureFlags: {
             [FeatureFlag.publish]: true,
+            [FeatureFlag.agents]: false,
             unknown: true,
         },
-    } as PersistedPluginData, createSettings());
+    } as unknown as PersistedPluginData, createSettings());
 
     assert.deepEqual(resolved.settings.featureFlags, {
         [FeatureFlag.publish]: true,
+        [FeatureFlag.agents]: false,
     });
     assert.equal(resolved.shouldRewriteLegacySettings, true);
 });
@@ -840,6 +865,7 @@ test("feature flag storage synchronization persists through the complete plugin 
         indexHeaderImageCaption: "Keep this caption",
         featureFlags: {
             [FeatureFlag.publish]: false,
+            [FeatureFlag.agents]: false,
         },
         publishPagesProjectName: "publish-example-com",
         publishBaseUrl: "https://publish.example.com",
@@ -856,7 +882,8 @@ test("feature flag storage synchronization persists through the complete plugin 
     };
 
     await harness.controller.loadSettings();
-    await harness.controller.syncPublishFeatureFlagStorage(
+    await harness.controller.syncFeatureFlagStorage(
+        FeatureFlag.publish,
         storage,
         "aside.feature.publish.Test Vault",
     );
@@ -866,6 +893,7 @@ test("feature flag storage synchronization persists through the complete plugin 
         ...persistedSettings,
         featureFlags: {
             [FeatureFlag.publish]: true,
+            [FeatureFlag.agents]: false,
         },
     }]);
 });
@@ -876,6 +904,7 @@ test("feature flag storage synchronization preserves persisted data for absent a
             indexHeaderImageCaption: "Keep this caption",
             featureFlags: {
                 [FeatureFlag.publish]: true,
+                [FeatureFlag.agents]: false,
             },
         });
         const harness = createControllerHarness({
@@ -890,7 +919,8 @@ test("feature flag storage synchronization preserves persisted data for absent a
         };
 
         await harness.controller.loadSettings();
-        await harness.controller.syncPublishFeatureFlagStorage(
+        await harness.controller.syncFeatureFlagStorage(
+            FeatureFlag.publish,
             storage,
             "aside.feature.publish.Test Vault",
         );
@@ -905,6 +935,7 @@ test("feature flag storage synchronization restores persisted data when saving f
     const persistedSettings = createSettings({
         featureFlags: {
             [FeatureFlag.publish]: false,
+            [FeatureFlag.agents]: false,
         },
     });
     const harness = createControllerHarness({
@@ -921,7 +952,8 @@ test("feature flag storage synchronization restores persisted data when saving f
     const errors: string[] = [];
 
     await harness.controller.loadSettings();
-    await harness.controller.syncPublishFeatureFlagStorage(
+    await harness.controller.syncFeatureFlagStorage(
+        FeatureFlag.publish,
         storage,
         "aside.feature.publish.Test Vault",
         (operation) => {
@@ -933,6 +965,39 @@ test("feature flag storage synchronization restores persisted data when saving f
     assert.equal(storageValue, "false");
     assert.deepEqual(harness.savedPayloads, []);
     assert.deepEqual(errors, ["persist"]);
+});
+
+test("feature flag storage synchronization persists agents without changing publish", async () => {
+    const persistedSettings = createSettings({
+        featureFlags: {
+            [FeatureFlag.publish]: true,
+            [FeatureFlag.agents]: false,
+        },
+    });
+    const harness = createControllerHarness({ loadedData: persistedSettings });
+    let storageValue: string | null = "true";
+    const storage: FeatureFlagStorage = {
+        getItem: () => storageValue,
+        setItem: (_key, value) => {
+            storageValue = value;
+        },
+    };
+
+    await harness.controller.loadSettings();
+    await harness.controller.syncFeatureFlagStorage(
+        FeatureFlag.agents,
+        storage,
+        "aside.feature.agents.Test Vault",
+    );
+
+    assert.deepEqual(harness.getSettings().featureFlags, {
+        publish: true,
+        agents: true,
+    });
+    assert.deepEqual(harness.savedPayloads.at(-1)?.featureFlags, {
+        publish: true,
+        agents: true,
+    });
 });
 
 test("index note settings controller saves publish settings without aggregate refreshes", async () => {

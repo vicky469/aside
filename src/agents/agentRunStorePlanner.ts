@@ -9,7 +9,11 @@ import {
     type AgentRunStatus,
 } from "../core/agents/agentRuns";
 import { normalizeAgentRuntimeModePreference } from "../core/agents/agentRuntimePreferences";
-import { normalizeAgentTarget } from "../core/config/agentTargets";
+import { getSupportedAgentActors } from "../core/agents/agentActorRegistry";
+import {
+    normalizeAgentTarget,
+    type AsideAgentTarget,
+} from "../core/config/agentTargets";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return !!value && typeof value === "object" && !Array.isArray(value);
@@ -40,6 +44,15 @@ function normalizeOptionalString(value: unknown): string | undefined {
         : undefined;
 }
 
+function normalizeOptionalAgentTarget(value: unknown): AsideAgentTarget | undefined {
+    if (typeof value !== "string") {
+        return undefined;
+    }
+    const normalized = value.trim().toLowerCase();
+    return getSupportedAgentActors()
+        .find((actor) => actor.id === normalized)?.id;
+}
+
 function normalizeAgentRunRecord(value: unknown): AgentRunRecord | null {
     if (!isRecord(value)) {
         return null;
@@ -67,6 +80,10 @@ function normalizeAgentRunRecord(value: unknown): AgentRunRecord | null {
     ]);
     const usedUrls = normalizeAgentRunUrls(value.usedUrls);
     const usedToolErrors = normalizeAgentRunToolErrors(value.usedToolErrors);
+    const requestKind = value.requestKind === "create-script"
+        ? value.requestKind
+        : undefined;
+    const preferredAgent = normalizeOptionalAgentTarget(value.preferredAgent);
 
     return {
         id,
@@ -74,6 +91,8 @@ function normalizeAgentRunRecord(value: unknown): AgentRunRecord | null {
         triggerEntryId,
         filePath,
         requestedAgent: normalizeAgentTarget(value.requestedAgent),
+        ...(preferredAgent ? { preferredAgent } : {}),
+        ...(requestKind ? { requestKind } : {}),
         runtime: "direct-cli",
         status,
         promptText,

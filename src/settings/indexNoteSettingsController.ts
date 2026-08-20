@@ -4,10 +4,15 @@ import {
     type AgentRuntimeModePreference,
 } from "../core/agents/agentRuntimePreferences";
 import {
-    syncPublishFeatureFlagStorage as syncStoredPublishFeatureFlag,
+    normalizeSupportedAgentTarget,
+} from "../core/agents/agentActorRegistry";
+import type { AsideAgentTarget } from "../core/config/agentTargets";
+import {
+    syncFeatureFlagStorage as syncStoredFeatureFlag,
     type FeatureFlagStorage,
     type FeatureFlagStorageSyncOperation,
 } from "../core/config/featureFlagStorageSync";
+import type { FeatureFlagKey } from "../core/config/featureFlags";
 import {
     derivePublishBaseUrlFromProjectName,
     isDefaultPagesPublishBaseUrl,
@@ -165,12 +170,14 @@ export class IndexNoteSettingsController {
         });
     }
 
-    public async syncPublishFeatureFlagStorage(
+    public async syncFeatureFlagStorage(
+        flag: FeatureFlagKey,
         storage: FeatureFlagStorage | null,
         storageKey: string,
         onError?: (operation: FeatureFlagStorageSyncOperation, error: unknown) => void,
     ): Promise<void> {
-        await syncStoredPublishFeatureFlag({
+        await syncStoredFeatureFlag({
+            flag,
             storage,
             storageKey,
             getFeatureFlags: () => this.host.getSettings().featureFlags,
@@ -199,6 +206,10 @@ export class IndexNoteSettingsController {
 
     public getAgentRuntimeMode(): AgentRuntimeModePreference {
         return normalizeAgentRuntimeModePreference(this.host.getSettings().agentRuntimeMode);
+    }
+
+    public getDefaultAgent(): AsideAgentTarget {
+        return normalizeSupportedAgentTarget(this.host.getSettings().defaultAgent);
     }
 
     public isAllCommentsNotePath(filePath: string): boolean {
@@ -316,6 +327,20 @@ export class IndexNoteSettingsController {
         this.host.setSettings({
             ...settings,
             agentRuntimeMode: nextMode,
+        });
+        await this.saveSettings();
+    }
+
+    public async setDefaultAgent(target: AsideAgentTarget): Promise<void> {
+        const settings = this.host.getSettings();
+        const defaultAgent = normalizeSupportedAgentTarget(target);
+        if (settings.defaultAgent === defaultAgent) {
+            return;
+        }
+
+        this.host.setSettings({
+            ...settings,
+            defaultAgent,
         });
         await this.saveSettings();
     }

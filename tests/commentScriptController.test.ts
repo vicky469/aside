@@ -287,7 +287,7 @@ test("saved entry routing sends only unclaimed entries to the agent controller",
         entryId: "thread-1",
         filePath: "Folder/Note.md",
         body: "/clean",
-    }, valid.controller, {
+    }, null, valid.controller, {
         handleSavedUserEntry: async (event) => {
             validAgentEvents.push(event.entryId);
         },
@@ -307,12 +307,12 @@ test("saved entry routing sends only unclaimed entries to the agent controller",
             rejectedAgentEvents.push(event.body);
         },
     };
-    await routeSavedUserEntry(originalEvent, rejected.controller, agentController);
+    await routeSavedUserEntry(originalEvent, null, rejected.controller, agentController);
     rejected.registry.remove("🛠️ scripts/clean.mjs");
     await routeSavedUserEntry({
         ...originalEvent,
         body: "@codex after registry refresh",
-    }, rejected.controller, agentController);
+    }, null, rejected.controller, agentController);
     assert.deepEqual(rejectedAgentEvents, []);
     assert.equal(rejected.store.getRuns().length, 1);
 
@@ -323,12 +323,40 @@ test("saved entry routing sends only unclaimed entries to the agent controller",
         entryId: "ordinary-entry",
         filePath: "Folder/Note.md",
         body: "ordinary @person",
-    }, ordinary.controller, {
+    }, null, ordinary.controller, {
         handleSavedUserEntry: async (event) => {
             ordinaryAgentEvents.push(event.entryId);
         },
     });
     assert.deepEqual(ordinaryAgentEvents, ["ordinary-entry"]);
+});
+
+test("saved entry routing gives the built-in create-script command first claim", async () => {
+    const routeCalls: string[] = [];
+    const savedEvent = {
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "/create-script build a cleaner",
+    };
+
+    await routeSavedUserEntry(savedEvent, {
+        handleSavedUserEntry: async () => {
+            routeCalls.push("built-in");
+            return true;
+        },
+    }, {
+        handleSavedUserEntry: async () => {
+            routeCalls.push("script");
+            return true;
+        },
+    }, {
+        handleSavedUserEntry: async () => {
+            routeCalls.push("agent");
+        },
+    });
+
+    assert.deepEqual(routeCalls, ["built-in"]);
 });
 
 test("rejected directives persist one failed result and bypass runtime and agent fallback", async () => {

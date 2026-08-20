@@ -5,7 +5,10 @@ import { CommentManager, type Comment } from "../src/commentManager";
 import { AgentRunStore } from "../src/agents/agentRunStore";
 import { CommentAgentController } from "../src/agents/commentAgentController";
 import type { PersistedPluginData } from "../src/settings/indexNoteSettingsPlanner";
-import type { AgentRuntimeSelection } from "../src/agents/agentRuntimeSelection";
+import type {
+    AgentRuntimeSelection,
+    DefaultAgentRuntimeSelection,
+} from "../src/agents/agentRuntimeSelection";
 import type {
     AgentRuntimeInvocation,
     AgentRuntimeResult,
@@ -65,7 +68,10 @@ function createHarness(options: {
     initialComments?: Comment[];
     availableFilePaths?: string[];
     runtimeSelection?: AgentRuntimeSelection;
+    defaultRuntimeSelection?: DefaultAgentRuntimeSelection;
+    resolveDefaultAgentRuntimeSelection?: () => Promise<DefaultAgentRuntimeSelection>;
     customRunAgentRuntime?: (invocation: AgentRuntimeInvocation) => Promise<AgentRuntimeResult>;
+    agentsFeatureAvailable?: boolean;
 } = {}) {
     let persistedData: PersistedPluginData = options.initialPersistedData ?? {};
     const commentManager = new CommentManager(options.initialComments ?? [createComment()]);
@@ -83,6 +89,7 @@ function createHarness(options: {
     }> = [];
     const runtimeCalls: AgentRuntimeInvocation[] = [];
     const runtimeSelectionCalls: AsideAgentTarget[] = [];
+    let defaultRuntimeSelectionCalls = 0;
     let refreshCount = 0;
     let idCounter = 1;
     let now = 100;
@@ -179,6 +186,20 @@ function createHarness(options: {
                 ownershipMessage: `Using your local ${getAgentActorLabel(target)} setup`,
             };
         },
+        resolveDefaultAgentRuntimeSelection: async () => {
+            defaultRuntimeSelectionCalls += 1;
+            return options.resolveDefaultAgentRuntimeSelection?.()
+                ?? options.defaultRuntimeSelection
+                ?? {
+                    kind: "resolved",
+                    selectedAgent: "codex",
+                    preferredAgent: "codex",
+                    usedFallback: false,
+                    runtime: "direct-cli",
+                    modePreference: "auto",
+                };
+        },
+        isAgentsFeatureAvailable: () => options.agentsFeatureAvailable ?? true,
         showNotice: (message) => {
             notices.push(message);
         },
@@ -199,10 +220,170 @@ function createHarness(options: {
         logEntries,
         runtimeCalls,
         runtimeSelectionCalls,
+        getDefaultRuntimeSelectionCalls: () => defaultRuntimeSelectionCalls,
         getRefreshCount: () => refreshCount,
         getPersistedData: () => persistedData,
     };
 }
+
+test("disabled agent directive performs no runtime selection or launch", async () => {
+    const harness = createHarness({ agentsFeatureAvailable: false });
+
+    await harness.controller.handleSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "@codex say hi",
+    });
+
+    assert.deepEqual(harness.runtimeSelectionCalls, []);
+    assert.deepEqual(harness.runtimeCalls, []);
+    assert.deepEqual(harness.controller.getAgentRuns(), []);
+    assert.deepEqual(harness.notices, ["Agents experiment is disabled."]);
+});
+
+test("disabled create-script request performs no default-agent selection", async () => {
+    const harness = createHarness({ agentsFeatureAvailable: false });
+
+    await harness.controller.handleCreateScriptRequest({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "/create-script build a cleaner",
+    }, "build a cleaner");
+
+    assert.equal(harness.getDefaultRuntimeSelectionCalls(), 0);
+    assert.deepEqual(harness.runtimeCalls, []);
+    assert.deepEqual(harness.notices, ["Agents experiment is disabled."]);
+});
+
+test("disabled regenerate preserves the existing run without diagnostics", async () => {
+    const existingRun = {
+        id: "run-old",
+        threadId: "thread-1",
+        triggerEntryId: "thread-1",
+        filePath: "Folder/Note.md",
+        requestedAgent: "codex" as const,
+        runtime: "direct-cli" as const,
+        status: "succeeded" as const,
+        promptText: "@codex say hi",
+        createdAt: 10,
+        startedAt: 11,
+        endedAt: 12,
+    };
+    const harness = createHarness({
+        agentsFeatureAvailable: false,
+        initialPersistedData: { agentRuns: [existingRun] },
+    });
+    const runsBeforeRetry = harness.controller.getAgentRuns();
+
+    assert.equal(await harness.controller.retryRun("run-old"), false);
+    assert.deepEqual(harness.runtimeSelectionCalls, []);
+    assert.deepEqual(harness.runtimeCalls, []);
+    assert.deepEqual(harness.controller.getAgentRuns(), runsBeforeRetry);
+    assert.deepEqual(harness.notices, ["Agents experiment is disabled."]);
+});
+
+test("create-script agent request queues the preferred available agent", async () => {
+    const harness = createHarness({
+        defaultRuntimeSelection: {
+            kind: "resolved",
+            selectedAgent: "claude",
+            preferredAgent: "claude",
+            usedFallback: false,
+            runtime: "direct-cli",
+            modePreference: "auto",
+        },
+    });
+
+    await harness.controller.handleCreateScriptRequest({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "/create-script build a cleaner",
+    }, "build a cleaner");
+    await waitForAgentQueueToDrain(harness.controller);
+
+    const latestRun = harness.controller.getLatestAgentRunForThread("thread-1");
+    assert.equal(latestRun?.requestKind, "create-script");
+    assert.equal(latestRun?.preferredAgent, undefined);
+    assert.equal(latestRun?.requestedAgent, "claude");
+    assert.equal(latestRun?.promptText, "build a cleaner");
+    assert.equal(harness.runtimeCalls[0]?.requestKind, "create-script");
+});
+
+test("create-script runs from the vault root instead of a nested note or repository directory", async () => {
+    const harness = createHarness({
+        runtimeWorkingDirectory: "/vault-root/Projects/NestedRepo",
+        defaultRuntimeSelection: {
+            kind: "resolved",
+            selectedAgent: "codex",
+            preferredAgent: "codex",
+            usedFallback: false,
+            runtime: "direct-cli",
+            modePreference: "auto",
+        },
+    });
+
+    await harness.controller.handleCreateScriptRequest({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Projects/NestedRepo/Folder/Note.md",
+        body: "/create-script build a cleaner",
+    }, "build a cleaner");
+    await waitForAgentQueueToDrain(harness.controller);
+
+    assert.equal(harness.runtimeCalls[0]?.cwd, "/vault-root");
+    assert.equal(harness.runtimeCalls[0]?.vaultRootPath, "/vault-root");
+});
+
+test("create-script agent request records fallback agent metadata", async () => {
+    const harness = createHarness({
+        defaultRuntimeSelection: {
+            kind: "resolved",
+            selectedAgent: "codex",
+            preferredAgent: "gemini",
+            usedFallback: true,
+            runtime: "direct-cli",
+            modePreference: "auto",
+        },
+    });
+
+    await harness.controller.handleCreateScriptRequest({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "/create-script build a cleaner",
+    }, "build a cleaner");
+    await waitForAgentQueueToDrain(harness.controller);
+
+    const latestRun = harness.controller.getLatestAgentRunForThread("thread-1");
+    assert.equal(latestRun?.requestKind, "create-script");
+    assert.equal(latestRun?.preferredAgent, "gemini");
+    assert.equal(latestRun?.requestedAgent, "codex");
+    assert.equal(harness.runtimeCalls[0]?.requestKind, "create-script");
+});
+
+test("create-script returns immediately when no agent is available", async () => {
+    const harness = createHarness({
+        defaultRuntimeSelection: {
+            kind: "none",
+            preferredAgent: "gemini",
+        },
+    });
+
+    await harness.controller.handleCreateScriptRequest({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "/create-script build a cleaner",
+    }, "build a cleaner");
+
+    assert.equal(harness.appendedEntries[0]?.body, "No agent is available to create the script.");
+    assert.equal(harness.controller.getAgentRuns().length, 0);
+    assert.equal(harness.runtimeCalls.length, 0);
+    assert.equal(harness.getDefaultRuntimeSelectionCalls(), 1);
+});
 
 test("comment agent controller marks runs failed when runtime execution is unavailable", async () => {
     const harness = createHarness({
@@ -756,6 +937,64 @@ test("comment agent controller regenerates a specific reply run using the curren
         body: "Second reply",
     }]);
     assert.equal(harness.commentManager.getCommentById(latestRun?.outputEntryId ?? "")?.comment, "Second reply");
+});
+
+test("comment agent controller re-resolves the default fallback for create-script regenerate", async () => {
+    let selection: DefaultAgentRuntimeSelection = {
+        kind: "resolved",
+        selectedAgent: "codex",
+        preferredAgent: "gemini",
+        usedFallback: true,
+        runtime: "direct-cli",
+        modePreference: "auto",
+    };
+    let runtimeAttempt = 0;
+    const harness = createHarness({
+        initialComments: [createComment({
+            comment: "/create-script build a cleaner",
+        })],
+        resolveDefaultAgentRuntimeSelection: async () => selection,
+        customRunAgentRuntime: async () => {
+            runtimeAttempt += 1;
+            if (runtimeAttempt === 1) {
+                throw new Error("Codex failed after launch");
+            }
+            return {
+                runtime: "direct-cli",
+                replyText: "Created /cleaner.",
+            };
+        },
+    });
+
+    await harness.controller.handleCreateScriptRequest({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "/create-script build a cleaner",
+    }, "build a cleaner");
+    await waitForAgentQueueToDrain(harness.controller);
+
+    const previous = harness.controller.getLatestAgentRunForThread("thread-1");
+    assert.equal(previous?.status, "failed");
+    selection = {
+        kind: "resolved",
+        selectedAgent: "claude",
+        preferredAgent: "gemini",
+        usedFallback: true,
+        runtime: "direct-cli",
+        modePreference: "auto",
+    };
+
+    assert.equal(await harness.controller.retryRun(previous?.id ?? ""), true);
+    await waitForAgentQueueToDrain(harness.controller);
+
+    const retry = harness.controller.getLatestAgentRunForThread("thread-1");
+    assert.equal(retry?.requestKind, "create-script");
+    assert.equal(retry?.requestedAgent, "claude");
+    assert.equal(retry?.preferredAgent, "gemini");
+    assert.equal(retry?.outputEntryId, previous?.outputEntryId);
+    assert.equal(retry?.retryOfRunId, previous?.id);
+    assert.equal(harness.runtimeCalls.at(-1)?.requestKind, "create-script");
 });
 
 test("comment agent controller clears the previous retry reply before the regenerated runtime completes", async () => {
