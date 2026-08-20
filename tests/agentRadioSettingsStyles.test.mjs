@@ -8,7 +8,7 @@ const settingSource = await readFile(
     "utf8",
 );
 
-test("agent settings radio rows use compact native controls and theme states", () => {
+test("agent settings radio choices form a horizontal wrapping row", () => {
     const group = styles.match(
         /\.aside-default-agent-radio-group\s*\{(?<body>[\s\S]*?)\}/,
     );
@@ -19,12 +19,28 @@ test("agent settings radio rows use compact native controls and theme states", (
         /\.aside-default-agent-option input\[type="radio"\]\s*\{(?<body>[\s\S]*?)\}/,
     );
 
-    assert.match(group?.groups?.body ?? "", /display:\s*grid/);
-    assert.match(option?.groups?.body ?? "", /grid-template-columns/);
+    assert.match(group?.groups?.body ?? "", /display:\s*flex\s*;/);
+    assert.match(group?.groups?.body ?? "", /align-items:\s*center\s*;/);
+    assert.match(group?.groups?.body ?? "", /flex-wrap:\s*wrap\s*;/);
+    assert.match(group?.groups?.body ?? "", /row-gap:\s*var\(--size-2-1\)\s*;/);
+    assert.match(
+        group?.groups?.body ?? "",
+        /column-gap:\s*calc\(var\(--size-4-2\) \* 2\)\s*;/,
+    );
+    assert.match(option?.groups?.body ?? "", /display:\s*grid\s*;/);
+    assert.match(
+        option?.groups?.body ?? "",
+        /grid-template-columns:\s*auto auto auto\s*;/,
+    );
+    assert.match(option?.groups?.body ?? "", /flex:\s*0 0 auto\s*;/);
+    assert.match(option?.groups?.body ?? "", /white-space:\s*nowrap\s*;/);
     assert.match(radio?.groups?.body ?? "", /margin:\s*0/);
     assert.match(styles, /\.aside-default-agent-option\.is-disabled/);
     assert.match(styles, /var\(--text-muted\)/);
-    assert.match(styles, /@media\s*\(max-width:\s*600px\)/);
+    assert.doesNotMatch(
+        styles,
+        /\.aside-default-agent-option-status\s*\{[^}]*grid-column:\s*2\s*;/,
+    );
 });
 
 test("default agent settings render a labeled native radio group", () => {
@@ -43,6 +59,9 @@ test("Aside headings and default agent controls use scoped left-aligned spacing"
     const setting = styles.match(
         /\.aside-default-agent-setting\s*\{(?<body>[\s\S]*?)\}/,
     );
+    const info = styles.match(
+        /\.aside-default-agent-setting \.setting-item-info\s*\{(?<body>[\s\S]*?)\}/,
+    );
     const control = styles.match(
         /\.aside-default-agent-setting \.setting-item-control\s*\{(?<body>[\s\S]*?)\}/,
     );
@@ -58,6 +77,10 @@ test("Aside headings and default agent controls use scoped left-aligned spacing"
     assert.match(setting?.groups?.body ?? "", /flex-direction:\s*column\s*;/);
     assert.match(setting?.groups?.body ?? "", /align-items:\s*flex-start\s*;/);
     assert.match(setting?.groups?.body ?? "", /gap:\s*var\(--size-4-2\)\s*;/);
+    assert.match(info?.groups?.body ?? "", /display:\s*flex\s*;/);
+    assert.match(info?.groups?.body ?? "", /align-items:\s*baseline\s*;/);
+    assert.match(info?.groups?.body ?? "", /flex-wrap:\s*wrap\s*;/);
+    assert.match(info?.groups?.body ?? "", /max-width:\s*100%\s*;/);
     assert.match(control?.groups?.body ?? "", /flex:\s*none\s*;/);
     assert.match(control?.groups?.body ?? "", /width:\s*fit-content\s*;/);
     assert.match(control?.groups?.body ?? "", /max-width:\s*100%\s*;/);

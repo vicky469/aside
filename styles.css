@@ -1719,6 +1719,18 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
     gap: var(--size-4-2);
 }
 
+.aside-default-agent-setting .setting-item-info {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: var(--size-2-1) var(--size-4-2);
+    max-width: 100%;
+}
+
+.aside-default-agent-setting .setting-item-description {
+    min-width: 0;
+}
+
 .aside-default-agent-setting .setting-item-control {
     flex: none;
     width: fit-content;
@@ -1727,8 +1739,11 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
 }
 
 .aside-default-agent-radio-group {
-    display: grid;
-    gap: var(--size-2-1);
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    row-gap: var(--size-2-1);
+    column-gap: calc(var(--size-4-2) * 2);
     width: fit-content;
     max-width: 100%;
 }
@@ -1736,12 +1751,14 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
 .aside-default-agent-option {
     display: grid;
     grid-template-columns: auto auto auto;
+    flex: 0 0 auto;
     align-items: center;
     gap: var(--size-4-2);
     min-height: var(--input-height);
     padding: var(--size-2-1) 0;
     border-radius: var(--radius-s);
     cursor: pointer;
+    white-space: nowrap;
 }
 
 .aside-default-agent-option:hover:not(.is-disabled) {
@@ -1773,17 +1790,6 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
 
 .aside-default-agent-fallback {
     margin-top: var(--size-2-2);
-}
-
-@media (max-width: 600px) {
-    .aside-default-agent-option {
-        grid-template-columns: auto minmax(0, 1fr);
-    }
-
-    .aside-default-agent-option-status {
-        grid-column: 2;
-        white-space: normal;
-    }
 }
 
 .aside-agent-stream-content {
