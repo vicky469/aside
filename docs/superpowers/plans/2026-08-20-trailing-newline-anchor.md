@@ -16,7 +16,7 @@
 - Modify: `tests/noteCommentStorage.test.ts`
 - Modify: `tests/commentSyncPolicy.test.ts`
 
-- [ ] **Step 1: Replace the parser contract test with source-ending preservation**
+- [x] **Step 1: Replace the parser contract test with source-ending preservation**
 
 Change the first parser test to:
 
@@ -30,7 +30,7 @@ test("parseNoteComments preserves the source ending while normalizing CRLF", () 
 });
 ```
 
-- [ ] **Step 2: Import the real parser into the synchronization tests**
+- [x] **Step 2: Import the real parser into the synchronization tests**
 
 Add:
 
@@ -38,7 +38,7 @@ Add:
 import { parseNoteComments } from "../src/core/storage/noteCommentStorage";
 ```
 
-- [ ] **Step 3: Add a full-file selection regression test**
+- [x] **Step 3: Add a full-file selection regression test**
 
 Add:
 
@@ -71,7 +71,7 @@ test("syncLoadedCommentsForCurrentNote keeps a full-file trailing-newline anchor
 });
 ```
 
-- [ ] **Step 4: Add a matching false-orphan recovery regression test**
+- [x] **Step 4: Add a matching false-orphan recovery regression test**
 
 Add:
 
@@ -102,7 +102,7 @@ test("syncLoadedCommentsForCurrentNote heals a matching trailing-newline false o
 });
 ```
 
-- [ ] **Step 5: Compile and run the focused tests to verify RED**
+- [x] **Step 5: Compile and run the focused tests to verify RED**
 
 Run:
 
@@ -113,7 +113,7 @@ node --test --test-name-pattern "source ending|full-file trailing-newline|traili
 
 Expected: three failures. The parser omits `"  \n"`; both synchronization tests report `orphaned: true` because `parseNoteComments` shortened the anchor source.
 
-- [ ] **Step 6: Commit the proven failing regressions**
+- [x] **Step 6: Commit the proven failing regressions**
 
 ```bash
 git add tests/noteCommentStorage.test.ts tests/commentSyncPolicy.test.ts
@@ -125,7 +125,7 @@ git commit -m "test: reproduce trailing newline orphaning"
 **Files:**
 - Modify: `src/core/storage/noteCommentStorage.ts`
 
-- [ ] **Step 1: Implement the minimal normalization change**
+- [x] **Step 1: Implement the minimal normalization change**
 
 Change `normalizeSourceContent` to:
 
@@ -135,7 +135,7 @@ function normalizeSourceContent(noteContent: string): string {
 }
 ```
 
-- [ ] **Step 2: Re-run the focused regressions to verify GREEN**
+- [x] **Step 2: Re-run the focused regressions to verify GREEN**
 
 Run:
 
@@ -146,7 +146,7 @@ node --test --test-name-pattern "source ending|full-file trailing-newline|traili
 
 Expected: all three matching tests pass with zero failures.
 
-- [ ] **Step 3: Verify genuine missing-text anchors remain orphaned**
+- [x] **Step 3: Verify genuine missing-text anchors remain orphaned**
 
 Run:
 
@@ -156,7 +156,7 @@ node --test .test-dist/tests/noteCommentStorage.test.js .test-dist/tests/comment
 
 Expected: all parser, synchronization, resolver, and manager tests pass, including existing tests that keep absent selections orphaned.
 
-- [ ] **Step 4: Commit the production fix**
+- [x] **Step 4: Commit the production fix**
 
 ```bash
 git add src/core/storage/noteCommentStorage.ts
@@ -169,7 +169,7 @@ git commit -m "fix: preserve source endings for anchors"
 - Modify: `docs/superpowers/specs/2026-08-20-trailing-newline-anchor-design.md`
 - Modify: `docs/superpowers/plans/2026-08-20-trailing-newline-anchor.md`
 
-- [ ] **Step 1: Run the complete repository test suite**
+- [x] **Step 1: Run the complete repository test suite**
 
 ```bash
 npm test
@@ -177,7 +177,7 @@ npm test
 
 Expected: all compiled and contract tests pass with zero failures.
 
-- [ ] **Step 2: Run the production build and release-artifact guard**
+- [x] **Step 2: Run the production build and release-artifact guard**
 
 ```bash
 npm run build
@@ -185,11 +185,11 @@ npm run build
 
 Expected: lint, typecheck, Obsidian compliance, bundle, and artifact inspection pass. The exact public artifact set is `main.js`, `manifest.json`, and `styles.css`, with no source map, `sourceMappingURL`, `sourcesContent`, raw TypeScript/JSX-family sources, or secret-bearing files.
 
-- [ ] **Step 3: Update implementation tracking**
+- [x] **Step 3: Update implementation tracking**
 
 Mark the implementation and feature-branch verification items complete in the design spec and this plan. Leave integration cleanup pending until it has occurred.
 
-- [ ] **Step 4: Review the branch diff**
+- [x] **Step 4: Review the branch diff**
 
 ```bash
 git diff --check main...HEAD
