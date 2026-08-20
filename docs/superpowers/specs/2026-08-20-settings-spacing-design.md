@@ -1,7 +1,7 @@
 # Aside Settings Spacing Design
 
 **Date:** 2026-08-20
-**Status:** Approved; implementation pending
+**Status:** Implemented; frontend acceptance pending
 
 ## Implementation Tracking
 
@@ -17,16 +17,16 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Place the Default agent name and normal description on one wrapping line above the controls.
-- [ ] Change the radio group from a vertical grid to one compact, left-aligned horizontal row.
-- [ ] Keep each radio, agent name, and textual status together as one content-sized option; wrap only between options when width is constrained.
-- [ ] Preserve default-agent selection, disabled states, availability text, fallback copy, persistence, and routing behavior.
+- [x] Place the Default agent name and normal description on one wrapping line above the controls.
+- [x] Change the radio group from a vertical grid to one compact, left-aligned horizontal row.
+- [x] Keep each radio, agent name, and textual status together as one content-sized option; wrap only between options when width is constrained.
+- [x] Preserve default-agent selection, disabled states, availability text, fallback copy, persistence, and routing behavior.
 
 ### Verification
 
-- [ ] A focused stylesheet regression test proves inline wrapping setting copy, horizontal flex controls, content-sized options, and option-boundary wrapping.
-- [ ] Existing agent radio presentation, interaction, fallback, and settings-catalog tests pass unchanged.
-- [ ] The full automated suite, lint, typecheck, Obsidian compliance check, production bundle, and release artifact guard pass.
+- [x] A focused stylesheet regression test proves inline wrapping setting copy, horizontal flex controls, content-sized options, and option-boundary wrapping.
+- [x] Existing agent radio presentation, interaction, fallback, and settings-catalog tests pass unchanged.
+- [x] The full automated suite, lint, typecheck, Obsidian compliance check, production bundle, and release artifact guard pass.
 - [ ] The installed plugin is visually checked at normal and narrow settings widths for heading spacing, left alignment, vertical rhythm, and whole-option wrapping.
 
 ## Context
