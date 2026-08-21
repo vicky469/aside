@@ -693,6 +693,41 @@ test("comment mutation controller can insert appended thread entries immediately
     );
 });
 
+test("comment mutation controller can refresh an appended entry before persistence settles", async () => {
+    const existing = createComment({ id: "thread-1", comment: "Original" });
+    let releasePersist = () => {};
+    let persistStarted = false;
+    const host = createHost({
+        knownComments: [existing],
+        loadedComments: [existing],
+        persistCommentsForFile: async () => {
+            persistStarted = true;
+            await new Promise<void>((resolve) => {
+                releasePersist = resolve;
+            });
+        },
+    });
+
+    const appendPromise = host.controller.appendThreadEntry(existing.id, {
+        id: "pending-script-output",
+        body: "",
+        timestamp: 400,
+    }, {
+        insertAfterCommentId: existing.id,
+        alwaysInsertAfterTarget: true,
+        refreshBeforePersist: true,
+        skipCommentViewRefresh: true,
+    });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    assert.equal(persistStarted, true);
+    assert.equal(host.getRefreshCommentViewsCount(), 1);
+    assert.equal(host.manager.getCommentById("pending-script-output")?.comment, "");
+
+    releasePersist();
+    assert.equal(await appendPromise, true);
+});
+
 test("comment mutation controller does not dispatch edited entries to the agent hook", async () => {
     const existing = createComment({ id: "thread-1", comment: "@codex original" });
     const draft = toDraft(existing, {

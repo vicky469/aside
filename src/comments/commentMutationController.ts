@@ -28,6 +28,7 @@ type PersistOptions = {
 type AppendThreadEntryOptions = PersistOptions & {
     insertAfterCommentId?: string;
     alwaysInsertAfterTarget?: boolean;
+    refreshBeforePersist?: boolean;
 };
 
 export type SaveDraftOptions = {
@@ -484,6 +485,9 @@ export class CommentMutationController {
                 options.insertAfterCommentId,
                 "after",
             );
+        }
+        if (options.refreshBeforePersist) {
+            await this.host.refreshCommentViews({ skipDataRefresh: true });
         }
         await this.host.persistCommentsForFile(latestTarget.file, this.buildPersistOptionsForComment(latestTarget.latestComment, {
             immediateAggregateRefresh: true,
