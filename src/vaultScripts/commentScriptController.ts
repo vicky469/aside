@@ -180,10 +180,10 @@ export class CommentScriptController {
                 const message = summarizeScriptError(error);
                 await this.terminalizeFailedRun(run.id, message);
                 this.host.showNotice(message);
-                await this.host.refreshCommentViews();
+                await this.refreshCommentViewsBestEffort();
                 return true;
             }
-            await this.host.refreshCommentViews();
+            await this.refreshCommentViewsBestEffort();
             void this.enqueue(run);
             return true;
         } finally {
@@ -234,12 +234,12 @@ export class CommentScriptController {
             };
             try {
                 await this.store.addRun(next);
-                await this.host.refreshCommentViews();
             } catch {
                 this.host.showNotice(SCRIPT_RETRY_PERSIST_NOTICE);
-                await this.host.refreshCommentViews();
+                await this.refreshCommentViewsBestEffort();
                 return false;
             }
+            await this.refreshCommentViewsBestEffort();
 
             if (reusesExistingOutput && previous.outputEntryId) {
                 let cleared = false;
@@ -255,10 +255,10 @@ export class CommentScriptController {
                 if (!cleared) {
                     await this.terminalizeFailedRun(next.id, SCRIPT_RETRY_REPLACE_NOTICE);
                     this.host.showNotice(SCRIPT_RETRY_REPLACE_NOTICE);
-                    await this.host.refreshCommentViews();
+                    await this.refreshCommentViewsBestEffort();
                     return false;
                 }
-                await this.host.refreshCommentViews();
+                await this.refreshCommentViewsBestEffort();
             } else {
                 try {
                     await this.appendPendingOutput(next);
@@ -266,10 +266,10 @@ export class CommentScriptController {
                     const message = summarizeScriptError(error);
                     await this.terminalizeFailedRun(next.id, message);
                     this.host.showNotice(message);
-                    await this.host.refreshCommentViews();
+                    await this.refreshCommentViewsBestEffort();
                     return false;
                 }
-                await this.host.refreshCommentViews();
+                await this.refreshCommentViewsBestEffort();
             }
 
             await this.enqueue(next);
@@ -363,7 +363,7 @@ export class CommentScriptController {
             status: "running",
             startedAt: this.host.now(),
         }));
-        await this.host.refreshCommentViews();
+        await this.refreshCommentViewsBestEffort();
         if (!runningRun) {
             return;
         }
@@ -420,6 +420,14 @@ export class CommentScriptController {
         }));
     }
 
+    private async refreshCommentViewsBestEffort(): Promise<void> {
+        try {
+            await this.host.refreshCommentViews();
+        } catch (error) {
+            this.host.showNotice(summarizeScriptError(error));
+        }
+    }
+
     private async appendPendingOutput(run: ScriptRunRecord): Promise<void> {
         const outputEntryId = run.outputEntryId;
         if (!outputEntryId) {
@@ -468,7 +476,7 @@ export class CommentScriptController {
             await this.terminalizeFailedRun(run.id, message);
             this.host.showNotice(message);
         }
-        await this.host.refreshCommentViews();
+        await this.refreshCommentViewsBestEffort();
     }
 
     private async writeOutput(run: ScriptRunRecord, body: string): Promise<string> {

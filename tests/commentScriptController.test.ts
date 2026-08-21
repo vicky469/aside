@@ -338,6 +338,41 @@ test("a terminal refresh failure keeps a successful run and output intact", asyn
     assert.equal(harness.editedEntries.length, 1);
 });
 
+test("automatic scripts run after pending and running refresh failures", async () => {
+    const harness = createHarness({ refreshFailures: [1, 2] });
+
+    assert.equal(await harness.controller.handleSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "/clean",
+    }), true);
+    await waitForRunStatus(harness, "thread-1", "succeeded");
+
+    assert.equal(harness.runtimeCalls.length, 1);
+    assert.equal(harness.appendedEntries[0]?.body, "");
+    assert.equal(harness.editedEntries.at(-1)?.body, "Script /clean:\n\ncleaned");
+});
+
+test("retryRun continues after setup refresh failure once its run is persisted", async () => {
+    const harness = createHarness({
+        refreshFailures: [1],
+        initialRuns: [createStoredRun({
+            status: "failed",
+            outputEntryId: "missing-output",
+            error: "Interrupted",
+        })],
+    });
+
+    assert.equal(await harness.controller.retryRun("stored-run"), true);
+
+    const retry = harness.store.getRuns()[1];
+    assert.equal(retry?.status, "succeeded");
+    assert.equal(harness.runtimeCalls.length, 1);
+    assert.equal(harness.appendedEntries[0]?.entryId, retry?.outputEntryId);
+    assert.equal(harness.editedEntries.at(-1)?.body, "Script /clean:\n\ncleaned");
+});
+
 test("retryRun replaces a missing persisted output id with a new pending reply", async () => {
     const harness = createHarness({
         initialRuns: [createStoredRun({
