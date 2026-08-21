@@ -82,6 +82,7 @@ function createHarness(options: {
     editSucceeds?: boolean;
     editResults?: boolean[];
     appendSucceeds?: boolean;
+    beforeEditComment?: () => Promise<void>;
     beforePersist?: (data: PersistedPluginData) => Promise<void>;
     loadCommentsForFile?: (filePath: string) => Promise<void>;
     runVaultScript?: (invocation: VaultScriptRuntimeInvocation) => Promise<VaultScriptRuntimeResult>;
@@ -169,6 +170,7 @@ function createHarness(options: {
         },
         editComment: async (commentId, body) => {
             editedEntries.push({ id: commentId, body });
+            await options.beforeEditComment?.();
             const nextEditResult = editResults.length > 0
                 ? editResults.shift()
                 : editSucceeds;
@@ -283,6 +285,30 @@ test("accepted script edits the pending output in place when runtime fails", asy
         body: "Script /clean:\n\nbad input",
     }]);
     assert.equal(harness.appendedEntries.length, 1);
+});
+
+test("disposing during the terminal output edit keeps the run active for startup reconciliation", async () => {
+    const editStarted = createDeferred<void>();
+    const releaseEdit = createDeferred<void>();
+    const harness = createHarness({
+        beforeEditComment: async () => {
+            editStarted.resolve();
+            await releaseEdit.promise;
+        },
+    });
+
+    await harness.controller.handleSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "/clean",
+    });
+    await editStarted.promise;
+    harness.controller.dispose();
+    releaseEdit.resolve();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    assert.equal(harness.store.getRuns()[0]?.status, "running");
 });
 
 test("first saved script entry creates one durable run, process, and prefixed output", async () => {

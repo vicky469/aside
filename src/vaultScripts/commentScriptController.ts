@@ -427,6 +427,7 @@ export class CommentScriptController {
     ): Promise<void> {
         try {
             const outputEntryId = await this.writeOutput(run, body);
+            if (this.disposed) return;
             const completedRun = await this.store.updateRun(run.id, (current) => ({
                 ...current,
                 status,

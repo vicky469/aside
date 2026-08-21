@@ -1347,6 +1347,31 @@ test("renderPersistedCommentCard reruns scripts explicitly and keeps collapsed s
     assert.deepEqual(retriedAgentPrompts, []);
 });
 
+test("renderPersistedCommentCard renders queued and running script outputs with spinner statuses", async () => {
+    const thread = createThreadWithEntries({
+        entries: [
+            { id: "comment-1", body: "/clean", timestamp: 100 },
+            { id: "entry-2", body: "", timestamp: 110 },
+        ],
+    });
+
+    for (const status of ["queued", "running"] as const) {
+        const root = new FakeElement("div");
+        await renderPersistedCommentCard(root as unknown as HTMLDivElement, thread, createRenderHost({
+            showNestedComments: true,
+            threadScriptRuns: [createScriptRun({ status })],
+        }));
+
+        const statusMark = root.findAllByClass("aside-agent-run-status-mark")[0];
+        const statusElement = root.findAllByClass("aside-agent-run-status")[0];
+        assert.ok(statusMark, status);
+        assert.ok(statusElement, status);
+        assert.equal(statusMark.classList.contains("is-spinner"), true, status);
+        assert.equal(statusMark.textContent, "", status);
+        assert.equal(statusElement.getAttribute("aria-label"), `Script ${status}`, status);
+    }
+});
+
 test("getAgentRunStatusPresentation uses compact success and failure markers", () => {
     assert.deepEqual(getAgentRunStatusPresentation("succeeded"), {
         marker: "✓",
