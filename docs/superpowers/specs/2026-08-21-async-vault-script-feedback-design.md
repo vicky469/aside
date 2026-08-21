@@ -20,25 +20,25 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Append an empty script output entry immediately after persisting an accepted queued run.
-- [ ] Associate the queued run with that output entry, refresh the sidebar, and return from saved-entry routing without awaiting script completion.
-- [ ] Execute queued scripts in the background and replace their existing output entry in place on success or failure.
-- [ ] Keep rejected directives synchronous and final because they do not launch a script.
-- [ ] Split `english-to-chinese` translation work into batches of at most six paragraphs or 3,000 source characters.
-- [ ] Run at most four translation batches concurrently while preserving original paragraph order.
-- [ ] Replace the synchronous Codex subprocess call with an asynchronous, shell-free child-process adapter.
-- [ ] Render each English paragraph followed immediately by its Simplified Chinese translation, with no blank line inside the bilingual pair and normal paragraph spacing between pairs.
-- [ ] Preserve the translation script's source-change check and single atomic note write after every batch succeeds.
+- [x] Append an empty script output entry immediately after persisting an accepted queued run.
+- [x] Associate the queued run with that output entry, refresh the sidebar, and return from saved-entry routing without awaiting script completion.
+- [x] Execute queued scripts in the background and replace their existing output entry in place on success or failure.
+- [x] Keep rejected directives synchronous and final because they do not launch a script.
+- [x] Split `english-to-chinese` translation work into batches of at most six paragraphs or 3,000 source characters.
+- [x] Run at most four translation batches concurrently while preserving original paragraph order.
+- [x] Replace the synchronous Codex subprocess call with an asynchronous, shell-free child-process adapter.
+- [x] Render each English paragraph followed immediately by its Simplified Chinese translation, with no blank line inside the bilingual pair and normal paragraph spacing between pairs.
+- [x] Preserve the translation script's source-change check and single atomic note write after every batch succeeds.
 
 ### Verification
 
-- [ ] Controller tests prove the pending script reply is appended and rendered before a deferred runtime completes.
-- [ ] Controller tests prove success and failure edit the pending reply instead of appending a second result.
-- [ ] Controller tests prove saved-entry routing returns while execution is still pending and continues to bypass agent routing.
-- [ ] Translation-script tests under the vault's `🛠️ scripts/tests/` folder prove bounded concurrency, ordered results, and bilingual paragraph adjacency.
-- [ ] Existing script-controller, sidebar, routing, runtime, and translation-script tests pass.
-- [ ] The Aside build and full automated test suite pass.
-- [ ] A built-plugin smoke test confirms a pending reply appears on the first sidebar refresh after save, targeting approximately 0.2 seconds under normal local conditions.
+- [x] Controller tests prove the pending script reply is appended and rendered before a deferred runtime completes.
+- [x] Controller tests prove success and failure edit the pending reply instead of appending a second result.
+- [x] Controller tests prove saved-entry routing returns while execution is still pending and continues to bypass agent routing.
+- [x] Translation-script tests under the vault's `🛠️ scripts/tests/` folder prove bounded concurrency, ordered results, and bilingual paragraph adjacency.
+- [x] Existing script-controller, sidebar, routing, runtime, and translation-script tests pass.
+- [x] The Aside build and full automated test suite pass.
+- [x] A built-plugin smoke test confirms a pending reply appears on the first sidebar refresh after save, targeting approximately 0.2 seconds under normal local conditions.
 
 ## Goals
 
@@ -81,13 +81,13 @@ Each source paragraph and translation will form one bilingual pair:
 
 ```markdown
 English paragraph.
-Simplified Chinese paragraph.
+Simplified Chinese paragraph. <!-- aside:english-to-chinese -->
 
 Next English paragraph.
-Next Simplified Chinese paragraph.
+Next Simplified Chinese paragraph. <!-- aside:english-to-chinese -->
 ```
 
-There is no empty line between an English paragraph and its Chinese translation. Existing paragraph separation remains between bilingual pairs so adjacent source paragraphs do not collapse into one block.
+There is no empty line between an English paragraph and its Chinese translation. Existing paragraph separation remains between bilingual pairs so adjacent source paragraphs do not collapse into one block. A hidden same-line marker identifies generated translations without changing rendered Markdown spacing, so repeat runs can skip them deterministically without mistaking unrelated Chinese prose for generated output.
 
 ## Error Handling
 
@@ -104,3 +104,15 @@ Aside controller tests will use a deferred runtime promise to prove that the out
 Translation tests will remain under the active vault's `🛠️ scripts/tests/` directory. Pure injected-worker tests will prove the concurrency ceiling and input-order result assembly without launching Codex. Formatting tests will assert no blank line inside each bilingual pair and one normal separator between pairs. Existing parsing and atomic-application tests will continue to guard response shape and note integrity.
 
 The final verification will run focused tests first, then the Aside full test suite and build, followed by a built-plugin smoke test against the real vault-script directive.
+
+## Verification Evidence — 2026-08-22
+
+- `npm test` passed with 1,197 compiled TypeScript tests and 97 maintained `.mjs` tests; both groups reported zero failures.
+- `npm run build` passed its complete test, lint, typecheck, Obsidian compliance, production bundle, and release-artifact inspection pipeline.
+- The release artifact guard inspected `main.js`, `manifest.json`, and `styles.css`. A separate scan found no `main.js.map`, `sourceMappingURL`, `sourcesContent`, root raw TypeScript/JSX-family files, `.env*`, `.npmrc`, private keys, certificates, test fixtures, or local-only files in the shipped set.
+- `node --test '/Users/example/Obsidian/lean-startup/🛠️ scripts/tests/english-to-chinese.test.mjs'` passed 26 of 26 tests. These tests cover the four-worker ceiling, ordered results, child-process failure paths, batching limits, and bilingual formatting. Inspection confirmed the main flow still re-reads the source and performs one final atomic rename only after every batch succeeds.
+- A deterministic formatting probe rendered each English paragraph directly above a marked Chinese line, with one blank line only between bilingual pairs.
+- The built `main.js`, `manifest.json`, and `styles.css` were installed into `lean-startup` and matched the worktree artifacts byte-for-byte. This Obsidian CLI requires the vault selector before the command, so the verified reload command was `obsidian vault=lean-startup plugin:reload id=aside`.
+- A disposable installed-plugin smoke run used an 800 ms no-network vault script. The first sidebar refresh completed in 81.9 ms with one blank output entry, the `Script` label, and the existing spinner. The completed run reused the same output entry id, left exactly two thread entries, replaced the blank body with the final script result, and removed the spinner.
+- The smoke run stayed responsive to a second Obsidian CLI evaluation while execution was pending. The disposable note and script were moved to trash, their visible thread/sidecar state was removed, and their test-only script-run records were deleted.
+- No live `english-to-chinese` Codex invocation was performed during smoke verification, avoiding model cost and mutation of user content. Its maximum-four concurrency and output formatting are covered deterministically by the 26-test focused suite.
