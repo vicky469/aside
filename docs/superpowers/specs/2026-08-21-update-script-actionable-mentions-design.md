@@ -1,7 +1,7 @@
 # Update Script and Actionable Mentions Design
 
 **Date:** 2026-08-21
-**Status:** Approved; implementation pending
+**Status:** Implemented; frontend acceptance pending
 
 ## Implementation Tracking
 
@@ -17,26 +17,26 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Add one shared actionable-mention policy for active built-ins, supported agents, and live vault scripts.
-- [ ] Derive autocomplete, draft highlighting, persisted highlighting, and reserved vault-script names from that policy.
-- [ ] Leave unknown tokens such as `@hi` and unregistered slash names unstyled and non-actionable.
-- [ ] Add `/update-script` as a reserved built-in slash command and suggestion when Agents is enabled.
-- [ ] Parse the strict `/update-script /script-name <request>` grammar and resolve the first argument through the live vault-script registry.
-- [ ] Fast-return before agent selection when the target is missing, ambiguous, or the request is empty.
-- [ ] Queue valid update requests through the existing default-agent run pipeline with typed target-script metadata.
-- [ ] Add one shared update-script prompt contract that modifies the exact target file in place.
-- [ ] Revalidate the latest target and request when regenerating an update-script run.
-- [ ] Update compact editor guidance to mention both script-authoring commands without duplicating the actionable-name policy.
+- [x] Add one shared actionable-mention policy for active built-ins, supported agents, and live vault scripts.
+- [x] Derive autocomplete, draft highlighting, persisted highlighting, and reserved vault-script names from that policy.
+- [x] Leave unknown tokens such as `@hi` and unregistered slash names unstyled and non-actionable.
+- [x] Add `/update-script` as a reserved built-in slash command and suggestion when Agents is enabled.
+- [x] Parse the strict `/update-script /script-name <request>` grammar and resolve the first argument through the live vault-script registry.
+- [x] Fast-return before agent selection when the target is missing, ambiguous, or the request is empty.
+- [x] Queue valid update requests through the existing default-agent run pipeline with typed target-script metadata.
+- [x] Add one shared update-script prompt contract that modifies the exact target file in place.
+- [x] Revalidate the latest target and request when regenerating an update-script run.
+- [x] Update compact editor guidance to mention both script-authoring commands without duplicating the actionable-name policy.
 
 ### Verification
 
-- [ ] A red-green regression test proves `@hi` stays plain while `@todo` and enabled supported-agent directives remain highlighted.
-- [ ] Tests prove disabled agent directives and disabled script-authoring commands stay plain and are absent from autocomplete.
-- [ ] Tests prove registered vault scripts and enabled built-in slash commands are highlighted in both draft and persisted comments.
-- [ ] Parser and controller tests cover valid, empty, missing, ambiguous, misplaced, and malformed update-script inputs.
-- [ ] Agent-run, prompt, persistence, and Regenerate tests cover the exact target path and in-place update contract.
-- [ ] Existing `/create-script`, `/script-name`, `@todo`, and explicit-agent behavior remains green.
-- [ ] The full automated test suite, lint, typecheck, production bundle, and release-artifact guard pass.
+- [x] A red-green regression test proves `@hi` stays plain while `@todo` and enabled supported-agent directives remain highlighted.
+- [x] Tests prove disabled agent directives and disabled script-authoring commands stay plain and are absent from autocomplete.
+- [x] Tests prove registered vault scripts and enabled built-in slash commands are highlighted in both draft and persisted comments.
+- [x] Parser and controller tests cover valid, empty, missing, ambiguous, misplaced, and malformed update-script inputs.
+- [x] Agent-run, prompt, persistence, and Regenerate tests cover the exact target path and in-place update contract.
+- [x] Existing `/create-script`, `/script-name`, `@todo`, and explicit-agent behavior remains green.
+- [x] The full automated test suite, lint, typecheck, production bundle, and release-artifact guard pass.
 - [ ] An installed-plugin smoke test updates a real vault script from an Aside thread and then runs it successfully.
 
 ## Context
