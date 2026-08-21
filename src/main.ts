@@ -43,6 +43,7 @@ import {
 } from "./vaultScripts/commentScriptController";
 import { ScriptRunStore } from "./vaultScripts/scriptRunStore";
 import { VaultScriptRegistry } from "./vaultScripts/vaultScriptRegistry";
+import { isActionableMention as resolveActionableMention } from "./core/text/actionableMentions";
 import {
     disposeVaultScriptRuntimeProcesses,
     runVaultScript,
@@ -1231,6 +1232,14 @@ export default class Aside extends Plugin {
 
     public isRunnableVaultScriptMention(mention: string): boolean {
         return this.vaultScriptRegistry.isRunnableMention(mention);
+    }
+
+    public isActionableMention(mention: string): boolean {
+        return resolveActionableMention(mention, {
+            agentsFeatureAvailable: this.isAgentsFeatureAvailable(),
+            isRunnableVaultScriptMention: (candidate) =>
+                this.vaultScriptRegistry.isRunnableMention(candidate),
+        });
     }
 
     public getScriptRuns() {

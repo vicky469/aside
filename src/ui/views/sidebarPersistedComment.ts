@@ -25,7 +25,7 @@ import type { DraftComment } from "../../domain/drafts";
 import { normalizeCommentMarkdownForRenderWithOptions } from "../editor/commentMarkdownRendering";
 import {
     decorateRenderedCommentMentions,
-    type RunnableVaultScriptMentionPredicate,
+    type ActionableMentionPredicate,
 } from "../editor/commentEditorStyling";
 import { ASIDE_REGENERATE_ICON_ID } from "../asideIcon";
 import {
@@ -100,7 +100,7 @@ export interface SidebarPersistedCommentHost {
     activeCommentId: string | null;
     currentFilePath: string | null;
     currentUserLabel: string;
-    isRunnableVaultScriptMention: RunnableVaultScriptMentionPredicate;
+    isActionableMention: ActionableMentionPredicate;
     showSourceRedirectAction: boolean;
     showBookmarkAndPinControls: boolean;
     showDeletedComments: boolean;
@@ -738,7 +738,7 @@ async function renderThreadEntryContent(
             container,
             thread.filePath,
         );
-        decorateRenderedCommentMentions(container, host.isRunnableVaultScriptMention);
+        decorateRenderedCommentMentions(container, host.isActionableMention);
         interceptSideNoteProtocolLinks(container, thread.filePath, host);
     }
 }

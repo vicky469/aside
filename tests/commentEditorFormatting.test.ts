@@ -1,5 +1,6 @@
 import * as assert from "node:assert/strict";
 import test from "node:test";
+import { isActionableMention } from "../src/core/text/actionableMentions";
 import { continueMarkdownList, toggleMarkdownBold, toggleMarkdownHighlight } from "../src/ui/editor/commentEditorFormatting";
 import { renderStyledDraftCommentHtml } from "../src/ui/editor/commentEditorStyling";
 
@@ -182,50 +183,56 @@ test("toggleMarkdownBold wraps multiline list selections per content line", () =
     ].join("\n"));
 });
 
-test("renderStyledDraftCommentHtml keeps bold markers and highlights mentions", () => {
+const registeredScripts = new Set(["/clean-youtube-transcript"]);
+const isRecognizedMention = (mention: string) => isActionableMention(mention, {
+    agentsFeatureAvailable: true,
+    isRunnableVaultScriptMention: (candidate) => registeredScripts.has(candidate.toLowerCase()),
+});
+
+test("renderStyledDraftCommentHtml highlights only actionable at mentions", () => {
 	assert.equal(
-		renderStyledDraftCommentHtml("Hi **@todo** and @idea"),
-		"Hi **<span class=\"aside-editor-token-bold\"><span class=\"aside-editor-token-mention\">@todo</span></span>** and <span class=\"aside-editor-token-mention\">@idea</span>",
+		renderStyledDraftCommentHtml("Hi **@todo** and @codex and @hi", isRecognizedMention),
+		"Hi **<span class=\"aside-editor-token-bold\"><span class=\"aside-editor-token-mention\">@todo</span></span>** and <span class=\"aside-editor-token-mention\">@codex</span> and @hi",
 	);
 });
 
 test("renderStyledDraftCommentHtml does not treat emails as mentions", () => {
     assert.equal(
-        renderStyledDraftCommentHtml("ping foo@example.com and @teammate"),
-        "ping foo@example.com and <span class=\"aside-editor-token-mention\">@teammate</span>",
+        renderStyledDraftCommentHtml("ping foo@example.com and @teammate", isRecognizedMention),
+        "ping foo@example.com and @teammate",
     );
 });
 
 test("renderStyledDraftCommentHtml keeps html-like input inert", () => {
-    const html = renderStyledDraftCommentHtml("<script>alert(1)</script> <img src=x onerror=alert(1)> @safe");
+    const html = renderStyledDraftCommentHtml(
+        "<script>alert(1)</script> <img src=x onerror=alert(1)> @safe",
+        isRecognizedMention,
+    );
 
     assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
     assert.match(html, /&lt;img src=x onerror=alert\(1\)&gt;/);
-    assert.match(html, /<span class=\"aside-editor-token-mention\">@safe<\/span>/);
+    assert.match(html, /&gt; @safe$/u);
     assert.ok(!html.includes("<script>"));
     assert.ok(!html.includes("<img "));
 });
 
-const registeredScripts = new Set(["/clean-youtube-transcript"]);
-const isRunnableVaultScriptMention = (mention: string) => registeredScripts.has(mention.toLowerCase());
-
 test("renderStyledDraftCommentHtml highlights registered standalone slash mentions", () => {
     assert.equal(
-        renderStyledDraftCommentHtml("Run /CLEAN-YOUTUBE-TRANSCRIPT now", isRunnableVaultScriptMention),
+        renderStyledDraftCommentHtml("Run /CLEAN-YOUTUBE-TRANSCRIPT now", isRecognizedMention),
         "Run <span class=\"aside-editor-token-mention\">/CLEAN-YOUTUBE-TRANSCRIPT</span> now",
     );
 });
 
-test("renderStyledDraftCommentHtml highlights built-in create-script without registry registration", () => {
+test("renderStyledDraftCommentHtml highlights enabled script-authoring commands", () => {
     assert.equal(
-        renderStyledDraftCommentHtml("Use /create-script to build it", () => false),
-        "Use <span class=\"aside-editor-token-mention\">/create-script</span> to build it",
+        renderStyledDraftCommentHtml("Use /create-script or /update-script", isRecognizedMention),
+        "Use <span class=\"aside-editor-token-mention\">/create-script</span> or <span class=\"aside-editor-token-mention\">/update-script</span>",
     );
 });
 
 test("renderStyledDraftCommentHtml leaves unregistered slash mentions plain", () => {
     assert.equal(
-        renderStyledDraftCommentHtml("Run /missing now", isRunnableVaultScriptMention),
+        renderStyledDraftCommentHtml("Run /missing now", isRecognizedMention),
         "Run /missing now",
     );
 });
@@ -250,9 +257,9 @@ test("renderStyledDraftCommentHtml does not partially highlight paths or urls", 
     assert.equal(renderStyledDraftCommentHtml(value, acceptEveryCandidate), value);
 });
 
-test("renderStyledDraftCommentHtml keeps at mentions independent of the script registry", () => {
+test("renderStyledDraftCommentHtml leaves unsupported at mentions plain", () => {
     assert.equal(
-        renderStyledDraftCommentHtml("@todo /missing", () => false),
-        "<span class=\"aside-editor-token-mention\">@todo</span> /missing",
+        renderStyledDraftCommentHtml("@todo @hi /missing", isRecognizedMention),
+        "<span class=\"aside-editor-token-mention\">@todo</span> @hi /missing",
     );
 });

@@ -1,11 +1,10 @@
-import { RESERVED_BUILT_IN_MENTION_NAMES } from "../../core/text/actionableMentions";
 import { nodeInstanceOf } from "../domGuards";
 import {
     createDetachedObsidianElement,
     createDetachedObsidianFragment,
 } from "../dom/createDetachedObsidianElement";
 
-export type RunnableVaultScriptMentionPredicate = (mention: string) => boolean;
+export type ActionableMentionPredicate = (mention: string) => boolean;
 
 const COMMENT_MENTION_PATTERN = /(^|[^\w<])(@[A-Za-z0-9_/-]+(?:\.[A-Za-z0-9_/-]+)*)|(^|[^\w</.~:\\-])(\/[A-Za-z0-9_.-]+(?:\.[A-Za-z0-9_.-]+)*)(?![A-Za-z0-9_./-])/g;
 
@@ -16,18 +15,9 @@ interface CommentMentionMatch {
     mention: string;
 }
 
-function isSupportedSlashMention(
-    mention: string,
-    isRunnableVaultScriptMention?: RunnableVaultScriptMentionPredicate,
-): boolean {
-    const normalizedMention = mention.slice(1).toLowerCase();
-    return RESERVED_BUILT_IN_MENTION_NAMES.has(normalizedMention)
-        || Boolean(isRunnableVaultScriptMention?.(mention));
-}
-
 function getCommentMentionMatches(
     value: string,
-    isRunnableVaultScriptMention?: RunnableVaultScriptMentionPredicate,
+    isActionableMention?: ActionableMentionPredicate,
 ): CommentMentionMatch[] {
     const matches: CommentMentionMatch[] = [];
     COMMENT_MENTION_PATTERN.lastIndex = 0;
@@ -35,7 +25,7 @@ function getCommentMentionMatches(
     for (let match = COMMENT_MENTION_PATTERN.exec(value); match; match = COMMENT_MENTION_PATTERN.exec(value)) {
         const prefix = match[1] ?? match[3] ?? "";
         const mention = match[2] ?? match[4] ?? "";
-        if (mention.startsWith("/") && !isSupportedSlashMention(mention, isRunnableVaultScriptMention)) {
+        if (!isActionableMention?.(mention)) {
             continue;
         }
 
@@ -55,11 +45,11 @@ function appendMentionNodes(
     parent: Node,
     value: string,
     className: string,
-    isRunnableVaultScriptMention?: RunnableVaultScriptMentionPredicate,
+    isActionableMention?: ActionableMentionPredicate,
 ): void {
     let lastIndex = 0;
 
-    for (const match of getCommentMentionMatches(value, isRunnableVaultScriptMention)) {
+    for (const match of getCommentMentionMatches(value, isActionableMention)) {
         const { prefix, mention } = match;
         if (match.index > lastIndex) {
             parent.appendChild(document.createTextNode(value.slice(lastIndex, match.index)));
@@ -83,7 +73,7 @@ function appendMentionNodes(
 export function renderStyledDraftCommentFragment(
     document: Document,
     value: string,
-    isRunnableVaultScriptMention?: RunnableVaultScriptMentionPredicate,
+    isActionableMention?: ActionableMentionPredicate,
 ): DocumentFragment {
     const fragment = createDetachedObsidianFragment(document);
     if (!value) {
@@ -99,7 +89,7 @@ export function renderStyledDraftCommentFragment(
                 fragment,
                 value.slice(cursor),
                 "aside-editor-token-mention",
-                isRunnableVaultScriptMention,
+                isActionableMention,
             );
             break;
         }
@@ -111,7 +101,7 @@ export function renderStyledDraftCommentFragment(
                 fragment,
                 value.slice(cursor),
                 "aside-editor-token-mention",
-                isRunnableVaultScriptMention,
+                isActionableMention,
             );
             break;
         }
@@ -121,7 +111,7 @@ export function renderStyledDraftCommentFragment(
             fragment,
             value.slice(cursor, boldStart),
             "aside-editor-token-mention",
-            isRunnableVaultScriptMention,
+            isActionableMention,
         );
         fragment.append(document.createTextNode(value.slice(boldStart, boldStart + 2)));
 
@@ -132,7 +122,7 @@ export function renderStyledDraftCommentFragment(
             boldEl,
             value.slice(boldStart + 2, boldEnd),
             "aside-editor-token-mention",
-            isRunnableVaultScriptMention,
+            isActionableMention,
         );
         fragment.appendChild(boldEl);
 
@@ -154,12 +144,12 @@ function escapeHtml(value: string): string {
 
 function renderMentionHtml(
     value: string,
-    isRunnableVaultScriptMention?: RunnableVaultScriptMentionPredicate,
+    isActionableMention?: ActionableMentionPredicate,
 ): string {
     let html = "";
     let lastIndex = 0;
 
-    for (const match of getCommentMentionMatches(value, isRunnableVaultScriptMention)) {
+    for (const match of getCommentMentionMatches(value, isActionableMention)) {
         const { prefix, mention } = match;
         html += escapeHtml(value.slice(lastIndex, match.index));
         html += escapeHtml(prefix);
@@ -173,7 +163,7 @@ function renderMentionHtml(
 
 export function renderStyledDraftCommentHtml(
     value: string,
-    isRunnableVaultScriptMention?: RunnableVaultScriptMentionPredicate,
+    isActionableMention?: ActionableMentionPredicate,
 ): string {
     if (!value) {
         return "";
@@ -185,21 +175,21 @@ export function renderStyledDraftCommentHtml(
     while (cursor < value.length) {
         const boldStart = value.indexOf("**", cursor);
         if (boldStart === -1) {
-            html += renderMentionHtml(value.slice(cursor), isRunnableVaultScriptMention);
+            html += renderMentionHtml(value.slice(cursor), isActionableMention);
             break;
         }
 
         const boldEnd = value.indexOf("**", boldStart + 2);
         if (boldEnd === -1) {
-            html += renderMentionHtml(value.slice(cursor), isRunnableVaultScriptMention);
+            html += renderMentionHtml(value.slice(cursor), isActionableMention);
             break;
         }
 
-        html += renderMentionHtml(value.slice(cursor, boldStart), isRunnableVaultScriptMention);
+        html += renderMentionHtml(value.slice(cursor, boldStart), isActionableMention);
         html += escapeHtml(value.slice(boldStart, boldStart + 2));
         html += `<span class="aside-editor-token-bold">${renderMentionHtml(
             value.slice(boldStart + 2, boldEnd),
-            isRunnableVaultScriptMention,
+            isActionableMention,
         )}</span>`;
         html += escapeHtml(value.slice(boldEnd, boldEnd + 2));
         cursor = boldEnd + 2;
@@ -211,13 +201,13 @@ export function renderStyledDraftCommentHtml(
 function createMentionFragment(
     document: Document,
     value: string,
-    isRunnableVaultScriptMention?: RunnableVaultScriptMentionPredicate,
+    isActionableMention?: ActionableMentionPredicate,
 ): DocumentFragment | null {
     let lastIndex = 0;
     let foundMention = false;
     const fragment = createDetachedObsidianFragment(document);
 
-    for (const match of getCommentMentionMatches(value, isRunnableVaultScriptMention)) {
+    for (const match of getCommentMentionMatches(value, isActionableMention)) {
         const { prefix, mention } = match;
         const prefixStart = match.index;
         const mentionEnd = match.end;
@@ -251,7 +241,7 @@ function createMentionFragment(
 
 export function decorateRenderedCommentMentions(
     container: HTMLElement,
-    isRunnableVaultScriptMention?: RunnableVaultScriptMentionPredicate,
+    isActionableMention?: ActionableMentionPredicate,
 ): void {
     const document = container.ownerDocument;
     const nodeFilter = document.defaultView?.NodeFilter;
@@ -291,7 +281,7 @@ export function decorateRenderedCommentMentions(
         const fragment = createMentionFragment(
             document,
             textNode.nodeValue ?? "",
-            isRunnableVaultScriptMention,
+            isActionableMention,
         );
         if (!fragment) {
             continue;

@@ -5,7 +5,7 @@ import { canSaveDraftWithoutComment, type DraftComment } from "../../domain/draf
 import { applyDraftPasteEditToTextarea, type HtmlToMarkdownConverter } from "../editor/commentEditorPaste";
 import {
     renderStyledDraftCommentFragment,
-    type RunnableVaultScriptMentionPredicate,
+    type ActionableMentionPredicate,
 } from "../editor/commentEditorStyling";
 import { nodeInstanceOf } from "../domGuards";
 import { formatSidebarCommentMeta } from "./sidebarCommentSections";
@@ -22,7 +22,7 @@ export interface DraftCommentPresentation {
 export interface SidebarDraftCommentHost {
     activeCommentId: string | null;
     shouldPinFocusedDraftToTop: boolean;
-    isRunnableVaultScriptMention: RunnableVaultScriptMentionPredicate;
+    isActionableMention: ActionableMentionPredicate;
     isAgentsFeatureAvailable(): boolean;
     isSavingDraft(commentId: string): boolean;
     updateDraftCommentText(commentId: string, commentText: string): void;
@@ -79,8 +79,8 @@ export function buildDraftCommentPresentation(
     const newDraftPlaceholder = !agentsFeatureAvailable
         ? "Write a side note. Use B or H for styling, or type /script-name or @todo."
         : supportedAgentDirectives
-            ? `Write a side note. Use B or H for styling, or type /create-script, /script-name, @todo, ${supportedAgentDirectives}.`
-            : "Write a side note. Use B or H for styling, or type /create-script, /script-name, or @todo.";
+            ? `Write a side note. Use B or H for styling, or type /create-script, /update-script, /script-name, @todo, ${supportedAgentDirectives}.`
+            : "Write a side note. Use B or H for styling, or type /create-script, /update-script, /script-name, or @todo.";
     const classes = [
         "aside-comment-item",
         "aside-comment-draft",
@@ -293,7 +293,7 @@ function renderDraftEditor(
             preview.replaceChildren(renderStyledDraftCommentFragment(
                 preview.ownerDocument,
                 textarea.value,
-                host.isRunnableVaultScriptMention,
+                host.isActionableMention,
             ));
         }
 

@@ -66,7 +66,7 @@ function isRemotePurgeSettingVisible(context: AsideSettingCatalogContext): boole
     return isPublishingSettingVisible(context) && context.plugin.settings.publishRemotePurgeEnabled;
 }
 
-const DEFAULT_AGENT_SETTING_DESCRIPTION = "Preferred local agent for /create-script.";
+const DEFAULT_AGENT_SETTING_DESCRIPTION = "Preferred local agent for /create-script and /update-script.";
 
 export const ASIDE_SETTING_CATALOG: readonly AsideSettingCatalogEntry[] = [
     {
