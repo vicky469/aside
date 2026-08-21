@@ -4,6 +4,10 @@ import vaultScriptPolicy from "../shared/vaultScriptPolicy.js";
 
 test("parseVaultScriptPath accepts a direct runnable vault script", () => {
     assert.equal(vaultScriptPolicy.VAULT_SCRIPT_FOLDER_PATH, "🛠️ scripts");
+    assert.equal(
+        vaultScriptPolicy.VAULT_SCRIPT_TEST_FOLDER_PATH,
+        "🛠️ scripts/tests",
+    );
     assert.deepEqual(vaultScriptPolicy.VAULT_SCRIPT_EXTENSIONS, [".mjs", ".js", ".cjs"]);
     assert.equal(Object.isFrozen(vaultScriptPolicy.VAULT_SCRIPT_EXTENSIONS), true);
     assert.deepEqual(

@@ -78,6 +78,39 @@ test("buildSideNotePrompt keeps reusable scripts in the active vault script fold
     assert.match(prompt, /not (?:in )?the plugin repository's internal `scripts\/`/i);
 });
 
+test("buildSideNotePrompt gives every script-authoring path one shared test-folder rule", () => {
+    const prompts = [
+        sideNotePromptPolicy.buildSideNotePrompt({
+            promptText: "@codex add tests for a vault script",
+            rootLabel: "vault root",
+            rootPath: "/vault",
+        }),
+        sideNotePromptPolicy.buildSideNotePrompt({
+            promptText: "build a cleaner and tests",
+            rootLabel: "vault root",
+            rootPath: "/vault",
+            requestKind: "create-script",
+        }),
+        sideNotePromptPolicy.buildSideNotePrompt({
+            promptText: "add regression tests",
+            rootLabel: "vault root",
+            rootPath: "/vault",
+            requestKind: "update-script",
+            targetScriptPath: "🛠️ scripts/embed-image-urls.mjs",
+        }),
+    ];
+
+    for (const prompt of prompts) {
+        assert.match(prompt, /`🛠️ scripts\/tests\/`/u);
+        assert.match(prompt, /create that folder if needed/iu);
+        assert.match(
+            prompt,
+            /do not place `\.test\.\*` or `\.spec\.\*` files directly under `🛠️ scripts\/`/iu,
+        );
+        assert.equal(prompt.match(/`🛠️ scripts\/tests\/`/gu)?.length, 1);
+    }
+});
+
 test("buildSideNotePrompt adds the shared create-script contract only for create-script runs", () => {
     const createPrompt = sideNotePromptPolicy.buildSideNotePrompt({
         promptText: "build a cleaner",

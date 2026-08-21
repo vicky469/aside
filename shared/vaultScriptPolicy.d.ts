@@ -1,4 +1,5 @@
 export const VAULT_SCRIPT_FOLDER_PATH: "🛠️ scripts";
+export const VAULT_SCRIPT_TEST_FOLDER_PATH: "🛠️ scripts/tests";
 export const VAULT_SCRIPT_EXTENSIONS: readonly [".mjs", ".js", ".cjs"];
 
 export interface VaultScriptRegistration {

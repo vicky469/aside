@@ -1,4 +1,5 @@
 const VAULT_SCRIPT_FOLDER_PATH = "🛠️ scripts";
+const VAULT_SCRIPT_TEST_FOLDER_PATH = `${VAULT_SCRIPT_FOLDER_PATH}/tests`;
 const VAULT_SCRIPT_EXTENSIONS = Object.freeze([".mjs", ".js", ".cjs"]);
 
 const VALID_MENTION_NAME = /^[A-Za-z0-9_.-]+$/;
@@ -76,6 +77,7 @@ function collectVaultScriptRegistrations(paths) {
 
 module.exports = {
     VAULT_SCRIPT_FOLDER_PATH,
+    VAULT_SCRIPT_TEST_FOLDER_PATH,
     VAULT_SCRIPT_EXTENSIONS,
     parseVaultScriptPath,
     collectVaultScriptRegistrations,

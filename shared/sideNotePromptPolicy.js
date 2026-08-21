@@ -1,4 +1,7 @@
-const { VAULT_SCRIPT_FOLDER_PATH } = require("./vaultScriptPolicy.js");
+const {
+    VAULT_SCRIPT_FOLDER_PATH,
+    VAULT_SCRIPT_TEST_FOLDER_PATH,
+} = require("./vaultScriptPolicy.js");
 
 const SIDE_NOTE_ATTACHMENT_FOLDER = "Attachments";
 
@@ -44,6 +47,7 @@ function buildSideNotePrompt(options) {
         "Only inspect or modify the current markdown page unless the request explicitly asks for broader workspace context.",
         "If the request asks for file changes, make them directly in the workspace before replying.",
         `If the user asks for a reusable vault script, place it directly under the active vault's \`${VAULT_SCRIPT_FOLDER_PATH}/\`, not in the plugin repository's internal \`scripts/\`.`,
+        `If you create tests for a vault script, place every test under the active vault's \`${VAULT_SCRIPT_TEST_FOLDER_PATH}/\`, create that folder if needed, and do not place \`.test.*\` or \`.spec.*\` files directly under \`${VAULT_SCRIPT_FOLDER_PATH}/\` beside runnable scripts.`,
         "Do not claim that side notes were added or updated unless you actually made the change.",
         "If you cannot make the requested Aside change from this runtime, say that plainly in the reply instead of saying Done.",
         "Return only the reply text that should be appended back into the Aside thread.",
