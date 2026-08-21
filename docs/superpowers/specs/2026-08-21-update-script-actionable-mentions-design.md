@@ -33,7 +33,7 @@ Use this section as the working checklist. Mark an item done only after the code
 - [ ] A red-green regression test proves `@hi` stays plain while `@todo` and enabled supported-agent directives remain highlighted.
 - [ ] Tests prove disabled agent directives and disabled script-authoring commands stay plain and are absent from autocomplete.
 - [ ] Tests prove registered vault scripts and enabled built-in slash commands are highlighted in both draft and persisted comments.
-- [ ] Parser and controller tests cover valid, empty, missing, ambiguous, repeated, and malformed update-script inputs.
+- [ ] Parser and controller tests cover valid, empty, missing, ambiguous, misplaced, and malformed update-script inputs.
 - [ ] Agent-run, prompt, persistence, and Regenerate tests cover the exact target path and in-place update contract.
 - [ ] Existing `/create-script`, `/script-name`, `@todo`, and explicit-agent behavior remains green.
 - [ ] The full automated test suite, lint, typecheck, production bundle, and release-artifact guard pass.
@@ -185,7 +185,8 @@ When validation succeeds, the replacement run persists the newly resolved path a
 ### Command parsing and routing
 
 - Accept the exact example and preserve the full request text.
-- Reject prose before the command, missing targets, non-slash targets, empty requests, repeated command tokens, unknown targets, and ambiguous targets.
+- Reject prose before the command, missing targets, non-slash targets, empty requests, unknown targets, and ambiguous targets.
+- Preserve command-like and agent-like tokens inside the request text after the target.
 - Prove invalid inputs return before default-agent selection or runtime diagnostics.
 - Prove request text after the target is opaque to other top-level directive parsers.
 
