@@ -1,6 +1,9 @@
 import type { VaultScriptRegistration } from "../../../shared/vaultScriptPolicy.js";
-import { getSupportedAgentActors } from "../../core/agents/agentActorRegistry";
-import { CREATE_SCRIPT_DIRECTIVE } from "../../core/text/createScriptDirective";
+import {
+    getActionableBuiltInMentions,
+    RESERVED_BUILT_IN_MENTION_NAMES,
+    type ActionableBuiltInMention,
+} from "../../core/text/actionableMentions";
 import type { TextEditResult } from "./commentEditorFormatting";
 
 export interface OpenMentionQuery {
@@ -13,7 +16,7 @@ export interface OpenMentionQuery {
 export type SideNoteMentionSuggestion =
     | {
         kind: "built-in";
-        mention: "@todo" | `@${string}` | typeof CREATE_SCRIPT_DIRECTIVE;
+        mention: ActionableBuiltInMention["mention"];
         label: string;
     }
     | {
@@ -29,7 +32,7 @@ export interface MentionSuggestionPresentation {
 
 export function getMentionSuggestionPlaceholder(agentsFeatureAvailable: boolean): string {
     return agentsFeatureAvailable
-        ? "Mention an agent, todo, /create-script, or a vault script"
+        ? "Mention an agent, todo, /create-script, /update-script, or a vault script"
         : "Mention todo or a vault script";
 }
 
@@ -95,37 +98,20 @@ export function buildMentionSuggestions(
     const shouldIncludeAtBuiltIns = !normalizedRawQuery.startsWith("/");
     const shouldIncludeSlashBuiltIns = !normalizedRawQuery.startsWith("@");
     const shouldFilterBuiltInsByQuery = query.length > 0;
-    const todoBuiltIn: SideNoteMentionSuggestion = {
-        kind: "built-in",
-        mention: "@todo",
-        label: "Todo",
-    };
-    const agentBuiltIns: SideNoteMentionSuggestion[] = getSupportedAgentActors().map((actor) => ({
-            kind: "built-in" as const,
-            mention: actor.directive,
-            label: actor.label,
+    const builtInCandidates: SideNoteMentionSuggestion[] = getActionableBuiltInMentions(
+        agentsFeatureAvailable,
+    )
+        .filter((item) => item.mention.startsWith("@")
+            ? shouldIncludeAtBuiltIns
+            : shouldIncludeSlashBuiltIns)
+        .map((item) => ({
+            kind: "built-in",
+            mention: item.mention,
+            label: item.label,
         }));
-    const createScriptBuiltIn: SideNoteMentionSuggestion = {
-        kind: "built-in",
-        mention: CREATE_SCRIPT_DIRECTIVE,
-        label: "Create script",
-    };
-    const atBuiltIns = [
-        todoBuiltIn,
-        ...(agentsFeatureAvailable ? agentBuiltIns : []),
-    ];
-    const slashBuiltIns = agentsFeatureAvailable ? [createScriptBuiltIn] : [];
-    const allBuiltIns = [todoBuiltIn, ...agentBuiltIns, createScriptBuiltIn];
-    const reservedMentionNames = new Set(
-        allBuiltIns.map((suggestion) => suggestion.mention.slice(1).toLowerCase()),
-    );
-    const builtInCandidates = [
-        ...(shouldIncludeAtBuiltIns ? atBuiltIns : []),
-        ...(shouldIncludeSlashBuiltIns ? slashBuiltIns : []),
-    ];
     const scriptCandidates = shouldIncludeScripts
         ? scripts
-            .filter((script) => !reservedMentionNames.has(script.normalizedMentionName))
+            .filter((script) => !RESERVED_BUILT_IN_MENTION_NAMES.has(script.normalizedMentionName))
             .map((script) => {
                 const mention: `/${string}` = `/${script.mentionName}`;
                 return {

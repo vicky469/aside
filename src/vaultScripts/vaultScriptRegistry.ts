@@ -3,22 +3,11 @@ import {
     parseVaultScriptPath,
     VaultScriptRegistration,
 } from "../../shared/vaultScriptPolicy";
-import { getSupportedAgentActors } from "../core/agents/agentActorRegistry";
-import { RESERVED_BUILT_IN_SLASH_MENTION_NAMES } from "../core/text/createScriptDirective";
+import { RESERVED_BUILT_IN_MENTION_NAMES } from "../core/text/actionableMentions";
 
 function normalizeMention(mention: string): string {
     return mention.trim().toLowerCase().replace(/^[@/]/, "");
 }
-
-function normalizeAgentDirective(directive: string): string {
-    return directive.trim().toLowerCase().replace(/^@/, "");
-}
-
-const RESERVED_MENTION_NAMES = new Set([
-    "todo",
-    ...RESERVED_BUILT_IN_SLASH_MENTION_NAMES,
-    ...getSupportedAgentActors().map((actor) => normalizeAgentDirective(actor.directive)),
-]);
 
 export class VaultScriptRegistry {
     private paths = new Set<string>();
@@ -91,10 +80,10 @@ export class VaultScriptRegistry {
     private rebuild(): void {
         const collection = collectVaultScriptRegistrations(this.paths);
         this.runnableScripts = collection.runnable.filter(
-            (registration) => !RESERVED_MENTION_NAMES.has(registration.normalizedMentionName),
+            (registration) => !RESERVED_BUILT_IN_MENTION_NAMES.has(registration.normalizedMentionName),
         );
         this.ambiguousMentionNames = collection.ambiguousMentionNames.filter(
-            (mentionName) => !RESERVED_MENTION_NAMES.has(mentionName),
+            (mentionName) => !RESERVED_BUILT_IN_MENTION_NAMES.has(mentionName),
         );
     }
 

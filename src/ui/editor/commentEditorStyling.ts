@@ -1,4 +1,4 @@
-import { RESERVED_BUILT_IN_SLASH_MENTION_NAMES } from "../../core/text/createScriptDirective";
+import { RESERVED_BUILT_IN_MENTION_NAMES } from "../../core/text/actionableMentions";
 import { nodeInstanceOf } from "../domGuards";
 import {
     createDetachedObsidianElement,
@@ -21,7 +21,7 @@ function isSupportedSlashMention(
     isRunnableVaultScriptMention?: RunnableVaultScriptMentionPredicate,
 ): boolean {
     const normalizedMention = mention.slice(1).toLowerCase();
-    return RESERVED_BUILT_IN_SLASH_MENTION_NAMES.has(normalizedMention)
+    return RESERVED_BUILT_IN_MENTION_NAMES.has(normalizedMention)
         || Boolean(isRunnableVaultScriptMention?.(mention));
 }
 
