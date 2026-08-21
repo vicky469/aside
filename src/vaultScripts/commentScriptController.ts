@@ -29,7 +29,12 @@ export interface CommentScriptHost {
     appendThreadEntry(
         threadId: string,
         entry: { id: string; body: string; timestamp: number },
-        options?: { insertAfterCommentId?: string; skipCommentViewRefresh?: boolean },
+        options?: {
+            insertAfterCommentId?: string;
+            alwaysInsertAfterTarget?: boolean;
+            refreshBeforePersist?: boolean;
+            skipCommentViewRefresh?: boolean;
+        },
     ): Promise<boolean>;
     editComment(
         commentId: string,
@@ -169,7 +174,17 @@ export class CommentScriptController {
 
             const run = this.buildQueuedRun(event, resolution);
             await this.store.addRun(run);
-            await this.enqueue(run);
+            try {
+                await this.appendPendingOutput(run);
+            } catch (error) {
+                const message = summarizeScriptError(error);
+                await this.terminalizeFailedRun(run.id, message);
+                this.host.showNotice(message);
+                await this.host.refreshCommentViews();
+                return true;
+            }
+            await this.host.refreshCommentViews();
+            void this.enqueue(run);
             return true;
         } finally {
             this.claimingSavedEntryIds.delete(event.entryId);
@@ -261,6 +276,7 @@ export class CommentScriptController {
             status: "queued",
             promptText: event.body,
             createdAt: this.host.now(),
+            outputEntryId: this.host.createRunId(),
         };
     }
 
@@ -287,11 +303,21 @@ export class CommentScriptController {
 
     private enqueue(run: ScriptRunRecord): Promise<void> {
         const execution = this.executionQueue.then(() => this.execute(run));
-        this.executionQueue = execution.then(
+        const recovered = execution.catch(async (error) => {
+            if (this.disposed) return;
+            const message = summarizeScriptError(error);
+            await this.finishRun(
+                run,
+                "failed",
+                formatScriptResult(run.mentionName, message),
+                message,
+            );
+        });
+        this.executionQueue = recovered.then(
             () => undefined,
             () => undefined,
         );
-        return execution;
+        return recovered;
     }
 
     private async execute(run: ScriptRunRecord): Promise<void> {
@@ -299,22 +325,33 @@ export class CommentScriptController {
             return;
         }
         if (!this.isRunScriptCurrent(run)) {
-            await this.terminalizeFailedRun(run.id, SCRIPT_CHANGED_BEFORE_EXECUTION_ERROR);
-            await this.host.refreshCommentViews();
+            await this.finishRun(
+                run,
+                "failed",
+                formatScriptResult(run.mentionName, SCRIPT_CHANGED_BEFORE_EXECUTION_ERROR),
+                SCRIPT_CHANGED_BEFORE_EXECUTION_ERROR,
+            );
             return;
         }
-        await this.store.updateRun(run.id, (current) => ({
+        const runningRun = await this.store.updateRun(run.id, (current) => ({
             ...current,
             status: "running",
             startedAt: this.host.now(),
         }));
         await this.host.refreshCommentViews();
+        if (!runningRun) {
+            return;
+        }
         if (this.disposed) {
             return;
         }
-        if (!this.isRunScriptCurrent(run)) {
-            await this.terminalizeFailedRun(run.id, SCRIPT_CHANGED_BEFORE_EXECUTION_ERROR);
-            await this.host.refreshCommentViews();
+        if (!this.isRunScriptCurrent(runningRun)) {
+            await this.finishRun(
+                runningRun,
+                "failed",
+                formatScriptResult(runningRun.mentionName, SCRIPT_CHANGED_BEFORE_EXECUTION_ERROR),
+                SCRIPT_CHANGED_BEFORE_EXECUTION_ERROR,
+            );
             return;
         }
 
@@ -328,41 +365,21 @@ export class CommentScriptController {
             }
             const result = await this.host.runVaultScript({
                 vaultRootPath,
-                scriptPath: run.scriptPath,
-                notePath: run.filePath,
+                scriptPath: runningRun.scriptPath,
+                notePath: runningRun.filePath,
             });
             status = "succeeded";
-            body = formatScriptResult(run.mentionName, result.stdout);
+            body = formatScriptResult(runningRun.mentionName, result.stdout);
         } catch (error) {
             runtimeError = summarizeScriptError(error);
             status = "failed";
-            body = formatScriptResult(run.mentionName, runtimeError);
+            body = formatScriptResult(runningRun.mentionName, runtimeError);
         }
         if (this.disposed) {
             return;
         }
 
-        try {
-            const outputEntryId = await this.writeOutput(
-                run,
-                body,
-            );
-            if (this.disposed) {
-                return;
-            }
-            await this.store.updateRun(run.id, (current) => ({
-                ...current,
-                status,
-                endedAt: this.host.now(),
-                outputEntryId,
-                error: runtimeError,
-            }));
-        } catch (outputError) {
-            const message = summarizeScriptError(outputError);
-            await this.terminalizeFailedRun(run.id, message);
-            this.host.showNotice(message);
-        }
-        await this.host.refreshCommentViews();
+        await this.finishRun(runningRun, status, body, runtimeError);
     }
 
     private isRunScriptCurrent(run: ScriptRunRecord): boolean {
@@ -376,6 +393,56 @@ export class CommentScriptController {
             endedAt: this.host.now(),
             error,
         }));
+    }
+
+    private async appendPendingOutput(run: ScriptRunRecord): Promise<void> {
+        const outputEntryId = run.outputEntryId;
+        if (!outputEntryId) {
+            throw new Error("Unable to save the vault script result.");
+        }
+        const appended = await this.host.appendThreadEntry(
+            run.threadId,
+            {
+                id: outputEntryId,
+                body: "",
+                timestamp: this.host.now(),
+            },
+            {
+                insertAfterCommentId: run.triggerEntryId,
+                alwaysInsertAfterTarget: true,
+                refreshBeforePersist: true,
+                skipCommentViewRefresh: true,
+            },
+        );
+        if (!appended) {
+            throw new Error("Unable to save the vault script result.");
+        }
+    }
+
+    private async finishRun(
+        run: ScriptRunRecord,
+        status: "succeeded" | "failed",
+        body: string,
+        error?: string,
+    ): Promise<void> {
+        try {
+            const outputEntryId = await this.writeOutput(run, body);
+            const completedRun = await this.store.updateRun(run.id, (current) => ({
+                ...current,
+                status,
+                endedAt: this.host.now(),
+                outputEntryId,
+                error,
+            }));
+            if (!completedRun) {
+                return;
+            }
+        } catch (outputError) {
+            const message = summarizeScriptError(outputError);
+            await this.terminalizeFailedRun(run.id, message);
+            this.host.showNotice(message);
+        }
+        await this.host.refreshCommentViews();
     }
 
     private async writeOutput(run: ScriptRunRecord, body: string): Promise<string> {

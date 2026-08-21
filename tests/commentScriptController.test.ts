@@ -46,6 +46,34 @@ function createStoredRun(overrides: Partial<ScriptRunRecord> = {}): ScriptRunRec
     };
 }
 
+function createDeferred<T>() {
+    let resolve = (_value: T) => {};
+    let reject = (_error: unknown) => {};
+    const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+        resolve = resolvePromise;
+        reject = rejectPromise;
+    });
+    return { promise, resolve, reject };
+}
+
+async function waitForCondition(predicate: () => boolean): Promise<void> {
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+        if (predicate()) return;
+        await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+    throw new Error("Timed out waiting for script controller state.");
+}
+
+async function waitForRunStatus(
+    harness: ReturnType<typeof createHarness>,
+    triggerEntryId: string,
+    status: ScriptRunRecord["status"],
+): Promise<void> {
+    await waitForCondition(() => harness.store.getRuns().some((run) => (
+        run.triggerEntryId === triggerEntryId && run.status === status
+    )));
+}
+
 function createHarness(options: {
     scripts?: string[];
     comments?: Comment[];
@@ -84,6 +112,8 @@ function createHarness(options: {
         entryId: string;
         body: string;
         insertAfterCommentId?: string;
+        alwaysInsertAfterTarget?: boolean;
+        refreshBeforePersist?: boolean;
     }> = [];
     const editedEntries: Array<{ id: string; body: string }> = [];
     const loadedFilePaths: string[] = [];
@@ -112,12 +142,22 @@ function createHarness(options: {
                 ...(appendOptions?.insertAfterCommentId
                     ? { insertAfterCommentId: appendOptions.insertAfterCommentId }
                     : {}),
+                ...(appendOptions?.alwaysInsertAfterTarget
+                    ? { alwaysInsertAfterTarget: appendOptions.alwaysInsertAfterTarget }
+                    : {}),
+                ...(appendOptions?.refreshBeforePersist
+                    ? { refreshBeforePersist: appendOptions.refreshBeforePersist }
+                    : {}),
             });
             if (!appendSucceeds) {
                 return false;
             }
             commentManager.appendEntry(threadId, entry);
-            if (appendOptions?.insertAfterCommentId && appendOptions.insertAfterCommentId !== threadId) {
+            if (
+                appendOptions?.insertAfterCommentId
+                && (appendOptions.alwaysInsertAfterTarget
+                    || appendOptions.insertAfterCommentId !== threadId)
+            ) {
                 commentManager.reorderThreadEntries(
                     threadId,
                     entry.id,
@@ -176,6 +216,75 @@ function createHarness(options: {
     };
 }
 
+test("accepted script creates a durable pending output before background execution", async () => {
+    const runtime = createDeferred<VaultScriptRuntimeResult>();
+    const harness = createHarness({ runVaultScript: async () => runtime.promise });
+    const event = {
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "please /clean",
+    };
+
+    let handledResult: boolean | undefined;
+    const handled = harness.controller.handleSavedUserEntry(event).then((result) => {
+        handledResult = result;
+        return result;
+    });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    assert.equal(handledResult, true);
+    assert.equal(harness.appendedEntries.length, 1);
+    assert.equal(harness.appendedEntries[0]?.body, "");
+    assert.equal(harness.appendedEntries[0]?.alwaysInsertAfterTarget, true);
+    assert.equal(harness.appendedEntries[0]?.refreshBeforePersist, true);
+    assert.deepEqual(harness.editedEntries, []);
+    const pendingRun = harness.store.getRuns()[0];
+    assert.equal(pendingRun?.outputEntryId, harness.appendedEntries[0]?.entryId);
+    assert.ok(pendingRun?.status === "queued" || pendingRun?.status === "running");
+
+    runtime.resolve({ stdout: "cleaned", stderr: "" });
+    await waitForRunStatus(harness, "thread-1", "succeeded");
+    assert.equal(await handled, true);
+
+    assert.equal(harness.editedEntries.length, 1);
+    assert.deepEqual(harness.editedEntries[0], {
+        id: pendingRun?.outputEntryId,
+        body: "Script /clean:\n\ncleaned",
+    });
+    assert.equal(harness.appendedEntries.length, 1);
+});
+
+test("accepted script edits the pending output in place when runtime fails", async () => {
+    const runtime = createDeferred<VaultScriptRuntimeResult>();
+    const harness = createHarness({ runVaultScript: async () => runtime.promise });
+
+    let handledResult: boolean | undefined;
+    const handled = harness.controller.handleSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "/clean",
+    }).then((result) => {
+        handledResult = result;
+        return result;
+    });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    assert.equal(handledResult, true);
+    assert.equal(harness.appendedEntries[0]?.body, "");
+    const pendingRun = harness.store.getRuns()[0];
+    runtime.reject(Object.assign(new Error("Command failed"), { stderr: "bad input" }));
+    await waitForRunStatus(harness, "thread-1", "failed");
+    assert.equal(await handled, true);
+
+    assert.deepEqual(harness.editedEntries, [{
+        id: pendingRun?.outputEntryId,
+        body: "Script /clean:\n\nbad input",
+    }]);
+    assert.equal(harness.appendedEntries.length, 1);
+});
+
 test("first saved script entry creates one durable run, process, and prefixed output", async () => {
     const harness = createHarness();
     const event = {
@@ -186,6 +295,7 @@ test("first saved script entry creates one durable run, process, and prefixed ou
     };
 
     assert.equal(await harness.controller.handleSavedUserEntry(event), true);
+    await waitForRunStatus(harness, "thread-1", "succeeded");
     harness.registry.remove("🛠️ scripts/clean.mjs");
     assert.equal(await harness.controller.handleSavedUserEntry(event), true);
 
@@ -197,9 +307,10 @@ test("first saved script entry creates one durable run, process, and prefixed ou
     });
     assert.equal(harness.appendedEntries.length, 1);
     assert.equal(harness.appendedEntries[0]?.insertAfterCommentId, "thread-1");
-    assert.equal(harness.appendedEntries[0]?.body, "Script /clean:\n\ncleaned");
+    assert.equal(harness.appendedEntries[0]?.body, "");
     assert.deepEqual(harness.store.getRuns().map((run) => run.status), ["succeeded"]);
     assert.equal(harness.store.getRuns()[0]?.outputEntryId, harness.appendedEntries[0]?.entryId);
+    assert.equal(harness.editedEntries.at(-1)?.body, "Script /clean:\n\ncleaned");
 });
 
 test("output append failure terminalizes the run without retrying the broken write path", async () => {
@@ -213,13 +324,13 @@ test("output append failure terminalizes the run without retrying the broken wri
     }), true);
 
     const run = harness.store.getRuns()[0];
-    assert.equal(harness.runtimeCalls.length, 1);
+    assert.equal(harness.runtimeCalls.length, 0);
     assert.equal(harness.appendedEntries.length, 1);
     assert.equal(run?.status, "failed");
     assert.equal(run?.error, "Unable to save the vault script result.");
     assert.equal(typeof run?.endedAt, "number");
     assert.deepEqual(harness.notices, ["Unable to save the vault script result."]);
-    assert.equal(harness.getRefreshCount(), 2);
+    assert.equal(harness.getRefreshCount(), 1);
 });
 
 test("script output handles empty success, truncation, and concise stderr failures", async () => {
@@ -232,7 +343,9 @@ test("script output handles empty success, truncation, and concise stderr failur
         filePath: "Folder/Note.md",
         body: "/clean",
     });
-    assert.equal(empty.appendedEntries[0]?.body, "Script /clean:\n\nCompleted.");
+    await waitForRunStatus(empty, "thread-1", "succeeded");
+    assert.equal(empty.appendedEntries[0]?.body, "");
+    assert.equal(empty.editedEntries.at(-1)?.body, "Script /clean:\n\nCompleted.");
 
     const longOutput = Array.from({ length: 260 }, (_, index) => `word-${index}`).join(" ");
     const truncated = createHarness({
@@ -244,8 +357,9 @@ test("script output handles empty success, truncation, and concise stderr failur
         filePath: "Folder/Note.md",
         body: "/clean",
     });
-    assert.match(truncated.appendedEntries[0]?.body ?? "", /word-249\n\n\[output truncated\]$/u);
-    assert.doesNotMatch(truncated.appendedEntries[0]?.body ?? "", /word-250/u);
+    await waitForRunStatus(truncated, "thread-1", "succeeded");
+    assert.match(truncated.editedEntries.at(-1)?.body ?? "", /word-249\n\n\[output truncated\]$/u);
+    assert.doesNotMatch(truncated.editedEntries.at(-1)?.body ?? "", /word-250/u);
 
     const processError = Object.assign(new Error("Command failed with a very noisy stack"), {
         stderr: " bad input\ncheck options ",
@@ -259,9 +373,10 @@ test("script output handles empty success, truncation, and concise stderr failur
         filePath: "Folder/Note.md",
         body: "/clean",
     });
+    await waitForRunStatus(failed, "thread-1", "failed");
     assert.equal(failed.store.getRuns()[0]?.status, "failed");
     assert.equal(failed.store.getRuns()[0]?.error, "bad input check options");
-    assert.equal(failed.appendedEntries[0]?.body, "Script /clean:\n\nbad input check options");
+    assert.equal(failed.editedEntries.at(-1)?.body, "Script /clean:\n\nbad input check options");
 
     const blankStderr = createHarness({
         runVaultScript: async () => Promise.reject(Object.assign(
@@ -275,8 +390,9 @@ test("script output handles empty success, truncation, and concise stderr failur
         filePath: "Folder/Note.md",
         body: "/clean",
     });
+    await waitForRunStatus(blankStderr, "thread-1", "failed");
     assert.equal(blankStderr.store.getRuns()[0]?.error, "Command failed");
-    assert.equal(blankStderr.appendedEntries[0]?.body, "Script /clean:\n\nCommand failed");
+    assert.equal(blankStderr.editedEntries.at(-1)?.body, "Script /clean:\n\nCommand failed");
 });
 
 test("saved entry routing sends only unclaimed entries to the agent controller", async () => {
@@ -437,10 +553,12 @@ test("script processes execute serially", async () => {
     await new Promise<void>((resolve) => setImmediate(resolve));
 
     assert.equal(harness.runtimeCalls.length, 1);
-    assert.equal(harness.store.getRuns().find((run) => run.id === "script-generated-1")?.status, "running");
-    assert.equal(harness.store.getRuns().find((run) => run.id === "script-generated-2")?.status, "queued");
+    assert.equal(harness.store.getRuns().find((run) => run.triggerEntryId === "thread-1")?.status, "running");
+    assert.equal(harness.store.getRuns().find((run) => run.triggerEntryId === "thread-2")?.status, "queued");
     releaseFirst();
     await Promise.all([first, second]);
+    await waitForRunStatus(harness, "thread-1", "succeeded");
+    await waitForRunStatus(harness, "thread-2", "succeeded");
     assert.equal(harness.runtimeCalls.length, 2);
 });
 
@@ -479,6 +597,8 @@ test("queued automatic execution revalidates its script against the live registr
     harness.registry.upsert("🛠️ scripts/Other-Script.cjs");
     releaseFirst();
     await Promise.all([first, second]);
+    await waitForRunStatus(harness, "thread-1", "succeeded");
+    await waitForRunStatus(harness, "thread-2", "failed");
 
     assert.equal(harness.runtimeCalls.length, 1);
     const secondRun = harness.store.getRuns().find((run) => run.triggerEntryId === "thread-2");
@@ -505,6 +625,7 @@ test("automatic execution revalidates again after persisting running state", asy
         filePath: "Folder/Note.md",
         body: "/clean",
     });
+    await waitForRunStatus(harness, "thread-1", "failed");
 
     assert.equal(harness.runtimeCalls.length, 0);
     const run = harness.store.getRuns()[0];
@@ -520,6 +641,7 @@ test("retryRun reuses output and reloads the latest trigger, thread, note, and s
         filePath: "Folder/Note.md",
         body: "/clean",
     });
+    await waitForRunStatus(harness, "thread-1", "succeeded");
     const previous = harness.store.getRuns()[0];
     assert.ok(previous?.outputEntryId);
     harness.commentManager.renameFile("Folder/Note.md", "Renamed.md");
@@ -541,6 +663,7 @@ test("retryRun reuses output and reloads the latest trigger, thread, note, and s
         notePath: "Renamed.md",
     });
     assert.deepEqual(harness.editedEntries.map((entry) => entry.body), [
+        "Script /clean:\n\ncleaned",
         "",
         "Script /clean:\n\ncleaned",
     ]);
@@ -575,14 +698,16 @@ test("retryRun persists before clearing and leaves old output visible when persi
         filePath: "Folder/Note.md",
         body: "/clean",
     });
+    await waitForRunStatus(harness, "thread-1", "succeeded");
     const previous = harness.store.getRuns()[0];
     const previousOutput = harness.commentManager.getCommentById(previous.outputEntryId ?? "")?.comment;
+    const editCountBeforeRetry = harness.editedEntries.length;
     harness.failNextPersist();
 
     assert.equal(await harness.controller.retryRun(previous.id), false);
 
     assert.equal(harness.store.getRuns().length, 1);
-    assert.deepEqual(harness.editedEntries, []);
+    assert.deepEqual(harness.editedEntries.slice(editCountBeforeRetry), []);
     assert.equal(
         harness.commentManager.getCommentById(previous.outputEntryId ?? "")?.comment,
         previousOutput,
@@ -598,6 +723,7 @@ test("retryRun terminalizes a durable retry when clearing the old output fails",
         filePath: "Folder/Note.md",
         body: "/clean",
     });
+    await waitForRunStatus(harness, "thread-1", "succeeded");
     const previous = harness.store.getRuns()[0];
     const previousOutput = harness.commentManager.getCommentById(previous.outputEntryId ?? "")?.comment;
     harness.setEditSucceeds(false);
@@ -624,7 +750,9 @@ test("retry output clear failure terminalizes once without retrying the edit", a
         filePath: "Folder/Note.md",
         body: "/clean",
     });
+    await waitForRunStatus(harness, "thread-1", "succeeded");
     const previous = harness.store.getRuns()[0];
+    const editCountBeforeRetry = harness.editedEntries.length;
     harness.setEditResults([false]);
 
     assert.equal(await harness.controller.retryRun(previous.id), false);
@@ -633,7 +761,7 @@ test("retry output clear failure terminalizes once without retrying the edit", a
     assert.equal(retry?.status, "failed");
     assert.equal(retry?.error, "Unable to replace the previous script result.");
     assert.equal(harness.runtimeCalls.length, 1);
-    assert.equal(harness.editedEntries.length, 1);
+    assert.equal(harness.editedEntries.length - editCountBeforeRetry, 1);
     assert.deepEqual(harness.notices, ["Unable to replace the previous script result."]);
 });
 
@@ -678,7 +806,7 @@ test("dispose leaves active receipts for startup reconciliation without launchin
     assert.equal(harness.runtimeCalls.length, 1);
     assert.equal(firstRun?.status, "running");
     assert.equal(secondRun?.status, "queued");
-    assert.equal(harness.appendedEntries.length, 0);
+    assert.equal(harness.appendedEntries.length, 2);
 });
 
 test("retryRun refuses busy, missing-script, and missing-trigger runs without runtime dispatch", async () => {
