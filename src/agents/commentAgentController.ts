@@ -1,4 +1,5 @@
 import type { TFile } from "obsidian";
+import type { VaultScriptRegistration } from "../../shared/vaultScriptPolicy.js";
 import type { CommentManager } from "../commentManager";
 import {
     cloneAgentRunStreamState,
@@ -25,6 +26,11 @@ import {
     CREATE_SCRIPT_USAGE,
     parseCreateScriptDirective,
 } from "../core/text/createScriptDirective";
+import {
+    UPDATE_SCRIPT_NO_AGENT,
+    UPDATE_SCRIPT_USAGE,
+    parseUpdateScriptDirective,
+} from "../core/text/updateScriptDirective";
 import { AgentRunStore } from "./agentRunStore";
 import {
     extractAgentAnnotationProposals,
@@ -92,6 +98,7 @@ export interface CommentAgentHost {
         cwd: string;
         vaultRootPath?: string | null;
         requestKind?: AgentRunRequestKind;
+        targetScriptPath?: string;
         onPartialText?: (partialText: string) => void;
         onProgressText?: (progressText: string) => void;
         onRunMetadata?: (metadata: AgentRunMetadata) => void;
@@ -99,6 +106,7 @@ export interface CommentAgentHost {
     }): Promise<AgentRuntimeResponse>;
     resolveAgentRuntimeSelection(target: AsideAgentTarget): Promise<AgentRuntimeSelection>;
     resolveDefaultAgentRuntimeSelection(): Promise<DefaultAgentRuntimeSelection>;
+    resolveVaultScriptMention(mention: string): VaultScriptRegistration | null;
     isAgentsFeatureAvailable(): boolean;
     showNotice(message: string): void;
     log?(level: "info" | "warn" | "error", area: string, event: string, payload?: Record<string, unknown>): Promise<void>;
@@ -313,6 +321,41 @@ export class CommentAgentController {
         this.logBuiltInAsideSkillSelected(run, event.entryId);
     }
 
+    public async handleUpdateScriptRequest(
+        event: SavedUserEntryEvent,
+        requestText: string,
+        targetScript: VaultScriptRegistration,
+    ): Promise<void> {
+        if (!this.host.isAgentsFeatureAvailable()) {
+            this.host.showNotice(AGENTS_EXPERIMENT_DISABLED_NOTICE);
+            return;
+        }
+        if (getLatestAgentRunForTriggerEntry(this.store.getRuns(), event.entryId)) {
+            return;
+        }
+
+        const selection = await this.host.resolveDefaultAgentRuntimeSelection();
+        if (selection.kind === "none") {
+            await this.appendCommandReply(event, UPDATE_SCRIPT_NO_AGENT);
+            return;
+        }
+
+        const run = this.buildQueuedRun({
+            threadId: event.threadId,
+            triggerEntryId: event.entryId,
+            filePath: event.filePath,
+            requestedAgent: selection.selectedAgent,
+            ...(selection.usedFallback ? { preferredAgent: selection.preferredAgent } : {}),
+            requestKind: "update-script",
+            targetScriptPath: targetScript.path,
+            runtime: selection.runtime,
+            modePreference: selection.modePreference,
+            promptText: requestText,
+        });
+        await this.enqueueRun(run);
+        this.logBuiltInAsideSkillSelected(run, event.entryId);
+    }
+
     public async retryRun(runId: string): Promise<boolean> {
         const previousRun = this.store.getRunById(runId);
         if (!previousRun) {
@@ -380,6 +423,7 @@ export class CommentAgentController {
         let promptText: string;
         let preferredAgent: AsideAgentTarget | undefined;
         let requestKind: AgentRunRequestKind | undefined;
+        let targetScriptPath: string | undefined;
 
         if (previousRun?.requestKind === "create-script") {
             const createResolution = parseCreateScriptDirective(latestComment.comment);
@@ -410,6 +454,50 @@ export class CommentAgentController {
                 ? selection.preferredAgent
                 : undefined;
             requestKind = "create-script";
+        } else if (previousRun?.requestKind === "update-script") {
+            const updateResolution = parseUpdateScriptDirective(latestComment.comment);
+            if (updateResolution.kind !== "request") {
+                await this.appendCommandReply({
+                    threadId: thread.id,
+                    entryId: latestComment.id,
+                    filePath: latestComment.filePath,
+                    body: latestComment.comment,
+                }, updateResolution.kind === "rejected"
+                    ? updateResolution.message
+                    : UPDATE_SCRIPT_USAGE);
+                return false;
+            }
+
+            const targetScript = this.host.resolveVaultScriptMention(updateResolution.targetMention);
+            if (!targetScript) {
+                await this.appendCommandReply({
+                    threadId: thread.id,
+                    entryId: latestComment.id,
+                    filePath: latestComment.filePath,
+                    body: latestComment.comment,
+                }, `Script ${updateResolution.targetMention} is not available to update.`);
+                return false;
+            }
+
+            const selection = await this.host.resolveDefaultAgentRuntimeSelection();
+            if (selection.kind === "none") {
+                await this.appendCommandReply({
+                    threadId: thread.id,
+                    entryId: latestComment.id,
+                    filePath: latestComment.filePath,
+                    body: latestComment.comment,
+                }, UPDATE_SCRIPT_NO_AGENT);
+                return false;
+            }
+            requestedAgent = selection.selectedAgent;
+            runtime = selection.runtime;
+            modePreference = selection.modePreference;
+            promptText = updateResolution.requestText;
+            preferredAgent = selection.usedFallback
+                ? selection.preferredAgent
+                : undefined;
+            requestKind = "update-script";
+            targetScriptPath = targetScript.path;
         } else {
             const resolution = parseAgentDirectives(latestComment.comment);
             const resolvedTarget = this.resolveRetryTarget(resolution);
@@ -441,6 +529,7 @@ export class CommentAgentController {
             requestedAgent,
             ...(preferredAgent ? { preferredAgent } : {}),
             ...(requestKind ? { requestKind } : {}),
+            ...(targetScriptPath ? { targetScriptPath } : {}),
             runtime,
             modePreference,
             promptText,
@@ -763,6 +852,7 @@ export class CommentAgentController {
     }): Promise<void> {
         const vaultRootPath = this.host.getVaultRootPath();
         const workingDirectory = options.run.requestKind === "create-script"
+            || options.run.requestKind === "update-script"
             ? vaultRootPath
             : this.host.getRuntimeWorkingDirectory(options.run.filePath);
         if (!workingDirectory) {
@@ -776,6 +866,7 @@ export class CommentAgentController {
             cwd: workingDirectory,
             vaultRootPath,
             requestKind: options.run.requestKind,
+            targetScriptPath: options.run.targetScriptPath,
             abortSignal: options.execution.abortController.signal,
             onProgressText: (progressText) => {
                 if (this.isRunCancellationRequested(options.run.id)) {
@@ -1209,6 +1300,7 @@ export class CommentAgentController {
         requestedAgent: AsideAgentTarget;
         preferredAgent?: AsideAgentTarget;
         requestKind?: AgentRunRequestKind;
+        targetScriptPath?: string;
         runtime: AgentRunRuntime;
         modePreference: AgentRuntimeModePreference;
         promptText: string;
@@ -1223,6 +1315,7 @@ export class CommentAgentController {
             requestedAgent: options.requestedAgent,
             ...(options.preferredAgent ? { preferredAgent: options.preferredAgent } : {}),
             ...(options.requestKind ? { requestKind: options.requestKind } : {}),
+            ...(options.targetScriptPath ? { targetScriptPath: options.targetScriptPath } : {}),
             runtime: options.runtime,
             status: "queued",
             promptText: options.promptText,
@@ -1238,7 +1331,10 @@ export class CommentAgentController {
                 filePath: options.filePath,
                 promptText: options.promptText,
             })],
-            usedFiles: [options.filePath],
+            usedFiles: [
+                options.filePath,
+                ...(options.targetScriptPath ? [options.targetScriptPath] : []),
+            ],
         };
     }
 

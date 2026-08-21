@@ -287,7 +287,7 @@ test("saved entry routing sends only unclaimed entries to the agent controller",
         entryId: "thread-1",
         filePath: "Folder/Note.md",
         body: "/clean",
-    }, null, valid.controller, {
+    }, [], valid.controller, {
         handleSavedUserEntry: async (event) => {
             validAgentEvents.push(event.entryId);
         },
@@ -307,12 +307,12 @@ test("saved entry routing sends only unclaimed entries to the agent controller",
             rejectedAgentEvents.push(event.body);
         },
     };
-    await routeSavedUserEntry(originalEvent, null, rejected.controller, agentController);
+    await routeSavedUserEntry(originalEvent, [], rejected.controller, agentController);
     rejected.registry.remove("🛠️ scripts/clean.mjs");
     await routeSavedUserEntry({
         ...originalEvent,
         body: "@codex after registry refresh",
-    }, null, rejected.controller, agentController);
+    }, [], rejected.controller, agentController);
     assert.deepEqual(rejectedAgentEvents, []);
     assert.equal(rejected.store.getRuns().length, 1);
 
@@ -323,7 +323,7 @@ test("saved entry routing sends only unclaimed entries to the agent controller",
         entryId: "ordinary-entry",
         filePath: "Folder/Note.md",
         body: "ordinary @person",
-    }, null, ordinary.controller, {
+    }, [], ordinary.controller, {
         handleSavedUserEntry: async (event) => {
             ordinaryAgentEvents.push(event.entryId);
         },
@@ -331,7 +331,7 @@ test("saved entry routing sends only unclaimed entries to the agent controller",
     assert.deepEqual(ordinaryAgentEvents, ["ordinary-entry"]);
 });
 
-test("saved entry routing gives the built-in create-script command first claim", async () => {
+test("saved entry routing tries built-in script-authoring commands before vault scripts", async () => {
     const routeCalls: string[] = [];
     const savedEvent = {
         threadId: "thread-1",
@@ -340,12 +340,17 @@ test("saved entry routing gives the built-in create-script command first claim",
         body: "/create-script build a cleaner",
     };
 
-    await routeSavedUserEntry(savedEvent, {
+    await routeSavedUserEntry(savedEvent, [{
         handleSavedUserEntry: async () => {
-            routeCalls.push("built-in");
-            return true;
+            routeCalls.push("update-script");
+            return false;
         },
     }, {
+        handleSavedUserEntry: async () => {
+            routeCalls.push("create-script");
+            return true;
+        },
+    }], {
         handleSavedUserEntry: async () => {
             routeCalls.push("script");
             return true;
@@ -356,7 +361,7 @@ test("saved entry routing gives the built-in create-script command first claim",
         },
     });
 
-    assert.deepEqual(routeCalls, ["built-in"]);
+    assert.deepEqual(routeCalls, ["update-script", "create-script"]);
 });
 
 test("rejected directives persist one failed result and bypass runtime and agent fallback", async () => {

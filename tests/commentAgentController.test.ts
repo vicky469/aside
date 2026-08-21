@@ -15,6 +15,7 @@ import type {
 } from "../src/agents/agentRuntimeAdapter";
 import { getAgentActorLabel } from "../src/core/agents/agentActorRegistry";
 import type { AsideAgentTarget } from "../src/core/config/agentTargets";
+import { VaultScriptRegistry } from "../src/vaultScripts/vaultScriptRegistry";
 
 function createFile(path: string): TFile {
     return {
@@ -72,6 +73,7 @@ function createHarness(options: {
     resolveDefaultAgentRuntimeSelection?: () => Promise<DefaultAgentRuntimeSelection>;
     customRunAgentRuntime?: (invocation: AgentRuntimeInvocation) => Promise<AgentRuntimeResult>;
     agentsFeatureAvailable?: boolean;
+    registeredScriptPaths?: string[];
 } = {}) {
     let persistedData: PersistedPluginData = options.initialPersistedData ?? {};
     const commentManager = new CommentManager(options.initialComments ?? [createComment()]);
@@ -89,6 +91,8 @@ function createHarness(options: {
     }> = [];
     const runtimeCalls: AgentRuntimeInvocation[] = [];
     const runtimeSelectionCalls: AsideAgentTarget[] = [];
+    const vaultScriptRegistry = new VaultScriptRegistry();
+    vaultScriptRegistry.seed(options.registeredScriptPaths ?? []);
     let defaultRuntimeSelectionCalls = 0;
     let refreshCount = 0;
     let idCounter = 1;
@@ -199,6 +203,7 @@ function createHarness(options: {
                     modePreference: "auto",
                 };
         },
+        resolveVaultScriptMention: (mention) => vaultScriptRegistry.resolve(mention),
         isAgentsFeatureAvailable: () => options.agentsFeatureAvailable ?? true,
         showNotice: (message) => {
             notices.push(message);
@@ -220,6 +225,7 @@ function createHarness(options: {
         logEntries,
         runtimeCalls,
         runtimeSelectionCalls,
+        vaultScriptRegistry,
         getDefaultRuntimeSelectionCalls: () => defaultRuntimeSelectionCalls,
         getRefreshCount: () => refreshCount,
         getPersistedData: () => persistedData,
@@ -383,6 +389,137 @@ test("create-script returns immediately when no agent is available", async () =>
     assert.equal(harness.controller.getAgentRuns().length, 0);
     assert.equal(harness.runtimeCalls.length, 0);
     assert.equal(harness.getDefaultRuntimeSelectionCalls(), 1);
+});
+
+test("update-script queues the resolved target and runs from the vault root", async () => {
+    const harness = createHarness({
+        runtimeWorkingDirectory: "/vault-root/Projects/NestedRepo",
+        registeredScriptPaths: ["🛠️ scripts/embed-image-urls.mjs"],
+    });
+    const targetScript = harness.vaultScriptRegistry.resolve("/embed-image-urls");
+    assert.ok(targetScript);
+
+    await harness.controller.handleUpdateScriptRequest({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "/update-script /embed-image-urls make the default size reasonable",
+    }, "make the default size reasonable", targetScript);
+    await waitForAgentQueueToDrain(harness.controller);
+
+    const latestRun = harness.controller.getLatestAgentRunForThread("thread-1");
+    assert.equal(latestRun?.requestKind, "update-script");
+    assert.equal(latestRun?.targetScriptPath, "🛠️ scripts/embed-image-urls.mjs");
+    assert.deepEqual(latestRun?.usedFiles, [
+        "Folder/Note.md",
+        "🛠️ scripts/embed-image-urls.mjs",
+    ]);
+    assert.equal(harness.runtimeCalls[0]?.cwd, "/vault-root");
+    assert.equal(harness.runtimeCalls[0]?.requestKind, "update-script");
+    assert.equal(
+        harness.runtimeCalls[0]?.targetScriptPath,
+        "🛠️ scripts/embed-image-urls.mjs",
+    );
+});
+
+test("update-script returns immediately when no agent is available", async () => {
+    const harness = createHarness({
+        registeredScriptPaths: ["🛠️ scripts/embed-image-urls.mjs"],
+        defaultRuntimeSelection: {
+            kind: "none",
+            preferredAgent: "gemini",
+        },
+    });
+    const targetScript = harness.vaultScriptRegistry.resolve("/embed-image-urls");
+    assert.ok(targetScript);
+
+    await harness.controller.handleUpdateScriptRequest({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "/update-script /embed-image-urls make the default smaller",
+    }, "make the default smaller", targetScript);
+
+    assert.equal(harness.appendedEntries[0]?.body, "No agent is available to update the script.");
+    assert.equal(harness.controller.getAgentRuns().length, 0);
+    assert.equal(harness.runtimeCalls.length, 0);
+    assert.equal(harness.getDefaultRuntimeSelectionCalls(), 1);
+});
+
+test("update-script regenerate reparses the latest request and re-resolves its target", async () => {
+    let runtimeAttempt = 0;
+    const harness = createHarness({
+        initialComments: [createComment({
+            comment: "/update-script /embed-image-urls make the default smaller",
+        })],
+        registeredScriptPaths: ["🛠️ scripts/embed-image-urls.mjs"],
+        customRunAgentRuntime: async () => {
+            runtimeAttempt += 1;
+            if (runtimeAttempt === 1) {
+                throw new Error("Codex failed after launch");
+            }
+            return {
+                runtime: "direct-cli",
+                replyText: "Updated /embed-image-urls.",
+            };
+        },
+    });
+    const targetScript = harness.vaultScriptRegistry.resolve("/embed-image-urls");
+    assert.ok(targetScript);
+
+    await harness.controller.handleUpdateScriptRequest({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "/update-script /embed-image-urls make the default smaller",
+    }, "make the default smaller", targetScript);
+    await waitForAgentQueueToDrain(harness.controller);
+    const previous = harness.controller.getLatestAgentRunForThread("thread-1");
+    assert.equal(previous?.status, "failed");
+
+    harness.commentManager.editComment(
+        "thread-1",
+        "/update-script /embed-image-urls make the default reasonable",
+    );
+    assert.equal(await harness.controller.retryRun(previous?.id ?? ""), true);
+    await waitForAgentQueueToDrain(harness.controller);
+
+    const retry = harness.controller.getLatestAgentRunForThread("thread-1");
+    assert.equal(retry?.requestKind, "update-script");
+    assert.equal(retry?.promptText, "make the default reasonable");
+    assert.equal(retry?.targetScriptPath, "🛠️ scripts/embed-image-urls.mjs");
+    assert.equal(retry?.retryOfRunId, previous?.id);
+    assert.equal(
+        harness.runtimeCalls.at(-1)?.targetScriptPath,
+        "🛠️ scripts/embed-image-urls.mjs",
+    );
+});
+
+test("update-script regenerate stops before selection when the target disappears", async () => {
+    const harness = createHarness({
+        initialComments: [createComment({
+            comment: "/update-script /embed-image-urls make the default smaller",
+        })],
+        registeredScriptPaths: ["🛠️ scripts/embed-image-urls.mjs"],
+        runtimeError: new Error("Codex failed after launch"),
+    });
+    const targetScript = harness.vaultScriptRegistry.resolve("/embed-image-urls");
+    assert.ok(targetScript);
+
+    await harness.controller.handleUpdateScriptRequest({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "/update-script /embed-image-urls make the default smaller",
+    }, "make the default smaller", targetScript);
+    await waitForAgentQueueToDrain(harness.controller);
+    const previous = harness.controller.getLatestAgentRunForThread("thread-1");
+    const selectionsBeforeRetry = harness.getDefaultRuntimeSelectionCalls();
+    harness.vaultScriptRegistry.remove("🛠️ scripts/embed-image-urls.mjs");
+
+    assert.equal(await harness.controller.retryRun(previous?.id ?? ""), false);
+    assert.equal(harness.getDefaultRuntimeSelectionCalls(), selectionsBeforeRetry);
+    assert.match(harness.appendedEntries.at(-1)?.body ?? "", /not available to update/iu);
 });
 
 test("comment agent controller marks runs failed when runtime execution is unavailable", async () => {

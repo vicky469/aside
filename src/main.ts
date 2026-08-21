@@ -7,6 +7,7 @@ import {
     type SavedUserEntryEvent,
 } from "./agents/commentAgentController";
 import { CreateScriptCommandController } from "./agents/createScriptCommandController";
+import { UpdateScriptCommandController } from "./agents/updateScriptCommandController";
 import { CommentHighlightController } from "./comments/commentHighlightController";
 import {
     CommentMutationController,
@@ -547,6 +548,7 @@ export default class Aside extends Plugin {
         runAgentRuntime: (invocation) => runAgentRuntime(invocation),
         resolveAgentRuntimeSelection: (target) => this.resolveAgentRuntimeSelection(target),
         resolveDefaultAgentRuntimeSelection: () => this.resolveDefaultAgentRuntimeSelection(),
+        resolveVaultScriptMention: (mention) => this.vaultScriptRegistry.resolve(mention),
         isAgentsFeatureAvailable: () => this.isAgentsFeatureAvailable(),
         showNotice: (message) => {
             this.showNotice(message, "agents", "agents.notice");
@@ -571,6 +573,25 @@ export default class Aside extends Plugin {
         },
         dispatchRequest: (event, requestText) =>
             this.commentAgentController.handleCreateScriptRequest(event, requestText),
+    });
+    private readonly updateScriptCommandController = new UpdateScriptCommandController({
+        getRegistry: () => this.vaultScriptRegistry,
+        isAgentsFeatureAvailable: () => this.isAgentsFeatureAvailable(),
+        showNotice: (message) => {
+            this.showNotice(message, "agents", "agents.notice");
+        },
+        appendReply: async (event, body) => {
+            await this.commentMutationController.appendThreadEntry(event.threadId, {
+                id: generateCommentId(),
+                body,
+                timestamp: Date.now(),
+            }, {
+                insertAfterCommentId: event.entryId,
+                alwaysInsertAfterTarget: true,
+            });
+        },
+        dispatchRequest: (event, requestText, targetScript) =>
+            this.commentAgentController.handleUpdateScriptRequest(event, requestText, targetScript),
     });
     private readonly publicHtmlPublishController = new PublicHtmlPublishController({
         getSettings: () => this.settings,
@@ -834,6 +855,7 @@ export default class Aside extends Plugin {
         // Also highlight commented text inside rendered Markdown (Live Preview/Reading view)
         this.commentHighlightController.registerMarkdownPreviewHighlights(this);
         await this.syncInstalledSidenoteSkill();
+        this.updateScriptCommandController.initialize();
         this.createScriptCommandController.initialize();
         this.commentScriptController.initialize();
         await this.commentScriptController.reconcilePendingRunsFromPreviousSession();
@@ -855,6 +877,7 @@ export default class Aside extends Plugin {
         this.unloaded = true;
         void this.logEvent("info", "startup", "startup.unload");
         disposeAgentRuntimeProcesses();
+        this.updateScriptCommandController.dispose();
         this.createScriptCommandController.dispose();
         this.commentScriptController.dispose();
         disposeVaultScriptRuntimeProcesses();
@@ -1754,7 +1777,10 @@ export default class Aside extends Plugin {
     private async handleSavedUserEntry(event: SavedUserEntryEvent): Promise<void> {
         await routeSavedUserEntry(
             event,
-            this.createScriptCommandController,
+            [
+                this.updateScriptCommandController,
+                this.createScriptCommandController,
+            ],
             this.commentScriptController,
             this.commentAgentController,
         );
