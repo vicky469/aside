@@ -23,6 +23,7 @@ function normalizeRootPath(value) {
 function buildSideNotePrompt(options) {
     const rootLabel = normalizeRootLabel(options?.rootLabel);
     const rootPath = normalizeRootPath(options?.rootPath);
+    const targetScriptPath = normalizeRootPath(options?.targetScriptPath);
     const promptText = typeof options?.promptText === "string"
         ? options.promptText
         : "";
@@ -70,6 +71,17 @@ function buildSideNotePrompt(options) {
             "Write concise user-facing results to standard output and failures to standard error.",
             "In the Aside reply, report the created vault-relative path and its /script-name invocation.",
             "If a previous attempt already created matching work, inspect and finish that file instead of creating a duplicate.",
+        );
+    }
+
+    if (options?.requestKind === "update-script" && targetScriptPath) {
+        promptLines.push(
+            `This is an /update-script request. Modify \`${targetScriptPath}\` in place now.`,
+            "Inspect the existing script before editing it.",
+            "Do not rename it, create a replacement, or edit unrelated vault files.",
+            "Preserve the script's current-note positional argument and vault-root working-directory contract.",
+            "In the Aside reply, report the updated vault-relative path and its /script-name invocation.",
+            "If the target disappears or cannot be edited, state that plainly instead of creating a substitute.",
         );
     }
 

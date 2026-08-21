@@ -4,7 +4,7 @@ import type { AgentRuntimeModePreference } from "./agentRuntimePreferences";
 
 export type AgentRunRuntime = "direct-cli";
 export type AgentRunStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
-export type AgentRunRequestKind = "create-script";
+export type AgentRunRequestKind = "create-script" | "update-script";
 
 export interface AgentRunSkillMetadata {
     name: string;
@@ -56,6 +56,7 @@ export interface AgentRunRecord extends AgentRunMetadata {
     requestedAgent: AsideAgentTarget;
     preferredAgent?: AsideAgentTarget;
     requestKind?: AgentRunRequestKind;
+    targetScriptPath?: string;
     runtime: AgentRunRuntime;
     status: AgentRunStatus;
     promptText: string;

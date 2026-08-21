@@ -96,3 +96,18 @@ test("buildSideNotePrompt adds the shared create-script contract only for create
     });
     assert.doesNotMatch(ordinaryPrompt, /first positional argument/i);
 });
+
+test("buildSideNotePrompt adds one exact in-place update-script contract", () => {
+    const prompt = sideNotePromptPolicy.buildSideNotePrompt({
+        promptText: "make the default size reasonable",
+        rootLabel: "vault root",
+        rootPath: "/vault",
+        requestKind: "update-script",
+        targetScriptPath: "🛠️ scripts/embed-image-urls.mjs",
+    });
+
+    assert.match(prompt, /modify `🛠️ scripts\/embed-image-urls\.mjs` in place/is);
+    assert.match(prompt, /do not rename/is);
+    assert.match(prompt, /do not rename[\s\S]*unrelated vault files/is);
+    assert.match(prompt, /\/script-name invocation/is);
+});

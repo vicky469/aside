@@ -80,9 +80,16 @@ function normalizeAgentRunRecord(value: unknown): AgentRunRecord | null {
     ]);
     const usedUrls = normalizeAgentRunUrls(value.usedUrls);
     const usedToolErrors = normalizeAgentRunToolErrors(value.usedToolErrors);
-    const requestKind = value.requestKind === "create-script"
+    const rawRequestKind = value.requestKind === "create-script"
+        || value.requestKind === "update-script"
         ? value.requestKind
         : undefined;
+    const targetScriptPath = rawRequestKind === "update-script"
+        ? normalizeOptionalString(value.targetScriptPath)?.trim()
+        : undefined;
+    const requestKind = rawRequestKind === "update-script" && !targetScriptPath
+        ? undefined
+        : rawRequestKind;
     const preferredAgent = normalizeOptionalAgentTarget(value.preferredAgent);
 
     return {
@@ -93,6 +100,7 @@ function normalizeAgentRunRecord(value: unknown): AgentRunRecord | null {
         requestedAgent: normalizeAgentTarget(value.requestedAgent),
         ...(preferredAgent ? { preferredAgent } : {}),
         ...(requestKind ? { requestKind } : {}),
+        ...(targetScriptPath ? { targetScriptPath } : {}),
         runtime: "direct-cli",
         status,
         promptText,

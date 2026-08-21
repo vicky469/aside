@@ -1125,6 +1125,18 @@ test("buildSideNotePrompt forwards create-script request kind to the shared poli
     assert.match(prompt, /\/script-name/i);
 });
 
+test("buildSideNotePrompt forwards the exact update-script target to the shared policy", () => {
+    const prompt = buildSideNotePrompt({
+        promptText: "make the default size reasonable",
+        vaultRootPath: "/vault",
+        requestKind: "update-script",
+        targetScriptPath: "🛠️ scripts/embed-image-urls.mjs",
+    });
+
+    assert.match(prompt, /modify `🛠️ scripts\/embed-image-urls\.mjs` in place/is);
+    assert.match(prompt, /do not rename/is);
+});
+
 test("createWorkspaceWriteSandboxPolicy includes extra writable roots without duplicates", () => {
     assert.deepEqual(
         createWorkspaceWriteSandboxPolicy("/vault/project", ["/vault", "/vault/project", "/vault"]).writableRoots,

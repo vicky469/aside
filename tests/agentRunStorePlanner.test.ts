@@ -1,7 +1,10 @@
 import * as assert from "node:assert/strict";
 import test from "node:test";
 import { AgentRunStore } from "../src/agents/agentRunStore";
-import { normalizePersistedAgentRuns } from "../src/agents/agentRunStorePlanner";
+import {
+    clonePersistedAgentRuns,
+    normalizePersistedAgentRuns,
+} from "../src/agents/agentRunStorePlanner";
 import type { AgentRunRecord } from "../src/core/agents/agentRuns";
 import type { PersistedPluginData } from "../src/settings/indexNoteSettingsPlanner";
 
@@ -134,6 +137,39 @@ test("normalizePersistedAgentRuns keeps supported create-script fallback metadat
     assert.equal(runs[0]?.preferredAgent, "gemini");
     assert.equal(runs[1]?.requestKind, undefined);
     assert.equal(runs[1]?.preferredAgent, undefined);
+});
+
+test("normalizePersistedAgentRuns keeps valid update-script targets only", () => {
+    const runs = normalizePersistedAgentRuns([{
+        id: "run-1",
+        threadId: "thread-1",
+        triggerEntryId: "entry-1",
+        filePath: "Folder/Note.md",
+        requestedAgent: "codex",
+        requestKind: "update-script",
+        targetScriptPath: " 🛠️ scripts/embed-image-urls.mjs ",
+        runtime: "direct-cli",
+        status: "queued",
+        promptText: "make the default size reasonable",
+        createdAt: 100,
+    }, {
+        id: "run-2",
+        threadId: "thread-2",
+        triggerEntryId: "entry-2",
+        filePath: "Folder/Other.md",
+        requestedAgent: "codex",
+        requestKind: "update-script",
+        runtime: "direct-cli",
+        status: "queued",
+        promptText: "change it",
+        createdAt: 101,
+    }]);
+
+    assert.equal(runs[0]?.requestKind, "update-script");
+    assert.equal(runs[0]?.targetScriptPath, "🛠️ scripts/embed-image-urls.mjs");
+    assert.equal(clonePersistedAgentRuns(runs)[0]?.targetScriptPath, "🛠️ scripts/embed-image-urls.mjs");
+    assert.equal(runs[1]?.requestKind, undefined);
+    assert.equal(runs[1]?.targetScriptPath, undefined);
 });
 
 test("AgentRunStore snapshots add input and leaves memory unchanged when persistence fails", async () => {
