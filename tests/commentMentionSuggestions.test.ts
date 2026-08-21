@@ -65,14 +65,32 @@ test("findOpenMentionQuery finds an existing query at a whitespace boundary", ()
     assert.equal(findOpenMentionQuery("please / cle now", 12, 12), null);
 });
 
-test("replaceOpenMentionQuery preserves surrounding text", () => {
+test("replaceOpenMentionQuery appends a space after @ and / suggestions", () => {
+    const atQuery = findOpenMentionQuery("@to", 3, 3);
+    const slashQuery = findOpenMentionQuery("/cle", 4, 4);
+    assert.ok(atQuery);
+    assert.ok(slashQuery);
+
+    assert.deepEqual(replaceOpenMentionQuery("@to", atQuery, "@todo"), {
+        value: "@todo ",
+        selectionStart: 6,
+        selectionEnd: 6,
+    });
+    assert.deepEqual(replaceOpenMentionQuery("/cle", slashQuery, "/clean-links"), {
+        value: "/clean-links ",
+        selectionStart: 13,
+        selectionEnd: 13,
+    });
+});
+
+test("replaceOpenMentionQuery reuses an existing following space", () => {
     const query = findOpenMentionQuery("please /cle now", 11, 11);
     assert.ok(query);
 
     assert.deepEqual(replaceOpenMentionQuery("please /cle now", query, "/clean-links"), {
         value: "please /clean-links now",
-        selectionStart: 19,
-        selectionEnd: 19,
+        selectionStart: 20,
+        selectionEnd: 20,
     });
 });
 

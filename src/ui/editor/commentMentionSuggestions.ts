@@ -74,9 +74,11 @@ export function replaceOpenMentionQuery(
     const normalizedMention = mention.startsWith("@") || mention.startsWith("/")
         ? mention
         : `/${mention}`;
-    const cursor = query.start + normalizedMention.length;
+    const suffix = value.slice(query.end);
+    const space = suffix.startsWith(" ") ? "" : " ";
+    const cursor = query.start + normalizedMention.length + 1;
     return {
-        value: `${value.slice(0, query.start)}${normalizedMention}${value.slice(query.end)}`,
+        value: `${value.slice(0, query.start)}${normalizedMention}${space}${suffix}`,
         selectionStart: cursor,
         selectionEnd: cursor,
     };
