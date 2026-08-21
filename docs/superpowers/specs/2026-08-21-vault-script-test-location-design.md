@@ -1,7 +1,7 @@
 # Vault Script Test Location Design
 
 **Date:** 2026-08-21
-**Status:** Approved; implementation pending
+**Status:** Implemented and verified
 
 ## Implementation Tracking
 
@@ -15,16 +15,16 @@ Use this section as the working checklist. Mark an item done only after the docu
 
 ### To Implement
 
-- [ ] Define `🛠️ scripts/tests` as the shared location for agent-authored vault-script tests.
-- [ ] Tell agents to create that directory when it is absent.
-- [ ] Tell agents never to place `.test.*` or `.spec.*` files beside runnable scripts in `🛠️ scripts/`.
-- [ ] Apply the rule once in the provider-neutral shared prompt rather than copying it into provider adapters or separate create/update blocks.
+- [x] Define `🛠️ scripts/tests` as the shared location for agent-authored vault-script tests.
+- [x] Tell agents to create that directory when it is absent.
+- [x] Tell agents never to place `.test.*` or `.spec.*` files beside runnable scripts in `🛠️ scripts/`.
+- [x] Apply the rule once in the provider-neutral shared prompt rather than copying it into provider adapters or separate create/update blocks.
 
 ### Verification
 
-- [ ] A red-green prompt-policy test proves the shared instruction names `🛠️ scripts/tests/`, directory creation, and the direct-root prohibition.
-- [ ] Tests prove both `/create-script` and `/update-script` prompts receive the same rule exactly once.
-- [ ] The full test suite, lint, typecheck, production bundle, and release-artifact guard pass.
+- [x] A red-green prompt-policy test proves the shared instruction names `🛠️ scripts/tests/`, directory creation, and the direct-root prohibition.
+- [x] Tests prove both `/create-script` and `/update-script` prompts receive the same rule exactly once.
+- [x] The full test suite, lint, typecheck, production bundle, and release-artifact guard pass.
 
 ## Context
 
