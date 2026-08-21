@@ -210,6 +210,10 @@ export class CommentScriptController {
                 this.host.showNotice(SCRIPT_RETRY_MISSING_NOTICE);
                 return false;
             }
+            const reusesExistingOutput = Boolean(
+                previous.outputEntryId
+                && this.host.getCommentManager().getCommentById(previous.outputEntryId),
+            );
 
             const next: ScriptRunRecord = {
                 ...previous,
@@ -221,7 +225,9 @@ export class CommentScriptController {
                 promptText: trigger.comment,
                 createdAt: this.host.now(),
                 retryOfRunId: previous.id,
-                outputEntryId: previous.outputEntryId,
+                outputEntryId: reusesExistingOutput
+                    ? previous.outputEntryId
+                    : this.host.createRunId(),
                 startedAt: undefined,
                 endedAt: undefined,
                 error: undefined,
@@ -235,7 +241,7 @@ export class CommentScriptController {
                 return false;
             }
 
-            if (previous.outputEntryId) {
+            if (reusesExistingOutput && previous.outputEntryId) {
                 let cleared = false;
                 try {
                     cleared = await this.host.editComment(
@@ -249,6 +255,17 @@ export class CommentScriptController {
                 if (!cleared) {
                     await this.terminalizeFailedRun(next.id, SCRIPT_RETRY_REPLACE_NOTICE);
                     this.host.showNotice(SCRIPT_RETRY_REPLACE_NOTICE);
+                    await this.host.refreshCommentViews();
+                    return false;
+                }
+                await this.host.refreshCommentViews();
+            } else {
+                try {
+                    await this.appendPendingOutput(next);
+                } catch (error) {
+                    const message = summarizeScriptError(error);
+                    await this.terminalizeFailedRun(next.id, message);
+                    this.host.showNotice(message);
                     await this.host.refreshCommentViews();
                     return false;
                 }
@@ -305,13 +322,21 @@ export class CommentScriptController {
         const execution = this.executionQueue.then(() => this.execute(run));
         const recovered = execution.catch(async (error) => {
             if (this.disposed) return;
+            const current = this.store.getRunById(run.id);
+            if (!current || (current.status !== "queued" && current.status !== "running")) {
+                return;
+            }
             const message = summarizeScriptError(error);
-            await this.finishRun(
-                run,
-                "failed",
-                formatScriptResult(run.mentionName, message),
-                message,
-            );
+            try {
+                await this.finishRun(
+                    current,
+                    "failed",
+                    formatScriptResult(current.mentionName, message),
+                    message,
+                );
+            } catch (recoveryError) {
+                this.host.showNotice(summarizeScriptError(recoveryError));
+            }
         });
         this.executionQueue = recovered.then(
             () => undefined,

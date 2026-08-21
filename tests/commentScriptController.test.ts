@@ -83,6 +83,7 @@ function createHarness(options: {
     editResults?: boolean[];
     appendSucceeds?: boolean;
     beforeEditComment?: () => Promise<void>;
+    refreshFailures?: number[];
     beforePersist?: (data: PersistedPluginData) => Promise<void>;
     loadCommentsForFile?: (filePath: string) => Promise<void>;
     runVaultScript?: (invocation: VaultScriptRuntimeInvocation) => Promise<VaultScriptRuntimeResult>;
@@ -93,8 +94,9 @@ function createHarness(options: {
     const store = new ScriptRunStore({
         readPersistedPluginData: () => persistedData,
         updatePersistedPluginData: async (updater) => {
-            if (failNextPersist) {
+            if (failNextPersist || persistFailuresRemaining > 0) {
                 failNextPersist = false;
+                persistFailuresRemaining = Math.max(0, persistFailuresRemaining - 1);
                 throw new Error("persist failed");
             }
             const nextData = updater({ ...persistedData });
@@ -123,6 +125,7 @@ function createHarness(options: {
     let id = 1;
     let now = 100;
     let failNextPersist = false;
+    let persistFailuresRemaining = 0;
     let appendSucceeds = options.appendSucceeds ?? true;
     let editSucceeds = options.editSucceeds ?? true;
     let editResults = options.editResults?.slice() ?? [];
@@ -182,6 +185,9 @@ function createHarness(options: {
         },
         refreshCommentViews: async () => {
             refreshCount += 1;
+            if (options.refreshFailures?.includes(refreshCount)) {
+                throw new Error("refresh failed");
+            }
         },
         showNotice: (message) => notices.push(message),
         getRegistry: () => registry,
@@ -212,6 +218,9 @@ function createHarness(options: {
         },
         failNextPersist: () => {
             failNextPersist = true;
+        },
+        failPersistTimes: (count: number) => {
+            persistFailuresRemaining = count;
         },
         getRefreshCount: () => refreshCount,
         getPersistedData: () => persistedData,
@@ -309,6 +318,89 @@ test("disposing during the terminal output edit keeps the run active for startup
     await new Promise<void>((resolve) => setImmediate(resolve));
 
     assert.equal(harness.store.getRuns()[0]?.status, "running");
+});
+
+test("a terminal refresh failure keeps a successful run and output intact", async () => {
+    const harness = createHarness({ refreshFailures: [3] });
+
+    await harness.controller.handleSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "/clean",
+    });
+    await waitForCondition(() => harness.getRefreshCount() >= 3);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    const run = harness.store.getRuns()[0];
+    assert.equal(run?.status, "succeeded");
+    assert.equal(harness.editedEntries.at(-1)?.body, "Script /clean:\n\ncleaned");
+    assert.equal(harness.editedEntries.length, 1);
+});
+
+test("retryRun replaces a missing persisted output id with a new pending reply", async () => {
+    const harness = createHarness({
+        initialRuns: [createStoredRun({
+            status: "failed",
+            outputEntryId: "missing-output",
+            error: "Interrupted",
+        })],
+    });
+
+    assert.equal(await harness.controller.retryRun("stored-run"), true);
+
+    const retry = harness.store.getRuns()[1];
+    assert.notEqual(retry?.outputEntryId, "missing-output");
+    assert.equal(harness.appendedEntries.length, 1);
+    assert.equal(harness.appendedEntries[0]?.entryId, retry?.outputEntryId);
+    assert.equal(harness.appendedEntries[0]?.body, "");
+    assert.deepEqual(harness.editedEntries, [{
+        id: retry?.outputEntryId,
+        body: "Script /clean:\n\ncleaned",
+    }]);
+    assert.equal(retry?.status, "succeeded");
+});
+
+test("recovery failures are noticed and leave the execution queue usable", async () => {
+    const firstRuntime = createDeferred<VaultScriptRuntimeResult>();
+    let runtimeCount = 0;
+    const harness = createHarness({
+        comments: [
+            createComment({ id: "thread-1", comment: "/clean" }),
+            createComment({ id: "thread-2", comment: "/clean", timestamp: 20 }),
+        ],
+        runVaultScript: async () => {
+            runtimeCount += 1;
+            return runtimeCount === 1
+                ? firstRuntime.promise
+                : { stdout: "cleaned", stderr: "" };
+        },
+    });
+
+    try {
+        await harness.controller.handleSavedUserEntry({
+            threadId: "thread-1",
+            entryId: "thread-1",
+            filePath: "Folder/Note.md",
+            body: "/clean",
+        });
+        await waitForCondition(() => harness.runtimeCalls.length === 1);
+        harness.failPersistTimes(4);
+        firstRuntime.reject(new Error("runtime failed"));
+        await waitForCondition(() => harness.notices.length > 0);
+
+        assert.match(harness.notices[0] ?? "", /persist failed/u);
+        assert.equal(await harness.controller.handleSavedUserEntry({
+            threadId: "thread-2",
+            entryId: "thread-2",
+            filePath: "Folder/Note.md",
+            body: "/clean",
+        }), true);
+        await waitForRunStatus(harness, "thread-2", "succeeded");
+        assert.equal(harness.runtimeCalls.length, 2);
+    } finally {
+        firstRuntime.resolve({ stdout: "cleaned", stderr: "" });
+    }
 });
 
 test("first saved script entry creates one durable run, process, and prefixed output", async () => {
