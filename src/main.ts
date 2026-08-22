@@ -1657,7 +1657,12 @@ export default class Aside extends Plugin {
                 fsPromises: rawFsPromises as VaultScriptRuntimeModules["fsPromises"],
                 path: rawPath as VaultScriptRuntimeModules["path"],
                 nodeExecutable: "node",
+                platform: process.platform,
                 processEnv,
+                scheduleTimeout: (callback, delayMs) => {
+                    const timeout = window.setTimeout(callback, delayMs);
+                    return { cancel: () => window.clearTimeout(timeout) };
+                },
             };
         } catch {
             return null;

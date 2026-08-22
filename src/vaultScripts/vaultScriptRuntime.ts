@@ -17,13 +17,26 @@ export interface VaultScriptRuntimeResult {
 export type VaultScriptRuntimeEnvironment = Readonly<Record<string, string | undefined>>;
 
 export interface VaultScriptRuntimeChildProcess {
+    pid?: number;
     kill(signal?: string | number): boolean;
+    stderr?: {
+        on(event: "data", listener: (chunk: string | Uint8Array) => void): void;
+        off(event: "data", listener: (chunk: string | Uint8Array) => void): void;
+        pause(): void;
+    } | null;
+    stdout?: {
+        on(event: "data", listener: (chunk: string | Uint8Array) => void): void;
+        off(event: "data", listener: (chunk: string | Uint8Array) => void): void;
+        pause(): void;
+    } | null;
 }
 
 export interface VaultScriptRuntimeModules {
     isScriptLaunchAllowed(scriptPath: string): boolean;
     nodeExecutable: string;
+    platform: string;
     processEnv: VaultScriptRuntimeEnvironment;
+    scheduleTimeout(callback: () => void, delayMs: number): { cancel(): void };
     childProcess: {
         execFile(
             file: string,
@@ -49,19 +62,76 @@ export interface VaultScriptRuntimeModules {
     };
 }
 
-const activeVaultScriptProcesses = new Set<VaultScriptRuntimeChildProcess>();
+interface ActiveVaultScriptProcess {
+    cancelTimeout(): void;
+    terminateTree(): void;
+}
+
+const activeVaultScriptProcesses = new Set<ActiveVaultScriptProcess>();
 let vaultScriptRuntimeGeneration = 0;
+
+function terminateVaultScriptProcessTree(
+    modules: VaultScriptRuntimeModules,
+    childProcess: VaultScriptRuntimeChildProcess,
+    cwd: string,
+): void {
+    const terminateDirectChild = () => {
+        try {
+            childProcess.kill("SIGTERM");
+        } catch {
+            // The process may have exited before cancellation reached it.
+        }
+    };
+
+    if (modules.platform !== "win32" || !childProcess.pid) {
+        terminateDirectChild();
+        return;
+    }
+
+    try {
+        modules.childProcess.execFile(
+            "taskkill",
+            ["/PID", String(childProcess.pid), "/T", "/F"],
+            {
+                cwd,
+                timeout: 5_000,
+                maxBuffer: VAULT_SCRIPT_MAX_BUFFER_BYTES,
+                windowsHide: true,
+                env: { ...modules.processEnv },
+            },
+            (error) => {
+                if (error) terminateDirectChild();
+            },
+        );
+    } catch {
+        terminateDirectChild();
+    }
+}
+
+function getChunkByteLength(chunk: string | Uint8Array): number {
+    return typeof chunk === "string" ? Buffer.byteLength(chunk) : chunk.byteLength;
+}
+
+function boundCapturedOutput(output: string): string {
+    if (Buffer.byteLength(output) <= VAULT_SCRIPT_MAX_BUFFER_BYTES) return output;
+    let byteLength = 0;
+    let end = 0;
+    for (const character of output) {
+        const characterByteLength = Buffer.byteLength(character);
+        if (byteLength + characterByteLength > VAULT_SCRIPT_MAX_BUFFER_BYTES) break;
+        byteLength += characterByteLength;
+        end += character.length;
+    }
+    return output.slice(0, end);
+}
 
 export function disposeVaultScriptRuntimeProcesses(): void {
     vaultScriptRuntimeGeneration += 1;
     const processes = Array.from(activeVaultScriptProcesses);
     activeVaultScriptProcesses.clear();
-    for (const childProcess of processes) {
-        try {
-            childProcess.kill("SIGTERM");
-        } catch {
-            continue;
-        }
+    for (const activeProcess of processes) {
+        activeProcess.cancelTimeout();
+        activeProcess.terminateTree();
     }
 }
 
@@ -119,21 +189,57 @@ export async function runVaultScript(
 
     return await new Promise<VaultScriptRuntimeResult>((resolve, reject) => {
         let childProcess: VaultScriptRuntimeChildProcess | null = null;
+        let activeProcess: ActiveVaultScriptProcess | null = null;
+        let windowsTimeout: { cancel(): void } | null = null;
+        let pendingWindowsError: (Error & { code?: string }) | null = null;
+        let stdoutBytes = 0;
+        let stderrBytes = 0;
         let settled = false;
+        const handleWindowsOutput = (streamName: "stdout" | "stderr") =>
+            (chunk: string | Uint8Array) => {
+                if (pendingWindowsError) return;
+                if (streamName === "stdout") stdoutBytes += getChunkByteLength(chunk);
+                else stderrBytes += getChunkByteLength(chunk);
+                const length = streamName === "stdout" ? stdoutBytes : stderrBytes;
+                if (length <= VAULT_SCRIPT_MAX_BUFFER_BYTES) return;
+
+                pendingWindowsError = Object.assign(
+                    new Error(`${streamName} maxBuffer length exceeded`),
+                    { code: "ERR_CHILD_PROCESS_STDIO_MAXBUFFER" },
+                );
+                activeProcess?.terminateTree();
+            };
+        const onWindowsStdout = handleWindowsOutput("stdout");
+        const onWindowsStderr = handleWindowsOutput("stderr");
         childProcess = modules.childProcess.execFile(
             modules.nodeExecutable,
             [realScriptPath, realNotePath],
             {
                 cwd: realVaultRoot,
-                timeout: VAULT_SCRIPT_TIMEOUT_MS,
-                maxBuffer: VAULT_SCRIPT_MAX_BUFFER_BYTES,
+                timeout: modules.platform === "win32" ? 0 : VAULT_SCRIPT_TIMEOUT_MS,
+                maxBuffer: modules.platform === "win32"
+                    ? Number.MAX_SAFE_INTEGER
+                    : VAULT_SCRIPT_MAX_BUFFER_BYTES,
                 windowsHide: true,
                 env: { ...modules.processEnv },
             },
             (error, stdout, stderr) => {
                 settled = true;
-                if (childProcess) {
-                    activeVaultScriptProcesses.delete(childProcess);
+                if (windowsTimeout) {
+                    windowsTimeout.cancel();
+                    windowsTimeout = null;
+                }
+                if (activeProcess) {
+                    activeVaultScriptProcesses.delete(activeProcess);
+                }
+                childProcess?.stdout?.off("data", onWindowsStdout);
+                childProcess?.stderr?.off("data", onWindowsStderr);
+                if (pendingWindowsError) {
+                    reject(Object.assign(pendingWindowsError, {
+                        stdout: boundCapturedOutput(stdout),
+                        stderr: boundCapturedOutput(stderr),
+                    }));
+                    return;
                 }
                 if (error) {
                     reject(Object.assign(error, { stdout, stderr }));
@@ -143,7 +249,39 @@ export async function runVaultScript(
             },
         );
         if (!settled) {
-            activeVaultScriptProcesses.add(childProcess);
+            let terminationRequested = false;
+            activeProcess = {
+                cancelTimeout: () => {
+                    if (!windowsTimeout) return;
+                    windowsTimeout.cancel();
+                    windowsTimeout = null;
+                },
+                terminateTree: () => {
+                    if (!childProcess || terminationRequested) return;
+                    terminationRequested = true;
+                    activeProcess?.cancelTimeout();
+                    if (modules.platform === "win32") {
+                        childProcess.stdout?.pause();
+                        childProcess.stderr?.pause();
+                    }
+                    terminateVaultScriptProcessTree(modules, childProcess, realVaultRoot);
+                },
+            };
+            activeVaultScriptProcesses.add(activeProcess);
+            if (modules.platform === "win32") {
+                childProcess.stdout?.on("data", onWindowsStdout);
+                childProcess.stderr?.on("data", onWindowsStderr);
+                windowsTimeout = modules.scheduleTimeout(
+                    () => {
+                        pendingWindowsError = Object.assign(
+                            new Error(`Vault script timed out after ${VAULT_SCRIPT_TIMEOUT_MS} ms`),
+                            { code: "ETIMEDOUT" },
+                        );
+                        activeProcess?.terminateTree();
+                    },
+                    VAULT_SCRIPT_TIMEOUT_MS,
+                );
+            }
         }
     });
 }

@@ -1,4 +1,5 @@
 import * as assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
 import path from "node:path";
 import test from "node:test";
 import {
@@ -27,6 +28,7 @@ interface RuntimeHarness {
 function createRuntimeHarness(options: {
     isScriptLaunchAllowed?: () => boolean;
     pathApi?: VaultScriptRuntimeModules["path"];
+    platform?: string;
     processEnv?: Readonly<Record<string, string | undefined>>;
     realpaths?: Readonly<Record<string, string>>;
     result?: { error: Error | null; stdout: string; stderr: string };
@@ -40,10 +42,15 @@ function createRuntimeHarness(options: {
         modules: {
             isScriptLaunchAllowed: () => options.isScriptLaunchAllowed?.() ?? true,
             nodeExecutable: "node",
+            platform: options.platform ?? process.platform,
             processEnv: options.processEnv ?? {
                 PATH: "/usr/bin",
                 ASIDE_TEST: "kept",
                 ELECTRON_RUN_AS_NODE: "0",
+            },
+            scheduleTimeout: (callback, delayMs) => {
+                const timeout = globalThis.setTimeout(callback, delayMs);
+                return { cancel: () => globalThis.clearTimeout(timeout) };
             },
             childProcess: {
                 execFile: (
@@ -389,6 +396,7 @@ test("runVaultScript preserves an empty successful result", async () => {
 
 test("disposeVaultScriptRuntimeProcesses terminates active external Node children", async () => {
     let killedWith: string | number | undefined;
+    let pausedStreams = 0;
     let callback: ((error: Error | null, stdout: string, stderr: string) => void) | undefined;
     const harness = createRuntimeHarness();
     harness.modules.childProcess.execFile = (_file, _args, _options, nextCallback) => {
@@ -397,6 +405,16 @@ test("disposeVaultScriptRuntimeProcesses terminates active external Node childre
             kill: (signal?: string | number) => {
                 killedWith = signal;
                 return true;
+            },
+            stdout: {
+                on: () => {},
+                off: () => {},
+                pause: () => { pausedStreams += 1; },
+            },
+            stderr: {
+                on: () => {},
+                off: () => {},
+                pause: () => { pausedStreams += 1; },
             },
         };
     };
@@ -410,8 +428,156 @@ test("disposeVaultScriptRuntimeProcesses terminates active external Node childre
 
     disposeVaultScriptRuntimeProcesses();
     assert.equal(killedWith, "SIGTERM");
+    assert.equal(pausedStreams, 0);
     callback?.(Object.assign(new Error("terminated"), { code: "SIGTERM" }), "", "");
     await assert.rejects(execution, /terminated/u);
+});
+
+test("Windows disposal terminates the complete vault-script process tree", async () => {
+    let scriptCallback:
+        | ((error: Error | null, stdout: string, stderr: string) => void)
+        | undefined;
+    const taskkillInvocations: Array<{ file: string; args: string[] }> = [];
+    const directKills: Array<string | number | undefined> = [];
+    const harness = createRuntimeHarness({ pathApi: path.win32, platform: "win32" });
+    harness.modules.childProcess.execFile = (file, args, _options, callback) => {
+        if (file === harness.modules.nodeExecutable) {
+            scriptCallback = callback;
+            return {
+                pid: 4242,
+                kill: (signal?: string | number) => {
+                    directKills.push(signal);
+                    return true;
+                },
+            } as ReturnType<VaultScriptRuntimeModules["childProcess"]["execFile"]> & {
+                pid: number;
+            };
+        }
+
+        taskkillInvocations.push({ file, args });
+        callback(null, "", "");
+        return { kill: () => true };
+    };
+
+    const execution = runVaultScript(harness.modules, {
+        vaultRootPath: "C:\\vault",
+        scriptPath: "🛠️ scripts/clean.mjs",
+        notePath: "Note.md",
+    });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    disposeVaultScriptRuntimeProcesses();
+    scriptCallback?.(Object.assign(new Error("terminated"), { code: "SIGTERM" }), "", "");
+    await assert.rejects(execution, /terminated/u);
+    assert.deepEqual(taskkillInvocations, [{
+        file: "taskkill",
+        args: ["/PID", "4242", "/T", "/F"],
+    }]);
+    assert.deepEqual(directKills, []);
+});
+
+test("Windows timeout terminates the complete vault-script process tree", async (context) => {
+    context.mock.timers.enable({ apis: ["setTimeout"] });
+    let scriptCallback:
+        | ((error: Error | null, stdout: string, stderr: string) => void)
+        | undefined;
+    let scriptTimeout: number | undefined;
+    const taskkillInvocations: Array<{ file: string; args: string[] }> = [];
+    const harness = createRuntimeHarness({ pathApi: path.win32, platform: "win32" });
+    harness.modules.childProcess.execFile = (file, args, options, callback) => {
+        if (file === harness.modules.nodeExecutable) {
+            scriptCallback = callback;
+            scriptTimeout = options.timeout;
+            return { pid: 5252, kill: () => true };
+        }
+
+        taskkillInvocations.push({ file, args });
+        callback(null, "", "");
+        return { kill: () => true };
+    };
+
+    try {
+        const execution = runVaultScript(harness.modules, {
+            vaultRootPath: "C:\\vault",
+            scriptPath: "🛠️ scripts/clean.mjs",
+            notePath: "Note.md",
+        });
+        await new Promise<void>((resolve) => setImmediate(resolve));
+
+        assert.equal(scriptTimeout, 0);
+        context.mock.timers.tick(60_000);
+        assert.deepEqual(taskkillInvocations, [{
+            file: "taskkill",
+            args: ["/PID", "5252", "/T", "/F"],
+        }]);
+
+        scriptCallback?.(Object.assign(new Error("terminated"), { code: "SIGTERM" }), "", "");
+        await assert.rejects(execution, (error: unknown) => {
+            assert.equal((error as Error & { code?: string }).code, "ETIMEDOUT");
+            return true;
+        });
+    } finally {
+        context.mock.timers.reset();
+    }
+});
+
+test("Windows output overflow terminates the complete vault-script process tree", async () => {
+    let scriptCallback:
+        | ((error: Error | null, stdout: string, stderr: string) => void)
+        | undefined;
+    let scriptMaxBuffer: number | undefined;
+    const stdout = new EventEmitter();
+    const stderr = new EventEmitter();
+    let stdoutPauses = 0;
+    let stderrPauses = 0;
+    Object.assign(stdout, { pause: () => { stdoutPauses += 1; } });
+    Object.assign(stderr, { pause: () => { stderrPauses += 1; } });
+    const taskkillInvocations: Array<{ file: string; args: string[] }> = [];
+    const harness = createRuntimeHarness({ pathApi: path.win32, platform: "win32" });
+    harness.modules.childProcess.execFile = (file, args, options, callback) => {
+        if (file === harness.modules.nodeExecutable) {
+            scriptCallback = callback;
+            scriptMaxBuffer = options.maxBuffer;
+            return {
+                pid: 6262,
+                kill: () => true,
+                stdout,
+                stderr,
+            } as ReturnType<VaultScriptRuntimeModules["childProcess"]["execFile"]> & {
+                stdout: EventEmitter;
+                stderr: EventEmitter;
+            };
+        }
+
+        taskkillInvocations.push({ file, args });
+        callback(null, "", "");
+        return { kill: () => true };
+    };
+
+    const execution = runVaultScript(harness.modules, {
+        vaultRootPath: "C:\\vault",
+        scriptPath: "🛠️ scripts/clean.mjs",
+        notePath: "Note.md",
+    });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    stdout.emit("data", Buffer.alloc(64 * 1024 + 1));
+    assert.equal(scriptMaxBuffer, Number.MAX_SAFE_INTEGER);
+    assert.deepEqual(taskkillInvocations, [{
+        file: "taskkill",
+        args: ["/PID", "6262", "/T", "/F"],
+    }]);
+    assert.equal(stdoutPauses, 1);
+    assert.equal(stderrPauses, 1);
+
+    scriptCallback?.(Object.assign(new Error("terminated"), { code: "SIGTERM" }), "partial", "");
+    await assert.rejects(execution, (error: unknown) => {
+        assert.equal(
+            (error as Error & { code?: string }).code,
+            "ERR_CHILD_PROCESS_STDIO_MAXBUFFER",
+        );
+        return true;
+    });
 });
 
 test("runtime disposal prevents a child from spawning after pending path resolution", async () => {
