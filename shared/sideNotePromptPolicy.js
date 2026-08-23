@@ -27,6 +27,7 @@ function buildSideNotePrompt(options) {
     const rootLabel = normalizeRootLabel(options?.rootLabel);
     const rootPath = normalizeRootPath(options?.rootPath);
     const targetScriptPath = normalizeRootPath(options?.targetScriptPath);
+    const isPdfToMarkdownRequest = options?.requestKind === "pdf-to-markdown";
     const promptText = typeof options?.promptText === "string"
         ? options.promptText
         : "";
@@ -35,7 +36,9 @@ function buildSideNotePrompt(options) {
         "You are responding to an Aside thread in Obsidian.",
         "Use the built-in Aside workflow for this request.",
         "Aside terminology: side note and side comment both mean an Aside thread or entry stored for the current note.",
-        "A page note is scoped to the current markdown page, not the whole vault or unrelated files.",
+        ...(isPdfToMarkdownRequest
+            ? []
+            : ["A page note is scoped to the current markdown page, not the whole vault or unrelated files."]),
         "An explicit in-note agent directive means the user is asking the selected local agent to answer in this Aside thread; in-note agent requests default to write mode.",
         "When the user asks to create, append, or update Aside side notes, make that change before replying.",
         "When the user asks to add annotations, comment on this article/note/text, add side comments to specific passages, or says 加批注, create selection-anchored Aside notes on the relevant source text spans.",
@@ -44,7 +47,9 @@ function buildSideNotePrompt(options) {
         "If you cannot create those selection-anchored notes from this runtime, say that you could not create the anchored notes instead of providing the critique as a substitute.",
         "For non-annotation requests like \"one point a note/comment\", keep one parent thread and append each point as a child entry unless the user explicitly asks for separate page-note threads.",
         "Answer the user's request directly.",
-        "Only inspect or modify the current markdown page unless the request explicitly asks for broader workspace context.",
+        ...(isPdfToMarkdownRequest
+            ? []
+            : ["Only inspect or modify the current markdown page unless the request explicitly asks for broader workspace context."]),
         "If the request asks for file changes, make them directly in the workspace before replying.",
         `If the user asks for a reusable vault script, place it directly under the active vault's \`${VAULT_SCRIPT_FOLDER_PATH}/\`, not in the plugin repository's internal \`scripts/\`.`,
         `If you create tests for a vault script, place every test under the active vault's \`${VAULT_SCRIPT_TEST_FOLDER_PATH}/\`, create that folder if needed, and do not place \`.test.*\` or \`.spec.*\` files directly under \`${VAULT_SCRIPT_FOLDER_PATH}/\` beside runnable scripts.`,
@@ -86,6 +91,20 @@ function buildSideNotePrompt(options) {
             "Preserve the script's current-note positional argument and vault-root working-directory contract.",
             "In the Aside reply, report the updated vault-relative path and its /script-name invocation.",
             "If the target disappears or cannot be edited, state that plainly instead of creating a substitute.",
+        );
+    }
+
+    if (isPdfToMarkdownRequest) {
+        promptLines.push(
+            "This is a /pdf-to-markdown request. Treat the current Note path as the exact source PDF.",
+            "Derive the sibling destination by replacing the final .pdf extension with .md.",
+            "If that sibling Markdown file already exists, do not modify it; report the conflict and stop.",
+            "Inspect the PDF layout and text quality before choosing direct extraction, OCR, or another available document workflow.",
+            "Produce readable Markdown with faithful headings, paragraphs, lists, and tables where the source supports them; clean extraction artifacts without inventing content.",
+            "Inspect representative output at the beginning and at least one later section before reporting success.",
+            "Preserve the source PDF, remove temporary conversion artifacts, and do not claim success unless the sibling file exists and the representative checks passed.",
+            "If reliable conversion is not possible, state that plainly in the Aside reply.",
+            "Return the vault-relative output path and a concise verification result.",
         );
     }
 

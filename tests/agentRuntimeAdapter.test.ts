@@ -1112,6 +1112,7 @@ test("buildSideNotePrompt allows visual assets and points them to vault-root Att
     assert.match(prompt, /place it under `Attachments\/` at the active vault root/i);
     assert.match(prompt, /The active vault root is: \/vault/);
     assert.doesNotMatch(prompt, /compact ASCII diagram that fits comfortably in the sidebar/);
+    assert.doesNotMatch(prompt, /exact source PDF/i);
 });
 
 test("buildSideNotePrompt forwards create-script request kind to the shared policy", () => {
@@ -1123,6 +1124,7 @@ test("buildSideNotePrompt forwards create-script request kind to the shared poli
 
     assert.match(prompt, /first positional argument/i);
     assert.match(prompt, /\/script-name/i);
+    assert.doesNotMatch(prompt, /exact source PDF/i);
 });
 
 test("buildSideNotePrompt forwards the exact update-script target to the shared policy", () => {
@@ -1135,6 +1137,22 @@ test("buildSideNotePrompt forwards the exact update-script target to the shared 
 
     assert.match(prompt, /modify `🛠️ scripts\/embed-image-urls\.mjs` in place/is);
     assert.match(prompt, /do not rename/is);
+    assert.doesNotMatch(prompt, /exact source PDF/i);
+});
+
+test("buildSideNotePrompt forwards the PDF conversion contract", () => {
+    const prompt = buildSideNotePrompt({
+        promptText: "/pdf-to-markdown",
+        vaultRootPath: "/vault",
+        requestKind: "pdf-to-markdown",
+    });
+
+    assert.match(prompt, /current Note path as the exact source PDF/i);
+    assert.match(prompt, /sibling.*\.md/i);
+    assert.match(prompt, /already exists.*do not modify/i);
+    assert.match(prompt, /inspect representative output/i);
+    assert.match(prompt, /do not claim success/i);
+    assert.doesNotMatch(prompt, /Only inspect or modify the current markdown page/i);
 });
 
 test("createWorkspaceWriteSandboxPolicy includes extra writable roots without duplicates", () => {
