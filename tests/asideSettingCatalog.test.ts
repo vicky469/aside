@@ -56,6 +56,14 @@ test("agent tab search aliases derive from every supported agent", () => {
     assert.deepEqual(entry?.aliases, ["Codex tab", "Claude Code tab", "Gemini tab"]);
 });
 
+test("default agent description covers every built-in default-agent command", () => {
+    const entry = ASIDE_SETTING_CATALOG.find((candidate) => candidate.key === "default-agent");
+    assert.equal(
+        entry?.description,
+        "Preferred local agent for /create-script, /update-script, and /pdf-to-markdown.",
+    );
+});
+
 test("vault scripts do not introduce a setting", () => {
     assert.equal(
         ASIDE_SETTING_SECTIONS.some((section) => section.key === ("scripts" as never)),

@@ -1,6 +1,7 @@
 import { isOrphanedComment, isPageComment } from "../../core/anchors/commentAnchors";
 import { formatSupportedAgentDirectives } from "../../core/agents/agentActorRegistry";
 import { MAX_SIDENOTE_WORDS, countCommentWords, exceedsCommentWordLimit } from "../../core/text/commentWordLimit";
+import { PDF_TO_MARKDOWN_DIRECTIVE } from "../../core/text/pdfToMarkdownDirective";
 import { canSaveDraftWithoutComment, type DraftComment } from "../../domain/drafts";
 import { applyDraftPasteEditToTextarea, type HtmlToMarkdownConverter } from "../editor/commentEditorPaste";
 import {
@@ -79,8 +80,8 @@ export function buildDraftCommentPresentation(
     const newDraftPlaceholder = !agentsFeatureAvailable
         ? "Write a side note. Use B or H for styling, or type /script-name or @todo."
         : supportedAgentDirectives
-            ? `Write a side note. Use B or H for styling, or type /create-script, /update-script, /script-name, @todo, ${supportedAgentDirectives}.`
-            : "Write a side note. Use B or H for styling, or type /create-script, /update-script, /script-name, or @todo.";
+            ? `Write a side note. Use B or H for styling, or type /create-script, /update-script, ${PDF_TO_MARKDOWN_DIRECTIVE}, /script-name, @todo, ${supportedAgentDirectives}.`
+            : `Write a side note. Use B or H for styling, or type /create-script, /update-script, ${PDF_TO_MARKDOWN_DIRECTIVE}, /script-name, or @todo.`;
     const classes = [
         "aside-comment-item",
         "aside-comment-draft",

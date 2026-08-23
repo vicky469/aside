@@ -1,6 +1,7 @@
 import type { Setting } from "obsidian";
 import type Aside from "../../main";
 import { getSupportedAgentActors } from "../../core/agents/agentActorRegistry";
+import { PDF_TO_MARKDOWN_DIRECTIVE } from "../../core/text/pdfToMarkdownDirective";
 import {
     ALL_COMMENTS_NOTE_IMAGE_CAPTION,
     ALL_COMMENTS_NOTE_IMAGE_URL,
@@ -66,7 +67,7 @@ function isRemotePurgeSettingVisible(context: AsideSettingCatalogContext): boole
     return isPublishingSettingVisible(context) && context.plugin.settings.publishRemotePurgeEnabled;
 }
 
-const DEFAULT_AGENT_SETTING_DESCRIPTION = "Preferred local agent for /create-script and /update-script.";
+const DEFAULT_AGENT_SETTING_DESCRIPTION = `Preferred local agent for /create-script, /update-script, and ${PDF_TO_MARKDOWN_DIRECTIVE}.`;
 
 export const ASIDE_SETTING_CATALOG: readonly AsideSettingCatalogEntry[] = [
     {
