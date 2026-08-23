@@ -391,6 +391,126 @@ test("create-script returns immediately when no agent is available", async () =>
     assert.equal(harness.getDefaultRuntimeSelectionCalls(), 1);
 });
 
+test("pdf-to-markdown queues the preferred default agent from the vault root", async () => {
+    const harness = createHarness({
+        runtimeWorkingDirectory: "/vault-root/Books",
+        initialComments: [createComment({
+            filePath: "Books/Guide.pdf",
+            comment: "/pdf-to-markdown",
+        })],
+        defaultRuntimeSelection: {
+            kind: "resolved",
+            selectedAgent: "claude",
+            preferredAgent: "claude",
+            usedFallback: false,
+            runtime: "direct-cli",
+            modePreference: "auto",
+        },
+    });
+
+    await harness.controller.handlePdfToMarkdownRequest({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Books/Guide.pdf",
+        body: "/pdf-to-markdown",
+    });
+    await waitForAgentQueueToDrain(harness.controller);
+
+    const run = harness.controller.getLatestAgentRunForThread("thread-1");
+    assert.equal(run?.requestKind, "pdf-to-markdown");
+    assert.equal(run?.requestedAgent, "claude");
+    assert.equal(run?.preferredAgent, undefined);
+    assert.equal(run?.promptText, "/pdf-to-markdown");
+    assert.equal(harness.runtimeCalls[0]?.cwd, "/vault-root");
+    assert.equal(harness.runtimeCalls[0]?.requestKind, "pdf-to-markdown");
+});
+
+test("pdf-to-markdown records default-agent fallback metadata", async () => {
+    const harness = createHarness({
+        initialComments: [createComment({
+            filePath: "Books/Guide.pdf",
+            comment: "/pdf-to-markdown",
+        })],
+        defaultRuntimeSelection: {
+            kind: "resolved",
+            selectedAgent: "codex",
+            preferredAgent: "gemini",
+            usedFallback: true,
+            runtime: "direct-cli",
+            modePreference: "auto",
+        },
+    });
+
+    await harness.controller.handlePdfToMarkdownRequest({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Books/Guide.pdf",
+        body: "/pdf-to-markdown",
+    });
+    await waitForAgentQueueToDrain(harness.controller);
+
+    const run = harness.controller.getLatestAgentRunForThread("thread-1");
+    assert.equal(run?.requestKind, "pdf-to-markdown");
+    assert.equal(run?.requestedAgent, "codex");
+    assert.equal(run?.preferredAgent, "gemini");
+});
+
+test("pdf-to-markdown returns immediately when no agent is available", async () => {
+    const harness = createHarness({
+        initialComments: [createComment({
+            filePath: "Books/Guide.pdf",
+            comment: "/pdf-to-markdown",
+        })],
+        defaultRuntimeSelection: {
+            kind: "none",
+            preferredAgent: "gemini",
+        },
+    });
+
+    await harness.controller.handlePdfToMarkdownRequest({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Books/Guide.pdf",
+        body: "/pdf-to-markdown",
+    });
+
+    assert.equal(harness.appendedEntries[0]?.body, "No agent is available to convert this PDF.");
+    assert.equal(harness.controller.getAgentRuns().length, 0);
+    assert.equal(harness.runtimeCalls.length, 0);
+    assert.equal(harness.getDefaultRuntimeSelectionCalls(), 1);
+});
+
+test("pdf-to-markdown regenerate revalidates the current source before agent selection", async () => {
+    const harness = createHarness({
+        initialComments: [createComment({
+            filePath: "Books/Guide.pdf",
+            comment: "/pdf-to-markdown",
+        })],
+        availableFilePaths: ["Books/Guide.pdf", "Books/Guide.md"],
+        runtimeError: new Error("agent failed after launch"),
+    });
+
+    await harness.controller.handlePdfToMarkdownRequest({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Books/Guide.pdf",
+        body: "/pdf-to-markdown",
+    });
+    await waitForAgentQueueToDrain(harness.controller);
+    const previous = harness.controller.getLatestAgentRunForThread("thread-1");
+    assert.equal(previous?.status, "failed");
+
+    const selectionsBeforeRetry = harness.getDefaultRuntimeSelectionCalls();
+    harness.commentManager.renameFile("Books/Guide.pdf", "Books/Guide.md");
+
+    assert.equal(await harness.controller.retryRun(previous?.id ?? ""), false);
+    assert.equal(harness.getDefaultRuntimeSelectionCalls(), selectionsBeforeRetry);
+    assert.equal(
+        harness.appendedEntries.at(-1)?.body,
+        "Open a PDF and use /pdf-to-markdown.",
+    );
+});
+
 test("update-script queues the resolved target and runs from the vault root", async () => {
     const harness = createHarness({
         runtimeWorkingDirectory: "/vault-root/Projects/NestedRepo",

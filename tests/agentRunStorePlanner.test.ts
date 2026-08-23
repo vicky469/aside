@@ -139,6 +139,28 @@ test("normalizePersistedAgentRuns keeps supported create-script fallback metadat
     assert.equal(runs[1]?.preferredAgent, undefined);
 });
 
+test("normalizePersistedAgentRuns keeps durable pdf-to-markdown metadata", () => {
+    const runs = normalizePersistedAgentRuns([{
+        id: "run-1",
+        threadId: "thread-1",
+        triggerEntryId: "entry-1",
+        filePath: "Books/Guide.pdf",
+        requestedAgent: "claude",
+        preferredAgent: " GEMINI ",
+        requestKind: "pdf-to-markdown",
+        targetScriptPath: "ignored.mjs",
+        runtime: "direct-cli",
+        status: "queued",
+        promptText: "/pdf-to-markdown",
+        createdAt: 100,
+    }]);
+
+    assert.equal(runs[0]?.requestKind, "pdf-to-markdown");
+    assert.equal(runs[0]?.preferredAgent, "gemini");
+    assert.equal(runs[0]?.targetScriptPath, undefined);
+    assert.equal(clonePersistedAgentRuns(runs)[0]?.requestKind, "pdf-to-markdown");
+});
+
 test("normalizePersistedAgentRuns keeps valid update-script targets only", () => {
     const runs = normalizePersistedAgentRuns([{
         id: "run-1",

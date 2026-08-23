@@ -4,7 +4,7 @@ import type { AgentRuntimeModePreference } from "./agentRuntimePreferences";
 
 export type AgentRunRuntime = "direct-cli";
 export type AgentRunStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
-export type AgentRunRequestKind = "create-script" | "update-script";
+export type AgentRunRequestKind = "create-script" | "update-script" | "pdf-to-markdown";
 
 export interface AgentRunSkillMetadata {
     name: string;

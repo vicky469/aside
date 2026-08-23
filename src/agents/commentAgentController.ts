@@ -27,6 +27,13 @@ import {
     parseCreateScriptDirective,
 } from "../core/text/createScriptDirective";
 import {
+    PDF_TO_MARKDOWN_DIRECTIVE,
+    PDF_TO_MARKDOWN_NO_AGENT,
+    PDF_TO_MARKDOWN_SOURCE_REQUIRED,
+    PDF_TO_MARKDOWN_USAGE,
+    parsePdfToMarkdownDirective,
+} from "../core/text/pdfToMarkdownDirective";
+import {
     UPDATE_SCRIPT_NO_AGENT,
     UPDATE_SCRIPT_USAGE,
     parseUpdateScriptDirective,
@@ -356,6 +363,36 @@ export class CommentAgentController {
         this.logBuiltInAsideSkillSelected(run, event.entryId);
     }
 
+    public async handlePdfToMarkdownRequest(event: SavedUserEntryEvent): Promise<void> {
+        if (!this.host.isAgentsFeatureAvailable()) {
+            this.host.showNotice(AGENTS_EXPERIMENT_DISABLED_NOTICE);
+            return;
+        }
+        if (getLatestAgentRunForTriggerEntry(this.store.getRuns(), event.entryId)) {
+            return;
+        }
+
+        const selection = await this.host.resolveDefaultAgentRuntimeSelection();
+        if (selection.kind === "none") {
+            await this.appendCommandReply(event, PDF_TO_MARKDOWN_NO_AGENT);
+            return;
+        }
+
+        const run = this.buildQueuedRun({
+            threadId: event.threadId,
+            triggerEntryId: event.entryId,
+            filePath: event.filePath,
+            requestedAgent: selection.selectedAgent,
+            ...(selection.usedFallback ? { preferredAgent: selection.preferredAgent } : {}),
+            requestKind: "pdf-to-markdown",
+            runtime: selection.runtime,
+            modePreference: selection.modePreference,
+            promptText: PDF_TO_MARKDOWN_DIRECTIVE,
+        });
+        await this.enqueueRun(run);
+        this.logBuiltInAsideSkillSelected(run, event.entryId);
+    }
+
     public async retryRun(runId: string): Promise<boolean> {
         const previousRun = this.store.getRunById(runId);
         if (!previousRun) {
@@ -425,7 +462,42 @@ export class CommentAgentController {
         let requestKind: AgentRunRequestKind | undefined;
         let targetScriptPath: string | undefined;
 
-        if (previousRun?.requestKind === "create-script") {
+        if (previousRun?.requestKind === "pdf-to-markdown") {
+            const commandEvent = {
+                threadId: thread.id,
+                entryId: latestComment.id,
+                filePath: latestComment.filePath,
+                body: latestComment.comment,
+            };
+            const pdfResolution = parsePdfToMarkdownDirective(latestComment.comment);
+            if (pdfResolution.kind !== "request") {
+                await this.appendCommandReply(
+                    commandEvent,
+                    pdfResolution.kind === "rejected"
+                        ? pdfResolution.message
+                        : PDF_TO_MARKDOWN_USAGE,
+                );
+                return false;
+            }
+            if (!/\.pdf$/iu.test(latestComment.filePath)) {
+                await this.appendCommandReply(commandEvent, PDF_TO_MARKDOWN_SOURCE_REQUIRED);
+                return false;
+            }
+
+            const selection = await this.host.resolveDefaultAgentRuntimeSelection();
+            if (selection.kind === "none") {
+                await this.appendCommandReply(commandEvent, PDF_TO_MARKDOWN_NO_AGENT);
+                return false;
+            }
+            requestedAgent = selection.selectedAgent;
+            runtime = selection.runtime;
+            modePreference = selection.modePreference;
+            promptText = PDF_TO_MARKDOWN_DIRECTIVE;
+            preferredAgent = selection.usedFallback
+                ? selection.preferredAgent
+                : undefined;
+            requestKind = "pdf-to-markdown";
+        } else if (previousRun?.requestKind === "create-script") {
             const createResolution = parseCreateScriptDirective(latestComment.comment);
             if (createResolution.kind !== "request") {
                 this.host.showNotice(
@@ -853,6 +925,7 @@ export class CommentAgentController {
         const vaultRootPath = this.host.getVaultRootPath();
         const workingDirectory = options.run.requestKind === "create-script"
             || options.run.requestKind === "update-script"
+            || options.run.requestKind === "pdf-to-markdown"
             ? vaultRootPath
             : this.host.getRuntimeWorkingDirectory(options.run.filePath);
         if (!workingDirectory) {

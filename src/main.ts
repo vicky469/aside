@@ -7,6 +7,7 @@ import {
     type SavedUserEntryEvent,
 } from "./agents/commentAgentController";
 import { CreateScriptCommandController } from "./agents/createScriptCommandController";
+import { PdfToMarkdownCommandController } from "./agents/pdfToMarkdownCommandController";
 import { UpdateScriptCommandController } from "./agents/updateScriptCommandController";
 import { CommentHighlightController } from "./comments/commentHighlightController";
 import {
@@ -593,6 +594,24 @@ export default class Aside extends Plugin {
         dispatchRequest: (event, requestText, targetScript) =>
             this.commentAgentController.handleUpdateScriptRequest(event, requestText, targetScript),
     });
+    private readonly pdfToMarkdownCommandController = new PdfToMarkdownCommandController({
+        isAgentsFeatureAvailable: () => this.isAgentsFeatureAvailable(),
+        showNotice: (message) => {
+            this.showNotice(message, "agents", "agents.notice");
+        },
+        appendReply: async (event, body) => {
+            await this.commentMutationController.appendThreadEntry(event.threadId, {
+                id: generateCommentId(),
+                body,
+                timestamp: Date.now(),
+            }, {
+                insertAfterCommentId: event.entryId,
+                alwaysInsertAfterTarget: true,
+            });
+        },
+        dispatchRequest: (event) =>
+            this.commentAgentController.handlePdfToMarkdownRequest(event),
+    });
     private readonly publicHtmlPublishController = new PublicHtmlPublishController({
         getSettings: () => this.settings,
         getFeatureFlags: () => this.settings.featureFlags,
@@ -857,6 +876,7 @@ export default class Aside extends Plugin {
         await this.syncInstalledSidenoteSkill();
         this.updateScriptCommandController.initialize();
         this.createScriptCommandController.initialize();
+        this.pdfToMarkdownCommandController.initialize();
         this.commentScriptController.initialize();
         await this.commentScriptController.reconcilePendingRunsFromPreviousSession();
         this.commentAgentController.initialize();
@@ -879,6 +899,7 @@ export default class Aside extends Plugin {
         disposeAgentRuntimeProcesses();
         this.updateScriptCommandController.dispose();
         this.createScriptCommandController.dispose();
+        this.pdfToMarkdownCommandController.dispose();
         this.commentScriptController.dispose();
         disposeVaultScriptRuntimeProcesses();
         this.commentAgentController.dispose();
@@ -1785,6 +1806,7 @@ export default class Aside extends Plugin {
             [
                 this.updateScriptCommandController,
                 this.createScriptCommandController,
+                this.pdfToMarkdownCommandController,
             ],
             this.commentScriptController,
             this.commentAgentController,

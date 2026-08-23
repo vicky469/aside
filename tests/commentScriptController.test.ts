@@ -633,6 +633,43 @@ test("saved entry routing tries built-in script-authoring commands before vault 
     assert.deepEqual(routeCalls, ["update-script", "create-script"]);
 });
 
+test("saved entry routing claims pdf-to-markdown before scripts and generic agents", async () => {
+    const routeCalls: string[] = [];
+
+    await routeSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Books/Guide.pdf",
+        body: "/pdf-to-markdown",
+    }, [{
+        handleSavedUserEntry: async () => {
+            routeCalls.push("update-script");
+            return false;
+        },
+    }, {
+        handleSavedUserEntry: async () => {
+            routeCalls.push("create-script");
+            return false;
+        },
+    }, {
+        handleSavedUserEntry: async () => {
+            routeCalls.push("pdf-to-markdown");
+            return true;
+        },
+    }], {
+        handleSavedUserEntry: async () => {
+            routeCalls.push("script");
+            return true;
+        },
+    }, {
+        handleSavedUserEntry: async () => {
+            routeCalls.push("agent");
+        },
+    });
+
+    assert.deepEqual(routeCalls, ["update-script", "create-script", "pdf-to-markdown"]);
+});
+
 test("rejected directives persist one failed result and bypass runtime and agent fallback", async () => {
     const cases = [
         {

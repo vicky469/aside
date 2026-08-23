@@ -82,6 +82,7 @@ function normalizeAgentRunRecord(value: unknown): AgentRunRecord | null {
     const usedToolErrors = normalizeAgentRunToolErrors(value.usedToolErrors);
     const rawRequestKind = value.requestKind === "create-script"
         || value.requestKind === "update-script"
+        || value.requestKind === "pdf-to-markdown"
         ? value.requestKind
         : undefined;
     const targetScriptPath = rawRequestKind === "update-script"
