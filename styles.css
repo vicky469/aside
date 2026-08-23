@@ -2480,8 +2480,7 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
     border-top: 1px solid color-mix(in srgb, var(--background-modifier-border) 64%, transparent);
 }
 
-.aside-inline-suggest-item.is-selected,
-.aside-inline-suggest-item:hover {
+.aside-inline-suggest-item.is-selected {
     background: color-mix(in srgb, var(--interactive-accent) 14%, transparent);
 }
 
