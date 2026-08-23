@@ -415,17 +415,33 @@ export class SidebarDraftEditorController {
         state.onClose();
     }
 
+    private syncInlineSuggestionSelection(state: InlineSuggestionState): void {
+        state.optionElements.forEach((option, index) => {
+            const selected = index === state.selectedIndex;
+            option.toggleClass("is-selected", selected);
+            option.setAttribute("aria-selected", selected ? "true" : "false");
+        });
+
+        const selectedOption = state.optionElements[state.selectedIndex];
+        if (selectedOption) {
+            state.textarea.setAttribute("aria-activedescendant", selectedOption.id);
+        } else {
+            state.textarea.removeAttribute("aria-activedescendant");
+        }
+    }
+
     private setInlineSuggestionSelectedIndex(
         state: InlineSuggestionState,
         index: number,
     ): void {
         if (!state.items.length) {
             state.selectedIndex = -1;
+            this.syncInlineSuggestionSelection(state);
             return;
         }
 
         state.selectedIndex = Math.min(Math.max(0, index), state.items.length - 1);
-        this.renderInlineSuggestionChoices(state);
+        this.syncInlineSuggestionSelection(state);
         const selectedOption = state.optionElements[state.selectedIndex];
         if (selectedOption && typeof selectedOption.scrollIntoView === "function") {
             selectedOption.scrollIntoView({ block: "nearest" });
@@ -472,12 +488,7 @@ export class SidebarDraftEditorController {
                 this.setInlineSuggestionSelectedIndex(state, index);
             });
         });
-        const selectedOption = state.optionElements[state.selectedIndex];
-        if (selectedOption) {
-            state.textarea.setAttribute("aria-activedescendant", selectedOption.id);
-        } else {
-            state.textarea.removeAttribute("aria-activedescendant");
-        }
+        this.syncInlineSuggestionSelection(state);
     }
 
     private async chooseInlineSuggestion(

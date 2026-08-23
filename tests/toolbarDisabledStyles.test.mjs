@@ -65,6 +65,16 @@ test("mention suggestions use a one-line fallback and compact inline geometry", 
     assert.match(mentionItemRule.groups.body, /padding:\s*3px 5px\s*;/);
 });
 
+test("inline suggestions use one visual selection state", () => {
+    const selectedRule = css.match(
+        /\.aside-inline-suggest-item\.is-selected\s*\{(?<body>[\s\S]*?)\}/,
+    );
+
+    assert.ok(selectedRule?.groups?.body, "missing selected suggestion rule");
+    assert.match(selectedRule.groups.body, /background:\s*color-mix\(/);
+    assert.doesNotMatch(css, /\.aside-inline-suggest-item:hover/);
+});
+
 test("disabled toolbar icon buttons are visibly unavailable and non-interactive", () => {
     const disabledRule = css.match(
         /button\.aside-toolbar-icon-button:disabled,[\s\S]*?button\.aside-toolbar-icon-button\[aria-disabled="true"\]\s*\{(?<body>[\s\S]*?)\}/,
