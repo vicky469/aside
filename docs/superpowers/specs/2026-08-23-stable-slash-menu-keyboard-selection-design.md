@@ -19,20 +19,20 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Update option selection classes and ARIA attributes in place when the active index changes.
-- [ ] Preserve existing option elements during Up and Down navigation.
-- [ ] Keep the active option scrolled into view.
-- [ ] Use `.is-selected` as the only blue row-selection state while retaining pointer selection through `mouseenter`.
-- [ ] Preserve Enter, Tab, Escape, query filtering, and mouse choice behavior.
+- [x] Update option selection classes and ARIA attributes in place when the active index changes.
+- [x] Preserve existing option elements during Up and Down navigation.
+- [x] Keep the active option scrolled into view.
+- [x] Use `.is-selected` as the only blue row-selection state while retaining pointer selection through `mouseenter`.
+- [x] Preserve Enter, Tab, Escape, query filtering, and mouse choice behavior.
 
 ### Verification
 
-- [ ] A fail-first controller test proves ArrowDown changes selection without replacing option elements.
-- [ ] A fail-first stylesheet test proves pointer hover cannot paint a second selected row.
-- [ ] Focused controller and stylesheet tests pass after the implementation.
-- [ ] The complete repository build and release-artifact guard pass.
-- [ ] The verified `main.js`, `manifest.json`, and `styles.css` are installed byte-identically in `lean-startup`.
-- [ ] A live Aside draft smoke test confirms `/`, repeated Up and Down, Enter, pointer movement, scrolling, and single-row highlighting.
+- [x] A fail-first controller test proves ArrowDown changes selection without replacing option elements.
+- [x] A fail-first stylesheet test proves pointer hover cannot paint a second selected row.
+- [x] Focused controller and stylesheet tests pass after the implementation.
+- [x] The complete repository build and release-artifact guard pass.
+- [x] The verified `main.js`, `manifest.json`, and `styles.css` are installed byte-identically in `lean-startup`.
+- [x] A live Aside draft smoke test confirms `/`, repeated Up and Down, Enter, pointer movement, and single-row highlighting; controller coverage confirms the selected row is scrolled into view.
 
 ## Goals
 
