@@ -43,6 +43,15 @@ function createFakeElement() {
         addClass: function addClass(name: string) {
             this.className = `${this.className} ${name}`.trim();
         },
+        toggleClass: function toggleClass(name: string, enabled: boolean) {
+            const classes = new Set(this.className.split(/\s+/u).filter(Boolean));
+            if (enabled) {
+                classes.add(name);
+            } else {
+                classes.delete(name);
+            }
+            this.className = Array.from(classes).join(" ");
+        },
         setAttribute: function setAttribute(name: string, value: string) {
             this.attributes.set(name, value);
         },
@@ -743,6 +752,62 @@ test("connected mention dropdown activates only the explicit @ query match", () 
     assert.deepEqual(rows.map((row) => row.children[0]?.text), ["@codex"]);
     assert.match(rows[0]?.className ?? "", /(?:^|\s)is-selected(?:\s|$)/u);
     assert.equal(rows[0]?.attributes.get("aria-selected"), "true");
+});
+
+test("slash suggestion ArrowDown preserves rows while moving the active option", () => {
+    const controller = new SidebarDraftEditorController({
+        getAllIndexedComments: () => [],
+        updateDraftCommentText: () => {},
+        renderComments: async () => {},
+        scheduleDraftFocus: () => {},
+        getMentionSuggestions: () => [
+            {
+                kind: "built-in",
+                mention: "/create-script",
+                label: "Create script",
+            },
+            {
+                kind: "built-in",
+                mention: "/update-script",
+                label: "Update script",
+            },
+        ],
+        openMentionSuggestModal: () => {},
+        openLinkSuggestModal: () => {},
+        openTagSuggestModal: () => {},
+    });
+    const draft = createDraft({ comment: "/" });
+    const { textarea, shell } = createSuggestionTextarea(draft.comment);
+
+    assert.equal(controller.openDraftMentionSuggest(draft, textarea, false), true);
+    const container = shell.children[0] as ReturnType<typeof createFakeElement>;
+    const list = container.children[0] as ReturnType<typeof createFakeElement>;
+    const originalRows = [...list.children] as ReturnType<typeof createFakeElement>[];
+    const scrollCalls: string[] = [];
+    originalRows[1].scrollIntoView = () => {
+        scrollCalls.push("second");
+    };
+    const consumed: string[] = [];
+    const event = {
+        key: "ArrowDown",
+        shiftKey: false,
+        preventDefault: () => consumed.push("preventDefault"),
+        stopPropagation: () => consumed.push("stopPropagation"),
+        stopImmediatePropagation: () => consumed.push("stopImmediatePropagation"),
+    } as unknown as KeyboardEvent;
+
+    assert.equal(controller.handleDraftSuggestionKeydown(event, textarea), true);
+    assert.deepEqual(list.children, originalRows);
+    assert.doesNotMatch(originalRows[0].className, /(?:^|\s)is-selected(?:\s|$)/u);
+    assert.equal(originalRows[0].attributes.get("aria-selected"), "false");
+    assert.match(originalRows[1].className, /(?:^|\s)is-selected(?:\s|$)/u);
+    assert.equal(originalRows[1].attributes.get("aria-selected"), "true");
+    assert.deepEqual(scrollCalls, ["second"]);
+    assert.deepEqual(consumed, [
+        "preventDefault",
+        "stopPropagation",
+        "stopImmediatePropagation",
+    ]);
 });
 
 test("input triggers keep @ and / inline while # opens the tag modal", () => {
