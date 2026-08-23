@@ -97,12 +97,13 @@ function buildSideNotePrompt(options) {
     if (isPdfToMarkdownRequest) {
         promptLines.push(
             "This is a /pdf-to-markdown request. Treat the current Note path as the exact source PDF.",
-            "Derive the sibling destination by replacing the final .pdf extension with .md.",
+            "Derive the sibling destination by replacing the final .pdf extension case-insensitively with .md.",
             "If that sibling Markdown file already exists, do not modify it; report the conflict and stop.",
             "Inspect the PDF layout and text quality before choosing direct extraction, OCR, or another available document workflow.",
             "Produce readable Markdown with faithful headings, paragraphs, lists, and tables where the source supports them; clean extraction artifacts without inventing content.",
             "Inspect representative output at the beginning and at least one later section before reporting success.",
-            "Preserve the source PDF, remove temporary conversion artifacts, and do not claim success unless the sibling file exists and the representative checks passed.",
+            "Preserve the source PDF and remove temporary conversion artifacts before replying.",
+            "Do not claim success unless the sibling file exists, the representative checks passed, and all temporary conversion artifacts were removed.",
             "If reliable conversion is not possible, state that plainly in the Aside reply.",
             "Return the vault-relative output path and a concise verification result.",
         );

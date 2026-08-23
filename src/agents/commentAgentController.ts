@@ -31,6 +31,9 @@ import {
     PDF_TO_MARKDOWN_NO_AGENT,
     PDF_TO_MARKDOWN_SOURCE_REQUIRED,
     PDF_TO_MARKDOWN_USAGE,
+    derivePdfToMarkdownDestinationPath,
+    formatPdfToMarkdownDestinationConflict,
+    formatPdfToMarkdownInProgress,
     parsePdfToMarkdownDirective,
 } from "../core/text/pdfToMarkdownDirective";
 import {
@@ -74,6 +77,7 @@ export interface CommentAgentHost {
     getRuntimeWorkingDirectory(filePath: string): string | null;
     getCommentManager(): CommentManager;
     getFileByPath(filePath: string): TFile | null;
+    getFilePaths(): string[];
     isCommentableFile(file: TFile | null): file is TFile;
     getCurrentNoteContent(file: TFile): Promise<string>;
     loadCommentsForFile(file: TFile): Promise<unknown>;
@@ -186,6 +190,7 @@ export class CommentAgentController {
     private readonly streamListeners = new Set<AgentStreamListener>();
     private readonly activeRunExecutions = new Map<string, ActiveRunExecution>();
     private readonly dispatchingRunIds = new Set<string>();
+    private readonly dispatchingPdfDestinationPaths = new Set<string>();
 
     constructor(
         private readonly host: CommentAgentHost,
@@ -254,6 +259,7 @@ export class CommentAgentController {
         }
         this.activeRunExecutions.clear();
         this.dispatchingRunIds.clear();
+        this.dispatchingPdfDestinationPaths.clear();
         this.runStreams.clear();
     }
 
@@ -372,25 +378,53 @@ export class CommentAgentController {
             return;
         }
 
-        const selection = await this.host.resolveDefaultAgentRuntimeSelection();
-        if (selection.kind === "none") {
-            await this.appendCommandReply(event, PDF_TO_MARKDOWN_NO_AGENT);
+        const destinationPath = derivePdfToMarkdownDestinationPath(event.filePath);
+        if (!destinationPath) {
+            await this.appendCommandReply(event, PDF_TO_MARKDOWN_SOURCE_REQUIRED);
+            return;
+        }
+        if (this.hasPdfToMarkdownDestination(destinationPath)) {
+            await this.appendCommandReply(
+                event,
+                formatPdfToMarkdownDestinationConflict(destinationPath),
+            );
+            return;
+        }
+        if (!this.reservePdfToMarkdownDestination(destinationPath)) {
+            await this.appendCommandReply(event, formatPdfToMarkdownInProgress(destinationPath));
             return;
         }
 
-        const run = this.buildQueuedRun({
-            threadId: event.threadId,
-            triggerEntryId: event.entryId,
-            filePath: event.filePath,
-            requestedAgent: selection.selectedAgent,
-            ...(selection.usedFallback ? { preferredAgent: selection.preferredAgent } : {}),
-            requestKind: "pdf-to-markdown",
-            runtime: selection.runtime,
-            modePreference: selection.modePreference,
-            promptText: PDF_TO_MARKDOWN_DIRECTIVE,
-        });
-        await this.enqueueRun(run);
-        this.logBuiltInAsideSkillSelected(run, event.entryId);
+        try {
+            const selection = await this.host.resolveDefaultAgentRuntimeSelection();
+            if (selection.kind === "none") {
+                await this.appendCommandReply(event, PDF_TO_MARKDOWN_NO_AGENT);
+                return;
+            }
+            if (this.hasPdfToMarkdownDestination(destinationPath)) {
+                await this.appendCommandReply(
+                    event,
+                    formatPdfToMarkdownDestinationConflict(destinationPath),
+                );
+                return;
+            }
+
+            const run = this.buildQueuedRun({
+                threadId: event.threadId,
+                triggerEntryId: event.entryId,
+                filePath: event.filePath,
+                requestedAgent: selection.selectedAgent,
+                ...(selection.usedFallback ? { preferredAgent: selection.preferredAgent } : {}),
+                requestKind: "pdf-to-markdown",
+                runtime: selection.runtime,
+                modePreference: selection.modePreference,
+                promptText: PDF_TO_MARKDOWN_DIRECTIVE,
+            });
+            await this.enqueueRun(run);
+            this.logBuiltInAsideSkillSelected(run, event.entryId);
+        } finally {
+            this.releasePdfToMarkdownDestination(destinationPath);
+        }
     }
 
     public async retryRun(runId: string): Promise<boolean> {
@@ -461,6 +495,7 @@ export class CommentAgentController {
         let preferredAgent: AsideAgentTarget | undefined;
         let requestKind: AgentRunRequestKind | undefined;
         let targetScriptPath: string | undefined;
+        let reservedPdfDestinationPath: string | undefined;
 
         if (previousRun?.requestKind === "pdf-to-markdown") {
             const commandEvent = {
@@ -479,8 +514,16 @@ export class CommentAgentController {
                 );
                 return false;
             }
-            if (!/\.pdf$/iu.test(latestComment.filePath)) {
+            const destinationPath = derivePdfToMarkdownDestinationPath(latestComment.filePath);
+            if (!destinationPath) {
                 await this.appendCommandReply(commandEvent, PDF_TO_MARKDOWN_SOURCE_REQUIRED);
+                return false;
+            }
+            if (this.hasPdfToMarkdownDestination(destinationPath)) {
+                await this.appendCommandReply(
+                    commandEvent,
+                    formatPdfToMarkdownDestinationConflict(destinationPath),
+                );
                 return false;
             }
 
@@ -489,6 +532,21 @@ export class CommentAgentController {
                 await this.appendCommandReply(commandEvent, PDF_TO_MARKDOWN_NO_AGENT);
                 return false;
             }
+            if (this.hasPdfToMarkdownDestination(destinationPath)) {
+                await this.appendCommandReply(
+                    commandEvent,
+                    formatPdfToMarkdownDestinationConflict(destinationPath),
+                );
+                return false;
+            }
+            if (!this.reservePdfToMarkdownDestination(destinationPath)) {
+                await this.appendCommandReply(
+                    commandEvent,
+                    formatPdfToMarkdownInProgress(destinationPath),
+                );
+                return false;
+            }
+            reservedPdfDestinationPath = destinationPath;
             requestedAgent = selection.selectedAgent;
             runtime = selection.runtime;
             modePreference = selection.modePreference;
@@ -587,42 +645,93 @@ export class CommentAgentController {
             promptText = latestComment.comment;
         }
 
-        const storedRetryOutputEntryId = retryOfRunId
-            ? this.store.getRunById(retryOfRunId)?.outputEntryId
-            : undefined;
-        const retryOutputEntryId = storedRetryOutputEntryId
-            && this.host.getCommentManager().getCommentById(storedRetryOutputEntryId)
-            ? storedRetryOutputEntryId
-            : undefined;
-        const run = this.buildQueuedRun({
-            threadId: thread.id,
-            triggerEntryId: latestComment.id,
-            filePath: latestComment.filePath,
-            requestedAgent,
-            ...(preferredAgent ? { preferredAgent } : {}),
-            ...(requestKind ? { requestKind } : {}),
-            ...(targetScriptPath ? { targetScriptPath } : {}),
-            runtime,
-            modePreference,
-            promptText,
-            ...(retryOfRunId ? { retryOfRunId } : {}),
-        });
-        if (retryOutputEntryId) {
-            run.outputEntryId = retryOutputEntryId;
+        try {
+            const storedRetryOutputEntryId = retryOfRunId
+                ? this.store.getRunById(retryOfRunId)?.outputEntryId
+                : undefined;
+            const retryOutputEntryId = storedRetryOutputEntryId
+                && this.host.getCommentManager().getCommentById(storedRetryOutputEntryId)
+                ? storedRetryOutputEntryId
+                : undefined;
+            const run = this.buildQueuedRun({
+                threadId: thread.id,
+                triggerEntryId: latestComment.id,
+                filePath: latestComment.filePath,
+                requestedAgent,
+                ...(preferredAgent ? { preferredAgent } : {}),
+                ...(requestKind ? { requestKind } : {}),
+                ...(targetScriptPath ? { targetScriptPath } : {}),
+                runtime,
+                modePreference,
+                promptText,
+                ...(retryOfRunId ? { retryOfRunId } : {}),
+            });
+            if (retryOutputEntryId) {
+                run.outputEntryId = retryOutputEntryId;
+            }
+            if (retryOutputEntryId && !(await this.clearRetryOutputEntry(run, retryOutputEntryId))) {
+                return false;
+            }
+            await this.enqueueRun(run);
+            this.logBuiltInAsideSkillSelected(run, latestComment.id);
+            void this.host.log?.("info", "agents", "agents.retry.created", {
+                runId: run.id,
+                ...(retryOfRunId ? { retryOfRunId } : {}),
+                threadId: thread.id,
+                triggerEntryId: latestComment.id,
+                requestedAgent: run.requestedAgent,
+            });
+            return true;
+        } finally {
+            if (reservedPdfDestinationPath) {
+                this.releasePdfToMarkdownDestination(reservedPdfDestinationPath);
+            }
         }
-        if (retryOutputEntryId && !(await this.clearRetryOutputEntry(run, retryOutputEntryId))) {
+    }
+
+    private reservePdfToMarkdownDestination(destinationPath: string): boolean {
+        const destinationKey = this.normalizePdfToMarkdownDestinationKey(destinationPath);
+        if (this.dispatchingPdfDestinationPaths.has(destinationKey)) {
             return false;
         }
-        await this.enqueueRun(run);
-        this.logBuiltInAsideSkillSelected(run, latestComment.id);
-        void this.host.log?.("info", "agents", "agents.retry.created", {
-            runId: run.id,
-            ...(retryOfRunId ? { retryOfRunId } : {}),
-            threadId: thread.id,
-            triggerEntryId: latestComment.id,
-            requestedAgent: run.requestedAgent,
+        const hasActiveRun = this.store.getRuns().some((run) => {
+            if (
+                run.requestKind !== "pdf-to-markdown"
+                || (run.status !== "queued" && run.status !== "running")
+            ) {
+                return false;
+            }
+            const activeDestinationPath = derivePdfToMarkdownDestinationPath(run.filePath);
+            return activeDestinationPath
+                ? this.normalizePdfToMarkdownDestinationKey(activeDestinationPath) === destinationKey
+                : false;
         });
+        if (hasActiveRun) {
+            return false;
+        }
+
+        this.dispatchingPdfDestinationPaths.add(destinationKey);
         return true;
+    }
+
+    private hasPdfToMarkdownDestination(destinationPath: string): boolean {
+        if (this.host.getFileByPath(destinationPath)) {
+            return true;
+        }
+        const destinationKey = this.normalizePdfToMarkdownDestinationKey(destinationPath);
+        return this.host.getFilePaths().some(
+            (filePath) => this.normalizePdfToMarkdownDestinationKey(filePath) === destinationKey,
+        );
+    }
+
+    private releasePdfToMarkdownDestination(destinationPath: string): void {
+        this.dispatchingPdfDestinationPaths.delete(
+            this.normalizePdfToMarkdownDestinationKey(destinationPath),
+        );
+    }
+
+    private normalizePdfToMarkdownDestinationKey(destinationPath: string): string {
+        return destinationPath.normalize("NFC").toLocaleLowerCase("en-US");
     }
 
     private async clearRetryOutputEntry(run: AgentRunRecord, outputEntryId: string): Promise<boolean> {

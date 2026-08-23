@@ -2,6 +2,7 @@ import * as assert from "node:assert/strict";
 import test from "node:test";
 import {
     PDF_TO_MARKDOWN_USAGE,
+    derivePdfToMarkdownDestinationPath,
     parsePdfToMarkdownDirective,
 } from "../src/core/text/pdfToMarkdownDirective";
 
@@ -10,6 +11,14 @@ test("pdf-to-markdown parser accepts only one standalone command", () => {
     assert.deepEqual(parsePdfToMarkdownDirective("ordinary note"), { kind: "none" });
     assert.deepEqual(parsePdfToMarkdownDirective("docs/pdf-to-markdown"), { kind: "none" });
     assert.deepEqual(parsePdfToMarkdownDirective("/pdf-to-markdown-extra"), { kind: "none" });
+});
+
+test("pdf-to-markdown derives one case-insensitive sibling Markdown path", () => {
+    assert.equal(
+        derivePdfToMarkdownDestinationPath("Books/Guide.PDF"),
+        "Books/Guide.md",
+    );
+    assert.equal(derivePdfToMarkdownDestinationPath("Books/Guide.md"), null);
 });
 
 test("pdf-to-markdown parser rejects arguments and repeated commands", () => {

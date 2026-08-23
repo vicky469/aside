@@ -2,6 +2,7 @@ import { AGENTS_EXPERIMENT_DISABLED_NOTICE } from "../core/agents/agentsFeatureP
 import type { SavedUserEntryEvent } from "../core/comments/savedUserEntry";
 import {
     PDF_TO_MARKDOWN_SOURCE_REQUIRED,
+    derivePdfToMarkdownDestinationPath,
     parsePdfToMarkdownDirective,
 } from "../core/text/pdfToMarkdownDirective";
 
@@ -43,7 +44,7 @@ export class PdfToMarkdownCommandController {
             await this.host.appendReply(event, resolution.message);
             return true;
         }
-        if (!/\.pdf$/iu.test(event.filePath)) {
+        if (!derivePdfToMarkdownDestinationPath(event.filePath)) {
             await this.host.appendReply(event, PDF_TO_MARKDOWN_SOURCE_REQUIRED);
             return true;
         }

@@ -519,6 +519,7 @@ export default class Aside extends Plugin {
         getRuntimeWorkingDirectory: (filePath: string) => this.getRuntimeWorkingDirectory(filePath),
         getCommentManager: () => this.commentManager,
         getFileByPath: (filePath) => this.workspaceViewController.getFileByPath(filePath),
+        getFilePaths: () => this.app.vault.getFiles().map((file) => file.path),
         isCommentableFile: (file): file is TFile => this.isCommentableFile(file),
         getCurrentNoteContent: (file) => this.workspaceViewController.getCurrentNoteContent(file),
         loadCommentsForFile: (file) => this.loadCommentsForFile(file),

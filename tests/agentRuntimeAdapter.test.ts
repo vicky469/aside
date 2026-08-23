@@ -1152,6 +1152,10 @@ test("buildSideNotePrompt forwards the PDF conversion contract", () => {
     assert.match(prompt, /already exists.*do not modify/i);
     assert.match(prompt, /inspect representative output/i);
     assert.match(prompt, /do not claim success/i);
+    assert.match(
+        prompt,
+        /do not claim success unless.*temporary conversion artifacts.*removed/is,
+    );
     assert.doesNotMatch(prompt, /Only inspect or modify the current markdown page/i);
 });
 

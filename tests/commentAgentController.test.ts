@@ -121,6 +121,7 @@ function createHarness(options: {
         getRuntimeWorkingDirectory: () => options.runtimeWorkingDirectory === undefined ? "/vault" : options.runtimeWorkingDirectory,
         getCommentManager: () => commentManager,
         getFileByPath: (filePath: string) => availableFilePaths.has(filePath) ? createFile(filePath) : null,
+        getFilePaths: () => Array.from(availableFilePaths),
         isCommentableFile: (candidate): candidate is TFile => !!candidate,
         getCurrentNoteContent: async () => options.currentNoteContent ?? "",
         loadCommentsForFile: async () => undefined,
@@ -225,6 +226,7 @@ function createHarness(options: {
         logEntries,
         runtimeCalls,
         runtimeSelectionCalls,
+        availableFilePaths,
         vaultScriptRegistry,
         getDefaultRuntimeSelectionCalls: () => defaultRuntimeSelectionCalls,
         getRefreshCount: () => refreshCount,
@@ -480,13 +482,134 @@ test("pdf-to-markdown returns immediately when no agent is available", async () 
     assert.equal(harness.getDefaultRuntimeSelectionCalls(), 1);
 });
 
+test("pdf-to-markdown preserves a case-variant existing sibling before agent selection", async () => {
+    const harness = createHarness({
+        initialComments: [createComment({
+            filePath: "Books/Guide.PDF",
+            comment: "/pdf-to-markdown",
+        })],
+        availableFilePaths: ["Books/Guide.PDF", "Books/guide.MD"],
+    });
+
+    await harness.controller.handlePdfToMarkdownRequest({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Books/Guide.PDF",
+        body: "/pdf-to-markdown",
+    });
+
+    assert.equal(harness.getDefaultRuntimeSelectionCalls(), 0);
+    assert.deepEqual(harness.runtimeCalls, []);
+    assert.deepEqual(harness.controller.getAgentRuns(), []);
+    assert.equal(
+        harness.appendedEntries[0]?.body,
+        "Conflict: `Books/Guide.md` already exists. It was not modified.",
+    );
+});
+
+test("pdf-to-markdown serializes concurrent requests for one destination", async () => {
+    let releaseFirstSelection = () => {};
+    const firstSelectionBlocked = new Promise<void>((resolve) => {
+        releaseFirstSelection = resolve;
+    });
+    const harness = createHarness({
+        initialComments: [
+            createComment({
+                id: "thread-1",
+                filePath: "Books/Guide.pdf",
+                comment: "/pdf-to-markdown",
+            }),
+            createComment({
+                id: "thread-2",
+                filePath: "Books/Guide.pdf",
+                comment: "/pdf-to-markdown",
+            }),
+        ],
+        resolveDefaultAgentRuntimeSelection: async () => {
+            await firstSelectionBlocked;
+            return {
+                kind: "resolved",
+                selectedAgent: "codex",
+                preferredAgent: "codex",
+                usedFallback: false,
+                runtime: "direct-cli",
+                modePreference: "auto",
+            };
+        },
+    });
+
+    const first = harness.controller.handlePdfToMarkdownRequest({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Books/Guide.pdf",
+        body: "/pdf-to-markdown",
+    });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    await harness.controller.handlePdfToMarkdownRequest({
+        threadId: "thread-2",
+        entryId: "thread-2",
+        filePath: "Books/Guide.pdf",
+        body: "/pdf-to-markdown",
+    });
+
+    assert.equal(harness.getDefaultRuntimeSelectionCalls(), 1);
+    assert.equal(
+        harness.appendedEntries[0]?.body,
+        "A PDF-to-Markdown conversion is already running for `Books/Guide.md`.",
+    );
+
+    releaseFirstSelection();
+    await first;
+    await waitForAgentQueueToDrain(harness.controller);
+    assert.equal(harness.controller.getAgentRuns().length, 1);
+});
+
+test("pdf-to-markdown blocks a destination reserved by a persisted active run", async () => {
+    const harness = createHarness({
+        initialComments: [createComment({
+            id: "thread-2",
+            filePath: "Books/Guide.pdf",
+            comment: "/pdf-to-markdown",
+        })],
+        initialPersistedData: {
+            agentRuns: [{
+                id: "run-1",
+                threadId: "thread-1",
+                triggerEntryId: "thread-1",
+                filePath: "Books/Guide.PDF",
+                requestedAgent: "codex",
+                requestKind: "pdf-to-markdown",
+                runtime: "direct-cli",
+                status: "running",
+                promptText: "/pdf-to-markdown",
+                createdAt: 100,
+                startedAt: 101,
+            }],
+        },
+    });
+
+    await harness.controller.handlePdfToMarkdownRequest({
+        threadId: "thread-2",
+        entryId: "thread-2",
+        filePath: "Books/Guide.pdf",
+        body: "/pdf-to-markdown",
+    });
+
+    assert.equal(harness.getDefaultRuntimeSelectionCalls(), 0);
+    assert.equal(
+        harness.appendedEntries[0]?.body,
+        "A PDF-to-Markdown conversion is already running for `Books/Guide.md`.",
+    );
+    assert.equal(harness.controller.getAgentRuns().length, 1);
+});
+
 test("pdf-to-markdown regenerate revalidates the current source before agent selection", async () => {
     const harness = createHarness({
         initialComments: [createComment({
             filePath: "Books/Guide.pdf",
             comment: "/pdf-to-markdown",
         })],
-        availableFilePaths: ["Books/Guide.pdf", "Books/Guide.md"],
+        availableFilePaths: ["Books/Guide.pdf"],
         runtimeError: new Error("agent failed after launch"),
     });
 
@@ -502,12 +625,44 @@ test("pdf-to-markdown regenerate revalidates the current source before agent sel
 
     const selectionsBeforeRetry = harness.getDefaultRuntimeSelectionCalls();
     harness.commentManager.renameFile("Books/Guide.pdf", "Books/Guide.md");
+    harness.availableFilePaths.delete("Books/Guide.pdf");
+    harness.availableFilePaths.add("Books/Guide.md");
 
     assert.equal(await harness.controller.retryRun(previous?.id ?? ""), false);
     assert.equal(harness.getDefaultRuntimeSelectionCalls(), selectionsBeforeRetry);
     assert.equal(
         harness.appendedEntries.at(-1)?.body,
         "Open a PDF and use /pdf-to-markdown.",
+    );
+});
+
+test("pdf-to-markdown regenerate preserves a case-variant sibling created after a failed run", async () => {
+    const harness = createHarness({
+        initialComments: [createComment({
+            filePath: "Books/Guide.pdf",
+            comment: "/pdf-to-markdown",
+        })],
+        runtimeError: new Error("agent failed after launch"),
+    });
+
+    await harness.controller.handlePdfToMarkdownRequest({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Books/Guide.pdf",
+        body: "/pdf-to-markdown",
+    });
+    await waitForAgentQueueToDrain(harness.controller);
+    const previous = harness.controller.getLatestAgentRunForThread("thread-1");
+    assert.equal(previous?.status, "failed");
+
+    const selectionsBeforeRetry = harness.getDefaultRuntimeSelectionCalls();
+    harness.availableFilePaths.add("Books/guide.MD");
+
+    assert.equal(await harness.controller.retryRun(previous?.id ?? ""), false);
+    assert.equal(harness.getDefaultRuntimeSelectionCalls(), selectionsBeforeRetry);
+    assert.equal(
+        harness.appendedEntries.at(-1)?.body,
+        "Conflict: `Books/Guide.md` already exists. It was not modified.",
     );
 });
 

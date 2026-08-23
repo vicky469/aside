@@ -1,7 +1,7 @@
 # PDF-to-Markdown Agent Command Design
 
 **Date:** 2026-08-23
-**Status:** Approved; implementation pending
+**Status:** Implemented and verified
 
 ## Implementation Tracking
 
@@ -14,27 +14,40 @@ Use this section as the working checklist. Mark an item done only after the code
 - [x] The real failure was reproduced: the physical `pdf-to-clean-markdown.mjs` vault script is rejected before launch because the vault-script runtime accepts only Markdown targets.
 - [x] The command name `/pdf-to-markdown`, agent-backed execution, internal clean-Markdown requirement, and preserve-existing-output behavior were approved in the originating conversation.
 
-### To Implement
+### Implemented
 
-- [ ] Add `/pdf-to-markdown` as a reserved actionable built-in command and slash-menu suggestion.
-- [ ] Parse the command as a standalone PDF conversion request and route it before registered vault scripts.
-- [ ] Validate that the current Aside source is a PDF before resolving or launching an agent.
-- [ ] Queue the request through the existing availability-aware default-agent path with durable `pdf-to-markdown` request-kind metadata.
-- [ ] Add one shared provider-independent prompt contract for inspected, readable, verified sibling Markdown conversion.
-- [ ] Preserve an existing sibling Markdown file and report the conflict without modifying it.
-- [ ] Revalidate the current command and PDF target when retrying or regenerating the request.
-- [ ] Remove the obsolete `🛠️ scripts/pdf-to-clean-markdown.mjs` vault script and its dedicated `🛠️ scripts/tests/pdf-to-clean-markdown.test.mjs` test.
-- [ ] Build and install the generated plugin assets into the `lean-startup` vault without hand-patching generated or installed bundles.
+- [x] Add `/pdf-to-markdown` as a reserved actionable built-in command and slash-menu suggestion.
+- [x] Parse the command as a standalone PDF conversion request and route it before registered vault scripts.
+- [x] Validate that the current Aside source is a PDF before resolving or launching an agent.
+- [x] Queue the request through the existing availability-aware default-agent path with durable `pdf-to-markdown` request-kind metadata.
+- [x] Add one shared provider-independent prompt contract for inspected, readable, verified sibling Markdown conversion.
+- [x] Preflight exact and case-variant sibling Markdown paths, serialize active conversions by destination, and report conflicts without launching an agent or modifying the sibling.
+- [x] Revalidate the current command and PDF target when retrying or regenerating the request.
+- [x] Remove the obsolete `🛠️ scripts/pdf-to-clean-markdown.mjs` vault script and its dedicated `🛠️ scripts/tests/pdf-to-clean-markdown.test.mjs` test.
+- [x] Build and install the generated plugin assets into the `lean-startup` vault without hand-patching generated or installed bundles.
 
 ### Verification
 
-- [ ] Fail-first parser and controller tests cover exact recognition, repeated use, non-PDF rejection, idempotency, default-agent dispatch, fallback, and no-agent handling.
-- [ ] Agent-run and prompt tests cover durable metadata, shared conversion instructions, existing-output preservation, and retry revalidation.
-- [ ] Actionable-mention, registry, suggestion, draft-rendering, and persisted-rendering tests cover the reserved command without changing unrelated slash behavior.
-- [ ] Existing explicit-agent, script-authoring, and registered vault-script tests remain green.
-- [ ] The full automated build and release-artifact guard pass.
-- [ ] Installed `main.js`, `manifest.json`, and `styles.css` match the verified repository artifacts byte-for-byte.
-- [ ] A live `lean-startup` smoke test on `z_📚 reading/essential-guide-shenzhen-web.pdf` reaches the default agent instead of the vault-script runtime and reports either a verified sibling note or the approved existing-output conflict.
+- [x] Fail-first parser and controller tests cover exact recognition, repeated use, non-PDF rejection, idempotency, default-agent dispatch, fallback, and no-agent handling.
+- [x] Agent-run and prompt tests cover durable metadata, shared conversion instructions, existing-output preservation, and retry revalidation.
+- [x] Actionable-mention, registry, suggestion, draft-rendering, and persisted-rendering tests cover the reserved command without changing unrelated slash behavior.
+- [x] Existing explicit-agent, script-authoring, and registered vault-script tests remain green.
+- [x] The full automated build and release-artifact guard pass.
+- [x] Installed `main.js`, `manifest.json`, and `styles.css` match the verified repository artifacts byte-for-byte.
+- [x] A live `lean-startup` smoke test on `z_📚 reading/essential-guide-shenzhen-web.pdf` reaches the default agent instead of the vault-script runtime and reports either a verified sibling note or the approved existing-output conflict.
+
+### Verification Evidence
+
+- `npm run build` passed 1,220 TypeScript tests, 98 JavaScript policy/style tests, lint, type checking, Obsidian compliance, production bundling, and the release-artifact guard.
+- The shipped allowlist remained `main.js`, `manifest.json`, and `styles.css`. Inspection found no `main.js.map`, `sourceMappingURL`, embedded `sourcesContent`, raw TypeScript/JSX-family source, private-key marker, or obvious secret label.
+- Installed SHA-256 values were `879143e1…0f638` (`main.js`), `4f192021…54528` (`manifest.json`), and `51ce1d7a…fbf0` (`styles.css`); every installed file matched the inspected build byte-for-byte.
+- The obsolete vault script and test were moved to recoverable Trash copies. Their SHA-256 values remained `08e79a2c…bf15d` and `a58178fe…992b4`, and no `pdf-to-clean-markdown` runnable surface remained in the live scripts folder.
+- The live run `f1276b50-dd2b-4da6-b445-c5e7be966002` was stored as `requestKind: pdf-to-markdown`, `requestedAgent: codex`, `runtime: direct-cli`, and `status: succeeded`; no script run handled the command.
+- The live run created `z_📚 reading/essential-guide-shenzhen-web.md` (1,742 lines, 148,466 bytes). Independent sampling covered the beginning, component tables, border-crossing table, later map sections, and acknowledgments. The 2,100,066-byte source PDF retained its original `2026-07-06 21:08:55` modification time.
+- A second live run, `4631f5de-4e7e-4d2d-b9ec-755cf2bf258a`, exercised the existing-output path. It replied with the conflict and left the sibling Markdown SHA-256 (`306c5044…b860`) and modification timestamp (`1787492695`) unchanged.
+- The final installed build handled trigger `ed2e18bb-a501-4289-86fe-0172915f1b9e` at the application boundary and appended conflict reply `f753dddf-42d4-42c4-9ca6-cfcc0f9fe890`. The PDF agent-run list stayed unchanged, while the sibling retained SHA-256 `306c5044…b860`, modification timestamp `1787492695`, and size `148466` bytes.
+- Independent verification found three temporary artifacts still present after the first agent reply claimed cleanup. They were removed explicitly, their absence was rechecked, and the shared prompt now forbids a success claim until all temporary conversion artifacts are removed.
+- Independent code review found no remaining merge blockers after application-owned destination preflight, NFC/case-folded collision detection, same-destination serialization, retry checks, and cleanup-gate tests were added.
 
 ## Summary
 
@@ -71,11 +84,11 @@ On a PDF page-note thread, the user submits:
 /pdf-to-markdown
 ```
 
-The command appears in the slash menu with the label **PDF to Markdown**. Aside immediately queues a normal agent run using the configured default agent or the existing deterministic fallback. The normal pending output, streamed progress, cancellation, failure presentation, tool metadata, and retry action remain visible.
+The command appears in the slash menu with the label **PDF to Markdown**. When the sibling destination is available, Aside queues a normal agent run using the configured default agent or the existing deterministic fallback. The normal pending output, streamed progress, cancellation, failure presentation, tool metadata, and retry action remain visible.
 
 On success, the agent creates a sibling note with the same basename and a `.md` extension, then replies with the vault-relative output path and a concise verification summary. The reply must not claim success unless the file exists and representative output was inspected.
 
-If the sibling `.md` already exists, the agent leaves it unchanged and replies that conversion was not run because the destination exists. The command never invents an alternate filename and never silently replaces existing work.
+If the sibling `.md` already exists, including a case-variant path that aliases it on a case-insensitive filesystem, Aside leaves it unchanged and appends the conflict without launching an agent. The command never invents an alternate filename and never silently replaces existing work. A second request for a destination with a queued, running, or dispatching conversion is also stopped before another run is created.
 
 If used on a non-PDF source, Aside appends `Open a PDF and use /pdf-to-markdown.` without probing agents or creating a run. If no agent is available, it appends `No agent is available to convert this PDF.`
 
@@ -103,6 +116,8 @@ Retry and Regenerate load the latest saved trigger and source path, reparse the 
 
 The run uses the active vault root as its writable workspace. The Note path already present in agent prompt context identifies the source PDF.
 
+Before selection and again after asynchronous selection, `CommentAgentController` derives the destination and checks all current vault file paths using one NFC-normalized, case-folded key. The same key reserves dispatching destinations and detects queued or running `pdf-to-markdown` runs, so concurrent entries cannot launch two conversions for one sibling. Retry repeats the destination checks and reservation before creating a replacement run.
+
 ## Shared Prompt Contract
 
 `shared/sideNotePromptPolicy.js` remains the single provider-independent prompt owner. For `pdf-to-markdown` runs it tells Codex, Claude Code, or Gemini to:
@@ -126,7 +141,8 @@ Provider adapters remain transport-only. They must not duplicate or weaken this 
 - Wrong source type: compact thread reply, no diagnostics probe, no run.
 - Repeated token or extra text: compact usage reply, no run.
 - No available agent: compact thread reply, no run.
-- Existing sibling Markdown: agent preserves it and reports the conflict.
+- Existing sibling Markdown, including case variants: application-owned preflight preserves it, appends the conflict, and creates no agent run.
+- Conversion already dispatching, queued, or running for the sibling: compact in-progress reply, no second run.
 - Missing or unreadable PDF: agent reports failure without creating a success reply.
 - Extraction or OCR failure: normal agent-run failure handling; no automatic second provider is launched because a partial process may have created files.
 - Unreliable output: agent states the limitation and does not describe the result as clean or complete.
@@ -158,6 +174,8 @@ Existing PDFs and existing generated Markdown files remain untouched. No plugin 
 - Use the existing default-agent fallback order.
 - Build the run from the PDF source path and active vault root.
 - Reparse and revalidate on retry.
+- Reject exact and case-variant existing siblings before selection on first run and retry.
+- Serialize concurrent and persisted active runs that resolve to the same case-folded destination.
 - Preserve normal output replacement, progress, cancellation, and failure behavior.
 
 ### Shared prompt

@@ -3,6 +3,20 @@ export const PDF_TO_MARKDOWN_USAGE = "Use /pdf-to-markdown by itself on a PDF.";
 export const PDF_TO_MARKDOWN_SOURCE_REQUIRED = "Open a PDF and use /pdf-to-markdown.";
 export const PDF_TO_MARKDOWN_NO_AGENT = "No agent is available to convert this PDF.";
 
+export function formatPdfToMarkdownDestinationConflict(destinationPath: string): string {
+    return `Conflict: \`${destinationPath}\` already exists. It was not modified.`;
+}
+
+export function formatPdfToMarkdownInProgress(destinationPath: string): string {
+    return `A PDF-to-Markdown conversion is already running for \`${destinationPath}\`.`;
+}
+
+export function derivePdfToMarkdownDestinationPath(filePath: string): string | null {
+    return /\.pdf$/iu.test(filePath)
+        ? filePath.replace(/\.pdf$/iu, ".md")
+        : null;
+}
+
 export type PdfToMarkdownDirectiveResolution =
     | { kind: "none" }
     | { kind: "request" }
