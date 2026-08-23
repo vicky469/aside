@@ -1,5 +1,6 @@
 import { getSupportedAgentActors } from "../agents/agentActorRegistry";
 import { CREATE_SCRIPT_DIRECTIVE } from "./createScriptDirective";
+import { PDF_TO_MARKDOWN_DIRECTIVE } from "./pdfToMarkdownDirective";
 import { UPDATE_SCRIPT_DIRECTIVE } from "./updateScriptDirective";
 
 export interface ActionableBuiltInMention {
@@ -23,6 +24,7 @@ function getAllBuiltInMentions(): ActionableBuiltInMention[] {
         })),
         { mention: CREATE_SCRIPT_DIRECTIVE, label: "Create script", requiresAgents: true },
         { mention: UPDATE_SCRIPT_DIRECTIVE, label: "Update script", requiresAgents: true },
+        { mention: PDF_TO_MARKDOWN_DIRECTIVE, label: "PDF to Markdown", requiresAgents: true },
     ];
 }
 

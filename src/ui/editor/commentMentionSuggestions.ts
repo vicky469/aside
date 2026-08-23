@@ -32,7 +32,7 @@ export interface MentionSuggestionPresentation {
 
 export function getMentionSuggestionPlaceholder(agentsFeatureAvailable: boolean): string {
     return agentsFeatureAvailable
-        ? "Mention an agent, todo, /create-script, /update-script, or a vault script"
+        ? "Mention an agent, todo, /create-script, /update-script, /pdf-to-markdown, or a vault script"
         : "Mention todo or a vault script";
 }
 

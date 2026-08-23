@@ -36,7 +36,7 @@ test("mention presentation exposes only the insertion value", () => {
 test("mention modal guidance follows the Agents capability", () => {
     assert.equal(
         getMentionSuggestionPlaceholder(true),
-        "Mention an agent, todo, /create-script, /update-script, or a vault script",
+        "Mention an agent, todo, /create-script, /update-script, /pdf-to-markdown, or a vault script",
     );
     assert.equal(
         getMentionSuggestionPlaceholder(false),
@@ -135,7 +135,7 @@ test("buildMentionSuggestions filters explicit built-in queries case-insensitive
 test("buildMentionSuggestions keeps todo and supported agents before live scripts", () => {
     assert.deepEqual(
         buildMentionSuggestions([cleanLinksScript], "", true).map((item) => item.mention),
-        ["@todo", "@codex", "@claude", "@gemini", "/create-script", "/update-script", "/clean-links"],
+        ["@todo", "@codex", "@claude", "@gemini", "/create-script", "/update-script", "/pdf-to-markdown", "/clean-links"],
     );
     assert.deepEqual(
         buildMentionSuggestions([cleanLinksScript], "cl", true).map((item) => item.mention),
@@ -147,7 +147,7 @@ test("buildMentionSuggestions keeps todo and supported agents before live script
     );
     assert.deepEqual(
         buildMentionSuggestions([cleanLinksScript], "/", true).map((item) => item.mention),
-        ["/create-script", "/update-script", "/clean-links"],
+        ["/create-script", "/update-script", "/pdf-to-markdown", "/clean-links"],
     );
     assert.deepEqual(
         buildMentionSuggestions([cleanLinksScript], "@cl", true).map((item) => item.mention),
@@ -194,11 +194,17 @@ test("buildMentionSuggestions omits scripts whose normalized mentions are reserv
             mentionName: "update-script",
             normalizedMentionName: "update-script",
         },
+        {
+            path: "🛠️ scripts/pdf-to-markdown.mjs",
+            fileName: "pdf-to-markdown.mjs",
+            mentionName: "pdf-to-markdown",
+            normalizedMentionName: "pdf-to-markdown",
+        },
     ];
 
     assert.deepEqual(
         buildMentionSuggestions(scripts, "", true).map((item) => item.mention),
-        ["@todo", "@codex", "@claude", "@gemini", "/create-script", "/update-script", "/clean-links"],
+        ["@todo", "@codex", "@claude", "@gemini", "/create-script", "/update-script", "/pdf-to-markdown", "/clean-links"],
     );
 
     assert.deepEqual(
@@ -215,4 +221,5 @@ test("disabled Agents suggestions keep todo and vault scripts only", () => {
     assert.deepEqual(buildMentionSuggestions([cleanLinksScript], "@co", false), []);
     assert.deepEqual(buildMentionSuggestions([cleanLinksScript], "/create", false), []);
     assert.deepEqual(buildMentionSuggestions([cleanLinksScript], "/update", false), []);
+    assert.deepEqual(buildMentionSuggestions([cleanLinksScript], "/pdf", false), []);
 });

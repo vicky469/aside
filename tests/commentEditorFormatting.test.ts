@@ -225,8 +225,8 @@ test("renderStyledDraftCommentHtml highlights registered standalone slash mentio
 
 test("renderStyledDraftCommentHtml highlights enabled script-authoring commands", () => {
     assert.equal(
-        renderStyledDraftCommentHtml("Use /create-script or /update-script", isRecognizedMention),
-        "Use <span class=\"aside-editor-token-mention\">/create-script</span> or <span class=\"aside-editor-token-mention\">/update-script</span>",
+        renderStyledDraftCommentHtml("Use /create-script, /update-script, or /pdf-to-markdown", isRecognizedMention),
+        "Use <span class=\"aside-editor-token-mention\">/create-script</span>, <span class=\"aside-editor-token-mention\">/update-script</span>, or <span class=\"aside-editor-token-mention\">/pdf-to-markdown</span>",
     );
 });
 
