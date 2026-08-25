@@ -3,6 +3,7 @@ import test from "node:test";
 import type { Editor, TFile } from "obsidian";
 import type { Comment } from "../src/commentManager";
 import { getPageCommentLabel } from "../src/core/anchors/commentAnchors";
+import { isPageNoteCapablePath } from "../src/core/rules/commentableFiles";
 import { CommentEntryController, type CommentEntryHost } from "../src/comments/commentEntryController";
 import type { DraftComment, DraftSelection } from "../src/domain/drafts";
 
@@ -35,14 +36,6 @@ function isCommentableFilePath(path: string): boolean {
     return path.endsWith(".md");
 }
 
-function isPageNoteCapableFilePath(path: string): boolean {
-    if (path === ALL_COMMENTS_NOTE_PATH) {
-        return false;
-    }
-
-    return path.endsWith(".md") || path.endsWith(".pdf") || path.endsWith(".html");
-}
-
 function createHost(options: { knownComments?: Comment[]; threadIdsByCommentId?: Record<string, string> } = {}) {
     const draftCalls: Array<{
         draft: DraftComment | null;
@@ -60,7 +53,7 @@ function createHost(options: { knownComments?: Comment[]; threadIdsByCommentId?:
         getAllCommentsNotePath: () => ALL_COMMENTS_NOTE_PATH,
         getFileByPath: (filePath) => createFile(filePath),
         isCommentableFile: (file): file is TFile => !!file && isCommentableFilePath(file.path),
-        isPageNoteCapableFile: (file): file is TFile => !!file && isPageNoteCapableFilePath(file.path),
+        isPageNoteCapableFile: (file): file is TFile => !!file && isPageNoteCapablePath(file.path, ALL_COMMENTS_NOTE_PATH),
         loadCommentsForFile: async (file) => {
             loadedFiles.push(file.path);
         },
@@ -172,7 +165,7 @@ test("comment entry controller rejects empty editor selections", async () => {
 
 test("comment entry controller rejects text-anchored drafts for non-markdown files", async () => {
     const host = createHost();
-    const file = createFile("docs/diagram.pdf");
+    const file = createFile("docs/proposal.docx");
 
     const started = await host.controller.startDraftFromEditorSelection(createEditor("label"), file);
 
@@ -203,28 +196,36 @@ test("comment entry controller rejects text-anchored drafts for rendered HTML se
     assert.deepEqual(host.notices, ["Text-anchored side notes are only supported in Markdown files."]);
 });
 
-test("comment entry controller starts page drafts for PDF files", async () => {
-    const host = createHost();
-    const file = createFile("docs/diagram.pdf");
+for (const filePath of [
+    "docs/diagram.pdf",
+    "assets/diagram.png",
+    "boards/roadmap.canvas",
+    "docs/proposal.docx",
+]) {
+    test(`comment entry controller starts page drafts for ${filePath}`, async () => {
+        const host = createHost();
+        const file = createFile(filePath);
 
-    const started = await host.controller.startPageCommentDraft(file);
+        const started = await host.controller.startPageCommentDraft(file);
 
-    assert.equal(started, true);
-    assert.deepEqual(host.loadedFiles, []);
-    assert.deepEqual(host.markedFiles, [file.path]);
-    assert.equal(host.draftCalls.length, 1);
-    assert.deepEqual(host.highlightedCommentIds, ["comment-1"]);
+        assert.equal(started, true);
+        assert.deepEqual(host.loadedFiles, []);
+        assert.deepEqual(host.markedFiles, [file.path]);
+        assert.equal(host.draftCalls.length, 1);
+        assert.deepEqual(host.highlightedCommentIds, ["comment-1"]);
 
-    const draft = host.draftCalls[0].draft;
-    assert.ok(draft);
-    assert.equal(draft.anchorKind, "page");
-    assert.equal(draft.filePath, file.path);
-    assert.equal(draft.selectedText, getPageCommentLabel(file.path));
-    assert.equal(draft.selectedTextHash, "");
-    assert.equal(host.draftCalls[0].skipCommentViewRefresh, true);
-    assert.equal(host.draftCalls[0].refreshEditorDecorations, false);
-    assert.deepEqual(host.notices, []);
-});
+        const draft = host.draftCalls[0].draft;
+        assert.ok(draft);
+        assert.equal(draft.anchorKind, "page");
+        assert.equal(draft.filePath, file.path);
+        assert.equal(draft.selectedText, getPageCommentLabel(file.path));
+        assert.equal(draft.selectedTextHash, "");
+        assert.equal(host.draftCalls[0].hostFilePath, file.path);
+        assert.equal(host.draftCalls[0].skipCommentViewRefresh, true);
+        assert.equal(host.draftCalls[0].refreshEditorDecorations, false);
+        assert.deepEqual(host.notices, []);
+    });
+}
 
 test("comment entry controller starts page drafts for markdown files", async () => {
     const host = createHost();

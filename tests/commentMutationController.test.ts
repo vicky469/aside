@@ -7,6 +7,7 @@ import {
     type CommentMutationHost,
 } from "../src/comments/commentMutationController";
 import type { SavedUserEntryEvent } from "../src/agents/commentAgentController";
+import { isPageNoteCapablePath } from "../src/core/rules/commentableFiles";
 import type { DraftComment, DraftSelection } from "../src/domain/drafts";
 import { threadMatchesSidebarGroup } from "../src/ui/views/sidebarThreadGroups";
 
@@ -146,7 +147,7 @@ function createHost(options: {
             : options.currentNoteContentByPath?.[file.path] ?? "",
         getCurrentSelectionForFile: (file) => options.currentSelectionByPath?.[file.path] ?? null,
         isCommentableFile: (file): file is TFile => !!file && file.extension === "md",
-        isPageNoteCapableFile: (file): file is TFile => !!file && (file.extension === "md" || file.extension === "pdf" || file.extension === "html"),
+        isPageNoteCapableFile: (file): file is TFile => !!file && isPageNoteCapablePath(file.path, "Aside index.md"),
         loadCommentsForFile: async (file) => {
             loadedFiles.push(file.path);
         },
@@ -864,6 +865,180 @@ test("comment mutation controller edits, deletes, and pins PDF page-note threads
         },
     ]);
     assert.deepEqual(host.notices, []);
+});
+
+test("comment mutation controller appends, edits, pins, and deletes DOCX page-note threads without reading source content", async () => {
+    const comment = createComment({
+        id: "docx-thread",
+        filePath: "docs/proposal.docx",
+        selectedText: "proposal",
+        selectedTextHash: "hash:proposal",
+        comment: "Original DOCX note",
+        anchorKind: "page",
+    });
+    const deletedAt = Date.now();
+    const host = createHost({
+        knownComments: [comment],
+        loadedComments: [comment],
+        getCurrentNoteContent: async () => {
+            throw new Error("DOCX content must not be read");
+        },
+        now: deletedAt,
+    });
+
+    const appended = await host.controller.appendThreadEntry(comment.id, {
+        id: "docx-entry",
+        body: "DOCX reply",
+        timestamp: deletedAt - 1,
+    });
+    const edited = await host.controller.editComment("docx-entry", "Updated DOCX reply");
+    const pinned = await host.controller.setCommentPinnedState(comment.id, true);
+    const deleted = await host.controller.deleteComment(comment.id);
+
+    assert.equal(appended, true);
+    assert.equal(edited, true);
+    assert.equal(pinned, true);
+    assert.equal(deleted, true);
+    const deletedThread = host.manager.getAllThreads({ includeDeleted: true })
+        .find((thread) => thread.id === comment.id);
+    assert.ok(deletedThread);
+    assert.deepEqual(deletedThread.entries.map((entry) => entry.body), [
+        "Original DOCX note",
+        "Updated DOCX reply",
+    ]);
+    assert.equal(deletedThread.isPinned, true);
+    assert.equal(deletedThread.deletedAt, deletedAt);
+    assert.deepEqual(host.loadedFiles, []);
+    assert.deepEqual(host.persistedFiles, Array.from({ length: 4 }, () => ({
+        path: comment.filePath,
+        immediateAggregateRefresh: true,
+        refreshEditorDecorations: false,
+        refreshMarkdownPreviews: false,
+    })));
+    assert.deepEqual(host.notices, []);
+});
+
+test("comment mutation controller reorders root page-note threads for non-markdown files", async () => {
+    const filePath = "boards/roadmap.canvas";
+    const first = createComment({ id: "thread-1", filePath, anchorKind: "page", timestamp: 100 });
+    const second = createComment({ id: "thread-2", filePath, anchorKind: "page", timestamp: 200 });
+    const third = createComment({ id: "thread-3", filePath, anchorKind: "page", timestamp: 300 });
+    const host = createHost({
+        knownComments: [first, second, third],
+        loadedComments: [first, second, third],
+    });
+
+    const reordered = await host.controller.reorderThreadsForFile(
+        filePath,
+        third.id,
+        first.id,
+        "before",
+    );
+
+    assert.equal(reordered, true);
+    assert.deepEqual(
+        host.manager.getThreadsForFile(filePath).map((thread) => thread.id),
+        [third.id, first.id, second.id],
+    );
+    assert.deepEqual(host.loadedFiles, [filePath]);
+    assert.deepEqual(host.persistedFiles, [{
+        path: filePath,
+        immediateAggregateRefresh: true,
+        refreshEditorDecorations: false,
+        refreshMarkdownPreviews: false,
+    }]);
+});
+
+test("comment mutation controller reorders child page-note entries for non-markdown files", async () => {
+    const filePath = "boards/roadmap.canvas";
+    const root = createComment({ id: "thread-1", filePath, anchorKind: "page" });
+    const host = createHost({
+        knownComments: [root],
+        loadedComments: [root],
+    });
+    host.manager.appendEntry(root.id, {
+        id: "entry-2",
+        body: "Second",
+        timestamp: 200,
+    });
+    host.manager.appendEntry(root.id, {
+        id: "entry-3",
+        body: "Third",
+        timestamp: 300,
+    });
+
+    const reordered = await host.controller.reorderThreadEntries(
+        filePath,
+        root.id,
+        "entry-3",
+        "entry-2",
+        "before",
+    );
+
+    assert.equal(reordered, true);
+    assert.deepEqual(
+        host.manager.getThreadById(root.id)?.entries.map((entry) => entry.id),
+        [root.id, "entry-3", "entry-2"],
+    );
+    assert.deepEqual(host.loadedFiles, [filePath]);
+    assert.deepEqual(host.persistedFiles, [{
+        path: filePath,
+        immediateAggregateRefresh: true,
+        refreshEditorDecorations: false,
+        refreshMarkdownPreviews: false,
+    }]);
+});
+
+test("comment mutation controller rejects reorder requests for missing and non-capable source files", async () => {
+    const indexPath = "Aside index.md";
+    const host = createHost({ extraFiles: [indexPath] });
+
+    const missingRootReorder = await host.controller.reorderThreadsForFile(
+        "missing.docx",
+        "thread-2",
+        "thread-1",
+        "before",
+    );
+    const indexChildReorder = await host.controller.reorderThreadEntries(
+        indexPath,
+        "thread-1",
+        "entry-3",
+        "entry-2",
+        "before",
+    );
+
+    assert.equal(missingRootReorder, false);
+    assert.equal(indexChildReorder, false);
+    assert.deepEqual(host.loadedFiles, []);
+    assert.deepEqual(host.persistedFiles, []);
+});
+
+test("comment mutation controller does not persist invalid page-note reorders", async () => {
+    const filePath = "docs/proposal.docx";
+    const root = createComment({ id: "thread-1", filePath, anchorKind: "page" });
+    const host = createHost({
+        knownComments: [root],
+        loadedComments: [root],
+    });
+
+    const rootReordered = await host.controller.reorderThreadsForFile(
+        filePath,
+        root.id,
+        root.id,
+        "before",
+    );
+    const childReordered = await host.controller.reorderThreadEntries(
+        filePath,
+        root.id,
+        "missing-entry",
+        root.id,
+        "after",
+    );
+
+    assert.equal(rootReordered, false);
+    assert.equal(childReordered, false);
+    assert.deepEqual(host.loadedFiles, [filePath, filePath]);
+    assert.deepEqual(host.persistedFiles, []);
 });
 
 test("comment mutation controller keeps child edit drafts attached to their parent thread", async () => {

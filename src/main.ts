@@ -2320,19 +2320,12 @@ export default class Aside extends Plugin {
         targetThreadId: string,
         placement: ReorderPlacement,
     ): Promise<boolean> {
-        const file = this.workspaceViewController.getFileByPath(filePath);
-        if (!this.isCommentableFile(file)) {
-            return false;
-        }
-
-        await this.loadCommentsForFile(file);
-        const changed = this.commentManager.reorderThreadsForFile(file.path, movedThreadId, targetThreadId, placement);
-        if (!changed) {
-            return false;
-        }
-
-        await this.persistCommentsForFile(file, { immediateAggregateRefresh: true });
-        return true;
+        return this.commentMutationController.reorderThreadsForFile(
+            filePath,
+            movedThreadId,
+            targetThreadId,
+            placement,
+        );
     }
 
     public async reorderThreadEntries(
@@ -2342,19 +2335,13 @@ export default class Aside extends Plugin {
         targetEntryId: string,
         placement: ReorderPlacement,
     ): Promise<boolean> {
-        const file = this.workspaceViewController.getFileByPath(filePath);
-        if (!this.isCommentableFile(file)) {
-            return false;
-        }
-
-        await this.loadCommentsForFile(file);
-        const changed = this.commentManager.reorderThreadEntries(threadId, movedEntryId, targetEntryId, placement);
-        if (!changed) {
-            return false;
-        }
-
-        await this.persistCommentsForFile(file, { immediateAggregateRefresh: true });
-        return true;
+        return this.commentMutationController.reorderThreadEntries(
+            filePath,
+            threadId,
+            movedEntryId,
+            targetEntryId,
+            placement,
+        );
     }
 
     public isSavingDraft(commentId: string): boolean {

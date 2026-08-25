@@ -1,5 +1,5 @@
 import type { TFile } from "obsidian";
-import type { Comment, CommentManager, CommentThread } from "../commentManager";
+import type { Comment, CommentManager, CommentThread, ReorderPlacement } from "../commentManager";
 import { getPageCommentLabel } from "../core/anchors/commentAnchors";
 import { lineChToOffset, offsetToLineCh } from "../core/anchors/anchorResolver";
 import { shortenBareUrlsInMarkdown } from "../core/text/commentUrls";
@@ -391,6 +391,63 @@ export class CommentMutationController {
                 normalizedTagText,
                 targetTagTextForNotice,
             }));
+    }
+
+    public async reorderThreadsForFile(
+        filePath: string,
+        movedThreadId: string,
+        targetThreadId: string,
+        placement: ReorderPlacement,
+    ): Promise<boolean> {
+        const file = this.host.getFileByPath(filePath);
+        if (!this.host.isPageNoteCapableFile(file)) {
+            return false;
+        }
+
+        await this.host.loadCommentsForFile(file);
+        const changed = this.host.getCommentManager().reorderThreadsForFile(
+            file.path,
+            movedThreadId,
+            targetThreadId,
+            placement,
+        );
+        if (!changed) {
+            return false;
+        }
+
+        await this.host.persistCommentsForFile(file, this.buildPersistOptionsForFile(file, {
+            immediateAggregateRefresh: true,
+        }));
+        return true;
+    }
+
+    public async reorderThreadEntries(
+        filePath: string,
+        threadId: string,
+        movedEntryId: string,
+        targetEntryId: string,
+        placement: ReorderPlacement,
+    ): Promise<boolean> {
+        const file = this.host.getFileByPath(filePath);
+        if (!this.host.isPageNoteCapableFile(file)) {
+            return false;
+        }
+
+        await this.host.loadCommentsForFile(file);
+        const changed = this.host.getCommentManager().reorderThreadEntries(
+            threadId,
+            movedEntryId,
+            targetEntryId,
+            placement,
+        );
+        if (!changed) {
+            return false;
+        }
+
+        await this.host.persistCommentsForFile(file, this.buildPersistOptionsForFile(file, {
+            immediateAggregateRefresh: true,
+        }));
+        return true;
     }
 
     private async mutateBatchTagsForFile(
