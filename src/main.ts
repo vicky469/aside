@@ -521,6 +521,7 @@ export default class Aside extends Plugin {
         getFileByPath: (filePath) => this.workspaceViewController.getFileByPath(filePath),
         getFilePaths: () => this.app.vault.getFiles().map((file) => file.path),
         isCommentableFile: (file): file is TFile => this.isCommentableFile(file),
+        isPageNoteCapableFile: (file): file is TFile => this.isPageNoteCapableFile(file),
         getCurrentNoteContent: (file) => this.workspaceViewController.getCurrentNoteContent(file),
         loadCommentsForFile: (file) => this.loadCommentsForFile(file),
         hashText: (text) => generateHash(text),
