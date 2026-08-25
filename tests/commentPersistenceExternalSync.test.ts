@@ -8,10 +8,12 @@ import type { PersistedPluginData } from "../src/settings/indexNoteSettingsPlann
 import { SideNoteSyncEventStore, type SideNoteSyncEventState } from "../src/sync/sideNoteSyncEventStore";
 import { parseNoteComments } from "../src/core/storage/noteCommentStorage";
 import { AggregateCommentIndex } from "../src/index/AggregateCommentIndex";
+import { ALL_COMMENTS_NOTE_PATH } from "../src/core/derived/allCommentsNote";
 
 class FakeAdapter implements Pick<DataAdapter, "exists" | "mkdir" | "write" | "read" | "remove" | "rename" | "list"> {
     public readonly directories = new Set<string>();
     public readonly files = new Map<string, string>();
+    public readonly readPaths: string[] = [];
 
     async exists(normalizedPath: string): Promise<boolean> {
         return this.directories.has(normalizedPath) || this.files.has(normalizedPath);
@@ -26,6 +28,7 @@ class FakeAdapter implements Pick<DataAdapter, "exists" | "mkdir" | "write" | "r
     }
 
     async read(normalizedPath: string): Promise<string> {
+        this.readPaths.push(normalizedPath);
         return this.files.get(normalizedPath) ?? "";
     }
 
@@ -903,6 +906,206 @@ test("comment persistence converts synced Markdown rename events into DOCX page-
         globalThis.window = originalWindow;
     }
 });
+
+for (const { kind, indexPath } of [
+    { kind: "default", indexPath: ALL_COMMENTS_NOTE_PATH },
+    { kind: "custom", indexPath: "Meta/Comment Hub.md" },
+]) {
+    test(`comment persistence rejects synced renames targeting the ${kind} generated index`, async () => {
+        const originalWindow = globalThis.window;
+        globalThis.window = {
+            setTimeout: () => 1,
+            clearTimeout: () => {},
+        } as unknown as typeof globalThis.window;
+
+        const oldFile = createFile(`docs/${kind}-source.md`);
+        const indexFile = createFile(indexPath);
+        const sourceId = `source-${kind}`;
+        const sourceThread = createThread(oldFile.path);
+        const adapter = new FakeAdapter();
+        const originalSidecarPath = getSidecarStoragePath(oldFile.path);
+        const sourceSidecarPath = getSourceSidecarStoragePath(sourceId);
+        adapter.files.set(originalSidecarPath, serializeSidecarThreads(oldFile.path, [sourceThread]));
+        adapter.files.set(sourceSidecarPath, `${JSON.stringify({
+            version: 1,
+            notePath: oldFile.path,
+            sourceId,
+            threads: [sourceThread],
+        })}\n`);
+        const initialSidecars = Array.from(adapter.files.entries());
+        const commentManager = new CommentManager([sourceThread]);
+        const aggregateCommentIndex = new AggregateCommentIndex();
+        aggregateCommentIndex.updateFile(oldFile.path, [sourceThread]);
+        const initialManagerThreads = commentManager.getThreadsForFile(oldFile.path, { includeDeleted: true });
+        const initialIndexThreads = aggregateCommentIndex.getThreadsForFile(oldFile.path, { includeDeleted: true });
+        const initialSourceIdentityState = {
+            schemaVersion: 1 as const,
+            sources: {
+                [sourceId]: {
+                    sourceId,
+                    currentPath: oldFile.path,
+                    aliases: [],
+                    contentFingerprint: null,
+                    createdAt: 1710000000000,
+                    updatedAt: 1710000000000,
+                },
+            },
+            pathToSourceId: {
+                [oldFile.path]: sourceId,
+            },
+        };
+        let persistedData: PersistedPluginData = {
+            sourceIdentityState: initialSourceIdentityState,
+        };
+        let eventCounter = 0;
+        const remoteEventStore = new SideNoteSyncEventStore({
+            readPersistedPluginData: () => persistedData,
+            writePersistedPluginData: async (data) => {
+                persistedData = data;
+            },
+            getDeviceId: () => "device-b",
+            createEventId: () => `remote-index-event-${kind}-${++eventCounter}`,
+            hashText: async (text) => `hash-${text.replace(/\//g, "_")}`,
+            now: () => 1710000000100 + eventCounter,
+        });
+        await remoteEventStore.appendLocalEvents(oldFile.path, [{
+            op: "renameNote",
+            payload: {
+                previousNotePath: oldFile.path,
+                nextNotePath: indexPath,
+            },
+        }]);
+
+        let indexContent = `# ${kind} generated index\n\nDerived content.\n`;
+        let indexProcessCount = 0;
+        let currentContentReadCount = 0;
+        let storedContentReadCount = 0;
+        let parserCount = 0;
+        const hashedTexts: string[] = [];
+        const logs: Array<{
+            level: "info" | "warn" | "error";
+            area: string;
+            event: string;
+            payload?: Record<string, unknown>;
+        }> = [];
+        const controller = new CommentPersistenceController({
+            app: {
+                vault: {
+                    adapter: adapter as unknown as DataAdapter,
+                    process: async (_file: TFile, change: (content: string) => string) => {
+                        indexProcessCount += 1;
+                        indexContent = change(indexContent);
+                        return indexContent;
+                    },
+                    getAbstractFileByPath: (filePath: string) => {
+                        if (filePath === oldFile.path) {
+                            return oldFile;
+                        }
+                        if (filePath === indexPath) {
+                            return indexFile;
+                        }
+                        return null;
+                    },
+                },
+            } as never,
+            getAllCommentsNotePath: () => indexPath,
+            getIndexHeaderImageUrl: () => "",
+            getIndexHeaderImageCaption: () => "",
+            getMarkdownViewForFile: () => null,
+            getMarkdownFileByPath: (filePath) => {
+                if (filePath === oldFile.path) {
+                    return oldFile;
+                }
+                if (filePath === indexPath) {
+                    return indexFile;
+                }
+                return null;
+            },
+            getCurrentNoteContent: async () => {
+                currentContentReadCount += 1;
+                return indexContent;
+            },
+            getStoredNoteContent: async () => {
+                storedContentReadCount += 1;
+                return indexContent;
+            },
+            getParsedNoteComments: (filePath, noteContent) => {
+                parserCount += 1;
+                return parseNoteComments(noteContent, filePath);
+            },
+            getPluginDataDirPath: () => ".obsidian/plugins/aside",
+            getSideNoteSyncDeviceId: () => "device-a",
+            readPersistedPluginData: () => persistedData,
+            writePersistedPluginData: async (data) => {
+                persistedData = data;
+            },
+            isAllCommentsNotePath: (filePath) => filePath === indexPath,
+            isCommentableFile: (candidate): candidate is TFile =>
+                !!candidate && candidate.extension === "md" && candidate.path !== indexPath,
+            isPageNoteCapableFile: (candidate): candidate is TFile =>
+                !!candidate && typeof candidate.extension === "string" && candidate.path !== indexPath,
+            isMarkdownEditorFocused: () => false,
+            getCommentManager: () => commentManager,
+            getAggregateCommentIndex: () => aggregateCommentIndex,
+            createCommentId: () => "generated-id",
+            hashText: async (text) => {
+                hashedTexts.push(text);
+                return `hash-${text.replace(/\//g, "_")}`;
+            },
+            syncDerivedCommentLinksForFile: () => {},
+            refreshCommentViews: async () => {},
+            refreshAllCommentsSidebarViews: async () => {},
+            refreshEditorDecorations: () => {},
+            refreshMarkdownPreviews: () => {},
+            getCommentMentionedPageLabels: () => [],
+            syncIndexNoteLeafMode: async () => {},
+            log: async (level, area, event, payload) => {
+                logs.push({ level, area, event, payload });
+            },
+        });
+
+        try {
+            assert.equal(await controller.replaySyncedSideNoteEvents(), 0);
+            assert.equal(await controller.replaySyncedSideNoteEvents(), 0);
+
+            assert.deepEqual(adapter.readPaths, []);
+            assert.deepEqual(hashedTexts, []);
+            assert.deepEqual(Array.from(adapter.files.entries()), initialSidecars);
+            assert.deepEqual(
+                commentManager.getThreadsForFile(oldFile.path, { includeDeleted: true }),
+                initialManagerThreads,
+            );
+            assert.deepEqual(
+                aggregateCommentIndex.getThreadsForFile(oldFile.path, { includeDeleted: true }),
+                initialIndexThreads,
+            );
+            assert.equal(commentManager.getThreadsForFile(indexPath, { includeDeleted: true }).length, 0);
+            assert.equal(aggregateCommentIndex.getThreadsForFile(indexPath, { includeDeleted: true }).length, 0);
+            assert.deepEqual(persistedData.sourceIdentityState, initialSourceIdentityState);
+            assert.equal(indexContent, `# ${kind} generated index\n\nDerived content.\n`);
+            assert.equal(indexProcessCount, 0);
+            assert.equal(currentContentReadCount, 0);
+            assert.equal(storedContentReadCount, 0);
+            assert.equal(parserCount, 0);
+            assert.equal(
+                (persistedData.sideNoteSyncEventState as SideNoteSyncEventState)
+                    .processedWatermarks["device-a"]?.["device-b"],
+                1,
+            );
+            assert.deepEqual(logs.filter((entry) => entry.level === "warn"), [{
+                level: "warn",
+                area: "persistence",
+                event: "sync.plugin-data.rename.skip-ineligible-target",
+                payload: {
+                    sourceNotePath: oldFile.path,
+                    targetNotePath: indexPath,
+                },
+            }]);
+        } finally {
+            globalThis.window = originalWindow;
+        }
+    });
+}
 
 test("comment persistence controller hydrates compacted snapshots over a stale sidecar cache", async () => {
     const originalWindow = globalThis.window;

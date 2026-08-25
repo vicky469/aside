@@ -18,7 +18,7 @@ import {
     type CanonicalCommentStorageSource,
 } from "../core/storage/canonicalCommentStorage";
 import { normalizeDeletedAt, purgeExpiredDeletedThreads } from "../core/rules/deletedCommentVisibility";
-import { isMarkdownCommentablePath } from "../core/rules/commentableFiles";
+import { isMarkdownCommentablePath, isPageNoteCapablePath } from "../core/rules/commentableFiles";
 import { SidecarCommentStorage, type RemovedSidecarComments } from "../core/storage/sidecarCommentStorage";
 import {
     buildSideNoteSyncEventInputsForThreadDiff,
@@ -879,6 +879,14 @@ export class CommentPersistenceController {
                 return appliedEventCount;
             }
             const targetNotePath = getSyncedEventTargetNotePath(notePath, noteEvents);
+            if (!isPageNoteCapablePath(targetNotePath, this.host.getAllCommentsNotePath())) {
+                void this.host.log?.("warn", "persistence", "sync.plugin-data.rename.skip-ineligible-target", {
+                    sourceNotePath: notePath,
+                    targetNotePath,
+                });
+                processedEvents.push(...noteEvents);
+                continue;
+            }
             const sourceId = getSyncedEventSourceId(noteEvents);
             const existingSourceRecord = sourceId
                 ? this.sourceIdentityStore.getRecordBySourceId(sourceId)
