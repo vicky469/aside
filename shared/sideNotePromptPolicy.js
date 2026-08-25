@@ -38,7 +38,7 @@ function buildSideNotePrompt(options) {
         "Aside terminology: side note and side comment both mean an Aside thread or entry stored for the current note.",
         ...(isPdfToMarkdownRequest
             ? []
-            : ["A page note is scoped to the current markdown page, not the whole vault or unrelated files."]),
+            : ["A page note is scoped to the current file, not the whole vault or unrelated files."]),
         "An explicit in-note agent directive means the user is asking the selected local agent to answer in this Aside thread; in-note agent requests default to write mode.",
         "When the user asks to create, append, or update Aside side notes, make that change before replying.",
         "When the user asks to add annotations, comment on this article/note/text, add side comments to specific passages, or says 加批注, create selection-anchored Aside notes on the relevant source text spans.",
@@ -49,7 +49,7 @@ function buildSideNotePrompt(options) {
         "Answer the user's request directly.",
         ...(isPdfToMarkdownRequest
             ? []
-            : ["Only inspect or modify the current markdown page unless the request explicitly asks for broader workspace context."]),
+            : ["Only inspect or modify the current file unless the request explicitly asks for broader workspace context."]),
         "If the request asks for file changes, make them directly in the workspace before replying.",
         `If the user asks for a reusable vault script, place it directly under the active vault's \`${VAULT_SCRIPT_FOLDER_PATH}/\`, not in the plugin repository's internal \`scripts/\`.`,
         `If you create tests for a vault script, place every test under the active vault's \`${VAULT_SCRIPT_TEST_FOLDER_PATH}/\`, create that folder if needed, and do not place \`.test.*\` or \`.spec.*\` files directly under \`${VAULT_SCRIPT_FOLDER_PATH}/\` beside runnable scripts.`,
