@@ -45,7 +45,7 @@ For durable storage and sync across devices, use Aside with [Obsidian Sync](http
 ## Features
 
 - Uses a dedicated sidebar for drafting, editing, and deleting comments.
-- Adds page notes for any real vault file Obsidian displays in a file-backed view, including viewer plugins. Selection-anchored notes remain Markdown-only. Aside does not add previews for formats Obsidian or its installed plugins cannot display.
+- Adds page notes for vault files displayed in an Obsidian file-backed view, except the generated `🐰 Aside Index.md`, including files displayed by viewer plugins. Selection-anchored notes remain Markdown-only. Aside does not add previews for formats Obsidian or its installed plugins cannot display.
 - Supports Obsidian-style `[[wikilinks]]` inside side comments to link existing notes or create new markdown notes.
 - Type `#` in a side note to search existing tags or add a new one.
 - Type `@todo` to mark follow-ups that appear in the Todo index tab.
@@ -67,9 +67,9 @@ For durable storage and sync across devices, use Aside with [Obsidian Sync](http
 
 ## Workflow
 
-1. Open a file in Obsidian's file-backed view.
+1. Open a file in an Obsidian file-backed view.
 2. Add a side note.
-   In markdown, select text and right-click `Add comment to selection`, or use the sidebar `Add page note` action for the whole file. Any file-backed view uses the sidebar `Add page note` action for a page note.
+   Markdown selections can use `Add comment to selection`; any supported file-backed view can use the sidebar `Add page note` for the whole file.
 3. Write your comment in the sidebar.
    Type `@todo` for follow-ups, `@codex` if you want Codex to take the task, `@claude` if you want Claude to take it, or `@gemini` if you want Gemini to take it.
 
@@ -82,7 +82,7 @@ For durable storage and sync across devices, use Aside with [Obsidian Sync](http
   One message inside a thread. The first saved entry creates the thread. Later child entries are replies in the same thread.
 
 - **`page note`**  
-  A thread attached to the whole file, not to a text selection. Page notes work for any real vault file Obsidian displays in a file-backed view, including viewer plugins. Aside does not add previews for formats Obsidian or its installed plugins cannot display.
+  A thread attached to the whole file, not to a text selection. Page notes work in supported file-backed views, including files displayed by viewer plugins. The generated `🐰 Aside Index.md` is an aggregate view, not a page-note target.
 
 - **`anchored note`**  
   A thread attached to a specific text selection in a markdown note. Selection-anchored notes remain Markdown-only; other file-backed views support page notes only.
