@@ -310,8 +310,12 @@ test("comment persistence controller deduplicates duplicate child entries from s
     }
 });
 
-test("comment persistence controller loads PDF page-note sidecars without reading PDF content", async () => {
-    const file = createFile("docs/diagram.pdf");
+for (const { kind, path, body } of [
+    { kind: "PDF", path: "docs/diagram.pdf", body: "PDF body" },
+    { kind: "DOCX", path: "docs/proposal.docx", body: "DOCX body" },
+]) {
+test(`comment persistence controller loads ${kind} page-note sidecars without reading ${kind} content`, async () => {
+    const file = createFile(path);
     const storedThread: CommentThread = {
         ...createThread(file.path),
         startLine: 0,
@@ -324,7 +328,7 @@ test("comment persistence controller loads PDF page-note sidecars without readin
         orphaned: false,
         entries: [{
             id: "entry-1",
-            body: "PDF body",
+            body,
             timestamp: 1710000000000,
         }],
     };
@@ -350,7 +354,7 @@ test("comment persistence controller loads PDF page-note sidecars without readin
         getMarkdownFileByPath: () => null,
         getCurrentNoteContent: async () => {
             contentReadCount += 1;
-            throw new Error("PDF content must not be read.");
+            throw new Error(`${kind} content must not be read.`);
         },
         getStoredNoteContent: async () => "",
         getParsedNoteComments: (filePath, noteContent) => parseNoteComments(noteContent, filePath),
@@ -363,7 +367,7 @@ test("comment persistence controller loads PDF page-note sidecars without readin
         isAllCommentsNotePath: () => false,
         isCommentableFile: (candidate): candidate is TFile => !!candidate && candidate.extension === "md",
         isPageNoteCapableFile: (candidate): candidate is TFile =>
-            !!candidate && (candidate.extension === "md" || candidate.extension === "pdf"),
+            !!candidate && typeof candidate.extension === "string",
         isMarkdownEditorFocused: () => false,
         getCommentManager: () => commentManager,
         getAggregateCommentIndex: () => aggregateCommentIndex,
@@ -385,19 +389,24 @@ test("comment persistence controller loads PDF page-note sidecars without readin
     assert.equal(comments.length, 1);
     assert.equal(comments[0].filePath, file.path);
     assert.equal(comments[0].anchorKind, "page");
-    assert.equal(comments[0].comment, "PDF body");
-    assert.equal(commentManager.getCommentById("thread-1")?.comment, "PDF body");
-    assert.equal(aggregateCommentIndex.getCommentById("thread-1")?.comment, "PDF body");
+    assert.equal(comments[0].comment, body);
+    assert.equal(commentManager.getCommentById("thread-1")?.comment, body);
+    assert.equal(aggregateCommentIndex.getCommentById("thread-1")?.comment, body);
 });
+}
 
-test("comment persistence controller persists PDF page notes without reading PDF content", async () => {
+for (const { kind, path, body } of [
+    { kind: "PDF", path: "docs/diagram.pdf", body: "PDF body" },
+    { kind: "DOCX", path: "docs/proposal.docx", body: "DOCX body" },
+]) {
+test(`comment persistence controller persists ${kind} page notes without reading ${kind} content`, async () => {
     const originalWindow = globalThis.window;
     globalThis.window = {
         setTimeout: () => 1,
         clearTimeout: () => {},
     } as unknown as typeof globalThis.window;
 
-    const file = createFile("docs/diagram.pdf");
+    const file = createFile(path);
     const storedThread: CommentThread = {
         ...createThread(file.path),
         startLine: 0,
@@ -410,7 +419,7 @@ test("comment persistence controller persists PDF page notes without reading PDF
         orphaned: false,
         entries: [{
             id: "entry-1",
-            body: "PDF body",
+            body,
             timestamp: 1710000000000,
         }],
     };
@@ -437,7 +446,7 @@ test("comment persistence controller persists PDF page notes without reading PDF
         getMarkdownFileByPath: () => null,
         getCurrentNoteContent: async () => {
             contentReadCount += 1;
-            throw new Error("PDF content must not be read.");
+            throw new Error(`${kind} content must not be read.`);
         },
         getStoredNoteContent: async () => "",
         getParsedNoteComments: (filePath, noteContent) => parseNoteComments(noteContent, filePath),
@@ -450,7 +459,7 @@ test("comment persistence controller persists PDF page notes without reading PDF
         isAllCommentsNotePath: () => false,
         isCommentableFile: (candidate): candidate is TFile => !!candidate && candidate.extension === "md",
         isPageNoteCapableFile: (candidate): candidate is TFile =>
-            !!candidate && (candidate.extension === "md" || candidate.extension === "pdf"),
+            !!candidate && typeof candidate.extension === "string",
         isMarkdownEditorFocused: () => false,
         getCommentManager: () => commentManager,
         getAggregateCommentIndex: () => aggregateCommentIndex,
@@ -485,8 +494,9 @@ test("comment persistence controller persists PDF page notes without reading PDF
         assert.equal(sidecar.threads?.length, 1);
         assert.equal(sidecar.threads?.[0]?.filePath, file.path);
         assert.equal(sidecar.threads?.[0]?.anchorKind, "page");
-        assert.equal(sidecar.threads?.[0]?.entries[0]?.body, "PDF body");
-        assert.equal(aggregateCommentIndex.getCommentById("thread-1")?.comment, "PDF body");
+        assert.equal(sidecar.threads?.[0]?.entries[0]?.body, body);
+        assert.equal(commentManager.getCommentById("thread-1")?.comment, body);
+        assert.equal(aggregateCommentIndex.getCommentById("thread-1")?.comment, body);
         assert.equal(refreshCommentViewsCount, 1);
         assert.equal(refreshEditorDecorationsCount, 0);
         assert.equal(refreshMarkdownPreviewsCount, 0);
@@ -494,6 +504,7 @@ test("comment persistence controller persists PDF page notes without reading PDF
         globalThis.window = originalWindow;
     }
 });
+}
 
 test("comment persistence controller replays synced plugin-data events into the local sidecar cache", async () => {
     const originalWindow = globalThis.window;

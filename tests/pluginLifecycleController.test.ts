@@ -116,7 +116,7 @@ function createHarness(options: {
         },
         isCommentableFile: (file): file is TFile => !!file && (file as { extension?: unknown }).extension === "md",
         isPageNoteCapableFile: (file): file is TFile =>
-            !!file && ["md", "pdf"].includes(String((file as { extension?: unknown }).extension)),
+            !!file && typeof (file as { extension?: unknown }).extension === "string",
         loadCommentsForFile: async (file) => {
             if (file) {
                 loadedFiles.push(file.path);
@@ -271,6 +271,44 @@ test("plugin lifecycle controller keeps renamed PDF page-note files and indexes 
     assert.equal(harness.getScheduleAggregateNoteRefreshCount(), 1);
 });
 
+test("plugin lifecycle controller keeps renamed DOCX page-note files and indexes aligned", async () => {
+    const originalFile = createFile("docs/proposal.docx");
+    const renamedFile = createFile("docs/renamed-proposal.docx");
+    const harness = createHarness({
+        initialComments: [
+            createComment({
+                filePath: originalFile.path,
+                anchorKind: "page",
+                selectedText: "proposal",
+                selectedTextHash: "hash:proposal",
+            }),
+        ],
+    });
+
+    await harness.controller.handleFileRename(renamedFile, originalFile.path);
+
+    assert.equal(harness.commentManager.getCommentById("comment-1")?.filePath, renamedFile.path);
+    assert.equal(harness.aggregateCommentIndex.getCommentById("comment-1")?.filePath, renamedFile.path);
+    assert.deepEqual(harness.renamedAgentRuns, [{
+        previousFilePath: originalFile.path,
+        nextFilePath: renamedFile.path,
+    }]);
+    assert.deepEqual(harness.renamedScriptRuns, [{
+        previousFilePath: originalFile.path,
+        nextFilePath: renamedFile.path,
+    }]);
+    assert.deepEqual(harness.renamedStoredComments, [{
+        previousFilePath: originalFile.path,
+        nextFilePath: renamedFile.path,
+    }]);
+    assert.deepEqual(harness.clearedParsedPaths, [originalFile.path, renamedFile.path]);
+    assert.deepEqual(harness.clearedDerivedPaths, [originalFile.path]);
+    assert.deepEqual(harness.loadedFiles, [renamedFile.path]);
+    assert.equal(harness.getRefreshCommentViewsCount(), 1);
+    assert.equal(harness.getRefreshEditorDecorationsCount(), 1);
+    assert.equal(harness.getScheduleAggregateNoteRefreshCount(), 1);
+});
+
 test("plugin lifecycle controller retargets published standalone artifacts on file rename", async () => {
     const originalFile = createFile("public/page.html");
     const renamedFile = createFile("public/renamed.html");
@@ -290,7 +328,6 @@ test("plugin lifecycle controller clears deleted comment files only when comment
         initialComments: [createComment({ filePath: deletedFile.path })],
     });
 
-    await harness.controller.handleFileDelete(createFile("docs/ignored.png"));
     await harness.controller.handleFileDelete(deletedFile);
 
     assert.deepEqual(harness.commentManager.getCommentsForFile(deletedFile.path), []);
@@ -320,7 +357,35 @@ test("plugin lifecycle controller clears deleted PDF page-note files", async () 
         ],
     });
 
-    await harness.controller.handleFileDelete(createFile("docs/ignored.png"));
+    await harness.controller.handleFileDelete(deletedFile);
+
+    assert.deepEqual(harness.commentManager.getCommentsForFile(deletedFile.path), []);
+    assert.deepEqual(
+        harness.aggregateCommentIndex.getAllComments().filter((comment) => comment.filePath === deletedFile.path),
+        [],
+    );
+    assert.deepEqual(harness.deletedStoredComments, [deletedFile.path]);
+    assert.deepEqual(harness.clearedParsedPaths, [deletedFile.path]);
+    assert.deepEqual(harness.clearedDerivedPaths, [deletedFile.path]);
+    assert.equal(harness.getRefreshCommentViewsCount(), 1);
+    assert.equal(harness.getRefreshEditorDecorationsCount(), 1);
+    assert.equal(harness.getRefreshAggregateNoteNowCount(), 1);
+    assert.equal(harness.getScheduleAggregateNoteRefreshCount(), 0);
+});
+
+test("plugin lifecycle controller clears deleted DOCX page-note files", async () => {
+    const deletedFile = createFile("docs/proposal.docx");
+    const harness = createHarness({
+        initialComments: [
+            createComment({
+                filePath: deletedFile.path,
+                anchorKind: "page",
+                selectedText: "proposal",
+                selectedTextHash: "hash:proposal",
+            }),
+        ],
+    });
+
     await harness.controller.handleFileDelete(deletedFile);
 
     assert.deepEqual(harness.commentManager.getCommentsForFile(deletedFile.path), []);
@@ -358,6 +423,20 @@ test("plugin lifecycle controller clears cached comments under deleted folders",
                 selectedText: "c",
                 selectedTextHash: "hash:c",
             }),
+            createComment({
+                filePath: "Deleted/nested/image.png",
+                id: "deleted-image",
+                anchorKind: "page",
+                selectedText: "image",
+                selectedTextHash: "hash:image",
+            }),
+            createComment({
+                filePath: "Deleted/nested/proposal.docx",
+                id: "deleted-docx",
+                anchorKind: "page",
+                selectedText: "proposal",
+                selectedTextHash: "hash:proposal",
+            }),
             createComment({ filePath: "Deletedness/c.md", id: "keep-c" }),
         ],
     });
@@ -366,9 +445,10 @@ test("plugin lifecycle controller clears cached comments under deleted folders",
         createFile("Deleted/a.md"),
         createFolder("Deleted/nested", [
             createFile("Deleted/nested/b.md"),
+            createFile("Deleted/nested/image.png"),
+            createFile("Deleted/nested/proposal.docx"),
         ]),
         createFile("Deleted/c.pdf"),
-        createFile("Deleted/ignored.png"),
     ]));
 
     assert.deepEqual(
@@ -381,8 +461,20 @@ test("plugin lifecycle controller clears cached comments under deleted folders",
     );
     assert.deepEqual(harness.deletedStoredComments, []);
     assert.deepEqual(harness.deletedStoredCommentFolders, ["Deleted"]);
-    assert.deepEqual(harness.clearedParsedPaths.sort(), ["Deleted/a.md", "Deleted/c.pdf", "Deleted/nested/b.md"]);
-    assert.deepEqual(harness.clearedDerivedPaths.sort(), ["Deleted/a.md", "Deleted/c.pdf", "Deleted/nested/b.md"]);
+    assert.deepEqual(harness.clearedParsedPaths.sort(), [
+        "Deleted/a.md",
+        "Deleted/c.pdf",
+        "Deleted/nested/b.md",
+        "Deleted/nested/image.png",
+        "Deleted/nested/proposal.docx",
+    ]);
+    assert.deepEqual(harness.clearedDerivedPaths.sort(), [
+        "Deleted/a.md",
+        "Deleted/c.pdf",
+        "Deleted/nested/b.md",
+        "Deleted/nested/image.png",
+        "Deleted/nested/proposal.docx",
+    ]);
     assert.equal(harness.getRefreshCommentViewsCount(), 1);
     assert.equal(harness.getRefreshEditorDecorationsCount(), 1);
     assert.equal(harness.getRefreshAggregateNoteNowCount(), 1);
@@ -402,6 +494,12 @@ test("plugin lifecycle controller only forwards markdown modify events", async (
     const harness = createHarness();
 
     await harness.controller.handleFileModify(createFile("docs/file.pdf"));
+    assert.equal(harness.getModifyHandledPath(), null);
+
+    await harness.controller.handleFileModify(createFile("docs/image.png"));
+    assert.equal(harness.getModifyHandledPath(), null);
+
+    await harness.controller.handleFileModify(createFile("docs/proposal.docx"));
     assert.equal(harness.getModifyHandledPath(), null);
 
     await harness.controller.handleFileModify(createFile("docs/file.md"));
