@@ -401,7 +401,7 @@ git commit -m "docs: track file-view agent regeneration"
 **Files:**
 - Verify: all branch changes against the current `main`
 
-- [ ] **Step 1: Confirm branch cleanliness and commit scope**
+- [x] **Step 1: Confirm branch cleanliness and commit scope**
 
 Run:
 
@@ -414,6 +414,6 @@ git diff --stat main...HEAD
 
 Expected: clean worktree, one tested code commit plus one documentation commit, no whitespace errors, and changes limited to the two controller/adapter files, controller tests, spec, and plan.
 
-- [ ] **Step 2: Use the finishing-development-branch workflow**
+- [x] **Step 2: Use the finishing-development-branch workflow**
 
 Invoke `superpowers:finishing-a-development-branch`, re-run its required verification, and integrate according to the user's selected option. Do not push, tag, publish, or upload artifacts unless separately requested.
