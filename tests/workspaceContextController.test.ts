@@ -55,7 +55,25 @@ test("workspace leaf target resolves supported PDF file views", () => {
     assert.equal(resolved, pdfFile);
 });
 
-test("workspace leaf target does not fall back to the last markdown file for unsupported file views", () => {
+test("workspace leaf target resolves plugin file views without falling back to the prior markdown file", () => {
+    const markdownFile = createFile("docs/note.md");
+    const docxFile = createFile("docs/proposal.docx");
+
+    const resolved = resolveWorkspaceLeafTargetInput(
+        {
+            view: {
+                file: docxFile,
+                getViewType: () => "docx-viewer",
+            },
+        },
+        markdownFile,
+        (value): value is MockFile => value === markdownFile || value === docxFile,
+    );
+
+    assert.equal(resolved, docxFile);
+});
+
+test("workspace leaf target resolves canvas file views", () => {
     const markdownFile = createFile("docs/note.md");
     const canvasFile = createFile("docs/board.canvas");
 
@@ -67,10 +85,10 @@ test("workspace leaf target does not fall back to the last markdown file for uns
             },
         },
         markdownFile,
-        (value): value is MockFile => value === markdownFile,
+        (value): value is MockFile => value === markdownFile || value === canvasFile,
     );
 
-    assert.equal(resolved, null);
+    assert.equal(resolved, canvasFile);
 });
 
 test("workspace leaf target resolves a pending file from the leaf view state", () => {
@@ -138,7 +156,7 @@ test("workspace leaf target uses the active file for a pending markdown leaf", (
     assert.equal(resolved, currentFile);
 });
 
-test("workspace leaf target ignores non-markdown leaf changes that temporarily have no file value", () => {
+test("workspace leaf target does not fall back to the last markdown file for non-file views", () => {
     const markdownFile = createFile("docs/note.md");
 
     const resolved = resolveWorkspaceLeafTargetInput(

@@ -66,7 +66,7 @@ class MockPlugin {
         return pickSidebarTargetFile(
             activeFile,
             this.activeSidebarFile,
-            (file): file is MockFile => !!file && (file.extension === "md" || file.extension === "pdf"),
+            (file): file is MockFile => !!file,
         );
     }
 
@@ -86,7 +86,7 @@ class MockPlugin {
             this.activeMarkdownFile,
             this.activeSidebarFile,
             (candidate): candidate is MockFile => !!candidate && candidate.extension === "md" && candidate.path !== ALL_COMMENTS_NOTE_PATH,
-            (candidate): candidate is MockFile => !!candidate && (candidate.extension === "md" || candidate.extension === "pdf"),
+            (candidate): candidate is MockFile => !!candidate,
         );
         this.activeMarkdownFile = nextState.activeMarkdownFile;
         this.activeSidebarFile = nextState.activeSidebarFile;
@@ -204,7 +204,7 @@ test("fixed sidebar target uses PDF when the active file is a PDF", () => {
     assert.deepEqual(target, { path: "docs/file.pdf", extension: "pdf" });
 });
 
-test("fixed sidebar target clears when the active file is unsupported", () => {
+test("fixed sidebar target uses canvas when the active file is canvas", () => {
     const plugin = new MockPlugin();
     plugin.activeSidebarFile = { path: "docs/note.md", extension: "md" };
 
@@ -213,7 +213,7 @@ test("fixed sidebar target clears when the active file is unsupported", () => {
         extension: "canvas",
     });
 
-    assert.equal(target, null);
+    assert.deepEqual(target, { path: "docs/board.canvas", extension: "canvas" });
 });
 
 test("public markdown properties are hidden only for markdown files under the publish root", () => {
@@ -273,7 +273,7 @@ test("workspace file targets preserve the last markdown note while pointing the 
         { path: "last-note.md", extension: "md" },
         null,
         (file): file is MockFile => !!file && file.extension === "md" && file.path !== ALL_COMMENTS_NOTE_PATH,
-        (file): file is MockFile => !!file && file.extension === "md",
+        (file): file is MockFile => !!file,
     );
 
     assert.deepEqual(target.activeMarkdownFile, { path: "last-note.md", extension: "md" });
@@ -288,7 +288,7 @@ test("workspace file targets preserve the last markdown note while pointing the 
         { path: "last-note.md", extension: "md" },
         { path: "docs/note.md", extension: "md" },
         (file): file is MockFile => !!file && file.extension === "md" && file.path !== ALL_COMMENTS_NOTE_PATH,
-        (file): file is MockFile => !!file && (file.extension === "md" || file.extension === "pdf"),
+        (file): file is MockFile => !!file,
     );
 
     assert.deepEqual(target.activeMarkdownFile, { path: "last-note.md", extension: "md" });
@@ -303,7 +303,7 @@ test("workspace file targets preserve the current sidebar file when leaf changes
         { path: "last-note.md", extension: "md" },
         { path: ALL_COMMENTS_NOTE_PATH, extension: "md" },
         (file): file is MockFile => !!file && file.extension === "md" && file.path !== ALL_COMMENTS_NOTE_PATH,
-        (file): file is MockFile => !!file && file.extension === "md",
+        (file): file is MockFile => !!file,
     );
 
     assert.deepEqual(target.activeMarkdownFile, { path: "last-note.md", extension: "md" });
@@ -311,19 +311,19 @@ test("workspace file targets preserve the current sidebar file when leaf changes
     assert.deepEqual(target.sidebarFile, { path: ALL_COMMENTS_NOTE_PATH, extension: "md" });
 });
 
-test("workspace file targets clear the sidebar file when the active file is unsupported", () => {
+test("workspace file targets preserve the last markdown note while pointing the sidebar at canvas", () => {
     const target = resolveWorkspaceFileTargets(
         { path: "docs/board.canvas", extension: "canvas" },
         { path: "docs/file.pdf", extension: "pdf" },
         { path: "last-note.md", extension: "md" },
         { path: "docs/note.md", extension: "md" },
         (file): file is MockFile => !!file && file.extension === "md" && file.path !== ALL_COMMENTS_NOTE_PATH,
-        (file): file is MockFile => !!file && file.extension === "md",
+        (file): file is MockFile => !!file,
     );
 
     assert.deepEqual(target.activeMarkdownFile, { path: "last-note.md", extension: "md" });
-    assert.equal(target.activeSidebarFile, null);
-    assert.equal(target.sidebarFile, null);
+    assert.deepEqual(target.activeSidebarFile, { path: "docs/board.canvas", extension: "canvas" });
+    assert.deepEqual(target.sidebarFile, { path: "docs/board.canvas", extension: "canvas" });
 });
 
 test("workspace file targets clear when there is no active workspace file", () => {
@@ -333,7 +333,7 @@ test("workspace file targets clear when there is no active workspace file", () =
         { path: "last-note.md", extension: "md" },
         { path: ALL_COMMENTS_NOTE_PATH, extension: "md" },
         (file): file is MockFile => !!file && file.extension === "md" && file.path !== ALL_COMMENTS_NOTE_PATH,
-        (file): file is MockFile => !!file && file.extension === "md",
+        (file): file is MockFile => !!file,
     );
 
     assert.equal(target.activeMarkdownFile, null);

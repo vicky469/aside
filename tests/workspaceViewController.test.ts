@@ -101,7 +101,7 @@ function createHarness(options: {
     const controller = new WorkspaceViewController({
         app,
         isSidebarSupportedFile: (file): file is TFile =>
-            !!file && file.extension === "md",
+            !!file,
         isAllCommentsNotePath: (filePath) => filePath === "Aside index.md",
         ensureIndexedCommentsLoaded: async () => {
             ensureIndexedCommentsLoadedCount += 1;
@@ -192,9 +192,11 @@ test("workspace view controller reads full note data from reading view instead o
     );
 });
 
-test("workspace view controller syncs visible files, rerenders surfaces, and clears markdown selections", async () => {
+test("workspace view controller syncs visible native and plugin file views while keeping markdown operations scoped", async () => {
     const indexFile = createFile("Aside index.md");
     const noteFile = createFile("docs/note.md");
+    const imageFile = createFile("docs/diagram.png");
+    const docxFile = createFile("docs/proposal.docx");
     const previewRerenders: boolean[] = [];
     const sidebarRenderCalls: number[] = [];
     const indexSidebarRenderCalls: number[] = [];
@@ -214,12 +216,14 @@ test("workspace view controller syncs visible files, rerenders surfaces, and cle
         leaves: [
             { view: { file: indexFile, getViewType: () => "markdown" } },
             { view: { file: noteFile, getViewType: () => "markdown" } },
+            { view: { file: imageFile, getViewType: () => "image" } },
+            { view: { file: docxFile, getViewType: () => "docx-viewer" } },
             { view: createSidebarView(sidebarRenderCalls, noteFile) },
             { view: createSidebarView(indexSidebarRenderCalls, indexFile) },
             { view: previewMarkdownView },
             { view: noteMarkdownView },
         ],
-        files: [indexFile, noteFile],
+        files: [indexFile, noteFile, imageFile, docxFile],
     });
 
     await harness.controller.loadVisibleFiles();
@@ -229,7 +233,7 @@ test("workspace view controller syncs visible files, rerenders surfaces, and cle
 
     assert.equal(harness.getEnsureIndexedCommentsLoadedCount(), 1);
     assert.equal(harness.getRefreshAggregateNoteCount(), 0);
-    assert.deepEqual(harness.loadedFiles, ["docs/note.md"]);
+    assert.deepEqual(harness.loadedFiles, ["docs/note.md", "docs/diagram.png", "docs/proposal.docx"]);
     assert.deepEqual(sidebarRenderCalls, [1]);
     assert.deepEqual(indexSidebarRenderCalls, [1, 2]);
     assert.deepEqual(previewRerenders, [true]);
