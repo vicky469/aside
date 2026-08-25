@@ -33,7 +33,7 @@ Use this section as the working checklist. Mark an item done only after the code
 - [x] Existing Markdown anchors, rendered HTML behavior, PDF page notes, and `/pdf-to-markdown` tests remain green.
 - [x] The full build, Obsidian compliance check, production bundle, and release-artifact guard pass.
 - [x] Installed `main.js`, `manifest.json`, and `styles.css` match the inspected build byte-for-byte.
-- [x] A live smoke test creates and mutates a page note from a native non-Markdown file view without changing or reading the source file.
+- [x] A live smoke test creates and mutates a page note from a native non-Markdown file view without changing the source file; automated reader tripwires verify that page-note operations do not read source bytes.
 
 ## Problem
 
