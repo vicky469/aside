@@ -102,6 +102,11 @@ function insertEntryAfter(
     ];
 }
 
+function hasSameIdOrder(before: readonly string[], after: readonly string[]): boolean {
+    return before.length === after.length
+        && before.every((id, index) => id === after[index]);
+}
+
 export interface CommentMutationHost {
     getAllCommentsNotePath(): string;
     getSidebarTargetFilePath(): string | null;
@@ -405,13 +410,20 @@ export class CommentMutationController {
         }
 
         await this.host.loadCommentsForFile(file);
-        const changed = this.host.getCommentManager().reorderThreadsForFile(
+        const manager = this.host.getCommentManager();
+        const previousThreadIds = manager
+            .getThreadsForFile(file.path, { includeDeleted: true })
+            .map((thread) => thread.id);
+        const changed = manager.reorderThreadsForFile(
             file.path,
             movedThreadId,
             targetThreadId,
             placement,
         );
-        if (!changed) {
+        const nextThreadIds = manager
+            .getThreadsForFile(file.path, { includeDeleted: true })
+            .map((thread) => thread.id);
+        if (!changed || hasSameIdOrder(previousThreadIds, nextThreadIds)) {
             return false;
         }
 
@@ -434,13 +446,20 @@ export class CommentMutationController {
         }
 
         await this.host.loadCommentsForFile(file);
-        const changed = this.host.getCommentManager().reorderThreadEntries(
+        const manager = this.host.getCommentManager();
+        const thread = manager.getThreadById(threadId);
+        if (thread?.filePath !== file.path) {
+            return false;
+        }
+        const previousEntryIds = thread.entries.map((entry) => entry.id);
+        const changed = manager.reorderThreadEntries(
             threadId,
             movedEntryId,
             targetEntryId,
             placement,
         );
-        if (!changed) {
+        const nextEntryIds = manager.getThreadById(threadId)?.entries.map((entry) => entry.id) ?? [];
+        if (!changed || hasSameIdOrder(previousEntryIds, nextEntryIds)) {
             return false;
         }
 

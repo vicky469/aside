@@ -926,6 +926,9 @@ test("comment mutation controller reorders root page-note threads for non-markdo
     const host = createHost({
         knownComments: [first, second, third],
         loadedComments: [first, second, third],
+        getCurrentNoteContent: async () => {
+            throw new Error("Canvas content must not be read during root reorder");
+        },
     });
 
     const reordered = await host.controller.reorderThreadsForFile(
@@ -955,6 +958,9 @@ test("comment mutation controller reorders child page-note entries for non-markd
     const host = createHost({
         knownComments: [root],
         loadedComments: [root],
+        getCurrentNoteContent: async () => {
+            throw new Error("Canvas content must not be read during child reorder");
+        },
     });
     host.manager.appendEntry(root.id, {
         id: "entry-2",
@@ -987,6 +993,119 @@ test("comment mutation controller reorders child page-note entries for non-markd
         refreshEditorDecorations: false,
         refreshMarkdownPreviews: false,
     }]);
+});
+
+test("comment mutation controller rejects child reorders when the thread belongs to another file", async () => {
+    const owningFilePath = "boards/source.canvas";
+    const requestedFilePath = "boards/target.canvas";
+    const root = createComment({ id: "thread-1", filePath: owningFilePath, anchorKind: "page" });
+    const host = createHost({
+        knownComments: [root],
+        loadedComments: [root],
+        extraFiles: [requestedFilePath],
+    });
+    host.manager.appendEntry(root.id, {
+        id: "entry-2",
+        body: "Second",
+        timestamp: 200,
+    });
+    host.manager.appendEntry(root.id, {
+        id: "entry-3",
+        body: "Third",
+        timestamp: 300,
+    });
+
+    const reordered = await host.controller.reorderThreadEntries(
+        requestedFilePath,
+        root.id,
+        "entry-3",
+        "entry-2",
+        "before",
+    );
+
+    assert.equal(reordered, false);
+    assert.deepEqual(
+        host.manager.getThreadById(root.id)?.entries.map((entry) => entry.id),
+        [root.id, "entry-2", "entry-3"],
+    );
+    assert.deepEqual(host.loadedFiles, [requestedFilePath]);
+    assert.deepEqual(host.persistedFiles, []);
+});
+
+test("comment mutation controller does not persist already-satisfied root thread placements", async () => {
+    const filePath = "boards/roadmap.canvas";
+    const first = createComment({ id: "thread-1", filePath, anchorKind: "page", timestamp: 100 });
+    const second = createComment({ id: "thread-2", filePath, anchorKind: "page", timestamp: 200 });
+    const third = createComment({ id: "thread-3", filePath, anchorKind: "page", timestamp: 300 });
+    const host = createHost({
+        knownComments: [first, second, third],
+        loadedComments: [first, second, third],
+    });
+
+    const alreadyBefore = await host.controller.reorderThreadsForFile(
+        filePath,
+        first.id,
+        second.id,
+        "before",
+    );
+    const alreadyAfter = await host.controller.reorderThreadsForFile(
+        filePath,
+        third.id,
+        second.id,
+        "after",
+    );
+
+    assert.equal(alreadyBefore, false);
+    assert.equal(alreadyAfter, false);
+    assert.deepEqual(
+        host.manager.getThreadsForFile(filePath).map((thread) => thread.id),
+        [first.id, second.id, third.id],
+    );
+    assert.deepEqual(host.loadedFiles, [filePath, filePath]);
+    assert.deepEqual(host.persistedFiles, []);
+});
+
+test("comment mutation controller does not persist already-satisfied child entry placements", async () => {
+    const filePath = "boards/roadmap.canvas";
+    const root = createComment({ id: "thread-1", filePath, anchorKind: "page" });
+    const host = createHost({
+        knownComments: [root],
+        loadedComments: [root],
+    });
+    host.manager.appendEntry(root.id, {
+        id: "entry-2",
+        body: "Second",
+        timestamp: 200,
+    });
+    host.manager.appendEntry(root.id, {
+        id: "entry-3",
+        body: "Third",
+        timestamp: 300,
+    });
+
+    const alreadyBefore = await host.controller.reorderThreadEntries(
+        filePath,
+        root.id,
+        "entry-2",
+        "entry-3",
+        "before",
+    );
+    const alreadyAfter = await host.controller.reorderThreadEntries(
+        filePath,
+        root.id,
+        "entry-3",
+        "entry-2",
+        "after",
+    );
+
+    assert.equal(alreadyBefore, false);
+    assert.equal(alreadyAfter, false);
+    assert.deepEqual(
+        host.manager.getThreadById(root.id)?.entries.map((entry) => entry.id),
+        [root.id, "entry-2", "entry-3"],
+    );
+    assert.deepEqual(host.loadedFiles, [filePath, filePath]);
+    assert.deepEqual(host.persistedFiles, []);
 });
 
 test("comment mutation controller rejects reorder requests for missing and non-capable source files", async () => {
