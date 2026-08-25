@@ -1,6 +1,7 @@
 import type { Plugin, TAbstractFile, TFile } from "obsidian";
 import type { CommentManager } from "../commentManager";
 import type { AggregateCommentIndex } from "../index/AggregateCommentIndex";
+import { getPageCommentLabel } from "../core/anchors/commentAnchors";
 
 export interface PluginLifecycleHost {
     app: Plugin["app"];
@@ -18,6 +19,7 @@ export interface PluginLifecycleHost {
     clearDerivedCommentLinksForFile(filePath: string): void;
     isCommentableFile(file: TAbstractFile | null): file is TFile;
     isPageNoteCapableFile(file: TAbstractFile | null): file is TFile;
+    hashText(text: string): Promise<string>;
     loadCommentsForFile(file: TFile | null): Promise<unknown>;
     refreshCommentViews(): Promise<void>;
     refreshEditorDecorations(): void;
@@ -98,10 +100,14 @@ export class PluginLifecycleController {
         await this.host.renameAgentRuns(oldPath, file.path);
         await this.host.renameScriptRuns(oldPath, file.path);
         await this.host.renameStoredComments(oldPath, file.path);
-        this.host.getCommentManager().renameFile(oldPath, file.path);
+        const retargetOptions = {
+            selectionCapable: this.host.isCommentableFile(file),
+            pageLabelHash: await this.host.hashText(getPageCommentLabel(file.path)),
+        };
+        this.host.getCommentManager().renameFile(oldPath, file.path, retargetOptions);
         this.host.clearParsedNoteCache(oldPath);
         this.host.clearParsedNoteCache(file.path);
-        this.host.getAggregateCommentIndex().renameFile(oldPath, file.path);
+        this.host.getAggregateCommentIndex().renameFile(oldPath, file.path, retargetOptions);
         this.host.clearDerivedCommentLinksForFile(oldPath);
         void this.host.loadCommentsForFile(file);
         void this.host.refreshCommentViews();

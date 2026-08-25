@@ -77,6 +77,7 @@ function createHarness(options: {
     const renamedPublishedArtifactPaths: Array<{ previousFilePath: string; nextFilePath: string }> = [];
     const deletedPublishedArtifactPaths: string[] = [];
     const deletedPublishedArtifactFolders: string[] = [];
+    const hashedTexts: string[] = [];
 
     const controller = new PluginLifecycleController({
         app: {} as never,
@@ -117,6 +118,10 @@ function createHarness(options: {
         isCommentableFile: (file): file is TFile => !!file && (file as { extension?: unknown }).extension === "md",
         isPageNoteCapableFile: (file): file is TFile =>
             !!file && typeof (file as { extension?: unknown }).extension === "string",
+        hashText: async (text) => {
+            hashedTexts.push(text);
+            return `hash:${text}`;
+        },
         loadCommentsForFile: async (file) => {
             if (file) {
                 loadedFiles.push(file.path);
@@ -188,6 +193,7 @@ function createHarness(options: {
         renamedPublishedArtifactPaths,
         deletedPublishedArtifactPaths,
         deletedPublishedArtifactFolders,
+        hashedTexts,
     };
 }
 
@@ -231,6 +237,40 @@ test("plugin lifecycle controller keeps renamed comment files and indexes aligne
     assert.equal(harness.getRefreshCommentViewsCount(), 1);
     assert.equal(harness.getRefreshEditorDecorationsCount(), 1);
     assert.equal(harness.getScheduleAggregateNoteRefreshCount(), 1);
+});
+
+test("plugin lifecycle controller forwards one consistent retarget context to manager and aggregate index", async () => {
+    const originalFile = createFile("docs/source.md");
+    const renamedFile = createFile("docs/Final Proposal.docx");
+    const harness = createHarness({
+        initialComments: [createComment({
+            filePath: originalFile.path,
+            selectedText: "source selection",
+            selectedTextHash: "hash:source selection",
+            anchorKind: "selection",
+            orphaned: true,
+        })],
+    });
+
+    await harness.controller.handleFileRename(renamedFile, originalFile.path);
+
+    const managerComment = harness.commentManager.getCommentById("comment-1");
+    const indexComment = harness.aggregateCommentIndex.getCommentById("comment-1");
+    assert.deepEqual(harness.hashedTexts, ["Final Proposal"]);
+    assert.deepEqual({
+        filePath: managerComment?.filePath,
+        selectedText: managerComment?.selectedText,
+        selectedTextHash: managerComment?.selectedTextHash,
+        anchorKind: managerComment?.anchorKind,
+        orphaned: managerComment?.orphaned,
+    }, {
+        filePath: renamedFile.path,
+        selectedText: "Final Proposal",
+        selectedTextHash: "hash:Final Proposal",
+        anchorKind: "page",
+        orphaned: false,
+    });
+    assert.deepEqual(indexComment, managerComment);
 });
 
 for (const { kind, originalPath, renamedPath, selectedText } of [

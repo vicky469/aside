@@ -15,6 +15,10 @@ import {
 } from "../domain/comments/commentThreadNormalization";
 import { isPathInsideFolder } from "../core/files/pathScope";
 import { isSoftDeleted } from "../core/rules/deletedCommentVisibility";
+import {
+    retargetCommentThreads,
+    type CommentThreadRetargetOptions,
+} from "../domain/comments/commentThreadRetarget";
 
 function toThreads(items: Array<Comment | CommentThread>): CommentThread[] {
     return items.map((item) => isCommentThreadLike(item) ? cloneCommentThread(item) : commentToThread(item));
@@ -37,20 +41,14 @@ export class AggregateCommentIndex {
         this.version += 1;
     }
 
-    renameFile(oldPath: string, newPath: string): void {
+    renameFile(oldPath: string, newPath: string, options: CommentThreadRetargetOptions): void {
         const threads = this.threadsByFile.get(oldPath);
         this.threadsByFile.delete(oldPath);
         if (!threads?.length) {
             return;
         }
 
-        this.threadsByFile.set(
-            newPath,
-            threads.map((thread) => ({
-                ...cloneCommentThread(thread),
-                filePath: newPath,
-            })),
-        );
+        this.threadsByFile.set(newPath, retargetCommentThreads(threads, newPath, options));
         this.version += 1;
     }
 

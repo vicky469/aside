@@ -301,13 +301,151 @@ test("CommentManager keeps id and file lookups current after replacement and ren
     assert.equal(manager.getThreadById("old-thread"), undefined);
     assert.equal(manager.getCommentById("new-child")?.comment, "child");
 
-    manager.renameFile("note.md", "renamed.md");
+    manager.renameFile("note.md", "renamed.md", {
+        selectionCapable: true,
+        pageLabelHash: "hash-renamed",
+    });
     assert.equal(manager.getThreadsForFile("note.md").length, 0);
     assert.equal(manager.getThreadById("new-child")?.filePath, "renamed.md");
     assert.deepEqual(
         manager.getThreadsForFile("renamed.md").map((thread) => thread.id),
         ["new-thread"],
     );
+});
+
+test("CommentManager retargets nested selection anchors when a Markdown file is renamed", () => {
+    const thread = commentToThread(createComment("thread-main", 1710000000000, "main"));
+    thread.entries.push({
+        id: "entry-point",
+        body: "point",
+        timestamp: 1710000001000,
+        anchor: {
+            filePath: "note.md",
+            startLine: 4,
+            startChar: 2,
+            endLine: 4,
+            endChar: 13,
+            selectedText: "point anchor",
+            selectedTextHash: "hash-point",
+            anchorKind: "selection",
+            orphaned: true,
+        },
+    });
+    const manager = new CommentManager([thread]);
+
+    manager.renameFile("note.md", "renamed.md", {
+        selectionCapable: true,
+        pageLabelHash: "hash-renamed",
+    });
+
+    const renamed = manager.getThreadById("thread-main");
+    assert.equal(renamed?.filePath, "renamed.md");
+    assert.deepEqual(renamed?.entries[1]?.anchor, {
+        filePath: "renamed.md",
+        startLine: 4,
+        startChar: 2,
+        endLine: 4,
+        endChar: 13,
+        selectedText: "point anchor",
+        selectedTextHash: "hash-point",
+        anchorKind: "selection",
+        orphaned: true,
+    });
+});
+
+test("CommentManager refreshes page metadata when a page-note file is renamed", () => {
+    const manager = new CommentManager([{
+        ...createComment("thread-page", 1710000000000, "page"),
+        filePath: "Books/Old Guide.pdf",
+        startLine: 0,
+        startChar: 0,
+        endLine: 0,
+        endChar: 0,
+        selectedText: "Old Guide",
+        selectedTextHash: "hash-old-guide",
+        anchorKind: "page",
+    }]);
+
+    manager.renameFile("Books/Old Guide.pdf", "Books/New Guide.pdf", {
+        selectionCapable: false,
+        pageLabelHash: "hash-new-guide",
+    });
+
+    const renamed = manager.getThreadById("thread-page");
+    assert.equal(renamed?.selectedText, "New Guide");
+    assert.equal(renamed?.selectedTextHash, "hash-new-guide");
+});
+
+test("CommentManager converts a renamed Markdown selection thread and its child into operable DOCX page notes", () => {
+    const deletedAt = Date.now();
+    const thread = commentToThread(createComment("thread-main", 1710000000000, "main"));
+    thread.isPinned = true;
+    thread.entries.push({
+        id: "entry-point",
+        body: "point",
+        timestamp: 1710000001000,
+        deletedAt,
+        anchor: {
+            filePath: "note.md",
+            startLine: 4,
+            startChar: 2,
+            endLine: 4,
+            endChar: 13,
+            selectedText: "point anchor",
+            selectedTextHash: "hash-point",
+            anchorKind: "selection",
+        },
+    });
+    const manager = new CommentManager([thread]);
+
+    manager.renameFile("note.md", "proposal.docx", {
+        selectionCapable: false,
+        pageLabelHash: "hash-proposal",
+    });
+
+    const renamed = manager.getThreadById("thread-main");
+    assert.ok(renamed);
+    assert.deepEqual({
+        filePath: renamed.filePath,
+        startLine: renamed.startLine,
+        startChar: renamed.startChar,
+        endLine: renamed.endLine,
+        endChar: renamed.endChar,
+        selectedText: renamed.selectedText,
+        selectedTextHash: renamed.selectedTextHash,
+        anchorKind: renamed.anchorKind,
+        orphaned: renamed.orphaned,
+        isPinned: renamed.isPinned,
+    }, {
+        filePath: "proposal.docx",
+        startLine: 0,
+        startChar: 0,
+        endLine: 0,
+        endChar: 0,
+        selectedText: "proposal",
+        selectedTextHash: "hash-proposal",
+        anchorKind: "page",
+        orphaned: false,
+        isPinned: true,
+    });
+    assert.equal(renamed.entries[0]?.body, "main");
+    assert.equal(renamed.entries[1]?.body, "point");
+    assert.equal(renamed.entries[1]?.deletedAt, deletedAt);
+    assert.equal(renamed.entries[1]?.anchor, undefined);
+    assert.deepEqual(manager.getCommentsForFile("proposal.docx").map((comment) => ({
+        id: comment.id,
+        filePath: comment.filePath,
+        anchorKind: comment.anchorKind,
+        selectedText: comment.selectedText,
+    })), [
+        { id: "thread-main", filePath: "proposal.docx", anchorKind: "page", selectedText: "proposal" },
+    ]);
+    assert.deepEqual(manager.getThreadById("entry-point")?.entries.map((entry) => entry.id), [
+        "thread-main",
+        "entry-point",
+    ]);
+    assert.equal(manager.getCommentById("entry-point")?.filePath, "proposal.docx");
+    assert.equal(manager.getCommentById("entry-point")?.anchorKind, "page");
 });
 
 test("CommentManager preserves a comment when its anchor text is gone", async () => {

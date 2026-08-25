@@ -18,6 +18,7 @@ import {
     type CanonicalCommentStorageSource,
 } from "../core/storage/canonicalCommentStorage";
 import { normalizeDeletedAt, purgeExpiredDeletedThreads } from "../core/rules/deletedCommentVisibility";
+import { isMarkdownCommentablePath } from "../core/rules/commentableFiles";
 import { SidecarCommentStorage, type RemovedSidecarComments } from "../core/storage/sidecarCommentStorage";
 import {
     buildSideNoteSyncEventInputsForThreadDiff,
@@ -36,6 +37,7 @@ import {
     SourceIdentityStore,
     type SourceIdentityRecord,
 } from "../sync/sourceIdentityStore";
+import { retargetCommentThreads } from "../domain/comments/commentThreadRetarget";
 
 type PersistOptions = {
     immediateAggregateRefresh?: boolean;
@@ -357,14 +359,6 @@ function hasDeleteNoteEvent(events: SideNoteSyncEvent[]): boolean {
     return events.some((event) => event.op === "deleteNote");
 }
 
-function retargetThreads(threads: CommentThread[], filePath: string): CommentThread[] {
-    return threads.map((thread) => ({
-        ...thread,
-        filePath,
-        entries: thread.entries.map((entry) => ({ ...entry })),
-    }));
-}
-
 function cloneThreadEntry(entry: CommentThreadEntry): CommentThreadEntry {
     const deletedAt = normalizeDeletedAt(entry.deletedAt);
     return {
@@ -655,6 +649,18 @@ export class CommentPersistenceController {
         };
     }
 
+    private async retargetThreads(threads: CommentThread[], filePath: string): Promise<CommentThread[]> {
+        if (!threads.length) {
+            return [];
+        }
+
+        const pageLabel = getPageCommentLabel(filePath);
+        return retargetCommentThreads(threads, filePath, {
+            selectionCapable: isMarkdownCommentablePath(filePath, this.host.getAllCommentsNotePath()),
+            pageLabelHash: await this.host.hashText(pageLabel),
+        });
+    }
+
     public async renameStoredComments(previousFilePath: string, nextFilePath: string): Promise<void> {
         await this.sourceIdentityStore.refreshFromLatestPersistedData();
         const existingSourceRecord = this.sourceIdentityStore.getRecordByPath(previousFilePath)
@@ -666,7 +672,7 @@ export class CommentPersistenceController {
         const sourceRecord = await this.sourceIdentityStore.recordRename(previousFilePath, nextFilePath);
         await this.sidecarStorage.rename(previousFilePath, nextFilePath);
         if (previousThreads && previousThreads.length > 0) {
-            const retargetedThreads = retargetThreads(previousThreads, nextFilePath);
+            const retargetedThreads = await this.retargetThreads(previousThreads, nextFilePath);
             await this.writeSourceAndPathSidecars(sourceRecord.sourceId, nextFilePath, retargetedThreads);
             await this.syncEventStore.appendLocalEvents(previousFilePath, [{
                 op: "renameSource",
@@ -888,7 +894,7 @@ export class CommentPersistenceController {
                 await this.normalizeThreadsForFile(notePath, baseThreads),
                 noteEvents,
             );
-            const targetThreads = retargetThreads(reduced.threads, targetNotePath);
+            const targetThreads = await this.retargetThreads(reduced.threads, targetNotePath);
             const noteWasDeleted = hasDeleteNoteEvent(noteEvents);
             const targetFile = this.getPageNoteCapableFileByPath(targetNotePath);
             const targetNoteContent = targetFile && this.host.isCommentableFile(targetFile)

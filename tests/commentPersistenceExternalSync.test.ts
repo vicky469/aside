@@ -526,6 +526,154 @@ for (const { kind, path, body } of [
     });
 }
 
+test("comment persistence retargets a renamed Markdown sidecar into reloadable DOCX page notes without reading source bytes", async () => {
+    const originalFile = createFile("docs/source.md");
+    const renamedFile = createFile("docs/Final Proposal.docx");
+    const storedThread: CommentThread = {
+        ...createThread(originalFile.path),
+        id: "thread-selection",
+        isPinned: true,
+        entries: [{
+            id: "entry-root",
+            body: "root body",
+            timestamp: 1710000000000,
+        }, {
+            id: "entry-child",
+            body: "child body",
+            timestamp: 1710000001000,
+            anchor: {
+                filePath: originalFile.path,
+                startLine: 9,
+                startChar: 3,
+                endLine: 9,
+                endChar: 11,
+                selectedText: "child text",
+                selectedTextHash: "hash-child-text",
+                anchorKind: "selection",
+                orphaned: true,
+            },
+        }],
+        createdAt: 1710000000000,
+        updatedAt: 1710000001000,
+    };
+    const adapter = new FakeAdapter();
+    adapter.files.set(
+        getSidecarStoragePath(originalFile.path),
+        serializeSidecarThreads(originalFile.path, [storedThread]),
+    );
+    const commentManager = new CommentManager([]);
+    const aggregateCommentIndex = new AggregateCommentIndex();
+    let persistedData: PersistedPluginData = {};
+    let currentContentReadCount = 0;
+    let storedContentReadCount = 0;
+    let parserCount = 0;
+    const hashedTexts: string[] = [];
+
+    const controller = new CommentPersistenceController({
+        app: {
+            vault: {
+                adapter: adapter as unknown as DataAdapter,
+                getAbstractFileByPath: (filePath: string) => filePath === renamedFile.path ? renamedFile : null,
+            },
+        } as never,
+        getAllCommentsNotePath: () => "Aside index.md",
+        getIndexHeaderImageUrl: () => "",
+        getIndexHeaderImageCaption: () => "",
+        getMarkdownViewForFile: () => null,
+        getMarkdownFileByPath: () => null,
+        getCurrentNoteContent: async () => {
+            currentContentReadCount += 1;
+            throw new Error("DOCX current content must not be read.");
+        },
+        getStoredNoteContent: async () => {
+            storedContentReadCount += 1;
+            throw new Error("DOCX stored content must not be read.");
+        },
+        getParsedNoteComments: () => {
+            parserCount += 1;
+            throw new Error("DOCX content must not be parsed.");
+        },
+        getPluginDataDirPath: () => ".obsidian/plugins/aside",
+        getSideNoteSyncDeviceId: () => "device-a",
+        readPersistedPluginData: () => persistedData,
+        writePersistedPluginData: async (data) => {
+            persistedData = data;
+        },
+        isAllCommentsNotePath: () => false,
+        isCommentableFile: (candidate): candidate is TFile => !!candidate && candidate.extension === "md",
+        isPageNoteCapableFile: (candidate): candidate is TFile =>
+            !!candidate && typeof candidate.extension === "string",
+        isMarkdownEditorFocused: () => false,
+        getCommentManager: () => commentManager,
+        getAggregateCommentIndex: () => aggregateCommentIndex,
+        createCommentId: () => "generated-id",
+        hashText: async (text) => {
+            hashedTexts.push(text);
+            return `hash-${text.replace(/\//g, "_").toLowerCase()}`;
+        },
+        syncDerivedCommentLinksForFile: () => {},
+        refreshCommentViews: async () => {},
+        refreshAllCommentsSidebarViews: async () => {},
+        refreshEditorDecorations: () => {},
+        refreshMarkdownPreviews: () => {},
+        getCommentMentionedPageLabels: () => [],
+        syncIndexNoteLeafMode: async () => {},
+        log: async () => {},
+    });
+
+    await controller.renameStoredComments(originalFile.path, renamedFile.path);
+    const comments = await controller.loadCommentsForFile(renamedFile);
+    const persistedPayload = JSON.parse(
+        adapter.files.get(getSidecarStoragePath(renamedFile.path).toLowerCase())
+            ?? adapter.files.get(getSidecarStoragePath(renamedFile.path))
+            ?? "{}",
+    ) as { notePath?: string; threads?: CommentThread[] };
+    const renamedThread = commentManager.getThreadById("thread-selection");
+
+    assert.equal(currentContentReadCount, 0);
+    assert.equal(storedContentReadCount, 0);
+    assert.equal(parserCount, 0);
+    assert.equal(hashedTexts.filter((text) => text === "Final Proposal").length, 1);
+    assert.equal(comments.length, 1);
+    assert.ok(renamedThread);
+    assert.deepEqual({
+        filePath: renamedThread.filePath,
+        startLine: renamedThread.startLine,
+        startChar: renamedThread.startChar,
+        endLine: renamedThread.endLine,
+        endChar: renamedThread.endChar,
+        selectedText: renamedThread.selectedText,
+        selectedTextHash: renamedThread.selectedTextHash,
+        anchorKind: renamedThread.anchorKind,
+        orphaned: renamedThread.orphaned,
+        isPinned: renamedThread.isPinned,
+        entryIds: renamedThread.entries.map((entry) => entry.id),
+        entryBodies: renamedThread.entries.map((entry) => entry.body),
+        entryAnchors: renamedThread.entries.map((entry) => entry.anchor),
+    }, {
+        filePath: renamedFile.path,
+        startLine: 0,
+        startChar: 0,
+        endLine: 0,
+        endChar: 0,
+        selectedText: "Final Proposal",
+        selectedTextHash: "hash-final proposal",
+        anchorKind: "page",
+        orphaned: false,
+        isPinned: true,
+        entryIds: ["entry-root", "entry-child"],
+        entryBodies: ["root body", "child body"],
+        entryAnchors: [undefined, undefined],
+    });
+    assert.equal(commentManager.getCommentById("entry-child")?.filePath, renamedFile.path);
+    assert.equal(commentManager.getCommentById("entry-child")?.anchorKind, "page");
+    assert.equal(aggregateCommentIndex.getCommentById("entry-child")?.anchorKind, "page");
+    assert.equal(persistedPayload.notePath, renamedFile.path);
+    assert.equal(persistedPayload.threads?.[0]?.selectedText, "Final Proposal");
+    assert.equal(persistedPayload.threads?.[0]?.selectedTextHash, "hash-final proposal");
+    assert.equal(persistedPayload.threads?.[0]?.entries[1]?.anchor, undefined);
+});
+
 test("comment persistence controller replays synced plugin-data events into the local sidecar cache", async () => {
     const originalWindow = globalThis.window;
     globalThis.window = {
@@ -622,6 +770,135 @@ test("comment persistence controller replays synced plugin-data events into the 
             }).processedWatermarks?.["device-a"]?.["device-b"],
             2,
         );
+    } finally {
+        globalThis.window = originalWindow;
+    }
+});
+
+test("comment persistence converts synced Markdown rename events into DOCX page-note projections", async () => {
+    const originalWindow = globalThis.window;
+    globalThis.window = {
+        setTimeout: () => 1,
+        clearTimeout: () => {},
+    } as unknown as typeof globalThis.window;
+
+    const oldFile = createFile("docs/source.md");
+    const newFile = createFile("docs/Team Brief.docx");
+    const remoteThread = createThread(oldFile.path);
+    remoteThread.entries.push({
+        id: "entry-child",
+        body: "remote child",
+        timestamp: 1710000000200,
+        anchor: {
+            filePath: oldFile.path,
+            startLine: 4,
+            startChar: 1,
+            endLine: 4,
+            endChar: 7,
+            selectedText: "remote",
+            selectedTextHash: "hash-remote",
+            anchorKind: "selection",
+        },
+    });
+    const adapter = new FakeAdapter();
+    const commentManager = new CommentManager([]);
+    const aggregateCommentIndex = new AggregateCommentIndex();
+    let persistedData: PersistedPluginData = {};
+    let eventCounter = 0;
+    let sourceReadCount = 0;
+    let parserCount = 0;
+    const hashedTexts: string[] = [];
+    const remoteEventStore = new SideNoteSyncEventStore({
+        readPersistedPluginData: () => persistedData,
+        writePersistedPluginData: async (data) => {
+            persistedData = data;
+        },
+        getDeviceId: () => "device-b",
+        createEventId: () => `remote-docx-event-${++eventCounter}`,
+        hashText: async (text) => `hash-${text.replace(/\//g, "_")}`,
+        now: () => 1710000000300 + eventCounter,
+    });
+
+    await remoteEventStore.appendLocalEvents(oldFile.path, [{
+        op: "createThread",
+        payload: { thread: remoteThread },
+    }]);
+    await remoteEventStore.appendLocalEvents(oldFile.path, [{
+        op: "renameNote",
+        payload: {
+            previousNotePath: oldFile.path,
+            nextNotePath: newFile.path,
+        },
+    }]);
+
+    const controller = new CommentPersistenceController({
+        app: {
+            vault: {
+                adapter: adapter as unknown as DataAdapter,
+                process: async () => "",
+                getAbstractFileByPath: (filePath: string) => filePath === newFile.path ? newFile : null,
+            },
+        } as never,
+        getAllCommentsNotePath: () => "Aside index.md",
+        getIndexHeaderImageUrl: () => "",
+        getIndexHeaderImageCaption: () => "",
+        getMarkdownViewForFile: () => null,
+        getMarkdownFileByPath: () => null,
+        getCurrentNoteContent: async () => {
+            sourceReadCount += 1;
+            throw new Error("DOCX current content must not be read.");
+        },
+        getStoredNoteContent: async () => {
+            sourceReadCount += 1;
+            throw new Error("DOCX stored content must not be read.");
+        },
+        getParsedNoteComments: () => {
+            parserCount += 1;
+            throw new Error("DOCX content must not be parsed.");
+        },
+        getPluginDataDirPath: () => ".obsidian/plugins/aside",
+        getSideNoteSyncDeviceId: () => "device-a",
+        readPersistedPluginData: () => persistedData,
+        writePersistedPluginData: async (data) => {
+            persistedData = data;
+        },
+        isAllCommentsNotePath: () => false,
+        isCommentableFile: (candidate): candidate is TFile => !!candidate && candidate.extension === "md",
+        isPageNoteCapableFile: (candidate): candidate is TFile =>
+            !!candidate && typeof candidate.extension === "string",
+        isMarkdownEditorFocused: () => false,
+        getCommentManager: () => commentManager,
+        getAggregateCommentIndex: () => aggregateCommentIndex,
+        createCommentId: () => "generated-id",
+        hashText: async (text) => {
+            hashedTexts.push(text);
+            return `hash-${text.replace(/\//g, "_")}`;
+        },
+        syncDerivedCommentLinksForFile: () => {},
+        refreshCommentViews: async () => {},
+        refreshAllCommentsSidebarViews: async () => {},
+        refreshEditorDecorations: () => {},
+        refreshMarkdownPreviews: () => {},
+        getCommentMentionedPageLabels: () => [],
+        syncIndexNoteLeafMode: async () => {},
+        log: async () => {},
+    });
+
+    try {
+        assert.equal(await controller.replaySyncedSideNoteEvents(), 2);
+        await controller.loadCommentsForFile(newFile);
+        const thread = commentManager.getThreadById("thread-1");
+        assert.equal(sourceReadCount, 0);
+        assert.equal(parserCount, 0);
+        assert.equal(hashedTexts.filter((text) => text === "Team Brief").length, 1);
+        assert.ok(thread);
+        assert.equal(thread.filePath, newFile.path);
+        assert.equal(thread.anchorKind, "page");
+        assert.equal(thread.selectedText, "Team Brief");
+        assert.equal(thread.selectedTextHash, "hash-Team Brief");
+        assert.equal(thread.entries[1]?.anchor, undefined);
+        assert.equal(commentManager.getCommentById("entry-child")?.anchorKind, "page");
+        assert.equal(aggregateCommentIndex.getCommentById("entry-child")?.anchorKind, "page");
     } finally {
         globalThis.window = originalWindow;
     }

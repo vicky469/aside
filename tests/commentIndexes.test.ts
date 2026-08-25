@@ -63,7 +63,10 @@ test("AggregateCommentIndex updates, renames, deletes, and returns cloned commen
     assert.equal(fresh.find((comment) => comment.id === "a-1")?.comment, "This is a side note.");
     assert.equal(index.getCommentById("a-1")?.filePath, "a.md");
 
-    index.renameFile("a.md", "renamed.md");
+    index.renameFile("a.md", "renamed.md", {
+        selectionCapable: true,
+        pageLabelHash: "hash-renamed",
+    });
     const renamed = index.getAllComments();
     assert.equal(renamed.find((comment) => comment.id === "a-1")?.filePath, "renamed.md");
     assert.equal(index.getCommentById("a-1")?.filePath, "renamed.md");
@@ -104,6 +107,56 @@ test("AggregateCommentIndex resolves child thread entries by id", () => {
     assert.equal(index.getCommentById("thread-1")?.comment, "parent");
     assert.equal(index.getCommentById("entry-2")?.comment, "child");
     assert.equal(index.getThreadById("entry-2")?.id, "thread-1");
+});
+
+test("AggregateCommentIndex keeps renamed DOCX page projections aligned for roots and children", () => {
+    const index = new AggregateCommentIndex();
+    const thread = commentToThread(createComment({
+        filePath: "notes/source.md",
+        id: "thread-1",
+        comment: "parent",
+    }));
+    thread.entries.push({
+        id: "entry-2",
+        body: "child",
+        timestamp: thread.updatedAt + 100,
+        anchor: {
+            filePath: "notes/source.md",
+            startLine: 8,
+            startChar: 1,
+            endLine: 8,
+            endChar: 6,
+            selectedText: "child anchor",
+            selectedTextHash: "hash-child",
+            anchorKind: "selection",
+        },
+    });
+    index.updateFile("notes/source.md", [thread]);
+
+    index.renameFile("notes/source.md", "docs/proposal.docx", {
+        selectionCapable: false,
+        pageLabelHash: "hash-proposal",
+    });
+
+    const renamed = index.getThreadById("thread-1");
+    assert.ok(renamed);
+    assert.equal(renamed.filePath, "docs/proposal.docx");
+    assert.equal(renamed.anchorKind, "page");
+    assert.equal(renamed.selectedText, "proposal");
+    assert.equal(renamed.selectedTextHash, "hash-proposal");
+    assert.equal(renamed.entries[1]?.anchor, undefined);
+    assert.deepEqual(["thread-1", "entry-2"].map((id) => {
+        const comment = index.getCommentById(id);
+        return {
+            id,
+            filePath: comment?.filePath,
+            anchorKind: comment?.anchorKind,
+            selectedText: comment?.selectedText,
+        };
+    }), [
+        { id: "thread-1", filePath: "docs/proposal.docx", anchorKind: "page", selectedText: "proposal" },
+        { id: "entry-2", filePath: "docs/proposal.docx", anchorKind: "page", selectedText: "proposal" },
+    ]);
 });
 
 test("AggregateCommentIndex hides soft-deleted threads and child entries from sidebar queries", () => {

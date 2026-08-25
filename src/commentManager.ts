@@ -1,5 +1,5 @@
 import { resolveAnchorRange } from "./core/anchors/anchorResolver";
-import { getPageCommentLabel, isPageComment } from "./core/anchors/commentAnchors";
+import { isPageComment } from "./core/anchors/commentAnchors";
 import { isPathInsideFolder } from "./core/files/pathScope";
 import {
     isSoftDeleted,
@@ -36,6 +36,10 @@ import type {
     CommentThreadEntryAnchor,
     ReorderPlacement,
 } from "./domain/comments/commentThread";
+import {
+    retargetCommentThreads,
+    type CommentThreadRetargetOptions,
+} from "./domain/comments/commentThreadRetarget";
 
 export type {
     CommentAnchorKind,
@@ -603,21 +607,16 @@ export class CommentManager {
         return true;
     }
 
-    renameFile(oldPath: string, newPath: string) {
-        let changed = false;
-        this.threads.forEach((thread) => {
-            if (thread.filePath === oldPath) {
-                thread.filePath = newPath;
-                changed = true;
-                if (isPageComment(thread)) {
-                    thread.selectedText = getPageCommentLabel(newPath);
-                    thread.orphaned = false;
-                }
-            }
-        });
-        if (changed) {
-            this.rebuildLookupIndexes();
+    renameFile(oldPath: string, newPath: string, options: CommentThreadRetargetOptions) {
+        const renamedThreads = this.threads.filter((thread) => thread.filePath === oldPath);
+        if (!renamedThreads.length) {
+            return;
         }
+
+        const retargetedThreads = retargetCommentThreads(renamedThreads, newPath, options);
+        let retargetedIndex = 0;
+        this.setThreads(this.threads.map((thread) =>
+            thread.filePath === oldPath ? retargetedThreads[retargetedIndex++] : thread));
     }
 
     async updateCommentCoordinatesForFile(fileContent: string, filePath: string): Promise<void> {

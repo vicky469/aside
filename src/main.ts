@@ -693,6 +693,7 @@ export default class Aside extends Plugin {
         clearDerivedCommentLinksForFile: (filePath) => this.derivedCommentMetadataManager.clearDerivedCommentLinksForFile(filePath),
         isCommentableFile: (file): file is TFile => file instanceof TFile && this.isCommentableFile(file),
         isPageNoteCapableFile: (file): file is TFile => file instanceof TFile && this.isPageNoteCapableFile(file),
+        hashText: (text) => generateHash(text),
         loadCommentsForFile: (file) => this.loadCommentsForFile(file),
         refreshCommentViews: () => this.workspaceViewController.refreshCommentViews(),
         refreshEditorDecorations: () => this.refreshEditorDecorations(),

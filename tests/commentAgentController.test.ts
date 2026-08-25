@@ -624,7 +624,10 @@ test("pdf-to-markdown regenerate revalidates the current source before agent sel
     assert.equal(previous?.status, "failed");
 
     const selectionsBeforeRetry = harness.getDefaultRuntimeSelectionCalls();
-    harness.commentManager.renameFile("Books/Guide.pdf", "Books/Guide.md");
+    harness.commentManager.renameFile("Books/Guide.pdf", "Books/Guide.md", {
+        selectionCapable: true,
+        pageLabelHash: "hash-guide",
+    });
     harness.availableFilePaths.delete("Books/Guide.pdf");
     harness.availableFilePaths.add("Books/Guide.md");
 

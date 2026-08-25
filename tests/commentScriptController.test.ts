@@ -834,7 +834,10 @@ test("retryRun reuses output and reloads the latest trigger, thread, note, and s
     await waitForRunStatus(harness, "thread-1", "succeeded");
     const previous = harness.store.getRuns()[0];
     assert.ok(previous?.outputEntryId);
-    harness.commentManager.renameFile("Folder/Note.md", "Renamed.md");
+    harness.commentManager.renameFile("Folder/Note.md", "Renamed.md", {
+        selectionCapable: true,
+        pageLabelHash: "hash-renamed",
+    });
     harness.commentManager.editComment("thread-1", "rerun /clean now");
     harness.registry.seed(["🛠️ scripts/clean.js"]);
 
