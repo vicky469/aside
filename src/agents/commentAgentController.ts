@@ -79,6 +79,7 @@ export interface CommentAgentHost {
     getFileByPath(filePath: string): TFile | null;
     getFilePaths(): string[];
     isCommentableFile(file: TFile | null): file is TFile;
+    isPageNoteCapableFile(file: TFile | null): file is TFile;
     getCurrentNoteContent(file: TFile): Promise<string>;
     loadCommentsForFile(file: TFile): Promise<unknown>;
     hashText(text: string): Promise<string>;
@@ -465,7 +466,7 @@ export class CommentAgentController {
             return false;
         }
         const file = this.host.getFileByPath(options.filePath);
-        if (!this.host.isCommentableFile(file)) {
+        if (!this.host.isPageNoteCapableFile(file)) {
             this.host.showNotice(options.missingFileNotice);
             return false;
         }

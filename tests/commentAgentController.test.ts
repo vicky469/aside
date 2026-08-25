@@ -61,6 +61,7 @@ function createHarness(options: {
     initialPersistedData?: PersistedPluginData;
     runtimeWorkingDirectory?: string | null;
     currentNoteContent?: string;
+    currentNoteContentError?: Error;
     runtimeReplyText?: string;
     runtimeError?: Error;
     runtimeStreamTexts?: string[];
@@ -68,6 +69,8 @@ function createHarness(options: {
     onRefreshCommentViews?: (controller: CommentAgentController) => void;
     initialComments?: Comment[];
     availableFilePaths?: string[];
+    isCommentableFilePath?: (filePath: string) => boolean;
+    isPageNoteCapableFilePath?: (filePath: string) => boolean;
     runtimeSelection?: AgentRuntimeSelection;
     defaultRuntimeSelection?: DefaultAgentRuntimeSelection;
     resolveDefaultAgentRuntimeSelection?: () => Promise<DefaultAgentRuntimeSelection>;
@@ -91,6 +94,7 @@ function createHarness(options: {
     }> = [];
     const runtimeCalls: AgentRuntimeInvocation[] = [];
     const runtimeSelectionCalls: AsideAgentTarget[] = [];
+    const currentNoteContentReads: string[] = [];
     const vaultScriptRegistry = new VaultScriptRegistry();
     vaultScriptRegistry.seed(options.registeredScriptPaths ?? []);
     let defaultRuntimeSelectionCalls = 0;
@@ -122,8 +126,21 @@ function createHarness(options: {
         getCommentManager: () => commentManager,
         getFileByPath: (filePath: string) => availableFilePaths.has(filePath) ? createFile(filePath) : null,
         getFilePaths: () => Array.from(availableFilePaths),
-        isCommentableFile: (candidate): candidate is TFile => !!candidate,
-        getCurrentNoteContent: async () => options.currentNoteContent ?? "",
+        isCommentableFile: (candidate): candidate is TFile => (
+            !!candidate
+            && (options.isCommentableFilePath?.(candidate.path) ?? true)
+        ),
+        isPageNoteCapableFile: (candidate): candidate is TFile => (
+            !!candidate
+            && (options.isPageNoteCapableFilePath?.(candidate.path) ?? true)
+        ),
+        getCurrentNoteContent: async (file) => {
+            currentNoteContentReads.push(file.path);
+            if (options.currentNoteContentError) {
+                throw options.currentNoteContentError;
+            }
+            return options.currentNoteContent ?? "";
+        },
         loadCommentsForFile: async () => undefined,
         hashText: async (text) => `hash:${text}`,
         persistCommentsForFile: async (file, persistOptions) => {
@@ -226,6 +243,7 @@ function createHarness(options: {
         logEntries,
         runtimeCalls,
         runtimeSelectionCalls,
+        currentNoteContentReads,
         availableFilePaths,
         vaultScriptRegistry,
         getDefaultRuntimeSelectionCalls: () => defaultRuntimeSelectionCalls,
@@ -1429,6 +1447,158 @@ test("comment agent controller regenerates a specific reply run using the curren
         body: "Second reply",
     }]);
     assert.equal(harness.commentManager.getCommentById(latestRun?.outputEntryId ?? "")?.comment, "Second reply");
+});
+
+test("comment agent controller regenerates a non-Markdown reply in the existing output entry", async () => {
+    let attempt = 0;
+    let releaseRetry!: () => void;
+    const retryGate = new Promise<void>((resolve) => {
+        releaseRetry = resolve;
+    });
+    const harness = createHarness({
+        initialComments: [createComment({
+            filePath: "Books/Guide.pdf",
+            comment: "/pdf-to-markdown",
+        })],
+        availableFilePaths: ["Books/Guide.pdf"],
+        isCommentableFilePath: (filePath) => /\.md$/iu.test(filePath),
+        isPageNoteCapableFilePath: () => true,
+        currentNoteContentError: new Error("binary source must not be read"),
+        customRunAgentRuntime: async () => {
+            attempt += 1;
+            if (attempt === 1) {
+                throw new Error("first conversion failed");
+            }
+            await retryGate;
+            return { runtime: "direct-cli", replyText: "Recovered conversion" };
+        },
+    });
+
+    await harness.controller.handlePdfToMarkdownRequest({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Books/Guide.pdf",
+        body: "/pdf-to-markdown",
+    });
+    await waitForAgentQueueToDrain(harness.controller);
+    const failedRun = harness.controller.getLatestAgentRunForThread("thread-1");
+    const outputEntryId = failedRun?.outputEntryId ?? "";
+    assert.equal(failedRun?.status, "failed");
+    assert.ok(outputEntryId);
+
+    const started = await harness.controller.retryRun(failedRun?.id ?? "");
+
+    assert.equal(started, true);
+    const retryRun = harness.controller.getLatestAgentRunForThread("thread-1");
+    assert.equal(retryRun?.outputEntryId, outputEntryId);
+    assert.equal(harness.commentManager.getCommentById(outputEntryId)?.comment, "");
+    assert.equal(
+        harness.controller.getActiveAgentStreamForThread("thread-1")?.outputEntryId,
+        outputEntryId,
+    );
+    assert.equal(harness.appendedEntries.length, 1);
+    assert.deepEqual(harness.currentNoteContentReads, []);
+
+    releaseRetry();
+    await waitForAgentQueueToDrain(harness.controller);
+    assert.equal(harness.commentManager.getCommentById(outputEntryId)?.comment, "Recovered conversion");
+});
+
+test("comment agent controller appends an output entry when a non-Markdown retry has none", async () => {
+    const harness = createHarness({
+        initialComments: [createComment({
+            filePath: "Documents/Guide.docx",
+            comment: "@codex summarize this file",
+        })],
+        availableFilePaths: ["Documents/Guide.docx"],
+        isCommentableFilePath: (filePath) => /\.md$/iu.test(filePath),
+        isPageNoteCapableFilePath: () => true,
+        currentNoteContentError: new Error("binary source must not be read"),
+        initialPersistedData: {
+            agentRuns: [{
+                id: "run-old",
+                threadId: "thread-1",
+                triggerEntryId: "thread-1",
+                filePath: "Documents/Guide.docx",
+                requestedAgent: "codex",
+                runtime: "direct-cli",
+                status: "failed",
+                promptText: "@codex summarize this file",
+                createdAt: 10,
+                startedAt: 11,
+                endedAt: 12,
+                error: "previous failure",
+                outputEntryId: "missing-output",
+            }],
+        },
+        runtimeReplyText: "Recovered document reply",
+    });
+
+    assert.equal(await harness.controller.retryRun("run-old"), true);
+    await waitForAgentQueueToDrain(harness.controller);
+
+    const retryRun = harness.controller.getLatestAgentRunForThread("thread-1");
+    assert.notEqual(retryRun?.outputEntryId, "missing-output");
+    assert.equal(harness.appendedEntries.length, 1);
+    assert.equal(
+        harness.commentManager.getCommentById(retryRun?.outputEntryId ?? "")?.comment,
+        "Recovered document reply",
+    );
+    assert.deepEqual(harness.currentNoteContentReads, []);
+});
+
+test("comment agent controller rejects missing and ineligible retry sources without reply mutation", async () => {
+    for (const scenario of [{
+        name: "missing source",
+        filePath: "Documents/Missing.docx",
+        availableFilePaths: [] as string[],
+        isPageNoteCapableFilePath: () => true,
+    }, {
+        name: "generated index",
+        filePath: "🐰 Aside Index.md",
+        availableFilePaths: ["🐰 Aside Index.md"],
+        isPageNoteCapableFilePath: () => false,
+    }]) {
+        const harness = createHarness({
+            initialComments: [createComment({
+                filePath: scenario.filePath,
+                comment: "@codex retry this",
+            })],
+            availableFilePaths: scenario.availableFilePaths,
+            isCommentableFilePath: () => false,
+            isPageNoteCapableFilePath: scenario.isPageNoteCapableFilePath,
+            initialPersistedData: {
+                agentRuns: [{
+                    id: "run-old",
+                    threadId: "thread-1",
+                    triggerEntryId: "thread-1",
+                    filePath: scenario.filePath,
+                    requestedAgent: "codex",
+                    runtime: "direct-cli",
+                    status: "failed",
+                    promptText: "@codex retry this",
+                    createdAt: 10,
+                    endedAt: 12,
+                    outputEntryId: "reply-1",
+                }],
+            },
+        });
+        harness.commentManager.appendEntry("thread-1", {
+            id: "reply-1",
+            body: "Previous failure",
+            timestamp: 20,
+        });
+
+        assert.equal(await harness.controller.retryRun("run-old"), false, scenario.name);
+        assert.deepEqual(harness.runtimeCalls, [], scenario.name);
+        assert.deepEqual(harness.editedEntries, [], scenario.name);
+        assert.deepEqual(harness.appendedEntries, [], scenario.name);
+        assert.equal(
+            harness.commentManager.getCommentById("reply-1")?.comment,
+            "Previous failure",
+            scenario.name,
+        );
+    }
 });
 
 test("comment agent controller re-resolves the default fallback for create-script regenerate", async () => {
