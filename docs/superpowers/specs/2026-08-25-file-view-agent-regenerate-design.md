@@ -1,7 +1,7 @@
 # File-View Agent Regenerate Design
 
 **Date:** 2026-08-25
-**Status:** Approved for implementation
+**Status:** Implemented
 
 ## Implementation Tracking
 
@@ -16,17 +16,17 @@ Use this checklist as the implementation source of truth. Mark an item done only
 
 ### To Implement
 
-- [ ] Expose `isPageNoteCapableFile` through `CommentAgentHost` and wire it to the existing shared plugin capability.
-- [ ] Validate retry source files with page-note capability instead of Markdown-only capability.
-- [ ] Preserve Markdown-only source-content and annotation behavior for non-Markdown retries.
-- [ ] Cover non-Markdown retry with both an existing output entry and a missing output entry.
-- [ ] Cover missing and ineligible source rejection without reply mutation.
+- [x] Expose `isPageNoteCapableFile` through `CommentAgentHost` and wire it to the existing shared plugin capability.
+- [x] Validate retry source files with page-note capability instead of Markdown-only capability.
+- [x] Preserve Markdown-only source-content and annotation behavior for non-Markdown retries.
+- [x] Cover non-Markdown retry with both an existing output entry and a missing output entry.
+- [x] Cover missing and ineligible source rejection without reply mutation.
 
 ### Verification
 
-- [ ] Focused comment-agent tests pass and demonstrate the pre-fix Markdown guard failure.
-- [ ] Typecheck, lint, all automated tests, production build, Obsidian compliance, and release-artifact inspection pass.
-- [ ] Exact built assets are inspected, synced to `lean-startup`, compared byte-for-byte, Aside is reloaded, and the failed PDF Generate flow is smoke-tested.
+- [x] Focused comment-agent tests pass and demonstrate the pre-fix Markdown guard failure.
+- [x] Typecheck, lint, all automated tests, production build, Obsidian compliance, and release-artifact inspection pass.
+- [x] Exact built assets are inspected, synced to `lean-startup`, compared byte-for-byte, Aside is reloaded, and the failed PDF Generate flow is smoke-tested.
 
 ## Problem
 

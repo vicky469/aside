@@ -26,7 +26,7 @@ No UI file should change unless the controller regression proves a second defect
 - Modify: `tests/commentAgentController.test.ts:55-220`
 - Modify: `tests/commentAgentController.test.ts:1380-1665`
 
-- [ ] **Step 1: Add explicit capability and source-read seams to the controller harness**
+- [x] **Step 1: Add explicit capability and source-read seams to the controller harness**
 
 Add these options to `createHarness`:
 
@@ -60,7 +60,7 @@ Keep the pre-fix host on its current Markdown predicate for the first red run:
 
 Expose `currentNoteContentReads` from the returned harness object. Declare `isPageNoteCapableFilePath` now for the later green wiring, but do not add a not-yet-supported property to the controller host before the red run.
 
-- [ ] **Step 2: Add an existing-output PDF retry test**
+- [x] **Step 2: Add an existing-output PDF retry test**
 
 Add this test beside the current regenerate tests:
 
@@ -121,7 +121,7 @@ test("comment agent controller regenerates a non-Markdown reply in the existing 
 });
 ```
 
-- [ ] **Step 3: Add missing-output and ineligible-source coverage**
+- [x] **Step 3: Add missing-output and ineligible-source coverage**
 
 Add a DOCX run whose stored output entry is absent:
 
@@ -228,7 +228,7 @@ test("comment agent controller rejects missing and ineligible retry sources with
 });
 ```
 
-- [ ] **Step 4: Run the focused test to prove the Markdown guard is the failure**
+- [x] **Step 4: Run the focused test to prove the Markdown guard is the failure**
 
 Run:
 
@@ -248,7 +248,7 @@ Expected: the new PDF and DOCX tests fail at `started === true` because the curr
 - Modify: `src/main.ts:510-528`
 - Modify: `tests/commentAgentController.test.ts:115-145`
 
-- [ ] **Step 1: Extend the agent host interface**
+- [x] **Step 1: Extend the agent host interface**
 
 Add the required predicate next to `isCommentableFile`:
 
@@ -258,7 +258,7 @@ Add the required predicate next to `isCommentableFile`:
     getCurrentNoteContent(file: TFile): Promise<string>;
 ```
 
-- [ ] **Step 2: Replace only the retry eligibility guard**
+- [x] **Step 2: Replace only the retry eligibility guard**
 
 Change `retryPromptForCommentInternal` to:
 
@@ -272,7 +272,7 @@ Change `retryPromptForCommentInternal` to:
 
 Do not change `applyAgentAnnotationProposals` or `buildRuntimePromptContext`; they must continue to reject non-Markdown anchoring and skip non-Markdown note-content reads.
 
-- [ ] **Step 3: Wire production and test hosts to the shared capability**
+- [x] **Step 3: Wire production and test hosts to the shared capability**
 
 In the `CommentAgentController` host in `src/main.ts`, add:
 
@@ -291,7 +291,7 @@ In the test harness, add after `isCommentableFile`:
         ),
 ```
 
-- [ ] **Step 4: Run the focused test and verify green behavior**
+- [x] **Step 4: Run the focused test and verify green behavior**
 
 Run:
 
@@ -303,7 +303,7 @@ node --test .test-dist/tests/commentAgentController.test.js
 
 Expected: all comment-agent tests pass. The PDF test reuses and clears its existing output entry, exposes an active stream for that entry, and completes without reading the PDF. The DOCX test appends exactly one replacement entry and also performs no source read.
 
-- [ ] **Step 5: Re-run the change-surface audit**
+- [x] **Step 5: Re-run the change-surface audit**
 
 Run:
 
@@ -313,7 +313,7 @@ rg -n "isCommentableFile|isPageNoteCapableFile" src/agents/commentAgentControlle
 
 Expected: retry eligibility uses `isPageNoteCapableFile`; annotation handling retains `isCommentableFile`; runtime prompt construction retains its Markdown path check; production and test hosts expose both predicates. There is no extension allowlist or generated-index duplicate in the controller.
 
-- [ ] **Step 6: Commit the tested fix**
+- [x] **Step 6: Commit the tested fix**
 
 ```bash
 git add src/agents/commentAgentController.ts src/main.ts tests/commentAgentController.test.ts
@@ -328,7 +328,7 @@ git commit -m "fix(agents): regenerate file-view replies"
 - Verify public assets: `main.js`, `manifest.json`, `styles.css`
 - Install exact assets into: `/Users/example/Obsidian/lean-startup/.obsidian/plugins/aside`
 
-- [ ] **Step 1: Run the complete build pipeline**
+- [x] **Step 1: Run the complete build pipeline**
 
 Run:
 
@@ -338,7 +338,7 @@ npm run build
 
 Expected: 1,249 compiled tests after the three additions, 98 repository-policy tests, lint, typecheck, Obsidian compliance, production bundle, and release-artifact inspection all pass with zero failures or warnings other than the existing npm `min-release-age` notice.
 
-- [ ] **Step 2: Inspect exactly what will be installed**
+- [x] **Step 2: Inspect exactly what will be installed**
 
 Run:
 
@@ -351,7 +351,7 @@ shasum -a 256 main.js manifest.json styles.css
 
 Expected: the exact public set is `main.js`, `manifest.json`, and `styles.css`; no `main.js.map` exists; the artifact guard passes; the explicit sensitive/source scan returns no matches; hashes are recorded for post-install comparison.
 
-- [ ] **Step 3: Install the exact inspected assets into `lean-startup`**
+- [x] **Step 3: Install the exact inspected assets into `lean-startup`**
 
 Run:
 
@@ -369,7 +369,7 @@ cmp -s styles.css "/Users/example/Obsidian/lean-startup/.obsidian/plugins/aside/
 
 Expected: installer reports only the three public assets; all three `cmp` commands exit `0`.
 
-- [ ] **Step 4: Reload Aside and smoke-test the original PDF Generate flow**
+- [x] **Step 4: Reload Aside and smoke-test the original PDF Generate flow**
 
 Run:
 
@@ -385,11 +385,11 @@ Open the source file `z_📚 reading/software/Algorithms + Data Structures = Pro
 4. A second reply is appended only when the stored output entry is genuinely missing.
 5. No missing-file notice appears for the PDF source.
 
-- [ ] **Step 5: Mark only verified tracking items complete**
+- [x] **Step 5: Mark only verified tracking items complete**
 
 Update `docs/superpowers/specs/2026-08-25-file-view-agent-regenerate-design.md` from `[ ]` to `[x]` only for implementation and verification items supported by the completed commands and live smoke evidence. Change the status to `Implemented` only when every required item is checked.
 
-- [ ] **Step 6: Commit the tracked design and plan**
+- [x] **Step 6: Commit the tracked design and plan**
 
 ```bash
 git add -f docs/superpowers/specs/2026-08-25-file-view-agent-regenerate-design.md docs/superpowers/plans/2026-08-25-file-view-agent-regenerate.md
