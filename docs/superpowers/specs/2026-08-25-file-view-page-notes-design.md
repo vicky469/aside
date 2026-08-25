@@ -1,7 +1,7 @@
 # File-View Page Notes Design
 
 **Date:** 2026-08-25
-**Status:** Approved; implementation pending
+**Status:** Implemented
 
 ## Implementation Tracking
 
@@ -16,24 +16,24 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Replace the Markdown/PDF/HTML page-note extension whitelist with one extension-independent rule for every real vault `TFile` except the generated Aside index.
-- [ ] Let the note sidebar target any `TFile` exposed by the active Obsidian file-backed view while preserving the existing no-stale-file behavior for non-file tabs.
-- [ ] Expose the normal Add page note, reply, edit, delete, pin, reorder, navigation, and index behavior for representative native and plugin-provided non-Markdown file views.
-- [ ] Keep source-content reads, editor selection, anchor validation, highlights, and Markdown preview refresh limited to the existing text-anchor-capable formats.
-- [ ] Keep Aside out of file preview ownership: add no custom file view, extension registration, parser, converter, viewer setting, or file-menu fallback.
-- [ ] Preserve existing page-note data when a source file still exists but its viewer is temporarily unavailable.
-- [ ] Remove PDF-only page-note policy helpers that have no remaining production consumer, while retaining truly format-specific HTML and publishing behavior.
+- [x] Replace the Markdown/PDF/HTML page-note extension whitelist with one extension-independent rule for every real vault `TFile` except the generated Aside index.
+- [x] Let the note sidebar target any `TFile` exposed by the active Obsidian file-backed view while preserving the existing no-stale-file behavior for non-file tabs.
+- [x] Expose the normal Add page note, reply, edit, delete, pin, reorder, navigation, and index behavior for representative native and plugin-provided non-Markdown file views.
+- [x] Keep source-content reads, editor selection, anchor validation, highlights, and Markdown preview refresh limited to the existing text-anchor-capable formats.
+- [x] Keep Aside out of file preview ownership: add no custom file view, extension registration, parser, converter, viewer setting, or file-menu fallback.
+- [x] Preserve existing page-note data when a source file still exists but its viewer is temporarily unavailable.
+- [x] Remove PDF-only page-note policy helpers that have no remaining production consumer, while retaining truly format-specific HTML and publishing behavior.
 
 ### Verification
 
-- [ ] Capability tests cover Markdown, PDF, HTML, images, audio, video, canvas, a plugin-viewed DOCX, the generated Aside index, and null inputs.
-- [ ] Workspace tests prove native and plugin-provided file views become the sidebar target and non-file tabs do not reuse a stale Markdown target.
-- [ ] Controller tests cover page-note creation and representative mutations on non-Markdown files without reading source bytes or refreshing Markdown decorations.
-- [ ] Persistence and lifecycle tests cover sidecar load/save, index inclusion, rename, deletion, and viewer unavailability for representative non-Markdown sources.
-- [ ] Existing Markdown anchors, rendered HTML behavior, PDF page notes, and `/pdf-to-markdown` tests remain green.
-- [ ] The full build, Obsidian compliance check, production bundle, and release-artifact guard pass.
-- [ ] Installed `main.js`, `manifest.json`, and `styles.css` match the inspected build byte-for-byte.
-- [ ] A live smoke test creates and mutates a page note from a native non-Markdown file view without changing or reading the source file.
+- [x] Capability tests cover Markdown, PDF, HTML, images, audio, video, canvas, a plugin-viewed DOCX, the generated Aside index, and null inputs.
+- [x] Workspace tests prove native and plugin-provided file views become the sidebar target and non-file tabs do not reuse a stale Markdown target.
+- [x] Controller tests cover page-note creation and representative mutations on non-Markdown files without reading source bytes or refreshing Markdown decorations.
+- [x] Persistence and lifecycle tests cover sidecar load/save, index inclusion, rename, deletion, and viewer unavailability for representative non-Markdown sources.
+- [x] Existing Markdown anchors, rendered HTML behavior, PDF page notes, and `/pdf-to-markdown` tests remain green.
+- [x] The full build, Obsidian compliance check, production bundle, and release-artifact guard pass.
+- [x] Installed `main.js`, `manifest.json`, and `styles.css` match the inspected build byte-for-byte.
+- [x] A live smoke test creates and mutates a page note from a native non-Markdown file view without changing or reading the source file.
 
 ## Problem
 
