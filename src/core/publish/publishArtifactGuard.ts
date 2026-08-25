@@ -9,6 +9,10 @@ export type PublishArtifactInspection =
 	| { ok: true }
 	| { ok: false; notice: string };
 
+type PublishPathAndContentsInspection =
+	| { ok: true; normalizedPath: string }
+	| { ok: false; notice: string };
+
 export interface InspectPublishArtifactOptions {
 	vaultRelativePath: string;
 	allowedRoot: string;
@@ -59,6 +63,10 @@ function isPdfPath(path: string): boolean {
 	return /\.pdf$/iu.test(path);
 }
 
+function isRawSourcePath(path: string): boolean {
+	return /\.(?:md|mdx|ts|tsx|jsx)$/iu.test(path);
+}
+
 function getSourceMapContentMarkers(): string[] {
 	return [
 		["source", "Mapping", "URL"],
@@ -66,7 +74,7 @@ function getSourceMapContentMarkers(): string[] {
 	].map((parts) => parts.join(""));
 }
 
-export function inspectPublishArtifact(options: InspectPublishArtifactOptions): PublishArtifactInspection {
+function inspectPublishPathAndContents(options: InspectPublishArtifactOptions): PublishPathAndContentsInspection {
 	const normalizedPath = normalizeVaultRelativePublishPath(options.vaultRelativePath);
 	if (!normalizedPath.ok) {
 		return {
@@ -128,10 +136,35 @@ export function inspectPublishArtifact(options: InspectPublishArtifactOptions): 
 		};
 	}
 
-	if (!(isHtmlPath(normalizedPath.path) || isPdfPath(normalizedPath.path))) {
+	return { ok: true, normalizedPath: normalizedPath.path };
+}
+
+export function inspectPublishArtifact(options: InspectPublishArtifactOptions): PublishArtifactInspection {
+	const safetyInspection = inspectPublishPathAndContents(options);
+	if (!safetyInspection.ok) {
+		return safetyInspection;
+	}
+
+	if (!(isHtmlPath(safetyInspection.normalizedPath) || isPdfPath(safetyInspection.normalizedPath))) {
 		return {
 			ok: false,
 			notice: "Publish failed: only .html, .htm, and .pdf files can be published in this version.",
+		};
+	}
+
+	return { ok: true };
+}
+
+export function inspectPublishDependency(options: InspectPublishArtifactOptions): PublishArtifactInspection {
+	const safetyInspection = inspectPublishPathAndContents(options);
+	if (!safetyInspection.ok) {
+		return safetyInspection;
+	}
+
+	if (isRawSourcePath(safetyInspection.normalizedPath)) {
+		return {
+			ok: false,
+			notice: "Publish failed: raw Markdown, TypeScript, and JSX source files cannot be published.",
 		};
 	}
 
