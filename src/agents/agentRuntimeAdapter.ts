@@ -2450,8 +2450,8 @@ async function runJsonLineAgentDirect(
 
             const replyText = sanitizeAgentReplyText(streamedText);
             const rawDiagnosticMessage = joinRuntimeDiagnostics([
-                normalizeRuntimeDiagnosticText(stderrBuffer),
                 ...runtimeErrorMessages,
+                normalizeRuntimeDiagnosticText(stderrBuffer),
                 ...stdoutDiagnosticLines,
             ]);
             const diagnosticMessage = definition.normalizeFailureDiagnostic

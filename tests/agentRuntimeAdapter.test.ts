@@ -726,6 +726,26 @@ test("runAgentRuntimeWithModules rejects structured OpenCode errors", async () =
     await rejection;
 });
 
+test("runAgentRuntimeWithModules prefers structured OpenCode errors over stderr", async () => {
+    const harness = createJsonLineRuntimeHarness();
+    const runPromise = runAgentRuntimeWithModules(harness.modules, OPENCODE_TEST_INVOCATION);
+    const child = await waitForRuntimeChild(harness.spawned, runPromise);
+    const rejection = assert.rejects(runPromise, (error: Error) => {
+        assert.equal(
+            error.message,
+            "Provider is not configured\nsecondary stderr diagnostic",
+        );
+        return true;
+    });
+    child.stderr.emitText("secondary stderr diagnostic");
+    child.stdout.emitText(JSON.stringify({
+        type: "error",
+        error: { data: { message: "Provider is not configured" } },
+    }) + "\n");
+    child.emit("close", 1, null);
+    await rejection;
+});
+
 test("runAgentRuntimeWithModules reports OpenCode nonzero failures", async () => {
     const harness = createJsonLineRuntimeHarness();
     const runPromise = runAgentRuntimeWithModules(harness.modules, OPENCODE_TEST_INVOCATION);
