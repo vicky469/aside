@@ -122,7 +122,7 @@ class RuntimeProcessStub extends EventEmitter {
     }
 }
 
-function createGeminiRuntimeHarness(options: {
+function createJsonLineRuntimeHarness(options: {
     child?: RuntimeProcessStub;
     spawnError?: Error;
 } = {}) {
@@ -148,9 +148,29 @@ function createGeminiRuntimeHarness(options: {
     return { child, modules, spawned, spawnCalls };
 }
 
+async function waitForRuntimeChild(
+    spawned: Promise<RuntimeProcessStub>,
+    runPromise: Promise<unknown>,
+): Promise<RuntimeProcessStub> {
+    return Promise.race([
+        spawned,
+        runPromise.then(
+            () => Promise.reject(new Error("Agent run settled before spawning.")),
+            (error: unknown) => Promise.reject(error),
+        ),
+    ]);
+}
+
 const GEMINI_TEST_INVOCATION = {
     target: "gemini" as const,
     prompt: "@gemini review this",
+    cwd: "/vault/project",
+    vaultRootPath: "/vault",
+};
+
+const OPENCODE_TEST_INVOCATION = {
+    target: "deepseek" as const,
+    prompt: "@deepseek review this",
     cwd: "/vault/project",
     vaultRootPath: "/vault",
 };
@@ -546,7 +566,7 @@ test("buildGeminiCliArgs does not duplicate the working directory", () => {
 });
 
 test("runAgentRuntimeWithModules streams Gemini replies, progress, metadata, and stdin prompt", async () => {
-    const harness = createGeminiRuntimeHarness();
+    const harness = createJsonLineRuntimeHarness();
     const partials: string[] = [];
     const progress: string[] = [];
     const metadata: AgentRunMetadata[] = [];
@@ -605,8 +625,155 @@ test("runAgentRuntimeWithModules streams Gemini replies, progress, metadata, and
     assert.equal(child.ended, true);
 });
 
+test("runAgentRuntimeWithModules streams OpenCode replies, progress, and metadata", async () => {
+    const harness = createJsonLineRuntimeHarness();
+    const partials: string[] = [];
+    const progress: string[] = [];
+    const metadata: AgentRunMetadata[] = [];
+    const runPromise = runAgentRuntimeWithModules(harness.modules, {
+        ...OPENCODE_TEST_INVOCATION,
+        onPartialText: (value) => partials.push(value),
+        onProgressText: (value) => progress.push(value),
+        onRunMetadata: (value) => metadata.push(value),
+    });
+    const child = await waitForRuntimeChild(harness.spawned, runPromise);
+
+    child.stdout.emitText([
+        JSON.stringify({ type: "step_start", part: { type: "step-start" } }),
+        JSON.stringify({
+            type: "tool_use",
+            part: {
+                type: "tool",
+                tool: "bash",
+                state: {
+                    status: "completed",
+                    input: {
+                        command: "pwd",
+                        filePath: "/vault/project/README.md",
+                    },
+                    output: "https://example.com/docs?token=secret",
+                },
+            },
+        }),
+        JSON.stringify({
+            type: "text",
+            part: { type: "text", text: "OpenCode reply." },
+        }),
+        JSON.stringify({ type: "step_finish", part: { type: "step-finish" } }),
+    ].join("\n") + "\n");
+    child.emit("close", 0, null);
+
+    const result = await runPromise;
+    assert.equal(result.runtime, "direct-cli");
+    assert.equal(result.replyText, "OpenCode reply.");
+    assert.deepEqual(partials, ["OpenCode reply."]);
+    assert.equal(progress.includes("Starting OpenCode"), true);
+    assert.equal(progress.includes("Running command"), true);
+    assert.deepEqual(result.usedTools, []);
+    assert.deepEqual(result.usedFiles, ["/vault/project/README.md"]);
+    assert.deepEqual(result.usedUrls, ["https://example.com/docs"]);
+    assert.equal(metadata.length > 0, true);
+    assert.equal(harness.spawnCalls[0]?.file, "opencode");
+    assert.deepEqual(harness.spawnCalls[0]?.args, buildOpenCodeCliArgs(buildSideNotePrompt({
+        promptText: "@deepseek review this",
+        vaultRootPath: "/vault",
+    })));
+    assert.equal(harness.spawnCalls[0]?.cwd, "/vault/project");
+    assert.deepEqual(child.stdinChunks, []);
+    assert.equal(child.ended, true);
+});
+
+test("runAgentRuntimeWithModules accepts OpenCode text without a terminal event", async () => {
+    const harness = createJsonLineRuntimeHarness();
+    const runPromise = runAgentRuntimeWithModules(harness.modules, OPENCODE_TEST_INVOCATION);
+    const child = await waitForRuntimeChild(harness.spawned, runPromise);
+    child.stdout.emitText([
+        "not-json",
+        JSON.stringify({ type: "future_event", value: "ignore" }),
+        JSON.stringify({
+            type: "text",
+            part: { type: "text", text: "Useful reply." },
+        }),
+    ].join("\n") + "\n");
+    child.emit("close", 0, null);
+
+    assert.equal((await runPromise).replyText, "Useful reply.");
+});
+
+test("runAgentRuntimeWithModules rejects an empty successful OpenCode response", async () => {
+    const harness = createJsonLineRuntimeHarness();
+    const runPromise = runAgentRuntimeWithModules(harness.modules, OPENCODE_TEST_INVOCATION);
+    const child = await waitForRuntimeChild(harness.spawned, runPromise);
+    const rejection = assert.rejects(runPromise, /OpenCode returned an empty response\./);
+    child.stdout.emitText(JSON.stringify({
+        type: "step_finish",
+        part: { type: "step-finish" },
+    }) + "\n");
+    child.emit("close", 0, null);
+    await rejection;
+});
+
+test("runAgentRuntimeWithModules rejects structured OpenCode errors", async () => {
+    const harness = createJsonLineRuntimeHarness();
+    const runPromise = runAgentRuntimeWithModules(harness.modules, OPENCODE_TEST_INVOCATION);
+    const child = await waitForRuntimeChild(harness.spawned, runPromise);
+    const rejection = assert.rejects(runPromise, /Provider is not configured/);
+    child.stdout.emitText(JSON.stringify({
+        type: "error",
+        error: { data: { message: "Provider is not configured" } },
+    }) + "\n");
+    child.emit("close", 0, null);
+    await rejection;
+});
+
+test("runAgentRuntimeWithModules reports OpenCode nonzero failures", async () => {
+    const harness = createJsonLineRuntimeHarness();
+    const runPromise = runAgentRuntimeWithModules(harness.modules, OPENCODE_TEST_INVOCATION);
+    const child = await waitForRuntimeChild(harness.spawned, runPromise);
+    const rejection = assert.rejects(runPromise, /Authentication failed/);
+    child.stderr.emitText("Authentication failed");
+    child.emit("close", 1, null);
+    await rejection;
+
+    const spawnHarness = createJsonLineRuntimeHarness({
+        spawnError: new Error("opencode spawn failed"),
+    });
+    await assert.rejects(
+        runAgentRuntimeWithModules(spawnHarness.modules, OPENCODE_TEST_INVOCATION),
+        /opencode spawn failed/,
+    );
+});
+
+test("runAgentRuntimeWithModules cancels OpenCode before and during execution", async () => {
+    const preAbortedController = new AbortController();
+    preAbortedController.abort();
+    const preAbortedHarness = createJsonLineRuntimeHarness();
+    await assert.rejects(
+        runAgentRuntimeWithModules(preAbortedHarness.modules, {
+            ...OPENCODE_TEST_INVOCATION,
+            abortSignal: preAbortedController.signal,
+        }),
+        { name: "AgentRuntimeCancelledError" },
+    );
+    assert.equal(preAbortedHarness.spawnCalls.length, 0);
+
+    const cancelledController = new AbortController();
+    const cancelledHarness = createJsonLineRuntimeHarness();
+    const cancelledRun = runAgentRuntimeWithModules(cancelledHarness.modules, {
+        ...OPENCODE_TEST_INVOCATION,
+        abortSignal: cancelledController.signal,
+    });
+    const cancelledRejection = assert.rejects(cancelledRun, {
+        name: "AgentRuntimeCancelledError",
+    });
+    const cancelledChild = await waitForRuntimeChild(cancelledHarness.spawned, cancelledRun);
+    cancelledController.abort();
+    await cancelledRejection;
+    assert.equal(cancelledChild.killedWith, "SIGTERM");
+});
+
 test("runAgentRuntimeWithModules ignores malformed and unknown Gemini stdout events", async () => {
-    const harness = createGeminiRuntimeHarness();
+    const harness = createJsonLineRuntimeHarness();
     const runPromise = runAgentRuntimeWithModules(harness.modules, GEMINI_TEST_INVOCATION);
     const child = await harness.spawned;
     child.stdout.emitText([
@@ -626,7 +793,7 @@ test("runAgentRuntimeWithModules ignores malformed and unknown Gemini stdout eve
 });
 
 test("runAgentRuntimeWithModules rejects an empty successful Gemini response", async () => {
-    const harness = createGeminiRuntimeHarness();
+    const harness = createJsonLineRuntimeHarness();
     const runPromise = runAgentRuntimeWithModules(harness.modules, GEMINI_TEST_INVOCATION);
     const rejection = assert.rejects(runPromise, /Gemini returned an empty response\./);
     const child = await harness.spawned;
@@ -636,7 +803,7 @@ test("runAgentRuntimeWithModules rejects an empty successful Gemini response", a
 });
 
 test("runAgentRuntimeWithModules rejects a terminal Gemini error result", async () => {
-    const harness = createGeminiRuntimeHarness();
+    const harness = createJsonLineRuntimeHarness();
     const runPromise = runAgentRuntimeWithModules(harness.modules, GEMINI_TEST_INVOCATION);
     const rejection = assert.rejects(runPromise, /Maximum session turns exceeded/);
     const child = await harness.spawned;
@@ -653,7 +820,7 @@ test("runAgentRuntimeWithModules rejects a terminal Gemini error result", async 
 });
 
 test("runAgentRuntimeWithModules reports Gemini nonzero stderr", async () => {
-    const harness = createGeminiRuntimeHarness();
+    const harness = createJsonLineRuntimeHarness();
     const runPromise = runAgentRuntimeWithModules(harness.modules, GEMINI_TEST_INVOCATION);
     const rejection = assert.rejects(runPromise, /Authentication failed/);
     const child = await harness.spawned;
@@ -663,7 +830,7 @@ test("runAgentRuntimeWithModules reports Gemini nonzero stderr", async () => {
 });
 
 test("runAgentRuntimeWithModules collapses Gemini authentication stacks", async () => {
-    const harness = createGeminiRuntimeHarness();
+    const harness = createJsonLineRuntimeHarness();
     const runPromise = runAgentRuntimeWithModules(harness.modules, GEMINI_TEST_INVOCATION);
     const rejection = assert.rejects(runPromise, (error: Error) => {
         assert.equal(
@@ -685,7 +852,7 @@ test("runAgentRuntimeWithModules collapses Gemini authentication stacks", async 
 });
 
 test("runAgentRuntimeWithModules rejects missing Gemini stdin and spawn failures", async () => {
-    const stdinHarness = createGeminiRuntimeHarness({
+    const stdinHarness = createJsonLineRuntimeHarness({
         child: new RuntimeProcessStub({ withStdin: false }),
     });
     const stdinRun = runAgentRuntimeWithModules(stdinHarness.modules, GEMINI_TEST_INVOCATION);
@@ -693,7 +860,7 @@ test("runAgentRuntimeWithModules rejects missing Gemini stdin and spawn failures
     await stdinHarness.spawned;
     await stdinRejection;
 
-    const spawnHarness = createGeminiRuntimeHarness({
+    const spawnHarness = createJsonLineRuntimeHarness({
         spawnError: new Error("spawn failed"),
     });
     await assert.rejects(
@@ -705,7 +872,7 @@ test("runAgentRuntimeWithModules rejects missing Gemini stdin and spawn failures
 test("runAgentRuntimeWithModules cancels Gemini before and during execution", async () => {
     const preAbortedController = new AbortController();
     preAbortedController.abort();
-    const preAbortedHarness = createGeminiRuntimeHarness();
+    const preAbortedHarness = createJsonLineRuntimeHarness();
     await assert.rejects(
         runAgentRuntimeWithModules(preAbortedHarness.modules, {
             ...GEMINI_TEST_INVOCATION,
@@ -716,7 +883,7 @@ test("runAgentRuntimeWithModules cancels Gemini before and during execution", as
     assert.equal(preAbortedHarness.spawnCalls.length, 0);
 
     const cancelledController = new AbortController();
-    const cancelledHarness = createGeminiRuntimeHarness();
+    const cancelledHarness = createJsonLineRuntimeHarness();
     const cancelledRun = runAgentRuntimeWithModules(cancelledHarness.modules, {
         ...GEMINI_TEST_INVOCATION,
         abortSignal: cancelledController.signal,

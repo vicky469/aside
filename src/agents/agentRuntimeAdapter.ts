@@ -2210,9 +2210,25 @@ async function runClaudeDirect(
     });
 }
 
-async function runGeminiDirect(
+interface JsonLineAgentRuntimeDefinition {
+    executable: string;
+    args: string[];
+    stdinPrompt?: string;
+    stdinUnavailableMessage?: string;
+    emptyResponseMessage: string;
+    unsuccessfulResultMessage: string;
+    extractText(event: unknown): string | null;
+    extractProgress(event: unknown): string | null;
+    extractError(event: unknown): string | null;
+    extractMetadata(event: unknown): AgentRunMetadata;
+    isTerminalError(event: unknown): boolean;
+    normalizeFailureDiagnostic?(value: string | null): string | null;
+}
+
+async function runJsonLineAgentDirect(
     modules: NodeModules,
     invocation: AgentRuntimeInvocation,
+    definition: JsonLineAgentRuntimeDefinition,
 ): Promise<AgentRuntimeResult> {
     if (invocation.abortSignal?.aborted) {
         throw new AgentRuntimeCancelledError();
@@ -2220,8 +2236,8 @@ async function runGeminiDirect(
 
     const childProcess = await spawnInteractiveAgentRuntimeProcess(
         modules,
-        "gemini",
-        buildGeminiCliArgs(invocation),
+        definition.executable,
+        definition.args,
         {
             cwd: invocation.cwd,
         },
@@ -2232,10 +2248,9 @@ async function runGeminiDirect(
         let stdoutBuffer = "";
         let stderrBuffer = "";
         let streamedText = "";
-        let resultStatus: GeminiResultStatus | null = null;
+        let terminalError = false;
         const stdoutDiagnosticLines: string[] = [];
-        const geminiErrorMessages: string[] = [];
-        const toolNamesById = new Map<string, string>();
+        const runtimeErrorMessages: string[] = [];
         const usedSkills = new Map<string, AgentRunSkillMetadata>();
         const usedTools = new Set<string>();
         const usedFiles = new Set<string>();
@@ -2294,7 +2309,7 @@ async function runGeminiDirect(
         };
 
         const publishMetadata = (event: unknown): void => {
-            const metadata = extractGeminiRunMetadataFromJsonEvent(event, toolNamesById);
+            const metadata = definition.extractMetadata(event);
             let changed = false;
             for (const skill of metadata.usedSkills ?? []) {
                 const key = [skill.name, skill.mode ?? "", skill.source ?? ""].join("\u0000");
@@ -2354,19 +2369,23 @@ async function runGeminiDirect(
         };
 
         const handleStdoutEvent = (event: unknown): void => {
+            if (settled) {
+                return;
+            }
+
             pushUniqueDiagnostic(
-                geminiErrorMessages,
-                extractGeminiErrorTextFromJsonEvent(event),
+                runtimeErrorMessages,
+                definition.extractError(event),
             );
-            resultStatus = extractGeminiResultStatusFromJsonEvent(event) ?? resultStatus;
+            terminalError = definition.isTerminalError(event) || terminalError;
             publishMetadata(event);
 
-            const progressText = extractGeminiProgressTextFromJsonEvent(event);
+            const progressText = definition.extractProgress(event);
             if (progressText) {
                 invocation.onProgressText?.(progressText);
             }
 
-            const textDelta = extractGeminiTextDeltaFromJsonEvent(event);
+            const textDelta = definition.extractText(event);
             if (textDelta) {
                 streamedText += textDelta;
                 invocation.onPartialText?.(sanitizeAgentReplyText(streamedText));
@@ -2396,6 +2415,10 @@ async function runGeminiDirect(
         };
 
         childProcess.stdout?.on("data", (chunk) => {
+            if (settled) {
+                return;
+            }
+
             const text = typeof chunk === "string" ? chunk : chunk.toString("utf8");
             stdoutBuffer += text;
             while (true) {
@@ -2426,33 +2449,34 @@ async function runGeminiDirect(
             }
 
             const replyText = sanitizeAgentReplyText(streamedText);
-            const diagnosticMessage = normalizeGeminiFailureDiagnostic(
-                joinRuntimeDiagnostics([
-                    normalizeRuntimeDiagnosticText(stderrBuffer),
-                    ...geminiErrorMessages,
-                    ...stdoutDiagnosticLines,
-                ]),
-            );
-            if (code === 0 && resultStatus !== "error" && replyText) {
+            const rawDiagnosticMessage = joinRuntimeDiagnostics([
+                normalizeRuntimeDiagnosticText(stderrBuffer),
+                ...runtimeErrorMessages,
+                ...stdoutDiagnosticLines,
+            ]);
+            const diagnosticMessage = definition.normalizeFailureDiagnostic
+                ? definition.normalizeFailureDiagnostic(rawDiagnosticMessage)
+                : rawDiagnosticMessage;
+            if (code === 0 && !terminalError && replyText) {
                 finalizeSuccess(replyText);
                 return;
             }
 
-            if (code === 0 && resultStatus === "error") {
+            if (code === 0 && terminalError) {
                 finalizeError(new Error(
-                    diagnosticMessage ?? "Gemini reported an unsuccessful result.",
+                    diagnosticMessage ?? definition.unsuccessfulResultMessage,
                 ));
                 return;
             }
 
             if (code === 0) {
-                finalizeError(new Error("Gemini returned an empty response."));
+                finalizeError(new Error(definition.emptyResponseMessage));
                 return;
             }
 
             finalizeError(new Error(
                 diagnosticMessage
-                    ?? `spawn gemini exited with code ${code ?? "null"}${signal ? ` signal ${signal}` : ""}`,
+                    ?? `spawn ${definition.executable} exited with code ${code ?? "null"}${signal ? ` signal ${signal}` : ""}`,
             ));
         });
 
@@ -2469,19 +2493,68 @@ async function runGeminiDirect(
 
         try {
             const stdin = childProcess.stdin;
-            if (!stdin) {
-                throw new Error("Gemini CLI did not expose stdin.");
+            if (definition.stdinPrompt !== undefined) {
+                if (!stdin) {
+                    throw new Error(
+                        definition.stdinUnavailableMessage
+                            ?? `${definition.executable} did not expose stdin.`,
+                    );
+                }
+                stdin.write(definition.stdinPrompt);
             }
-            stdin.write(buildSideNotePrompt({
-                promptText: invocation.prompt,
-                vaultRootPath: invocation.vaultRootPath,
-                requestKind: invocation.requestKind,
-                targetScriptPath: invocation.targetScriptPath,
-            }));
-            stdin.end();
+            stdin?.end();
         } catch (error) {
             finalizeError(error);
         }
+    });
+}
+
+async function runGeminiDirect(
+    modules: NodeModules,
+    invocation: AgentRuntimeInvocation,
+): Promise<AgentRuntimeResult> {
+    const toolNamesById = new Map<string, string>();
+    return runJsonLineAgentDirect(modules, invocation, {
+        executable: "gemini",
+        args: buildGeminiCliArgs(invocation),
+        stdinPrompt: buildSideNotePrompt({
+            promptText: invocation.prompt,
+            vaultRootPath: invocation.vaultRootPath,
+            requestKind: invocation.requestKind,
+            targetScriptPath: invocation.targetScriptPath,
+        }),
+        stdinUnavailableMessage: "Gemini CLI did not expose stdin.",
+        emptyResponseMessage: "Gemini returned an empty response.",
+        unsuccessfulResultMessage: "Gemini reported an unsuccessful result.",
+        extractText: extractGeminiTextDeltaFromJsonEvent,
+        extractProgress: extractGeminiProgressTextFromJsonEvent,
+        extractError: extractGeminiErrorTextFromJsonEvent,
+        extractMetadata: (event) => extractGeminiRunMetadataFromJsonEvent(event, toolNamesById),
+        isTerminalError: (event) => extractGeminiResultStatusFromJsonEvent(event) === "error",
+        normalizeFailureDiagnostic: normalizeGeminiFailureDiagnostic,
+    });
+}
+
+async function runOpenCodeDirect(
+    modules: NodeModules,
+    invocation: AgentRuntimeInvocation,
+): Promise<AgentRuntimeResult> {
+    const prompt = buildSideNotePrompt({
+        promptText: invocation.prompt,
+        vaultRootPath: invocation.vaultRootPath,
+        requestKind: invocation.requestKind,
+        targetScriptPath: invocation.targetScriptPath,
+    });
+    return runJsonLineAgentDirect(modules, invocation, {
+        executable: "opencode",
+        args: buildOpenCodeCliArgs(prompt),
+        emptyResponseMessage: "OpenCode returned an empty response.",
+        unsuccessfulResultMessage: "OpenCode reported an unsuccessful result.",
+        extractText: extractOpenCodeTextDeltaFromJsonEvent,
+        extractProgress: extractOpenCodeProgressTextFromJsonEvent,
+        extractError: extractOpenCodeErrorTextFromJsonEvent,
+        extractMetadata: extractOpenCodeRunMetadataFromJsonEvent,
+        isTerminalError: (event) => isRecord(event) && event.type === "error",
     });
 }
 
@@ -2501,6 +2574,8 @@ export async function runAgentRuntimeWithModules(
             return runClaudeDirect(modules, invocation);
         case "gemini-cli":
             return runGeminiDirect(modules, invocation);
+        case "opencode-cli":
+            return runOpenCodeDirect(modules, invocation);
         default:
             throw new Error(`${actor.label} does not have an executable runtime strategy.`);
     }
