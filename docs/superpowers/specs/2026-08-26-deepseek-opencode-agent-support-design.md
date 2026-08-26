@@ -19,23 +19,24 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Add a supported DeepSeek actor with target `deepseek`, directive `@deepseek`, and runtime strategy `opencode-cli`.
-- [ ] Add OpenCode diagnostics and route `opencode-cli` through the generic local runtime entrypoints.
-- [ ] Launch a fresh OpenCode run with JSON output and automatic non-interactive approval, while inheriting the user's configured model and OpenCode environment.
-- [ ] Translate supported OpenCode JSON events into Aside reply text, progress, tool metadata, completion, and actionable failures.
-- [ ] Extend shared provider-derived copy and remove newly exposed hard-coded provider lists where application code owns the list.
-- [ ] Document `@deepseek`, the OpenCode prerequisite, inherited model behavior, and the actor/model mismatch caveat.
+- [x] Add a supported DeepSeek actor with target `deepseek`, directive `@deepseek`, and runtime strategy `opencode-cli`.
+- [x] Add OpenCode diagnostics and route `opencode-cli` through the generic local runtime entrypoints.
+- [x] Launch a fresh OpenCode run with JSON output and automatic non-interactive approval, while inheriting the user's configured model and OpenCode environment.
+- [x] Translate supported OpenCode JSON events into Aside reply text, progress, tool metadata, completion, and actionable failures.
+- [x] Extend shared provider-derived copy and remove newly exposed hard-coded provider lists where application code owns the list.
+- [x] Document `@deepseek`, the OpenCode prerequisite, inherited model behavior, and the actor/model mismatch caveat.
 
 ### Verification
 
-- [ ] Fail-first registry, directive, suggestion, and settings tests prove `@deepseek` behaves as a peer supported actor.
-- [ ] CLI argument tests prove `--format json` and `--auto` are present while model, agent, and session overrides are absent.
-- [ ] Diagnostics tests cover desktop availability, a missing binary, and launch failures.
-- [ ] JSON event and runtime tests cover text, tool activity, metadata, malformed events, structured errors, empty success, nonzero exit, spawn failure, and cancellation.
-- [ ] Controller and presentation tests prove DeepSeek uses existing dispatch, retry, cancellation, author-label, fallback, and persistence paths.
-- [ ] A repeated change-surface search leaves only intentional provider adapters, type declarations, documentation examples, and test fixtures.
-- [ ] The full test suite, lint, typecheck, production bundle, Obsidian compliance check, and release-artifact guard pass.
+- [x] Fail-first registry, directive, suggestion, and settings tests prove `@deepseek` behaves as a peer supported actor.
+- [x] CLI argument tests prove `--format json` and `--auto` are present while model, agent, and session overrides are absent.
+- [x] Diagnostics tests cover desktop availability, a missing binary, and launch failures.
+- [x] JSON event and runtime tests cover text, tool activity, metadata, malformed events, structured errors, empty success, nonzero exit, spawn failure, and cancellation.
+- [x] Controller and presentation tests prove DeepSeek uses existing dispatch, retry, cancellation, author-label, fallback, and persistence paths.
+- [x] A repeated change-surface search leaves only intentional provider adapters, type declarations, documentation examples, and test fixtures.
+- [x] The full test suite, lint, typecheck, production bundle, Obsidian compliance check, and release-artifact guard pass.
 - [ ] A built-plugin smoke check confirms discovery, availability, execution, progress, cancellation, and persisted reply behavior with the user's OpenCode setup.
+  Not run on 2026-08-26 because it would spend provider credits and mutate a real vault note without explicit authorization. The non-mutating local checks confirmed OpenCode 1.18.23 is installed and that `opencode run --help` exposes the required JSON, model-inheritance, fresh-session, and `--auto` flags.
 
 ## Goals
 
