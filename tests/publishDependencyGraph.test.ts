@@ -68,6 +68,10 @@ function bytes(...values: number[]): ArrayBuffer {
 	return Uint8Array.from(values).buffer;
 }
 
+function asciiBuffer(value: string): ArrayBuffer {
+	return bytes(...Array.from(value, (character) => character.charCodeAt(0)));
+}
+
 function entry(vaultRelativePath: string, contents: string) {
 	return { vaultRelativePath, contents };
 }
@@ -133,6 +137,32 @@ test("buildPublishDependencyGraph returns the exact missing dependency notice", 
 		ok: false,
 		notice: "Publish failed: public/pigeon/index.html references missing local asset public/pigeon/missing.css.",
 	});
+});
+
+test("buildPublishDependencyGraph rejects source-map markers in binary-read manifest data", async () => {
+	const cases = [
+		["site.webmanifest", `<link rel="manifest" href="site.webmanifest">`],
+		["config.json", `<script src="config.json" type="application/json"></script>`],
+	] as const;
+
+	for (const [path, html] of cases) {
+		const harness = makeHarness({
+			binary: {
+				[`public/${path}`]: asciiBuffer(`{"sourcesContent":["private source"]}`),
+			},
+		});
+		const result = await buildPublishDependencyGraph({
+			...harness.input,
+			entryFiles: [entry("public/index.html", html)],
+		});
+
+		assert.deepEqual(result, {
+			ok: false,
+			notice: `Publish failed: source-map references cannot be published. Referenced by public/index.html: ${path}`,
+		});
+		assert.equal(harness.binaryReads.get(`public/${path}`), 1);
+		assert.equal(harness.textReads.size, 0);
+	}
 });
 
 test("buildPublishDependencyGraph ignores external references without inspecting the vault", async () => {

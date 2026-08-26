@@ -74,6 +74,34 @@ function getSourceMapContentMarkers(): string[] {
 	].map((parts) => parts.join(""));
 }
 
+function arrayBufferContainsAscii(value: ArrayBuffer, marker: string): boolean {
+	let bytes: Uint8Array;
+	try {
+		bytes = new Uint8Array(value);
+	} catch {
+		return true;
+	}
+	if (marker.length > bytes.length) return false;
+
+	for (let offset = 0; offset <= bytes.length - marker.length; offset += 1) {
+		let matches = true;
+		for (let markerIndex = 0; markerIndex < marker.length; markerIndex += 1) {
+			if (bytes[offset + markerIndex] !== marker.charCodeAt(markerIndex)) {
+				matches = false;
+				break;
+			}
+		}
+		if (matches) return true;
+	}
+	return false;
+}
+
+function containsSourceMapContentMarker(contents: string | ArrayBuffer): boolean {
+	return getSourceMapContentMarkers().some((marker) => typeof contents === "string"
+		? contents.includes(marker)
+		: arrayBufferContainsAscii(contents, marker));
+}
+
 function inspectPublishPathAndContents(options: InspectPublishArtifactOptions): PublishPathAndContentsInspection {
 	const normalizedPath = normalizeVaultRelativePublishPath(options.vaultRelativePath);
 	if (!normalizedPath.ok) {
@@ -119,14 +147,11 @@ function inspectPublishPathAndContents(options: InspectPublishArtifactOptions): 
 		};
 	}
 
-	if (typeof options.contents === "string") {
-		const contents = options.contents;
-		if (getSourceMapContentMarkers().some((marker) => contents.includes(marker))) {
-			return {
-				ok: false,
-				notice: "Publish failed: source-map references cannot be published.",
-			};
-		}
+	if (containsSourceMapContentMarker(options.contents)) {
+		return {
+			ok: false,
+			notice: "Publish failed: source-map references cannot be published.",
+		};
 	}
 
 	if (/\.log$/iu.test(normalizedPath.path)) {

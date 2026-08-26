@@ -5,7 +5,10 @@ import {
 	inspectPublishDependency,
 } from "../src/core/publish/publishArtifactGuard";
 
-function inspect(vaultRelativePath: string, contents = "<!doctype html><html></html>") {
+function inspect(
+	vaultRelativePath: string,
+	contents: string | ArrayBuffer = "<!doctype html><html></html>",
+) {
 	return inspectPublishArtifact({
 		vaultRelativePath,
 		allowedRoot: "share/",
@@ -21,6 +24,14 @@ function inspectDependency(vaultRelativePath: string, contents: string | ArrayBu
 		configDir: ".obsidian",
 		contents,
 	});
+}
+
+function asciiBuffer(value: string): ArrayBuffer {
+	const bytes = new Uint8Array(value.length);
+	for (let index = 0; index < value.length; index += 1) {
+		bytes[index] = value.charCodeAt(index);
+	}
+	return bytes.buffer;
 }
 
 test("inspectPublishArtifact allows HTML files under the configured publish root", () => {
@@ -87,6 +98,20 @@ test("inspectPublishArtifact blocks source maps, source-map markers, and logs", 
 	assert.deepEqual(inspect("share/debug.log"), {
 		ok: false,
 		notice: "Publish failed: log files cannot be published.",
+	});
+});
+
+test("publish inspections block ASCII source-map markers in ArrayBuffer contents", () => {
+	assert.deepEqual(inspect("share/report.pdf", asciiBuffer("%PDF\nsourceMappingURL=report.pdf.map")), {
+		ok: false,
+		notice: "Publish failed: source-map references cannot be published.",
+	});
+	assert.deepEqual(inspectDependency(
+		"share/site.webmanifest",
+		asciiBuffer(`{"sourcesContent":["private source"]}`),
+	), {
+		ok: false,
+		notice: "Publish failed: source-map references cannot be published.",
 	});
 });
 
