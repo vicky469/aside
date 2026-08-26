@@ -52,7 +52,7 @@ For durable storage and sync across devices, use Aside with [Obsidian Sync](http
 - Browse, filter, and batch-apply local side-note tags from the active note sidebar.
 - Generates `🐰 Aside Index.md` as a vault-wide comment index.
 - Lets the index sidebar switch between the comment list and a thought-trail graph built from side-note wiki links. The graph follows those links across connected markdown files, so it can show multi-step trails instead of only direct one-hop links.
-- Built-in agent help on desktop Obsidian. Type `@codex`, `@claude`, or `@gemini` in a thread to get a reply, create anchored side notes, or apply explicit edits to the source note.
+- Built-in agent help on desktop Obsidian. Type `@codex`, `@claude`, `@gemini`, or `@deepseek` in a thread to get a reply, create anchored side notes, or apply explicit edits to the source note.
 
 [Experimental Features](EXPERIMENTAL_FEATURES.md) are documented separately.
 
@@ -65,13 +65,15 @@ For durable storage and sync across devices, use Aside with [Obsidian Sync](http
    $skill-installer install https://github.com/vicky469/aside/tree/main/skills/aside
    ```
 
+`@deepseek` requires a configured [OpenCode CLI](https://opencode.ai/docs/cli/). Aside runs the model currently selected by OpenCode and passes `--auto` for headless execution; permissions explicitly denied in OpenCode remain denied. Because Aside does not pass `--model`, the DeepSeek label does not guarantee that the active OpenCode model is still a DeepSeek model.
+
 ## Workflow
 
 1. Open a file in an Obsidian file-backed view.
 2. Add a side note.
    Markdown selections can use `Add comment to selection`; any supported file-backed view can use the sidebar `Add page note` for the whole file.
 3. Write your comment in the sidebar.
-   Type `@todo` for follow-ups, `@codex` if you want Codex to take the task, `@claude` if you want Claude to take it, or `@gemini` if you want Gemini to take it.
+   Type `@todo` for follow-ups, `@codex` if you want Codex to take the task, `@claude` if you want Claude to take it, `@gemini` if you want Gemini to take it, or `@deepseek` to run the model currently configured in OpenCode.
 
 ## Glossary
 
@@ -103,7 +105,7 @@ For durable storage and sync across devices, use Aside with [Obsidian Sync](http
 | Save draft | Click `Save`. |
 | Insert a newline | Press `Enter`. |
 | Mark a todo | Type `@todo` in the note. |
-| Ask a local agent from a side note | Type `@codex`, `@claude`, or `@gemini` in the note, then save it. |
+| Ask a local agent from a side note | Type `@codex`, `@claude`, `@gemini`, or `@deepseek` in the note, then save it. |
 | Link a note | Type `[[` to open note suggestions and insert an Obsidian wikilink. |
 | Add a tag | Type `#` to open tag suggestions and insert a tag. |
 | Reopen link or tag suggestions | Press `Tab` while the cursor is inside an unfinished `[[...` or `#...` token. |
