@@ -13,6 +13,7 @@ test("default agent radio options preserve order and expose status", () => {
         ["gemini", { status: "missing", message: "Missing" }],
         ["codex", { status: "available", message: "Ready" }],
         ["claude", { status: "checking", message: "Checking" }],
+        ["deepseek" as AsideAgentTarget, { status: "missing", message: "Missing" }],
     ]);
 
     assert.deepEqual(buildDefaultAgentOptions("gemini", diagnostics), [
@@ -42,6 +43,15 @@ test("default agent radio options preserve order and expose status", () => {
             available: false,
             disabled: true,
             selected: true,
+        },
+        {
+            target: "deepseek",
+            label: "DeepSeek",
+            status: "unavailable",
+            statusLabel: "Unavailable",
+            available: false,
+            disabled: true,
+            selected: false,
         },
     ]);
 });

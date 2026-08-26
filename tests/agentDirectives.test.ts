@@ -47,6 +47,24 @@ test("parseAgentDirectives blocks gemini mixed with another supported target", (
     });
 });
 
+test("parseAgentDirectives resolves repeated deepseek mentions case-insensitively", () => {
+    assert.deepEqual(parseAgentDirectives("ask @DEEPSEEK twice @deepseek"), {
+        target: "deepseek",
+        hasConflict: false,
+        matchedTargets: ["deepseek"],
+        unsupportedTargets: [],
+    });
+});
+
+test("parseAgentDirectives blocks deepseek mixed with another supported target", () => {
+    assert.deepEqual(parseAgentDirectives("ask @gemini and @deepseek"), {
+        target: null,
+        hasConflict: true,
+        matchedTargets: ["gemini", "deepseek"],
+        unsupportedTargets: [],
+    });
+});
+
 test("parseAgentDirectives blocks mixed supported agent mentions", () => {
     assert.deepEqual(parseAgentDirectives("ask @codex and @claude"), {
         target: null,

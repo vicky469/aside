@@ -15,6 +15,7 @@ test("actionable mentions follow active built-ins and live scripts", () => {
 
     assert.equal(isActionableMention("@todo", enabled), true);
     assert.equal(isActionableMention("@codex", enabled), true);
+    assert.equal(isActionableMention("@deepseek", enabled), true);
     assert.equal(isActionableMention("/create-script", enabled), true);
     assert.equal(isActionableMention("/update-script", enabled), true);
     assert.equal(isActionableMention("/pdf-to-markdown", enabled), true);
@@ -39,8 +40,9 @@ test("disabled Agents keeps only todo and live scripts actionable", () => {
 test("built-in candidates and reservations share one definition", () => {
     assert.deepEqual(
         getActionableBuiltInMentions(true).map((item) => item.mention),
-        ["@todo", "@codex", "@claude", "@gemini", "/create-script", "/update-script", "/pdf-to-markdown"],
+        ["@todo", "@codex", "@claude", "@gemini", "@deepseek", "/create-script", "/update-script", "/pdf-to-markdown"],
     );
+    assert.ok(RESERVED_BUILT_IN_MENTION_NAMES.has("deepseek"));
     assert.ok(RESERVED_BUILT_IN_MENTION_NAMES.has("update-script"));
     assert.ok(RESERVED_BUILT_IN_MENTION_NAMES.has("pdf-to-markdown"));
 });

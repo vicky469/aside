@@ -1,12 +1,14 @@
 import type { AgentActorDefinition, AsideAgentTarget } from "./agentActorDefinition";
 import { CLAUDE_AGENT_ACTOR } from "./claudeActor";
 import { CODEX_AGENT_ACTOR } from "./codexActor";
+import { DEEPSEEK_AGENT_ACTOR } from "./deepseekActor";
 import { GEMINI_AGENT_ACTOR } from "./geminiActor";
 
 export const ASIDE_AGENT_ACTORS: readonly AgentActorDefinition[] = [
     CODEX_AGENT_ACTOR,
     CLAUDE_AGENT_ACTOR,
     GEMINI_AGENT_ACTOR,
+    DEEPSEEK_AGENT_ACTOR,
 ];
 
 export const DEFAULT_ASIDE_AGENT_ACTOR_ID: AsideAgentTarget = CODEX_AGENT_ACTOR.id;

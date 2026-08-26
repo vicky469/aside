@@ -7,7 +7,7 @@ import {
 import type { AsideAgentTarget } from "../src/core/config/agentTargets";
 
 function diagnostics(available: AsideAgentTarget[]): Map<AsideAgentTarget, AgentRuntimeDiagnostics> {
-    return new Map((["codex", "claude", "gemini"] as AsideAgentTarget[]).map((target) => [
+    return new Map((["codex", "claude", "gemini", "deepseek"] as AsideAgentTarget[]).map((target) => [
         target,
         {
             status: available.includes(target) ? "available" : "unavailable",
@@ -21,6 +21,15 @@ test("default agent selection uses the available preference", () => {
         kind: "preferred",
         preferredAgent: "gemini",
         selectedAgent: "gemini",
+    });
+});
+
+test("default agent selection can prefer DeepSeek through OpenCode", () => {
+    const deepseek = "deepseek" as AsideAgentTarget;
+    assert.deepEqual(resolveDefaultAgentSelection(deepseek, diagnostics([deepseek])), {
+        kind: "preferred",
+        preferredAgent: "deepseek",
+        selectedAgent: "deepseek",
     });
 });
 

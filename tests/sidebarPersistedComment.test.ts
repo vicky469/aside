@@ -1160,6 +1160,23 @@ test("resolveSidebarCommentAuthor labels agent-produced replies from their outpu
     );
 });
 
+test("resolveSidebarCommentAuthor labels DeepSeek replies from their output run", () => {
+    assert.deepEqual(
+        resolveSidebarCommentAuthor(
+            "entry-2",
+            [createAgentRun({
+                requestedAgent: "deepseek" as AgentRunRecord["requestedAgent"],
+                outputEntryId: "entry-2",
+            })],
+            "You",
+        ),
+        {
+            kind: "deepseek",
+            label: "DeepSeek",
+        },
+    );
+});
+
 test("resolveSidebarCommentAuthor identifies fallback agent replies", () => {
     assert.deepEqual(
         resolveSidebarCommentAuthor(

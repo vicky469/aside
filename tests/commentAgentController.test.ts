@@ -1141,6 +1141,30 @@ test("comment agent controller dispatches gemini as a peer provider", async () =
     }]);
 });
 
+test("comment agent controller dispatches deepseek through OpenCode", async () => {
+    const harness = createHarness({
+        runtimeReplyText: "OpenCode reply.",
+    });
+
+    await harness.controller.handleSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "@deepseek review this",
+    });
+    await waitForAgentQueueToDrain(harness.controller);
+
+    const latestRun = harness.controller.getLatestAgentRunForThread("thread-1");
+    assert.equal(latestRun?.status, "succeeded");
+    assert.equal(latestRun?.requestedAgent, "deepseek");
+    assert.deepEqual(harness.runtimeSelectionCalls, ["deepseek"]);
+    assert.equal(harness.runtimeCalls[0]?.target, "deepseek");
+    assert.deepEqual(harness.editedEntries, [{
+        commentId: "generated-2",
+        body: "OpenCode reply.",
+    }]);
+});
+
 test("comment agent controller treats mixed supported agents as a conflict", async () => {
     const harness = createHarness();
 
