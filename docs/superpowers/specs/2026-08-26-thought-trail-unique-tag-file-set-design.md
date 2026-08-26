@@ -16,19 +16,19 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Replace the group-oriented tag result with one unique related-file model keyed by normalized full file path.
-- [ ] Accumulate every shared source tag on each unique file and derive per-tag counts from that file set.
-- [ ] Render `All` plus single-select tag filter buttons below the current filename, with `All` selected by default.
-- [ ] Render one row per unique file with every shared tag visible on that row, regardless of the selected filter.
-- [ ] Keep filter state transient and remove obsolete tag-group rendering, group-only types, group-only styles, and source-contract assertions.
-- [ ] Preserve semantic lists, keyboard access, native file tooltips/navigation, compact sidebar layout, current-file exclusion, and generated-index exclusion.
+- [x] Replace the group-oriented tag result with one unique related-file model keyed by normalized full file path.
+- [x] Accumulate every shared source tag on each unique file and derive per-tag counts from that file set.
+- [x] Render `All` plus single-select tag filter buttons below the current filename, with `All` selected by default.
+- [x] Render one row per unique file with every shared tag visible on that row, regardless of the selected filter.
+- [x] Keep filter state transient and remove obsolete tag-group rendering, group-only types, group-only styles, and source-contract assertions.
+- [x] Preserve semantic lists, keyboard access, native file tooltips/navigation, compact sidebar layout, current-file exclusion, and generated-index exclusion.
 
 ### Verification
 
-- [ ] Pure model tests cover multi-tag deduplication, unique counts, tag and file ordering, path normalization, same-basename files, current-file exclusion, generated-index exclusion, and empty inputs.
-- [ ] Renderer and style tests cover one semantic unique-file list, visible shared tag labels, `All`/tag button accessibility, single-selection behavior, and removal of nested tag groups.
-- [ ] Existing Thought Trail sources and navigation remain green, and the full test, lint, typecheck, Obsidian compliance, production bundle, and release-artifact guard pass.
-- [ ] An installed-vault smoke test confirms the default one-shot list contains no repeated file path and tag filtering narrows the same rows without duplicating them.
+- [x] Pure model tests cover multi-tag deduplication, unique counts, tag and file ordering, path normalization, same-basename files, current-file exclusion, generated-index exclusion, and empty inputs.
+- [x] Renderer and style tests cover one semantic unique-file list, visible shared tag labels, `All`/tag button accessibility, single-selection behavior, and removal of nested tag groups.
+- [x] Existing Thought Trail sources and navigation remain green, and the full test, lint, typecheck, Obsidian compliance, production bundle, and release-artifact guard pass.
+- [x] An installed-vault smoke test confirms the default one-shot list contains no repeated file path and tag filtering narrows the same rows without duplicating them.
 
 ## Problem
 

@@ -9,11 +9,10 @@ import {
 } from "obsidian";
 import type { Comment, CommentThread } from "../../commentManager";
 import {
-    buildTagRelatedFileListModel,
-    buildTagGroupedRelatedFiles,
+    buildTagRelatedFileSetModel,
     extractThoughtTrailMermaidSource,
     getThoughtTrailMermaidRenderConfig,
-    type TagRelatedFileGroup,
+    type TagRelatedFileSetModel,
     type ThoughtTrailFileTagLookup,
 } from "../../core/derived/thoughtTrail";
 import { buildThoughtTrailNoteLinkLines } from "../../core/derived/thoughtTrailNoteLinkGraph";
@@ -108,33 +107,78 @@ function renderThoughtTrailSourceControl(
 
 function renderTagRelatedFilesList(
     container: HTMLDivElement,
-    rootFilePath: string,
-    groups: TagRelatedFileGroup[],
+    model: TagRelatedFileSetModel,
     context: SidebarThoughtTrailRenderContext,
 ): void {
-    const model = buildTagRelatedFileListModel(rootFilePath, groups);
-    const listEl = container.createEl("ul", { cls: "aside-tag-related-files" });
-
     if (model.currentFile) {
-        const currentRowEl = listEl.createEl("li", {
-            cls: "aside-tag-related-file-row aside-tag-related-file-row--current",
-        });
-        currentRowEl.createSpan({
+        const currentFileEl = container.createDiv({
             cls: "aside-tag-related-current-file",
             text: model.currentFile.label,
-        }).title = model.currentFile.filePath;
+        });
+        setTooltip(currentFileEl, model.currentFile.filePath);
     }
 
-    for (const group of model.groups) {
-        const groupEl = listEl.createEl("li", { cls: "aside-tag-related-files-group" });
-        groupEl.createDiv({ cls: "aside-tag-related-files-tag-header", text: group.tagDisplay });
-        const filesEl = groupEl.createEl("ul", { cls: "aside-tag-related-files-list" });
-        for (const filePath of group.filePaths) {
-            const label = filePath.replace(/\.md$/i, "").split("/").pop() ?? filePath;
-            const rowEl = filesEl.createEl("li", { cls: "aside-tag-related-file-row" });
-            renderTagRelatedFileLink(rowEl, filePath, label, context);
+    const filterBarEl = container.createDiv({
+        cls: "aside-tag-related-filter-bar",
+        attr: {
+            role: "group",
+            "aria-label": "Filter related files by tag",
+        },
+    });
+    const listEl = container.createEl("ul", { cls: "aside-tag-related-files" });
+    const renderedRows = model.files.map((file) => {
+        const rowEl = listEl.createEl("li", {
+            cls: "aside-tag-related-file-row",
+            attr: { "data-file-path": file.filePath },
+        });
+        renderTagRelatedFileLink(rowEl, file.filePath, file.label, context);
+        const tagsEl = rowEl.createDiv("aside-tag-related-file-tags");
+        for (const tag of file.tags) {
+            tagsEl.createSpan({
+                cls: "aside-tag-related-file-tag",
+                text: `#${tag.tagDisplay}`,
+                attr: { "data-tag-key": tag.tagKey },
+            });
         }
+        return { file, rowEl };
+    });
+
+    const filterDefinitions = [
+        { tagKey: null, label: `All · ${model.files.length}` },
+        ...model.tags.map((tag) => ({
+            tagKey: tag.tagKey,
+            label: `#${tag.tagDisplay} · ${tag.fileCount}`,
+        })),
+    ];
+    const filterButtons: Array<{ tagKey: string | null; button: HTMLButtonElement }> = [];
+    const applyFilter = (selectedTagKey: string | null): void => {
+        for (const { tagKey, button } of filterButtons) {
+            const isSelected = tagKey === selectedTagKey;
+            button.setAttribute("aria-pressed", String(isSelected));
+            button.classList.toggle("is-selected", isSelected);
+        }
+        for (const { file, rowEl } of renderedRows) {
+            rowEl.hidden = selectedTagKey !== null
+                && !file.tags.some((tag) => tag.tagKey === selectedTagKey);
+        }
+    };
+
+    for (const definition of filterDefinitions) {
+        const button = filterBarEl.createEl("button", {
+            cls: "aside-tag-related-filter",
+            text: definition.label,
+            attr: {
+                type: "button",
+                "aria-pressed": String(definition.tagKey === null),
+                "data-tag-key": definition.tagKey ?? "",
+            },
+        });
+        button.addEventListener("click", () => {
+            applyFilter(definition.tagKey);
+        });
+        filterButtons.push({ tagKey: definition.tagKey, button });
     }
+    applyFilter(null);
 }
 
 function renderTagRelatedFileLink(
@@ -147,7 +191,7 @@ function renderTagRelatedFileLink(
         cls: "aside-tag-related-file-link",
         text: label,
     });
-    btn.title = filePath;
+    setTooltip(btn, filePath);
     btn.addEventListener("click", () => {
         const url = `obsidian://open?vault=${encodeURIComponent(context.app.vault.getName())}&file=${encodeURIComponent(filePath)}`;
         void openThoughtTrailTarget(url, context);
@@ -175,7 +219,7 @@ export async function renderSidebarThoughtTrail(
     }
 
     const rootFilePath = options.rootFilePath;
-    const tagGroups = buildTagGroupedRelatedFiles(
+    const tagRelatedFileSet = buildTagRelatedFileSetModel(
         rootFilePath,
         options.candidateFilePaths,
         options.getTagsForFilePath,
@@ -184,14 +228,14 @@ export async function renderSidebarThoughtTrail(
     renderThoughtTrailSourceControl(thoughtTrailEl, {
         source: options.source,
         radioGroupName: `aside-thought-trail-source-${context.renderVersion}-${options.surface}-${encodeURIComponent(rootFilePath)}`,
-        tagsDisabled: !tagGroups.length,
+        tagsDisabled: tagRelatedFileSet.files.length === 0,
         onSourceChange: (source) => {
             options.onSourceChange(source);
         },
     });
     if (options.source === "tags") {
         const sectionEl = thoughtTrailEl.createDiv("aside-thought-trail-section");
-        renderTagRelatedFilesList(sectionEl, rootFilePath, tagGroups, context);
+        renderTagRelatedFilesList(sectionEl, tagRelatedFileSet, context);
         return;
     }
 

@@ -9,6 +9,30 @@ const mentionModalSource = readFileSync(
 );
 const importantOverridePattern = new RegExp("!" + "important");
 
+function normalizeCssSelectors(selectors) {
+    return selectors
+        .replace(/\/\*.*?\*\//gs, "")
+        .split(",")
+        .map((selector) => selector.trim().replace(/\s+/g, " "))
+        .join(", ");
+}
+
+function parseCssRules(source) {
+    return [...source.matchAll(/(?<selectors>[^{}]+)\{(?<body>[^{}]*)\}/g)].map((match) => ({
+        selectors: normalizeCssSelectors(match.groups.selectors),
+        body: match.groups.body,
+    }));
+}
+
+const cssRules = parseCssRules(css);
+
+function getExactCssRule(selectors) {
+    const normalizedSelectors = normalizeCssSelectors(selectors);
+    const rule = cssRules.find((candidate) => candidate.selectors === normalizedSelectors);
+    assert.ok(rule, `missing exact CSS rule: ${normalizedSelectors}`);
+    return rule;
+}
+
 test("stylesheet avoids important overrides", () => {
     assert.doesNotMatch(css, importantOverridePattern);
 });
@@ -171,68 +195,137 @@ test("thought trail source selector uses native Obsidian theme colors", () => {
     assert.doesNotMatch(sourceControlRule.groups.body + sourceOptionRule.groups.body + sourceInputRule.groups.body, /#[0-9a-f]{3,6}|purple|blue/i);
 });
 
-test("thought trail tag related files stay compact", () => {
-    const listRule = css.match(
-        /\.aside-thought-trail \.aside-tag-related-files\s*\{(?<body>[\s\S]*?)\}/,
+test("thought trail unique tag file set stays compact and theme-native", () => {
+    const filterBarRule = getExactCssRule(".aside-tag-related-filter-bar");
+    const filterRule = getExactCssRule(".aside-thought-trail button.aside-tag-related-filter");
+    const filterHoverFocusRule = getExactCssRule(`
+        .aside-thought-trail button.aside-tag-related-filter:hover,
+        .aside-thought-trail button.aside-tag-related-filter:focus-visible
+    `);
+    const filterFocusRule = getExactCssRule(
+        ".aside-thought-trail button.aside-tag-related-filter:focus-visible",
     );
-    const groupRule = css.match(
-        /\.aside-tag-related-files-group\s*\{(?<body>[\s\S]*?)\}/,
+    const selectedFilterRule = getExactCssRule(
+        '.aside-thought-trail button.aside-tag-related-filter[aria-pressed="true"]',
     );
-    const headerRule = css.match(
-        /\.aside-tag-related-files-tag-header\s*\{(?<body>[\s\S]*?)\}/,
+    const listRule = getExactCssRule(".aside-thought-trail .aside-tag-related-files");
+    const rowRule = getExactCssRule(".aside-tag-related-file-row");
+    const tagsRule = getExactCssRule(".aside-tag-related-file-tags");
+    const tagRule = getExactCssRule(".aside-tag-related-file-tag");
+    const linkRule = getExactCssRule(".aside-thought-trail button.aside-tag-related-file-link");
+    const linkHoverFocusRule = getExactCssRule(`
+        .aside-thought-trail button.aside-tag-related-file-link:hover,
+        .aside-thought-trail button.aside-tag-related-file-link:focus-visible
+    `);
+    const linkFocusRule = getExactCssRule(
+        ".aside-thought-trail button.aside-tag-related-file-link:focus-visible",
     );
-    const nestedListRule = css.match(
-        /\.aside-thought-trail \.aside-tag-related-files-list\s*\{(?<body>[\s\S]*?)\}/,
-    );
-    const linkRule = css.match(
-        /button\.aside-tag-related-file-link\s*\{(?<body>[\s\S]*?)\}/,
-    );
-    const linkHoverFocusRule = css.match(
-        /button\.aside-tag-related-file-link:hover,[\s\S]*?button\.aside-tag-related-file-link:focus-visible\s*\{(?<body>[\s\S]*?)\}/,
-    );
-    const currentRule = css.match(
-        /\.aside-tag-related-current-file\s*\{(?<body>[\s\S]*?)\}/,
-    );
+    const currentRule = getExactCssRule(".aside-tag-related-current-file");
 
-    assert.ok(listRule?.groups?.body, "missing tag related file list rule");
-    assert.ok(groupRule?.groups?.body, "missing tag related file group rule");
-    assert.ok(headerRule?.groups?.body, "missing tag related file header rule");
-    assert.ok(nestedListRule?.groups?.body, "missing nested tag related file list rule");
-    assert.ok(linkRule?.groups?.body, "missing tag related file link rule");
-    assert.ok(linkHoverFocusRule?.groups?.body, "missing tag related file link hover/focus rule");
-    assert.ok(currentRule?.groups?.body, "missing current tag related file rule");
-    assert.match(listRule.groups.body, /list-style:\s*none\s*;/);
-    assert.match(listRule.groups.body, /margin:\s*0\s*;/);
-    assert.match(listRule.groups.body, /padding:\s*0\s*;/);
-    assert.match(listRule.groups.body, /gap:\s*2px\s*;/);
-    assert.match(groupRule.groups.body, /gap:\s*1px\s*;/);
-    assert.match(headerRule.groups.body, /font-weight:\s*var\(--font-normal\)\s*;/);
-    assert.match(headerRule.groups.body, /padding:\s*0\s*;/);
-    assert.match(nestedListRule.groups.body, /list-style:\s*none\s*;/);
-    assert.match(nestedListRule.groups.body, /margin:\s*0\s*;/);
-    assert.match(nestedListRule.groups.body, /padding:\s*0\s*;/);
-    assert.match(linkRule.groups.body, /padding:\s*1px 0\s*;/);
-    assert.match(linkRule.groups.body, /background:\s*transparent\s*;/);
-    assert.match(linkRule.groups.body, /background-image:\s*none\s*;/);
-    assert.match(linkRule.groups.body, /border:\s*none\s*;/);
-    assert.match(linkRule.groups.body, /border-radius:\s*0\s*;/);
-    assert.match(linkRule.groups.body, /box-shadow:\s*none\s*;/);
-    assert.match(linkRule.groups.body, /height:\s*auto\s*;/);
-    assert.match(linkRule.groups.body, /min-height:\s*0\s*;/);
-    assert.match(linkRule.groups.body, /width:\s*auto\s*;/);
-    assert.match(linkRule.groups.body, /max-width:\s*100%\s*;/);
-    assert.match(linkRule.groups.body, /-webkit-appearance:\s*none\s*;/);
-    assert.match(linkRule.groups.body, /appearance:\s*none\s*;/);
-    assert.match(linkRule.groups.body, /font-size:\s*var\(--font-ui-smaller\)\s*;/);
-    assert.doesNotMatch(linkRule.groups.body, /border-radius:\s*var\(/);
-    assert.doesNotMatch(linkRule.groups.body, /background:\s*var\(--background-modifier-hover\)/);
-    assert.match(linkHoverFocusRule.groups.body, /background:\s*transparent\s*;/);
-    assert.match(linkHoverFocusRule.groups.body, /box-shadow:\s*none\s*;/);
-    assert.doesNotMatch(linkHoverFocusRule.groups.body, /background-modifier-hover/);
-    assert.match(currentRule.groups.body, /display:\s*block\s*;/);
-    assert.match(currentRule.groups.body, /padding:\s*1px 0\s*;/);
-    assert.match(currentRule.groups.body, /cursor:\s*default\s*;/);
-    assert.doesNotMatch(currentRule.groups.body, /background:/);
+    assert.match(filterBarRule.body, /display:\s*flex\s*;/);
+    assert.match(filterBarRule.body, /flex-wrap:\s*wrap\s*;/);
+    assert.match(filterBarRule.body, /gap:\s*3px\s*;/);
+    assert.match(filterBarRule.body, /margin:\s*2px 0 4px\s*;/);
+    assert.match(filterRule.body, /-webkit-appearance:\s*none\s*;/);
+    assert.match(filterRule.body, /appearance:\s*none\s*;/);
+    assert.match(filterRule.body, /box-sizing:\s*border-box\s*;/);
+    assert.match(filterRule.body, /width:\s*auto\s*;/);
+    assert.match(filterRule.body, /min-width:\s*0\s*;/);
+    assert.match(filterRule.body, /max-width:\s*100%\s*;/);
+    assert.match(filterRule.body, /min-height:\s*0\s*;/);
+    assert.match(filterRule.body, /height:\s*auto\s*;/);
+    assert.match(filterRule.body, /margin:\s*0\s*;/);
+    assert.match(filterRule.body, /padding:\s*1px 5px\s*;/);
+    assert.match(filterRule.body, /border:\s*1px solid var\(--background-modifier-border\)\s*;/);
+    assert.match(filterRule.body, /border-radius:\s*var\(--radius-s\)\s*;/);
+    assert.match(filterRule.body, /background:\s*transparent\s*;/);
+    assert.match(filterRule.body, /box-shadow:\s*none\s*;/);
+    assert.match(filterRule.body, /cursor:\s*pointer\s*;/);
+    assert.match(filterRule.body, /color:\s*var\(--text-muted\)\s*;/);
+    assert.match(filterRule.body, /font-family:\s*inherit\s*;/);
+    assert.match(filterRule.body, /font-size:\s*var\(--font-ui-smaller\)\s*;/);
+    assert.match(filterRule.body, /line-height:\s*1\.3\s*;/);
+    assert.match(filterRule.body, /white-space:\s*nowrap\s*;/);
+    assert.match(filterRule.body, /overflow:\s*hidden\s*;/);
+    assert.match(filterRule.body, /text-overflow:\s*ellipsis\s*;/);
+    assert.match(filterHoverFocusRule.body, /background:\s*var\(--background-modifier-hover\)\s*;/);
+    assert.match(filterHoverFocusRule.body, /color:\s*var\(--text-normal\)\s*;/);
+    assert.match(filterFocusRule.body, /outline:\s*1px solid var\(--interactive-accent\)\s*;/);
+    assert.match(filterFocusRule.body, /outline-offset:\s*1px\s*;/);
+    assert.match(selectedFilterRule.body, /border-color:\s*var\(--interactive-accent\)\s*;/);
+    assert.match(selectedFilterRule.body, /background:\s*var\(--background-modifier-hover\)\s*;/);
+    assert.match(selectedFilterRule.body, /color:\s*var\(--text-normal\)\s*;/);
+
+    assert.match(listRule.body, /display:\s*flex\s*;/);
+    assert.match(listRule.body, /flex-direction:\s*column\s*;/);
+    assert.match(listRule.body, /list-style:\s*none\s*;/);
+    assert.match(listRule.body, /margin:\s*0\s*;/);
+    assert.match(listRule.body, /padding:\s*0\s*;/);
+    assert.match(listRule.body, /gap:\s*3px\s*;/);
+    assert.match(rowRule.body, /display:\s*flex\s*;/);
+    assert.match(rowRule.body, /flex-direction:\s*column\s*;/);
+    assert.match(rowRule.body, /gap:\s*0\s*;/);
+    assert.match(rowRule.body, /margin:\s*0\s*;/);
+    assert.match(rowRule.body, /padding:\s*0\s*;/);
+    assert.match(rowRule.body, /min-width:\s*0\s*;/);
+    assert.match(tagsRule.body, /display:\s*flex\s*;/);
+    assert.match(tagsRule.body, /flex-wrap:\s*wrap\s*;/);
+    assert.match(tagsRule.body, /gap:\s*2px 5px\s*;/);
+    assert.match(tagsRule.body, /min-width:\s*0\s*;/);
+    assert.match(tagRule.body, /min-width:\s*0\s*;/);
+    assert.match(tagRule.body, /max-width:\s*100%\s*;/);
+    assert.match(tagRule.body, /color:\s*var\(--text-faint\)\s*;/);
+    assert.match(tagRule.body, /font-size:\s*var\(--font-ui-smaller\)\s*;/);
+    assert.match(tagRule.body, /line-height:\s*1\.25\s*;/);
+    assert.match(tagRule.body, /overflow-wrap:\s*anywhere\s*;/);
+
+    assert.match(linkRule.body, /padding:\s*1px 0\s*;/);
+    assert.match(linkRule.body, /background:\s*transparent\s*;/);
+    assert.match(linkRule.body, /background-image:\s*none\s*;/);
+    assert.match(linkRule.body, /border:\s*none\s*;/);
+    assert.match(linkRule.body, /border-radius:\s*0\s*;/);
+    assert.match(linkRule.body, /box-shadow:\s*none\s*;/);
+    assert.match(linkRule.body, /height:\s*auto\s*;/);
+    assert.match(linkRule.body, /min-height:\s*0\s*;/);
+    assert.match(linkRule.body, /width:\s*auto\s*;/);
+    assert.match(linkRule.body, /max-width:\s*100%\s*;/);
+    assert.match(linkRule.body, /-webkit-appearance:\s*none\s*;/);
+    assert.match(linkRule.body, /appearance:\s*none\s*;/);
+    assert.match(linkRule.body, /font-size:\s*var\(--font-ui-smaller\)\s*;/);
+    assert.match(linkRule.body, /white-space:\s*nowrap\s*;/);
+    assert.match(linkRule.body, /overflow:\s*hidden\s*;/);
+    assert.match(linkRule.body, /text-overflow:\s*ellipsis\s*;/);
+    assert.doesNotMatch(linkRule.body, /border-radius:\s*var\(/);
+    assert.doesNotMatch(linkRule.body, /background:\s*var\(--background-modifier-hover\)/);
+    assert.match(linkHoverFocusRule.body, /background:\s*transparent\s*;/);
+    assert.match(linkHoverFocusRule.body, /box-shadow:\s*none\s*;/);
+    assert.match(linkHoverFocusRule.body, /color:\s*var\(--text-accent\)\s*;/);
+    assert.match(linkHoverFocusRule.body, /text-decoration:\s*underline\s*;/);
+    assert.doesNotMatch(linkHoverFocusRule.body, /background-modifier-hover/);
+    assert.match(linkFocusRule.body, /outline:\s*1px solid var\(--interactive-accent\)\s*;/);
+    assert.match(linkFocusRule.body, /outline-offset:\s*2px\s*;/);
+
+    assert.match(currentRule.body, /display:\s*block\s*;/);
+    assert.match(currentRule.body, /padding:\s*1px 0\s*;/);
+    assert.match(currentRule.body, /color:\s*var\(--text-muted\)\s*;/);
+    assert.match(currentRule.body, /cursor:\s*default\s*;/);
+    assert.match(currentRule.body, /font-size:\s*var\(--font-ui-smaller\)\s*;/);
+    assert.match(currentRule.body, /white-space:\s*nowrap\s*;/);
+    assert.match(currentRule.body, /overflow:\s*hidden\s*;/);
+    assert.match(currentRule.body, /text-overflow:\s*ellipsis\s*;/);
+    assert.doesNotMatch(currentRule.body, /background:/);
+
+    assert.doesNotMatch(
+        css,
+        /\.aside-tag-related-files-group|\.aside-tag-related-files-tag-header|\.aside-tag-related-files-list/,
+    );
+    const tagRelatedClassPattern = /\.aside-tag-related-(?:filter(?:-bar)?|current-file|files|file-(?:row|tags|tag|link))\b/;
+    const relatedFilesRules = cssRules.filter((rule) => tagRelatedClassPattern.test(rule.selectors));
+    assert.notEqual(relatedFilesRules.length, 0, "missing parsed Thought Trail tag-related rules");
+    const relatedFilesRuleBodies = relatedFilesRules.map((rule) => rule.body).join("\n");
+    const hardcodedColorPattern = /#[0-9a-f]{3,8}\b|\b(?:rgb|rgba|hsl|hsla|hwb|lab|lch|oklab|oklch|color)\s*\(|(?<![-\w])(?:black|white|red|green|blue|purple|orange|yellow|gr[ae]y|pink|cyan|magenta|teal|navy|maroon|olive|lime|aqua|fuchsia|silver)(?![-\w])/i;
+    assert.doesNotMatch(relatedFilesRuleBodies, hardcodedColorPattern);
+    assert.doesNotMatch(relatedFilesRuleBodies, importantOverridePattern);
 });
 
 test("empty states stay muted without promoted heading text", () => {
