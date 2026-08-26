@@ -56,6 +56,7 @@ import {
     getClaudeRuntimeDiagnostics as probeClaudeRuntimeDiagnostics,
     getCodexRuntimeDiagnostics as probeCodexRuntimeDiagnostics,
     getGeminiRuntimeDiagnostics as probeGeminiRuntimeDiagnostics,
+    getOpenCodeRuntimeDiagnostics as probeOpenCodeRuntimeDiagnostics,
     resolveAgentExecutionEnv,
     runAgentRuntime,
     type AgentRuntimeDiagnostics,
@@ -1343,6 +1344,8 @@ export default class Aside extends Plugin {
                 return probeClaudeRuntimeDiagnostics();
             case "gemini-cli":
                 return probeGeminiRuntimeDiagnostics();
+            case "opencode-cli":
+                return probeOpenCodeRuntimeDiagnostics();
             case "unsupported":
             default:
                 return {

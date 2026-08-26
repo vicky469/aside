@@ -100,6 +100,7 @@ export type AgentRuntimeDiagnostics = {
 export type CodexRuntimeDiagnostics = AgentRuntimeDiagnostics;
 export type ClaudeRuntimeDiagnostics = AgentRuntimeDiagnostics;
 export type GeminiRuntimeDiagnostics = AgentRuntimeDiagnostics;
+export type OpenCodeRuntimeDiagnostics = AgentRuntimeDiagnostics;
 
 export class AgentRuntimeCancelledError extends Error {
     constructor(message: string = "Agent execution cancelled.") {
@@ -1010,6 +1011,48 @@ export async function getGeminiRuntimeDiagnostics(
         return {
             status: "unavailable",
             message: "Gemini CLI could not be launched or authenticated from this Obsidian environment.",
+        };
+    }
+}
+
+export async function getOpenCodeRuntimeDiagnostics(
+    modulesOverride?: NodeModules | null,
+    baseEnv: ExecEnv = getBaseProcessEnv(),
+): Promise<OpenCodeRuntimeDiagnostics> {
+    const modules = modulesOverride ?? getNodeModules();
+    if (!modules) {
+        return {
+            status: "unsupported",
+            message: "Built-in @deepseek requires desktop Obsidian.",
+        };
+    }
+
+    try {
+        const env = await resolveAgentExecutionEnv(modules, baseEnv);
+        await execFileAsync(
+            modules,
+            "opencode",
+            ["--version"],
+            {
+                cwd: env.HOME ?? "/",
+                env,
+            },
+        );
+        return {
+            status: "available",
+            message: "OpenCode CLI is available.",
+        };
+    } catch (error) {
+        if (isExecErrorWithCode(error, "ENOENT")) {
+            return {
+                status: "missing",
+                message: "OpenCode CLI was not found on PATH.",
+            };
+        }
+
+        return {
+            status: "unavailable",
+            message: "OpenCode CLI could not be launched from this Obsidian environment.",
         };
     }
 }

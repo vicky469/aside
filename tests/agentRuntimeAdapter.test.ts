@@ -30,6 +30,7 @@ import {
     getClaudeRuntimeDiagnostics,
     getCodexRuntimeDiagnostics,
     getGeminiRuntimeDiagnostics,
+    getOpenCodeRuntimeDiagnostics,
     resetResolvedAgentExecutionEnvForTests,
     resolveAgentExecutionEnv,
     runAgentRuntimeWithModules,
@@ -388,6 +389,79 @@ test("getGeminiRuntimeDiagnostics reports launch or authentication failures", as
     assert.deepEqual(diagnostics, {
         status: "unavailable",
         message: "Gemini CLI could not be launched or authenticated from this Obsidian environment.",
+    });
+});
+
+test("getOpenCodeRuntimeDiagnostics reports OpenCode as available from its version probe", async () => {
+    resetResolvedAgentExecutionEnvForTests();
+
+    const modules = createRuntimeModules((file, args, options, callback) => {
+        if (file === "/bin/zsh") {
+            callback(null, "/Users/test/.opencode/bin:/usr/bin\n", "");
+            return createTrackedProcessStub();
+        }
+
+        assert.equal(file, "opencode");
+        assert.deepEqual(args, ["--version"]);
+        assert.equal(options.cwd, "/Users/test");
+        assert.equal(options.env?.PATH, "/Users/test/.opencode/bin:/usr/bin");
+        callback(null, "1.18.23", "");
+        return createTrackedProcessStub();
+    });
+
+    assert.deepEqual(await getOpenCodeRuntimeDiagnostics(modules, {
+        HOME: "/Users/test",
+        PATH: "/usr/bin",
+        SHELL: "/bin/zsh",
+    }), {
+        status: "available",
+        message: "OpenCode CLI is available.",
+    });
+});
+
+test("getOpenCodeRuntimeDiagnostics reports a missing opencode binary clearly", async () => {
+    resetResolvedAgentExecutionEnvForTests();
+
+    const modules = createRuntimeModules((file, _args, _options, callback) => {
+        if (file === "/bin/zsh") {
+            callback(null, "/Users/test/.opencode/bin:/usr/bin\n", "");
+            return createTrackedProcessStub();
+        }
+
+        callback(Object.assign(new Error("missing opencode"), { code: "ENOENT" }), "", "");
+        return createTrackedProcessStub();
+    });
+
+    assert.deepEqual(await getOpenCodeRuntimeDiagnostics(modules, {
+        HOME: "/Users/test",
+        PATH: "/usr/bin",
+        SHELL: "/bin/zsh",
+    }), {
+        status: "missing",
+        message: "OpenCode CLI was not found on PATH.",
+    });
+});
+
+test("getOpenCodeRuntimeDiagnostics reports generic launch failures", async () => {
+    resetResolvedAgentExecutionEnvForTests();
+
+    const modules = createRuntimeModules((file, _args, _options, callback) => {
+        if (file === "/bin/zsh") {
+            callback(null, "/Users/test/.opencode/bin:/usr/bin\n", "");
+            return createTrackedProcessStub();
+        }
+
+        callback(new Error("launch failed"), "", "launch failed");
+        return createTrackedProcessStub();
+    });
+
+    assert.deepEqual(await getOpenCodeRuntimeDiagnostics(modules, {
+        HOME: "/Users/test",
+        PATH: "/usr/bin",
+        SHELL: "/bin/zsh",
+    }), {
+        status: "unavailable",
+        message: "OpenCode CLI could not be launched from this Obsidian environment.",
     });
 });
 
