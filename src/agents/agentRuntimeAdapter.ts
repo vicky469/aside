@@ -1443,6 +1443,119 @@ export function extractGeminiRunMetadataFromJsonEvent(
     };
 }
 
+function getOpenCodeEventPart(event: unknown): Record<string, unknown> | null {
+    if (!isRecord(event) || !isRecord(event.part)) {
+        return null;
+    }
+
+    return event.part;
+}
+
+export function extractOpenCodeTextDeltaFromJsonEvent(event: unknown): string | null {
+    if (!isRecord(event) || event.type !== "text") {
+        return null;
+    }
+
+    const part = getOpenCodeEventPart(event);
+    return part?.type === "text" && typeof part.text === "string" && part.text.length > 0
+        ? part.text
+        : null;
+}
+
+export function extractOpenCodeErrorTextFromJsonEvent(event: unknown): string | null {
+    if (!isRecord(event) || event.type !== "error") {
+        return null;
+    }
+
+    return normalizeRuntimeDiagnosticText(firstStringAtPaths(event, [
+        ["error", "data", "message"],
+        ["error", "message"],
+        ["message"],
+        ["error"],
+    ]) ?? "");
+}
+
+export function extractOpenCodeProgressTextFromJsonEvent(event: unknown): string | null {
+    if (!isRecord(event)) {
+        return null;
+    }
+
+    if (event.type === "step_start") {
+        return "Starting OpenCode";
+    }
+
+    if (event.type !== "tool_use") {
+        return null;
+    }
+
+    const part = getOpenCodeEventPart(event);
+    const toolName = normalizeGeminiToolName(part?.tool);
+    if (!toolName) {
+        return null;
+    }
+
+    return toolName === "shell"
+        ? "Running command"
+        : normalizeProgressText(`Using ${toolName}`);
+}
+
+export function extractOpenCodeRunMetadataFromJsonEvent(
+    event: unknown,
+): Pick<AgentRunMetadata, "usedSkills" | "usedTools" | "usedFiles" | "usedUrls" | "usedToolErrors"> {
+    if (!isRecord(event) || event.type !== "tool_use") {
+        return {
+            usedTools: [],
+            usedFiles: [],
+            usedUrls: [],
+        };
+    }
+
+    const part = getOpenCodeEventPart(event);
+    const state = isRecord(part?.state) ? part.state : null;
+    const toolName = normalizeGeminiToolName(part?.tool);
+    if (!part || !state || !toolName) {
+        return {
+            usedTools: [],
+            usedFiles: [],
+            usedUrls: [],
+        };
+    }
+
+    const payload = {
+        input: state.input,
+        output: state.output,
+        error: state.error,
+    };
+    const fileCandidates: unknown[] = [];
+    collectFilePathStrings(payload, fileCandidates);
+    const urlSet = new Set<string>();
+    collectUrlStrings(payload, urlSet);
+    const isToolError = state.status === "error";
+    const usedToolErrors = isToolError
+        ? normalizeAgentRunToolErrors([{
+            name: toolName,
+            payload: getNestedValue(state, ["error", "message"]) ?? state.error ?? state.output,
+        }])
+        : [];
+    const skillName = /^(?:skill|activate_skill)$/u.test(toolName)
+        ? firstStringAtPaths(state.input, [["name"], ["skill"]])
+        : null;
+    const usedSkills = skillName
+        ? normalizeAgentRunSkillMetadata([{ name: skillName }])
+        : [];
+
+    return {
+        ...(usedSkills.length ? { usedSkills } : {}),
+        usedTools: normalizeAgentRunToolNames([
+            ...(toolName ? [toolName] : []),
+            ...usedToolErrors.map((error) => formatUnavailableAgentRunToolName(error.name)),
+        ]),
+        usedFiles: normalizeAgentRunFilePaths(fileCandidates),
+        usedUrls: Array.from(urlSet),
+        ...(usedToolErrors.length ? { usedToolErrors } : {}),
+    };
+}
+
 async function runCodexDirect(
     modules: NodeModules,
     invocation: AgentRuntimeInvocation,
@@ -1763,6 +1876,10 @@ export function buildGeminiCliArgs(options: {
         args.push("--include-directories", options.vaultRootPath);
     }
     return args;
+}
+
+export function buildOpenCodeCliArgs(prompt: string): string[] {
+    return ["run", "--format", "json", "--auto", prompt];
 }
 
 async function runClaudeDirect(

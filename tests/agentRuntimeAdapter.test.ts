@@ -6,6 +6,7 @@ import {
     buildCodexCliArgs,
     buildClaudeCliArgs,
     buildGeminiCliArgs,
+    buildOpenCodeCliArgs,
     extractClaudeProgressTextFromJsonEvent,
     extractClaudeReplyTextFromJsonEvent,
     extractClaudeRunMetadataFromJsonEvent,
@@ -22,6 +23,10 @@ import {
     extractGeminiResultStatusFromJsonEvent,
     extractGeminiRunMetadataFromJsonEvent,
     extractGeminiTextDeltaFromJsonEvent,
+    extractOpenCodeErrorTextFromJsonEvent,
+    extractOpenCodeProgressTextFromJsonEvent,
+    extractOpenCodeRunMetadataFromJsonEvent,
+    extractOpenCodeTextDeltaFromJsonEvent,
     getClaudeRuntimeDiagnostics,
     getCodexRuntimeDiagnostics,
     getGeminiRuntimeDiagnostics,
@@ -1007,6 +1012,115 @@ test("Gemini event helpers expose concise progress and bounded structured errors
         role: "assistant",
         content: "normal reply",
     }), null);
+});
+
+test("buildOpenCodeCliArgs inherits the configured model and starts a fresh private run", () => {
+    const args = buildOpenCodeCliArgs("Aside prompt");
+
+    assert.deepEqual(args, ["run", "--format", "json", "--auto", "Aside prompt"]);
+    for (const forbidden of [
+        "--model",
+        "--variant",
+        "--agent",
+        "--continue",
+        "--session",
+        "--fork",
+        "--attach",
+        "--share",
+    ]) {
+        assert.equal(args.includes(forbidden), false, forbidden);
+    }
+});
+
+test("OpenCode event helpers extract reply, progress, and structured errors", () => {
+    assert.equal(extractOpenCodeProgressTextFromJsonEvent({
+        type: "step_start",
+    }), "Starting OpenCode");
+    assert.equal(extractOpenCodeTextDeltaFromJsonEvent({
+        type: "text",
+        part: {
+            type: "text",
+            text: "OpenCode reply.",
+        },
+    }), "OpenCode reply.");
+    assert.equal(extractOpenCodeProgressTextFromJsonEvent({
+        type: "tool_use",
+        part: {
+            type: "tool",
+            tool: "bash",
+            state: { status: "completed" },
+        },
+    }), "Running command");
+    assert.equal(extractOpenCodeErrorTextFromJsonEvent({
+        type: "error",
+        error: {
+            data: {
+                message: "Provider is not configured",
+            },
+        },
+    }), "Provider is not configured");
+    assert.equal(extractOpenCodeTextDeltaFromJsonEvent({
+        type: "reasoning",
+        part: { text: "private reasoning" },
+    }), null);
+});
+
+test("extractOpenCodeRunMetadataFromJsonEvent sanitizes completed tool evidence", () => {
+    assert.deepEqual(extractOpenCodeRunMetadataFromJsonEvent({
+        type: "tool_use",
+        part: {
+            type: "tool",
+            tool: "read",
+            state: {
+                status: "completed",
+                input: { filePath: "/vault/Note.md" },
+                output: "https://example.com/docs?token=secret#debug",
+            },
+        },
+    }), {
+        usedTools: ["read"],
+        usedFiles: ["/vault/Note.md"],
+        usedUrls: ["https://example.com/docs"],
+    });
+});
+
+test("extractOpenCodeRunMetadataFromJsonEvent marks failed tools and explicit skills", () => {
+    assert.deepEqual(extractOpenCodeRunMetadataFromJsonEvent({
+        type: "tool_use",
+        part: {
+            type: "tool",
+            tool: "read",
+            state: {
+                status: "error",
+                input: { filePath: "/vault/missing.md" },
+                error: "file not found",
+            },
+        },
+    }), {
+        usedTools: ["read (unavailable)"],
+        usedFiles: ["/vault/missing.md"],
+        usedUrls: [],
+        usedToolErrors: [{
+            name: "read",
+            payload: "file not found",
+        }],
+    });
+    assert.deepEqual(extractOpenCodeRunMetadataFromJsonEvent({
+        type: "tool_use",
+        part: {
+            type: "tool",
+            tool: "skill",
+            state: {
+                status: "completed",
+                input: { name: "aside" },
+            },
+        },
+    }), {
+        usedSkills: [{ name: "aside" }],
+        usedTools: ["skill"],
+        usedFiles: [],
+        usedUrls: [],
+    });
 });
 
 test("extractCodexProgressTextFromJsonEvent reads reasoning summaries and plan updates", () => {
