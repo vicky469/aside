@@ -13,7 +13,7 @@ import {
 import type { Comment, CommentThread, ReorderPlacement } from "../../commentManager";
 import { parseIndexFileOpenUrl } from "../../core/derived/allCommentsNote";
 import {
-    buildTagGroupedRelatedFiles,
+    buildTagRelatedFileSetModel,
     buildThoughtTrailCommentTagsByFilePath,
     type ThoughtTrailFileTagLookup,
 } from "../../core/derived/thoughtTrail";
@@ -1803,12 +1803,10 @@ export default class AsideView extends ItemView {
                 isAllCommentsView
                 && selectedIndexFileFilterRootPath
                 && indexThoughtTrailTagLookup
-                && buildTagGroupedRelatedFiles(
+                && this.hasThoughtTrailTagRelatedFiles(
                     selectedIndexFileFilterRootPath,
-                    this.getThoughtTrailVaultCandidateFilePaths(selectedIndexFileFilterRootPath),
                     indexThoughtTrailTagLookup,
-                    { allCommentsNotePath: this.plugin.getAllCommentsNotePath() },
-                ).length > 0
+                )
             );
             const indexThoughtTrailUnavailableReason = isAllCommentsView
                 ? getThoughtTrailUnavailableReason(
@@ -2035,7 +2033,7 @@ export default class AsideView extends ItemView {
                     hasRootScope: hasIndexThoughtTrailRootScope,
                     rootFilePath: selectedIndexFileFilterRootPath,
                     candidateFilePaths: this.getThoughtTrailVaultCandidateFilePaths(selectedIndexFileFilterRootPath),
-                    source: this.resolveThoughtTrailSource(selectedIndexFileFilterRootPath, indexThoughtTrailTagLookup ?? (() => [])),
+                    source: this.resolveThoughtTrailSource(hasIndexThoughtTrailTagSource),
                     onSourceChange: (source) => this.setThoughtTrailSource(source),
                     getTagsForFilePath: indexThoughtTrailTagLookup ?? (() => []),
                 });
@@ -2388,7 +2386,7 @@ export default class AsideView extends ItemView {
             file.path,
         ).length;
         const thoughtTrailTagLookup = this.buildThoughtTrailTagLookup(file.path, persistedThreads);
-        const hasThoughtTrailTagSource = (thoughtTrailTagLookup(file.path) ?? []).length > 0;
+        const hasThoughtTrailTagSource = this.hasThoughtTrailTagRelatedFiles(file.path, thoughtTrailTagLookup);
         const hasThoughtTrailRootScope = scopedFilePaths.length > 0 || hasThoughtTrailTagSource;
         const thoughtTrailUnavailableReason = getThoughtTrailUnavailableReason(
             hasThoughtTrailRootScope,
@@ -2468,7 +2466,7 @@ export default class AsideView extends ItemView {
             hasRootScope: hasThoughtTrailRootScope,
             rootFilePath: file.path,
             candidateFilePaths: this.getThoughtTrailVaultCandidateFilePaths(file.path),
-            source: this.resolveThoughtTrailSource(file.path, thoughtTrailTagLookup),
+            source: this.resolveThoughtTrailSource(hasThoughtTrailTagSource),
             onSourceChange: (source) => this.setThoughtTrailSource(source),
             getTagsForFilePath: thoughtTrailTagLookup,
         });
@@ -2562,11 +2560,20 @@ export default class AsideView extends ItemView {
         };
     }
 
-    private resolveThoughtTrailSource(
-        rootFilePath: string | null,
+    private hasThoughtTrailTagRelatedFiles(
+        rootFilePath: string,
         getTagsForFilePath: ThoughtTrailFileTagLookup,
-    ): SidebarThoughtTrailSource {
-        if (this.thoughtTrailSource === "tags" && (!rootFilePath || !(getTagsForFilePath(rootFilePath) ?? []).length)) {
+    ): boolean {
+        return buildTagRelatedFileSetModel(
+            rootFilePath,
+            this.getThoughtTrailVaultCandidateFilePaths(rootFilePath),
+            getTagsForFilePath,
+            { allCommentsNotePath: this.plugin.getAllCommentsNotePath() },
+        ).files.length > 0;
+    }
+
+    private resolveThoughtTrailSource(hasTagRelatedFiles: boolean): SidebarThoughtTrailSource {
+        if (this.thoughtTrailSource === "tags" && !hasTagRelatedFiles) {
             this.thoughtTrailSource = getDefaultThoughtTrailSource();
         }
 
@@ -2616,7 +2623,7 @@ export default class AsideView extends ItemView {
             file.path,
         ).length;
         const thoughtTrailTagLookup = this.buildThoughtTrailTagLookup(file.path, currentFileThreads);
-        const hasThoughtTrailTagSource = (thoughtTrailTagLookup(file.path) ?? []).length > 0;
+        const hasThoughtTrailTagSource = this.hasThoughtTrailTagRelatedFiles(file.path, thoughtTrailTagLookup);
         const hasThoughtTrailRootScope = scope.scopedFilePaths.length > 0 || hasThoughtTrailTagSource;
         const unavailableReason = getThoughtTrailUnavailableReason(
             hasThoughtTrailRootScope,

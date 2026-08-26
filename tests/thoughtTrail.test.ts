@@ -1,10 +1,8 @@
 import * as assert from "node:assert/strict";
 import test from "node:test";
 import {
-    buildTagRelatedFileListModel,
-    buildTagGroupedRelatedFiles,
+    buildTagRelatedFileSetModel,
     buildThoughtTrailCommentTagsByFilePath,
-    buildTagRelatedFileLines,
     buildThoughtTrailLines,
     extractThoughtTrailMermaidSource,
     getThoughtTrailMermaidRenderConfig,
@@ -267,92 +265,92 @@ test("buildThoughtTrailLines includes links from older child entries in a thread
     assert.equal(lines.includes("    n1[\"file2\"]"), true);
 });
 
-test("buildTagRelatedFileLines renders a deduped file set that shares the source tag set", () => {
+test("buildTagRelatedFileSetModel deduplicates paths and accumulates every shared tag", () => {
     const tagsByPath = new Map<string, string[]>([
-        ["docs/source.md", ["#Project/Alpha", "#Status"]],
-        ["docs/a.md", ["#project/alpha", "#status", "#extra"]],
-        ["docs/b.md", ["#project/alpha"]],
-        ["docs/c.md", ["#STATUS", "#PROJECT/ALPHA"]],
+        ["docs/source.md", ["#Status", "#Finance", "#FINANCE"]],
+        ["docs/a.md", ["#finance", "#status", "#extra"]],
+        ["docs/b.md", ["#FINANCE"]],
+        ["docs/c.md", ["#status"]],
+        ["docs/no-match.md", ["#other"]],
     ]);
-    const lines = buildTagRelatedFileLines(
-        "dev",
-        "docs/source.md",
-        ["docs/source.md", "docs/a.md", "docs/a.md", "docs/b.md", "docs/c.md"],
-        (filePath: string) => tagsByPath.get(filePath) ?? [],
-    );
 
-    assert.equal(lines[0], THOUGHT_TRAIL_INIT);
-    assert.equal(lines[1], "```mermaid");
-    assert.equal(lines[2], "flowchart TD");
-    assert.equal(lines.filter((line: string) => line.includes("Open docs/source.md")).length, 1);
-    assert.equal(lines.filter((line: string) => line.includes("Open docs/a.md")).length, 1);
-    assert.equal(lines.filter((line: string) => line.includes("Open docs/c.md")).length, 1);
-    assert.equal(lines.some((line: string) => line.includes("Open docs/b.md")), false);
-    assert.equal(lines.filter((line: string) => /^\s+n0 --> n\d+$/.test(line)).length, 2);
+    assert.deepEqual(
+        buildTagRelatedFileSetModel(
+            "docs/./source.md",
+            [
+                "docs/source.md",
+                "./docs/a.md",
+                "docs/../docs/a.md",
+                "docs/c.md",
+                "docs/b.md",
+                "docs/no-match.md",
+                "",
+            ],
+            (filePath: string) => tagsByPath.get(filePath) ?? [],
+        ),
+        {
+            currentFile: {
+                filePath: "docs/source.md",
+                label: "source (current)",
+            },
+            tags: [
+                { tagKey: "finance", tagDisplay: "Finance", fileCount: 2 },
+                { tagKey: "status", tagDisplay: "Status", fileCount: 2 },
+            ],
+            files: [
+                {
+                    filePath: "docs/a.md",
+                    label: "a",
+                    tags: [
+                        { tagKey: "finance", tagDisplay: "Finance" },
+                        { tagKey: "status", tagDisplay: "Status" },
+                    ],
+                },
+                {
+                    filePath: "docs/b.md",
+                    label: "b",
+                    tags: [{ tagKey: "finance", tagDisplay: "Finance" }],
+                },
+                {
+                    filePath: "docs/c.md",
+                    label: "c",
+                    tags: [{ tagKey: "status", tagDisplay: "Status" }],
+                },
+            ],
+        },
+    );
 });
 
-test("buildTagRelatedFileLines excludes the configured index note from tag matches", () => {
+test("buildTagRelatedFileSetModel preserves distinct full paths with the same basename", () => {
     const tagsByPath = new Map<string, string[]>([
         ["docs/source.md", ["#project"]],
-        ["docs/a.md", ["#project"]],
+        ["folder-a/index.md", ["#project"]],
+        ["folder-b/index.md", ["#PROJECT"]],
         ["Custom Aside Index.md", ["#project"]],
     ]);
-    const lines = buildTagRelatedFileLines(
-        "dev",
+
+    const model = buildTagRelatedFileSetModel(
         "docs/source.md",
-        ["docs/a.md", "Custom Aside Index.md"],
+        [
+            "folder-b/index.md",
+            "Custom Aside Index.md",
+            "folder-a/./index.md",
+            "docs/source.md",
+        ],
         (filePath: string) => tagsByPath.get(filePath) ?? [],
         { allCommentsNotePath: "Custom Aside Index.md" },
     );
 
-    assert.equal(lines.some((line: string) => line.includes("Open docs/a.md")), true);
-    assert.equal(lines.some((line: string) => line.includes("Custom Aside Index.md")), false);
-});
-
-test("buildTagGroupedRelatedFiles excludes the configured index note from tag matches", () => {
-    const tagsByPath = new Map<string, string[]>([
-        ["docs/source.md", ["#project"]],
-        ["docs/a.md", ["#project"]],
-        ["Custom Aside Index.md", ["#project"]],
+    assert.deepEqual(model.tags, [
+        { tagKey: "project", tagDisplay: "project", fileCount: 2 },
     ]);
-    assert.deepEqual(
-        buildTagGroupedRelatedFiles(
-            "docs/source.md",
-            ["docs/a.md", "Custom Aside Index.md"],
-            (filePath: string) => tagsByPath.get(filePath) ?? [],
-            { allCommentsNotePath: "Custom Aside Index.md" },
-        ),
-        [{
-            tagDisplay: "project",
-            tagKey: "project",
-            filePaths: ["docs/a.md"],
-        }],
-    );
+    assert.deepEqual(model.files.map(({ filePath, label }) => ({ filePath, label })), [
+        { filePath: "folder-a/index.md", label: "index" },
+        { filePath: "folder-b/index.md", label: "index" },
+    ]);
 });
 
-test("buildTagRelatedFileListModel puts the current file once above tag groups", () => {
-    const groups = [{
-        tagDisplay: "project",
-        tagKey: "project",
-        filePaths: ["docs/a.md", "docs/source.md", "docs/b.md"],
-    }];
-
-    assert.deepEqual(buildTagRelatedFileListModel("docs/source.md", groups), {
-        currentFile: {
-            filePath: "docs/source.md",
-            label: "source (current)",
-            current: true,
-            interactive: false,
-        },
-        groups: [{
-            tagDisplay: "project",
-            tagKey: "project",
-            filePaths: ["docs/a.md", "docs/b.md"],
-        }],
-    });
-});
-
-test("buildTagGroupedRelatedFiles still uses side comment tags when excluding the index note", () => {
+test("buildTagRelatedFileSetModel uses side-comment tags and excludes the generated index", () => {
     const tagsByPath = buildThoughtTrailCommentTagsByFilePath([
         createThread({
             id: "source-thread",
@@ -371,31 +369,69 @@ test("buildTagGroupedRelatedFiles still uses side comment tags when excluding th
         }),
     ]);
 
+    const model = buildTagRelatedFileSetModel(
+        "docs/source.md",
+        ["docs/a.md", "Custom Aside Index.md"],
+        (filePath: string) => tagsByPath.get(filePath) ?? [],
+        { allCommentsNotePath: "Custom Aside Index.md" },
+    );
+
+    assert.deepEqual(model.files.map((file) => file.filePath), ["docs/a.md"]);
+    assert.deepEqual(model.tags, [
+        { tagKey: "project", tagDisplay: "project", fileCount: 1 },
+    ]);
+});
+
+test("buildTagRelatedFileSetModel returns empty membership for invalid or untagged sources", () => {
+    const untagged = buildTagRelatedFileSetModel(
+        "docs/source.md",
+        ["docs/a.md"],
+        () => [],
+    );
+    assert.deepEqual(untagged, {
+        currentFile: { filePath: "docs/source.md", label: "source (current)" },
+        tags: [],
+        files: [],
+    });
+
     assert.deepEqual(
-        buildTagGroupedRelatedFiles(
-            "docs/source.md",
-            ["docs/a.md", "Custom Aside Index.md"],
-            (filePath: string) => tagsByPath.get(filePath) ?? [],
+        buildTagRelatedFileSetModel(
+            "./",
+            ["docs/a.md"],
+            () => ["#project"],
+        ),
+        { currentFile: null, tags: [], files: [] },
+    );
+
+    assert.deepEqual(
+        buildTagRelatedFileSetModel(
+            "Custom Aside Index.md",
+            ["docs/a.md"],
+            () => ["#project"],
             { allCommentsNotePath: "Custom Aside Index.md" },
         ),
-        [{
-            tagDisplay: "project",
-            tagKey: "project",
-            filePaths: ["docs/a.md"],
-        }],
+        { currentFile: null, tags: [], files: [] },
     );
 });
 
-test("buildTagRelatedFileLines returns no graph when the source file has no tags", () => {
-    assert.deepEqual(
-        buildTagRelatedFileLines(
-            "dev",
-            "docs/source.md",
-            ["docs/a.md"],
-            () => [],
-        ),
-        [],
+test("buildTagRelatedFileSetModel omits source tags with no related files", () => {
+    const tagsByPath = new Map<string, string[]>([
+        ["docs/source.md", ["#Project", "#Unused"]],
+        ["docs/a.md", ["#project"]],
+    ]);
+
+    const model = buildTagRelatedFileSetModel(
+        "docs/source.md",
+        ["docs/a.md"],
+        (filePath: string) => tagsByPath.get(filePath) ?? [],
     );
+
+    assert.deepEqual(model.tags, [
+        { tagKey: "project", tagDisplay: "Project", fileCount: 1 },
+    ]);
+    assert.deepEqual(model.files[0]?.tags, [
+        { tagKey: "project", tagDisplay: "Project" },
+    ]);
 });
 
 test("buildThoughtTrailCommentTagsByFilePath collects tags from side comment entries", () => {

@@ -279,26 +279,6 @@ function getNormalizedThoughtTrailTagKeys(tags: readonly string[] | null | undef
     return keys;
 }
 
-function hasEveryTagKey(candidateKeys: Set<string>, requiredKeys: Set<string>): boolean {
-    for (const requiredKey of requiredKeys) {
-        if (!candidateKeys.has(requiredKey)) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-function hasAnyTagKey(candidateKeys: Set<string>, requiredKeys: Set<string>): boolean {
-    for (const requiredKey of requiredKeys) {
-        if (candidateKeys.has(requiredKey)) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
 export function buildThoughtTrailCommentTagsByFilePath(
     comments: ReadonlyArray<Comment | CommentThread>,
 ): Map<string, string[]> {
@@ -386,212 +366,115 @@ function getOrderedRoots(edgesBySourceFile: Map<string, Array<{ targetFilePath: 
     return orderedRoots;
 }
 
-export interface TagRelatedFileGroup {
-    tagDisplay: string;
+export interface TagRelatedFileTag {
     tagKey: string;
-    filePaths: string[];
+    tagDisplay: string;
+    fileCount: number;
 }
 
-export interface TagRelatedFileListItem {
+export interface TagRelatedUniqueFileTag {
+    tagKey: string;
+    tagDisplay: string;
+}
+
+export interface TagRelatedUniqueFile {
     filePath: string;
     label: string;
-    current: boolean;
-    interactive: boolean;
+    tags: TagRelatedUniqueFileTag[];
 }
 
-export interface TagRelatedFileListGroup extends Omit<TagRelatedFileGroup, "filePaths"> {
-    filePaths: string[];
+export interface TagRelatedCurrentFile {
+    filePath: string;
+    label: string;
 }
 
-export interface TagRelatedFileListModel {
-    currentFile: TagRelatedFileListItem | null;
-    groups: TagRelatedFileListGroup[];
+export interface TagRelatedFileSetModel {
+    currentFile: TagRelatedCurrentFile | null;
+    tags: TagRelatedFileTag[];
+    files: TagRelatedUniqueFile[];
 }
 
 export interface ThoughtTrailTagRelatedOptions {
     allCommentsNotePath?: string;
 }
 
-export function buildTagGroupedRelatedFiles(
+export function buildTagRelatedFileSetModel(
     sourceFilePath: string,
     candidateFilePaths: readonly string[],
     getTagsForFilePath: ThoughtTrailFileTagLookup,
     options: ThoughtTrailTagRelatedOptions = {},
-): TagRelatedFileGroup[] {
+): TagRelatedFileSetModel {
     const normalizedSourcePath = normalizeNotePath(sourceFilePath);
     if (!normalizedSourcePath || isAllCommentsNotePath(normalizedSourcePath, options.allCommentsNotePath)) {
-        return [];
+        return { currentFile: null, tags: [], files: [] };
     }
 
+    const currentFile: TagRelatedCurrentFile = {
+        filePath: normalizedSourcePath,
+        label: formatCurrentRelatedFileLabel(normalizedSourcePath),
+    };
     const sourceTagsByKey = new Map<string, string>();
     for (const tag of getTagsForFilePath(normalizedSourcePath) ?? []) {
-        const key = normalizeThoughtTrailTagKey(tag);
-        if (key) {
-            sourceTagsByKey.set(key, tag);
+        const tagKey = normalizeThoughtTrailTagKey(tag);
+        if (tagKey && !sourceTagsByKey.has(tagKey)) {
+            sourceTagsByKey.set(tagKey, formatThoughtTrailTagDisplay(tag));
         }
     }
     if (!sourceTagsByKey.size) {
-        return [];
+        return { currentFile, tags: [], files: [] };
     }
 
-    const filePathsByTagKey = new Map<string, string[]>();
-    const seenFilePaths = new Set<string>();
-
-    for (const candidateFilePath of candidateFilePaths) {
-        const normalizedCandidate = normalizeNotePath(candidateFilePath);
-        if (
-            !normalizedCandidate
-            || normalizedCandidate === normalizedSourcePath
-            || isAllCommentsNotePath(normalizedCandidate, options.allCommentsNotePath)
-            || seenFilePaths.has(normalizedCandidate)
-        ) {
-            continue;
-        }
-        seenFilePaths.add(normalizedCandidate);
-
-        const candidateTagKeys = getNormalizedThoughtTrailTagKeys(getTagsForFilePath(normalizedCandidate));
-        for (const tagKey of sourceTagsByKey.keys()) {
-            if (candidateTagKeys.has(tagKey)) {
-                const existing = filePathsByTagKey.get(tagKey);
-                if (existing) {
-                    existing.push(normalizedCandidate);
-                } else {
-                    filePathsByTagKey.set(tagKey, [normalizedCandidate]);
-                }
-            }
-        }
-    }
-
-    return Array.from(filePathsByTagKey.entries())
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([tagKey, filePaths]) => ({
-            tagDisplay: formatThoughtTrailTagDisplay(sourceTagsByKey.get(tagKey) ?? tagKey),
-            tagKey,
-            filePaths: filePaths.sort((a, b) => a.localeCompare(b)),
-        }));
-}
-
-export function buildTagRelatedFileListModel(
-    sourceFilePath: string,
-    groups: readonly TagRelatedFileGroup[],
-): TagRelatedFileListModel {
-    const normalizedSourcePath = normalizeNotePath(sourceFilePath);
-    return {
-        currentFile: normalizedSourcePath
-            ? {
-                filePath: normalizedSourcePath,
-                label: formatCurrentRelatedFileLabel(normalizedSourcePath),
-                current: true,
-                interactive: false,
-            }
-            : null,
-        groups: groups
-            .map((group) => ({
-                tagDisplay: group.tagDisplay,
-                tagKey: group.tagKey,
-                filePaths: group.filePaths
-                    .map((filePath) => normalizeNotePath(filePath))
-                    .filter((filePath) => !!filePath && filePath !== normalizedSourcePath),
-            }))
-            .filter((group) => group.filePaths.length > 0),
-    };
-}
-
-export function buildTagRelatedFileLines(
-    vaultName: string,
-    sourceFilePath: string,
-    candidateFilePaths: readonly string[],
-    getTagsForFilePath: ThoughtTrailFileTagLookup,
-    options: {
-        allCommentsNotePath?: string;
-        layout?: "default" | "vertical";
-        matchMode?: "all" | "any";
-    } = {},
-): string[] {
-    const normalizedSourcePath = normalizeNotePath(sourceFilePath);
-    if (!normalizedSourcePath || isAllCommentsNotePath(normalizedSourcePath, options.allCommentsNotePath)) {
-        return [];
-    }
-
-    const sourceTagKeys = getNormalizedThoughtTrailTagKeys(getTagsForFilePath(normalizedSourcePath));
-    if (!sourceTagKeys.size) {
-        return [];
-    }
-
-    const matchedFilePaths: string[] = [];
-    const seenFilePaths = new Set<string>();
+    const tagKeysByFilePath = new Map<string, Set<string>>();
+    const seenCandidateFilePaths = new Set<string>();
     for (const candidateFilePath of candidateFilePaths) {
         const normalizedCandidatePath = normalizeNotePath(candidateFilePath);
         if (
             !normalizedCandidatePath
             || normalizedCandidatePath === normalizedSourcePath
             || isAllCommentsNotePath(normalizedCandidatePath, options.allCommentsNotePath)
-            || seenFilePaths.has(normalizedCandidatePath)
+            || seenCandidateFilePaths.has(normalizedCandidatePath)
         ) {
             continue;
         }
+        seenCandidateFilePaths.add(normalizedCandidatePath);
 
-        seenFilePaths.add(normalizedCandidatePath);
-        const candidateTagKeys = getNormalizedThoughtTrailTagKeys(getTagsForFilePath(normalizedCandidatePath));
-        const isMatch = options.matchMode === "any"
-            ? hasAnyTagKey(candidateTagKeys, sourceTagKeys)
-            : hasEveryTagKey(candidateTagKeys, sourceTagKeys);
-        if (isMatch) {
-            matchedFilePaths.push(normalizedCandidatePath);
-        }
-    }
-
-    if (!matchedFilePaths.length) {
-        return [];
-    }
-
-    const nodeLabelByFilePath = buildCompactNodeLabels([normalizedSourcePath, ...matchedFilePaths]);
-    const nodeLines: string[] = [];
-    const edgeLines: string[] = [];
-    const layoutHintLines: string[] = [];
-    const clickLines: string[] = [];
-    const nodeIds = new Map<string, string>();
-
-    const ensureNode = (filePath: string): string => {
-        const existing = nodeIds.get(filePath);
-        if (existing) {
-            return existing;
-        }
-
-        const nodeId = `n${nodeIds.size}`;
-        nodeIds.set(filePath, nodeId);
-        const label = JSON.stringify(toMermaidText(nodeLabelByFilePath.get(filePath) ?? formatNodeLabel(filePath)));
-        nodeLines.push(`    ${nodeId}[${label}]`);
-        clickLines.push(
-            `    click ${nodeId} href ${JSON.stringify(buildNoteOpenUrl(vaultName, filePath))} ${JSON.stringify(`Open ${normalizeNotePath(filePath)}`)}`,
+        const candidateTagKeys = getNormalizedThoughtTrailTagKeys(
+            getTagsForFilePath(normalizedCandidatePath),
         );
-        return nodeId;
-    };
-
-    const sourceId = ensureNode(normalizedSourcePath);
-    const targetIds: string[] = [];
-    for (const matchedFilePath of matchedFilePaths) {
-        const targetId = ensureNode(matchedFilePath);
-        targetIds.push(targetId);
-        edgeLines.push(`    ${sourceId} --> ${targetId}`);
-    }
-    if (options.layout === "vertical" && targetIds.length > 1) {
-        // Invisible edges keep a one-level tag fanout stacked without changing the visible graph meaning.
-        for (let index = 0; index < targetIds.length - 1; index += 1) {
-            layoutHintLines.push(`    ${targetIds[index]} ~~~ ${targetIds[index + 1]}`);
+        const sharedTagKeys = new Set<string>();
+        for (const sourceTagKey of sourceTagsByKey.keys()) {
+            if (candidateTagKeys.has(sourceTagKey)) {
+                sharedTagKeys.add(sourceTagKey);
+            }
+        }
+        if (sharedTagKeys.size) {
+            tagKeysByFilePath.set(normalizedCandidatePath, sharedTagKeys);
         }
     }
 
-    return [
-        THOUGHT_TRAIL_MERMAID_INIT,
-        "```mermaid",
-        "flowchart TD",
-        ...nodeLines,
-        ...edgeLines,
-        ...layoutHintLines,
-        ...clickLines,
-        "```",
-    ];
+    const orderedTagKeys = Array.from(sourceTagsByKey.keys())
+        .sort((left, right) => left.localeCompare(right));
+    const files = Array.from(tagKeysByFilePath.entries())
+        .sort(([leftPath], [rightPath]) => leftPath.localeCompare(rightPath))
+        .map(([filePath, sharedTagKeys]): TagRelatedUniqueFile => ({
+            filePath,
+            label: formatRelatedFileListLabel(filePath),
+            tags: orderedTagKeys
+                .filter((tagKey) => sharedTagKeys.has(tagKey))
+                .map((tagKey) => ({
+                    tagKey,
+                    tagDisplay: sourceTagsByKey.get(tagKey) ?? tagKey,
+                })),
+        }));
+    const tags = orderedTagKeys
+        .map((tagKey): TagRelatedFileTag => ({
+            tagKey,
+            tagDisplay: sourceTagsByKey.get(tagKey) ?? tagKey,
+            fileCount: files.filter((file) => file.tags.some((tag) => tag.tagKey === tagKey)).length,
+        }))
+        .filter((tag) => tag.fileCount > 0);
+
+    return { currentFile, tags, files };
 }
 
 export function buildThoughtTrailLines(
