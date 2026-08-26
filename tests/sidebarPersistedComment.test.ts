@@ -1177,6 +1177,25 @@ test("resolveSidebarCommentAuthor labels DeepSeek replies from their output run"
     );
 });
 
+test("resolveSidebarCommentAuthor identifies DeepSeek fallback replies", () => {
+    assert.deepEqual(
+        resolveSidebarCommentAuthor(
+            "entry-2",
+            [createAgentRun({
+                requestedAgent: "deepseek",
+                preferredAgent: "gemini",
+                requestKind: "create-script",
+                outputEntryId: "entry-2",
+            })],
+            "You",
+        ),
+        {
+            kind: "deepseek",
+            label: "DeepSeek (fallback for Gemini)",
+        },
+    );
+});
+
 test("resolveSidebarCommentAuthor identifies fallback agent replies", () => {
     assert.deepEqual(
         resolveSidebarCommentAuthor(
