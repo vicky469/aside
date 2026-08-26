@@ -22,6 +22,34 @@ test("tag related files render one semantic unique-file list", () => {
     assert.doesNotMatch(source, /aside-tag-related-files-list/);
 });
 
+test("related file rows render every shared model tag", () => {
+    assert.match(
+        source,
+        /for \(const tag of file\.tags\) \{[\s\S]*?text:\s*`#\$\{tag\.tagDisplay\}`[\s\S]*?attr:\s*\{\s*"data-tag-key":\s*tag\.tagKey\s*\}/,
+    );
+});
+
+test("per-tag filters use model tag displays and unique counts", () => {
+    assert.match(
+        source,
+        /\.\.\.model\.tags\.map\(\(tag\)\s*=>\s*\(\{[\s\S]*?tagKey:\s*tag\.tagKey[\s\S]*?label:\s*`#\$\{tag\.tagDisplay\} · \$\{tag\.fileCount\}`/,
+    );
+});
+
+test("tag filter bar exposes an explicit accessible group role", () => {
+    assert.match(
+        source,
+        /cls:\s*"aside-tag-related-filter-bar"[\s\S]*?attr:\s*\{[\s\S]*?role:\s*"group"[\s\S]*?"aria-label":\s*"Filter related files by tag"/,
+    );
+});
+
+test("tag filters are native non-submit buttons", () => {
+    assert.match(
+        source,
+        /filterBarEl\.createEl\("button",\s*\{[\s\S]*?cls:\s*"aside-tag-related-filter"[\s\S]*?attr:\s*\{[\s\S]*?type:\s*"button"/,
+    );
+});
+
 test("tag filters are accessible, single-select, and hide rows from the existing set", () => {
     assert.match(source, /cls:\s*"aside-tag-related-filter-bar"/);
     assert.match(source, /aria-label["']?:\s*"Filter related files by tag"/);
