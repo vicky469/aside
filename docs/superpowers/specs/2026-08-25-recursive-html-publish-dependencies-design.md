@@ -36,12 +36,13 @@ Use this section as the working checklist. Mark an item done only after the code
 - [x] The built plugin is installed into the `lean-startup` vault and the original page is republished.
 - [x] Fresh HTTP checks return 200 for `/public/pigeon-plan/`, `/public/pigeon-plan/pigeon-mocks-v7.css`, and `/public/pigeon-plan/assets/pigeon-logo.svg`.
 
-### Verification Evidence — 2026-08-26
+### Verification Evidence — 2026-08-27
 
-- Focused publish verification, including the Wrangler publisher suite, passed 132 of 132 tests.
-- The full build passed 1,327 compiled tests and 98 `.mjs` tests, for 1,425 total tests with no failures.
-- The release artifact guard inspected exactly `main.js`, `manifest.json`, and `styles.css`. Follow-up scans found no `sourceMappingURL`, `sourcesContent`, source maps, `.env*`, `.npmrc`, keys, or certificates.
-- The verified build was installed byte-for-byte into the `lean-startup` vault. Aside's normal update-publish action then emitted the sanitized `publish.html.updated` success event for `public/pigeon-plan/index.html`; no Obsidian developer errors were captured, and the reported CSS and SVG dependencies changed from HTTP 404 to live assets.
+- Focused publish verification, including the Wrangler publisher suite, passed 135 of 135 tests.
+- The full build passed 1,330 compiled tests and 98 `.mjs` tests, for 1,428 total tests with no failures.
+- The release artifact guard inspected exactly `main.js`, `manifest.json`, and `styles.css`. Follow-up scans found no `sourceMappingURL`, `sourcesContent`, source maps, `.env*`, `.npmrc`, keys, or certificates. The inspected `main.js` SHA-256 was `dec622af8020e55c4c7db34182c569ce537c307b0a6fc5fb67cdce408fa12a09`.
+- The post-fix verified build was installed byte-for-byte into the `lean-startup` vault. Aside's normal update-publish action emitted the sanitized `publish.html.updated` success event for `public/pigeon-plan/index.html` at `2026-08-27T02:16:30.094Z`; no Obsidian developer errors were captured, and the reported CSS and SVG dependencies remained live.
+- Final review fixes cover alternate raw-source extensions, first remote or empty `<base>` semantics, and ignored bodies for scripts whose `src` attribute supplies the resource.
 - The production graph closure contained `index.html`, `assets/pigeon-logo.svg`, `pigeon-mocks-v7.css`, and the recursively imported `pigeon-mocks-v6.css`.
 - The page route and all three dependency assets returned HTTP 200. The explicit `/public/pigeon-plan/index.html` URL returned the expected canonical HTTP 308 redirect.
 - **Manual browser validation remains open:** no in-app browser backend was available, so computed styles, the rendered logo, and browser console/network state were not visually inspected.
