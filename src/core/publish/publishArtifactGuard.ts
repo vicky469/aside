@@ -64,7 +64,7 @@ function isPdfPath(path: string): boolean {
 }
 
 function isRawSourcePath(path: string): boolean {
-	return /\.(?:md|mdx|ts|tsx|jsx)$/iu.test(path);
+	return /\.(?:md|markdown|mdown|mkd|mkdn|mdwn|mdtxt|mdtext|mdx|rmd|qmd|ts|mts|cts|tsx|jsx)$/iu.test(path);
 }
 
 function getSourceMapContentMarkers(): string[] {

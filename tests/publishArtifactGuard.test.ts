@@ -159,8 +159,19 @@ test("inspectPublishDependency allows reachable web assets", () => {
 test("inspectPublishDependency blocks raw source files", () => {
 	for (const vaultRelativePath of [
 		"share/readme.MD",
+		"share/readme.Markdown",
+		"share/readme.MDOWN",
+		"share/readme.mkd",
+		"share/readme.mkdn",
+		"share/readme.mdwn",
+		"share/readme.mdtxt",
+		"share/readme.mdtext",
 		"share/component.MdX",
+		"share/report.Rmd",
+		"share/notebook.QMD",
 		"share/app.Ts",
+		"share/app.MTS",
+		"share/app.cts",
 		"share/app.tSX",
 		"share/component.JsX",
 	]) {

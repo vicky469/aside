@@ -101,7 +101,7 @@ test("HTML extraction supports the complete resource tag policy and attribute qu
 	]);
 });
 
-test("HTML extraction uses the first local base and discovers inline template tags without duplicates or comments", () => {
+test("HTML extraction preserves the first base href even when it is remote", () => {
 	const result = extractPublishDependencyReferences({
 		vaultRelativePath: "public/index.html",
 		contents: `<!-- <img src="commented.png"> -->
@@ -118,8 +118,47 @@ test("HTML extraction uses the first local base and discovers inline template ta
 	});
 
 	assert.deepEqual(result, {
-		baseHref: "./local/",
+		baseHref: "https://cdn.example.com/",
 		references: ["shared.png", "template.png"],
+	});
+	assert.deepEqual(resolvePublishDependencyReference({
+		referrerPath: "public/index.html",
+		reference: result.references[0],
+		baseHref: result.baseHref,
+		allowedRoot: "public/",
+	}), { ok: true, kind: "ignored" });
+});
+
+test("HTML extraction treats an empty first base href as the document base and ignores later bases", () => {
+	const result = extractPublishDependencyReferences({
+		vaultRelativePath: "public/site/index.html",
+		contents: `<base href><base href="./ignored/"><img src="logo.svg">`,
+	});
+
+	assert.deepEqual(result, {
+		baseHref: "",
+		references: ["logo.svg"],
+	});
+	assert.deepEqual(resolvePublishDependencyReference({
+		referrerPath: "public/site/index.html",
+		reference: result.references[0],
+		baseHref: result.baseHref,
+		allowedRoot: "public/",
+	}), { ok: true, kind: "local", path: "public/site/logo.svg" });
+});
+
+test("HTML extraction ignores inline script contents when the start tag has src", () => {
+	assert.deepEqual(extractPublishDependencyReferences({
+		vaultRelativePath: "public/index.html",
+		contents: `<script src="./external.js">
+import "./ignored.js";
+new URL("./ignored.wasm", import.meta.url);
+const fragment = '<img src="ignored.png">';
+</script>
+<script>import "./inline.js";</script>`,
+	}), {
+		baseHref: null,
+		references: ["./external.js", "./inline.js"],
 	});
 });
 
@@ -676,6 +715,13 @@ test("resolvePublishDependencyReference ignores non-local references without net
 			allowedRoot: "public/",
 		}), { ok: true, kind: "ignored" }, reference);
 	}
+
+	assert.deepEqual(resolvePublishDependencyReference({
+		referrerPath: "public/site/index.html",
+		reference: "relative.css",
+		baseHref: "https://cdn.example.com/assets/",
+		allowedRoot: "public/",
+	}), { ok: true, kind: "ignored" });
 });
 
 test("resolvePublishDependencyReference reports invalid, traversal, and outside-root local references with context", () => {

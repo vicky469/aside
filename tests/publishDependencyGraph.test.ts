@@ -181,6 +181,23 @@ test("buildPublishDependencyGraph ignores external references without inspecting
 	assert.deepEqual(harness.existsCalls, []);
 });
 
+test("buildPublishDependencyGraph honors the first remote base without local reads", async () => {
+	const harness = makeHarness({
+		text: { "public/local/theme.css": "body {}" },
+	});
+	const result = await buildPublishDependencyGraph({
+		...harness.input,
+		entryFiles: [entry("public/index.html", [
+			"<base href='https://cdn.example/assets/'>",
+			"<base href='./local/'>",
+			"<link href='theme.css'>",
+		].join(""))],
+	});
+
+	assert.deepEqual(result, { ok: true, files: [] });
+	assertNoHostCalls(harness);
+});
+
 test("buildPublishDependencyGraph reads a dependency shared by two entries once", async () => {
 	const harness = makeHarness({ text: { "public/shared.css": "body {}" } });
 	const result = await buildPublishDependencyGraph({
@@ -260,7 +277,11 @@ test("buildPublishDependencyGraph appends reference context to every dependency 
 		["debug.log", "Publish failed: log files cannot be published."],
 		["readme.md", "Publish failed: raw Markdown, TypeScript, and JSX source files cannot be published."],
 		["readme.mdx", "Publish failed: raw Markdown, TypeScript, and JSX source files cannot be published."],
+		["readme.markdown", "Publish failed: raw Markdown, TypeScript, and JSX source files cannot be published."],
+		["readme.mdown", "Publish failed: raw Markdown, TypeScript, and JSX source files cannot be published."],
 		["app.ts", "Publish failed: raw Markdown, TypeScript, and JSX source files cannot be published."],
+		["app.mts", "Publish failed: raw Markdown, TypeScript, and JSX source files cannot be published."],
+		["app.cts", "Publish failed: raw Markdown, TypeScript, and JSX source files cannot be published."],
 		["app.tsx", "Publish failed: raw Markdown, TypeScript, and JSX source files cannot be published."],
 		["view.jsx", "Publish failed: raw Markdown, TypeScript, and JSX source files cannot be published."],
 		["assets/.obsidian/config", "Publish failed: Obsidian configuration files cannot be published."],

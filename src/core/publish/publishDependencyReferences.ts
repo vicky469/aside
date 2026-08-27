@@ -857,15 +857,6 @@ function splitSrcset(value: string): string[] {
 	return references;
 }
 
-function isLocalBaseHref(value: string | undefined): value is string {
-	const trimmed = value?.trim() ?? "";
-	return Boolean(trimmed)
-		&& !trimmed.startsWith("#")
-		&& !trimmed.startsWith("?")
-		&& !trimmed.startsWith("//")
-		&& !EXPLICIT_SCHEME_PATTERN.test(trimmed);
-}
-
 function findHtmlNonDataElementClosingTag(
 	contents: string,
 	tagName: HtmlClosableNonDataElement,
@@ -974,6 +965,7 @@ function collectHtmlDataReferences(
 ): string | null {
 	const tagStartPattern = /<([a-z][a-z0-9:-]*)(?=\s|\/?>)/iyu;
 	let baseHref: string | null = null;
+	let baseHrefSeen = false;
 	for (let index = 0; index < contents.length;) {
 		if (contents.startsWith("<!--", index)) {
 			const closingOffset = contents.indexOf("-->", index + 4);
@@ -1003,9 +995,12 @@ function collectHtmlDataReferences(
 		if (tagEnd < 0) break;
 		const attributes = scanHtmlAttributes(contents, attributesStart, tagEnd);
 
-		if (options.allowBase && tagName === "base" && baseHref === null) {
-			const href = attributes.find((attribute) => attribute.name === "href")?.value;
-			if (isLocalBaseHref(href)) baseHref = href.trim();
+		if (options.allowBase && tagName === "base" && !baseHrefSeen) {
+			const href = attributes.find((attribute) => attribute.name === "href");
+			if (href) {
+				baseHref = (href.value ?? "").trim();
+				baseHrefSeen = true;
+			}
 		}
 		collectHtmlAttributeReferences(tagName, attributes, target, options);
 		if (options.mode === "svg" && isXmlSelfClosingTag(contents, tagEnd)) {
@@ -1021,7 +1016,9 @@ function collectHtmlDataReferences(
 
 		const bodyStart = tagEnd + 1;
 		const closingTag = findHtmlNonDataElementClosingTag(contents, tagName, bodyStart);
-		if (options.collectRawDependencies && (tagName === "script" || tagName === "style")) {
+		const collectRawBody = tagName === "style"
+			|| (tagName === "script" && !attributes.some((attribute) => attribute.name === "src"));
+		if (options.collectRawDependencies && collectRawBody) {
 			const body = contents.slice(bodyStart, closingTag.start);
 			const bodyOffset = options.baseOffset + bodyStart;
 			if (tagName === "style") {

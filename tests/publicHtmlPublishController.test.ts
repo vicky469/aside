@@ -1070,7 +1070,11 @@ test("public html publish controller retains shared dependencies when one entry 
 test("public html publish controller rejects unsafe referenced source and secret files before deployment", async () => {
 	const cases = [
 		["notes.md", "Publish failed: raw Markdown, TypeScript, and JSX source files cannot be published."],
+		["notes.markdown", "Publish failed: raw Markdown, TypeScript, and JSX source files cannot be published."],
+		["notes.mdown", "Publish failed: raw Markdown, TypeScript, and JSX source files cannot be published."],
 		["app.ts", "Publish failed: raw Markdown, TypeScript, and JSX source files cannot be published."],
+		["app.mts", "Publish failed: raw Markdown, TypeScript, and JSX source files cannot be published."],
+		["app.cts", "Publish failed: raw Markdown, TypeScript, and JSX source files cannot be published."],
 		["app.js.map", "Publish failed: source maps cannot be published."],
 		[".env.production", "Publish failed: secret-bearing files cannot be published."],
 	] as const;
@@ -1090,6 +1094,8 @@ test("public html publish controller rejects unsafe referenced source and secret
 			notice: `${notice} Referenced by public/index.html: ${reference}`,
 		});
 		assert.deepEqual(harness.deployCalls, []);
+		assert.deepEqual(harness.writes, []);
+		assert.equal(harness.files.has("public/index.md"), false);
 		assert.deepEqual(harness.getPublishedArtifactPaths(), []);
 	}
 });
