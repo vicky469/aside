@@ -14,27 +14,38 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Add deterministic extraction of statically discoverable local references from HTML, CSS, SVG, and JavaScript module content.
-- [ ] Add vault-relative URL resolution that follows browser-style relative paths, strips query/fragment components for file lookup, ignores non-local URLs, and rejects paths outside `public/`.
-- [ ] Build a recursive, cycle-safe, de-duplicated dependency graph from every enabled HTML entry artifact in the publish snapshot.
-- [ ] Read dependency files as text when they can contain further references and as binary otherwise, preserving their original vault-relative paths and bytes.
-- [ ] Extend publish artifact inspection to admit reachable web dependencies while continuing to reject source maps, secret-bearing files, keys, certificates, logs, raw Markdown, TypeScript/JSX-family source, and Obsidian configuration files.
-- [ ] Abort the deploy before Wrangler runs when a local dependency is missing, unsafe, unreadable, or outside the publish root.
-- [ ] Keep publish state and the generated public publish index scoped to entry artifacts; derive dependency assets fresh for each snapshot rather than persisting them as independently published files.
+- [x] Add deterministic extraction of statically discoverable local references from HTML, CSS, SVG, and JavaScript module content.
+- [x] Add vault-relative URL resolution that follows browser-style relative paths, strips query/fragment components for file lookup, ignores non-local URLs, and rejects paths outside `public/`.
+- [x] Build a recursive, cycle-safe, de-duplicated dependency graph from every enabled HTML entry artifact in the publish snapshot.
+- [x] Read dependency files as text when they can contain further references and as binary otherwise, preserving their original vault-relative paths and bytes.
+- [x] Extend publish artifact inspection to admit reachable web dependencies while continuing to reject source maps, secret-bearing files, keys, certificates, logs, raw Markdown, TypeScript/JSX-family source, and Obsidian configuration files.
+- [x] Abort the deploy before Wrangler runs when a local dependency is missing, unsafe, unreadable, or outside the publish root.
+- [x] Keep publish state and the generated public publish index scoped to entry artifacts; derive dependency assets fresh for each snapshot rather than persisting them as independently published files.
 
 ### Verification
 
-- [ ] Unit tests cover HTML references to sibling CSS and nested SVG assets.
-- [ ] Unit tests cover recursive CSS imports and `url(...)` assets.
-- [ ] Unit tests cover static JavaScript module imports and `new URL(..., import.meta.url)` assets.
-- [ ] Unit tests cover `srcset`, inline CSS, query strings, fragments, percent-encoded paths, cycles, duplicate references, and assets shared by multiple entry pages.
-- [ ] Unit tests confirm remote, protocol-relative, `data:`, `blob:`, fragment-only, mail, and telephone URLs are ignored.
-- [ ] Unit tests confirm missing, traversal, outside-root, secret-bearing, source-map, raw Markdown, TypeScript, and JSX dependencies fail closed before deployment.
-- [ ] Unit tests confirm binary dependency bytes are preserved and unpublishing an entry removes dependencies that are no longer reachable while retaining shared dependencies.
-- [ ] Existing publish controller and artifact guard tests pass.
-- [ ] `npm run build` passes.
-- [ ] The built plugin is installed into the `lean-startup` vault and the original page is republished.
-- [ ] Fresh HTTP checks return 200 for `/public/pigeon-plan/`, `/public/pigeon-plan/pigeon-mocks-v7.css`, and `/public/pigeon-plan/assets/pigeon-logo.svg`.
+- [x] Unit tests cover HTML references to sibling CSS and nested SVG assets.
+- [x] Unit tests cover recursive CSS imports and `url(...)` assets.
+- [x] Unit tests cover static JavaScript module imports and `new URL(..., import.meta.url)` assets.
+- [x] Unit tests cover `srcset`, inline CSS, query strings, fragments, percent-encoded paths, cycles, duplicate references, and assets shared by multiple entry pages.
+- [x] Unit tests confirm remote, protocol-relative, `data:`, `blob:`, fragment-only, mail, and telephone URLs are ignored.
+- [x] Unit tests confirm missing, traversal, outside-root, secret-bearing, source-map, raw Markdown, TypeScript, and JSX dependencies fail closed before deployment.
+- [x] Unit tests confirm binary dependency bytes are preserved and unpublishing an entry removes dependencies that are no longer reachable while retaining shared dependencies.
+- [x] Existing publish controller and artifact guard tests pass.
+- [x] `npm run build` passes.
+- [x] The built plugin is installed into the `lean-startup` vault and the original page is republished.
+- [x] Fresh HTTP checks return 200 for `/public/pigeon-plan/`, `/public/pigeon-plan/pigeon-mocks-v7.css`, and `/public/pigeon-plan/assets/pigeon-logo.svg`.
+
+### Verification Evidence — 2026-08-27
+
+- Focused publish verification, including the Wrangler publisher suite, passed 135 of 135 tests.
+- The full build passed 1,330 compiled tests and 98 `.mjs` tests, for 1,428 total tests with no failures.
+- The release artifact guard inspected exactly `main.js`, `manifest.json`, and `styles.css`. Follow-up scans found no `sourceMappingURL`, `sourcesContent`, source maps, `.env*`, `.npmrc`, keys, or certificates. The inspected `main.js` SHA-256 was `dec622af8020e55c4c7db34182c569ce537c307b0a6fc5fb67cdce408fa12a09`.
+- The post-fix verified build was installed byte-for-byte into the `lean-startup` vault. Aside's normal update-publish action emitted the sanitized `publish.html.updated` success event for `public/pigeon-plan/index.html` at `2026-08-27T02:16:30.094Z`; no Obsidian developer errors were captured, and the reported CSS and SVG dependencies remained live.
+- Final review fixes cover alternate raw-source extensions, first remote or empty `<base>` semantics, and ignored bodies for scripts whose `src` attribute supplies the resource.
+- The production graph closure contained `index.html`, `assets/pigeon-logo.svg`, `pigeon-mocks-v7.css`, and the recursively imported `pigeon-mocks-v6.css`.
+- The page route and all three dependency assets returned HTTP 200. The explicit `/public/pigeon-plan/index.html` URL returned the expected canonical HTTP 308 redirect.
+- **Manual browser validation remains open:** no in-app browser backend was available, so computed styles, the rendered logo, and browser console/network state were not visually inspected.
 
 ## Context
 

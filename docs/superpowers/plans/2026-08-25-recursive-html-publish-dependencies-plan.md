@@ -27,7 +27,7 @@
 - Modify: `tests/publishArtifactGuard.test.ts`
 - Modify: `src/core/publish/publishArtifactGuard.ts`
 
-- [ ] **Step 1: Write failing dependency-policy tests**
+- [x] **Step 1: Write failing dependency-policy tests**
 
 Import a new `inspectPublishDependency` export and add focused cases while retaining every existing entry-artifact assertion:
 
@@ -89,7 +89,7 @@ test("entry selection remains limited to HTML and PDF", () => {
 
 Also exercise `.env`, `.npmrc`, keys, certificates, `.map`, source-map markers, logs, outside-root paths, and nested `.obsidian` paths through both public functions so shared safety cannot drift.
 
-- [ ] **Step 2: Run the guard test and confirm red**
+- [x] **Step 2: Run the guard test and confirm red**
 
 ```bash
 ./node_modules/.bin/tsc -p tsconfig.test.json && node --test .test-dist/tests/publishArtifactGuard.test.js
@@ -97,7 +97,7 @@ Also exercise `.env`, `.npmrc`, keys, certificates, `.map`, source-map markers, 
 
 Expected: TypeScript fails because `inspectPublishDependency` does not exist.
 
-- [ ] **Step 3: Extract common safety and add dependency inspection**
+- [x] **Step 3: Extract common safety and add dependency inspection**
 
 Refactor `publishArtifactGuard.ts` around this exact public shape:
 
@@ -191,11 +191,11 @@ export function inspectPublishDependency(
 
 Keep the existing helper implementations and notices unchanged. The refactor must not weaken entry selection or duplicate common checks.
 
-- [ ] **Step 4: Run the guard test and confirm green**
+- [x] **Step 4: Run the guard test and confirm green**
 
 Run the Step 2 command. Expected: all artifact guard tests pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/core/publish/publishArtifactGuard.ts tests/publishArtifactGuard.test.ts
@@ -209,7 +209,7 @@ git commit -m "refactor(publish): split dependency safety"
 - Create: `src/core/publish/publishDependencyReferences.ts`
 - Create: `tests/publishDependencyReferences.test.ts`
 
-- [ ] **Step 1: Write failing extraction tests**
+- [x] **Step 1: Write failing extraction tests**
 
 Cover HTML/SVG attributes, `srcset`, inline styles, `<style>`, inline scripts, CSS imports/URLs, JavaScript modules, comment suppression, de-duplication, and text-kind selection:
 
@@ -273,7 +273,7 @@ test("text-kind selection limits recursive scanning", () => {
 });
 ```
 
-- [ ] **Step 2: Write failing URL-resolution tests**
+- [x] **Step 2: Write failing URL-resolution tests**
 
 Add table-driven expectations for relative, base-relative, root-relative, query/fragment removal, percent-decoding, ignored schemes, malformed encoding, traversal, and outside-root paths:
 
@@ -335,7 +335,7 @@ test("outside-root and malformed local references fail closed", () => {
 });
 ```
 
-- [ ] **Step 3: Run the focused test and confirm red**
+- [x] **Step 3: Run the focused test and confirm red**
 
 ```bash
 ./node_modules/.bin/tsc -p tsconfig.test.json && node --test .test-dist/tests/publishDependencyReferences.test.js
@@ -343,7 +343,7 @@ test("outside-root and malformed local references fail closed", () => {
 
 Expected: TypeScript fails because the module and exports do not exist.
 
-- [ ] **Step 4: Implement deterministic reference extraction**
+- [x] **Step 4: Implement deterministic reference extraction**
 
 Create the module with these public types and exports:
 
@@ -409,7 +409,7 @@ Implement JavaScript extraction after a character-state pass replaces line and b
 
 `extractPublishDependencyReferences` dispatches on `getPublishDependencyTextKind`; unsupported formats return `{ baseHref: null, references: [] }`.
 
-- [ ] **Step 5: Implement local URL resolution**
+- [x] **Step 5: Implement local URL resolution**
 
 Add these result types:
 
@@ -446,11 +446,11 @@ import { normalizeVaultRelativePublishPath } from "./publishPath";
 import { normalizePublishAllowedRoot } from "./publishSettings";
 ```
 
-- [ ] **Step 6: Run the focused test and confirm green**
+- [x] **Step 6: Run the focused test and confirm green**
 
 Run the Step 3 command. Expected: all extraction and resolution tests pass.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/core/publish/publishDependencyReferences.ts tests/publishDependencyReferences.test.ts
@@ -464,7 +464,7 @@ git commit -m "feat(publish): resolve local asset references"
 - Create: `src/core/publish/publishDependencyGraph.ts`
 - Create: `tests/publishDependencyGraph.test.ts`
 
-- [ ] **Step 1: Write the failing graph tests**
+- [x] **Step 1: Write the failing graph tests**
 
 Build a real in-memory host with text and binary maps, call counts, and no mocks. Cover the production graph, nested CSS/JS, cycles, shared dependencies, remote URLs, binary bytes, missing files, outside-root failures, blocked files, and read errors:
 
@@ -537,7 +537,7 @@ test("dependency graph fails before returning a partial missing-asset graph", as
 
 Add separate assertions that external/data/blob URLs do not call `fileExists`, two entries sharing one asset read it once, a CSS cycle terminates, traversal fails, `.env`/`.map`/`.md`/`.ts` dependencies return guard failures, and thrown text/binary reads become concise unreadable-asset failures.
 
-- [ ] **Step 2: Run the focused graph test and confirm red**
+- [x] **Step 2: Run the focused graph test and confirm red**
 
 ```bash
 ./node_modules/.bin/tsc -p tsconfig.test.json && node --test .test-dist/tests/publishDependencyGraph.test.js
@@ -545,7 +545,7 @@ Add separate assertions that external/data/blob URLs do not call `fileExists`, t
 
 Expected: TypeScript fails because the graph module and exports do not exist.
 
-- [ ] **Step 3: Implement the async graph builder**
+- [x] **Step 3: Implement the async graph builder**
 
 Create these public contracts:
 
@@ -675,7 +675,7 @@ export async function buildPublishDependencyGraph(
 
 Import the reference functions and `inspectPublishDependency`. Normalize entry paths before seeding; return a failure rather than accepting duplicate aliases. Keep graph state local to one call so every snapshot derives current dependencies.
 
-- [ ] **Step 4: Run the graph and guard tests and confirm green**
+- [x] **Step 4: Run the graph and guard tests and confirm green**
 
 ```bash
 ./node_modules/.bin/tsc -p tsconfig.test.json && node --test \
@@ -686,7 +686,7 @@ Import the reference functions and `inspectPublishDependency`. Normalize entry p
 
 Expected: all focused dependency tests pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/core/publish/publishDependencyGraph.ts tests/publishDependencyGraph.test.ts
@@ -700,7 +700,7 @@ git commit -m "feat(publish): build recursive asset graph"
 - Modify: `src/publish/publicHtmlPublishController.ts`
 - Modify: `tests/publicHtmlPublishController.test.ts`
 
-- [ ] **Step 1: Write the production regression test first**
+- [x] **Step 1: Write the production regression test first**
 
 Add a standalone entry fixture matching the reported site:
 
@@ -741,7 +741,7 @@ Add three integration cases:
 2. Two enabled HTML entries share one dependency; unpublishing one retains the shared file and removes its entry-only dependency.
 3. A referenced `.md`, `.ts`, `.map`, or `.env` file aborts before `deploySnapshot`.
 
-- [ ] **Step 2: Run the controller test and confirm red**
+- [x] **Step 2: Run the controller test and confirm red**
 
 ```bash
 ./node_modules/.bin/tsc -p tsconfig.test.json && node --test .test-dist/tests/publicHtmlPublishController.test.js
@@ -749,7 +749,7 @@ Add three integration cases:
 
 Expected: the regression deploy contains only `index.html`; the CSS/SVG/PNG expectations fail.
 
-- [ ] **Step 3: Compose snapshots through a path-keyed map**
+- [x] **Step 3: Compose snapshots through a path-keyed map**
 
 Import the graph builder and dependency guard:
 
@@ -783,7 +783,7 @@ Use `addSnapshotFile` for all three existing additions:
 
 Do not mark generated Markdown HTML as a graph seed in this change. Keep the existing entry-specific `inspectPublishArtifact` calls before adding each selected entry.
 
-- [ ] **Step 4: Resolve dependencies and inspect the exact final snapshot**
+- [x] **Step 4: Resolve dependencies and inspect the exact final snapshot**
 
 Immediately before `host.deploySnapshot`, add:
 
@@ -832,11 +832,11 @@ return this.host.deploySnapshot(completedSnapshot);
 
 The final inspection loop is mandatory: it checks the exact deduplicated contents passed to the deploy host, including generated HTML, PDF entries, and every derived dependency.
 
-- [ ] **Step 5: Run the controller test and confirm green**
+- [x] **Step 5: Run the controller test and confirm green**
 
 Run the Step 2 command. Expected: the production fixture stages HTML, SVG, CSS, and PNG; missing/unsafe dependencies make no deploy call; shared assets follow reachability; all pre-existing controller tests remain green.
 
-- [ ] **Step 6: Run all focused publish tests**
+- [x] **Step 6: Run all focused publish tests**
 
 ```bash
 ./node_modules/.bin/tsc -p tsconfig.test.json && node --test \
@@ -849,7 +849,7 @@ Run the Step 2 command. Expected: the production fixture stages HTML, SVG, CSS, 
 
 Expected: all focused publish tests pass with no warnings or failures.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/publish/publicHtmlPublishController.ts tests/publicHtmlPublishController.test.ts
@@ -862,7 +862,7 @@ git commit -m "fix(publish): bundle referenced site assets"
 
 - Modify: `docs/superpowers/specs/2026-08-25-recursive-html-publish-dependencies-design.md`
 
-- [ ] **Step 1: Run the full repository verification**
+- [x] **Step 1: Run the full repository verification**
 
 ```bash
 npm run build
@@ -877,7 +877,7 @@ Expected sequence and result:
 - esbuild writes production `main.js` without a source map;
 - the release artifact guard passes for exactly `main.js`, `manifest.json`, and `styles.css`.
 
-- [ ] **Step 2: Inspect the exact plugin artifacts before local installation**
+- [x] **Step 2: Inspect the exact plugin artifacts before local installation**
 
 ```bash
 npm run release:artifacts:check
@@ -887,21 +887,21 @@ find . -maxdepth 1 -type f \( -name 'main.js.map' -o -name '.env*' -o -name '.np
 
 Expected: the guard passes; both scans print no source-map, secret, key, certificate, or unexpected map artifact. This is the required inspection of the exact three plugin files being copied into the vault.
 
-- [ ] **Step 3: Install and reload the verified build**
+- [x] **Step 3: Install and reload the verified build**
 
 ```bash
 npm run dev:install-built -- --vault /Users/example/Obsidian/lean-startup
-obsidian plugin:reload id=aside vault=lean-startup
+obsidian vault=lean-startup plugin:reload id=aside
 ```
 
 Expected: the installer reports copying `main.js`, `manifest.json`, and `styles.css`; Obsidian reports the `aside` plugin reloaded.
 
-- [ ] **Step 4: Republish through the installed Aside controller**
+- [x] **Step 4: Republish through the installed Aside controller**
 
 Use the Obsidian developer CLI so the real plugin builds and inspects the complete current snapshot before Wrangler uploads it:
 
 ```bash
-obsidian eval vault=lean-startup code="(async () => await app.plugins.plugins.aside.publicHtmlPublishController.updatePublishedFile('public/pigeon-plan/index.html'))()"
+obsidian vault=lean-startup eval code="(async () => await app.plugins.plugins.aside.publicHtmlPublishController.updatePublishedFile('public/pigeon-plan/index.html'))()"
 ```
 
 Expected: `{ ok: true, url: "https://publish.fdechina.com/public/pigeon-plan/index" }` or the equivalent serialized result. Do not bypass Aside with a direct Wrangler command.
@@ -918,11 +918,11 @@ curl -I https://publish.fdechina.com/public/pigeon-plan/assets/pigeon-logo.svg
 
 Expected: all three return HTTP 200. Then open `https://publish.fdechina.com/public/pigeon-plan/#/workspaces` and confirm the page has computed styles and a loaded logo with no same-site 404s in the browser network/console view.
 
-- [ ] **Step 6: Update the tracked spec from fresh evidence**
+- [x] **Step 6: Update the tracked spec from fresh evidence**
 
 Mark implementation and verification checkboxes `[x]` only for behavior demonstrated by the focused tests, full build, artifact inspection, installed republish, HTTP checks, and browser check. Leave any unperformed manual item unchecked and explain it in the handoff.
 
-- [ ] **Step 7: Run final diff and status checks**
+- [x] **Step 7: Run final diff and status checks**
 
 ```bash
 git diff --check
@@ -932,7 +932,7 @@ rg -n "\[DEBUG-" src tests
 
 Expected: no whitespace errors, no debug instrumentation, and only the intended spec/plan tracking change remains after code commits.
 
-- [ ] **Step 8: Commit tracking evidence**
+- [x] **Step 8: Commit tracking evidence**
 
 ```bash
 git add -f docs/superpowers/specs/2026-08-25-recursive-html-publish-dependencies-design.md \

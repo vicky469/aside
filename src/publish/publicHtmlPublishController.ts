@@ -9,7 +9,9 @@ import {
 import type { FeatureFlags } from "../core/config/featureFlags";
 import {
 	inspectPublishArtifact,
+	inspectPublishDependency,
 } from "../core/publish/publishArtifactGuard";
+import { buildPublishDependencyGraph } from "../core/publish/publishDependencyGraph";
 import {
 	buildPublishPublicUrl,
 	normalizeVaultRelativePublishPath,
@@ -1267,7 +1269,15 @@ export class PublicHtmlPublishController {
 		} = {},
 	): Promise<PublicHtmlDeploySnapshotResult> {
 		const markdownFiles = (await this.host.listMarkdownFiles(settings.publishAllowedRoot)).sort();
-		const snapshotFiles: PublicHtmlPublishSnapshotFile[] = [];
+		const snapshotFilesByPath = new Map<string, PublicHtmlPublishSnapshotFile>();
+		const realHtmlEntryPaths = new Set<string>();
+		const addSnapshotFile = (
+			file: PublicHtmlPublishSnapshotFile,
+			options: { realHtmlEntry?: boolean } = {},
+		): void => {
+			snapshotFilesByPath.set(file.vaultRelativePath, file);
+			if (options.realHtmlEntry) realHtmlEntryPaths.add(file.vaultRelativePath);
+		};
 		const ownedHtmlArtifactPaths = new Set<string>();
 		for (const sourcePath of markdownFiles) {
 			if (isPublicPublishIndexPath(sourcePath, settings.publishAllowedRoot)) {
@@ -1308,7 +1318,7 @@ export class PublicHtmlPublishController {
 					if (!markdownInspection.ok) {
 						return markdownInspection;
 					}
-					snapshotFiles.push({
+					addSnapshotFile({
 						vaultRelativePath: markdownArtifactPath,
 						contents: htmlContents,
 					});
@@ -1345,10 +1355,10 @@ export class PublicHtmlPublishController {
 				if (!artifactInspection.ok) {
 					return artifactInspection;
 				}
-				snapshotFiles.push({
+				addSnapshotFile({
 					vaultRelativePath: pair.htmlPath,
 					contents: htmlContents,
-				});
+				}, { realHtmlEntry: true });
 			}
 		}
 
@@ -1375,12 +1385,66 @@ export class PublicHtmlPublishController {
 			if (!artifactInspection.ok) {
 				return artifactInspection;
 			}
-			snapshotFiles.push({
+			addSnapshotFile({
 				vaultRelativePath: artifact.artifactPath,
 				contents,
-			});
+			}, { realHtmlEntry: isHtmlPath(artifact.artifactPath) });
 		}
 
-		return this.host.deploySnapshot(snapshotFiles);
+		const entryFiles: Array<{ vaultRelativePath: string; contents: string }> = [];
+		for (const path of realHtmlEntryPaths) {
+			const file = snapshotFilesByPath.get(path);
+			if (!file || typeof file.contents !== "string") {
+				return {
+					ok: false,
+					notice: `Publish failed: HTML entry is not readable as text: ${path}`,
+				};
+			}
+			entryFiles.push({
+				vaultRelativePath: path,
+				contents: file.contents,
+			});
+		}
+		const dependencyResult = await buildPublishDependencyGraph({
+			entryFiles,
+			allowedRoot: settings.publishAllowedRoot,
+			configDir: this.host.getVaultConfigDir(),
+			fileExists: async (path) => snapshotFilesByPath.has(path)
+				|| this.host.fileExists(path),
+			readTextFile: async (path) => {
+				const snapshotFile = snapshotFilesByPath.get(path);
+				if (!snapshotFile) return this.host.readVaultFile(path);
+				if (typeof snapshotFile.contents !== "string") {
+					throw new Error(`Snapshot file is not text: ${path}`);
+				}
+				return snapshotFile.contents;
+			},
+			readBinaryFile: async (path) => {
+				const snapshotFile = snapshotFilesByPath.get(path);
+				if (!snapshotFile) return this.host.readVaultBinaryFile(path);
+				if (!(snapshotFile.contents instanceof ArrayBuffer)) {
+					throw new Error(`Snapshot file is not binary: ${path}`);
+				}
+				return snapshotFile.contents;
+			},
+		});
+		if (!dependencyResult.ok) return dependencyResult;
+		for (const dependency of dependencyResult.files) {
+			if (!snapshotFilesByPath.has(dependency.vaultRelativePath)) {
+				snapshotFilesByPath.set(dependency.vaultRelativePath, dependency);
+			}
+		}
+
+		const completedSnapshot = [...snapshotFilesByPath.values()];
+		for (const file of completedSnapshot) {
+			const inspection = inspectPublishDependency({
+				vaultRelativePath: file.vaultRelativePath,
+				allowedRoot: settings.publishAllowedRoot,
+				configDir: this.host.getVaultConfigDir(),
+				contents: file.contents,
+			});
+			if (!inspection.ok) return inspection;
+		}
+		return this.host.deploySnapshot(completedSnapshot);
 	}
 }

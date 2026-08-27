@@ -971,3 +971,174 @@ test("public html publish controller publishes a standalone html without a markd
 		disabled: false,
 	});
 });
+
+test("public html publish controller bundles dependencies referenced by a standalone index", async () => {
+	const harness = createHarness({
+		files: {
+			"public/pigeon-plan/index.html": `
+				<!doctype html>
+				<link rel="icon" href="assets/pigeon-logo.svg" type="image/svg+xml">
+				<link rel="stylesheet" href="pigeon-mocks-v7.css">
+				<img src="assets/pigeon-logo.svg" alt="">
+			`,
+			"public/pigeon-plan/pigeon-mocks-v7.css": `.brand { background-image:url("assets/paper.png") }`,
+			"public/pigeon-plan/assets/pigeon-logo.svg": `<svg viewBox="0 0 10 10"></svg>`,
+		},
+		binaryFiles: {
+			"public/pigeon-plan/assets/paper.png": "PNG bytes",
+		},
+	});
+
+	const result = await harness.controller.publishFile("public/pigeon-plan/index.html");
+
+	assert.equal(result.ok, true);
+	assert.deepEqual(harness.deployCalls.at(-1)?.map((file) => file.vaultRelativePath), [
+		"public/pigeon-plan/index.html",
+		"public/pigeon-plan/assets/pigeon-logo.svg",
+		"public/pigeon-plan/pigeon-mocks-v7.css",
+		"public/pigeon-plan/assets/paper.png",
+	]);
+	assert.deepEqual(harness.getPublishedArtifactPaths(), ["public/pigeon-plan/index.html"]);
+});
+
+test("public html publish controller aborts a missing dependency without mutating publish state", async () => {
+	const harness = createHarness({
+		files: {
+			"public/pigeon-plan/index.html": `<link rel="stylesheet" href="missing.css">`,
+		},
+	});
+
+	const result = await harness.controller.publishFile("public/pigeon-plan/index.html");
+
+	assert.deepEqual(result, {
+		ok: false,
+		notice: "Publish failed: public/pigeon-plan/index.html references missing local asset public/pigeon-plan/missing.css.",
+	});
+	assert.deepEqual(harness.deployCalls, []);
+	assert.deepEqual(harness.writes, []);
+	assert.equal(harness.files.has("public/index.md"), false);
+	assert.deepEqual(harness.getPublishedArtifactPaths(), []);
+});
+
+test("public html publish controller aborts a binary-read manifest containing source-map markers", async () => {
+	const harness = createHarness({
+		files: {
+			"public/index.html": `<link rel="manifest" href="site.webmanifest">`,
+		},
+		binaryFiles: {
+			"public/site.webmanifest": `{"sourcesContent":["private source"]}`,
+		},
+	});
+
+	const result = await harness.controller.publishFile("public/index.html");
+
+	assert.deepEqual(result, {
+		ok: false,
+		notice: "Publish failed: source-map references cannot be published. Referenced by public/index.html: site.webmanifest",
+	});
+	assert.deepEqual(harness.deployCalls, []);
+	assert.deepEqual(harness.writes, []);
+	assert.equal(harness.files.has("public/index.md"), false);
+	assert.deepEqual(harness.getPublishedArtifactPaths(), []);
+});
+
+test("public html publish controller retains shared dependencies when one entry is unpublished", async () => {
+	const harness = createHarness({
+		files: {
+			"public/one.html": `<link rel="stylesheet" href="shared.css"><img src="one.png">`,
+			"public/two.html": `<link rel="stylesheet" href="shared.css"><img src="two.png">`,
+			"public/shared.css": ".shared {}",
+		},
+		binaryFiles: {
+			"public/one.png": "one",
+			"public/two.png": "two",
+		},
+		publishedArtifactPaths: ["public/one.html", "public/two.html"],
+	});
+
+	const result = await harness.controller.unpublishFile("public/one.html");
+
+	assert.equal(result.ok, true);
+	assert.deepEqual(harness.deployCalls.at(-1)?.map((file) => file.vaultRelativePath), [
+		"public/two.html",
+		"public/shared.css",
+		"public/two.png",
+	]);
+	assert.deepEqual(harness.getPublishedArtifactPaths(), ["public/two.html"]);
+});
+
+test("public html publish controller rejects unsafe referenced source and secret files before deployment", async () => {
+	const cases = [
+		["notes.md", "Publish failed: raw Markdown, TypeScript, and JSX source files cannot be published."],
+		["notes.markdown", "Publish failed: raw Markdown, TypeScript, and JSX source files cannot be published."],
+		["notes.mdown", "Publish failed: raw Markdown, TypeScript, and JSX source files cannot be published."],
+		["app.ts", "Publish failed: raw Markdown, TypeScript, and JSX source files cannot be published."],
+		["app.mts", "Publish failed: raw Markdown, TypeScript, and JSX source files cannot be published."],
+		["app.cts", "Publish failed: raw Markdown, TypeScript, and JSX source files cannot be published."],
+		["app.js.map", "Publish failed: source maps cannot be published."],
+		[".env.production", "Publish failed: secret-bearing files cannot be published."],
+	] as const;
+
+	for (const [reference, notice] of cases) {
+		const harness = createHarness({
+			files: {
+				"public/index.html": `<script src="${reference}"></script>`,
+				[`public/${reference}`]: "unsafe",
+			},
+		});
+
+		const result = await harness.controller.publishFile("public/index.html");
+
+		assert.deepEqual(result, {
+			ok: false,
+			notice: `${notice} Referenced by public/index.html: ${reference}`,
+		});
+		assert.deepEqual(harness.deployCalls, []);
+		assert.deepEqual(harness.writes, []);
+		assert.equal(harness.files.has("public/index.md"), false);
+		assert.deepEqual(harness.getPublishedArtifactPaths(), []);
+	}
+});
+
+test("public html publish controller reads reachable staged files before shadowing vault files", async () => {
+	const harness = createHarness({
+		files: {
+			"public/generated.md": [
+				"---",
+				"asidePublish:",
+				"  markdownEnabled: true",
+				"  htmlEnabled: false",
+				"---",
+				"# Generated",
+				"![staged](staged.png)",
+			].join("\n"),
+			"public/generated.html": `<img src="vault-only.png">`,
+			"public/unrelated.md": [
+				"---",
+				"asidePublish:",
+				"  markdownEnabled: true",
+				"  htmlEnabled: false",
+				"---",
+				"# Unrelated",
+				"![unrelated](unrelated.png)",
+			].join("\n"),
+			"public/index.html": `<iframe src="generated.html"></iframe>`,
+		},
+		binaryFiles: {
+			"public/staged.png": "staged",
+			"public/vault-only.png": "vault",
+			"public/unrelated.png": "unrelated",
+		},
+	});
+
+	const result = await harness.controller.publishFile("public/index.html");
+
+	assert.equal(result.ok, true);
+	assert.deepEqual(harness.deployCalls.at(-1)?.map((file) => file.vaultRelativePath), [
+		"public/generated.html",
+		"public/unrelated.html",
+		"public/index.html",
+		"public/staged.png",
+	]);
+	assert.equal(decodeSnapshotContents(harness.deployCalls.at(-1)![0]).includes("staged.png"), true);
+});
