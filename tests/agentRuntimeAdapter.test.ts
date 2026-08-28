@@ -1513,7 +1513,8 @@ test("buildSideNotePrompt forwards the conditional guarded update-script rename 
     assert.match(prompt, /exact target `🛠️ scripts\/compact-google-ai-images\.mjs`/is);
     assert.match(prompt, /default.*edit.*in place[\s\S]*unless.*explicitly asks.*rename.*filename.*slash invocation/is);
     assert.match(prompt, /guarded true move[\s\S]*collision-free direct child[\s\S]*supported extension/is);
-    assert.match(prompt, /move.*paired test[\s\S]*imports.*path.*name.*expectations/is);
+    assert.match(prompt, /basename stem must match `\[A-Za-z0-9_.\-\]\+`/);
+    assert.match(prompt, /move every matching paired test or spec[\s\S]*\.\{test,spec\}\.\{mjs,js,cjs\}/is);
     assert.match(prompt, /rename the script name to clean-google-ai-summary/);
     assert.doesNotMatch(prompt, /exact source PDF/i);
 });
