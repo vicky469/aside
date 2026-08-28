@@ -161,7 +161,7 @@ test("buildSideNotePrompt permits an explicit update-script rename only as a gua
     assert.match(prompt, /explicitly asks.*rename.*filename.*slash invocation[\s\S]*guarded true move/is);
     assert.match(prompt, /collision-free direct child[\s\S]*supported extension/is);
     assert.match(prompt, /reserved.*hidden.*nested.*test-spec.*invalid.*case-insensitive collision/is);
-    assert.match(prompt, /basename stem must match `\[A-Za-z0-9_.\-\]\+`/);
+    assert.match(prompt, /basename stem must match `\[A-Za-z0-9_.-\]\+`/);
     assert.match(prompt, /must not start with `\.`[\s\S]*must not end with `\.test` or `\.spec` case-insensitively/is);
     assert.match(prompt, /filename-derived slash invocation.*Aside built-in or agent-reserved name/is);
     assert.match(prompt, /move every matching paired test or spec.*tests\/.*<old-script-stem>\.\{test,spec\}\.\{mjs,js,cjs\}[\s\S]*imports.*path.*name.*expectations/is);
