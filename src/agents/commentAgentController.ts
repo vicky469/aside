@@ -1629,7 +1629,7 @@ export class CommentAgentController {
         this.clearRunStreamPruneTimer(stream.runId);
         this.runStreams.set(stream.runId, cloneAgentRunStreamState(stream));
         if (stream.status === "succeeded" || stream.status === "failed" || stream.status === "cancelled") {
-            this.scheduleSilentRunStreamPrune(stream.runId);
+            this.scheduleRunStreamPrune(stream.runId);
         }
     }
 
@@ -1651,7 +1651,7 @@ export class CommentAgentController {
         return true;
     }
 
-    private scheduleSilentRunStreamPrune(runId: string): void {
+    private scheduleRunStreamPrune(runId: string): void {
         this.clearRunStreamPruneTimer(runId);
         const timerWindow = getTimerWindow();
         if (!timerWindow) {
@@ -1660,7 +1660,13 @@ export class CommentAgentController {
 
         const timer = timerWindow.setTimeout(() => {
             this.runStreamPruneTimers.delete(runId);
+            const stream = this.runStreams.get(runId);
+            if (!stream) {
+                return;
+            }
+
             this.runStreams.delete(runId);
+            this.emitStreamUpdate(stream.threadId, null);
         }, FINAL_STREAM_RETENTION_MS);
         this.runStreamPruneTimers.set(runId, timer);
     }

@@ -2166,6 +2166,56 @@ test("comment agent controller keeps the cancelled reply card when no text has s
     assert.equal(harness.controller.getLatestAgentRunForThread("thread-1")?.status, "cancelled");
 });
 
+test("comment agent controller emits a clear update when terminal retention expires", () => {
+    const previousWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
+    const scheduled: { callback?: () => void } = {};
+    Object.defineProperty(globalThis, "window", {
+        configurable: true,
+        value: {
+            setTimeout(callback: () => void) {
+                scheduled.callback = callback;
+                return 1;
+            },
+            clearTimeout() {},
+        },
+    });
+
+    try {
+        const harness = createHarness();
+        const updates: Array<{ threadId: string; stream: unknown }> = [];
+        const unsubscribe = harness.controller.subscribeToStreamUpdates((update) => {
+            updates.push(update);
+        });
+        const controller = harness.controller as any;
+        controller.setRunStream({
+            runId: "retained-run",
+            threadId: "thread-1",
+            requestedAgent: "codex",
+            runtime: "direct-cli",
+            status: "cancelled",
+            statusText: "Cancelled",
+            partialText: "",
+            startedAt: 100,
+            updatedAt: 101,
+        });
+        updates.length = 0;
+
+        assert.ok(scheduled.callback);
+        scheduled.callback();
+
+        assert.equal(harness.controller.getActiveAgentStreamForThread("thread-1"), null);
+        assert.deepEqual(updates, [{ threadId: "thread-1", stream: null }]);
+        unsubscribe();
+        harness.controller.dispose();
+    } finally {
+        if (previousWindow) {
+            Object.defineProperty(globalThis, "window", previousWindow);
+        } else {
+            Reflect.deleteProperty(globalThis, "window");
+        }
+    }
+});
+
 test("comment agent controller marks thread runs cancelled before delete flow continues", async () => {
     const harness = createHarness({
         customRunAgentRuntime: async (invocation) => {
