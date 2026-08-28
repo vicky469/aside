@@ -85,11 +85,15 @@ function buildSideNotePrompt(options) {
 
     if (options?.requestKind === "update-script" && targetScriptPath) {
         promptLines.push(
-            `This is an /update-script request. Modify \`${targetScriptPath}\` in place now.`,
-            "Inspect the existing script before editing it.",
-            "Do not rename it, create a replacement, or edit unrelated vault files.",
-            "Preserve the script's current-note positional argument and vault-root working-directory contract.",
-            "In the Aside reply, report the updated vault-relative path and its /script-name invocation.",
+            `This is an /update-script request. Inspect and update the exact target \`${targetScriptPath}\` now.`,
+            "Default to editing that exact script in place. Do not rename its filename or slash invocation, create a replacement, or edit unrelated vault files unless the user explicitly asks to rename the filename or slash invocation.",
+            "Preserve the script's current Markdown note absolute path first positional argument and vault root working directory contract.",
+            `If the user explicitly asks to rename the filename or slash invocation, permit only a guarded true move: move the existing script to one collision-free direct child of \`${VAULT_SCRIPT_FOLDER_PATH}/\` with a supported extension (.mjs, .js, or .cjs); do not create an old-path alias or replacement.`,
+            "Reject reserved names, hidden paths, nested paths, test-spec files, invalid filenames, and case-insensitive collisions; plainly fail if the move is unsafe or cannot be verified.",
+            `Move any paired test at \`${VAULT_SCRIPT_TEST_FOLDER_PATH}/<old-script-stem>.test.<extension>\` and update its imports, path references, and name expectations.`,
+            "Use no alias, wrapper, or scriptName export as a substitute for the move, and do not edit unrelated vault files.",
+            "Before reporting success, run paired tests and verify the new path exists, the old path is absent, the slash invocation matches the filename, no collision exists, and the paired tests pass.",
+            "In the Aside reply, report the actual vault-relative path and its /script-name invocation.",
             "If the target disappears or cannot be edited, state that plainly instead of creating a substitute.",
         );
     }

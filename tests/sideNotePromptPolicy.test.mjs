@@ -132,7 +132,7 @@ test("buildSideNotePrompt adds the shared create-script contract only for create
     assert.doesNotMatch(ordinaryPrompt, /first positional argument/i);
 });
 
-test("buildSideNotePrompt adds one exact in-place update-script contract", () => {
+test("buildSideNotePrompt keeps ordinary update-script requests on the exact target", () => {
     const prompt = sideNotePromptPolicy.buildSideNotePrompt({
         promptText: "make the default size reasonable",
         rootLabel: "vault root",
@@ -141,8 +141,27 @@ test("buildSideNotePrompt adds one exact in-place update-script contract", () =>
         targetScriptPath: "🛠️ scripts/embed-image-urls.mjs",
     });
 
-    assert.match(prompt, /modify `🛠️ scripts\/embed-image-urls\.mjs` in place/is);
-    assert.match(prompt, /do not rename/is);
-    assert.match(prompt, /do not rename[\s\S]*unrelated vault files/is);
+    assert.match(prompt, /inspect and update the exact target `🛠️ scripts\/embed-image-urls\.mjs`/is);
+    assert.match(prompt, /default.*edit.*in place[\s\S]*do not rename.*replace.*unless.*explicitly asks.*rename.*filename.*slash invocation/is);
+    assert.match(prompt, /do not.*unrelated vault files/is);
+    assert.match(prompt, /current Markdown note.*absolute path.*first positional argument[\s\S]*vault root.*working directory/is);
     assert.match(prompt, /\/script-name invocation/is);
+});
+
+test("buildSideNotePrompt permits an explicit update-script rename only as a guarded true move", () => {
+    const prompt = sideNotePromptPolicy.buildSideNotePrompt({
+        promptText: "rename the script name to clean-google-ai-summary",
+        rootLabel: "vault root",
+        rootPath: "/vault",
+        requestKind: "update-script",
+        targetScriptPath: "🛠️ scripts/compact-google-ai-images.mjs",
+    });
+
+    assert.match(prompt, /inspect and update the exact target `🛠️ scripts\/compact-google-ai-images\.mjs`/is);
+    assert.match(prompt, /explicitly asks.*rename.*filename.*slash invocation[\s\S]*guarded true move/is);
+    assert.match(prompt, /collision-free direct child[\s\S]*supported extension/is);
+    assert.match(prompt, /reserved.*hidden.*nested.*test-spec.*invalid.*case-insensitive collision/is);
+    assert.match(prompt, /move.*paired test.*tests\/.*<old-script-stem>\.test\.<extension>[\s\S]*imports.*path.*name.*expectations/is);
+    assert.match(prompt, /no alias.*wrapper.*scriptName.*export/is);
+    assert.match(prompt, /new.*exists.*old.*absent[\s\S]*slash.*filename[\s\S]*no collision[\s\S]*paired tests pass/is);
 });

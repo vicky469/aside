@@ -1502,16 +1502,19 @@ test("buildSideNotePrompt forwards create-script request kind to the shared poli
     assert.doesNotMatch(prompt, /exact source PDF/i);
 });
 
-test("buildSideNotePrompt forwards the exact update-script target to the shared policy", () => {
+test("buildSideNotePrompt forwards the conditional guarded update-script rename contract", () => {
     const prompt = buildSideNotePrompt({
-        promptText: "make the default size reasonable",
+        promptText: "rename the script name to clean-google-ai-summary",
         vaultRootPath: "/vault",
         requestKind: "update-script",
-        targetScriptPath: "🛠️ scripts/embed-image-urls.mjs",
+        targetScriptPath: "🛠️ scripts/compact-google-ai-images.mjs",
     });
 
-    assert.match(prompt, /modify `🛠️ scripts\/embed-image-urls\.mjs` in place/is);
-    assert.match(prompt, /do not rename/is);
+    assert.match(prompt, /exact target `🛠️ scripts\/compact-google-ai-images\.mjs`/is);
+    assert.match(prompt, /default.*edit.*in place[\s\S]*unless.*explicitly asks.*rename.*filename.*slash invocation/is);
+    assert.match(prompt, /guarded true move[\s\S]*collision-free direct child[\s\S]*supported extension/is);
+    assert.match(prompt, /move.*paired test[\s\S]*imports.*path.*name.*expectations/is);
+    assert.match(prompt, /rename the script name to clean-google-ai-summary/);
     assert.doesNotMatch(prompt, /exact source PDF/i);
 });
 
