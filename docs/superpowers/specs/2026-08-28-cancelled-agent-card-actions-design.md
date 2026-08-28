@@ -19,19 +19,19 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Restore a borrowed card's snapshotted header and footer actions immediately when its stream reaches a terminal state.
-- [ ] Keep the streamed terminal author and status presentation visible during the 30-second retention period.
-- [ ] Preserve the existing running behavior in which the stream controller shows only the Cancel action.
-- [ ] Emit a `null` stream update when retained terminal stream state expires so the view clears the stream controller and fully restores the persisted card.
-- [ ] Keep action construction, permission checks, and click handlers owned by the persisted renderer.
+- [x] Restore a borrowed card's snapshotted header and footer actions immediately when its stream reaches a terminal state.
+- [x] Keep the streamed terminal author and status presentation visible during the 30-second retention period.
+- [x] Preserve the existing running behavior in which the stream controller shows only the Cancel action.
+- [x] Emit a `null` stream update when retained terminal stream state expires so the view clears the stream controller and fully restores the persisted card.
+- [x] Keep action construction, permission checks, and click handlers owned by the persisted renderer.
 
 ### Verification
 
-- [ ] A fail-first stream-renderer regression test proves cancelled borrowed cards immediately regain their original header and footer actions while retaining `Cancelled` status.
-- [ ] Existing and focused tests prove queued and running cards still suppress persisted actions and show only Cancel.
-- [ ] A fail-first lifecycle regression test proves retention expiry removes the stream and emits one `null` update for the correct thread.
-- [ ] Focused persisted-card tests prove note cards remain editable and deletable under existing permission rules.
-- [ ] The full test suite, lint, typecheck, Obsidian compliance check, production bundle, and release-artifact guard pass.
+- [x] A fail-first stream-renderer regression test proves cancelled borrowed cards immediately regain their original header and footer actions while retaining `Cancelled` status.
+- [x] Existing and focused tests prove queued and running cards still suppress persisted actions and show only Cancel.
+- [x] A fail-first lifecycle regression test proves retention expiry removes the stream and emits one `null` update for the correct thread.
+- [x] Focused persisted-card tests prove note cards remain editable and deletable under existing permission rules.
+- [x] The full test suite, lint, typecheck, Obsidian compliance check, production bundle, and release-artifact guard pass.
 
 ## Goals
 

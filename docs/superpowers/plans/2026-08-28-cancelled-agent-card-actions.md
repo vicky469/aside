@@ -25,7 +25,7 @@
 - Modify: `src/ui/views/streamedAgentReplyController.ts:20-220`
 - Modify: `src/ui/views/streamedAgentReplyController.ts:350-380`
 
-- [ ] **Step 1: Add fake action elements to the stream-controller test harness**
+- [x] **Step 1: Add fake action elements to the stream-controller test harness**
 
 Add these focused fakes below `FakeContainerElement` in `tests/streamedAgentReplyController.test.ts`:
 
@@ -51,7 +51,7 @@ class FakeActionContainer extends FakeContainerElement {
 
 Extend `FakeContainerElement` with a no-op-compatible attribute setter already present in the class; `FakeActionButton` inherits it for the Cancel button's `type` attribute.
 
-- [ ] **Step 2: Write the failing cancelled-card action test**
+- [x] **Step 2: Write the failing cancelled-card action test**
 
 Add a test beside the existing borrowed-footer test. It uses the controller's real action/footer synchronization methods and the same snapshot shape used in production:
 
@@ -103,7 +103,7 @@ test("streamed agent reply controller restores borrowed actions after cancellati
 });
 ```
 
-- [ ] **Step 3: Strengthen the running-state characterization**
+- [x] **Step 3: Strengthen the running-state characterization**
 
 Update the existing `hides borrowed footer actions while streaming` test to pass a running stream into `syncBorrowedFooterMeta`, and add this header-action assertion:
 
@@ -118,7 +118,7 @@ assert.equal(actionsEl.childNodes.length, 1);
 assert.equal((actionsEl.childNodes[0] as FakeActionButton).textContent, "Cancel");
 ```
 
-- [ ] **Step 4: Run the focused test and verify RED**
+- [x] **Step 4: Run the focused test and verify RED**
 
 Run:
 
@@ -129,7 +129,7 @@ node --test .test-dist/tests/streamedAgentReplyController.test.js
 
 Expected: the new cancelled-card test fails because `syncBorrowedFooterMeta` removes the footer action and `syncActions` removes the edit/delete nodes. The running characterization remains green.
 
-- [ ] **Step 5: Implement busy-versus-terminal action synchronization**
+- [x] **Step 5: Implement busy-versus-terminal action synchronization**
 
 Add a narrow predicate near the controller options:
 
@@ -193,7 +193,7 @@ private syncBorrowedFooterMeta(stream: AgentRunStreamState): void {
 
 Do not recreate persisted controls or handlers.
 
-- [ ] **Step 6: Run focused tests and verify GREEN**
+- [x] **Step 6: Run focused tests and verify GREEN**
 
 Run:
 
@@ -204,7 +204,7 @@ node --test .test-dist/tests/streamedAgentReplyController.test.js .test-dist/tes
 
 Expected: all selected tests pass, including immediate restoration for cancelled cards and Cancel-only behavior for running cards.
 
-- [ ] **Step 7: Commit the renderer fix**
+- [x] **Step 7: Commit the renderer fix**
 
 ```bash
 git add src/ui/views/streamedAgentReplyController.ts tests/streamedAgentReplyController.test.ts
@@ -217,7 +217,7 @@ git commit -m "fix(agents): restore cancelled card actions"
 - Modify: `tests/commentAgentController.test.ts`
 - Modify: `src/agents/commentAgentController.ts:1628-1665`
 
-- [ ] **Step 1: Write the failing retention-expiry test**
+- [x] **Step 1: Write the failing retention-expiry test**
 
 Add this test near the existing cancellation stream tests. It controls the browser timer without waiting 30 seconds and restores the global descriptor afterward:
 
@@ -273,7 +273,7 @@ test("comment agent controller emits a clear update when terminal retention expi
 });
 ```
 
-- [ ] **Step 2: Run the focused lifecycle test and verify RED**
+- [x] **Step 2: Run the focused lifecycle test and verify RED**
 
 Run:
 
@@ -284,7 +284,7 @@ node --test --test-name-pattern "terminal retention expires" .test-dist/tests/co
 
 Expected: FAIL because the stream disappears but `updates` remains empty.
 
-- [ ] **Step 3: Make terminal pruning observable**
+- [x] **Step 3: Make terminal pruning observable**
 
 Rename `scheduleSilentRunStreamPrune` to `scheduleRunStreamPrune` at its definition and call site. Implement the timer callback as:
 
@@ -303,7 +303,7 @@ const timer = timerWindow.setTimeout(() => {
 
 This uses the current retained stream as the source of the thread id and emits nothing if the run was already cleared.
 
-- [ ] **Step 4: Run cancellation and stream lifecycle tests and verify GREEN**
+- [x] **Step 4: Run cancellation and stream lifecycle tests and verify GREEN**
 
 Run:
 
@@ -314,7 +314,7 @@ node --test .test-dist/tests/commentAgentController.test.js .test-dist/tests/str
 
 Expected: all selected tests pass, including cancellation-before-text, cancellation-after-partial-text, and retention expiry.
 
-- [ ] **Step 5: Commit the lifecycle fix**
+- [x] **Step 5: Commit the lifecycle fix**
 
 ```bash
 git add src/agents/commentAgentController.ts tests/commentAgentController.test.ts
@@ -329,7 +329,7 @@ git commit -m "fix(agents): clear retained stream views"
 - Verify: `manifest.json`
 - Verify: `styles.css`
 
-- [ ] **Step 1: Run the complete build**
+- [x] **Step 1: Run the complete build**
 
 Run:
 
@@ -339,7 +339,7 @@ npm run build
 
 Expected: TypeScript and `.mjs` tests pass with zero failures, followed by lint, typecheck, Obsidian compliance, production bundling, and `Release artifact inspection passed for main.js, manifest.json, styles.css`.
 
-- [ ] **Step 2: Inspect the exact shipped assets independently**
+- [x] **Step 2: Inspect the exact shipped assets independently**
 
 Run:
 
@@ -365,11 +365,11 @@ rg -n "AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{35}|gh[pousr]_[0-9A-Za-z]{30,}|sk-[0-9
 
 Expected: exit 1 with no matches.
 
-- [ ] **Step 3: Mark the tracked spec complete**
+- [x] **Step 3: Mark the tracked spec complete**
 
 In `docs/superpowers/specs/2026-08-28-cancelled-agent-card-actions-design.md`, change every pending implementation and verification checkbox to `[x]` only after Steps 1-2 pass.
 
-- [ ] **Step 4: Review the final diff and working tree**
+- [x] **Step 4: Review the final diff and working tree**
 
 Run:
 
@@ -381,7 +381,7 @@ git diff --stat 07bb452..HEAD
 
 Expected: no whitespace errors; only the two controllers, their focused tests, and tracking documents are changed by this bug fix.
 
-- [ ] **Step 5: Commit verification tracking**
+- [x] **Step 5: Commit verification tracking**
 
 ```bash
 git add docs/superpowers/specs/2026-08-28-cancelled-agent-card-actions-design.md
