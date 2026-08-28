@@ -44,6 +44,24 @@ class FakeContainerElement {
     }
 }
 
+class FakeActionButton extends FakeContainerElement {
+    public textContent = "";
+    public onclick: ((event: {
+        preventDefault(): void;
+        stopPropagation(): void;
+    }) => void) | null = null;
+}
+
+class FakeActionContainer extends FakeContainerElement {
+    public createEl(_tagName: "button", options: { cls: string; text: string }): FakeActionButton {
+        const button = new FakeActionButton();
+        button.className = options.cls;
+        button.textContent = options.text;
+        this.childNodes.push(button);
+        return button;
+    }
+}
+
 class FakeStreamElement extends FakeContainerElement {
     public textContent = "";
     public hidden = false;
@@ -125,11 +143,15 @@ test("streamed agent reply controller restores borrowed nodes without cloning aw
 });
 
 test("streamed agent reply controller hides borrowed footer actions while streaming", () => {
-    const controller = new StreamedAgentReplyController("thread-1") as any;
+    const controller = new StreamedAgentReplyController("thread-1", {
+        onCancelRun: () => {},
+    }) as any;
     const labelEl = new FakeLabelElement();
     const statusEl = new FakeContainerElement();
     const footerMetaEl = new FakeContainerElement();
+    const actionsEl = new FakeActionContainer();
     const addToFileNode = createFakeNode("add-to-file");
+    actionsEl.childNodes = [createFakeNode("delete")];
     footerMetaEl.childNodes = [labelEl, statusEl, addToFileNode];
 
     controller.ownsCard = false;
@@ -137,9 +159,58 @@ test("streamed agent reply controller hides borrowed footer actions while stream
     controller.statusEl = statusEl;
     controller.footerMetaEl = footerMetaEl;
 
-    controller.syncBorrowedFooterMeta();
+    controller.syncBorrowedFooterMeta({ runId: "run-1", status: "running" });
+    controller.syncActions(actionsEl, { runId: "run-1", status: "running" });
 
     assert.deepEqual(footerMetaEl.childNodes, [labelEl, statusEl]);
+    assert.equal(actionsEl.childNodes.length, 1);
+    assert.equal((actionsEl.childNodes[0] as FakeActionButton).textContent, "Cancel");
+});
+
+test("streamed agent reply controller restores borrowed actions after cancellation", () => {
+    const controller = new StreamedAgentReplyController("thread-1", {
+        onCancelRun: () => {},
+    }) as any;
+    const labelEl = new FakeLabelElement();
+    const statusEl = new FakeContainerElement();
+    const footerMetaEl = new FakeContainerElement();
+    const actionsEl = new FakeActionContainer();
+    const editNode = createFakeNode("edit");
+    const deleteNode = createFakeNode("delete");
+    const footerActionNode = createFakeNode("footer-action");
+    actionsEl.childNodes = [editNode, deleteNode];
+    footerMetaEl.childNodes = [labelEl, statusEl, footerActionNode];
+
+    controller.ownsCard = false;
+    controller.labelEl = labelEl;
+    controller.statusEl = statusEl;
+    controller.footerMetaEl = footerMetaEl;
+    controller.borrowedSnapshot = {
+        metaText: "saved meta",
+        labelClassName: "saved-label",
+        labelText: "Gemini",
+        labelHidden: false,
+        labelDisplay: "",
+        statusClassName: "saved-status",
+        statusNodes: [],
+        statusAriaLabel: null,
+        statusTitle: null,
+        footerMetaClassName: "aside-thread-footer-meta",
+        footerMetaNodes: [labelEl, statusEl, footerActionNode],
+        contentNodes: [],
+        actionsClassName: "aside-comment-actions",
+        actionsNodes: [editNode, deleteNode],
+    };
+
+    const stream = {
+        runId: "run-1",
+        status: "cancelled",
+    };
+    controller.syncBorrowedFooterMeta(stream);
+    controller.syncActions(actionsEl, stream);
+
+    assert.deepEqual(actionsEl.childNodes, [editNode, deleteNode]);
+    assert.deepEqual(footerMetaEl.childNodes, [labelEl, statusEl, footerActionNode]);
 });
 
 test("streamed agent reply controller formats process log separately from reply text", () => {

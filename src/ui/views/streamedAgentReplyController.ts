@@ -21,6 +21,10 @@ type StreamedAgentReplyControllerOptions = {
     onCancelRun?: (runId: string) => void;
 };
 
+function isAgentStreamBusy(stream: Pick<AgentRunStreamState, "status">): boolean {
+    return stream.status === "queued" || stream.status === "running";
+}
+
 export function formatAgentProcessLogText(
     stream: Pick<AgentRunStreamState, "processLogLines">,
 ): string {
@@ -109,7 +113,7 @@ export class StreamedAgentReplyController {
         labelEl.hidden = hideAgentLabel;
         labelEl.style.display = hideAgentLabel ? "none" : "";
 
-        this.syncBorrowedFooterMeta();
+        this.syncBorrowedFooterMeta(stream);
         this.syncStatus(statusEl, label, stream);
         this.syncActions(actionsEl, stream);
 
@@ -199,10 +203,14 @@ export class StreamedAgentReplyController {
 
     private syncActions(actionsEl: HTMLDivElement, stream: AgentRunStreamState): void {
         actionsEl.replaceChildren();
-        if (
-            !this.options.onCancelRun
-            || (stream.status !== "queued" && stream.status !== "running")
-        ) {
+        if (!isAgentStreamBusy(stream)) {
+            if (!this.ownsCard && this.borrowedSnapshot) {
+                actionsEl.replaceChildren(...this.borrowedSnapshot.actionsNodes);
+            }
+            return;
+        }
+
+        if (!this.options.onCancelRun) {
             return;
         }
 
@@ -371,8 +379,13 @@ export class StreamedAgentReplyController {
         };
     }
 
-    private syncBorrowedFooterMeta(): void {
+    private syncBorrowedFooterMeta(stream: AgentRunStreamState): void {
         if (this.ownsCard || !this.footerMetaEl || !this.labelEl || !this.statusEl) {
+            return;
+        }
+
+        if (!isAgentStreamBusy(stream) && this.borrowedSnapshot) {
+            this.footerMetaEl.replaceChildren(...this.borrowedSnapshot.footerMetaNodes);
             return;
         }
 
