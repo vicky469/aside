@@ -1,7 +1,7 @@
 # Conditional Update-Script Renames Design
 
 **Date:** 2026-08-28
-**Status:** Approved; implementation pending
+**Status:** Implemented; verified
 
 ## Implementation Tracking
 
@@ -17,19 +17,19 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Replace the unconditional no-rename prompt with a conditional contract: ordinary update requests stay in place, while requests that explicitly ask to rename the script or slash command may perform a true rename.
-- [ ] Require explicit renames to move the existing direct-child script rather than copy it, preserve its supported extension and runtime contracts, reject collisions or invalid names, and leave no old-name alias.
-- [ ] Require a paired test file, when present, to move with the script and update its import/path references without modifying unrelated vault files.
-- [ ] Require the agent to verify the renamed file exists, the old file is absent, the paired tests pass, and the reported slash name matches the new filename before returning a success reply.
-- [ ] Preserve the existing target-disappeared and cannot-edit failure behavior, including a plain failure reply instead of a substitute file.
+- [x] Replace the unconditional no-rename prompt with a conditional contract: ordinary update requests stay in place, while requests that explicitly ask to rename the script or slash command may perform a true rename.
+- [x] Require explicit renames to move the existing direct-child script rather than copy it, preserve its supported extension and runtime contracts, reject collisions or invalid names, and leave no old-name alias.
+- [x] Require a paired test file, when present, to move with the script and update its import/path references without modifying unrelated vault files.
+- [x] Require the agent to verify the renamed file exists, the old file is absent, the paired tests pass, and the reported slash name matches the new filename before returning a success reply.
+- [x] Preserve the existing target-disappeared and cannot-edit failure behavior, including a plain failure reply instead of a substitute file.
 
 ### Verification
 
-- [ ] A red-green prompt-policy regression proves ordinary update requests retain the default in-place/no-rename rule.
-- [ ] A red-green prompt-policy regression proves explicit rename requests are allowed to rename the target and paired test under the guarded rename contract.
-- [ ] Adapter regression coverage proves every provider continues to consume the one shared update-script policy rather than provider-specific copies.
-- [ ] The full automated test suite, lint, typecheck, Obsidian compliance check, production bundle, and release-artifact guard pass.
-- [ ] A manual installed-plugin smoke test renames a disposable vault script, confirms only the new slash command appears, and runs it successfully.
+- [x] A red-green prompt-policy regression proves ordinary update requests retain the default in-place/no-rename rule.
+- [x] A red-green prompt-policy regression proves explicit rename requests are allowed to rename the target and paired test under the guarded rename contract.
+- [x] Adapter regression coverage proves every provider continues to consume the one shared update-script policy rather than provider-specific copies.
+- [x] The full automated test suite, lint, typecheck, Obsidian compliance check, production bundle, and release-artifact guard pass.
+- [x] A manual installed-plugin smoke test renames a disposable vault script, confirms only the new slash command appears, and runs it successfully.
 
 ## Context
 

@@ -26,7 +26,7 @@ No registry, directive-parser, controller, or provider-specific adapter code sho
 - Modify: `tests/agentRuntimeAdapter.test.ts:1505-1516`
 - Modify: `shared/sideNotePromptPolicy.js:86-94`
 
-- [ ] **Step 1: Replace the single prompt-policy expectation with separate ordinary-update and explicit-rename regressions**
+- [x] **Step 1: Replace the single prompt-policy expectation with separate ordinary-update and explicit-rename regressions**
 
 Replace the existing `buildSideNotePrompt adds one exact in-place update-script contract` test in `tests/sideNotePromptPolicy.test.mjs` with:
 
@@ -67,7 +67,7 @@ test("buildSideNotePrompt permits an explicit true rename only with guarded veri
 });
 ```
 
-- [ ] **Step 2: Strengthen the adapter regression before changing production code**
+- [x] **Step 2: Strengthen the adapter regression before changing production code**
 
 Replace the existing `buildSideNotePrompt forwards the exact update-script target to the shared policy` test in `tests/agentRuntimeAdapter.test.ts` with:
 
@@ -89,7 +89,7 @@ test("buildSideNotePrompt forwards update-script target and rename policy to the
 });
 ```
 
-- [ ] **Step 3: Run the direct shared-policy test and witness the expected RED failure**
+- [x] **Step 3: Run the direct shared-policy test and witness the expected RED failure**
 
 Run:
 
@@ -99,7 +99,7 @@ node --test tests/sideNotePromptPolicy.test.mjs
 
 Expected: FAIL because the current prompt still says `Do not rename it` unconditionally and contains none of the guarded move, paired-test, or old/new verification language.
 
-- [ ] **Step 4: Compile and run the adapter test and witness the expected RED failure**
+- [x] **Step 4: Compile and run the adapter test and witness the expected RED failure**
 
 Run:
 
@@ -110,7 +110,7 @@ node --test .test-dist/tests/agentRuntimeAdapter.test.js
 
 Expected: FAIL in the renamed update-script test because the shared prompt does not yet contain the conditional rename policy. Compilation itself must succeed.
 
-- [ ] **Step 5: Replace the unconditional production prompt with the minimal shared conditional contract**
+- [x] **Step 5: Replace the unconditional production prompt with the minimal shared conditional contract**
 
 Replace the `update-script` block in `shared/sideNotePromptPolicy.js` with:
 
@@ -133,7 +133,7 @@ Replace the `update-script` block in `shared/sideNotePromptPolicy.js` with:
 
 Do not add an intent regex, a `renameAllowed` field, provider-specific prompt text, or registry mutation code.
 
-- [ ] **Step 6: Run both focused suites and witness GREEN**
+- [x] **Step 6: Run both focused suites and witness GREEN**
 
 Run:
 
@@ -145,7 +145,7 @@ node --test .test-dist/tests/agentRuntimeAdapter.test.js
 
 Expected: all tests in both files pass with zero failures.
 
-- [ ] **Step 7: Inspect the focused diff and commit the behavior**
+- [x] **Step 7: Inspect the focused diff and commit the behavior**
 
 Run:
 
@@ -166,7 +166,7 @@ Expected: one focused commit containing only the shared contract and its regress
 - Verify: `tests/agentRuntimeAdapter.test.ts`
 - Verify exact shipped assets: `main.js`, `manifest.json`, `styles.css`
 
-- [ ] **Step 1: Run the full project build**
+- [x] **Step 1: Run the full project build**
 
 Run:
 
@@ -176,7 +176,7 @@ npm run build
 
 Expected: 1,433 TypeScript-compiled tests and 105 `.mjs` tests pass, lint passes with zero warnings, typecheck passes, Obsidian compliance passes, production bundling succeeds, and the release-artifact guard reports `Release artifact inspection passed for main.js, manifest.json, styles.css`.
 
-- [ ] **Step 2: Independently inspect the exact shipped artifacts for source exposure and secrets**
+- [x] **Step 2: Independently inspect the exact shipped artifacts for source exposure and secrets**
 
 Run:
 
@@ -188,7 +188,7 @@ rg -n -e "AKIA[0-9A-Z]{16}" -e "AIza[0-9A-Za-z_-]{35}" -e "gh[pousr]_[0-9A-Za-z]
 
 Expected: the size command lists exactly the three shipped assets; both `rg` commands return no matches. Do not publish or upload anything.
 
-- [ ] **Step 3: Confirm the worktree contains only intended committed changes**
+- [x] **Step 3: Confirm the worktree contains only intended committed changes**
 
 Run:
 
@@ -207,7 +207,7 @@ Expected: no unstaged implementation changes; the branch contains the design com
 - Temporarily create in the chosen test vault: `🛠️ scripts/tests/aside-rename-smoke.test.mjs`
 - Install exact built assets: `main.js`, `manifest.json`, `styles.css`
 
-- [ ] **Step 1: Install the verified build into the `lean-startup` vault and reload Aside**
+- [x] **Step 1: Install the verified build into the `lean-startup` vault and reload Aside**
 
 Run from the feature worktree:
 
@@ -218,7 +218,7 @@ obsidian plugin:reload id=aside vault=lean-startup
 
 Expected: only `main.js`, `manifest.json`, and `styles.css` are copied to `.obsidian/plugins/aside`, then Obsidian reports that plugin `aside` reloaded.
 
-- [ ] **Step 2: Create a disposable direct-child script and paired test**
+- [x] **Step 2: Create a disposable direct-child script and paired test**
 
 Create `🛠️ scripts/aside-rename-smoke.mjs` with:
 
@@ -254,7 +254,7 @@ node --test "/Users/example/Obsidian/lean-startup/🛠️ scripts/tests/aside-re
 
 Expected: one test passes and `/aside-rename-smoke` appears in Aside's slash suggestions.
 
-- [ ] **Step 3: Exercise an ordinary update before the rename**
+- [x] **Step 3: Exercise an ordinary update before the rename**
 
 In a disposable page-note thread, submit:
 
@@ -264,7 +264,7 @@ In a disposable page-note thread, submit:
 
 Expected: the agent edits both message expectations without moving either file; `/aside-rename-smoke` remains available and `/aside-renamed-smoke` is absent.
 
-- [ ] **Step 4: Exercise the explicit true rename**
+- [x] **Step 4: Exercise the explicit true rename**
 
 In the same thread, submit:
 
@@ -274,7 +274,7 @@ In the same thread, submit:
 
 Expected: `🛠️ scripts/aside-renamed-smoke.mjs` and `🛠️ scripts/tests/aside-renamed-smoke.test.mjs` exist; both old paths are absent; the test imports the renamed script; `/aside-rename-smoke` disappears; `/aside-renamed-smoke` appears without restarting Obsidian.
 
-- [ ] **Step 5: Run the renamed test and slash command**
+- [x] **Step 5: Run the renamed test and slash command**
 
 Run:
 
@@ -286,7 +286,7 @@ Then submit `/aside-renamed-smoke` in the disposable Aside thread.
 
 Expected: the paired test passes and the script result contains `conditional rename ordinary update passed`.
 
-- [ ] **Step 6: Remove the two disposable smoke files after recording the result**
+- [x] **Step 6: Remove the two disposable smoke files after recording the result**
 
 Move the two disposable files to Trash or delete only these exact paths after confirming they are the smoke fixtures:
 
@@ -303,11 +303,11 @@ Expected: no disposable old or new smoke files remain. Do not remove any other v
 - Modify: `docs/superpowers/specs/2026-08-28-conditional-update-script-renames-design.md:3-32`
 - Modify: `docs/superpowers/plans/2026-08-28-conditional-update-script-renames.md`
 
-- [ ] **Step 1: Mark only evidenced implementation and verification items complete**
+- [x] **Step 1: Mark only evidenced implementation and verification items complete**
 
 Change the spec status to `Implemented; verified` only if Tasks 1-3 all passed. Mark every `To Implement` and `Verification` checkbox `[x]` only when its corresponding evidence exists. If installed acceptance was not run, leave that checkbox unchecked and use `Implemented; installed acceptance pending`.
 
-- [ ] **Step 2: Mark completed plan steps and run documentation checks**
+- [x] **Step 2: Mark completed plan steps and run documentation checks**
 
 Change completed plan checkboxes to `[x]`, then run:
 
@@ -319,7 +319,7 @@ git status --short --branch
 
 Expected: no placeholder matches, no whitespace errors, and only the two tracked documents are modified after the implementation commit.
 
-- [ ] **Step 3: Commit the verified tracking state**
+- [x] **Step 3: Commit the verified tracking state**
 
 Run:
 
