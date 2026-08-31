@@ -6,7 +6,26 @@ import {
     buildThoughtTrailNoteLinkGraph,
     buildThoughtTrailNoteLinkLines,
 } from "../../core/derived/thoughtTrailNoteLinkGraph";
+import type { SidebarThoughtTrailSourceAvailability } from "./sidebarThoughtTrailSource";
 import type { SidebarPrimaryMode } from "./viewState";
+
+export type ThoughtTrailUnavailableReason = "no-root-scope" | "no-renderable-lines";
+
+export function getThoughtTrailUnavailableReason(options: {
+    hasRootScope: boolean;
+    lineCount: number;
+    sourceAvailability: SidebarThoughtTrailSourceAvailability;
+}): ThoughtTrailUnavailableReason | null {
+    if (!options.hasRootScope) {
+        return "no-root-scope";
+    }
+
+    return options.lineCount > 0
+        || options.sourceAvailability.tags
+        || options.sourceAvailability.attachments
+        ? null
+        : "no-renderable-lines";
+}
 
 export function hasAvailableThoughtTrail(options: {
     allCommentsNotePath: string;

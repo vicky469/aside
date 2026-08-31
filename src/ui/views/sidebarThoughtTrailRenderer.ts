@@ -24,6 +24,7 @@ import {
     resolveThoughtTrailNodeId,
 } from "./thoughtTrailNodeLinks";
 import { parseTrustedMermaidSvg } from "./thoughtTrailSvg";
+import type { ThoughtTrailAttachmentItem } from "./sidebarThoughtTrailAttachments";
 import type { SidebarThoughtTrailSource } from "./sidebarThoughtTrailSource";
 import { nodeInstanceOf } from "../domGuards";
 import { buildSidebarThoughtTrailNoteLinkGraph } from "./sidebarThoughtTrailGraph";
@@ -41,6 +42,7 @@ export interface SidebarThoughtTrailOptions {
     hasRootScope: boolean;
     rootFilePath: string | null;
     candidateFilePaths: readonly string[];
+    attachments: readonly ThoughtTrailAttachmentItem[];
     source: SidebarThoughtTrailSource;
     onSourceChange(source: SidebarThoughtTrailSource): void;
     getTagsForFilePath: ThoughtTrailFileTagLookup;

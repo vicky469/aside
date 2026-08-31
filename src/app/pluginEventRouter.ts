@@ -1,7 +1,7 @@
 import type { EventRef, TAbstractFile, TFile, WorkspaceLeaf } from "obsidian";
 
 type WorkspaceEventName = "file-open" | "active-leaf-change" | "editor-change";
-type VaultEventName = "rename" | "delete" | "modify";
+type VaultEventName = "create" | "rename" | "delete" | "modify";
 
 interface WorkspaceEventSource {
     layoutReady: boolean;
@@ -13,25 +13,33 @@ interface WorkspaceEventSource {
 }
 
 interface VaultEventSource {
+    on(eventName: "create", handler: (file: unknown) => void | Promise<void>): EventRef;
     on(eventName: "rename", handler: (file: unknown, oldPath: string) => void | Promise<void>): EventRef;
     on(eventName: "delete", handler: (file: unknown) => void | Promise<void>): EventRef;
     on(eventName: "modify", handler: (file: unknown) => void | Promise<void>): EventRef;
     on(eventName: VaultEventName, handler: (...args: unknown[]) => void): EventRef;
 }
 
+interface MetadataCacheEventSource {
+    on(eventName: "resolved", handler: () => void | Promise<void>): EventRef;
+}
+
 export interface PluginEventRouterHost {
     app: {
         workspace: WorkspaceEventSource;
         vault: VaultEventSource;
+        metadataCache: MetadataCacheEventSource;
     };
     registerEvent(eventRef: EventRef): void;
     isTFile(value: unknown): value is TFile;
     handleLayoutReady(): void | Promise<void>;
     handleFileOpen(file: TFile | null): void;
     handleActiveLeafChange(leaf: WorkspaceLeaf | null): void;
+    handleFileCreate(file: TFile | null): Promise<void>;
     handleFileRename(file: TFile | null, oldPath: string): Promise<void>;
     handleFileDelete(file: TAbstractFile | null): Promise<void>;
     handleFileModify(file: TFile | null): Promise<void>;
+    handleMetadataResolved(): Promise<void>;
     handleEditorChange(filePath: string | null | undefined): void;
 }
 
@@ -40,12 +48,29 @@ function isTAbstractFile(value: unknown): value is TAbstractFile {
 }
 
 export class PluginEventRouter {
+    private vaultCreateEventRegistered = false;
+
     constructor(private readonly host: PluginEventRouterHost) {}
 
     public async register(): Promise<void> {
+        this.registerVaultCreateEvent();
         await this.registerLayoutReady();
         this.registerWorkspaceEvents();
         this.registerVaultEvents();
+        this.registerMetadataCacheEvents();
+    }
+
+    public registerVaultCreateEvent(): void {
+        if (this.vaultCreateEventRegistered) {
+            return;
+        }
+
+        this.vaultCreateEventRegistered = true;
+        this.host.registerEvent(
+            this.host.app.vault.on("create", async (file) => {
+                await this.host.handleFileCreate(this.host.isTFile(file) ? file : null);
+            }),
+        );
     }
 
     private async registerLayoutReady(): Promise<void> {
@@ -98,6 +123,14 @@ export class PluginEventRouter {
         this.host.registerEvent(
             this.host.app.vault.on("modify", async (file) => {
                 await this.host.handleFileModify(this.host.isTFile(file) ? file : null);
+            }),
+        );
+    }
+
+    private registerMetadataCacheEvents(): void {
+        this.host.registerEvent(
+            this.host.app.metadataCache.on("resolved", async () => {
+                await this.host.handleMetadataResolved();
             }),
         );
     }

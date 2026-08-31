@@ -697,7 +697,7 @@ export default class Aside extends Plugin {
         isPageNoteCapableFile: (file): file is TFile => file instanceof TFile && this.isPageNoteCapableFile(file),
         hashText: (text) => generateHash(text),
         loadCommentsForFile: (file) => this.loadCommentsForFile(file),
-        refreshCommentViews: () => this.workspaceViewController.refreshCommentViews(),
+        refreshCommentViews: (options) => this.workspaceViewController.refreshCommentViews(options),
         refreshEditorDecorations: () => this.refreshEditorDecorations(),
         refreshAggregateNoteNow: () => this.refreshAggregateNoteNow(),
         scheduleAggregateNoteRefresh: () => this.scheduleAggregateNoteRefresh(),
@@ -780,6 +780,13 @@ export default class Aside extends Plugin {
             this.workspaceContextController.handleActiveLeafChange(leaf);
             this.syncPublicFilePublishActions();
         },
+        handleFileCreate: async (file) => {
+            if (file) {
+                this.vaultScriptRegistry.upsert(file.path);
+                this.vaultCapabilityIndex.upsert(file, this.getVaultFileTags(file));
+            }
+            await this.pluginLifecycleController.handleFileCreate(file);
+        },
         handleFileRename: async (file, oldPath) => {
             this.vaultScriptRegistry.seed(this.app.vault.getFiles().map((candidate) => candidate.path));
             if (file) {
@@ -803,6 +810,9 @@ export default class Aside extends Plugin {
         handleFileModify: async (file) => {
             await this.pluginLifecycleController.handleFileModify(file);
             this.syncPublicFilePublishActions();
+        },
+        handleMetadataResolved: async () => {
+            await this.pluginLifecycleController.handleMetadataResolved();
         },
         handleEditorChange: (filePath) => {
             this.pluginLifecycleController.handleEditorChange(filePath);
@@ -854,18 +864,13 @@ export default class Aside extends Plugin {
         this.commentManager = new CommentManager([]);
         await this.loadSettings();
         this.vaultScriptRegistry.seed(this.app.vault.getFiles().map((file) => file.path));
+        this.pluginEventRouter.registerVaultCreateEvent();
         this.scriptRunStore.load();
         await this.syncFeatureFlagStorage();
         this.vaultCapabilityIndex.seed(
             this.app.vault.getMarkdownFiles(),
             (file) => this.getVaultFileTags(file),
         );
-        this.registerEvent(this.app.vault.on("create", (file) => {
-            if (file instanceof TFile) {
-                this.vaultScriptRegistry.upsert(file.path);
-                this.vaultCapabilityIndex.upsert(file, this.getVaultFileTags(file));
-            }
-        }));
         this.registerEvent(this.app.metadataCache.on("changed", (file, _data, cache) => {
             this.vaultCapabilityIndex.upsert(file, getAllTags(cache) ?? []);
         }));

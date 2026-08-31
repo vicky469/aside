@@ -71,13 +71,26 @@ test("AsideView uses the unique file-set planner for tag-source availability", (
     );
     const availabilityCalls = asideViewSource.match(/this\.hasThoughtTrailTagRelatedFiles\(/g) ?? [];
     assert.equal(availabilityCalls.length, 3, "index and both note availability paths should share one helper");
+    assert.equal(asideViewSource.includes(obsoleteGroupedPlannerName), false);
+});
+
+test("AsideView discovers direct attachments and wires them into thought trail rendering", () => {
+    assert.match(asideViewSource, /getDirectThoughtTrailAttachments/);
+    assert.match(asideViewSource, /resolveAvailableThoughtTrailSource/);
+    const attachmentCalls = asideViewSource.match(/getDirectThoughtTrailAttachments\(/g) ?? [];
+    assert.equal(attachmentCalls.length, 2, "index and note availability should each discover direct attachments exactly once");
     assert.match(
         asideViewSource,
-        /private resolveThoughtTrailSource\(hasTagRelatedFiles:\s*boolean\):\s*SidebarThoughtTrailSource/,
+        /thoughtTrailAttachments:\s*noteThoughtTrailAvailability\.thoughtTrailAttachments/,
+        "note rendering should receive the retained availability snapshot",
     );
-    assert.match(asideViewSource, /this\.resolveThoughtTrailSource\(hasIndexThoughtTrailTagSource\)/);
-    assert.match(asideViewSource, /this\.resolveThoughtTrailSource\(hasThoughtTrailTagSource\)/);
-    assert.equal(asideViewSource.includes(obsoleteGroupedPlannerName), false);
+    assert.match(
+        asideViewSource,
+        /const thoughtTrailAttachments = options\.thoughtTrailAttachments/,
+        "note rendering should consume the retained availability snapshot",
+    );
+    assert.match(asideViewSource, /attachments:\s*indexThoughtTrailAttachments/);
+    assert.match(asideViewSource, /attachments:\s*thoughtTrailAttachments/);
 });
 
 test("clickable thought trail nodes receive native full-path tooltips", () => {

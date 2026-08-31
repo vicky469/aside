@@ -2,6 +2,7 @@ import * as assert from "node:assert/strict";
 import test from "node:test";
 import type { CommentThread } from "../src/commentManager";
 import {
+    getThoughtTrailUnavailableReason,
     hasAvailableThoughtTrail,
     mergeCurrentFileThreadsForThoughtTrail,
     resolveModeWithThoughtTrailAvailability,
@@ -98,6 +99,33 @@ test("hasAvailableThoughtTrail is true when source markdown links produce trail 
             vaultName: "dev",
         }),
         true,
+    );
+});
+
+test("getThoughtTrailUnavailableReason includes attachment source availability", () => {
+    assert.equal(
+        getThoughtTrailUnavailableReason({
+            hasRootScope: true,
+            lineCount: 0,
+            sourceAvailability: { tags: false, attachments: true },
+        }),
+        null,
+    );
+    assert.equal(
+        getThoughtTrailUnavailableReason({
+            hasRootScope: true,
+            lineCount: 0,
+            sourceAvailability: { tags: false, attachments: false },
+        }),
+        "no-renderable-lines",
+    );
+    assert.equal(
+        getThoughtTrailUnavailableReason({
+            hasRootScope: false,
+            lineCount: 1,
+            sourceAvailability: { tags: true, attachments: true },
+        }),
+        "no-root-scope",
     );
 });
 
