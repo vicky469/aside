@@ -6,7 +6,30 @@ import {
     buildThoughtTrailNoteLinkGraph,
     buildThoughtTrailNoteLinkLines,
 } from "../../core/derived/thoughtTrailNoteLinkGraph";
+import {
+    resolveAvailableThoughtTrailSource,
+    type SidebarThoughtTrailSource,
+    type SidebarThoughtTrailSourceAvailability,
+} from "./sidebarThoughtTrailSource";
 import type { SidebarPrimaryMode } from "./viewState";
+
+export type ThoughtTrailUnavailableReason = "no-root-scope" | "no-renderable-lines";
+
+export function getThoughtTrailUnavailableReason(options: {
+    hasRootScope: boolean;
+    lineCount: number;
+    sourceAvailability: SidebarThoughtTrailSourceAvailability;
+}): ThoughtTrailUnavailableReason | null {
+    if (!options.hasRootScope) {
+        return "no-root-scope";
+    }
+
+    return options.lineCount > 0
+        || options.sourceAvailability.tags
+        || options.sourceAvailability.attachments
+        ? null
+        : "no-renderable-lines";
+}
 
 export function hasAvailableThoughtTrail(options: {
     allCommentsNotePath: string;
@@ -52,4 +75,18 @@ export function resolveModeWithThoughtTrailAvailability(
     return mode === "thought-trail" && !isThoughtTrailEnabled
         ? "list"
         : mode;
+}
+
+export function resolveThoughtTrailPresentationState(options: {
+    mode: SidebarPrimaryMode;
+    source: SidebarThoughtTrailSource;
+    isThoughtTrailEnabled: boolean;
+    sourceAvailability: SidebarThoughtTrailSourceAvailability;
+}): {
+    mode: SidebarPrimaryMode;
+    source: SidebarThoughtTrailSource;
+} {
+    const source = resolveAvailableThoughtTrailSource(options.source, options.sourceAvailability);
+    const mode = resolveModeWithThoughtTrailAvailability(options.mode, options.isThoughtTrailEnabled);
+    return { mode, source };
 }

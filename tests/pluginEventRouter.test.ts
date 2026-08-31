@@ -4,7 +4,8 @@ import type { EventRef, TAbstractFile, TFile, WorkspaceLeaf } from "obsidian";
 import { PluginEventRouter } from "../src/app/pluginEventRouter";
 
 type WorkspaceEventName = "file-open" | "active-leaf-change" | "editor-change";
-type VaultEventName = "rename" | "delete" | "modify";
+type VaultEventName = "create" | "rename" | "delete" | "modify";
+type MetadataCacheEventName = "resolved";
 
 function createFile(path: string): TFile {
     return {
@@ -26,6 +27,8 @@ function createHarness(options: { layoutReady?: boolean } = {}) {
     const registeredEvents: EventRef[] = [];
     const workspaceHandlers = new Map<WorkspaceEventName, (...args: any[]) => void>();
     const vaultHandlers = new Map<VaultEventName, (...args: any[]) => void>();
+    const vaultRegistrationCounts = new Map<VaultEventName, number>();
+    const metadataCacheHandlers = new Map<MetadataCacheEventName, (...args: any[]) => void>();
     let layoutReadyHandler: (() => void | Promise<void>) | null = null;
 
     const router = new PluginEventRouter({
@@ -54,7 +57,14 @@ function createHarness(options: { layoutReady?: boolean } = {}) {
                         | ((file: unknown) => void | Promise<void>),
                 ): EventRef {
                     vaultHandlers.set(eventName, handler);
+                    vaultRegistrationCounts.set(eventName, (vaultRegistrationCounts.get(eventName) ?? 0) + 1);
                     return { name: `vault:${eventName}` } as unknown as EventRef;
+                },
+            },
+            metadataCache: {
+                on(eventName: MetadataCacheEventName, handler: () => void | Promise<void>): EventRef {
+                    metadataCacheHandlers.set(eventName, handler);
+                    return { name: `metadata-cache:${eventName}` } as unknown as EventRef;
                 },
             },
         },
@@ -73,6 +83,9 @@ function createHarness(options: { layoutReady?: boolean } = {}) {
         handleActiveLeafChange: (leaf) => {
             calls.push(`active-leaf-change:${leaf ? "leaf" : "null"}`);
         },
+        handleFileCreate: async (file) => {
+            calls.push(`create:${file?.path ?? "null"}`);
+        },
         handleFileRename: async (file, oldPath) => {
             calls.push(`rename:${oldPath}->${file?.path ?? "null"}`);
         },
@@ -81,6 +94,9 @@ function createHarness(options: { layoutReady?: boolean } = {}) {
         },
         handleFileModify: async (file) => {
             calls.push(`modify:${file?.path ?? "null"}`);
+        },
+        handleMetadataResolved: async () => {
+            calls.push("metadata-resolved");
         },
         handleEditorChange: (filePath) => {
             calls.push(`editor-change:${filePath ?? "null"}`);
@@ -93,9 +109,37 @@ function createHarness(options: { layoutReady?: boolean } = {}) {
         router,
         workspaceHandlers,
         vaultHandlers,
+        vaultRegistrationCounts,
+        metadataCacheHandlers,
         getLayoutReadyHandler: () => layoutReadyHandler,
     };
 }
+
+test("plugin event router registers vault create early once and reuses it during full registration", async () => {
+    const harness = createHarness();
+    const note = createFile("docs/early.md");
+
+    harness.router.registerVaultCreateEvent();
+    harness.router.registerVaultCreateEvent();
+
+    assert.deepEqual(Array.from(harness.vaultHandlers.keys()), ["create"]);
+    assert.equal(harness.vaultRegistrationCounts.get("create"), 1);
+    assert.equal(harness.registeredEvents.length, 1);
+
+    harness.vaultHandlers.get("create")?.(note);
+    harness.vaultHandlers.get("create")?.(createFolder("Assets"));
+    await Promise.resolve();
+    assert.deepEqual(harness.calls, ["create:docs/early.md", "create:null"]);
+
+    await harness.router.register();
+
+    assert.deepEqual(
+        Array.from(harness.vaultHandlers.keys()),
+        ["create", "rename", "delete", "modify"],
+    );
+    assert.equal(harness.vaultRegistrationCounts.get("create"), 1);
+    assert.equal(harness.registeredEvents.length, 8);
+});
 
 test("plugin event router exposes Obsidian event flow in one module", async () => {
     const harness = createHarness();
@@ -109,25 +153,32 @@ test("plugin event router exposes Obsidian event flow in one module", async () =
     );
     assert.deepEqual(
         Array.from(harness.vaultHandlers.keys()),
-        ["rename", "delete", "modify"],
+        ["create", "rename", "delete", "modify"],
     );
-    assert.equal(harness.registeredEvents.length, 6);
+    assert.deepEqual(Array.from(harness.metadataCacheHandlers.keys()), ["resolved"]);
+    assert.equal(harness.registeredEvents.length, 8);
 
     harness.workspaceHandlers.get("file-open")?.(note);
     harness.workspaceHandlers.get("active-leaf-change")?.({} as WorkspaceLeaf);
     harness.workspaceHandlers.get("editor-change")?.({}, { file: note });
+    harness.vaultHandlers.get("create")?.(note);
+    harness.vaultHandlers.get("create")?.(createFolder("Assets"));
     harness.vaultHandlers.get("rename")?.(note, "docs/old.md");
     harness.vaultHandlers.get("delete")?.(note);
     harness.vaultHandlers.get("modify")?.(note);
+    harness.metadataCacheHandlers.get("resolved")?.();
     await Promise.resolve();
 
     assert.deepEqual(harness.calls, [
         "file-open:docs/a.md",
         "active-leaf-change:leaf",
         "editor-change:docs/a.md",
+        "create:docs/a.md",
+        "create:null",
         "rename:docs/old.md->docs/a.md",
         "delete:docs/a.md",
         "modify:docs/a.md",
+        "metadata-resolved",
     ]);
 });
 

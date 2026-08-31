@@ -161,18 +161,25 @@ import {
     type SidebarThoughtTrailOptions,
 } from "./sidebarThoughtTrailRenderer";
 import {
+    getDirectThoughtTrailAttachments,
+    type ThoughtTrailAttachmentItem,
+} from "./sidebarThoughtTrailAttachments";
+import {
     buildSidebarThoughtTrailNoteLinkGraph,
     getCachedSourceMarkdownEmbeds,
     getCachedSourceMarkdownLinks,
     resolveMarkdownNoteLinkPath,
 } from "./sidebarThoughtTrailGraph";
 import {
-    getDefaultThoughtTrailSource,
+    getDefaultSidebarThoughtTrailSource,
     type SidebarThoughtTrailSource,
+    type SidebarThoughtTrailSourceAvailability,
 } from "./sidebarThoughtTrailSource";
 import {
+    getThoughtTrailUnavailableReason,
     mergeCurrentFileThreadsForThoughtTrail,
-    resolveModeWithThoughtTrailAvailability,
+    resolveThoughtTrailPresentationState,
+    type ThoughtTrailUnavailableReason,
 } from "./sidebarThoughtTrailState";
 import {
     isSidebarListLikeMode,
@@ -254,18 +261,6 @@ function indexDefaultSidebarCacheKeysMatch(
         && left.mtime === right.mtime
         && left.size === right.size
         && left.aggregateVersion === right.aggregateVersion;
-}
-
-function getThoughtTrailUnavailableReason(
-    hasRootScope: boolean,
-    lineCount: number,
-    hasTagSource: boolean = false,
-): "no-root-scope" | "no-renderable-lines" | null {
-    if (!hasRootScope) {
-        return "no-root-scope";
-    }
-
-    return lineCount > 0 || hasTagSource ? null : "no-renderable-lines";
 }
 
 function summarizeThoughtTrailPaths(paths: readonly string[]): {
@@ -441,7 +436,7 @@ export default class AsideView extends ItemView {
     private indexFileFilterAutoSelectSuppressed = true;
     private indexFileFilterGraph: IndexFileFilterGraph | null = null;
     private indexDefaultSidebarCache: IndexDefaultSidebarCache | null = null;
-    private thoughtTrailSource: SidebarThoughtTrailSource = getDefaultThoughtTrailSource();
+    private thoughtTrailSource: SidebarThoughtTrailSource = getDefaultSidebarThoughtTrailSource();
     private reorderDragState: SidebarReorderDragState | null = null;
     private reorderDragSourceEl: HTMLElement | null = null;
     private reorderDropIndicatorEl: HTMLElement | null = null;
@@ -568,7 +563,7 @@ export default class AsideView extends ItemView {
             this.noteSidebarSearchQuery = "";
             this.noteSidebarSearchInputValue = "";
             this.clearIndexSidebarSearchState();
-            this.thoughtTrailSource = getDefaultThoughtTrailSource();
+            this.thoughtTrailSource = getDefaultSidebarThoughtTrailSource();
             this.noteSidebarShell = null;
             this.indexSidebarShell = null;
         }
@@ -1808,21 +1803,37 @@ export default class AsideView extends ItemView {
                     indexThoughtTrailTagLookup,
                 )
             );
+            const indexThoughtTrailAttachments: readonly ThoughtTrailAttachmentItem[] = selectedIndexFileFilterRootPath
+                ? getDirectThoughtTrailAttachments(this.app, selectedIndexFileFilterRootPath)
+                : [];
+            const indexThoughtTrailSourceAvailability: SidebarThoughtTrailSourceAvailability = {
+                tags: hasIndexThoughtTrailTagSource,
+                attachments: indexThoughtTrailAttachments.length > 0,
+            };
             const indexThoughtTrailUnavailableReason = isAllCommentsView
-                ? getThoughtTrailUnavailableReason(
-                    hasIndexThoughtTrailRootScope,
-                    indexThoughtTrailLineCount,
-                    hasIndexThoughtTrailTagSource,
-                )
+                ? getThoughtTrailUnavailableReason({
+                    hasRootScope: hasIndexThoughtTrailRootScope,
+                    lineCount: indexThoughtTrailLineCount,
+                    sourceAvailability: indexThoughtTrailSourceAvailability,
+                })
                 : null;
             const isIndexThoughtTrailEnabled = isAllCommentsView && indexThoughtTrailUnavailableReason === null;
             let effectiveIndexSidebarMode = this.indexSidebarMode;
+            const indexSidebarModeBeforeAvailability = effectiveIndexSidebarMode;
             if (isAllCommentsView) {
+                const indexThoughtTrailPresentationState = resolveThoughtTrailPresentationState({
+                    mode: effectiveIndexSidebarMode,
+                    source: this.thoughtTrailSource,
+                    isThoughtTrailEnabled: isIndexThoughtTrailEnabled,
+                    sourceAvailability: indexThoughtTrailSourceAvailability,
+                });
+                this.thoughtTrailSource = indexThoughtTrailPresentationState.source;
+                effectiveIndexSidebarMode = indexThoughtTrailPresentationState.mode;
                 const filteredFileSummary = summarizeThoughtTrailPaths(filteredIndexFilePaths);
                 void this.plugin.logEvent("info", "thoughttrail", "thoughttrail.index.availability", {
                     filePath: file.path,
                     selectedRootFilePath: selectedIndexFileFilterRootPath,
-                    modeBefore: effectiveIndexSidebarMode,
+                    modeBefore: indexSidebarModeBeforeAvailability,
                     isEnabled: isIndexThoughtTrailEnabled,
                     unavailableReason: indexThoughtTrailUnavailableReason,
                     persistedThreadCount: persistedThreads.length,
@@ -1842,14 +1853,10 @@ export default class AsideView extends ItemView {
                     effectiveIndexSidebarMode,
                     this.getSidebarModeVisibility(),
                 );
-                effectiveIndexSidebarMode = resolveModeWithThoughtTrailAvailability(
-                    effectiveIndexSidebarMode,
-                    isIndexThoughtTrailEnabled,
-                );
                 if (effectiveIndexSidebarMode === "tags") {
                     effectiveIndexSidebarMode = "list";
                 }
-                if (this.indexSidebarMode === "thought-trail" && effectiveIndexSidebarMode !== "thought-trail") {
+                if (indexSidebarModeBeforeAvailability === "thought-trail" && effectiveIndexSidebarMode !== "thought-trail") {
                     void this.plugin.logEvent("warn", "thoughttrail", "thoughttrail.index.fallback", {
                         filePath: file.path,
                         selectedRootFilePath: selectedIndexFileFilterRootPath,
@@ -2033,7 +2040,8 @@ export default class AsideView extends ItemView {
                     hasRootScope: hasIndexThoughtTrailRootScope,
                     rootFilePath: selectedIndexFileFilterRootPath,
                     candidateFilePaths: this.getThoughtTrailVaultCandidateFilePaths(selectedIndexFileFilterRootPath),
-                    source: this.resolveThoughtTrailSource(hasIndexThoughtTrailTagSource),
+                    attachments: indexThoughtTrailAttachments,
+                    source: this.thoughtTrailSource,
                     onSourceChange: (source) => this.setThoughtTrailSource(source),
                     getTagsForFilePath: indexThoughtTrailTagLookup ?? (() => []),
                 });
@@ -2159,6 +2167,14 @@ export default class AsideView extends ItemView {
         );
         const isThoughtTrailEnabled = noteThoughtTrailAvailability.isEnabled;
         const noteSidebarModeBeforeAvailability = this.noteSidebarMode;
+        const noteThoughtTrailPresentationState = resolveThoughtTrailPresentationState({
+            mode: this.noteSidebarMode,
+            source: this.thoughtTrailSource,
+            isThoughtTrailEnabled,
+            sourceAvailability: noteThoughtTrailAvailability.sourceAvailability,
+        });
+        this.thoughtTrailSource = noteThoughtTrailPresentationState.source;
+        this.noteSidebarMode = noteThoughtTrailPresentationState.mode;
         const scopedFileSummary = summarizeThoughtTrailPaths(noteThoughtTrailAvailability.scopedFilePaths);
         void this.plugin.logEvent("info", "thoughttrail", "thoughttrail.note.availability", {
             filePath: file.path,
@@ -2180,10 +2196,6 @@ export default class AsideView extends ItemView {
             this.noteSidebarMode,
             this.getSidebarModeVisibility(),
         );
-        this.noteSidebarMode = resolveModeWithThoughtTrailAvailability(
-            this.noteSidebarMode,
-            isThoughtTrailEnabled,
-        );
         if (noteSidebarModeBeforeAvailability === "thought-trail" && this.noteSidebarMode !== "thought-trail") {
             void this.plugin.logEvent("warn", "thoughttrail", "thoughttrail.note.fallback", {
                 filePath: file.path,
@@ -2196,6 +2208,7 @@ export default class AsideView extends ItemView {
         if (this.noteSidebarMode === "thought-trail") {
             await this.renderNoteThoughtTrailSidebar(shell, file, renderVersion, {
                 showDeleted,
+                thoughtTrailAttachments: noteThoughtTrailAvailability.thoughtTrailAttachments,
             });
             return;
         }
@@ -2369,6 +2382,7 @@ export default class AsideView extends ItemView {
         renderVersion: number,
         options: {
             showDeleted: boolean;
+            thoughtTrailAttachments: readonly ThoughtTrailAttachmentItem[];
         },
     ): Promise<void> {
         this.normalizeNoteSidebarContentFilter();
@@ -2387,12 +2401,19 @@ export default class AsideView extends ItemView {
         ).length;
         const thoughtTrailTagLookup = this.buildThoughtTrailTagLookup(file.path, persistedThreads);
         const hasThoughtTrailTagSource = this.hasThoughtTrailTagRelatedFiles(file.path, thoughtTrailTagLookup);
-        const hasThoughtTrailRootScope = scopedFilePaths.length > 0 || hasThoughtTrailTagSource;
-        const thoughtTrailUnavailableReason = getThoughtTrailUnavailableReason(
-            hasThoughtTrailRootScope,
-            thoughtTrailLineCount,
-            hasThoughtTrailTagSource,
-        );
+        const thoughtTrailAttachments = options.thoughtTrailAttachments;
+        const thoughtTrailSourceAvailability: SidebarThoughtTrailSourceAvailability = {
+            tags: hasThoughtTrailTagSource,
+            attachments: thoughtTrailAttachments.length > 0,
+        };
+        const hasThoughtTrailRootScope = scopedFilePaths.length > 0
+            || hasThoughtTrailTagSource
+            || thoughtTrailAttachments.length > 0;
+        const thoughtTrailUnavailableReason = getThoughtTrailUnavailableReason({
+            hasRootScope: hasThoughtTrailRootScope,
+            lineCount: thoughtTrailLineCount,
+            sourceAvailability: thoughtTrailSourceAvailability,
+        });
         const isThoughtTrailEnabled = thoughtTrailUnavailableReason === null;
         const scopedFileSummary = summarizeThoughtTrailPaths(scopedFilePaths);
         void this.plugin.logEvent("info", "thoughttrail", "thoughttrail.note.render-check", {
@@ -2466,7 +2487,8 @@ export default class AsideView extends ItemView {
             hasRootScope: hasThoughtTrailRootScope,
             rootFilePath: file.path,
             candidateFilePaths: this.getThoughtTrailVaultCandidateFilePaths(file.path),
-            source: this.resolveThoughtTrailSource(hasThoughtTrailTagSource),
+            attachments: thoughtTrailAttachments,
+            source: this.thoughtTrailSource,
             onSourceChange: (source) => this.setThoughtTrailSource(source),
             getTagsForFilePath: thoughtTrailTagLookup,
         });
@@ -2572,14 +2594,6 @@ export default class AsideView extends ItemView {
         ).files.length > 0;
     }
 
-    private resolveThoughtTrailSource(hasTagRelatedFiles: boolean): SidebarThoughtTrailSource {
-        if (this.thoughtTrailSource === "tags" && !hasTagRelatedFiles) {
-            this.thoughtTrailSource = getDefaultThoughtTrailSource();
-        }
-
-        return this.thoughtTrailSource;
-    }
-
     private setThoughtTrailSource(source: SidebarThoughtTrailSource): void {
         if (this.thoughtTrailSource === source) {
             return;
@@ -2598,8 +2612,10 @@ export default class AsideView extends ItemView {
         mergedThreadCount: number;
         scopedFilePaths: string[];
         scopedThreads: CommentThread[];
+        thoughtTrailAttachments: readonly ThoughtTrailAttachmentItem[];
+        sourceAvailability: SidebarThoughtTrailSourceAvailability;
         lineCount: number;
-        unavailableReason: "no-root-scope" | "no-renderable-lines" | null;
+        unavailableReason: ThoughtTrailUnavailableReason | null;
         isEnabled: boolean;
     } {
         const indexedThreads = this.plugin.getAllIndexedThreads();
@@ -2624,12 +2640,19 @@ export default class AsideView extends ItemView {
         ).length;
         const thoughtTrailTagLookup = this.buildThoughtTrailTagLookup(file.path, currentFileThreads);
         const hasThoughtTrailTagSource = this.hasThoughtTrailTagRelatedFiles(file.path, thoughtTrailTagLookup);
-        const hasThoughtTrailRootScope = scope.scopedFilePaths.length > 0 || hasThoughtTrailTagSource;
-        const unavailableReason = getThoughtTrailUnavailableReason(
-            hasThoughtTrailRootScope,
+        const thoughtTrailAttachments = getDirectThoughtTrailAttachments(this.app, file.path);
+        const thoughtTrailSourceAvailability: SidebarThoughtTrailSourceAvailability = {
+            tags: hasThoughtTrailTagSource,
+            attachments: thoughtTrailAttachments.length > 0,
+        };
+        const hasThoughtTrailRootScope = scope.scopedFilePaths.length > 0
+            || hasThoughtTrailTagSource
+            || thoughtTrailAttachments.length > 0;
+        const unavailableReason = getThoughtTrailUnavailableReason({
+            hasRootScope: hasThoughtTrailRootScope,
             lineCount,
-            hasThoughtTrailTagSource,
-        );
+            sourceAvailability: thoughtTrailSourceAvailability,
+        });
 
         return {
             currentVisibleThreadCount: currentFileThreads.length,
@@ -2637,6 +2660,8 @@ export default class AsideView extends ItemView {
             mergedThreadCount: mergedThreads.length,
             scopedFilePaths: scope.scopedFilePaths,
             scopedThreads: scope.scopedThreads,
+            thoughtTrailAttachments,
+            sourceAvailability: thoughtTrailSourceAvailability,
             lineCount,
             unavailableReason,
             isEnabled: unavailableReason === null,

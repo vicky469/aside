@@ -8,6 +8,7 @@ const mentionModalSource = readFileSync(
     "utf8",
 );
 const importantOverridePattern = new RegExp("!" + "important");
+const hardcodedColorPattern = /#[0-9a-f]{3,8}\b|\b(?:rgb|rgba|hsl|hsla|hwb|lab|lch|oklab|oklch|color)\s*\(|(?<![-\w])(?:black|white|red|green|blue|purple|orange|yellow|gr[ae]y|pink|cyan|magenta|teal|navy|maroon|olive|lime|aqua|fuchsia|silver)(?![-\w])/i;
 
 function normalizeCssSelectors(selectors) {
     return selectors
@@ -31,6 +32,10 @@ function getExactCssRule(selectors) {
     const rule = cssRules.find((candidate) => candidate.selectors === normalizedSelectors);
     assert.ok(rule, `missing exact CSS rule: ${normalizedSelectors}`);
     return rule;
+}
+
+function countClassSelectors(selectors) {
+    return selectors.match(/\.[-\w]+/g)?.length ?? 0;
 }
 
 test("stylesheet avoids important overrides", () => {
@@ -323,9 +328,75 @@ test("thought trail unique tag file set stays compact and theme-native", () => {
     const relatedFilesRules = cssRules.filter((rule) => tagRelatedClassPattern.test(rule.selectors));
     assert.notEqual(relatedFilesRules.length, 0, "missing parsed Thought Trail tag-related rules");
     const relatedFilesRuleBodies = relatedFilesRules.map((rule) => rule.body).join("\n");
-    const hardcodedColorPattern = /#[0-9a-f]{3,8}\b|\b(?:rgb|rgba|hsl|hsla|hwb|lab|lch|oklab|oklch|color)\s*\(|(?<![-\w])(?:black|white|red|green|blue|purple|orange|yellow|gr[ae]y|pink|cyan|magenta|teal|navy|maroon|olive|lime|aqua|fuchsia|silver)(?![-\w])/i;
     assert.doesNotMatch(relatedFilesRuleBodies, hardcodedColorPattern);
     assert.doesNotMatch(relatedFilesRuleBodies, importantOverridePattern);
+});
+
+test("thought trail attachment list stays compact and theme-native", () => {
+    const genericListRule = getExactCssRule(".aside-thought-trail ul");
+    const genericRowRule = getExactCssRule(".aside-thought-trail li");
+    const listRule = getExactCssRule(".aside-thought-trail .aside-thought-trail-attachments");
+    const rowRule = getExactCssRule(".aside-thought-trail .aside-thought-trail-attachment-row");
+    const linkRule = getExactCssRule(".aside-thought-trail button.aside-thought-trail-attachment-link");
+    const linkHoverFocusRule = getExactCssRule(`
+        .aside-thought-trail button.aside-thought-trail-attachment-link:hover,
+        .aside-thought-trail button.aside-thought-trail-attachment-link:focus-visible
+    `);
+    const typeRule = getExactCssRule(".aside-thought-trail-attachment-type");
+
+    assert.match(listRule.body, /display:\s*flex\s*;/);
+    assert.match(listRule.body, /flex-direction:\s*column\s*;/);
+    assert.match(listRule.body, /gap:\s*3px\s*;/);
+    assert.match(listRule.body, /margin:\s*0\s*;/);
+    assert.match(listRule.body, /padding:\s*0\s*;/);
+    assert.match(listRule.body, /list-style:\s*none\s*;/);
+    assert.ok(
+        countClassSelectors(listRule.selectors) > countClassSelectors(genericListRule.selectors),
+        "attachment list reset must outrank the generic Thought Trail ul rule",
+    );
+    assert.match(rowRule.body, /display:\s*flex\s*;/);
+    assert.match(rowRule.body, /align-items:\s*center\s*;/);
+    assert.match(rowRule.body, /gap:\s*8px\s*;/);
+    assert.match(rowRule.body, /min-width:\s*0\s*;/);
+    assert.match(rowRule.body, /margin:\s*0\s*;/);
+    assert.ok(
+        countClassSelectors(rowRule.selectors) > countClassSelectors(genericRowRule.selectors),
+        "attachment row reset must outrank the generic Thought Trail li rule",
+    );
+    assert.match(linkRule.body, /-webkit-appearance:\s*none\s*;/);
+    assert.match(linkRule.body, /appearance:\s*none\s*;/);
+    assert.match(linkRule.body, /flex:\s*1 1 auto\s*;/);
+    assert.match(linkRule.body, /min-width:\s*0\s*;/);
+    assert.match(linkRule.body, /margin:\s*0\s*;/);
+    assert.match(linkRule.body, /padding:\s*2px 0\s*;/);
+    assert.match(linkRule.body, /border:\s*0\s*;/);
+    assert.match(linkRule.body, /background:\s*transparent\s*;/);
+    assert.match(linkRule.body, /box-shadow:\s*none\s*;/);
+    assert.match(linkRule.body, /color:\s*var\(--text-normal\)\s*;/);
+    assert.match(linkRule.body, /font:\s*inherit\s*;/);
+    assert.match(linkRule.body, /text-align:\s*left\s*;/);
+    assert.match(linkRule.body, /overflow:\s*hidden\s*;/);
+    assert.match(linkRule.body, /text-overflow:\s*ellipsis\s*;/);
+    assert.match(linkRule.body, /white-space:\s*nowrap\s*;/);
+    assert.match(linkHoverFocusRule.body, /color:\s*var\(--text-accent\)\s*;/);
+    assert.match(linkHoverFocusRule.body, /text-decoration:\s*underline\s*;/);
+    assert.match(typeRule.body, /flex:\s*0 0 auto\s*;/);
+    assert.match(typeRule.body, /color:\s*var\(--text-faint\)\s*;/);
+    assert.match(typeRule.body, /font-size:\s*var\(--font-ui-smaller\)\s*;/);
+    assert.match(typeRule.body, /line-height:\s*1\.2\s*;/);
+    assert.match(typeRule.body, /max-width:\s*35%\s*;/);
+    assert.match(typeRule.body, /overflow:\s*hidden\s*;/);
+    assert.match(typeRule.body, /text-overflow:\s*ellipsis\s*;/);
+    assert.match(typeRule.body, /white-space:\s*nowrap\s*;/);
+
+    const combinedRules = [
+        listRule,
+        rowRule,
+        linkRule,
+        linkHoverFocusRule,
+        typeRule,
+    ].map((rule) => rule.body).join("\n");
+    assert.doesNotMatch(combinedRules, hardcodedColorPattern);
 });
 
 test("empty states stay muted without promoted heading text", () => {

@@ -2,9 +2,11 @@ import * as assert from "node:assert/strict";
 import test from "node:test";
 import type { CommentThread } from "../src/commentManager";
 import {
+    getThoughtTrailUnavailableReason,
     hasAvailableThoughtTrail,
     mergeCurrentFileThreadsForThoughtTrail,
     resolveModeWithThoughtTrailAvailability,
+    resolveThoughtTrailPresentationState,
 } from "../src/ui/views/sidebarThoughtTrailState";
 
 function createThread(overrides: Partial<CommentThread> = {}): CommentThread {
@@ -101,11 +103,64 @@ test("hasAvailableThoughtTrail is true when source markdown links produce trail 
     );
 });
 
+test("getThoughtTrailUnavailableReason includes attachment source availability", () => {
+    assert.equal(
+        getThoughtTrailUnavailableReason({
+            hasRootScope: true,
+            lineCount: 0,
+            sourceAvailability: { tags: false, attachments: true },
+        }),
+        null,
+    );
+    assert.equal(
+        getThoughtTrailUnavailableReason({
+            hasRootScope: true,
+            lineCount: 0,
+            sourceAvailability: { tags: false, attachments: false },
+        }),
+        "no-renderable-lines",
+    );
+    assert.equal(
+        getThoughtTrailUnavailableReason({
+            hasRootScope: false,
+            lineCount: 1,
+            sourceAvailability: { tags: true, attachments: true },
+        }),
+        "no-root-scope",
+    );
+});
+
 test("resolveModeWithThoughtTrailAvailability falls back from unavailable thought trail to list", () => {
     assert.equal(resolveModeWithThoughtTrailAvailability("thought-trail", false), "list");
     assert.equal(resolveModeWithThoughtTrailAvailability("thought-trail", true), "thought-trail");
     assert.equal(resolveModeWithThoughtTrailAvailability("tags", false), "tags");
     assert.equal(resolveModeWithThoughtTrailAvailability("list", false), "list");
+});
+
+test("attachment-only disappearance resets source before mode fallback and keeps it reset on return", () => {
+    const unavailable = resolveThoughtTrailPresentationState({
+        mode: "thought-trail",
+        source: "attachments",
+        isThoughtTrailEnabled: false,
+        sourceAvailability: { tags: false, attachments: false },
+    });
+
+    assert.deepEqual(unavailable, {
+        mode: "list",
+        source: "wikilinks",
+    });
+
+    const availableAgain = resolveThoughtTrailPresentationState({
+        mode: "thought-trail",
+        source: unavailable.source,
+        isThoughtTrailEnabled: true,
+        sourceAvailability: { tags: false, attachments: true },
+    });
+
+    assert.deepEqual(availableAgain, {
+        mode: "thought-trail",
+        source: "wikilinks",
+    });
 });
 
 test("mergeCurrentFileThreadsForThoughtTrail uses current file threads without waiting for a loaded index", () => {

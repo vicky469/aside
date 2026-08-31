@@ -71,13 +71,142 @@ test("AsideView uses the unique file-set planner for tag-source availability", (
     );
     const availabilityCalls = asideViewSource.match(/this\.hasThoughtTrailTagRelatedFiles\(/g) ?? [];
     assert.equal(availabilityCalls.length, 3, "index and both note availability paths should share one helper");
+    assert.equal(asideViewSource.includes(obsoleteGroupedPlannerName), false);
+});
+
+test("AsideView discovers direct attachments and wires them into thought trail rendering", () => {
+    assert.match(asideViewSource, /getDirectThoughtTrailAttachments/);
+    assert.match(asideViewSource, /resolveThoughtTrailPresentationState/);
+    const attachmentCalls = asideViewSource.match(/getDirectThoughtTrailAttachments\(/g) ?? [];
+    assert.equal(attachmentCalls.length, 2, "index and note availability should each discover direct attachments exactly once");
     assert.match(
         asideViewSource,
-        /private resolveThoughtTrailSource\(hasTagRelatedFiles:\s*boolean\):\s*SidebarThoughtTrailSource/,
+        /thoughtTrailAttachments:\s*noteThoughtTrailAvailability\.thoughtTrailAttachments/,
+        "note rendering should receive the retained availability snapshot",
     );
-    assert.match(asideViewSource, /this\.resolveThoughtTrailSource\(hasIndexThoughtTrailTagSource\)/);
-    assert.match(asideViewSource, /this\.resolveThoughtTrailSource\(hasThoughtTrailTagSource\)/);
-    assert.equal(asideViewSource.includes(obsoleteGroupedPlannerName), false);
+    assert.match(
+        asideViewSource,
+        /const thoughtTrailAttachments = options\.thoughtTrailAttachments/,
+        "note rendering should consume the retained availability snapshot",
+    );
+    assert.match(asideViewSource, /attachments:\s*indexThoughtTrailAttachments/);
+    assert.match(asideViewSource, /attachments:\s*thoughtTrailAttachments/);
+});
+
+test("AsideView resolves note and index presentation before thought-trail render branching", () => {
+    const presentationCalls = asideViewSource.match(/resolveThoughtTrailPresentationState\(/g) ?? [];
+    assert.equal(presentationCalls.length, 2, "note and index availability should share one presentation planner");
+
+    const indexAvailabilityIndex = asideViewSource.indexOf("const isIndexThoughtTrailEnabled");
+    const indexModeCaptureIndex = asideViewSource.indexOf(
+        "const indexSidebarModeBeforeAvailability = effectiveIndexSidebarMode",
+        indexAvailabilityIndex,
+    );
+    const indexPlannerIndex = asideViewSource.indexOf("resolveThoughtTrailPresentationState(", indexAvailabilityIndex);
+    const indexRenderBranchIndex = asideViewSource.indexOf(
+        'if (isAllCommentsView && effectiveIndexSidebarMode === "thought-trail")',
+        indexPlannerIndex,
+    );
+    assert.ok(indexAvailabilityIndex >= 0 && indexAvailabilityIndex < indexModeCaptureIndex);
+    assert.ok(indexModeCaptureIndex < indexPlannerIndex);
+    assert.ok(indexPlannerIndex < indexRenderBranchIndex);
+    assert.match(
+        asideViewSource.slice(indexAvailabilityIndex, indexRenderBranchIndex),
+        /if \(isAllCommentsView\) \{[\s\S]*?this\.thoughtTrailSource\s*=\s*indexThoughtTrailPresentationState\.source/,
+        "index facts should update source only on the all-comments surface",
+    );
+    assert.match(
+        asideViewSource.slice(indexModeCaptureIndex, indexRenderBranchIndex),
+        /modeBefore:\s*indexSidebarModeBeforeAvailability/,
+        "index availability telemetry should retain the mode from before presentation fallback",
+    );
+    assert.match(
+        asideViewSource.slice(indexModeCaptureIndex, indexRenderBranchIndex),
+        /if \(indexSidebarModeBeforeAvailability === "thought-trail" && effectiveIndexSidebarMode !== "thought-trail"\)/,
+        "index fallback detection should compare the captured pre-plan mode",
+    );
+
+    const noteAvailabilityIndex = asideViewSource.indexOf("const noteThoughtTrailAvailability");
+    const notePlannerIndex = asideViewSource.indexOf("resolveThoughtTrailPresentationState(", noteAvailabilityIndex);
+    const noteRenderBranchIndex = asideViewSource.indexOf(
+        'if (this.noteSidebarMode === "thought-trail")',
+        notePlannerIndex,
+    );
+    assert.ok(noteAvailabilityIndex >= 0 && noteAvailabilityIndex < notePlannerIndex);
+    assert.ok(notePlannerIndex < noteRenderBranchIndex);
+    assert.match(
+        asideViewSource.slice(noteAvailabilityIndex, noteRenderBranchIndex),
+        /this\.thoughtTrailSource\s*=\s*noteThoughtTrailPresentationState\.source/,
+    );
+});
+
+test("source control renders shared definitions with shared availability and dynamic scope", () => {
+    assert.match(
+        source,
+        /import\s*\{[\s\S]*?SIDEBAR_THOUGHT_TRAIL_SOURCES,[\s\S]*?getThoughtTrailSourceDefinition,[\s\S]*?isThoughtTrailSourceAvailable,[\s\S]*?type SidebarThoughtTrailSourceAvailability,[\s\S]*?\}\s*from\s*"\.\/sidebarThoughtTrailSource";/,
+    );
+    assert.match(source, /sourceAvailability:\s*SidebarThoughtTrailSourceAvailability/);
+    assert.match(source, /for \(const definition of SIDEBAR_THOUGHT_TRAIL_SOURCES\)/);
+    assert.match(
+        source,
+        /const isDisabled\s*=\s*!isThoughtTrailSourceAvailable\(definition\.id,\s*options\.sourceAvailability\)/,
+    );
+    assert.match(source, /value:\s*definition\.id/);
+    assert.match(source, /inputEl\.checked\s*=\s*options\.source\s*===\s*definition\.id/);
+    assert.match(source, /inputEl\.disabled\s*=\s*isDisabled/);
+    assert.match(source, /isDisabled\s*\?\s*" is-disabled"\s*:\s*""/);
+    assert.match(source, /options\.onSourceChange\(definition\.id\)/);
+    assert.match(source, /text:\s*definition\.label/);
+    assert.match(
+        source,
+        /text:\s*`Scope: \$\{getThoughtTrailSourceDefinition\(options\.source\)\.scope\}`/,
+    );
+    assert.match(
+        source,
+        /const sourceAvailability:\s*SidebarThoughtTrailSourceAvailability\s*=\s*\{\s*tags:\s*tagRelatedFileSet\.files\.length\s*>\s*0,\s*attachments:\s*options\.attachments\.length\s*>\s*0,\s*\}/,
+    );
+    assert.match(source, /sourceAvailability,/);
+    assert.doesNotMatch(source, /\["wikilinks",\s*"tags"\]/);
+    assert.doesNotMatch(source, /source\s*===\s*"wikilinks"\s*\?\s*"Wikilinks"\s*:\s*"Tags"/);
+});
+
+test("attachment source renders a compact semantic file list", () => {
+    assert.match(source, /if \(options\.source\s*===\s*"attachments"\)\s*\{/);
+    const attachmentLists = source.match(/createEl\("ul",\s*\{\s*cls:\s*"aside-thought-trail-attachments"/g) ?? [];
+    assert.equal(attachmentLists.length, 1, "attachments should use exactly one semantic list");
+    assert.match(
+        source,
+        /for \(const attachment of options\.attachments\)\s*\{[\s\S]*?createEl\("li",\s*\{[\s\S]*?cls:\s*"aside-thought-trail-attachment-row"[\s\S]*?"data-file-path":\s*attachment\.filePath/,
+    );
+    assert.match(
+        source,
+        /createEl\("button",\s*\{[\s\S]*?cls:\s*"aside-thought-trail-attachment-link"[\s\S]*?text:\s*attachment\.label[\s\S]*?attr:\s*\{\s*type:\s*"button"\s*\}/,
+    );
+    assert.match(source, /setTooltip\(buttonEl,\s*attachment\.filePath\)/);
+    assert.match(
+        source,
+        /createSpan\(\{\s*cls:\s*"aside-thought-trail-attachment-type",\s*text:\s*attachment\.typeLabel,?\s*\}\)/,
+    );
+    assert.match(
+        source,
+        /buttonEl\.addEventListener\("click",\s*\(\)\s*=>\s*\{\s*void openThoughtTrailFile\(attachment\.filePath,\s*context\)/,
+    );
+});
+
+test("tag and attachment file links share the preferred-leaf path wrapper", () => {
+    assert.match(
+        source,
+        /function openThoughtTrailFile\(\s*filePath:\s*string,\s*context:\s*SidebarThoughtTrailRenderContext,?\s*\):\s*void\s*\{[\s\S]*?const targetUrl\s*=\s*`obsidian:\/\/open\?vault=\$\{encodeURIComponent\(context\.app\.vault\.getName\(\)\)\}&file=\$\{encodeURIComponent\(filePath\)\}`;[\s\S]*?void openThoughtTrailTarget\(targetUrl,\s*context\)/,
+    );
+    assert.match(
+        source,
+        /cls:\s*"aside-tag-related-file-link"[\s\S]*?attr:\s*\{\s*type:\s*"button"\s*\}[\s\S]*?addEventListener\("click",\s*\(\)\s*=>\s*\{\s*openThoughtTrailFile\(filePath,\s*context\)/,
+    );
+    assert.match(source, /openThoughtTrailFile\(attachment\.filePath,\s*context\)/);
+    assert.match(
+        source,
+        /async function openThoughtTrailTarget\([\s\S]*?getAbstractFileByPath\(filePath\)[\s\S]*?context\.getPreferredFileLeaf\(filePath\)\s*\?\?\s*context\.app\.workspace\.getLeaf\(false\)[\s\S]*?await targetLeaf\.openFile\(targetFile\)[\s\S]*?setActiveLeaf\(targetLeaf,\s*\{\s*focus:\s*true\s*\}\)/,
+    );
 });
 
 test("clickable thought trail nodes receive native full-path tooltips", () => {

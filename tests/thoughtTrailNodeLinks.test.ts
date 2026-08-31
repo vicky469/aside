@@ -30,6 +30,11 @@ test("parseThoughtTrailOpenFilePath extracts the file path from obsidian open UR
         parseThoughtTrailOpenFilePath("obsidian://open?vault=dev&file=Folder%2FNote.md"),
         "Folder/Note.md",
     );
+    assert.equal(
+        parseThoughtTrailOpenFilePath("obsidian://open?vault=dev&file=%20Folder%2FNote.md%20"),
+        " Folder/Note.md ",
+    );
+    assert.equal(parseThoughtTrailOpenFilePath("obsidian://open?vault=dev&file="), null);
     assert.equal(parseThoughtTrailOpenFilePath("obsidian://aside-comment?vault=dev&file=Folder%2FNote.md"), null);
     assert.equal(parseThoughtTrailOpenFilePath("not a url"), null);
 });

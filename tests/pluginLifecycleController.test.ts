@@ -63,6 +63,7 @@ function createHarness(options: {
     const clearedTimers: number[] = [];
     let nextTimerId = 1;
     let refreshCommentViewsCount = 0;
+    const refreshCommentViewOptions: Array<{ skipDataRefresh?: boolean } | undefined> = [];
     let refreshEditorDecorationsCount = 0;
     let scheduleAggregateNoteRefreshCount = 0;
     let refreshAggregateNoteNowCount = 0;
@@ -127,8 +128,9 @@ function createHarness(options: {
                 loadedFiles.push(file.path);
             }
         },
-        refreshCommentViews: async () => {
+        refreshCommentViews: async (refreshOptions) => {
             refreshCommentViewsCount += 1;
+            refreshCommentViewOptions.push(refreshOptions);
         },
         refreshEditorDecorations: () => {
             if (options.refreshThrows) {
@@ -179,6 +181,7 @@ function createHarness(options: {
         runTimer: (timerId: number) => scheduledTimers.get(timerId)?.(),
         clearedTimers,
         getRefreshCommentViewsCount: () => refreshCommentViewsCount,
+        refreshCommentViewOptions,
         getRefreshEditorDecorationsCount: () => refreshEditorDecorationsCount,
         getRefreshAggregateNoteNowCount: () => refreshAggregateNoteNowCount,
         getScheduleAggregateNoteRefreshCount: () => scheduleAggregateNoteRefreshCount,
@@ -206,6 +209,33 @@ test("plugin lifecycle controller handles layout ready without eager comment hyd
     assert.equal(harness.getRefreshEditorDecorationsCount(), 0);
     assert.equal(harness.getScheduleAggregateNoteRefreshCount(), 0);
     assert.equal(harness.getSyncIndexNoteViewClassesCount(), 1);
+});
+
+test("plugin lifecycle controller refreshes attachment availability for PNG lifecycle events", async () => {
+    const harness = createHarness();
+
+    await harness.controller.handleFileCreate(null);
+    assert.equal(harness.getRefreshCommentViewsCount(), 0);
+
+    await harness.controller.handleFileCreate(createFile("assets/image.png"));
+    await harness.controller.handleFileRename(createFile("assets/renamed.png"), "assets/image.png");
+    await harness.controller.handleFileDelete(createFile("assets/renamed.png"));
+
+    assert.equal(harness.getRefreshCommentViewsCount(), 3);
+    assert.deepEqual(harness.refreshCommentViewOptions, [
+        { skipDataRefresh: true },
+        undefined,
+        undefined,
+    ]);
+});
+
+test("plugin lifecycle controller refreshes attachment availability after metadata resolution", async () => {
+    const harness = createHarness();
+
+    await harness.controller.handleMetadataResolved();
+
+    assert.equal(harness.getRefreshCommentViewsCount(), 1);
+    assert.deepEqual(harness.refreshCommentViewOptions, [{ skipDataRefresh: true }]);
 });
 
 test("plugin lifecycle controller keeps renamed comment files and indexes aligned", async () => {

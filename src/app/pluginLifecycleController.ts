@@ -21,7 +21,7 @@ export interface PluginLifecycleHost {
     isPageNoteCapableFile(file: TAbstractFile | null): file is TFile;
     hashText(text: string): Promise<string>;
     loadCommentsForFile(file: TFile | null): Promise<unknown>;
-    refreshCommentViews(): Promise<void>;
+    refreshCommentViews(options?: { skipDataRefresh?: boolean }): Promise<void>;
     refreshEditorDecorations(): void;
     refreshAggregateNoteNow(): Promise<void>;
     scheduleAggregateNoteRefresh(): void;
@@ -84,6 +84,18 @@ export class PluginLifecycleController {
     public handleLayoutReady(): void {
         this.host.syncIndexNoteViewClasses();
         void this.host.log?.("info", "startup", "startup.layout.ready");
+    }
+
+    public async handleFileCreate(file: TFile | null): Promise<void> {
+        if (!file) {
+            return;
+        }
+
+        await this.host.refreshCommentViews({ skipDataRefresh: true });
+    }
+
+    public async handleMetadataResolved(): Promise<void> {
+        await this.host.refreshCommentViews({ skipDataRefresh: true });
     }
 
     public async handleFileRename(file: TFile | null, oldPath: string): Promise<void> {
