@@ -25,7 +25,13 @@ import {
 } from "./thoughtTrailNodeLinks";
 import { parseTrustedMermaidSvg } from "./thoughtTrailSvg";
 import type { ThoughtTrailAttachmentItem } from "./sidebarThoughtTrailAttachments";
-import type { SidebarThoughtTrailSource } from "./sidebarThoughtTrailSource";
+import {
+    SIDEBAR_THOUGHT_TRAIL_SOURCES,
+    getThoughtTrailSourceDefinition,
+    isThoughtTrailSourceAvailable,
+    type SidebarThoughtTrailSource,
+    type SidebarThoughtTrailSourceAvailability,
+} from "./sidebarThoughtTrailSource";
 import { nodeInstanceOf } from "../domGuards";
 import { buildSidebarThoughtTrailNoteLinkGraph } from "./sidebarThoughtTrailGraph";
 
@@ -68,7 +74,7 @@ function renderThoughtTrailSourceControl(
     options: {
         source: SidebarThoughtTrailSource;
         radioGroupName: string;
-        tagsDisabled?: boolean;
+        sourceAvailability: SidebarThoughtTrailSourceAvailability;
         onSourceChange(source: SidebarThoughtTrailSource): void;
     },
 ): void {
@@ -78,8 +84,8 @@ function renderThoughtTrailSourceControl(
         text: "Related Files By",
     });
     const sourceOptionsEl = controlEl.createDiv("aside-thought-trail-source-options");
-    for (const source of ["wikilinks", "tags"] as const) {
-        const isDisabled = source === "tags" && options.tagsDisabled;
+    for (const definition of SIDEBAR_THOUGHT_TRAIL_SOURCES) {
+        const isDisabled = !isThoughtTrailSourceAvailable(definition.id, options.sourceAvailability);
         const labelEl = sourceOptionsEl.createEl("label", {
             cls: `aside-thought-trail-source-option${isDisabled ? " is-disabled" : ""}`,
         });
@@ -87,23 +93,23 @@ function renderThoughtTrailSourceControl(
             type: "radio",
             attr: {
                 name: options.radioGroupName,
-                value: source,
+                value: definition.id,
             },
         });
-        inputEl.checked = options.source === source;
-        inputEl.disabled = isDisabled ?? false;
+        inputEl.checked = options.source === definition.id;
+        inputEl.disabled = isDisabled;
         inputEl.addEventListener("change", () => {
             if (inputEl.checked) {
-                options.onSourceChange(source);
+                options.onSourceChange(definition.id);
             }
         });
         labelEl.createSpan({
-            text: source === "wikilinks" ? "Wikilinks" : "Tags",
+            text: definition.label,
         });
     }
     controlEl.createSpan({
         cls: "aside-thought-trail-scope-note",
-        text: "Scope: Vault",
+        text: `Scope: ${getThoughtTrailSourceDefinition(options.source).scope}`,
     });
 }
 
@@ -192,11 +198,11 @@ function renderTagRelatedFileLink(
     const btn = container.createEl("button", {
         cls: "aside-tag-related-file-link",
         text: label,
+        attr: { type: "button" },
     });
     setTooltip(btn, filePath);
     btn.addEventListener("click", () => {
-        const url = `obsidian://open?vault=${encodeURIComponent(context.app.vault.getName())}&file=${encodeURIComponent(filePath)}`;
-        void openThoughtTrailTarget(url, context);
+        openThoughtTrailFile(filePath, context);
     });
 }
 
@@ -227,14 +233,42 @@ export async function renderSidebarThoughtTrail(
         options.getTagsForFilePath,
         { allCommentsNotePath: context.allCommentsNotePath },
     );
+    const sourceAvailability: SidebarThoughtTrailSourceAvailability = {
+        tags: tagRelatedFileSet.files.length > 0,
+        attachments: options.attachments.length > 0,
+    };
     renderThoughtTrailSourceControl(thoughtTrailEl, {
         source: options.source,
         radioGroupName: `aside-thought-trail-source-${context.renderVersion}-${options.surface}-${encodeURIComponent(rootFilePath)}`,
-        tagsDisabled: tagRelatedFileSet.files.length === 0,
+        sourceAvailability,
         onSourceChange: (source) => {
             options.onSourceChange(source);
         },
     });
+    if (options.source === "attachments") {
+        const sectionEl = thoughtTrailEl.createDiv("aside-thought-trail-section");
+        const listEl = sectionEl.createEl("ul", { cls: "aside-thought-trail-attachments" });
+        for (const attachment of options.attachments) {
+            const rowEl = listEl.createEl("li", {
+                cls: "aside-thought-trail-attachment-row",
+                attr: { "data-file-path": attachment.filePath },
+            });
+            const buttonEl = rowEl.createEl("button", {
+                cls: "aside-thought-trail-attachment-link",
+                text: attachment.label,
+                attr: { type: "button" },
+            });
+            setTooltip(buttonEl, attachment.filePath);
+            buttonEl.addEventListener("click", () => {
+                void openThoughtTrailFile(attachment.filePath, context);
+            });
+            rowEl.createSpan({
+                cls: "aside-thought-trail-attachment-type",
+                text: attachment.typeLabel,
+            });
+        }
+        return;
+    }
     if (options.source === "tags") {
         const sectionEl = thoughtTrailEl.createDiv("aside-thought-trail-section");
         renderTagRelatedFilesList(sectionEl, tagRelatedFileSet, context);
@@ -434,6 +468,14 @@ function bindThoughtTrailNodeLinks(
         event.stopPropagation();
         void openThoughtTrailTarget(targetUrl, context);
     });
+}
+
+function openThoughtTrailFile(
+    filePath: string,
+    context: SidebarThoughtTrailRenderContext,
+): void {
+    const targetUrl = `obsidian://open?vault=${encodeURIComponent(context.app.vault.getName())}&file=${encodeURIComponent(filePath)}`;
+    void openThoughtTrailTarget(targetUrl, context);
 }
 
 async function openThoughtTrailTarget(
