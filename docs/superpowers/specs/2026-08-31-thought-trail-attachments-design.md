@@ -20,24 +20,24 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Extend the shared Thought Trail source policy with `Attachments`, its label, file scope, ordering, normalization, availability, and fallback behavior.
-- [ ] Add one attachment model that resolves direct cached embeds from the selected file, excludes Markdown and unresolved targets, deduplicates normalized paths, and sorts the result deterministically.
-- [ ] Make direct attachments participate in Thought Trail availability without changing Wikilinks or Tags scope.
-- [ ] Render Attachments as a compact semantic list with clickable filenames, type labels, and full-path tooltips.
-- [ ] Show `Scope: File` for Attachments while retaining `Scope: Vault` for Wikilinks and Tags.
-- [ ] Keep Attachments visible but disabled when the selected file has no eligible attachments, and fall back to Wikilinks if an active attachment source becomes unavailable.
-- [ ] Add only the minimal theme-native styles required by the attachment list.
+- [x] Extend the shared Thought Trail source policy with `Attachments`, its label, file scope, ordering, normalization, availability, and fallback behavior.
+- [x] Add one attachment model that resolves direct cached embeds from the selected file, excludes Markdown and unresolved targets, deduplicates normalized paths, and sorts the result deterministically.
+- [x] Make direct attachments participate in Thought Trail availability without changing Wikilinks or Tags scope.
+- [x] Render Attachments as a compact semantic list with clickable filenames, type labels, and full-path tooltips.
+- [x] Show `Scope: File` for Attachments while retaining `Scope: Vault` for Wikilinks and Tags.
+- [x] Keep Attachments visible but disabled when the selected file has no eligible attachments, and fall back to Wikilinks if an active attachment source becomes unavailable.
+- [x] Add only the minimal theme-native styles required by the attachment list.
 
 ### Verification
 
-- [ ] Tests prove attachment discovery is direct-file-only, excludes Markdown and unresolved embeds, deduplicates repeated embeds, and sorts deterministically.
-- [ ] Tests prove the source order is Wikilinks, Tags, Attachments; source normalization accepts Attachments; scope copy and independent disabled states derive from the shared policy; and unavailable Attachments falls back to Wikilinks.
-- [ ] Tests prove a file with attachments but no Wikilink or tag relationships can still enter Thought Trail.
-- [ ] Tests prove the compact list is semantic, exposes filenames and types, uses full-path tooltips, and opens the exact attachment through the existing preferred-leaf behavior.
-- [ ] Tests prove existing Wikilinks and Tags behavior remains unchanged on note and index surfaces.
-- [ ] A repeated change-surface audit leaves one shared source-policy owner plus thin metadata, availability, and rendering adapters.
-- [ ] The full tests, lint, typecheck, Obsidian compliance check, production bundle, and release-artifact guard pass.
-- [ ] An installed-vault smoke test covers image and PDF embeds, a repeated embed, a Markdown embed, an unresolved embed, source switching, disabled state, file scope, and exact file opening.
+- [x] Tests prove attachment discovery is direct-file-only, excludes Markdown and unresolved embeds, deduplicates repeated embeds, and sorts deterministically.
+- [x] Tests prove the source order is Wikilinks, Tags, Attachments; source normalization accepts Attachments; scope copy and independent disabled states derive from the shared policy; and unavailable Attachments falls back to Wikilinks.
+- [x] Tests prove a file with attachments but no Wikilink or tag relationships can still enter Thought Trail.
+- [x] Tests prove the compact list is semantic, exposes filenames and types, uses full-path tooltips, and opens the exact attachment through the existing preferred-leaf behavior.
+- [x] Tests prove existing Wikilinks and Tags behavior remains unchanged on note and index surfaces.
+- [x] A repeated change-surface audit leaves one shared source-policy owner plus thin metadata, availability, and rendering adapters.
+- [x] The full tests, lint, typecheck, Obsidian compliance check, production bundle, and release-artifact guard pass.
+- [x] An installed-vault smoke test covers image and PDF embeds, a repeated embed, a Markdown embed, an unresolved embed, source switching, disabled state, file scope, and exact file opening.
 
 ## Product Behavior
 
