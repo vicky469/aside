@@ -35,19 +35,39 @@ test("buildThoughtTrailAttachmentItems keeps unique non-Markdown embeds in displ
 });
 
 test("buildThoughtTrailAttachmentItems normalizes backslash paths and labels extensionless files as FILE", () => {
+    const caseDistinctTargets = new Map<string, ThoughtTrailAttachmentTarget>([
+        ["same", { filePath: "/assets/Zebra.PNG/", fileName: "Zebra.PNG", extension: "PNG" }],
+        ["normalized-same", { filePath: "assets/Zebra.PNG", fileName: "Zebra.PNG", extension: "PNG" }],
+        ["case-distinct", { filePath: "assets/zebra.png", fileName: "zebra.png", extension: "png" }],
+        ["accent", { filePath: "assets/Éclair.png", fileName: "Éclair.png", extension: "png" }],
+    ]);
+    assert.deepEqual(
+        buildThoughtTrailAttachmentItems(
+            "notes/source.md",
+            ["same", "normalized-same", "case-distinct", "accent"],
+            (linkPath: string) => caseDistinctTargets.get(linkPath) ?? null,
+        ),
+        [
+            { filePath: "assets/Zebra.PNG", label: "Zebra.PNG", typeLabel: "PNG" },
+            { filePath: "assets/zebra.png", label: "zebra.png", typeLabel: "PNG" },
+            { filePath: "assets/Éclair.png", label: "Éclair.png", typeLabel: "PNG" },
+        ],
+    );
+
     const targets = new Map<string, ThoughtTrailAttachmentTarget>([
         ["first", { filePath: "assets\\raw-data", fileName: "raw-data", extension: "" }],
         ["second", { filePath: "/assets/raw-data/", fileName: "raw-data", extension: "" }],
         ["markdown", { filePath: "docs/note.md", fileName: "note.md", extension: ".MD" }],
         ["empty-path", { filePath: "///", fileName: "empty-path", extension: "png" }],
         ["fallback", { filePath: "/assets/fallback.PNG/", fileName: "", extension: "png" }],
+        ["whitespace", { filePath: " assets/space.png ", fileName: "space.png", extension: "png" }],
     ]);
     const resolverCalls: string[] = [];
 
     assert.deepEqual(
         buildThoughtTrailAttachmentItems(
             "notes/source.md",
-            [" first ", "", "  ", " second ", " markdown ", " empty-path ", " fallback "],
+            [" first ", "", "  ", " second ", " markdown ", " empty-path ", " fallback ", " whitespace "],
             (linkPath: string) => {
                 resolverCalls.push(linkPath);
                 return targets.get(linkPath) ?? null;
@@ -56,26 +76,10 @@ test("buildThoughtTrailAttachmentItems normalizes backslash paths and labels ext
         [
             { filePath: "assets/fallback.PNG", label: "fallback.PNG", typeLabel: "PNG" },
             { filePath: "assets/raw-data", label: "raw-data", typeLabel: "FILE" },
+            { filePath: " assets/space.png ", label: "space.png", typeLabel: "PNG" },
         ],
     );
-    assert.deepEqual(resolverCalls, ["first", "second", "markdown", "empty-path", "fallback"]);
-
-    const caseDistinctTargets = new Map<string, ThoughtTrailAttachmentTarget>([
-        ["same", { filePath: "/assets/Zebra.PNG/", fileName: "Zebra.PNG", extension: "PNG" }],
-        ["normalized-same", { filePath: "assets/Zebra.PNG", fileName: "Zebra.PNG", extension: "PNG" }],
-        ["case-distinct", { filePath: "assets/zebra.png", fileName: "zebra.png", extension: "png" }],
-    ]);
-    assert.deepEqual(
-        buildThoughtTrailAttachmentItems(
-            "notes/source.md",
-            ["same", "normalized-same", "case-distinct"],
-            (linkPath: string) => caseDistinctTargets.get(linkPath) ?? null,
-        ),
-        [
-            { filePath: "assets/zebra.png", label: "zebra.png", typeLabel: "PNG" },
-            { filePath: "assets/Zebra.PNG", label: "Zebra.PNG", typeLabel: "PNG" },
-        ],
-    );
+    assert.deepEqual(resolverCalls, ["first", "second", "markdown", "empty-path", "fallback", "whitespace"]);
 });
 
 test("getDirectThoughtTrailAttachments reads embeds from only the selected Markdown source", () => {

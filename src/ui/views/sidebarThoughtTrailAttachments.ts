@@ -18,7 +18,11 @@ type ThoughtTrailAttachmentResolver = (
 ) => ThoughtTrailAttachmentTarget | null;
 
 function normalizeVaultPath(filePath: string): string {
-    return filePath.trim().replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+    return filePath.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+}
+
+function compareCodePointStrings(left: string, right: string): number {
+    return left < right ? -1 : left > right ? 1 : 0;
 }
 
 function isFileLike(value: unknown): value is TFile {
@@ -71,8 +75,8 @@ export function buildThoughtTrailAttachmentItems(
     }
 
     return items.sort((left, right) => {
-        const labelOrder = left.label.localeCompare(right.label, undefined, { sensitivity: "base" });
-        return labelOrder !== 0 ? labelOrder : left.filePath.localeCompare(right.filePath);
+        const labelOrder = compareCodePointStrings(left.label.toLowerCase(), right.label.toLowerCase());
+        return labelOrder !== 0 ? labelOrder : compareCodePointStrings(left.filePath, right.filePath);
     });
 }
 

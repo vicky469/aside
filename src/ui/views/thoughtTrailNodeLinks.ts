@@ -55,8 +55,8 @@ export function parseThoughtTrailOpenFilePath(url: string): string | null {
             return null;
         }
 
-        const filePath = parsed.searchParams.get("file")?.trim();
-        return filePath || null;
+        const filePath = parsed.searchParams.get("file");
+        return filePath === null || filePath.length === 0 ? null : filePath;
     } catch {
         return null;
     }

@@ -58,12 +58,13 @@ test("getDefaultThoughtTrailSource starts fresh views from wikilinks", () => {
     assert.equal(getDefaultThoughtTrailSource(), "wikilinks");
 });
 
-test("normalizeThoughtTrailSource delegates to the supported source policy", () => {
+test("normalizeThoughtTrailSource preserves the deprecated nullable contract", () => {
     for (const definition of SIDEBAR_THOUGHT_TRAIL_SOURCES) {
         assert.equal(normalizeThoughtTrailSource(definition.id), definition.id);
     }
-    assert.equal(normalizeThoughtTrailSource("links"), "wikilinks");
-    assert.equal(normalizeThoughtTrailSource(undefined), "wikilinks");
+    assert.equal(normalizeThoughtTrailSource("links"), null);
+    assert.equal(normalizeThoughtTrailSource(undefined), null);
+    assert.equal(normalizeThoughtTrailSource("invalid"), null);
 });
 
 test("resolveAvailableThoughtTrailSource falls back to wikilinks when tag graph is unavailable", () => {

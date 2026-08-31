@@ -6,6 +6,7 @@ import {
     hasAvailableThoughtTrail,
     mergeCurrentFileThreadsForThoughtTrail,
     resolveModeWithThoughtTrailAvailability,
+    resolveThoughtTrailPresentationState,
 } from "../src/ui/views/sidebarThoughtTrailState";
 
 function createThread(overrides: Partial<CommentThread> = {}): CommentThread {
@@ -134,6 +135,32 @@ test("resolveModeWithThoughtTrailAvailability falls back from unavailable though
     assert.equal(resolveModeWithThoughtTrailAvailability("thought-trail", true), "thought-trail");
     assert.equal(resolveModeWithThoughtTrailAvailability("tags", false), "tags");
     assert.equal(resolveModeWithThoughtTrailAvailability("list", false), "list");
+});
+
+test("attachment-only disappearance resets source before mode fallback and keeps it reset on return", () => {
+    const unavailable = resolveThoughtTrailPresentationState({
+        mode: "thought-trail",
+        source: "attachments",
+        isThoughtTrailEnabled: false,
+        sourceAvailability: { tags: false, attachments: false },
+    });
+
+    assert.deepEqual(unavailable, {
+        mode: "list",
+        source: "wikilinks",
+    });
+
+    const availableAgain = resolveThoughtTrailPresentationState({
+        mode: "thought-trail",
+        source: unavailable.source,
+        isThoughtTrailEnabled: true,
+        sourceAvailability: { tags: false, attachments: true },
+    });
+
+    assert.deepEqual(availableAgain, {
+        mode: "thought-trail",
+        source: "wikilinks",
+    });
 });
 
 test("mergeCurrentFileThreadsForThoughtTrail uses current file threads without waiting for a loaded index", () => {

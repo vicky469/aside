@@ -76,7 +76,7 @@ test("AsideView uses the unique file-set planner for tag-source availability", (
 
 test("AsideView discovers direct attachments and wires them into thought trail rendering", () => {
     assert.match(asideViewSource, /getDirectThoughtTrailAttachments/);
-    assert.match(asideViewSource, /resolveAvailableThoughtTrailSource/);
+    assert.match(asideViewSource, /resolveThoughtTrailPresentationState/);
     const attachmentCalls = asideViewSource.match(/getDirectThoughtTrailAttachments\(/g) ?? [];
     assert.equal(attachmentCalls.length, 2, "index and note availability should each discover direct attachments exactly once");
     assert.match(
@@ -91,6 +91,53 @@ test("AsideView discovers direct attachments and wires them into thought trail r
     );
     assert.match(asideViewSource, /attachments:\s*indexThoughtTrailAttachments/);
     assert.match(asideViewSource, /attachments:\s*thoughtTrailAttachments/);
+});
+
+test("AsideView resolves note and index presentation before thought-trail render branching", () => {
+    const presentationCalls = asideViewSource.match(/resolveThoughtTrailPresentationState\(/g) ?? [];
+    assert.equal(presentationCalls.length, 2, "note and index availability should share one presentation planner");
+
+    const indexAvailabilityIndex = asideViewSource.indexOf("const isIndexThoughtTrailEnabled");
+    const indexModeCaptureIndex = asideViewSource.indexOf(
+        "const indexSidebarModeBeforeAvailability = effectiveIndexSidebarMode",
+        indexAvailabilityIndex,
+    );
+    const indexPlannerIndex = asideViewSource.indexOf("resolveThoughtTrailPresentationState(", indexAvailabilityIndex);
+    const indexRenderBranchIndex = asideViewSource.indexOf(
+        'if (isAllCommentsView && effectiveIndexSidebarMode === "thought-trail")',
+        indexPlannerIndex,
+    );
+    assert.ok(indexAvailabilityIndex >= 0 && indexAvailabilityIndex < indexModeCaptureIndex);
+    assert.ok(indexModeCaptureIndex < indexPlannerIndex);
+    assert.ok(indexPlannerIndex < indexRenderBranchIndex);
+    assert.match(
+        asideViewSource.slice(indexAvailabilityIndex, indexRenderBranchIndex),
+        /if \(isAllCommentsView\) \{[\s\S]*?this\.thoughtTrailSource\s*=\s*indexThoughtTrailPresentationState\.source/,
+        "index facts should update source only on the all-comments surface",
+    );
+    assert.match(
+        asideViewSource.slice(indexModeCaptureIndex, indexRenderBranchIndex),
+        /modeBefore:\s*indexSidebarModeBeforeAvailability/,
+        "index availability telemetry should retain the mode from before presentation fallback",
+    );
+    assert.match(
+        asideViewSource.slice(indexModeCaptureIndex, indexRenderBranchIndex),
+        /if \(indexSidebarModeBeforeAvailability === "thought-trail" && effectiveIndexSidebarMode !== "thought-trail"\)/,
+        "index fallback detection should compare the captured pre-plan mode",
+    );
+
+    const noteAvailabilityIndex = asideViewSource.indexOf("const noteThoughtTrailAvailability");
+    const notePlannerIndex = asideViewSource.indexOf("resolveThoughtTrailPresentationState(", noteAvailabilityIndex);
+    const noteRenderBranchIndex = asideViewSource.indexOf(
+        'if (this.noteSidebarMode === "thought-trail")',
+        notePlannerIndex,
+    );
+    assert.ok(noteAvailabilityIndex >= 0 && noteAvailabilityIndex < notePlannerIndex);
+    assert.ok(notePlannerIndex < noteRenderBranchIndex);
+    assert.match(
+        asideViewSource.slice(noteAvailabilityIndex, noteRenderBranchIndex),
+        /this\.thoughtTrailSource\s*=\s*noteThoughtTrailPresentationState\.source/,
+    );
 });
 
 test("source control renders shared definitions with shared availability and dynamic scope", () => {

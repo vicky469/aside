@@ -23,15 +23,19 @@ export function getDefaultSidebarThoughtTrailSource(): SidebarThoughtTrailSource
     return "wikilinks";
 }
 
+function findSidebarThoughtTrailSourceDefinition(value: unknown): SidebarThoughtTrailSourceDefinition | undefined {
+    return SIDEBAR_THOUGHT_TRAIL_SOURCES.find((definition) => definition.id === value);
+}
+
 export function normalizeSidebarThoughtTrailSource(value: unknown): SidebarThoughtTrailSource {
-    const source = SIDEBAR_THOUGHT_TRAIL_SOURCES.find((definition) => definition.id === value)?.id;
+    const source = findSidebarThoughtTrailSourceDefinition(value)?.id;
     return source ?? getDefaultSidebarThoughtTrailSource();
 }
 
 export function getThoughtTrailSourceDefinition(
     source: SidebarThoughtTrailSource,
 ): SidebarThoughtTrailSourceDefinition {
-    return SIDEBAR_THOUGHT_TRAIL_SOURCES.find((definition) => definition.id === source)
+    return findSidebarThoughtTrailSourceDefinition(source)
         ?? SIDEBAR_THOUGHT_TRAIL_SOURCES[0];
 }
 
@@ -61,6 +65,6 @@ export function getDefaultThoughtTrailSource(): SidebarThoughtTrailSource {
 }
 
 /** @deprecated Use normalizeSidebarThoughtTrailSource instead. */
-export function normalizeThoughtTrailSource(value: unknown): SidebarThoughtTrailSource {
-    return normalizeSidebarThoughtTrailSource(value);
+export function normalizeThoughtTrailSource(value: unknown): SidebarThoughtTrailSource | null {
+    return findSidebarThoughtTrailSourceDefinition(value)?.id ?? null;
 }
