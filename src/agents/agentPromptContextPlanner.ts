@@ -1,4 +1,4 @@
-import type { CommentThread, CommentThreadEntry } from "../commentManager";
+import type { CommentThread } from "../commentManager";
 import type { AgentRunRecord } from "../core/agents/agentRuns";
 import { getAgentActorLabel } from "../core/agents/agentActorRegistry";
 import { getVisibleNoteContent } from "../core/storage/noteCommentStorage";
