@@ -19,18 +19,18 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Make the transcript builder distinguish agent-generated entries from user-authored entries using existing run metadata.
-- [ ] Include normalized agent-generated entry bodies without a per-entry character cap.
-- [ ] Continue clipping user-authored entry bodies at 360 characters.
-- [ ] Preserve author labels, current-entry labeling, empty-entry filtering, and the eight-entry transcript window.
+- [x] Make the transcript builder distinguish agent-generated entries from user-authored entries using existing run metadata.
+- [x] Include normalized agent-generated entry bodies without a per-entry character cap.
+- [x] Continue clipping user-authored entry bodies at 360 characters.
+- [x] Preserve author labels, current-entry labeling, empty-entry filtering, and the eight-entry transcript window.
 
 ### Verification
 
-- [ ] A regression test proves an agent response longer than 360 characters is present in full in the generated prompt.
-- [ ] A regression test proves a user-authored entry longer than 360 characters remains clipped.
-- [ ] Tests prove the behavior applies uniformly to Codex, Claude, Gemini, and DeepSeek/OpenCode output entries.
-- [ ] Tests prove only the latest eight entries remain in the generated transcript.
-- [ ] The focused prompt-context tests and the full project build pass.
+- [x] A regression test proves an agent response longer than 360 characters is present in full in the generated prompt.
+- [x] A regression test proves a user-authored entry longer than 360 characters remains clipped.
+- [x] Tests prove the behavior applies uniformly to Codex, Claude, Gemini, and DeepSeek/OpenCode output entries.
+- [x] Tests prove only the latest eight entries remain in the generated transcript.
+- [x] The focused prompt-context tests and the full project build pass.
 
 ## Goals
 

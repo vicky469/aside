@@ -2,6 +2,7 @@ import * as assert from "node:assert/strict";
 import test from "node:test";
 import { commentToThread, type Comment, type CommentThread } from "../src/commentManager";
 import { buildAgentPromptContext } from "../src/agents/agentPromptContextPlanner";
+import type { AsideAgentTarget } from "../src/core/config/agentTargets";
 
 function createComment(overrides: Partial<Comment> = {}): Comment {
     return {
@@ -142,4 +143,82 @@ test("buildAgentPromptContext falls back cleanly when note content is unavailabl
     assert.match(context.promptText, /Anchor:\n<<<\nPage 4 chart\n>>>/);
     assert.doesNotMatch(context.promptText, /Headings:/);
     assert.equal(context.byteLength, Buffer.byteLength(context.promptText, "utf8"));
+});
+
+test("buildAgentPromptContext preserves full agent responses for every provider", () => {
+    const targets: Array<[AsideAgentTarget, string]> = [
+        ["codex", "Codex"],
+        ["claude", "Claude Code"],
+        ["gemini", "Gemini"],
+        ["deepseek", "DeepSeek"],
+    ];
+
+    for (const [requestedAgent, label] of targets) {
+        const longReply = `${"agent response ".repeat(30)}END-${requestedAgent}`;
+        const thread = {
+            ...createThread({ comment: "Translate the reply above" }),
+            entries: [
+                { id: `output-${requestedAgent}`, body: longReply, timestamp: 10 },
+                { id: `follow-up-${requestedAgent}`, body: "Translate the reply above", timestamp: 11 },
+            ],
+        };
+
+        const context = buildAgentPromptContext({
+            filePath: "Folder/Note.md",
+            noteContent: "# Note",
+            thread,
+            triggerEntryId: `follow-up-${requestedAgent}`,
+            fallbackPromptText: "Translate the reply above",
+            threadAgentRuns: [{ requestedAgent, outputEntryId: `output-${requestedAgent}` }],
+        });
+
+        assert.ok(context.promptText.includes(`- ${label}: ${longReply}`));
+    }
+});
+
+test("buildAgentPromptContext clips long user transcript entries", () => {
+    const longUserBody = `${"user text ".repeat(45)}USER-END`;
+    const thread = {
+        ...createThread(),
+        entries: [
+            { id: "long-user", body: longUserBody, timestamp: 10 },
+            { id: "follow-up", body: "Follow up", timestamp: 11 },
+        ],
+    };
+
+    const context = buildAgentPromptContext({
+        filePath: "Folder/Note.md",
+        noteContent: "# Note",
+        thread,
+        triggerEntryId: "follow-up",
+        fallbackPromptText: "Follow up",
+    });
+
+    assert.match(context.promptText, new RegExp(`- You(?: \\(current\\))?: ${"user text ".repeat(36).trimEnd()}\\.\\.\\.`));
+    assert.doesNotMatch(context.promptText, /USER-END/);
+});
+
+test("buildAgentPromptContext keeps only the latest eight transcript entries", () => {
+    const thread = {
+        ...createThread(),
+        entries: Array.from({ length: 10 }, (_, index) => ({
+            id: `entry-${index + 1}`,
+            body: `entry-${index + 1}`,
+            timestamp: index + 1,
+        })),
+    };
+
+    const context = buildAgentPromptContext({
+        filePath: "Folder/Note.md",
+        noteContent: "# Note",
+        thread,
+        triggerEntryId: "entry-10",
+        fallbackPromptText: "entry-10",
+    });
+
+    for (let index = 3; index <= 10; index += 1) {
+        assert.match(context.promptText, new RegExp(`- (?:You|You \\(current\\)): entry-${index}`));
+    }
+    assert.doesNotMatch(context.promptText, /entry-1\b/);
+    assert.doesNotMatch(context.promptText, /entry-2\b/);
 });
