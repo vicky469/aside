@@ -176,16 +176,6 @@ function resolvePageText(noteContent: string): string | null {
     return clipText(normalized, MAX_PAGE_CHARS);
 }
 
-function resolveTranscriptAuthorLabel(
-    entry: CommentThreadEntry,
-    threadAgentRuns: readonly Pick<AgentRunRecord, "requestedAgent" | "outputEntryId">[],
-): string {
-    const matchingRun = threadAgentRuns.find((run) => run.outputEntryId === entry.id);
-    return matchingRun
-        ? getAgentActorLabel(matchingRun.requestedAgent)
-        : "You";
-}
-
 function buildThreadTranscript(
     thread: CommentThread,
     triggerEntryId: string,
@@ -194,9 +184,15 @@ function buildThreadTranscript(
     return thread.entries
         .slice(-MAX_TRANSCRIPT_ENTRIES)
         .map((entry) => {
-            const label = resolveTranscriptAuthorLabel(entry, threadAgentRuns);
+            const matchingRun = threadAgentRuns.find((run) => run.outputEntryId === entry.id);
+            const label = matchingRun
+                ? getAgentActorLabel(matchingRun.requestedAgent)
+                : "You";
             const currentSuffix = entry.id === triggerEntryId ? " (current)" : "";
-            return `${label}${currentSuffix}: ${clipCompactText(entry.body, MAX_TRANSCRIPT_ENTRY_CHARS)}`;
+            const body = matchingRun
+                ? compactText(entry.body)
+                : clipCompactText(entry.body, MAX_TRANSCRIPT_ENTRY_CHARS);
+            return `${label}${currentSuffix}: ${body}`;
         })
         .filter((line) => !line.endsWith(": "));
 }
