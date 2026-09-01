@@ -20,16 +20,16 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Remove the visible `Related Files By` element from the shared Thought Trail source control.
-- [ ] Preserve the same context as an accessible label on the radio-options group.
-- [ ] Keep source ordering, selection, availability, and scope behavior unchanged.
+- [x] Remove the visible `Related Files By` element from the shared Thought Trail source control.
+- [x] Preserve the same context as an accessible label on the radio-options group.
+- [x] Keep source ordering, selection, availability, and scope behavior unchanged.
 
 ### Verification
 
-- [ ] Confirm the production source and bundle contain no visible source-label element.
+- [x] Confirm the production source and bundle contain no visible source-label element.
 - [ ] Confirm the installed `lean-startup` artifacts match the rebuilt repository artifacts.
 - [ ] Confirm Aside reloads in `lean-startup` with the rebuilt bundle.
-- [ ] Run the repository production build; do not add a new targeted test per the user's explicit instruction.
+- [x] Run the repository production build; do not add a new targeted test per the user's explicit instruction.
 
 ## Design
 
@@ -41,7 +41,7 @@ The visible control becomes:
 ( ) Wikilinks  ( ) Tags  ( ) Attachments    Scope: File
 ```
 
-No source definitions, attachment discovery, fallback rules, event handling, or scope logic will change. The obsolete label style may remain if it is shared or harmless; otherwise it can be removed only when confirmed unused.
+No source definitions, attachment discovery, fallback rules, event handling, or scope logic will change. The obsolete label style is removed after a repository-wide search confirms that the deleted element was its only consumer.
 
 ## Verification Strategy
 

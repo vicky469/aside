@@ -79,11 +79,13 @@ function renderThoughtTrailSourceControl(
     },
 ): void {
     const controlEl = container.createDiv("aside-thought-trail-source-control");
-    controlEl.createSpan({
-        cls: "aside-thought-trail-source-label",
-        text: "Related Files By",
+    const sourceOptionsEl = controlEl.createDiv({
+        cls: "aside-thought-trail-source-options",
+        attr: {
+            role: "radiogroup",
+            "aria-label": "Related files by",
+        },
     });
-    const sourceOptionsEl = controlEl.createDiv("aside-thought-trail-source-options");
     for (const definition of SIDEBAR_THOUGHT_TRAIL_SOURCES) {
         const isDisabled = !isThoughtTrailSourceAvailable(definition.id, options.sourceAvailability);
         const labelEl = sourceOptionsEl.createEl("label", {
