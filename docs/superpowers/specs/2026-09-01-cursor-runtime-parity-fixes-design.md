@@ -11,17 +11,17 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Route non-terminal Cursor assistant text through the grey progress callback instead of the persisted reply callback.
-- [ ] Publish only a successful terminal Cursor result as reply text.
-- [ ] Force the Cursor CLI sandbox on while preserving the selected workspace and additional vault root.
-- [ ] Reject an executable named `agent` when its help output does not identify the Cursor Agent CLI.
+- [x] Route non-terminal Cursor assistant text through the grey progress callback instead of the persisted reply callback.
+- [x] Publish only a successful terminal Cursor result as reply text.
+- [x] Force the Cursor CLI sandbox on while preserving the selected workspace and additional vault root.
+- [x] Reject an executable named `agent` when its help output does not identify the Cursor Agent CLI.
 
 ### Verification
 
-- [ ] Regression tests prove interim Cursor narration never enters partial reply text.
-- [ ] Argument tests prove Cursor launches with the sandbox enabled.
-- [ ] Diagnostic tests cover both genuine Cursor help output and a colliding non-Cursor `agent` executable.
-- [ ] The focused runtime adapter tests, full test suite, and production build pass.
+- [x] Regression tests prove interim Cursor narration never enters partial reply text.
+- [x] Argument tests prove Cursor launches with the sandbox enabled.
+- [x] Diagnostic tests cover both genuine Cursor help output and a colliding non-Cursor `agent` executable.
+- [x] The focused runtime adapter tests, full test suite, and production build pass.
 
 ## Problem
 

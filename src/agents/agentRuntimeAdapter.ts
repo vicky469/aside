@@ -988,7 +988,7 @@ export async function getCursorRuntimeDiagnostics(
 
     try {
         const env = await resolveAgentExecutionEnv(modules, baseEnv);
-        await execFileAsync(
+        const result = await execFileAsync(
             modules,
             "agent",
             ["--help"],
@@ -997,6 +997,9 @@ export async function getCursorRuntimeDiagnostics(
                 env,
             },
         );
+        if (!/\bCursor Agent\b/u.test(`${result.stdout}\n${result.stderr}`)) {
+            throw new Error("The agent executable is not the Cursor Agent CLI.");
+        }
         return {
             status: "available",
             message: "Cursor CLI is available.",
@@ -1399,20 +1402,7 @@ export function extractClaudeProgressTextFromJsonEvent(event: unknown): string |
 }
 
 export function extractCursorTextDeltaFromJsonEvent(event: unknown): string | null {
-    const resultText = extractClaudeReplyTextFromJsonEvent(event);
-    if (resultText) {
-        return resultText;
-    }
-
-    if (getClaudeEventType(event) !== "assistant") {
-        return null;
-    }
-
-    if (!isRecord(event) || !("timestamp_ms" in event)) {
-        return null;
-    }
-
-    return joinTextContentItems(getNestedValue(event, ["message", "content"]));
+    return extractClaudeReplyTextFromJsonEvent(event);
 }
 
 export function extractCursorErrorTextFromJsonEvent(event: unknown): string | null {
@@ -1444,6 +1434,15 @@ export function extractCursorProgressTextFromJsonEvent(event: unknown): string |
         return "Starting Cursor";
     }
 
+    if (getClaudeEventType(event) === "assistant" && isRecord(event) && "timestamp_ms" in event) {
+        const assistantProgressText = normalizeProgressText(
+            joinTextContentItems(getNestedValue(event, ["message", "content"])) ?? "",
+        );
+        if (assistantProgressText) {
+            return assistantProgressText;
+        }
+    }
+
     return extractClaudeProgressTextFromJsonEvent(event);
 }
 
@@ -1458,18 +1457,6 @@ export function isCursorTerminalErrorEvent(event: unknown): boolean {
 
     const subtype = firstStringAtPaths(event, [["subtype"]]);
     return subtype != null && subtype !== "success";
-}
-
-export function appendCursorStreamText(
-    streamedText: string,
-    textDelta: string,
-    event: unknown,
-): string {
-    if (getClaudeEventType(event) === "result") {
-        return textDelta || streamedText;
-    }
-
-    return `${streamedText}${textDelta}`;
 }
 
 type GeminiResultStatus = "success" | "error";
@@ -2053,6 +2040,8 @@ export function buildCursorCliArgs(options: {
         "stream-json",
         "--stream-partial-output",
         "--trust",
+        "--sandbox",
+        "enabled",
         "--workspace",
         options.cwd,
     ];
@@ -2700,7 +2689,6 @@ async function runCursorDirect(
         extractError: extractCursorErrorTextFromJsonEvent,
         extractMetadata: extractClaudeRunMetadataFromJsonEvent,
         isTerminalError: isCursorTerminalErrorEvent,
-        appendStreamText: appendCursorStreamText,
     });
 }
 

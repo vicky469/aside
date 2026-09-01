@@ -15,7 +15,6 @@ import {
     extractCursorErrorTextFromJsonEvent,
     extractCursorProgressTextFromJsonEvent,
     extractCursorTextDeltaFromJsonEvent,
-    appendCursorStreamText,
     extractCodexProgressTextDeltaFromJsonEvent,
     buildSideNotePrompt,
     createWorkspaceWriteSandboxPolicy,
@@ -361,7 +360,7 @@ test("getCursorRuntimeDiagnostics reports Cursor as available when the process c
         assert.deepEqual(args, ["--help"]);
         assert.equal(options.cwd, "/Users/test");
         assert.equal(options.env?.PATH, "/Users/test/.nvm/bin:/usr/bin");
-        callback(null, "agent help", "");
+        callback(null, "Usage: agent [options]\nStart the Cursor Agent", "");
         return createTrackedProcessStub();
     });
 
@@ -375,6 +374,30 @@ test("getCursorRuntimeDiagnostics reports Cursor as available when the process c
     assert.deepEqual(diagnostics, {
         status: "available",
         message: "Cursor CLI is available.",
+    });
+});
+
+test("getCursorRuntimeDiagnostics rejects an unrelated executable named agent", async () => {
+    resetResolvedAgentExecutionEnvForTests();
+
+    const modules = createRuntimeModules((file, _args, _options, callback) => {
+        if (file === "/bin/zsh") {
+            callback(null, "/Users/test/bin:/usr/bin\n", "");
+            return createTrackedProcessStub();
+        }
+
+        assert.equal(file, "agent");
+        callback(null, "Usage: agent [options]", "");
+        return createTrackedProcessStub();
+    });
+
+    assert.deepEqual(await getCursorRuntimeDiagnostics(modules, {
+        HOME: "/Users/test",
+        PATH: "/usr/bin",
+        SHELL: "/bin/zsh",
+    }), {
+        status: "unavailable",
+        message: "Cursor CLI is not authenticated or could not start.",
     });
 });
 
@@ -590,6 +613,27 @@ test("buildCodexCliArgs uses one-shot exec instead of app-server", () => {
     assert.equal(args[addDirIndex + 1], "/vault");
 });
 
+test("buildCursorCliArgs forces sandboxed streaming within the workspace and vault", () => {
+    assert.deepEqual(buildCursorCliArgs({
+        cwd: "/vault/project",
+        vaultRootPath: "/vault",
+        prompt: "Reply to the side note.",
+    }), [
+        "-p",
+        "--output-format",
+        "stream-json",
+        "--stream-partial-output",
+        "--trust",
+        "--sandbox",
+        "enabled",
+        "--workspace",
+        "/vault/project",
+        "--add-dir",
+        "/vault",
+        "Reply to the side note.",
+    ]);
+});
+
 test("buildGeminiCliArgs enables sandboxed headless streaming without overriding local ownership", () => {
     const args = buildGeminiCliArgs({
         cwd: "/vault/project",
@@ -768,6 +812,7 @@ test("runAgentRuntimeWithModules streams Cursor replies, progress, and metadata"
         vaultRootPath: "/vault",
     });
 
+    const narration = "I'll read the Aside workflow skill and the note, then fetch the YouTube transcript to append.";
     child.stdout.emitText([
         JSON.stringify({
             type: "system",
@@ -776,28 +821,24 @@ test("runAgentRuntimeWithModules streams Cursor replies, progress, and metadata"
         }),
         JSON.stringify({
             type: "assistant",
-            message: { role: "assistant", content: [{ type: "text", text: "Hello" }] },
+            message: { role: "assistant", content: [{ type: "text", text: narration }] },
             timestamp_ms: 1,
-        }),
-        JSON.stringify({
-            type: "assistant",
-            message: { role: "assistant", content: [{ type: "text", text: " world" }] },
-            timestamp_ms: 2,
         }),
         JSON.stringify({
             type: "result",
             subtype: "success",
             is_error: false,
-            result: "Hello world",
+            result: "Transcript appended.",
         }),
     ].join("\n") + "\n");
     child.emit("close", 0, null);
 
     const result = await runPromise;
     assert.equal(result.runtime, "direct-cli");
-    assert.equal(result.replyText, "Hello world");
-    assert.deepEqual(partials, ["Hello", "Hello world", "Hello world"]);
+    assert.equal(result.replyText, "Transcript appended.");
+    assert.deepEqual(partials, ["Transcript appended."]);
     assert.equal(progress.includes("Starting Cursor"), true);
+    assert.equal(progress.includes(narration), true);
     assert.equal(harness.spawnCalls[0]?.file, "agent");
     assert.deepEqual(
         harness.spawnCalls[0]?.args,
@@ -812,7 +853,7 @@ test("runAgentRuntimeWithModules streams Cursor replies, progress, and metadata"
     assert.equal(child.ended, true);
 });
 
-test("cursor stream-json extractors append partial text and prefer final results", () => {
+test("cursor stream-json extractors separate progress text from final results", () => {
     const initEvent = { type: "system", subtype: "init" };
     const partialEvent = {
         type: "assistant",
@@ -825,12 +866,20 @@ test("cursor stream-json extractors append partial text and prefer final results
         is_error: false,
         result: "Hi there",
     };
+    const toolEvent = {
+        type: "assistant",
+        message: {
+            role: "assistant",
+            content: [{ type: "tool_use", name: "shell", input: { command: "pwd" } }],
+        },
+        timestamp_ms: 2,
+    };
 
     assert.equal(extractCursorProgressTextFromJsonEvent(initEvent), "Starting Cursor");
-    assert.equal(extractCursorTextDeltaFromJsonEvent(partialEvent), "Hi");
+    assert.equal(extractCursorProgressTextFromJsonEvent(partialEvent), "Hi");
+    assert.equal(extractCursorProgressTextFromJsonEvent(toolEvent), "Running command");
+    assert.equal(extractCursorTextDeltaFromJsonEvent(partialEvent), null);
     assert.equal(extractCursorTextDeltaFromJsonEvent(resultEvent), "Hi there");
-    assert.equal(appendCursorStreamText("Hi", " there", partialEvent), "Hi there");
-    assert.equal(appendCursorStreamText("Hi there", "Hi there", resultEvent), "Hi there");
     assert.equal(extractCursorErrorTextFromJsonEvent({
         type: "result",
         subtype: "error",
