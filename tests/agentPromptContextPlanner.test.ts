@@ -149,6 +149,7 @@ test("buildAgentPromptContext preserves full agent responses for every provider"
     const targets: Array<[AsideAgentTarget, string]> = [
         ["codex", "Codex"],
         ["claude", "Claude Code"],
+        ["cursor", "Cursor"],
         ["gemini", "Gemini"],
         ["deepseek", "DeepSeek"],
     ];

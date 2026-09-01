@@ -14,6 +14,7 @@ test("setup guide stays hidden while availability is still checking", () => {
     const state = resolveDefaultAgentSetupGuideState(diagnostics({
         codex: { status: "checking", message: "Checking" },
         claude: { status: "missing", message: "Missing" },
+        cursor: { status: "missing", message: "Missing" },
         gemini: { status: "missing", message: "Missing" },
         deepseek: { status: "missing", message: "Missing" },
     }));
@@ -26,6 +27,7 @@ test("setup guide stays hidden when at least one agent is available", () => {
     const state = resolveDefaultAgentSetupGuideState(diagnostics({
         codex: { status: "available", message: "Ready" },
         claude: { status: "missing", message: "Missing" },
+        cursor: { status: "missing", message: "Missing" },
         gemini: { status: "missing", message: "Missing" },
         deepseek: { status: "missing", message: "Missing" },
     }));
@@ -37,6 +39,7 @@ test("setup guide asks for desktop Obsidian when every agent is unsupported", ()
     const state = resolveDefaultAgentSetupGuideState(diagnostics({
         codex: { status: "unsupported", message: "Desktop only" },
         claude: { status: "unsupported", message: "Desktop only" },
+        cursor: { status: "unsupported", message: "Desktop only" },
         gemini: { status: "unsupported", message: "Desktop only" },
         deepseek: { status: "unsupported", message: "Desktop only" },
     }));
@@ -49,6 +52,7 @@ test("setup guide points users to CLI login when no agent is available", () => {
     const state = resolveDefaultAgentSetupGuideState(diagnostics({
         codex: { status: "missing", message: "Codex was not found on PATH." },
         claude: { status: "unavailable", message: "Claude CLI is not authenticated or could not start." },
+        cursor: { status: "missing", message: "Cursor CLI was not found on PATH." },
         gemini: { status: "missing", message: "Gemini CLI was not found on PATH." },
         deepseek: { status: "missing", message: "OpenCode CLI was not found on PATH." },
     }));
@@ -56,6 +60,7 @@ test("setup guide points users to CLI login when no agent is available", () => {
     assert.equal(state.kind, "setup-needed");
     assert.match(state.markdown, /codex login/i);
     assert.match(state.markdown, /claude login/i);
+    assert.match(state.markdown, /agent login/i);
     assert.match(state.markdown, /\/create-script/i);
     assert.match(state.markdown, /Recheck/i);
     assert.match(state.markdown, /opencode\.ai\/docs\/cli/i);

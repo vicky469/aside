@@ -55,6 +55,7 @@ import {
     disposeAgentRuntimeProcesses,
     getClaudeRuntimeDiagnostics as probeClaudeRuntimeDiagnostics,
     getCodexRuntimeDiagnostics as probeCodexRuntimeDiagnostics,
+    getCursorRuntimeDiagnostics as probeCursorRuntimeDiagnostics,
     getGeminiRuntimeDiagnostics as probeGeminiRuntimeDiagnostics,
     getOpenCodeRuntimeDiagnostics as probeOpenCodeRuntimeDiagnostics,
     resolveAgentExecutionEnv,
@@ -1347,6 +1348,8 @@ export default class Aside extends Plugin {
                 return probeCodexRuntimeDiagnostics();
             case "claude-cli":
                 return probeClaudeRuntimeDiagnostics();
+            case "cursor-cli":
+                return probeCursorRuntimeDiagnostics();
             case "gemini-cli":
                 return probeGeminiRuntimeDiagnostics();
             case "opencode-cli":

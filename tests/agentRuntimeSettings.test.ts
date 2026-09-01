@@ -36,6 +36,15 @@ test("default agent radio options preserve order and expose status", () => {
             selected: false,
         },
         {
+            target: "cursor",
+            label: "Cursor",
+            status: "checking",
+            statusLabel: "Checking…",
+            available: false,
+            disabled: true,
+            selected: false,
+        },
+        {
             target: "gemini",
             label: "Gemini",
             status: "unavailable",

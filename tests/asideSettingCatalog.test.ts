@@ -53,7 +53,7 @@ test("Scripts section is the first settings section", () => {
 
 test("agent tab search aliases derive from every supported agent", () => {
     const entry = ASIDE_SETTING_CATALOG.find((candidate) => candidate.key === "show-agent-tab");
-    assert.deepEqual(entry?.aliases, ["Codex tab", "Claude Code tab", "Gemini tab", "DeepSeek tab"]);
+    assert.deepEqual(entry?.aliases, ["Codex tab", "Claude Code tab", "Cursor tab", "Gemini tab", "DeepSeek tab"]);
 });
 
 test("default agent description covers every built-in default-agent command", () => {

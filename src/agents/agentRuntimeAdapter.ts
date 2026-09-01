@@ -99,6 +99,7 @@ export type AgentRuntimeDiagnostics = {
 };
 export type CodexRuntimeDiagnostics = AgentRuntimeDiagnostics;
 export type ClaudeRuntimeDiagnostics = AgentRuntimeDiagnostics;
+export type CursorRuntimeDiagnostics = AgentRuntimeDiagnostics;
 export type GeminiRuntimeDiagnostics = AgentRuntimeDiagnostics;
 export type OpenCodeRuntimeDiagnostics = AgentRuntimeDiagnostics;
 
@@ -973,6 +974,48 @@ export async function getClaudeRuntimeDiagnostics(
     }
 }
 
+export async function getCursorRuntimeDiagnostics(
+    modulesOverride?: NodeModules | null,
+    baseEnv: ExecEnv = getBaseProcessEnv(),
+): Promise<CursorRuntimeDiagnostics> {
+    const modules = modulesOverride ?? getNodeModules();
+    if (!modules) {
+        return {
+            status: "unsupported",
+            message: "Built-in @cursor requires desktop Obsidian.",
+        };
+    }
+
+    try {
+        const env = await resolveAgentExecutionEnv(modules, baseEnv);
+        await execFileAsync(
+            modules,
+            "agent",
+            ["--help"],
+            {
+                cwd: env.HOME ?? "/",
+                env,
+            },
+        );
+        return {
+            status: "available",
+            message: "Cursor CLI is available.",
+        };
+    } catch (error) {
+        if (isExecErrorWithCode(error, "ENOENT")) {
+            return {
+                status: "missing",
+                message: "Cursor CLI was not found on PATH.",
+            };
+        }
+
+        return {
+            status: "unavailable",
+            message: "Cursor CLI is not authenticated or could not start.",
+        };
+    }
+}
+
 export async function getGeminiRuntimeDiagnostics(
     modulesOverride?: NodeModules | null,
     baseEnv: ExecEnv = getBaseProcessEnv(),
@@ -1353,6 +1396,80 @@ export function extractClaudeProgressTextFromJsonEvent(event: unknown): string |
     return toolName === "shell"
         ? "Running command"
         : normalizeProgressText(`Using ${toolName}`);
+}
+
+export function extractCursorTextDeltaFromJsonEvent(event: unknown): string | null {
+    const resultText = extractClaudeReplyTextFromJsonEvent(event);
+    if (resultText) {
+        return resultText;
+    }
+
+    if (getClaudeEventType(event) !== "assistant") {
+        return null;
+    }
+
+    if (!isRecord(event) || !("timestamp_ms" in event)) {
+        return null;
+    }
+
+    return joinTextContentItems(getNestedValue(event, ["message", "content"]));
+}
+
+export function extractCursorErrorTextFromJsonEvent(event: unknown): string | null {
+    if (getClaudeEventType(event) !== "result") {
+        return null;
+    }
+
+    if (isRecord(event) && event.is_error === true) {
+        return normalizeRuntimeDiagnosticText(firstStringAtPaths(event, [
+            ["result"],
+            ["message"],
+            ["error"],
+        ]) ?? "Cursor reported an error.");
+    }
+
+    const subtype = firstStringAtPaths(event, [["subtype"]]);
+    if (subtype && subtype !== "success") {
+        return normalizeRuntimeDiagnosticText(firstStringAtPaths(event, [
+            ["result"],
+            ["message"],
+        ]) ?? "Cursor reported an unsuccessful result.");
+    }
+
+    return null;
+}
+
+export function extractCursorProgressTextFromJsonEvent(event: unknown): string | null {
+    if (getClaudeEventType(event) === "system" && firstStringAtPaths(event, [["subtype"]]) === "init") {
+        return "Starting Cursor";
+    }
+
+    return extractClaudeProgressTextFromJsonEvent(event);
+}
+
+export function isCursorTerminalErrorEvent(event: unknown): boolean {
+    if (getClaudeEventType(event) !== "result") {
+        return false;
+    }
+
+    if (isRecord(event) && event.is_error === true) {
+        return true;
+    }
+
+    const subtype = firstStringAtPaths(event, [["subtype"]]);
+    return subtype != null && subtype !== "success";
+}
+
+export function appendCursorStreamText(
+    streamedText: string,
+    textDelta: string,
+    event: unknown,
+): string {
+    if (getClaudeEventType(event) === "result") {
+        return textDelta || streamedText;
+    }
+
+    return `${streamedText}${textDelta}`;
 }
 
 type GeminiResultStatus = "success" | "error";
@@ -1925,6 +2042,27 @@ export function buildOpenCodeCliArgs(prompt: string): string[] {
     return ["run", "--format", "json", "--auto", prompt];
 }
 
+export function buildCursorCliArgs(options: {
+    cwd: string;
+    vaultRootPath?: string | null;
+    prompt: string;
+}): string[] {
+    const args = [
+        "-p",
+        "--output-format",
+        "stream-json",
+        "--stream-partial-output",
+        "--trust",
+        "--workspace",
+        options.cwd,
+    ];
+    if (options.vaultRootPath && options.vaultRootPath !== options.cwd) {
+        args.push("--add-dir", options.vaultRootPath);
+    }
+    args.push(options.prompt);
+    return args;
+}
+
 async function runClaudeDirect(
     modules: NodeModules,
     invocation: AgentRuntimeInvocation,
@@ -2222,6 +2360,7 @@ interface JsonLineAgentRuntimeDefinition {
     extractError(event: unknown): string | null;
     extractMetadata(event: unknown): AgentRunMetadata;
     isTerminalError(event: unknown): boolean;
+    appendStreamText?(streamedText: string, textDelta: string, event: unknown): string;
     normalizeFailureDiagnostic?(value: string | null): string | null;
 }
 
@@ -2387,7 +2526,9 @@ async function runJsonLineAgentDirect(
 
             const textDelta = definition.extractText(event);
             if (textDelta) {
-                streamedText += textDelta;
+                streamedText = definition.appendStreamText
+                    ? definition.appendStreamText(streamedText, textDelta, event)
+                    : `${streamedText}${textDelta}`;
                 invocation.onPartialText?.(sanitizeAgentReplyText(streamedText));
             }
         };
@@ -2535,6 +2676,34 @@ async function runGeminiDirect(
     });
 }
 
+async function runCursorDirect(
+    modules: NodeModules,
+    invocation: AgentRuntimeInvocation,
+): Promise<AgentRuntimeResult> {
+    const prompt = buildSideNotePrompt({
+        promptText: invocation.prompt,
+        vaultRootPath: invocation.vaultRootPath,
+        requestKind: invocation.requestKind,
+        targetScriptPath: invocation.targetScriptPath,
+    });
+    return runJsonLineAgentDirect(modules, invocation, {
+        executable: "agent",
+        args: buildCursorCliArgs({
+            cwd: invocation.cwd,
+            vaultRootPath: invocation.vaultRootPath,
+            prompt,
+        }),
+        emptyResponseMessage: "Cursor returned an empty response.",
+        unsuccessfulResultMessage: "Cursor reported an unsuccessful result.",
+        extractText: extractCursorTextDeltaFromJsonEvent,
+        extractProgress: extractCursorProgressTextFromJsonEvent,
+        extractError: extractCursorErrorTextFromJsonEvent,
+        extractMetadata: extractClaudeRunMetadataFromJsonEvent,
+        isTerminalError: isCursorTerminalErrorEvent,
+        appendStreamText: appendCursorStreamText,
+    });
+}
+
 async function runOpenCodeDirect(
     modules: NodeModules,
     invocation: AgentRuntimeInvocation,
@@ -2572,6 +2741,8 @@ export async function runAgentRuntimeWithModules(
             return runCodexDirect(modules, invocation);
         case "claude-cli":
             return runClaudeDirect(modules, invocation);
+        case "cursor-cli":
+            return runCursorDirect(modules, invocation);
         case "gemini-cli":
             return runGeminiDirect(modules, invocation);
         case "opencode-cli":

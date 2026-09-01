@@ -29,6 +29,15 @@ test("parseAgentDirectives resolves claude as a supported peer target", () => {
     });
 });
 
+test("parseAgentDirectives resolves cursor as a supported peer target", () => {
+    assert.deepEqual(parseAgentDirectives("ping foo@example.com then ask @cursor"), {
+        target: "cursor",
+        hasConflict: false,
+        matchedTargets: ["cursor"],
+        unsupportedTargets: [],
+    });
+});
+
 test("parseAgentDirectives resolves repeated gemini mentions case-insensitively", () => {
     assert.deepEqual(parseAgentDirectives("ask @GEMINI twice @gemini"), {
         target: "gemini",

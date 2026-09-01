@@ -7,7 +7,7 @@ import {
 import type { AsideAgentTarget } from "../src/core/config/agentTargets";
 
 function diagnostics(available: AsideAgentTarget[]): Map<AsideAgentTarget, AgentRuntimeDiagnostics> {
-    return new Map((["codex", "claude", "gemini", "deepseek"] as AsideAgentTarget[]).map((target) => [
+    return new Map((["codex", "claude", "cursor", "gemini", "deepseek"] as AsideAgentTarget[]).map((target) => [
         target,
         {
             status: available.includes(target) ? "available" : "unavailable",

@@ -26,6 +26,7 @@ const SETUP_NEEDED_MARKDOWN = [
     "2. Install and sign in to at least one CLI:",
     "   - **Codex** — `codex login`",
     "   - **Claude Code** — `claude login`",
+    "   - **Cursor** — `agent login`",
     "   - **Gemini** — run `gemini` and finish its sign-in flow",
     "   - **DeepSeek** — install the [OpenCode CLI](https://opencode.ai/docs/cli/), then sign in there",
     "3. Return here and click **Recheck**.",

@@ -507,7 +507,7 @@ test("sidebar draft editor controller preserves @ provider scope in the disconne
         mentions: suggestions.map((suggestion) => suggestion.mention),
     }, {
         rawQueries: ["@c"],
-        mentions: ["@codex", "@claude"],
+        mentions: ["@codex", "@claude", "@cursor"],
     });
     assert.ok(suggestions.every((suggestion) => suggestion.kind === "built-in"));
     assert.ok(suggestions.every((suggestion) => suggestion.mention.startsWith("@")));

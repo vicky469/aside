@@ -25,7 +25,7 @@ On desktop Obsidian with a filesystem-backed vault, Aside can run reusable JavaS
 - Supported extensions are `.mjs`, `.js`, and `.cjs`.
 - Hidden files and filenames ending in `.test` or `.spec` are ignored.
 - Filenames cannot contain spaces. The filename without its extension becomes the command: `clean-citations.mjs` becomes `/clean-citations`.
-- Command names are matched case-insensitively. Duplicate names and the reserved names `todo`, `codex`, `claude`, `gemini`, and `deepseek` are not runnable.
+- Command names are matched case-insensitively. Duplicate names and the reserved names `todo`, `codex`, `claude`, `cursor`, `gemini`, and `deepseek` are not runnable.
 
 Aside discovers eligible scripts when it loads and keeps the list current when files are created, renamed, or deleted.
 

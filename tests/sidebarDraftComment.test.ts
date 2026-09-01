@@ -75,7 +75,7 @@ test("buildDraftCommentPresentation mentions todo and agent directives in new dr
 
     assert.equal(
         presentation.placeholder,
-        "Write a side note. Use B or H for styling, or type /create-script, /update-script, /pdf-to-markdown, /script-name, @todo, @codex, @claude, @gemini, or @deepseek.",
+        "Write a side note. Use B or H for styling, or type /create-script, /update-script, /pdf-to-markdown, /script-name, @todo, @codex, @claude, @cursor, @gemini, or @deepseek.",
     );
 });
 

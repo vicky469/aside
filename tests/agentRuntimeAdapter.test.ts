@@ -5,12 +5,17 @@ import type { AgentRunMetadata } from "../src/core/agents/agentRuns";
 import {
     buildCodexCliArgs,
     buildClaudeCliArgs,
+    buildCursorCliArgs,
     buildGeminiCliArgs,
     buildOpenCodeCliArgs,
     extractClaudeProgressTextFromJsonEvent,
     extractClaudeReplyTextFromJsonEvent,
     extractClaudeRunMetadataFromJsonEvent,
     extractClaudeTextDeltaFromJsonEvent,
+    extractCursorErrorTextFromJsonEvent,
+    extractCursorProgressTextFromJsonEvent,
+    extractCursorTextDeltaFromJsonEvent,
+    appendCursorStreamText,
     extractCodexProgressTextDeltaFromJsonEvent,
     buildSideNotePrompt,
     createWorkspaceWriteSandboxPolicy,
@@ -29,6 +34,7 @@ import {
     extractOpenCodeTextDeltaFromJsonEvent,
     getClaudeRuntimeDiagnostics,
     getCodexRuntimeDiagnostics,
+    getCursorRuntimeDiagnostics,
     getGeminiRuntimeDiagnostics,
     getOpenCodeRuntimeDiagnostics,
     resetResolvedAgentExecutionEnvForTests,
@@ -171,6 +177,13 @@ const GEMINI_TEST_INVOCATION = {
 const OPENCODE_TEST_INVOCATION = {
     target: "deepseek" as const,
     prompt: "@deepseek review this",
+    cwd: "/vault/project",
+    vaultRootPath: "/vault",
+};
+
+const CURSOR_TEST_INVOCATION = {
+    target: "cursor" as const,
+    prompt: "@cursor review this",
     cwd: "/vault/project",
     vaultRootPath: "/vault",
 };
@@ -330,6 +343,63 @@ test("getClaudeRuntimeDiagnostics reports a missing claude binary clearly", asyn
     assert.deepEqual(diagnostics, {
         status: "missing",
         message: "Claude CLI was not found on PATH.",
+    });
+});
+
+test("getCursorRuntimeDiagnostics reports Cursor as available when the process can be launched", async () => {
+    resetResolvedAgentExecutionEnvForTests();
+
+    let helpChecked = false;
+    const modules = createRuntimeModules((file, args, options, callback) => {
+        if (file === "/bin/zsh") {
+            callback(null, "/Users/test/.nvm/bin:/usr/bin\n", "");
+            return createTrackedProcessStub();
+        }
+
+        helpChecked = true;
+        assert.equal(file, "agent");
+        assert.deepEqual(args, ["--help"]);
+        assert.equal(options.cwd, "/Users/test");
+        assert.equal(options.env?.PATH, "/Users/test/.nvm/bin:/usr/bin");
+        callback(null, "agent help", "");
+        return createTrackedProcessStub();
+    });
+
+    const diagnostics = await getCursorRuntimeDiagnostics(modules, {
+        HOME: "/Users/test",
+        PATH: "/usr/bin",
+        SHELL: "/bin/zsh",
+    });
+
+    assert.equal(helpChecked, true);
+    assert.deepEqual(diagnostics, {
+        status: "available",
+        message: "Cursor CLI is available.",
+    });
+});
+
+test("getCursorRuntimeDiagnostics reports a missing agent binary clearly", async () => {
+    resetResolvedAgentExecutionEnvForTests();
+
+    const modules = createRuntimeModules((file, _args, _options, callback) => {
+        if (file === "/bin/zsh") {
+            callback(null, "/Users/test/.nvm/bin:/usr/bin\n", "");
+            return createTrackedProcessStub();
+        }
+
+        callback(Object.assign(new Error("missing agent"), { code: "ENOENT" }), "", "");
+        return createTrackedProcessStub();
+    });
+
+    const diagnostics = await getCursorRuntimeDiagnostics(modules, {
+        HOME: "/Users/test",
+        PATH: "/usr/bin",
+        SHELL: "/bin/zsh",
+    });
+
+    assert.deepEqual(diagnostics, {
+        status: "missing",
+        message: "Cursor CLI was not found on PATH.",
     });
 });
 
@@ -681,6 +751,92 @@ test("runAgentRuntimeWithModules streams OpenCode replies, progress, and metadat
     assert.equal(harness.spawnCalls[0]?.cwd, "/vault/project");
     assert.deepEqual(child.stdinChunks, []);
     assert.equal(child.ended, true);
+});
+
+test("runAgentRuntimeWithModules streams Cursor replies, progress, and metadata", async () => {
+    const harness = createJsonLineRuntimeHarness();
+    const partials: string[] = [];
+    const progress: string[] = [];
+    const runPromise = runAgentRuntimeWithModules(harness.modules, {
+        ...CURSOR_TEST_INVOCATION,
+        onPartialText: (value) => partials.push(value),
+        onProgressText: (value) => progress.push(value),
+    });
+    const child = await waitForRuntimeChild(harness.spawned, runPromise);
+    const sideNotePrompt = buildSideNotePrompt({
+        promptText: "@cursor review this",
+        vaultRootPath: "/vault",
+    });
+
+    child.stdout.emitText([
+        JSON.stringify({
+            type: "system",
+            subtype: "init",
+            cwd: "/vault/project",
+        }),
+        JSON.stringify({
+            type: "assistant",
+            message: { role: "assistant", content: [{ type: "text", text: "Hello" }] },
+            timestamp_ms: 1,
+        }),
+        JSON.stringify({
+            type: "assistant",
+            message: { role: "assistant", content: [{ type: "text", text: " world" }] },
+            timestamp_ms: 2,
+        }),
+        JSON.stringify({
+            type: "result",
+            subtype: "success",
+            is_error: false,
+            result: "Hello world",
+        }),
+    ].join("\n") + "\n");
+    child.emit("close", 0, null);
+
+    const result = await runPromise;
+    assert.equal(result.runtime, "direct-cli");
+    assert.equal(result.replyText, "Hello world");
+    assert.deepEqual(partials, ["Hello", "Hello world", "Hello world"]);
+    assert.equal(progress.includes("Starting Cursor"), true);
+    assert.equal(harness.spawnCalls[0]?.file, "agent");
+    assert.deepEqual(
+        harness.spawnCalls[0]?.args,
+        buildCursorCliArgs({
+            cwd: "/vault/project",
+            vaultRootPath: "/vault",
+            prompt: sideNotePrompt,
+        }),
+    );
+    assert.equal(harness.spawnCalls[0]?.cwd, "/vault/project");
+    assert.deepEqual(child.stdinChunks, []);
+    assert.equal(child.ended, true);
+});
+
+test("cursor stream-json extractors append partial text and prefer final results", () => {
+    const initEvent = { type: "system", subtype: "init" };
+    const partialEvent = {
+        type: "assistant",
+        message: { role: "assistant", content: [{ type: "text", text: "Hi" }] },
+        timestamp_ms: 1,
+    };
+    const resultEvent = {
+        type: "result",
+        subtype: "success",
+        is_error: false,
+        result: "Hi there",
+    };
+
+    assert.equal(extractCursorProgressTextFromJsonEvent(initEvent), "Starting Cursor");
+    assert.equal(extractCursorTextDeltaFromJsonEvent(partialEvent), "Hi");
+    assert.equal(extractCursorTextDeltaFromJsonEvent(resultEvent), "Hi there");
+    assert.equal(appendCursorStreamText("Hi", " there", partialEvent), "Hi there");
+    assert.equal(appendCursorStreamText("Hi there", "Hi there", resultEvent), "Hi there");
+    assert.equal(extractCursorErrorTextFromJsonEvent({
+        type: "result",
+        subtype: "error",
+        is_error: true,
+        result: "Authentication failed.",
+    }), "Authentication failed.");
 });
 
 test("runAgentRuntimeWithModules accepts OpenCode text without a terminal event", async () => {
