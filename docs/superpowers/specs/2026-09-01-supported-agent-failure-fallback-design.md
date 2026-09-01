@@ -12,18 +12,18 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Classify known quota, billing, authentication, rate-limit, and runtime-availability failures through one shared policy for every supported agent.
-- [ ] Replace streamed provider error text with a concise provider-aware fallback when a classified failure reaches the controller.
-- [ ] Keep classified runs visibly failed and retain their retry behavior.
-- [ ] Render the failed state with a clear failure mark (`❌ Failed`) rather than a success mark.
-- [ ] Preserve specific diagnostics in run metadata and logs without exposing raw provider garbage as the persisted reply.
+- [x] Classify known quota, billing, authentication, rate-limit, and runtime-availability failures through one shared policy for every supported agent, including failure text returned through an otherwise successful transport result.
+- [x] Replace streamed provider error text with a concise provider-aware fallback when a classified failure reaches the controller.
+- [x] Keep classified runs visibly failed and retain their retry behavior.
+- [x] Render the failed state with a clear failure mark (`❌ Failed`) rather than a success mark.
+- [x] Preserve specific diagnostics in run metadata and logs without exposing raw provider garbage as the persisted reply.
 
 ### Verification
 
-- [ ] Shared classifier tests cover Codex, Claude, Gemini, OpenCode, and Cursor failure examples.
-- [ ] Controller tests prove prior partial text is replaced for classified failures while ordinary failures keep their existing behavior.
-- [ ] UI tests prove failed agent output uses `❌ Failed` and the generic fallback copy.
-- [ ] Focused tests, the full test suite, and the production build pass.
+- [x] Shared classifier tests cover Codex, Claude, Cursor, Gemini, and DeepSeek failure examples.
+- [x] Controller tests prove prior partial text is replaced for classified failures while ordinary failures keep their existing behavior.
+- [x] UI tests prove failed agent output uses `❌ Failed` and the generic fallback copy.
+- [x] Focused tests, the full test suite, and the production build pass.
 
 ## Problem
 
@@ -39,13 +39,13 @@ A recognized provider or runtime-availability failure remains visibly failed:
 Gemini couldn’t complete this request. Try another agent.
 ```
 
-The agent label changes for Codex, Claude, Gemini, OpenCode, or Cursor. The run does not masquerade as a successful assistant reply. Existing retry controls remain available.
+The agent label changes for Codex, Claude, Cursor, Gemini, or DeepSeek. DeepSeek's OpenCode transport remains an internal implementation detail. The run does not masquerade as a successful assistant reply. Existing retry controls remain available.
 
 ## Design
 
 A shared failure-policy helper owns classification and user-facing fallback formatting for all supported agents. It accepts the requested agent plus the final runtime diagnostic and classifies only high-confidence failure signatures: quota or credits exhausted, billing disabled or required, authentication or authorization failure, rate limiting, and runtime or service unavailability.
 
-Runtime adapters remain responsible for extracting provider-specific structured diagnostics from their transports. They do not each format UI copy. The controller catches runtime failures, asks the shared policy whether the failure is eligible for replacement, and passes an explicit replacement reply to the failed-run persistence path.
+Runtime adapters remain responsible for extracting provider-specific structured diagnostics from their transports. They do not each format UI copy. The controller validates both thrown runtime diagnostics and the final returned reply text through the shared policy. A reply that is itself a high-confidence provider failure is converted into a failed run before normal completion. The controller passes an explicit replacement reply to the failed-run persistence path.
 
 The failed-run path distinguishes two values:
 

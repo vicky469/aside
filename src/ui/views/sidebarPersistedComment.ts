@@ -172,7 +172,7 @@ export function getAgentRunStatusPresentation(status: AgentRunRecord["status"]):
         case "running":
             return { marker: null, markerKind: "spinner" };
         case "failed":
-            return { marker: "✕", markerKind: "text" };
+            return { marker: "❌", markerKind: "text" };
         case "succeeded":
             return { marker: "✓", markerKind: "text" };
         case "cancelled":

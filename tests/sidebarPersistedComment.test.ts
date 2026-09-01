@@ -1414,7 +1414,7 @@ test("getAgentRunStatusPresentation uses compact success and failure markers", (
         markerKind: "text",
     });
     assert.deepEqual(getAgentRunStatusPresentation("failed"), {
-        marker: "✕",
+        marker: "❌",
         markerKind: "text",
     });
 });

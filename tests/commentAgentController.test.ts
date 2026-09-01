@@ -1800,6 +1800,56 @@ test("comment agent controller retries a renamed thread when old run output is m
     assert.deepEqual(harness.notices, []);
 });
 
+test("comment agent controller replaces streamed provider garbage on a known failure", async () => {
+    const harness = createHarness({
+        customRunAgentRuntime: async (invocation) => {
+            invocation.onPartialText?.("RESOURCE_EXHAUSTED: quota exceeded and internal details");
+            throw new Error("RESOURCE_EXHAUSTED: quota exceeded");
+        },
+    });
+
+    await harness.controller.handleSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "@gemini summarize this",
+    });
+    await waitForAgentQueueToDrain(harness.controller);
+
+    const run = harness.controller.getLatestAgentRunForThread("thread-1");
+    assert.equal(run?.status, "failed");
+    assert.equal(run?.error, "RESOURCE_EXHAUSTED: quota exceeded");
+    assert.equal(
+        harness.commentManager.getCommentById(run?.outputEntryId ?? "")?.comment,
+        "Gemini couldn’t complete this request. Try another agent.",
+    );
+});
+
+test("comment agent controller rejects provider failure text returned as success", async () => {
+    const harness = createHarness({
+        customRunAgentRuntime: async () => ({
+            runtime: "direct-cli",
+            replyText: "You have insufficient credits to continue.",
+        }),
+    });
+
+    await harness.controller.handleSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "@codex summarize this",
+    });
+    await waitForAgentQueueToDrain(harness.controller);
+
+    const run = harness.controller.getLatestAgentRunForThread("thread-1");
+    assert.equal(run?.status, "failed");
+    assert.equal(run?.error, "You have insufficient credits to continue.");
+    assert.equal(
+        harness.commentManager.getCommentById(run?.outputEntryId ?? "")?.comment,
+        "Codex couldn’t complete this request. Try another agent.",
+    );
+});
+
 test("comment agent controller keeps failed runs retryable through the same output entry", async () => {
     let attempt = 0;
     const harness = createHarness({

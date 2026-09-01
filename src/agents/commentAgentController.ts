@@ -50,6 +50,7 @@ import {
     type AgentRuntimeSelection,
     type DefaultAgentRuntimeSelection,
 } from "./agentRuntimeSelection";
+import { formatKnownAgentFailureReply } from "./agentFailurePolicy";
 import { isAgentRuntimeCancelledError } from "./agentRuntimeAdapter";
 import {
     buildAgentPromptContext,
@@ -984,9 +985,12 @@ export class CommentAgentController {
 
     private async failRun(runId: string, run: AgentRunRecord, message: string): Promise<void> {
         const existingStream = this.runStreams.get(runId);
-        const failureText = existingStream?.partialText.trim().length
-            ? existingStream.partialText
-            : message;
+        const knownFailureReply = formatKnownAgentFailureReply(
+            run.requestedAgent,
+            [message, existingStream?.partialText ?? ""].join("\n"),
+        );
+        const failureText = knownFailureReply
+            ?? (existingStream?.partialText.trim().length ? existingStream.partialText : message);
         const failureMetadata = mergeAgentRunMetadata(run, existingStream ?? {});
         if (run.outputEntryId) {
             await this.host.editComment(run.outputEntryId, failureText, { skipCommentViewRefresh: true });
@@ -1129,6 +1133,10 @@ export class CommentAgentController {
         });
         if (this.isRunCancellationRequested(options.run.id)) {
             return;
+        }
+
+        if (formatKnownAgentFailureReply(options.run.requestedAgent, runtimeResponse.replyText)) {
+            throw new Error(runtimeResponse.replyText);
         }
 
         await this.completeRunWithReply({
