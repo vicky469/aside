@@ -42,7 +42,7 @@ test("every Aside setting has searchable metadata and one section owner", () => 
     }
 });
 
-test("Agents experiment is the first settings section", () => {
+test("Scripts section is the first settings section", () => {
     assert.deepEqual(ASIDE_SETTING_SECTIONS.map((section) => section.key), [
         "agents",
         "sidebar",
@@ -100,7 +100,7 @@ function createCatalogContext(options: {
     } as unknown as Parameters<NonNullable<(typeof ASIDE_SETTING_CATALOG)[number]["visible"]>>[0];
 }
 
-test("Agents settings and group follow the agents feature flag", () => {
+test("Scripts settings and group follow the agents feature flag", () => {
     const disabled = createCatalogContext({
         agentsFeatureEnabled: false,
         publishFeatureEnabled: false,
@@ -116,9 +116,9 @@ test("Agents settings and group follow the agents feature flag", () => {
     assert.equal(isVisible("show-agent-tab", enabled), true);
 
     const group = getAsideSettingDefinitions(disabled)
-        .find((item) => "heading" in item && item.heading === "Agents (experimental)");
+        .find((item) => "heading" in item && item.heading === "Scripts");
     if (!group || typeof group.visible !== "function") {
-        assert.fail("Agents settings group should define feature visibility");
+        assert.fail("Scripts settings group should define feature visibility");
     }
     assert.equal(group.visible(), false);
 });

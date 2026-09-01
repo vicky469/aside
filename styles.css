@@ -1805,6 +1805,62 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
     padding: 0;
 }
 
+.aside-default-agent-setting .setting-item-name {
+    display: inline-flex;
+    align-items: center;
+}
+
+.aside-settings-tab .aside-setting-info-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-inline-start: 0.35em;
+    color: var(--text-muted);
+    cursor: default;
+    flex: none;
+    --icon-size: 0.9em;
+}
+
+.aside-default-agent-setup-guide {
+    display: none;
+    width: 100%;
+    margin-top: var(--size-4-2);
+    padding: var(--size-4-2) var(--size-4-3);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: var(--radius-m);
+    background: var(--background-secondary);
+}
+
+.aside-default-agent-setup-guide.is-visible {
+    display: block;
+}
+
+.aside-default-agent-setup-guide-markdown {
+    font-size: var(--font-ui-small);
+    line-height: var(--line-height-normal);
+}
+
+.aside-default-agent-setup-guide-markdown p,
+.aside-default-agent-setup-guide-markdown ol,
+.aside-default-agent-setup-guide-markdown ul {
+    margin: 0 0 var(--size-4-2);
+}
+
+.aside-default-agent-setup-guide-markdown p:last-child,
+.aside-default-agent-setup-guide-markdown ol:last-child,
+.aside-default-agent-setup-guide-markdown ul:last-child {
+    margin-bottom: 0;
+}
+
+.aside-default-agent-setup-recheck {
+    display: none;
+    margin-top: var(--size-4-2);
+}
+
+.aside-default-agent-setup-recheck.is-visible {
+    display: inline-flex;
+}
+
 .aside-default-agent-setting {
     flex-direction: column;
     align-items: flex-start;

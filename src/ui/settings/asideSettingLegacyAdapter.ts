@@ -27,8 +27,10 @@ export function renderLegacyAsideSettings(
 
         for (const entry of entries) {
             const setting = createSetting(containerEl)
-                .setName(entry.name)
-                .setDesc(entry.description);
+                .setName(entry.name);
+            if (entry.key !== "default-agent") {
+                setting.setDesc(entry.description);
+            }
             entry.render(setting, context);
         }
     }

@@ -35,7 +35,7 @@ export const ASIDE_SETTING_SECTIONS: ReadonlyArray<{
     key: AsideSettingSection;
     heading: string;
 }> = [
-    { key: "agents", heading: "Agents (experimental)" },
+    { key: "agents", heading: "Scripts" },
     { key: "sidebar", heading: "Sidebar tabs" },
     { key: "publishing", heading: "Publishing (experimental)" },
     { key: "index-note", heading: "Index note" },

@@ -1,5 +1,7 @@
 import {
     App,
+    Component,
+    MarkdownRenderer,
     PluginSettingTab,
     SecretComponent,
     Setting,
@@ -37,6 +39,8 @@ import {
     formatDefaultAgentFallback,
     resolveDefaultAgentRadioSelection,
 } from "./agentRuntimeSettings";
+import { resolveDefaultAgentSetupGuideState } from "./defaultAgentSetupGuide";
+import { appendAsideSettingInfoIcon } from "./asideSettingInfoIcon";
 import { type AsideSettingCatalogContext } from "./asideSettingCatalog";
 import { getAsideSettingDefinitions } from "./asideSettingDefinitionsAdapter";
 import { renderLegacyAsideSettings } from "./asideSettingLegacyAdapter";
@@ -70,6 +74,7 @@ export const DEFAULT_SETTINGS: AsideSettings = {
 export default class AsideSetting extends PluginSettingTab {
     plugin: Aside;
     private agentStatusRefreshToken = 0;
+    private setupGuideMarkdownComponent: Component | null = null;
 
     constructor(app: App, plugin: Aside) {
         super(app, plugin);
@@ -87,6 +92,7 @@ export default class AsideSetting extends PluginSettingTab {
 
     private renderLegacySettings(): void {
         this.agentStatusRefreshToken += 1;
+        this.unloadSetupGuideMarkdownComponent();
         this.containerEl.empty();
         renderLegacyAsideSettings(
             this.containerEl,
@@ -127,6 +133,11 @@ export default class AsideSetting extends PluginSettingTab {
         this.renderLegacySettings();
     }
 
+    private unloadSetupGuideMarkdownComponent(): void {
+        this.setupGuideMarkdownComponent?.unload();
+        this.setupGuideMarkdownComponent = null;
+    }
+
     private getAgentSettingsDescription(
         baseDescription: string,
         supplementalLines?: string[],
@@ -155,6 +166,7 @@ export default class AsideSetting extends PluginSettingTab {
             supportedActors.map((actor) => [actor.id, createCheckingAgentRuntimeDiagnostics(actor.id)]),
         );
         agentSetting.settingEl.addClass("aside-default-agent-setting");
+        appendAsideSettingInfoIcon(agentSetting.nameEl, baseDescription);
         const groupEl = agentSetting.controlEl.createDiv({
             cls: "aside-default-agent-radio-group",
             attr: {
@@ -204,6 +216,46 @@ export default class AsideSetting extends PluginSettingTab {
             radioRows.set(actor.id, { rowEl, inputEl, statusEl });
         }
 
+        const setupGuideEl = agentSetting.controlEl.createDiv({
+            cls: "aside-default-agent-setup-guide",
+        });
+        const setupGuideMarkdownEl = setupGuideEl.createDiv({
+            cls: "aside-default-agent-setup-guide-markdown",
+        });
+        const setupGuideRecheckButton = setupGuideEl.createEl("button", {
+            cls: "mod-cta aside-default-agent-setup-recheck",
+            text: "Recheck availability",
+        });
+        setupGuideRecheckButton.setAttr("type", "button");
+        setupGuideRecheckButton.addEventListener("click", () => {
+            void refreshRuntimeSetting();
+        });
+
+        const renderSetupGuide = (): void => {
+            const guideState = resolveDefaultAgentSetupGuideState(localDiagnosticsByTarget);
+            const shouldShowGuide = guideState.kind === "setup-needed"
+                || guideState.kind === "desktop-required";
+            setupGuideEl.toggleClass("is-visible", shouldShowGuide);
+            setupGuideRecheckButton.toggleClass("is-visible", guideState.kind === "setup-needed");
+            if (!shouldShowGuide) {
+                setupGuideMarkdownEl.empty();
+                this.unloadSetupGuideMarkdownComponent();
+                return;
+            }
+
+            setupGuideMarkdownEl.empty();
+            this.unloadSetupGuideMarkdownComponent();
+            this.setupGuideMarkdownComponent = new Component();
+            this.setupGuideMarkdownComponent.load();
+            void MarkdownRenderer.render(
+                this.app,
+                guideState.markdown,
+                setupGuideMarkdownEl,
+                "",
+                this.setupGuideMarkdownComponent,
+            );
+        };
+
         const renderRuntimeSetting = (): void => {
             const options = buildDefaultAgentOptions(
                 this.plugin.settings.defaultAgent,
@@ -232,9 +284,10 @@ export default class AsideSetting extends PluginSettingTab {
                 ? formatDefaultAgentFallback(selection.preferredAgent, selection.selectedAgent)
                 : "";
             agentSetting.setDesc(this.getAgentSettingsDescription(
-                baseDescription,
+                "",
                 fallbackLine ? [fallbackLine] : undefined,
             ));
+            renderSetupGuide();
         };
         const refreshRuntimeSetting = async () => {
             const refreshToken = ++this.agentStatusRefreshToken;

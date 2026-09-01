@@ -7,6 +7,10 @@ const settingSource = await readFile(
     new URL("../src/ui/settings/AsideSetting.ts", import.meta.url),
     "utf8",
 );
+const infoIconSource = await readFile(
+    new URL("../src/ui/settings/asideSettingInfoIcon.ts", import.meta.url),
+    "utf8",
+);
 
 test("agent settings radio choices form a horizontal wrapping row", () => {
     const group = styles.match(
@@ -68,7 +72,16 @@ test("default agent settings render a labeled native radio group", () => {
     assert.match(settingSource, /role:\s*"radiogroup"/);
     assert.match(settingSource, /type:\s*"radio"/);
     assert.match(settingSource, /resolveDefaultAgentRadioSelection/);
+    assert.match(settingSource, /appendAsideSettingInfoIcon/);
     assert.doesNotMatch(settingSource, /agentSetting\.addDropdown/);
+});
+
+test("default agent label exposes a Lucide info icon for hover help", () => {
+    assert.match(styles, /\.aside-settings-tab \.aside-setting-info-icon/);
+    assert.match(styles, /--icon-size:/);
+    assert.match(infoIconSource, /aside-setting-info-icon/);
+    assert.match(infoIconSource, /setIcon\(infoIconEl,\s*"info"\)/);
+    assert.match(infoIconSource, /setTooltip/);
 });
 
 test("Aside headings and default agent controls use scoped left-aligned spacing", () => {

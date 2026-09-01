@@ -25,7 +25,7 @@ export function getAsideSettingDefinitions(
             items: entries
                 .map<SettingDefinitionRender>((entry) => ({
                     name: entry.name,
-                    desc: entry.description,
+                    desc: entry.key === "default-agent" ? "" : entry.description,
                     aliases: [...entry.aliases, ...entry.keywords],
                     visible: entry.visible ? () => entry.visible?.(context) !== false : true,
                     render: (setting) => {

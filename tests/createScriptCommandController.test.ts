@@ -64,7 +64,7 @@ test("create-script rejects mixed registered scripts and explicit agents", async
 
     assert.deepEqual(harness.dispatchedRequests, []);
     assert.match(harness.replies[0] ?? "", /or a vault script, not both/i);
-    assert.match(harness.replies[1] ?? "", /Settings → Agents/i);
+    assert.match(harness.replies[1] ?? "", /Settings → Scripts/i);
 });
 
 test("create-script returns usage once for one saved entry and resets on disposal", async () => {
