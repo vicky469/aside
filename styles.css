@@ -1077,10 +1077,6 @@ button.aside-filter-chip {
     line-height: 1.2;
 }
 
-.aside-thought-trail-source-label {
-    color: var(--text-faint);
-}
-
 .aside-thought-trail-scope-note {
     margin-left: auto;
     color: var(--text-faint);
