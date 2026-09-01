@@ -27,8 +27,8 @@ Use this section as the working checklist. Mark an item done only after the code
 ### Verification
 
 - [x] Confirm the production source and bundle contain no visible source-label element.
-- [ ] Confirm the installed `lean-startup` artifacts match the rebuilt repository artifacts.
-- [ ] Confirm Aside reloads in `lean-startup` with the rebuilt bundle.
+- [x] Confirm the installed `lean-startup` artifacts match the rebuilt repository artifacts.
+- [x] Confirm Aside reloads in `lean-startup` with the rebuilt bundle.
 - [x] Run the repository production build; do not add a new targeted test per the user's explicit instruction.
 
 ## Design
