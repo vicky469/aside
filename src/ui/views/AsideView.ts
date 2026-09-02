@@ -2049,6 +2049,7 @@ export default class AsideView extends ItemView {
                     candidateFilePaths: this.getThoughtTrailVaultCandidateFilePaths(selectedIndexFileFilterRootPath),
                     attachments: indexThoughtTrailAttachments,
                     source: this.thoughtTrailSource,
+                    sourceAvailability: indexThoughtTrailSourceAvailability,
                     onSourceChange: (source) => this.setThoughtTrailSource(source),
                     getTagsForFilePath: indexThoughtTrailTagLookup ?? (() => []),
                 });
@@ -2502,6 +2503,7 @@ export default class AsideView extends ItemView {
             candidateFilePaths: this.getThoughtTrailVaultCandidateFilePaths(file.path),
             attachments: thoughtTrailAttachments,
             source: this.thoughtTrailSource,
+            sourceAvailability: thoughtTrailSourceAvailability,
             onSourceChange: (source) => this.setThoughtTrailSource(source),
             getTagsForFilePath: thoughtTrailTagLookup,
         });

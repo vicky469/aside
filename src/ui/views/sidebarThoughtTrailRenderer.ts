@@ -50,6 +50,7 @@ export interface SidebarThoughtTrailOptions {
     candidateFilePaths: readonly string[];
     attachments: readonly ThoughtTrailAttachmentItem[];
     source: SidebarThoughtTrailSource;
+    sourceAvailability: SidebarThoughtTrailSourceAvailability;
     onSourceChange(source: SidebarThoughtTrailSource): void;
     getTagsForFilePath: ThoughtTrailFileTagLookup;
 }
@@ -235,14 +236,10 @@ export async function renderSidebarThoughtTrail(
         options.getTagsForFilePath,
         { allCommentsNotePath: context.allCommentsNotePath },
     );
-    const sourceAvailability: SidebarThoughtTrailSourceAvailability = {
-        tags: tagRelatedFileSet.files.length > 0,
-        attachments: options.attachments.length > 0,
-    };
     renderThoughtTrailSourceControl(thoughtTrailEl, {
         source: options.source,
         radioGroupName: `aside-thought-trail-source-${context.renderVersion}-${options.surface}-${encodeURIComponent(rootFilePath)}`,
-        sourceAvailability,
+        sourceAvailability: options.sourceAvailability,
         onSourceChange: (source) => {
             options.onSourceChange(source);
         },

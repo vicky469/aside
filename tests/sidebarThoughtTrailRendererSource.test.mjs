@@ -176,13 +176,25 @@ test("source control renders shared definitions with shared availability and dyn
         source,
         /text:\s*`Scope: \$\{getThoughtTrailSourceDefinition\(options\.source\)\.scope\}`/,
     );
-    assert.match(
-        source,
-        /const sourceAvailability:\s*SidebarThoughtTrailSourceAvailability\s*=\s*\{\s*tags:\s*tagRelatedFileSet\.files\.length\s*>\s*0,\s*attachments:\s*options\.attachments\.length\s*>\s*0,\s*\}/,
-    );
-    assert.match(source, /sourceAvailability,/);
     assert.doesNotMatch(source, /\["wikilinks",\s*"tags"\]/);
     assert.doesNotMatch(source, /source\s*===\s*"wikilinks"\s*\?\s*"Wikilinks"\s*:\s*"Tags"/);
+});
+
+test("renderer consumes resolved source availability without rebuilding policy facts", () => {
+    assert.match(
+        source,
+        /interface SidebarThoughtTrailOptions[\s\S]*?sourceAvailability:\s*SidebarThoughtTrailSourceAvailability/,
+    );
+    assert.match(
+        source,
+        /renderThoughtTrailSourceControl\(thoughtTrailEl,\s*\{[\s\S]*?sourceAvailability:\s*options\.sourceAvailability/,
+    );
+    assert.doesNotMatch(
+        source,
+        /const sourceAvailability:\s*SidebarThoughtTrailSourceAvailability\s*=\s*\{/,
+    );
+    assert.match(asideViewSource, /sourceAvailability:\s*indexThoughtTrailSourceAvailability/);
+    assert.match(asideViewSource, /sourceAvailability:\s*thoughtTrailSourceAvailability/);
 });
 
 test("attachment source renders a compact semantic file list", () => {

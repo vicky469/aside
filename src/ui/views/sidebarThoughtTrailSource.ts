@@ -3,7 +3,7 @@ export type SidebarThoughtTrailSource = "wikilinks" | "tags" | "attachments";
 export type SidebarThoughtTrailScope = "Vault" | "File";
 
 export interface SidebarThoughtTrailSourceAvailability {
-    wikilinks?: boolean;
+    wikilinks: boolean;
     tags: boolean;
     attachments: boolean;
 }
