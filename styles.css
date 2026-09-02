@@ -1176,6 +1176,7 @@ button.aside-filter-chip {
     color: var(--text-normal);
     font: inherit;
     text-align: left;
+    justify-content: flex-start;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

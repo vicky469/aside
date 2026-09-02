@@ -375,6 +375,7 @@ test("thought trail attachment list stays compact and theme-native", () => {
     assert.match(linkRule.body, /color:\s*var\(--text-normal\)\s*;/);
     assert.match(linkRule.body, /font:\s*inherit\s*;/);
     assert.match(linkRule.body, /text-align:\s*left\s*;/);
+    assert.match(linkRule.body, /justify-content:\s*flex-start\s*;/);
     assert.match(linkRule.body, /overflow:\s*hidden\s*;/);
     assert.match(linkRule.body, /text-overflow:\s*ellipsis\s*;/);
     assert.match(linkRule.body, /white-space:\s*nowrap\s*;/);

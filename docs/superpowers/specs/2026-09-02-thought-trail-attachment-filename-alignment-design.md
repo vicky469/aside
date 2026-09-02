@@ -11,14 +11,14 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Align the attachment filename button's flex content to the left with `justify-content: flex-start`.
-- [ ] Leave the attachment type label and all other Thought Trail layout unchanged.
+- [x] Align the attachment filename button's flex content to the left with `justify-content: flex-start`.
+- [x] Leave the attachment type label and all other Thought Trail layout unchanged.
 
 ### Verification
 
-- [ ] The stylesheet regression test requires left flex alignment on the attachment filename button.
-- [ ] The focused stylesheet test passes.
-- [ ] The production build passes, including release artifact inspection.
+- [x] The stylesheet regression test requires left flex alignment on the attachment filename button.
+- [x] The focused stylesheet test passes.
+- [x] The production build passes, including release artifact inspection.
 
 ## Problem
 
