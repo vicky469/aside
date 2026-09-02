@@ -55,6 +55,8 @@ export type NestCommentThreadOptions = CommentMutationPersistBehaviorOptions & {
     insertAfterCommentId?: string;
 };
 
+const SAVE_DRAFT_FAILURE_NOTICE = "Unable to save this side note. Your draft was restored.";
+
 function buildBatchTagFileFailure(
     selectedThreadIds: readonly string[],
     message: string,
@@ -222,6 +224,9 @@ export class CommentMutationController {
                 skipDataRefresh: true,
             });
             this.host.refreshEditorDecorations();
+            if (trimmedDraft.mode !== "edit") {
+                this.host.showNotice(SAVE_DRAFT_FAILURE_NOTICE);
+            }
             throw error;
         }
 
@@ -288,6 +293,10 @@ export class CommentMutationController {
                 filePath: preparedDraft.filePath,
                 error,
             });
+            if (preparedDraft.mode !== "edit") {
+                this.host.setDraftCommentValue(trimmedDraft);
+                this.host.showNotice(SAVE_DRAFT_FAILURE_NOTICE);
+            }
             throw error;
         } finally {
             await finalizeDraftUi();
@@ -301,7 +310,7 @@ export class CommentMutationController {
 
         return {
             ...options,
-            skipPreSaveRefresh: options.skipPreSaveRefresh ?? true,
+            skipPreSaveRefresh: options.skipPreSaveRefresh ?? false,
             deferAggregateRefresh: options.deferAggregateRefresh ?? true,
             skipPersistedViewRefresh: options.skipPersistedViewRefresh ?? true,
         };
@@ -320,6 +329,8 @@ export class CommentMutationController {
         }
 
         await this.host.loadCommentsForFile(file);
+        const previousThreads = this.host.getCommentManager().getThreadsForFile(file.path, { includeDeleted: true });
+        const previousAddFingerprint = this.lastAddFingerprint;
         const now = this.host.now();
         const fingerprint = this.createAddFingerprint(newComment);
         if (
@@ -331,11 +342,17 @@ export class CommentMutationController {
         }
 
         this.lastAddFingerprint = { key: fingerprint, at: now };
-        this.host.getCommentManager().addComment(newComment);
-        await this.host.persistCommentsForFile(file, this.buildPersistOptionsForComment(newComment, {
-            immediateAggregateRefresh: options.immediateAggregateRefresh ?? true,
-            ...(options.skipCommentViewRefresh === true ? { skipCommentViewRefresh: true } : {}),
-        }));
+        try {
+            this.host.getCommentManager().addComment(newComment);
+            await this.host.persistCommentsForFile(file, this.buildPersistOptionsForComment(newComment, {
+                immediateAggregateRefresh: options.immediateAggregateRefresh ?? true,
+                ...(options.skipCommentViewRefresh === true ? { skipCommentViewRefresh: true } : {}),
+            }));
+        } catch (error) {
+            this.host.getCommentManager().replaceThreadsForFile(file.path, previousThreads);
+            this.lastAddFingerprint = previousAddFingerprint;
+            throw error;
+        }
         return true;
     }
 
@@ -502,23 +519,32 @@ export class CommentMutationController {
             return false;
         }
 
-        this.host.getCommentManager().appendEntry(threadId, {
-            id: draftComment.id,
-            body: draftComment.comment,
-            timestamp: draftComment.timestamp,
-        });
-        if (draftComment.appendAfterCommentId && draftComment.appendAfterCommentId !== threadId) {
-            this.host.getCommentManager().reorderThreadEntries(
-                threadId,
-                draftComment.id,
-                draftComment.appendAfterCommentId,
-                "after",
-            );
-        }
-        await this.host.persistCommentsForFile(
-            latestTarget.file,
-            this.buildPersistOptionsForComment(latestTarget.latestComment, { immediateAggregateRefresh: true }),
+        const previousThreads = this.host.getCommentManager().getThreadsForFile(
+            latestTarget.file.path,
+            { includeDeleted: true },
         );
+        try {
+            this.host.getCommentManager().appendEntry(threadId, {
+                id: draftComment.id,
+                body: draftComment.comment,
+                timestamp: draftComment.timestamp,
+            });
+            if (draftComment.appendAfterCommentId && draftComment.appendAfterCommentId !== threadId) {
+                this.host.getCommentManager().reorderThreadEntries(
+                    threadId,
+                    draftComment.id,
+                    draftComment.appendAfterCommentId,
+                    "after",
+                );
+            }
+            await this.host.persistCommentsForFile(
+                latestTarget.file,
+                this.buildPersistOptionsForComment(latestTarget.latestComment, { immediateAggregateRefresh: true }),
+            );
+        } catch (error) {
+            this.host.getCommentManager().replaceThreadsForFile(latestTarget.file.path, previousThreads);
+            throw error;
+        }
         return true;
     }
 

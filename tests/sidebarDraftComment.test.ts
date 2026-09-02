@@ -68,6 +68,23 @@ test("buildDraftCommentPresentation keeps append drafts distinct from new drafts
     assert.equal(appendPresentation.placeholder, "Add another entry to this thread.");
 });
 
+test("buildDraftCommentPresentation makes saving new and append drafts read-only pending cards", () => {
+    const newPresentation = buildDraftCommentPresentation(createDraft({ mode: "new" }), null, true, true);
+    const appendPresentation = buildDraftCommentPresentation(createDraft({ mode: "append" }), null, true, true);
+
+    assert.equal(newPresentation.isPending, true);
+    assert.equal(appendPresentation.isPending, true);
+    assert.ok(newPresentation.classes.includes("is-saving"));
+    assert.ok(appendPresentation.classes.includes("is-saving"));
+});
+
+test("buildDraftCommentPresentation leaves saving edit drafts on the editable path", () => {
+    const presentation = buildDraftCommentPresentation(createDraft({ mode: "edit" }), null, true, true);
+
+    assert.equal(presentation.isPending, false);
+    assert.equal(presentation.classes.includes("is-saving"), false);
+});
+
 test("buildDraftCommentPresentation mentions todo and agent directives in new draft placeholder", () => {
 	const presentation = buildDraftCommentPresentation(createDraft({
 		mode: "new",

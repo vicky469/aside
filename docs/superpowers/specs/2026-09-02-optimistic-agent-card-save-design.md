@@ -12,20 +12,20 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Transition a new or appended draft to one read-only pending card as soon as save begins.
-- [ ] Keep exactly one card visible when the in-memory persisted entry appears before storage finishes.
-- [ ] Preserve durable-save-before-agent-dispatch ordering.
-- [ ] Restore the exact editable draft and remove its optimistic in-memory mutation if persistence fails.
-- [ ] Show a concise save-failure notice when the editable draft is restored.
-- [ ] Leave inline edit saves on their existing behavior.
+- [x] Transition a new or appended draft to one read-only pending card as soon as save begins.
+- [x] Keep exactly one card visible when the in-memory persisted entry appears before storage finishes.
+- [x] Preserve durable-save-before-agent-dispatch ordering.
+- [x] Restore the exact editable draft and remove its optimistic in-memory mutation if persistence fails.
+- [x] Show a concise save-failure notice when the editable draft is restored.
+- [x] Leave inline edit saves on their existing behavior.
 
 ### Verification
 
-- [ ] Mutation tests prove the saving state is rendered before persistence settles.
-- [ ] Rendering tests prove a saving draft and its same-ID persisted entry never produce duplicate cards.
-- [ ] Failure tests prove the original draft and pre-save thread state are restored.
-- [ ] Dispatch tests prove agent routing starts only after persistence succeeds.
-- [ ] Focused tests, the full test suite, and the production build pass.
+- [x] Mutation tests prove the saving state is rendered before persistence settles.
+- [x] Rendering tests prove a saving draft and its same-ID persisted entry never produce duplicate cards.
+- [x] Failure tests prove the original draft and pre-save thread state are restored.
+- [x] Dispatch tests prove agent routing starts only after persistence succeeds.
+- [x] Focused tests, the full test suite, and the production build pass.
 
 ## Problem
 

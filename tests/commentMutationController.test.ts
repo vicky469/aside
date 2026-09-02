@@ -269,7 +269,7 @@ test("comment mutation controller saves a new draft by trimming and persisting i
     }]);
     assert.equal(host.getDraftComment(), null);
     assert.equal(host.getSavingDraftCommentId(), null);
-    assert.equal(host.getRefreshCommentViewsCount(), 1);
+    assert.equal(host.getRefreshCommentViewsCount(), 2);
     assert.equal(host.getRefreshEditorDecorationsCount(), 1);
     assert.deepEqual(host.notices, []);
 });
@@ -349,7 +349,7 @@ test("comment mutation controller saves a new anchored draft without a comment",
     }]);
     assert.equal(host.getDraftComment(), null);
     assert.equal(host.getSavingDraftCommentId(), null);
-    assert.equal(host.getRefreshCommentViewsCount(), 1);
+    assert.equal(host.getRefreshCommentViewsCount(), 2);
     assert.equal(host.getRefreshEditorDecorationsCount(), 1);
     assert.deepEqual(host.notices, []);
 });
@@ -408,7 +408,7 @@ test("comment mutation controller saves a PDF page-note draft without reading PD
     }]);
     assert.equal(host.getDraftComment(), null);
     assert.equal(host.getSavingDraftCommentId(), null);
-    assert.equal(host.getRefreshCommentViewsCount(), 1);
+    assert.equal(host.getRefreshCommentViewsCount(), 2);
     assert.equal(host.getRefreshEditorDecorationsCount(), 1);
     assert.deepEqual(host.notices, []);
 });
@@ -501,6 +501,104 @@ test("comment mutation controller dispatches saved new entries to the agent hook
     }]);
 });
 
+test("comment mutation controller does not dispatch an agent entry before persistence succeeds", async () => {
+    const draft = toDraft(createComment({
+        id: "draft-agent-persist-1",
+        comment: "@codex fix the parser",
+    }));
+    let releasePersistence!: () => void;
+    let markPersistenceStarted!: () => void;
+    const persistenceStarted = new Promise<void>((resolve) => {
+        markPersistenceStarted = resolve;
+    });
+    const persistencePending = new Promise<void>((resolve) => {
+        releasePersistence = resolve;
+    });
+    const host = createHost({
+        draftComment: draft,
+        knownComments: [draft],
+        loadedComments: [],
+        currentNoteContentByPath: {
+            [draft.filePath]: "# Title\n\nAlpha beta gamma.\n",
+        },
+        persistCommentsForFile: async () => {
+            markPersistenceStarted();
+            await persistencePending;
+        },
+    });
+
+    const savePromise = host.controller.saveDraft(draft.id);
+    await persistenceStarted;
+
+    assert.deepEqual(host.savedUserEntryEvents, []);
+    releasePersistence();
+    await savePromise;
+    assert.equal(host.savedUserEntryEvents.length, 1);
+});
+
+test("comment mutation controller restores a new draft and threads when persistence fails", async () => {
+    const existing = createComment({ id: "existing-1", comment: "Existing" });
+    const draft = toDraft(createComment({ id: "draft-fail-1", comment: "@codex try this" }));
+    let rejectPersistence!: (error: Error) => void;
+    let markPersistenceStarted!: () => void;
+    const persistenceStarted = new Promise<void>((resolve) => {
+        markPersistenceStarted = resolve;
+    });
+    const persistencePending = new Promise<void>((_resolve, reject) => {
+        rejectPersistence = reject;
+    });
+    const host = createHost({
+        draftComment: draft,
+        knownComments: [existing, draft],
+        loadedComments: [existing],
+        currentNoteContentByPath: {
+            [draft.filePath]: "# Title\n\nAlpha beta gamma.\n",
+        },
+        persistCommentsForFile: async () => {
+            markPersistenceStarted();
+            await persistencePending;
+        },
+    });
+    const previousThreads = host.manager.getThreadsForFile(draft.filePath, { includeDeleted: true });
+
+    const savePromise = host.controller.saveDraft(draft.id);
+    await persistenceStarted;
+    assert.ok(host.manager.getCommentById(draft.id));
+    rejectPersistence(new Error("disk full"));
+    await assert.rejects(savePromise, /disk full/);
+
+    assert.deepEqual(host.manager.getThreadsForFile(draft.filePath, { includeDeleted: true }), previousThreads);
+    assert.deepEqual(host.getDraftComment(), draft);
+    assert.equal(host.getSavingDraftCommentId(), null);
+    assert.deepEqual(host.savedUserEntryEvents, []);
+    assert.deepEqual(host.notices, ["Unable to save this side note. Your draft was restored."]);
+});
+
+test("comment mutation controller restores an append draft and parent thread when persistence fails", async () => {
+    const existing = createComment({ id: "thread-1", comment: "Original" });
+    const draft: DraftComment = {
+        ...toDraft(existing, { id: "entry-fail-1", comment: "@codex explain", mode: "append" }),
+        threadId: existing.id,
+    };
+    const host = createHost({
+        draftComment: draft,
+        knownComments: [existing],
+        loadedComments: [existing],
+        persistCommentsForFile: async () => {
+            throw new Error("write failed");
+        },
+    });
+    const previousThreads = host.manager.getThreadsForFile(existing.filePath, { includeDeleted: true });
+
+    await assert.rejects(host.controller.saveDraft(draft.id), /write failed/);
+
+    assert.deepEqual(host.manager.getThreadsForFile(existing.filePath, { includeDeleted: true }), previousThreads);
+    assert.deepEqual(host.getDraftComment(), draft);
+    assert.equal(host.getSavingDraftCommentId(), null);
+    assert.deepEqual(host.savedUserEntryEvents, []);
+    assert.deepEqual(host.notices, ["Unable to save this side note. Your draft was restored."]);
+});
+
 test("comment mutation controller closes a saved draft before a slow agent dispatch finishes", async () => {
     const draft = toDraft(createComment({
         id: "draft-agent-slow-1",
@@ -528,7 +626,7 @@ test("comment mutation controller closes a saved draft before a slow agent dispa
     assert.equal(dispatchResolved, false);
     assert.equal(host.getDraftComment(), null);
     assert.equal(host.getSavingDraftCommentId(), null);
-    assert.equal(host.getRefreshCommentViewsCount(), 1);
+    assert.equal(host.getRefreshCommentViewsCount(), 2);
     assert.equal(host.getRefreshEditorDecorationsCount(), 1);
     assert.deepEqual(host.savedUserEntryEvents, [{
         threadId: draft.id,
@@ -1305,7 +1403,7 @@ test("comment mutation controller marks a new draft as saving before anchor reso
 
     assert.equal(host.getDraftComment()?.comment, "Ship it");
     assert.equal(host.getSavingDraftCommentId(), draft.id);
-    assert.equal(host.getRefreshCommentViewsCount(), 0);
+    assert.equal(host.getRefreshCommentViewsCount(), 1);
     assert.equal(host.getRefreshEditorDecorationsCount(), 0);
 
     resolveCurrentNoteContent("# Title\n\nAlpha beta gamma.\n");
@@ -1343,7 +1441,7 @@ test("comment mutation controller keeps a new draft open when the selected text 
     assert.equal(host.getDraftComment()?.id, draft.id);
     assert.equal(host.getDraftComment()?.comment, "Ship it");
     assert.equal(host.getSavingDraftCommentId(), null);
-    assert.equal(host.getRefreshCommentViewsCount(), 1);
+    assert.equal(host.getRefreshCommentViewsCount(), 2);
     assert.equal(host.getRefreshEditorDecorationsCount(), 1);
     assert.deepEqual(host.notices, [
         "Selected text changed before save. Review the draft and reselect the anchor text.",

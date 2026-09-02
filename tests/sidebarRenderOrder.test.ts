@@ -10,6 +10,7 @@ import {
     getReplacedThreadIdForEditDraft,
     getSidebarSortCommentForThread,
     matchesPinnedSidebarDraftVisibility,
+    resolveRenderableSavingDraft,
     shouldRenderTopLevelDraftComment,
     sortSidebarRenderableItems,
 } from "../src/ui/views/sidebarRenderOrder";
@@ -197,6 +198,39 @@ test("getNestedThreadIdForAppendDraft resolves a child-targeted append draft to 
         ...draft,
         mode: "new",
     }), null);
+});
+
+test("resolveRenderableSavingDraft keeps a pending new draft until its stable id enters the thread model", () => {
+    const draft: DraftComment = {
+        ...createComment({ id: "draft-1", comment: "Pending body" }),
+        mode: "new",
+    };
+
+    assert.equal(resolveRenderableSavingDraft([], draft, true), draft);
+    assert.equal(resolveRenderableSavingDraft([commentToThread(draft)], draft, true), null);
+    assert.equal(resolveRenderableSavingDraft([commentToThread(draft)], draft, false), draft);
+});
+
+test("resolveRenderableSavingDraft hides a pending append draft once its stable entry id exists", () => {
+    const thread = commentToThread(createComment({ id: "thread-1" }));
+    thread.entries.push({ id: "draft-1", body: "Pending reply", timestamp: 200 });
+    const draft: DraftComment = {
+        ...createComment({ id: "draft-1", comment: "Pending reply", timestamp: 200 }),
+        mode: "append",
+        threadId: thread.id,
+    };
+
+    assert.equal(resolveRenderableSavingDraft([thread], draft, true), null);
+});
+
+test("resolveRenderableSavingDraft leaves inline edits on their existing render path", () => {
+    const draft: DraftComment = {
+        ...createComment({ id: "thread-1", comment: "Edited body" }),
+        mode: "edit",
+        threadId: "thread-1",
+    };
+
+    assert.equal(resolveRenderableSavingDraft([commentToThread(draft)], draft, true), draft);
 });
 
 test("buildStoredOrderSidebarItems keeps file thread order and replaces the edited thread in place", () => {

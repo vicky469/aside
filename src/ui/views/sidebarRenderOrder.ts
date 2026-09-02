@@ -86,6 +86,21 @@ export function getNestedThreadIdForAppendDraft(
     )?.id ?? null;
 }
 
+export function resolveRenderableSavingDraft(
+    threads: readonly CommentThread[],
+    draft: DraftComment | null,
+    isSaving: boolean,
+): DraftComment | null {
+    if (!draft || !isSaving || draft.mode === "edit") {
+        return draft;
+    }
+
+    const alreadyRepresented = threads.some((thread) => (
+        thread.id === draft.id || thread.entries.some((entry) => entry.id === draft.id)
+    ));
+    return alreadyRepresented ? null : draft;
+}
+
 export function shouldRenderTopLevelDraftComment(options: {
     draft: DraftComment | null;
     nestedAppendDraftThreadId: string | null;

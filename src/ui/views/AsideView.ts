@@ -95,6 +95,7 @@ import {
     getNestedThreadIdForAppendDraft,
     getReplacedThreadIdForEditDraft,
     matchesPinnedSidebarDraftVisibility,
+    resolveRenderableSavingDraft,
     shouldRenderTopLevelDraftComment,
     sortSidebarRenderableItems,
     type SidebarRenderableItem,
@@ -1918,24 +1919,29 @@ export default class AsideView extends ItemView {
                 activeDraftHostThreadId,
             );
             const totalScopedCount = searchMatchedVisibleResult.totalMatchCount;
-            const hasNestedComments = searchScopedVisibleThreads.some((thread) => thread.entries.length > 1)
-                || visibleDraftComment?.mode === "append";
-            const nestedEditDraftThreadId = getNestedThreadIdForEditDraft(
+            const renderableDraftComment = resolveRenderableSavingDraft(
                 searchScopedVisibleThreads,
                 visibleDraftComment,
+                !!visibleDraftComment && this.plugin.isSavingDraft(visibleDraftComment.id),
+            );
+            const hasNestedComments = searchScopedVisibleThreads.some((thread) => thread.entries.length > 1)
+                || renderableDraftComment?.mode === "append";
+            const nestedEditDraftThreadId = getNestedThreadIdForEditDraft(
+                searchScopedVisibleThreads,
+                renderableDraftComment,
             );
             const replacedThreadId = nestedEditDraftThreadId
                 ? null
                 : getReplacedThreadIdForEditDraft(
                 searchScopedVisibleThreads,
-                visibleDraftComment,
+                renderableDraftComment,
             );
             const nestedAppendDraftThreadId = getNestedThreadIdForAppendDraft(
                 searchScopedVisibleThreads,
-                visibleDraftComment,
+                renderableDraftComment,
             );
             const topLevelDraftComment = shouldRenderTopLevelDraftComment({
-                draft: visibleDraftComment,
+                draft: renderableDraftComment,
                 nestedAppendDraftThreadId,
                 nestedEditDraftThreadId,
                 isAgentIndexMode: false,
@@ -2265,26 +2271,31 @@ export default class AsideView extends ItemView {
                 showDeleted,
             }));
         const totalScopedCount = searchMatchedThreads.length;
-        const hasNestedComments = searchScopedThreads.some((thread) => thread.entries.length > 1)
-            || visibleDraftComment?.mode === "append";
-        const nestedEditDraftThreadId = getNestedThreadIdForEditDraft(
+        const renderableDraftComment = resolveRenderableSavingDraft(
             visiblePersistedThreads,
             visibleDraftComment,
+            !!visibleDraftComment && this.plugin.isSavingDraft(visibleDraftComment.id),
+        );
+        const hasNestedComments = searchScopedThreads.some((thread) => thread.entries.length > 1)
+            || renderableDraftComment?.mode === "append";
+        const nestedEditDraftThreadId = getNestedThreadIdForEditDraft(
+            visiblePersistedThreads,
+            renderableDraftComment,
         );
         const replacedThreadId = nestedEditDraftThreadId
             ? null
             : getReplacedThreadIdForEditDraft(
             visiblePersistedThreads,
-            visibleDraftComment,
+            renderableDraftComment,
         );
         const nestedAppendDraftThreadId = getNestedThreadIdForAppendDraft(
             visiblePersistedThreads,
-            visibleDraftComment,
+            renderableDraftComment,
         );
         const topLevelDraftComment = this.noteSidebarContentFilter === "all"
-            && !!visibleDraftComment
+            && !!renderableDraftComment
             ? shouldRenderTopLevelDraftComment({
-            draft: visibleDraftComment,
+            draft: renderableDraftComment,
             nestedAppendDraftThreadId,
             nestedEditDraftThreadId,
             isAgentIndexMode: false,

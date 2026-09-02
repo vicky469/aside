@@ -1714,6 +1714,11 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
     cursor: text;
 }
 
+.aside-comment-draft.is-saving .aside-draft-pending-content {
+	opacity: 0.72;
+	cursor: default;
+}
+
 .aside-comment-content:focus {
     outline: none;
 }

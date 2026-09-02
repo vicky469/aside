@@ -18,6 +18,7 @@ export interface DraftCommentPresentation {
     metaText: string;
     saveLabel: string;
     placeholder: string;
+    isPending: boolean;
 }
 
 export interface SidebarDraftCommentHost {
@@ -73,6 +74,7 @@ export function buildDraftCommentPresentation(
     comment: DraftComment,
     activeCommentId: string | null,
     agentsFeatureAvailable: boolean,
+    isSaving = false,
 ): DraftCommentPresentation {
     const supportedAgentDirectives = agentsFeatureAvailable
         ? formatSupportedAgentDirectives("or")
@@ -96,6 +98,10 @@ export function buildDraftCommentPresentation(
     if (activeCommentId === comment.id) {
         classes.push("active");
     }
+    const isPending = isSaving && comment.mode !== "edit";
+    if (isPending) {
+        classes.push("is-saving");
+    }
 
     return {
         classes,
@@ -104,6 +110,7 @@ export function buildDraftCommentPresentation(
         placeholder: comment.mode === "append"
             ? "Add another entry to this thread."
             : newDraftPlaceholder,
+        isPending,
     };
 }
 
@@ -117,6 +124,7 @@ export function renderDraftCommentCard(
         comment,
         host.activeCommentId,
         host.isAgentsFeatureAvailable(),
+        host.isSavingDraft(comment.id),
     );
     const commentEl = commentsContainer.createDiv(presentation.classes.join(" "));
     commentEl.setAttribute("data-draft-id", comment.id);
@@ -127,6 +135,16 @@ export function renderDraftCommentCard(
         text: presentation.metaText,
         cls: "aside-timestamp",
     });
+
+    if (presentation.isPending) {
+        const contentEl = commentEl.createDiv("aside-comment-content aside-draft-pending-content");
+        contentEl.appendChild(renderStyledDraftCommentFragment(
+            contentEl.ownerDocument,
+            comment.comment,
+            host.isActionableMention,
+        ));
+        return;
+    }
 
     renderDraftEditor(commentEl, comment, presentation, host, draftEditorController, "card");
 }
