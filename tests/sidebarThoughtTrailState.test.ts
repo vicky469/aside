@@ -108,7 +108,7 @@ test("getThoughtTrailUnavailableReason includes attachment source availability",
         getThoughtTrailUnavailableReason({
             hasRootScope: true,
             lineCount: 0,
-            sourceAvailability: { tags: false, attachments: true },
+            sourceAvailability: { wikilinks: false, tags: false, attachments: true },
         }),
         null,
     );
@@ -116,7 +116,7 @@ test("getThoughtTrailUnavailableReason includes attachment source availability",
         getThoughtTrailUnavailableReason({
             hasRootScope: true,
             lineCount: 0,
-            sourceAvailability: { tags: false, attachments: false },
+            sourceAvailability: { wikilinks: false, tags: false, attachments: false },
         }),
         "no-renderable-lines",
     );
@@ -124,7 +124,7 @@ test("getThoughtTrailUnavailableReason includes attachment source availability",
         getThoughtTrailUnavailableReason({
             hasRootScope: false,
             lineCount: 1,
-            sourceAvailability: { tags: true, attachments: true },
+            sourceAvailability: { wikilinks: true, tags: true, attachments: true },
         }),
         "no-root-scope",
     );
@@ -137,12 +137,12 @@ test("resolveModeWithThoughtTrailAvailability falls back from unavailable though
     assert.equal(resolveModeWithThoughtTrailAvailability("list", false), "list");
 });
 
-test("attachment-only disappearance resets source before mode fallback and keeps it reset on return", () => {
+test("presentation resets to wikilinks when every source disappears", () => {
     const unavailable = resolveThoughtTrailPresentationState({
         mode: "thought-trail",
         source: "attachments",
         isThoughtTrailEnabled: false,
-        sourceAvailability: { tags: false, attachments: false },
+        sourceAvailability: { wikilinks: false, tags: false, attachments: false },
     });
 
     assert.deepEqual(unavailable, {
@@ -150,16 +150,47 @@ test("attachment-only disappearance resets source before mode fallback and keeps
         source: "wikilinks",
     });
 
-    const availableAgain = resolveThoughtTrailPresentationState({
-        mode: "thought-trail",
-        source: unavailable.source,
-        isThoughtTrailEnabled: true,
-        sourceAvailability: { tags: false, attachments: true },
-    });
+});
 
-    assert.deepEqual(availableAgain, {
+test("presentation selects tags when wikilinks are empty", () => {
+    const presentation = resolveThoughtTrailPresentationState({
         mode: "thought-trail",
         source: "wikilinks",
+        isThoughtTrailEnabled: true,
+        sourceAvailability: { wikilinks: false, tags: true, attachments: true },
+    });
+
+    assert.deepEqual(presentation, {
+        mode: "thought-trail",
+        source: "tags",
+    });
+});
+
+test("presentation selects attachments when they are the only populated source", () => {
+    const presentation = resolveThoughtTrailPresentationState({
+        mode: "thought-trail",
+        source: "wikilinks",
+        isThoughtTrailEnabled: true,
+        sourceAvailability: { wikilinks: false, tags: false, attachments: true },
+    });
+
+    assert.deepEqual(presentation, {
+        mode: "thought-trail",
+        source: "attachments",
+    });
+});
+
+test("presentation preserves a populated transient manual source", () => {
+    const presentation = resolveThoughtTrailPresentationState({
+        mode: "thought-trail",
+        source: "attachments",
+        isThoughtTrailEnabled: true,
+        sourceAvailability: { wikilinks: true, tags: true, attachments: true },
+    });
+
+    assert.deepEqual(presentation, {
+        mode: "thought-trail",
+        source: "attachments",
     });
 });
 

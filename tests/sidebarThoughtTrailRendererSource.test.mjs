@@ -74,6 +74,21 @@ test("AsideView uses the unique file-set planner for tag-source availability", (
     assert.equal(asideViewSource.includes(obsoleteGroupedPlannerName), false);
 });
 
+test("note and index availability adapters include existing wikilink line counts", () => {
+    assert.match(
+        asideViewSource,
+        /const indexThoughtTrailSourceAvailability:[\s\S]*?wikilinks:\s*indexThoughtTrailLineCount\s*>\s*0/,
+    );
+    assert.match(
+        asideViewSource,
+        /const thoughtTrailSourceAvailability:[\s\S]*?wikilinks:\s*thoughtTrailLineCount\s*>\s*0/,
+    );
+    assert.match(
+        asideViewSource,
+        /const thoughtTrailSourceAvailability:[\s\S]*?wikilinks:\s*lineCount\s*>\s*0/,
+    );
+});
+
 test("AsideView discovers direct attachments and wires them into thought trail rendering", () => {
     assert.match(asideViewSource, /getDirectThoughtTrailAttachments/);
     assert.match(asideViewSource, /resolveThoughtTrailPresentationState/);

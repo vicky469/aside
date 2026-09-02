@@ -1808,6 +1808,7 @@ export default class AsideView extends ItemView {
                 ? getDirectThoughtTrailAttachments(this.app, selectedIndexFileFilterRootPath)
                 : [];
             const indexThoughtTrailSourceAvailability: SidebarThoughtTrailSourceAvailability = {
+                wikilinks: indexThoughtTrailLineCount > 0,
                 tags: hasIndexThoughtTrailTagSource,
                 attachments: indexThoughtTrailAttachments.length > 0,
             };
@@ -2414,6 +2415,7 @@ export default class AsideView extends ItemView {
         const hasThoughtTrailTagSource = this.hasThoughtTrailTagRelatedFiles(file.path, thoughtTrailTagLookup);
         const thoughtTrailAttachments = options.thoughtTrailAttachments;
         const thoughtTrailSourceAvailability: SidebarThoughtTrailSourceAvailability = {
+            wikilinks: thoughtTrailLineCount > 0,
             tags: hasThoughtTrailTagSource,
             attachments: thoughtTrailAttachments.length > 0,
         };
@@ -2653,6 +2655,7 @@ export default class AsideView extends ItemView {
         const hasThoughtTrailTagSource = this.hasThoughtTrailTagRelatedFiles(file.path, thoughtTrailTagLookup);
         const thoughtTrailAttachments = getDirectThoughtTrailAttachments(this.app, file.path);
         const thoughtTrailSourceAvailability: SidebarThoughtTrailSourceAvailability = {
+            wikilinks: lineCount > 0,
             tags: hasThoughtTrailTagSource,
             attachments: thoughtTrailAttachments.length > 0,
         };
