@@ -16,19 +16,19 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Represent whether the current Thought Trail has renderable Wikilink results alongside existing Tags and Attachments availability.
-- [ ] Select the first populated source in Wikilinks, Tags, Attachments priority order when a file's source state is initialized or the selected source becomes unavailable.
-- [ ] Select Wikilinks when no source contains results.
-- [ ] Disable empty source controls when another source contains results, while keeping Wikilinks enabled as the empty-state default when every source is empty.
-- [ ] Preserve an available manual source choice for the current file without persisting it.
-- [ ] Keep tag-related file filtering single-select; do not add Shift+click or multi-tag matching in this change.
+- [x] Represent whether the current Thought Trail has renderable Wikilink results alongside existing Tags and Attachments availability.
+- [x] Select the first populated source in Wikilinks, Tags, Attachments priority order when a file's source state is initialized or the selected source becomes unavailable.
+- [x] Select Wikilinks when no source contains results.
+- [x] Disable empty source controls when another source contains results, while keeping Wikilinks enabled as the empty-state default when every source is empty.
+- [x] Preserve an available manual source choice for the current file without persisting it.
+- [x] Keep tag-related file filtering single-select; do not add Shift+click or multi-tag matching in this change.
 
 ### Verification
 
-- [ ] Shared policy tests cover every availability combination, source priority, empty-state fallback, disabled states, and preservation of an available manual choice.
-- [ ] Presentation-state tests prove note and index callers receive Wikilink availability and resolve through the shared policy.
-- [ ] Renderer contract tests prove source controls expose the resolved selection and disabled states consistently.
-- [ ] Existing Thought Trail, typecheck, lint, build, Obsidian compliance, and release-artifact checks pass.
+- [x] Shared policy tests cover every availability combination, source priority, empty-state fallback, disabled states, and preservation of an available manual choice.
+- [x] Presentation-state tests prove note and index callers receive Wikilink availability and resolve through the shared policy.
+- [x] Renderer contract tests prove source controls expose the resolved selection and disabled states consistently.
+- [x] Existing Thought Trail, typecheck, lint, build, Obsidian compliance, and release-artifact checks pass.
 
 ## Problem
 
