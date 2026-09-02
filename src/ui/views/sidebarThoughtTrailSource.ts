@@ -3,6 +3,7 @@ export type SidebarThoughtTrailSource = "wikilinks" | "tags" | "attachments";
 export type SidebarThoughtTrailScope = "Vault" | "File";
 
 export interface SidebarThoughtTrailSourceAvailability {
+    wikilinks?: boolean;
     tags: boolean;
     attachments: boolean;
 }
@@ -43,20 +44,23 @@ export function isThoughtTrailSourceAvailable(
     source: SidebarThoughtTrailSource,
     availability: SidebarThoughtTrailSourceAvailability,
 ): boolean {
-    if (source === "wikilinks") {
-        return true;
-    }
-
-    return availability[source];
+    return availability[source] === true
+        || (
+            source === getDefaultSidebarThoughtTrailSource()
+            && !SIDEBAR_THOUGHT_TRAIL_SOURCES.some((definition) => availability[definition.id])
+        );
 }
 
 export function resolveAvailableThoughtTrailSource(
     source: SidebarThoughtTrailSource,
     availability: SidebarThoughtTrailSourceAvailability,
 ): SidebarThoughtTrailSource {
-    return isThoughtTrailSourceAvailable(source, availability)
-        ? source
-        : getDefaultSidebarThoughtTrailSource();
+    if (availability[source] === true) {
+        return source;
+    }
+
+    return SIDEBAR_THOUGHT_TRAIL_SOURCES.find((definition) => availability[definition.id])?.id
+        ?? getDefaultSidebarThoughtTrailSource();
 }
 
 /** @deprecated Use getDefaultSidebarThoughtTrailSource instead. */

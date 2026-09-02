@@ -39,19 +39,43 @@ test("source definitions can be looked up by source", () => {
     });
 });
 
-test("availability independently controls tags and attachments", () => {
-    const availability = { tags: false, attachments: true };
+test("source availability disables empty sources when another source has results", () => {
+    const tagsOnly = { wikilinks: false, tags: true, attachments: false };
 
-    assert.equal(isThoughtTrailSourceAvailable("wikilinks", availability), true);
-    assert.equal(isThoughtTrailSourceAvailable("tags", availability), false);
-    assert.equal(isThoughtTrailSourceAvailable("attachments", availability), true);
-    assert.equal(resolveAvailableThoughtTrailSource("tags", availability), "wikilinks");
-    assert.equal(resolveAvailableThoughtTrailSource("attachments", availability), "attachments");
+    assert.equal(isThoughtTrailSourceAvailable("wikilinks", tagsOnly), false);
+    assert.equal(isThoughtTrailSourceAvailable("tags", tagsOnly), true);
+    assert.equal(isThoughtTrailSourceAvailable("attachments", tagsOnly), false);
+});
 
-    assert.equal(isThoughtTrailSourceAvailable("tags", { tags: true, attachments: false }), true);
-    assert.equal(isThoughtTrailSourceAvailable("attachments", { tags: true, attachments: false }), false);
-    assert.equal(resolveAvailableThoughtTrailSource("attachments", { tags: true, attachments: false }), "wikilinks");
-    assert.equal(resolveAvailableThoughtTrailSource("wikilinks", { tags: false, attachments: false }), "wikilinks");
+test("all-empty availability keeps only wikilinks enabled", () => {
+    const empty = { wikilinks: false, tags: false, attachments: false };
+
+    assert.equal(isThoughtTrailSourceAvailable("wikilinks", empty), true);
+    assert.equal(isThoughtTrailSourceAvailable("tags", empty), false);
+    assert.equal(isThoughtTrailSourceAvailable("attachments", empty), false);
+});
+
+test("source resolution uses populated priority and preserves an available selection", () => {
+    assert.equal(
+        resolveAvailableThoughtTrailSource("wikilinks", { wikilinks: false, tags: true, attachments: true }),
+        "tags",
+    );
+    assert.equal(
+        resolveAvailableThoughtTrailSource("wikilinks", { wikilinks: false, tags: false, attachments: true }),
+        "attachments",
+    );
+    assert.equal(
+        resolveAvailableThoughtTrailSource("attachments", { wikilinks: true, tags: true, attachments: true }),
+        "attachments",
+    );
+    assert.equal(
+        resolveAvailableThoughtTrailSource("tags", { wikilinks: true, tags: false, attachments: true }),
+        "wikilinks",
+    );
+    assert.equal(
+        resolveAvailableThoughtTrailSource("attachments", { wikilinks: false, tags: false, attachments: false }),
+        "wikilinks",
+    );
 });
 
 test("getDefaultThoughtTrailSource starts fresh views from wikilinks", () => {
@@ -67,10 +91,19 @@ test("normalizeThoughtTrailSource preserves the deprecated nullable contract", (
     assert.equal(normalizeThoughtTrailSource("invalid"), null);
 });
 
-test("resolveAvailableThoughtTrailSource falls back to wikilinks when tag graph is unavailable", () => {
-    assert.equal(resolveAvailableThoughtTrailSource("tags", { tags: false, attachments: false }), "wikilinks");
-    assert.equal(resolveAvailableThoughtTrailSource("tags", { tags: true, attachments: false }), "tags");
-    assert.equal(resolveAvailableThoughtTrailSource("wikilinks", { tags: false, attachments: false }), "wikilinks");
+test("resolveAvailableThoughtTrailSource falls back to wikilinks when every source is empty", () => {
+    assert.equal(
+        resolveAvailableThoughtTrailSource("tags", { wikilinks: false, tags: false, attachments: false }),
+        "wikilinks",
+    );
+    assert.equal(
+        resolveAvailableThoughtTrailSource("tags", { wikilinks: false, tags: true, attachments: false }),
+        "tags",
+    );
+    assert.equal(
+        resolveAvailableThoughtTrailSource("wikilinks", { wikilinks: false, tags: false, attachments: false }),
+        "wikilinks",
+    );
 });
 
 test("does not treat ambiguous boolean availability as attachment availability", () => {
