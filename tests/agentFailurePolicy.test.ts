@@ -66,6 +66,26 @@ test("preflight failure reply redacts obvious credentials", () => {
     assert.match(reply, /Authentication failed/u);
 });
 
+test("preflight failure reply redacts common credentials, credential urls, and home paths", () => {
+    const reply = formatAgentPreflightFailureReply(
+        "cursor",
+        [
+            "Error: Authentication failed:",
+            "Authorization: Bearer ghp_abcdefghijklmnopqrstuvwxyz1234567890",
+            "CURSOR_API_KEY=cursor_secret_abcdefghijklmnopqrstuvwxyz",
+            "https://api.example.com/run?token=query-secret&key=value",
+            "/Users/alice/.cursor/config.json",
+        ].join(" "),
+    );
+
+    assert.match(reply, /Authentication failed/u);
+    assert.doesNotMatch(reply, /ghp_/u);
+    assert.doesNotMatch(reply, /cursor_secret/u);
+    assert.doesNotMatch(reply, /query-secret/u);
+    assert.doesNotMatch(reply, /\/Users\/alice/u);
+    assert.match(reply, /\[redacted\]/u);
+});
+
 test("preflight failure reply prefers an explicit error over preceding warnings", () => {
     assert.equal(formatAgentPreflightFailureReply(
         "codex",

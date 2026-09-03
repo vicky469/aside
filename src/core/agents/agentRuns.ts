@@ -28,6 +28,7 @@ export interface AgentRunMetadata {
 export interface AgentRunStreamState {
     runId: string;
     threadId: string;
+    triggerEntryId?: string;
     requestedAgent: AsideAgentTarget;
     preferredAgent?: AsideAgentTarget;
     requestKind?: AgentRunRequestKind;

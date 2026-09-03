@@ -56,6 +56,8 @@ import {
 import {
     formatAgentPreflightFailureReply,
     formatKnownAgentFailureReply,
+    formatStandaloneAgentProviderFailureReply,
+    sanitizeAgentDiagnosticForDisplay,
 } from "./agentFailurePolicy";
 import { isAgentRuntimeCancelledError } from "./agentRuntimeAdapter";
 import {
@@ -72,6 +74,7 @@ export interface AgentRuntimeResponse extends AgentRunMetadata {
 
 export interface AgentStreamUpdate {
     threadId: string;
+    runId: string;
     stream: AgentRunStreamState | null;
 }
 
@@ -289,10 +292,18 @@ export class CommentAgentController {
     }
 
     public getActiveAgentStreamForThread(threadId: string): AgentRunStreamState | null {
-        const matchingStreams = Array.from(this.runStreams.values())
+        return this.getAgentStreamsForThread(threadId)[0] ?? null;
+    }
+
+    public getAgentStreamsForThread(threadId: string): AgentRunStreamState[] {
+        return Array.from(this.runStreams.values())
             .filter((stream) => stream.threadId === threadId)
-            .sort((left, right) => right.updatedAt - left.updatedAt);
-        return matchingStreams[0] ? cloneAgentRunStreamState(matchingStreams[0]) : null;
+            .sort((left, right) => (
+                right.updatedAt !== left.updatedAt
+                    ? right.updatedAt - left.updatedAt
+                    : right.runId.localeCompare(left.runId)
+            ))
+            .map((stream) => cloneAgentRunStreamState(stream));
     }
 
     public subscribeToStreamUpdates(listener: AgentStreamListener): () => void {
@@ -832,33 +843,32 @@ export class CommentAgentController {
         const partialText = existingStream?.partialText.trim().length
             ? existingStream.partialText
             : "";
+        const replyText = partialText || cancellationMessage;
         if (run.outputEntryId) {
-            if (partialText) {
-                let persistenceError: unknown = null;
-                try {
-                    const committed = await this.commitRunReply(
-                        run,
-                        run.outputEntryId,
-                        partialText,
-                        this.host.now(),
-                    );
-                    if (!committed) {
-                        persistenceError = new Error("Unable to save the cancelled agent reply.");
-                    }
-                } catch (error) {
-                    persistenceError = error;
+            let persistenceError: unknown = null;
+            try {
+                const committed = await this.commitRunReply(
+                    run,
+                    run.outputEntryId,
+                    replyText,
+                    this.host.now(),
+                );
+                if (!committed) {
+                    persistenceError = new Error("Unable to save the cancelled agent reply.");
                 }
-                if (persistenceError) {
-                    await this.failReplyPersistence({
-                        run,
-                        replyText: partialText,
-                        outputEntryId: run.outputEntryId,
-                        startedAt: run.startedAt ?? run.createdAt,
-                        error: persistenceError,
-                        runError: cancellationMessage,
-                    });
-                    return true;
-                }
+            } catch (error) {
+                persistenceError = error;
+            }
+            if (persistenceError) {
+                await this.failReplyPersistence({
+                    run,
+                    replyText,
+                    outputEntryId: run.outputEntryId,
+                    startedAt: run.startedAt ?? run.createdAt,
+                    error: persistenceError,
+                    runError: cancellationMessage,
+                });
+                return true;
             }
         }
 
@@ -873,7 +883,7 @@ export class CommentAgentController {
                 status: "cancelled",
                 statusText: AGENT_STATUS_CANCELLED,
                 processLogLines: existingStream?.processLogLines,
-                partialText,
+                partialText: replyText,
                 startedAt: cancelledRun.startedAt ?? run.createdAt,
                 updatedAt: cancelledRun.endedAt ?? this.host.now(),
                 outputEntryId: cancelledRun.outputEntryId,
@@ -1048,7 +1058,9 @@ export class CommentAgentController {
             [message, existingStream?.partialText ?? ""].join("\n"),
         );
         const failureText = knownFailureReply
-            ?? (existingStream?.partialText.trim().length ? existingStream.partialText : message);
+            ?? (existingStream?.partialText.trim().length
+                ? existingStream.partialText
+                : sanitizeAgentDiagnosticForDisplay(message));
         const failureMetadata = mergeAgentRunMetadata(run, existingStream ?? {});
         let failureReplyPersisted = false;
         let failureReplyPersistenceError: unknown = null;
@@ -1234,7 +1246,7 @@ export class CommentAgentController {
             return;
         }
 
-        if (formatKnownAgentFailureReply(options.run.requestedAgent, runtimeResponse.replyText)) {
+        if (formatStandaloneAgentProviderFailureReply(options.run.requestedAgent, runtimeResponse.replyText)) {
             throw new Error(runtimeResponse.replyText);
         }
 
@@ -1254,16 +1266,17 @@ export class CommentAgentController {
         body: string,
         timestamp: number,
     ): Promise<boolean> {
+        const currentRun = this.store.getRunById(run.id) ?? run;
         return this.host.commitThreadEntry(
-            run.filePath,
-            run.threadId,
+            currentRun.filePath,
+            currentRun.threadId,
             {
                 id: outputEntryId,
                 body,
                 timestamp,
             },
             {
-                insertAfterCommentId: run.triggerEntryId,
+                insertAfterCommentId: currentRun.triggerEntryId,
                 immediateAggregateRefresh: false,
                 skipCommentViewRefresh: true,
                 refreshEditorDecorations: false,
@@ -1774,7 +1787,7 @@ export class CommentAgentController {
     }
 
     private buildRunStreamState(
-        run: Pick<AgentRunRecord, "id" | "threadId" | "requestedAgent" | "preferredAgent" | "requestKind" | "runtime"> & AgentRunMetadata,
+        run: Pick<AgentRunRecord, "id" | "threadId" | "triggerEntryId" | "requestedAgent" | "preferredAgent" | "requestKind" | "runtime"> & AgentRunMetadata,
         options: {
             status: AgentRunRecord["status"];
             statusText?: string;
@@ -1791,6 +1804,7 @@ export class CommentAgentController {
         return {
             runId: run.id,
             threadId: run.threadId,
+            triggerEntryId: run.triggerEntryId,
             requestedAgent: run.requestedAgent,
             preferredAgent: run.preferredAgent,
             requestKind: run.requestKind,
@@ -1929,7 +1943,7 @@ export class CommentAgentController {
 
     private setRunStream(stream: AgentRunStreamState): void {
         this.setRunStreamState(stream);
-        this.emitStreamUpdate(stream.threadId, stream);
+        this.emitStreamUpdate(stream.runId, stream.threadId, stream);
     }
 
     private setRunStreamState(stream: AgentRunStreamState): void {
@@ -1948,7 +1962,7 @@ export class CommentAgentController {
             return;
         }
 
-        this.emitStreamUpdate(threadId, null);
+        this.emitStreamUpdate(runId, threadId, null);
     }
 
     private clearRunStreamState(runId: string): boolean {
@@ -1977,7 +1991,7 @@ export class CommentAgentController {
             }
 
             this.runStreams.delete(runId);
-            this.emitStreamUpdate(stream.threadId, null);
+            this.emitStreamUpdate(runId, stream.threadId, null);
         }, FINAL_STREAM_RETENTION_MS);
         this.runStreamPruneTimers.set(runId, timer);
     }
@@ -2078,9 +2092,14 @@ export class CommentAgentController {
         this.runStreamPruneTimers.delete(runId);
     }
 
-    private emitStreamUpdate(threadId: string, stream: AgentRunStreamState | null): void {
+    private emitStreamUpdate(
+        runId: string,
+        threadId: string,
+        stream: AgentRunStreamState | null,
+    ): void {
         const payload: AgentStreamUpdate = {
             threadId,
+            runId,
             stream: stream ? cloneAgentRunStreamState(stream) : null,
         };
         for (const listener of this.streamListeners) {

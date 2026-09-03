@@ -435,3 +435,64 @@ test("comment persistence commits complete thread entries idempotently", async (
         globalThis.window = originalWindow;
     }
 });
+
+test("agent reply commit preserves a user mutation made while the commit is writing", async () => {
+    const originalWindow = globalThis.window;
+    globalThis.window = {
+        setTimeout: () => 1,
+        clearTimeout: () => {},
+    } as unknown as typeof globalThis.window;
+
+    const file = createFile("docs/note.md");
+    const thread = createThread(file.path);
+    const harness = createHarness([file], [thread]);
+    const commitWriteEntered = createDeferred();
+    const releaseCommitWrite = createDeferred();
+    let readCount = 0;
+    harness.setCurrentNoteContentReader(async () => {
+        readCount += 1;
+        if (readCount === 2) {
+            commitWriteEntered.resolve();
+            await releaseCommitWrite.promise;
+        }
+        return "# Title\n\nAlpha target omega\n";
+    });
+
+    try {
+        const agentCommit = harness.controller.commitThreadEntry(file, thread.id, {
+            id: "agent-reply",
+            body: "Agent reply",
+            timestamp: 1710000001000,
+        }, {
+            insertAfterCommentId: thread.id,
+        });
+        await commitWriteEntered.promise;
+
+        harness.commentManager.appendEntry(thread.id, {
+            id: "user-reply",
+            body: "User reply",
+            timestamp: 1710000002000,
+        });
+        const userSave = harness.controller.persistCommentsForFile(file);
+
+        releaseCommitWrite.resolve();
+        assert.equal(await agentCommit, true);
+        await userSave;
+
+        const payload = JSON.parse(await harness.adapter.read(getSidecarStoragePath(file.path))) as {
+            threads: CommentThread[];
+        };
+        assert.deepEqual(
+            payload.threads[0]?.entries.map((entry) => entry.id),
+            ["entry-1", "agent-reply", "user-reply"],
+        );
+        assert.deepEqual(
+            harness.commentManager.getThreadById(thread.id)?.entries.map((entry) => entry.id),
+            ["entry-1", "agent-reply", "user-reply"],
+        );
+    } finally {
+        releaseCommitWrite.resolve();
+        harness.controller.dispose();
+        globalThis.window = originalWindow;
+    }
+});

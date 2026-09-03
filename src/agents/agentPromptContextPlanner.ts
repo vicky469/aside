@@ -21,8 +21,11 @@ const MAX_ANCHOR_CHARS = 1_200;
 const MAX_PAGE_CHARS = 8_000;
 const MAX_REQUEST_CHARS = 1_200;
 const MAX_TRANSCRIPT_ENTRY_CHARS = 360;
+const MAX_AGENT_TRANSCRIPT_ENTRY_BYTES = 4_000;
 const MAX_TRANSCRIPT_ENTRIES = 8;
 const MAX_NEARBY_HEADINGS = 4;
+const MAX_PROMPT_BYTES = 24_000;
+const TRUNCATION_MARKER = "\n...[context truncated]";
 
 function normalizeText(value: string): string {
     return value.replace(/\r\n/g, "\n").trim();
@@ -90,6 +93,36 @@ function formatInlineList(label: string, values: string[]): string | null {
 
 function countUtf8Bytes(value: string): number {
     return new TextEncoder().encode(value).length;
+}
+
+function clipTextToUtf8Bytes(value: string, maxBytes: number): string {
+    const normalized = normalizeText(value);
+    if (countUtf8Bytes(normalized) <= maxBytes) {
+        return normalized;
+    }
+
+    const markerBytes = countUtf8Bytes(TRUNCATION_MARKER);
+    const contentBudget = Math.max(0, maxBytes - markerBytes);
+    let low = 0;
+    let high = normalized.length;
+    while (low < high) {
+        const middle = Math.ceil((low + high) / 2);
+        if (countUtf8Bytes(normalized.slice(0, middle)) <= contentBudget) {
+            low = middle;
+        } else {
+            high = middle - 1;
+        }
+    }
+
+    let clipped = normalized.slice(0, low);
+    if (clipped && /[\uD800-\uDBFF]$/u.test(clipped)) {
+        clipped = clipped.slice(0, -1);
+    }
+    return `${clipped.trimEnd()}${TRUNCATION_MARKER}`;
+}
+
+function clipCompactTextToUtf8Bytes(value: string, maxBytes: number): string {
+    return clipTextToUtf8Bytes(compactText(value), maxBytes);
 }
 
 function parseMarkdownHeadings(noteContent: string): AgentPromptHeading[] {
@@ -190,7 +223,7 @@ function buildThreadTranscript(
                 : "You";
             const currentSuffix = entry.id === triggerEntryId ? " (current)" : "";
             const body = matchingRun
-                ? compactText(entry.body)
+                ? clipCompactTextToUtf8Bytes(entry.body, MAX_AGENT_TRANSCRIPT_ENTRY_BYTES)
                 : clipCompactText(entry.body, MAX_TRANSCRIPT_ENTRY_CHARS);
             return `${label}${currentSuffix}: ${body}`;
         })
@@ -278,7 +311,17 @@ export function buildAgentPromptContext(options: {
         sections.push(requestBlock);
     }
 
-    const promptText = sections.join("\n\n");
+    let promptText = sections.join("\n\n");
+    if (countUtf8Bytes(promptText) > MAX_PROMPT_BYTES) {
+        const requestSection = requestBlock ?? "";
+        const prefixSections = requestBlock ? sections.slice(0, -1) : sections;
+        const separator = requestSection ? "\n\n" : "";
+        const prefixBudget = Math.max(
+            0,
+            MAX_PROMPT_BYTES - countUtf8Bytes(separator) - countUtf8Bytes(requestSection),
+        );
+        promptText = `${clipTextToUtf8Bytes(prefixSections.join("\n\n"), prefixBudget)}${separator}${requestSection}`;
+    }
 
     return {
         scope,

@@ -33,11 +33,21 @@ test("AsideView preserves streamed reply controllers across both thread reconcil
 
     assert.equal(adapters.length, 2);
     assert.match(source, /private handoffStreamedReplyController\(/u);
-    assert.match(
-        source,
-        /this\.plugin\.getAgentRuns\(\)\.find\(\(candidate\) => candidate\.id === stream\.runId\)/u,
-    );
+    assert.match(source, /const runsById = new Map\(/u);
+    assert.match(source, /runsById\.get\(stream\.runId\)/u);
     assert.match(source, /stream\.status !== run\.status/u);
-    assert.match(source, /stream\.status !== "succeeded" && stream\.status !== "failed"/u);
+    assert.match(source, /stream\.status !== "cancelled"/u);
     assert.match(source, /adoptSidebarPersistedCardInteractions/u);
+});
+
+test("AsideView keys streamed reply controllers by run so same-thread runs stay independent", () => {
+    const source = readFileSync("src/ui/views/AsideView.ts", "utf8");
+
+    assert.match(source, /this\.plugin\.getAgentStreamsForThread\(threadId\)/u);
+    assert.match(source, /this\.streamedReplyControllers\.get\(update\.runId\)/u);
+    assert.match(source, /this\.removeStreamedReplyController\(update\.runId\)/u);
+    assert.doesNotMatch(
+        source,
+        /getOrCreateStreamedReplyController\(update\.threadId\)\.sync/u,
+    );
 });

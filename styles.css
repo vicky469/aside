@@ -1821,8 +1821,14 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
     align-items: center;
     justify-content: center;
     margin-inline-start: 0.35em;
+    padding: 0;
+    width: auto;
+    height: auto;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
     color: var(--text-muted);
-    cursor: default;
+    cursor: help;
     flex: none;
     --icon-size: 0.9em;
 }

@@ -426,6 +426,34 @@ test("buildPageSidebarDraftRenderSignature changes only for the matching active 
     assert.notEqual(inactive, active);
 });
 
+test("draft render signatures change as persistence starts", () => {
+    const topLevelDraft = createDraft({ id: "draft-top", mode: "new", threadId: undefined });
+    const appendDraft = createDraft({ id: "draft-append", mode: "append", threadId: "thread-1" });
+    const thread = createThread();
+    const baseThreadOptions: Parameters<typeof buildPageSidebarThreadRenderSignature>[0] = {
+        thread,
+        activeCommentId: "draft-append",
+        isPinned: false,
+        showNestedComments: true,
+        showNestedCommentsByDefault: true,
+        isSelectedForTagBatch: false,
+        enableTagSelection: false,
+        enablePageThreadReorder: true,
+        editDraftComment: null,
+        appendDraftComment: appendDraft,
+        threadAgentRuns: [],
+    };
+
+    assert.notEqual(
+        buildPageSidebarDraftRenderSignature(topLevelDraft, "draft-top", false),
+        buildPageSidebarDraftRenderSignature(topLevelDraft, "draft-top", true),
+    );
+    assert.notEqual(
+        buildPageSidebarThreadRenderSignature({ ...baseThreadOptions, isSavingDraft: false }),
+        buildPageSidebarThreadRenderSignature({ ...baseThreadOptions, isSavingDraft: true }),
+    );
+});
+
 test("buildPageSidebarThreadRenderSignature changes when the global nested default changes for an active parent thread", () => {
     const thread = createThread();
     const hiddenByDefault = buildPageSidebarThreadRenderSignature({

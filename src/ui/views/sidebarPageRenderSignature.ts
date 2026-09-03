@@ -135,6 +135,7 @@ export function buildPageSidebarThreadRenderSignature(options: {
     threadAgentRuns: readonly AgentRunRecord[];
     threadScriptRuns?: readonly ScriptRunRecord[];
     presentationKey?: string;
+    isSavingDraft?: boolean;
 }): string {
     const { thread } = options;
     return [
@@ -164,6 +165,7 @@ export function buildPageSidebarThreadRenderSignature(options: {
         options.presentationKey ?? "",
         getDraftIdentity(options.editDraftComment),
         getDraftIdentity(options.appendDraftComment),
+        options.isSavingDraft === true ? 1 : 0,
         getAgentRunsIdentity(options.threadAgentRuns),
         getScriptRunsIdentity(options.threadScriptRuns ?? []),
     ].join("|");
@@ -172,9 +174,11 @@ export function buildPageSidebarThreadRenderSignature(options: {
 export function buildPageSidebarDraftRenderSignature(
     draft: DraftComment,
     activeCommentId: string | null,
+    isSavingDraft = false,
 ): string {
     return [
         getDraftIdentity(draft),
         draft.id === activeCommentId ? 1 : 0,
+        isSavingDraft ? 1 : 0,
     ].join("|");
 }

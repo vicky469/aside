@@ -1493,6 +1493,12 @@ test("comment agent controller runs local jobs in parallel within the same threa
         ));
     assert.equal(runningRuns.length, 2);
     assert.deepEqual(runningRuns.map((run) => run.triggerEntryId), ["thread-1", "entry-2"]);
+    assert.deepEqual(
+        harness.controller.getAgentStreamsForThread("thread-1")
+            .map((stream) => stream.triggerEntryId)
+            .sort(),
+        ["entry-2", "thread-1"],
+    );
 
     const parentOutputEntryId = runningRuns[0]?.outputEntryId ?? null;
     const childOutputEntryId = runningRuns[1]?.outputEntryId ?? null;
@@ -1519,6 +1525,39 @@ test("comment agent controller runs local jobs in parallel within the same threa
             .sort(),
         ["Local same-thread reply 1", "Local same-thread reply 2"],
     );
+});
+
+test("comment agent controller commits a running reply to the run's renamed file", async () => {
+    let releaseRuntime: () => void = () => {
+        throw new Error("Runtime did not start.");
+    };
+    const harness = createHarness({
+        availableFilePaths: ["Folder/Note.md", "Folder/Renamed.md"],
+        customRunAgentRuntime: async () => {
+            await new Promise<void>((resolve) => {
+                releaseRuntime = resolve;
+            });
+            return {
+                runtime: "direct-cli",
+                replyText: "Reply after rename",
+            };
+        },
+    });
+
+    await harness.controller.handleSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "@codex answer while I rename this note",
+    });
+    for (let attempt = 0; attempt < 40 && harness.runtimeCalls.length < 1; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    await harness.store.renameFile("Folder/Note.md", "Folder/Renamed.md");
+    releaseRuntime();
+    await waitForAgentQueueToDrain(harness.controller);
+
+    assert.equal(harness.committedEntries.at(-1)?.filePath, "Folder/Renamed.md");
 });
 
 test("comment agent controller inserts child-triggered replies after the triggering child entry", async () => {
@@ -2480,6 +2519,28 @@ test("comment agent controller rejects provider failure text returned as success
     );
 });
 
+test("comment agent controller preserves successful prose that mentions a provider failure phrase", async () => {
+    const replyText = "The guide explains why a model is currently unavailable message may appear and how to retry safely.";
+    const harness = createHarness({
+        customRunAgentRuntime: async () => ({
+            runtime: "direct-cli",
+            replyText,
+        }),
+    });
+
+    await harness.controller.handleSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "@codex explain this error",
+    });
+    await waitForAgentQueueToDrain(harness.controller);
+
+    const run = harness.controller.getLatestAgentRunForThread("thread-1");
+    assert.equal(run?.status, "succeeded");
+    assert.equal(harness.commentManager.getCommentById(run?.outputEntryId ?? "")?.comment, replyText);
+});
+
 test("comment agent controller keeps failed runs retryable through the same output entry", async () => {
     let attempt = 0;
     const harness = createHarness({
@@ -2916,7 +2977,7 @@ test("comment agent controller keeps the cancelled reply card when no text has s
 
     assert.equal(cancelled, true);
     assert.equal(harness.controller.getActiveAgentStreamForThread("thread-1")?.status, "cancelled");
-    assert.equal(harness.commentManager.getCommentById("generated-2"), undefined);
+    assert.equal(harness.commentManager.getCommentById("generated-2")?.comment, "Cancelled.");
     assert.equal(harness.controller.getLatestAgentRunForThread("thread-1")?.status, "cancelled");
 });
 
@@ -2958,7 +3019,7 @@ test("comment agent controller emits a clear update when terminal retention expi
         scheduled.callback();
 
         assert.equal(harness.controller.getActiveAgentStreamForThread("thread-1"), null);
-        assert.deepEqual(updates, [{ threadId: "thread-1", stream: null }]);
+        assert.deepEqual(updates, [{ threadId: "thread-1", runId: "retained-run", stream: null }]);
         unsubscribe();
         harness.controller.dispose();
     } finally {

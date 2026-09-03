@@ -1426,6 +1426,10 @@ export function extractClaudeProgressTextFromJsonEvent(event: unknown): string |
 }
 
 export function extractCursorTextDeltaFromJsonEvent(event: unknown): string | null {
+    const eventType = getClaudeEventType(event);
+    if (eventType === "assistant") {
+        return joinTextContentItems(getNestedValue(event, ["message", "content"]));
+    }
     return extractClaudeReplyTextFromJsonEvent(event);
 }
 
@@ -1458,7 +1462,7 @@ export function extractCursorProgressTextFromJsonEvent(event: unknown): string |
         return "Starting Cursor";
     }
 
-    if (getClaudeEventType(event) === "assistant" && isRecord(event) && "timestamp_ms" in event) {
+    if (getClaudeEventType(event) === "assistant") {
         const assistantProgressText = normalizeProgressText(
             joinTextContentItems(getNestedValue(event, ["message", "content"])) ?? "",
         );
@@ -1467,7 +1471,94 @@ export function extractCursorProgressTextFromJsonEvent(event: unknown): string |
         }
     }
 
-    return extractClaudeProgressTextFromJsonEvent(event);
+    const toolCall = getCursorToolCall(event);
+    if (toolCall && firstStringAtPaths(event, [["subtype"]]) === "started") {
+        switch (toolCall.name) {
+            case "read":
+                return "Reading file";
+            case "write":
+                return "Writing file";
+            case "shell":
+                return "Running command";
+            default:
+                return normalizeProgressText(`Using ${toolCall.name}`);
+        }
+    }
+
+    return null;
+}
+
+type CursorToolCall = {
+    name: string;
+    value: Record<string, unknown>;
+};
+
+function normalizeCursorToolName(value: string): string {
+    const withoutSuffix = value.replace(/ToolCall$/u, "");
+    const normalized = withoutSuffix.charAt(0).toLowerCase() + withoutSuffix.slice(1);
+    return /^(?:shell|terminal|runTerminalCmd)$/iu.test(normalized) ? "shell" : normalized;
+}
+
+function getCursorToolCall(event: unknown): CursorToolCall | null {
+    if (getClaudeEventType(event) !== "tool_call") {
+        return null;
+    }
+    const toolCallEnvelope = getNestedValue(event, ["tool_call"]);
+    if (!isRecord(toolCallEnvelope)) {
+        return null;
+    }
+
+    for (const [key, value] of Object.entries(toolCallEnvelope)) {
+        if (isRecord(value)) {
+            return {
+                name: normalizeCursorToolName(key),
+                value,
+            };
+        }
+    }
+    return null;
+}
+
+function getCursorToolFailurePayload(toolCall: CursorToolCall): string | null {
+    const result = toolCall.value.result;
+    if (!isRecord(result)) {
+        return null;
+    }
+    const failure = result.failure ?? result.error;
+    if (failure == null) {
+        return null;
+    }
+    return firstStringAtPaths(failure, [["message"], ["error"], ["detail"]])
+        ?? stringifyToolErrorPayload(failure);
+}
+
+export function extractCursorRunMetadataFromJsonEvent(event: unknown): Pick<AgentRunMetadata, "usedTools" | "usedFiles" | "usedUrls" | "usedToolErrors"> {
+    const toolCall = getCursorToolCall(event);
+    if (!toolCall) {
+        return {
+            usedTools: [],
+            usedFiles: [],
+            usedUrls: [],
+        };
+    }
+
+    const args = toolCall.value.args;
+    const fileCandidates: unknown[] = [];
+    const urls = new Set<string>();
+    collectFilePathStrings(args, fileCandidates);
+    collectUrlStrings(args, urls);
+    const failurePayload = getCursorToolFailurePayload(toolCall);
+    const usedToolErrors = failurePayload
+        ? normalizeAgentRunToolErrors([{ name: toolCall.name, payload: failurePayload }])
+        : [];
+    return {
+        usedTools: normalizeAgentRunToolNames([
+            failurePayload ? formatUnavailableAgentRunToolName(toolCall.name) : toolCall.name,
+        ]),
+        usedFiles: normalizeAgentRunFilePaths(fileCandidates),
+        usedUrls: Array.from(urls),
+        ...(usedToolErrors.length ? { usedToolErrors } : {}),
+    };
 }
 
 export function isCursorTerminalErrorEvent(event: unknown): boolean {
@@ -2060,6 +2151,7 @@ export function buildCursorCliArgs(options: {
 }): string[] {
     const args = [
         "-p",
+        "--force",
         "--output-format",
         "stream-json",
         "--stream-partial-output",
@@ -2711,8 +2803,11 @@ async function runCursorDirect(
         extractText: extractCursorTextDeltaFromJsonEvent,
         extractProgress: extractCursorProgressTextFromJsonEvent,
         extractError: extractCursorErrorTextFromJsonEvent,
-        extractMetadata: extractClaudeRunMetadataFromJsonEvent,
+        extractMetadata: extractCursorRunMetadataFromJsonEvent,
         isTerminalError: isCursorTerminalErrorEvent,
+        appendStreamText: (streamedText, textDelta, event) => (
+            getClaudeEventType(event) === "result" ? textDelta : `${streamedText}${textDelta}`
+        ),
     });
 }
 

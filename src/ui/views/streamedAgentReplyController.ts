@@ -105,7 +105,12 @@ export class StreamedAgentReplyController {
         }
 
         const repliesEl = this.ensureRepliesContainer(threadEl);
-        const cardEl = this.ensureCard(threadEl, repliesEl, stream.outputEntryId ?? null);
+        const cardEl = this.ensureCard(
+            threadEl,
+            repliesEl,
+            stream.outputEntryId ?? null,
+            stream.triggerEntryId ?? this.threadId,
+        );
         const metaValueEl = this.metaValueEl;
         const labelEl = this.labelEl;
         const statusEl = this.statusEl;
@@ -393,6 +398,7 @@ export class StreamedAgentReplyController {
         threadEl: HTMLDivElement,
         repliesEl: HTMLDivElement,
         outputEntryId: string | null,
+        triggerEntryId = this.threadId,
     ): HTMLDivElement {
         const isCardConnected = this.cardEl?.isConnected
             && (
@@ -493,7 +499,14 @@ export class StreamedAgentReplyController {
         cardEl.appendChild(headerEl);
         cardEl.appendChild(contentEl);
         cardEl.appendChild(footerEl);
-        repliesEl.appendChild(cardEl);
+        if (triggerEntryId === this.threadId) {
+            repliesEl.insertBefore(cardEl, repliesEl.firstChild);
+        } else {
+            const triggerEl = repliesEl.querySelector(
+                `.aside-thread-entry-item[data-comment-id="${triggerEntryId}"]`,
+            );
+            repliesEl.insertBefore(cardEl, triggerEl?.nextSibling ?? null);
+        }
 
         this.cardEl = cardEl;
         this.ownsCard = true;

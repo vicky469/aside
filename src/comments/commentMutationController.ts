@@ -109,6 +109,27 @@ function hasSameIdOrder(before: readonly string[], after: readonly string[]): bo
         && before.every((id, index) => id === after[index]);
 }
 
+function rollbackAddedThread(manager: CommentManager, filePath: string, threadId: string): void {
+    manager.replaceThreadsForFile(
+        filePath,
+        manager.getThreadsForFile(filePath, { includeDeleted: true })
+            .filter((thread) => thread.id !== threadId),
+    );
+}
+
+function rollbackAppendedEntry(manager: CommentManager, filePath: string, threadId: string, entryId: string): void {
+    manager.replaceThreadsForFile(
+        filePath,
+        manager.getThreadsForFile(filePath, { includeDeleted: true })
+            .map((thread) => thread.id === threadId
+                ? {
+                    ...thread,
+                    entries: thread.entries.filter((entry) => entry.id !== entryId),
+                }
+                : thread),
+    );
+}
+
 export interface CommentMutationHost {
     getAllCommentsNotePath(): string;
     getSidebarTargetFilePath(): string | null;
@@ -247,16 +268,25 @@ export class CommentMutationController {
             if (finalizedDraftUi) {
                 return;
             }
+            finalizedDraftUi = true;
 
             if (saved && this.host.getDraftComment()?.id === commentId) {
                 this.host.clearDraftState();
             }
             this.host.setSavingDraftCommentId(null);
-            await this.host.refreshCommentViews({
-                skipDataRefresh: true,
-            });
-            this.host.refreshEditorDecorations();
-            finalizedDraftUi = true;
+            try {
+                await this.host.refreshCommentViews({
+                    skipDataRefresh: true,
+                });
+                this.host.refreshEditorDecorations();
+            } catch (error) {
+                void this.host.log?.("warn", "draft", "draft.finalize_ui.warn", {
+                    commentId,
+                    draftMode: preparedDraft?.mode ?? trimmedDraft.mode,
+                    filePath: preparedDraft?.filePath ?? trimmedDraft.filePath,
+                    error,
+                });
+            }
         };
         try {
             if (preparedDraft.mode === "new") {
@@ -329,7 +359,6 @@ export class CommentMutationController {
         }
 
         await this.host.loadCommentsForFile(file);
-        const previousThreads = this.host.getCommentManager().getThreadsForFile(file.path, { includeDeleted: true });
         const previousAddFingerprint = this.lastAddFingerprint;
         const now = this.host.now();
         const fingerprint = this.createAddFingerprint(newComment);
@@ -349,7 +378,7 @@ export class CommentMutationController {
                 ...(options.skipCommentViewRefresh === true ? { skipCommentViewRefresh: true } : {}),
             }));
         } catch (error) {
-            this.host.getCommentManager().replaceThreadsForFile(file.path, previousThreads);
+            rollbackAddedThread(this.host.getCommentManager(), file.path, newComment.id);
             this.lastAddFingerprint = previousAddFingerprint;
             throw error;
         }
@@ -519,10 +548,6 @@ export class CommentMutationController {
             return false;
         }
 
-        const previousThreads = this.host.getCommentManager().getThreadsForFile(
-            latestTarget.file.path,
-            { includeDeleted: true },
-        );
         try {
             this.host.getCommentManager().appendEntry(threadId, {
                 id: draftComment.id,
@@ -542,7 +567,12 @@ export class CommentMutationController {
                 this.buildPersistOptionsForComment(latestTarget.latestComment, { immediateAggregateRefresh: true }),
             );
         } catch (error) {
-            this.host.getCommentManager().replaceThreadsForFile(latestTarget.file.path, previousThreads);
+            rollbackAppendedEntry(
+                this.host.getCommentManager(),
+                latestTarget.file.path,
+                threadId,
+                draftComment.id,
+            );
             throw error;
         }
         return true;

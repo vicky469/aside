@@ -63,6 +63,7 @@ function createHost(options: {
     }) => Promise<void> | void;
     now?: number;
     handleSavedUserEntry?: (event: SavedUserEntryEvent) => Promise<void> | void;
+    refreshCommentViews?: () => Promise<void> | void;
 } = {}) {
     const manager = new CommentManager(options.loadedComments ?? options.knownComments ?? []);
     let draftComment = options.draftComment ?? null;
@@ -135,6 +136,7 @@ function createHost(options: {
         },
         refreshCommentViews: async () => {
             refreshCommentViewsCount += 1;
+            await options.refreshCommentViews?.();
         },
         refreshEditorDecorations: () => {
             refreshEditorDecorationsCount += 1;
@@ -574,6 +576,42 @@ test("comment mutation controller restores a new draft and threads when persiste
     assert.deepEqual(host.notices, ["Unable to save this side note. Your draft was restored."]);
 });
 
+test("failed new-draft persistence rolls back only that draft", async () => {
+    const existing = createComment({ id: "existing-1", comment: "Existing" });
+    const concurrent = createComment({ id: "concurrent-1", comment: "Concurrent" });
+    const draft = toDraft(createComment({ id: "draft-fail-1", comment: "Draft" }));
+    let rejectPersistence!: (error: Error) => void;
+    let markPersistenceStarted!: () => void;
+    const persistenceStarted = new Promise<void>((resolve) => {
+        markPersistenceStarted = resolve;
+    });
+    const persistencePending = new Promise<void>((_resolve, reject) => {
+        rejectPersistence = reject;
+    });
+    const host = createHost({
+        draftComment: draft,
+        knownComments: [existing, draft],
+        loadedComments: [existing],
+        currentNoteContentByPath: {
+            [draft.filePath]: "# Title\n\nAlpha beta gamma.\n",
+        },
+        persistCommentsForFile: async () => {
+            markPersistenceStarted();
+            await persistencePending;
+        },
+    });
+
+    const savePromise = host.controller.saveDraft(draft.id);
+    await persistenceStarted;
+    host.manager.addComment(concurrent);
+    rejectPersistence(new Error("disk full"));
+    await assert.rejects(savePromise, /disk full/);
+
+    assert.equal(host.manager.getCommentById(draft.id), undefined);
+    assert.equal(host.manager.getCommentById(existing.id)?.comment, "Existing");
+    assert.equal(host.manager.getCommentById(concurrent.id)?.comment, "Concurrent");
+});
+
 test("comment mutation controller restores an append draft and parent thread when persistence fails", async () => {
     const existing = createComment({ id: "thread-1", comment: "Original" });
     const draft: DraftComment = {
@@ -597,6 +635,73 @@ test("comment mutation controller restores an append draft and parent thread whe
     assert.equal(host.getSavingDraftCommentId(), null);
     assert.deepEqual(host.savedUserEntryEvents, []);
     assert.deepEqual(host.notices, ["Unable to save this side note. Your draft was restored."]);
+});
+
+test("failed append persistence preserves a concurrent entry", async () => {
+    const existing = createComment({ id: "thread-1", comment: "Original" });
+    const draft: DraftComment = {
+        ...toDraft(existing, { id: "entry-fail-1", comment: "Draft reply", mode: "append" }),
+        threadId: existing.id,
+    };
+    let rejectPersistence!: (error: Error) => void;
+    let markPersistenceStarted!: () => void;
+    const persistenceStarted = new Promise<void>((resolve) => {
+        markPersistenceStarted = resolve;
+    });
+    const persistencePending = new Promise<void>((_resolve, reject) => {
+        rejectPersistence = reject;
+    });
+    const host = createHost({
+        draftComment: draft,
+        knownComments: [existing],
+        loadedComments: [existing],
+        persistCommentsForFile: async () => {
+            markPersistenceStarted();
+            await persistencePending;
+        },
+    });
+
+    const savePromise = host.controller.saveDraft(draft.id);
+    await persistenceStarted;
+    host.manager.appendEntry(existing.id, {
+        id: "concurrent-entry",
+        body: "Concurrent reply",
+        timestamp: 500,
+    });
+    rejectPersistence(new Error("write failed"));
+    await assert.rejects(savePromise, /write failed/);
+
+    assert.deepEqual(
+        host.manager.getThreadById(existing.id)?.entries.map((entry) => entry.id),
+        [existing.id, "concurrent-entry"],
+    );
+});
+
+test("a refresh failure after durable save does not report persistence failure", async () => {
+    const draft = toDraft(createComment({ id: "draft-refresh-1", comment: "@codex continue" }));
+    let refreshCount = 0;
+    const host = createHost({
+        draftComment: draft,
+        knownComments: [draft],
+        loadedComments: [],
+        currentNoteContentByPath: {
+            [draft.filePath]: "# Title\n\nAlpha beta gamma.\n",
+        },
+        refreshCommentViews: () => {
+            refreshCount += 1;
+            if (refreshCount === 2) {
+                throw new Error("render failed");
+            }
+        },
+    });
+
+    await host.controller.saveDraft(draft.id);
+
+    assert.equal(host.manager.getCommentById(draft.id)?.comment, "@codex continue");
+    assert.equal(host.getDraftComment(), null);
+    assert.equal(host.getSavingDraftCommentId(), null);
+    assert.deepEqual(host.notices, []);
+    assert.equal(host.savedUserEntryEvents.length, 1);
 });
 
 test("comment mutation controller closes a saved draft before a slow agent dispatch finishes", async () => {

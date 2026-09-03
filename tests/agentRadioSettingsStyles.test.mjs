@@ -89,6 +89,9 @@ test("default agent label exposes a Lucide info icon for hover help", () => {
     assert.match(infoIconSource, /aside-setting-info-icon/);
     assert.match(infoIconSource, /setIcon\(infoIconEl,\s*"info"\)/);
     assert.match(infoIconSource, /setTooltip/);
+    assert.match(infoIconSource, /createEl\("button"/);
+    assert.match(infoIconSource, /type:\s*"button"/);
+    assert.doesNotMatch(infoIconSource, /role:\s*"img"/);
 });
 
 test("Aside headings and default agent controls use scoped left-aligned spacing", () => {

@@ -1320,6 +1320,10 @@ export default class Aside extends Plugin {
         return this.commentAgentController.getActiveAgentStreamForThread(threadId);
     }
 
+    public getAgentStreamsForThread(threadId: string): AgentRunStreamState[] {
+        return this.commentAgentController.getAgentStreamsForThread(threadId);
+    }
+
     public subscribeToAgentStreamUpdates(listener: (update: AgentStreamUpdate) => void): () => void {
         return this.commentAgentController.subscribeToStreamUpdates(listener);
     }

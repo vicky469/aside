@@ -177,6 +177,31 @@ test("buildAgentPromptContext preserves full agent responses for every provider"
     }
 });
 
+test("buildAgentPromptContext bounds oversized agent transcripts by UTF-8 bytes", () => {
+    const oversizedReply = `${"界".repeat(40_000)}AGENT-END`;
+    const thread = {
+        ...createThread({ comment: "Continue from the reply" }),
+        entries: [
+            { id: "agent-output", body: oversizedReply, timestamp: 10 },
+            { id: "follow-up", body: "Continue from the reply", timestamp: 11 },
+        ],
+    };
+
+    const context = buildAgentPromptContext({
+        filePath: "Folder/Note.md",
+        noteContent: "# Note",
+        thread,
+        triggerEntryId: "follow-up",
+        fallbackPromptText: "Continue from the reply",
+        threadAgentRuns: [{ requestedAgent: "codex", outputEntryId: "agent-output" }],
+    });
+
+    assert.ok(context.byteLength <= 24_000, `context was ${context.byteLength} bytes`);
+    assert.doesNotMatch(context.promptText, /AGENT-END/u);
+    assert.match(context.promptText, /truncated/u);
+    assert.match(context.promptText, /Request:\n<<<\nContinue from the reply/u);
+});
+
 test("buildAgentPromptContext clips long user transcript entries", () => {
     const longUserBody = `${"user text ".repeat(45)}USER-END`;
     const thread = {

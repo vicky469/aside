@@ -1325,10 +1325,14 @@ export class CommentPersistenceController {
                 : undefined;
             const sourceRecord = await this.ensureSourceIdentityForFilePath(filePath, noteContent);
             const storedThreads = (await this.readSourceOrPathSidecar(sourceRecord, filePath))?.threads;
-            const canonicalThreads = await this.normalizeThreadsForFile(
+            const storedCanonicalThreads = await this.normalizeThreadsForFile(
                 filePath,
-                storedThreads ?? this.host.getCommentManager().getThreadsForFile(filePath, { includeDeleted: true }),
+                storedThreads ?? [],
             );
+            const liveThreads = this.host.getCommentManager().getThreadsForFile(filePath, { includeDeleted: true });
+            const canonicalThreads = liveThreads.some((thread) => thread.id === threadId)
+                ? liveThreads
+                : storedCanonicalThreads;
             const targetThreadIndex = canonicalThreads.findIndex((thread) => thread.id === threadId);
             if (targetThreadIndex === -1) {
                 return;
@@ -1357,10 +1361,12 @@ export class CommentPersistenceController {
             }
             targetThread.updatedAt = Math.max(targetThread.updatedAt, entry.timestamp);
 
+            this.host.getCommentManager().replaceThreadsForFile(filePath, nextThreads);
+
             await this.writeCommentsForFile(file, filePath, {
                 ...options,
                 immediateAggregateRefresh: options.immediateAggregateRefresh ?? false,
-            }, nextThreads);
+            });
             committed = true;
         });
         return committed;
@@ -2053,7 +2059,6 @@ export class CommentPersistenceController {
             notePath: filePath,
             threads,
         }]);
-        this.host.getCommentManager().replaceThreadsForFile(filePath, threads);
         this.host.getAggregateCommentIndex().updateFile(filePath, threads);
         await this.afterCommentsChanged(filePath, options);
         void this.host.log?.("info", "persistence", "storage.page.write.success", {

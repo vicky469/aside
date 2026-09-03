@@ -258,6 +258,11 @@ interface IndexDefaultSidebarCache {
     storedThreadCount: number;
 }
 
+interface StreamedReplyControllerEntry {
+    threadId: string;
+    controller: StreamedAgentReplyController;
+}
+
 function indexDefaultSidebarCacheKeysMatch(
     left: IndexDefaultSidebarCacheKey,
     right: IndexDefaultSidebarCacheKey,
@@ -448,7 +453,7 @@ export default class AsideView extends ItemView {
     private reorderDropIndicatorPlacement: ReorderPlacement | null = null;
     private noteSidebarShell: NoteSidebarShell | null = null;
     private indexSidebarShell: IndexSidebarShell | null = null;
-    private readonly streamedReplyControllers = new Map<string, StreamedAgentReplyController>();
+    private readonly streamedReplyControllers = new Map<string, StreamedReplyControllerEntry>();
     private unsubscribeFromAgentStreamUpdates: (() => void) | null = null;
 
     private isNonDesktopClient(): boolean {
@@ -1929,6 +1934,8 @@ export default class AsideView extends ItemView {
                 visibleDraftComment,
                 !!visibleDraftComment && this.plugin.isSavingDraft(visibleDraftComment.id),
             );
+            const isVisibleDraftSaving = !!visibleDraftComment
+                && this.plugin.isSavingDraft(visibleDraftComment.id);
             const hasNestedComments = searchScopedVisibleThreads.some((thread) => thread.entries.length > 1)
                 || renderableDraftComment?.mode === "append";
             const nestedEditDraftThreadId = getNestedThreadIdForEditDraft(
@@ -2081,6 +2088,7 @@ export default class AsideView extends ItemView {
                 nestedEditDraftThreadId,
                 nestedAppendDraftThreadId,
                 visibleDraftComment,
+                isVisibleDraftSaving,
                 enableTagSelection: false,
                 canInlineEditTodoEntries,
                 searchQuery: this.indexSidebarSearchQuery,
@@ -2096,7 +2104,7 @@ export default class AsideView extends ItemView {
                 ),
                 onReplaceThread: (threadId, _previousThreadEl, nextThreadEl) =>
                     this.handoffStreamedReplyController(threadId, nextThreadEl),
-                onRemoveThread: (threadId) => this.removeStreamedReplyController(threadId),
+                onRemoveThread: (threadId) => this.removeStreamedReplyControllersForThread(threadId),
             });
             if (!completed) {
                 return;
@@ -2284,6 +2292,8 @@ export default class AsideView extends ItemView {
             visibleDraftComment,
             !!visibleDraftComment && this.plugin.isSavingDraft(visibleDraftComment.id),
         );
+        const isVisibleDraftSaving = !!visibleDraftComment
+            && this.plugin.isSavingDraft(visibleDraftComment.id);
         const hasNestedComments = searchScopedThreads.some((thread) => thread.entries.length > 1)
             || renderableDraftComment?.mode === "append";
         const nestedEditDraftThreadId = getNestedThreadIdForEditDraft(
@@ -2358,6 +2368,7 @@ export default class AsideView extends ItemView {
             nestedEditDraftThreadId,
             nestedAppendDraftThreadId,
             visibleDraftComment,
+            isVisibleDraftSaving,
             enableTagSelection: this.noteSidebarMode === "tags",
             canInlineEditTodoEntries: false,
             searchQuery: this.noteSidebarSearchQuery,
@@ -2369,7 +2380,7 @@ export default class AsideView extends ItemView {
             isCurrent: () => renderVersion === this.renderVersion && this.file?.path === file.path,
             onReplaceThread: (threadId, _previousThreadEl, nextThreadEl) =>
                 this.handoffStreamedReplyController(threadId, nextThreadEl),
-            onRemoveThread: (threadId) => this.removeStreamedReplyController(threadId),
+            onRemoveThread: (threadId) => this.removeStreamedReplyControllersForThread(threadId),
         });
         if (!completed) {
             return;
@@ -2781,6 +2792,7 @@ export default class AsideView extends ItemView {
             nestedEditDraftThreadId: string | null;
             nestedAppendDraftThreadId: string | null;
             visibleDraftComment: DraftComment | null;
+            isVisibleDraftSaving: boolean;
             enableTagSelection: boolean;
             canInlineEditTodoEntries: boolean;
             searchQuery: string;
@@ -2796,6 +2808,7 @@ export default class AsideView extends ItemView {
                     signature: buildPageSidebarDraftRenderSignature(
                         item.draft,
                         this.interactionController.getActiveCommentId(),
+                        options.isVisibleDraftSaving && options.visibleDraftComment?.id === item.draft.id,
                     ),
                     threadId: null,
                     render: () => {
@@ -2835,6 +2848,8 @@ export default class AsideView extends ItemView {
                     enableTagSelection: options.enableTagSelection,
                     editDraftComment,
                     appendDraftComment,
+                    isSavingDraft: options.isVisibleDraftSaving
+                        && options.visibleDraftComment?.id === (editDraftComment?.id ?? appendDraftComment?.id),
                     threadAgentRuns,
                     threadScriptRuns,
                     presentationKey: [
@@ -3337,7 +3352,7 @@ export default class AsideView extends ItemView {
 
     private handleAgentStreamUpdate(update: AgentStreamUpdate): void {
         if (!update.stream) {
-            this.removeStreamedReplyController(update.threadId);
+            this.removeStreamedReplyController(update.runId);
             return;
         }
 
@@ -3346,11 +3361,15 @@ export default class AsideView extends ItemView {
             return;
         }
 
-        this.getOrCreateStreamedReplyController(update.threadId).sync(this.containerEl, update.stream);
+        const existing = this.streamedReplyControllers.get(update.runId);
+        const controller = existing?.threadId === update.threadId
+            ? existing.controller
+            : this.getOrCreateStreamedReplyController(update.threadId, update.runId);
+        controller.sync(this.containerEl, update.stream);
     }
 
     private syncVisibleStreamedReplyControllers(): void {
-        const visibleThreadIds = new Set<string>();
+        const visibleRunIds = new Set<string>();
         const threadEls = Array.from(this.containerEl.querySelectorAll(".aside-thread-stack[data-thread-id]"));
         for (const threadEl of threadEls) {
             if (!nodeInstanceOf(threadEl, HTMLDivElement)) {
@@ -3361,26 +3380,35 @@ export default class AsideView extends ItemView {
                 continue;
             }
 
-            visibleThreadIds.add(threadId);
-            const stream = this.plugin.getActiveAgentStreamForThread(threadId);
-            if (!stream) {
-                this.removeStreamedReplyController(threadId);
-                continue;
+            const streams = this.plugin.getAgentStreamsForThread(threadId);
+            for (const stream of streams) {
+                visibleRunIds.add(stream.runId);
+                this.getOrCreateStreamedReplyController(threadId, stream.runId)
+                    .sync(this.containerEl, stream);
             }
-            this.getOrCreateStreamedReplyController(threadId).sync(this.containerEl, stream);
         }
 
-        for (const [threadId] of this.streamedReplyControllers) {
-            if (!visibleThreadIds.has(threadId)) {
-                this.removeStreamedReplyController(threadId);
+        for (const [runId] of this.streamedReplyControllers) {
+            if (!visibleRunIds.has(runId)) {
+                this.removeStreamedReplyController(runId);
             }
         }
     }
 
-    private getOrCreateStreamedReplyController(threadId: string): StreamedAgentReplyController {
-        let controller = this.streamedReplyControllers.get(threadId);
-        if (!controller) {
-            controller = new StreamedAgentReplyController(threadId, {
+    private getOrCreateStreamedReplyController(
+        threadId: string,
+        runId: string,
+    ): StreamedAgentReplyController {
+        const existing = this.streamedReplyControllers.get(runId);
+        if (existing?.threadId === threadId) {
+            return existing.controller;
+        }
+        if (existing) {
+            existing.controller.clear();
+            this.streamedReplyControllers.delete(runId);
+        }
+
+        const controller = new StreamedAgentReplyController(threadId, {
                 onCancelRun: (runId) => {
                     void this.plugin.cancelAgentRun(runId);
                 },
@@ -3416,39 +3444,64 @@ export default class AsideView extends ItemView {
                 },
                 adoptPersistedCardInteractions: (persistedCardEl, retainedCardEl) =>
                     adoptSidebarPersistedCardInteractions(persistedCardEl, retainedCardEl),
-            });
-            this.streamedReplyControllers.set(threadId, controller);
-        }
+        });
+        this.streamedReplyControllers.set(runId, { threadId, controller });
 
         return controller;
     }
 
     private handoffStreamedReplyController(threadId: string, nextThreadEl: HTMLElement): boolean {
-        const controller = this.streamedReplyControllers.get(threadId);
-        const stream = this.plugin.getActiveAgentStreamForThread(threadId);
-        if (
-            !controller
-            || !stream
-            || (stream.status !== "succeeded" && stream.status !== "failed")
-        ) {
-            return false;
-        }
-        const run = this.plugin.getAgentRuns().find((candidate) => candidate.id === stream.runId);
-        if (!run || stream.status !== run.status) {
+        const controllerEntries = Array.from(this.streamedReplyControllers.entries())
+            .filter(([, entry]) => entry.threadId === threadId);
+        if (!controllerEntries.length) {
             return false;
         }
 
-        return controller.handoffToPersistedThread(nextThreadEl, stream);
+        const streamsByRunId = new Map(
+            this.plugin.getAgentStreamsForThread(threadId)
+                .map((stream) => [stream.runId, stream] as const),
+        );
+        const runsById = new Map(
+            this.plugin.getAgentRuns().map((run) => [run.id, run] as const),
+        );
+        for (const [runId, entry] of controllerEntries) {
+            const stream = streamsByRunId.get(runId);
+            if (
+                !stream
+                || (
+                    stream.status !== "succeeded"
+                    && stream.status !== "failed"
+                    && stream.status !== "cancelled"
+                )
+            ) {
+                continue;
+            }
+            const run = runsById.get(stream.runId);
+            if (!run || stream.status !== run.status) {
+                continue;
+            }
+            entry.controller.handoffToPersistedThread(nextThreadEl, stream);
+        }
+
+        return true;
     }
 
-    private removeStreamedReplyController(threadId: string): void {
-        const controller = this.streamedReplyControllers.get(threadId);
-        if (!controller) {
+    private removeStreamedReplyController(runId: string): void {
+        const entry = this.streamedReplyControllers.get(runId);
+        if (!entry) {
             return;
         }
 
-        controller.clear();
-        this.streamedReplyControllers.delete(threadId);
+        entry.controller.clear();
+        this.streamedReplyControllers.delete(runId);
+    }
+
+    private removeStreamedReplyControllersForThread(threadId: string): void {
+        for (const [runId, entry] of this.streamedReplyControllers) {
+            if (entry.threadId === threadId) {
+                this.removeStreamedReplyController(runId);
+            }
+        }
     }
 
     private normalizeNoteSidebarContentFilter(): void {
@@ -3496,8 +3549,8 @@ export default class AsideView extends ItemView {
     }
 
     private resetStreamedReplyControllers(): void {
-        for (const controller of this.streamedReplyControllers.values()) {
-            controller.clear();
+        for (const entry of this.streamedReplyControllers.values()) {
+            entry.controller.clear();
         }
         this.streamedReplyControllers.clear();
     }

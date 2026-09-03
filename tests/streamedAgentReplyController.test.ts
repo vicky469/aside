@@ -105,6 +105,13 @@ class FakeStreamElement extends FakeContainerElement {
         super();
     }
 
+    public get nextSibling(): FakeStreamElement | null {
+        const siblings = this.parentElement?.childNodes ?? [];
+        const index = siblings.indexOf(this);
+        const next = index >= 0 ? siblings[index + 1] : null;
+        return next instanceof FakeStreamElement ? next : null;
+    }
+
     public instanceOf(type: { name: string }): boolean {
         return (type.name === "HTMLSpanElement" && (this.tagName === "" || this.tagName === "span"))
             || (type.name === "HTMLDivElement" && (this.tagName === "" || this.tagName === "div"));
@@ -825,6 +832,66 @@ test("streamed agent reply controller keeps one card through optimistic completi
             assert.equal(controller.cardEl, cards[0]);
             assert.equal(controller.contentEl?.textContent, "Second reply");
         }
+    } finally {
+        if (previousSpan) {
+            Object.defineProperty(globalThis, "HTMLSpanElement", previousSpan);
+        } else {
+            Reflect.deleteProperty(globalThis, "HTMLSpanElement");
+        }
+        if (previousDiv) {
+            Object.defineProperty(globalThis, "HTMLDivElement", previousDiv);
+        } else {
+            Reflect.deleteProperty(globalThis, "HTMLDivElement");
+        }
+    }
+});
+
+test("streamed agent reply controller places a child-triggered card beside its trigger", () => {
+    const previousSpan = Object.getOwnPropertyDescriptor(globalThis, "HTMLSpanElement");
+    const previousDiv = Object.getOwnPropertyDescriptor(globalThis, "HTMLDivElement");
+    Object.defineProperty(globalThis, "HTMLSpanElement", {
+        configurable: true,
+        value: class HTMLSpanElement {},
+    });
+    Object.defineProperty(globalThis, "HTMLDivElement", {
+        configurable: true,
+        value: class HTMLDivElement {},
+    });
+    const controller = new StreamedAgentReplyController("thread-1") as any;
+    const containerEl = new FakeStreamElement("div");
+    const threadEl = new FakeStreamElement("div");
+    const repliesEl = new FakeStreamElement("div");
+    const triggerEl = new FakeStreamElement("div");
+    const laterEl = new FakeStreamElement("div");
+    threadEl.className = "aside-thread-stack";
+    threadEl.setAttribute("data-thread-id", "thread-1");
+    repliesEl.className = "aside-thread-replies";
+    triggerEl.className = "aside-thread-entry-item";
+    triggerEl.setAttribute("data-comment-id", "entry-2");
+    laterEl.className = "aside-thread-entry-item";
+    laterEl.setAttribute("data-comment-id", "entry-3");
+    repliesEl.appendChild(triggerEl);
+    repliesEl.appendChild(laterEl);
+    threadEl.appendChild(repliesEl);
+    containerEl.appendChild(threadEl);
+
+    try {
+        controller.sync(containerEl as any, {
+            runId: "run-1",
+            threadId: "thread-1",
+            triggerEntryId: "entry-2",
+            requestedAgent: "codex",
+            runtime: "direct-cli",
+            status: "queued",
+            statusHintText: "Starting Codex…",
+            partialText: "",
+            startedAt: 100,
+            updatedAt: 100,
+            outputEntryId: "reply-1",
+        });
+
+        const cardEl = repliesEl.querySelector('.aside-agent-stream-item[data-agent-run-id="run-1"]');
+        assert.deepEqual(repliesEl.childNodes, [triggerEl, cardEl, laterEl]);
     } finally {
         if (previousSpan) {
             Object.defineProperty(globalThis, "HTMLSpanElement", previousSpan);

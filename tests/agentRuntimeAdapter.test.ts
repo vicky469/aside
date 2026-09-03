@@ -14,6 +14,7 @@ import {
     extractClaudeTextDeltaFromJsonEvent,
     extractCursorErrorTextFromJsonEvent,
     extractCursorProgressTextFromJsonEvent,
+    extractCursorRunMetadataFromJsonEvent,
     extractCursorTextDeltaFromJsonEvent,
     extractCodexProgressTextDeltaFromJsonEvent,
     buildSideNotePrompt,
@@ -651,6 +652,7 @@ test("buildCursorCliArgs forces sandboxed streaming within the workspace and vau
         prompt: "Reply to the side note.",
     }), [
         "-p",
+        "--force",
         "--output-format",
         "stream-json",
         "--stream-partial-output",
@@ -832,10 +834,12 @@ test("runAgentRuntimeWithModules streams Cursor replies, progress, and metadata"
     const harness = createJsonLineRuntimeHarness();
     const partials: string[] = [];
     const progress: string[] = [];
+    const metadata: AgentRunMetadata[] = [];
     const runPromise = runAgentRuntimeWithModules(harness.modules, {
         ...CURSOR_TEST_INVOCATION,
         onPartialText: (value) => partials.push(value),
         onProgressText: (value) => progress.push(value),
+        onRunMetadata: (value) => metadata.push(value),
     });
     const child = await waitForRuntimeChild(harness.spawned, runPromise);
     const sideNotePrompt = buildSideNotePrompt({
@@ -853,7 +857,16 @@ test("runAgentRuntimeWithModules streams Cursor replies, progress, and metadata"
         JSON.stringify({
             type: "assistant",
             message: { role: "assistant", content: [{ type: "text", text: narration }] },
-            timestamp_ms: 1,
+        }),
+        JSON.stringify({
+            type: "tool_call",
+            subtype: "started",
+            call_id: "call-read-1",
+            tool_call: {
+                readToolCall: {
+                    args: { path: "README.md" },
+                },
+            },
         }),
         JSON.stringify({
             type: "result",
@@ -867,9 +880,13 @@ test("runAgentRuntimeWithModules streams Cursor replies, progress, and metadata"
     const result = await runPromise;
     assert.equal(result.runtime, "direct-cli");
     assert.equal(result.replyText, "Transcript appended.");
-    assert.deepEqual(partials, ["Transcript appended."]);
+    assert.deepEqual(partials, [narration, "Transcript appended."]);
     assert.equal(progress.includes("Starting Cursor"), true);
     assert.equal(progress.includes(narration), true);
+    assert.equal(progress.includes("Reading file"), true);
+    assert.deepEqual(result.usedTools, ["read"]);
+    assert.deepEqual(result.usedFiles, ["README.md"]);
+    assert.equal(metadata.length > 0, true);
     assert.equal(harness.spawnCalls[0]?.file, "agent");
     assert.deepEqual(
         harness.spawnCalls[0]?.args,
@@ -889,7 +906,6 @@ test("cursor stream-json extractors separate progress text from final results", 
     const partialEvent = {
         type: "assistant",
         message: { role: "assistant", content: [{ type: "text", text: "Hi" }] },
-        timestamp_ms: 1,
     };
     const resultEvent = {
         type: "result",
@@ -898,25 +914,60 @@ test("cursor stream-json extractors separate progress text from final results", 
         result: "Hi there",
     };
     const toolEvent = {
-        type: "assistant",
-        message: {
-            role: "assistant",
-            content: [{ type: "tool_use", name: "shell", input: { command: "pwd" } }],
+        type: "tool_call",
+        subtype: "started",
+        call_id: "call-read-1",
+        tool_call: {
+            readToolCall: {
+                args: { path: "README.md" },
+            },
         },
-        timestamp_ms: 2,
     };
 
     assert.equal(extractCursorProgressTextFromJsonEvent(initEvent), "Starting Cursor");
     assert.equal(extractCursorProgressTextFromJsonEvent(partialEvent), "Hi");
-    assert.equal(extractCursorProgressTextFromJsonEvent(toolEvent), "Running command");
-    assert.equal(extractCursorTextDeltaFromJsonEvent(partialEvent), null);
+    assert.equal(extractCursorProgressTextFromJsonEvent(toolEvent), "Reading file");
+    assert.equal(extractCursorTextDeltaFromJsonEvent(partialEvent), "Hi");
     assert.equal(extractCursorTextDeltaFromJsonEvent(resultEvent), "Hi there");
+    assert.deepEqual(extractCursorRunMetadataFromJsonEvent(toolEvent), {
+        usedTools: ["read"],
+        usedFiles: ["README.md"],
+        usedUrls: [],
+    });
     assert.equal(extractCursorErrorTextFromJsonEvent({
         type: "result",
         subtype: "error",
         is_error: true,
         result: "Authentication failed.",
     }), "Authentication failed.");
+});
+
+test("cursor stream metadata captures failed tool calls without exposing successful payloads", () => {
+    const metadata = extractCursorRunMetadataFromJsonEvent({
+        type: "tool_call",
+        subtype: "completed",
+        call_id: "call-write-1",
+        tool_call: {
+            writeToolCall: {
+                args: {
+                    path: "summary.md",
+                    fileText: "private generated content",
+                },
+                result: {
+                    failure: {
+                        message: "Permission denied",
+                    },
+                },
+            },
+        },
+    });
+
+    assert.deepEqual(metadata, {
+        usedTools: ["write (unavailable)"],
+        usedFiles: ["summary.md"],
+        usedUrls: [],
+        usedToolErrors: [{ name: "write", payload: "Permission denied" }],
+    });
 });
 
 test("runAgentRuntimeWithModules accepts OpenCode text without a terminal event", async () => {

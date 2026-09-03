@@ -230,12 +230,6 @@ export async function renderSidebarThoughtTrail(
     }
 
     const rootFilePath = options.rootFilePath;
-    const tagRelatedFileSet = buildTagRelatedFileSetModel(
-        rootFilePath,
-        options.candidateFilePaths,
-        options.getTagsForFilePath,
-        { allCommentsNotePath: context.allCommentsNotePath },
-    );
     renderThoughtTrailSourceControl(thoughtTrailEl, {
         source: options.source,
         radioGroupName: `aside-thought-trail-source-${context.renderVersion}-${options.surface}-${encodeURIComponent(rootFilePath)}`,
@@ -269,6 +263,12 @@ export async function renderSidebarThoughtTrail(
         return;
     }
     if (options.source === "tags") {
+        const tagRelatedFileSet = buildTagRelatedFileSetModel(
+            rootFilePath,
+            options.candidateFilePaths,
+            options.getTagsForFilePath,
+            { allCommentsNotePath: context.allCommentsNotePath },
+        );
         const sectionEl = thoughtTrailEl.createDiv("aside-thought-trail-section");
         renderTagRelatedFilesList(sectionEl, tagRelatedFileSet, context);
         return;

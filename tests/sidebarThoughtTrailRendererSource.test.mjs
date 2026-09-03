@@ -22,6 +22,17 @@ test("tag related files render one semantic unique-file list", () => {
     assert.doesNotMatch(source, /aside-tag-related-files-list/);
 });
 
+test("attachment and wikilink sources do not build the vault-wide tag model", () => {
+    const tagsBranchIndex = source.indexOf('if (options.source === "tags")');
+    const tagModelIndex = source.indexOf("const tagRelatedFileSet = buildTagRelatedFileSetModel(");
+
+    assert.ok(tagsBranchIndex >= 0, "renderer should keep an explicit tags branch");
+    assert.ok(
+        tagModelIndex > tagsBranchIndex,
+        "tag model construction should stay inside the tags-only branch",
+    );
+});
+
 test("related file rows render every shared model tag", () => {
     assert.match(
         source,
