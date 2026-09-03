@@ -100,7 +100,7 @@ Expected: the post-commit bookkeeping case is mislabeled as reply persistence fa
 
 Catch only canonical commit failure with `failReplyPersistence`. After a successful commit, isolate run-store finalization, duplicate cleanup, and view refresh in separate best-effort blocks with specific warning events. Keep the succeeded live card retained when handoff cannot be proven.
 
-- [ ] **Step 4: Run focused and full verification**
+- [x] **Step 4: Run focused and full verification**
 
 Run: `npm run build`
 
