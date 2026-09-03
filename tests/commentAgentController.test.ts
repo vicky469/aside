@@ -1200,6 +1200,54 @@ for (const actor of getSupportedAgentActors()) {
     });
 }
 
+test("comment agent controller persists a blocked retry in the existing failed card", async () => {
+    const harness = createHarness({
+        initialComments: [createComment({ comment: "@codex review this" })],
+        initialPersistedData: {
+            agentRuns: [{
+                id: "run-old",
+                threadId: "thread-1",
+                triggerEntryId: "thread-1",
+                filePath: "Folder/Note.md",
+                requestedAgent: "codex",
+                runtime: "direct-cli",
+                status: "failed",
+                promptText: "@codex review this",
+                createdAt: 10,
+                endedAt: 12,
+                error: "Previous failure",
+                outputEntryId: "reply-1",
+            }],
+        },
+        runtimeSelection: {
+            kind: "blocked",
+            runtime: "direct-cli",
+            modePreference: "auto",
+            notice: "Codex was not found on PATH.",
+            diagnostic: "Codex was not found on PATH.",
+        },
+    });
+    harness.commentManager.appendEntry("thread-1", {
+        id: "reply-1",
+        body: "Previous failure",
+        timestamp: 20,
+    });
+
+    assert.equal(await harness.controller.retryRun("run-old"), true);
+
+    const latest = harness.controller.getLatestAgentRunForThread("thread-1");
+    assert.equal(latest?.status, "failed");
+    assert.equal(latest?.retryOfRunId, "run-old");
+    assert.equal(latest?.outputEntryId, "reply-1");
+    assert.equal(
+        harness.commentManager.getCommentById("reply-1")?.comment,
+        "Codex was not found on PATH.",
+    );
+    assert.deepEqual(harness.appendedEntries, []);
+    assert.deepEqual(harness.runtimeCalls, []);
+    assert.deepEqual(harness.notices, []);
+});
+
 test("comment agent controller runs local jobs in parallel across different threads", async () => {
     const runtimeResolvers: Array<() => void> = [];
     let replyIndex = 0;

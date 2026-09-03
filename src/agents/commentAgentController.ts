@@ -496,6 +496,7 @@ export class CommentAgentController {
         let requestKind: AgentRunRequestKind | undefined;
         let targetScriptPath: string | undefined;
         let reservedPdfDestinationPath: string | undefined;
+        let preflightDiagnostic: string | undefined;
 
         if (previousRun?.requestKind === "pdf-to-markdown") {
             const commandEvent = {
@@ -626,14 +627,13 @@ export class CommentAgentController {
                 return false;
             }
             const runtimeSelection = await this.host.resolveAgentRuntimeSelection(resolvedTarget);
-            if (runtimeSelection.kind === "blocked") {
-                this.host.showNotice(runtimeSelection.notice);
-                return false;
-            }
             requestedAgent = resolvedTarget;
             runtime = runtimeSelection.runtime;
             modePreference = runtimeSelection.modePreference;
             promptText = latestComment.comment;
+            if (runtimeSelection.kind === "blocked") {
+                preflightDiagnostic = runtimeSelection.diagnostic;
+            }
         }
 
         try {
@@ -658,6 +658,9 @@ export class CommentAgentController {
             });
             if (retryOutputEntryId) {
                 run.outputEntryId = retryOutputEntryId;
+            }
+            if (preflightDiagnostic) {
+                return this.persistPreflightFailure(run, preflightDiagnostic);
             }
             if (retryOutputEntryId && !(await this.clearRetryOutputEntry(run, retryOutputEntryId))) {
                 return false;
