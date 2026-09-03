@@ -15,8 +15,9 @@
 **Files:**
 - Modify: `tests/sidebarDraftComment.test.ts`
 - Modify: `src/ui/views/sidebarDraftComment.ts:1-45,167-200`
+- Modify: `styles.css:1807-1818`
 
-- [ ] **Step 1: Add the failing renderer regression test**
+- [x] **Step 1: Add the failing renderer regression test**
 
 Extend the import from `sidebarDraftComment` and import the controller type:
 
@@ -139,7 +140,7 @@ test("saving an agent prompt card contains no agent activity", () => {
 });
 ```
 
-- [ ] **Step 2: Run the test and verify RED**
+- [x] **Step 2: Run the test and verify RED**
 
 Run:
 
@@ -151,7 +152,7 @@ node --test --test-name-pattern "saving an agent prompt card contains no agent a
 
 Expected: FAIL because the saving prompt currently contains `.aside-thread-replies`, `.aside-agent-stream-item`, and the spinner.
 
-- [ ] **Step 3: Remove the provisional agent reply from the draft renderer**
+- [x] **Step 3: Remove the provisional agent reply from the draft renderer**
 
 In `src/ui/views/sidebarDraftComment.ts`, reduce the registry import and remove the agent-target and directive-parser imports:
 
@@ -175,7 +176,7 @@ if (presentation.isPending) {
 
 Do not change `CommentAgentController`, `StreamedAgentReplyController`, or persistence ordering.
 
-- [ ] **Step 4: Run the focused tests and verify GREEN**
+- [x] **Step 4: Run the focused tests and verify GREEN**
 
 Run:
 
@@ -187,7 +188,7 @@ node --test .test-dist/tests/sidebarDraftComment.test.js .test-dist/tests/commen
 
 Expected: PASS. The draft renderer contains no agent activity; the existing controller test `comment agent controller shows starting status and launches while refresh is blocked` still proves the separate queued stream is emitted immediately after saved-entry routing.
 
-- [ ] **Step 5: Commit the code correction**
+- [x] **Step 5: Commit the code correction**
 
 ```bash
 git add src/ui/views/sidebarDraftComment.ts tests/sidebarDraftComment.test.ts
@@ -203,7 +204,7 @@ git commit -m "fix(agents): keep status off prompt card"
 - Inspect: `manifest.json`
 - Inspect: `styles.css`
 
-- [ ] **Step 1: Run the complete repository verification**
+- [x] **Step 1: Run the complete repository verification**
 
 Run:
 
@@ -213,7 +214,7 @@ npm run build
 
 Expected: all TypeScript tests, repository checks, lint, typecheck, Obsidian compliance, production bundle, and release-artifact inspection pass.
 
-- [ ] **Step 2: Inspect the exact shipped assets**
+- [x] **Step 2: Inspect the exact shipped assets**
 
 Run:
 
@@ -224,7 +225,7 @@ rg -n "sourceMappingURL|sourcesContent" main.js manifest.json styles.css
 
 Expected: the three files exist; `rg` returns no matches. Confirm the artifact guard reports no source maps, raw TypeScript/JSX-family files, or secret-bearing files in the shipped artifact set.
 
-- [ ] **Step 3: Sync and reload `lean-startup`**
+- [x] **Step 3: Sync and reload `lean-startup`**
 
 Run:
 
@@ -238,7 +239,7 @@ cmp -s styles.css "/path/to/vault/.obsidian/plugins/aside/styles.css"
 
 Expected: installation and reload succeed; all three `cmp` commands exit 0.
 
-- [ ] **Step 4: Complete tracking and commit**
+- [x] **Step 4: Complete tracking and commit**
 
 Mark every verified checklist item in the associated spec and this plan `[x]`, then run:
 
@@ -247,7 +248,7 @@ git add -f docs/superpowers/specs/2026-09-03-pending-agent-reply-card-placement-
 git commit -m "docs(agents): complete reply placement"
 ```
 
-- [ ] **Step 5: Confirm the final state**
+- [x] **Step 5: Confirm the final state**
 
 Run:
 

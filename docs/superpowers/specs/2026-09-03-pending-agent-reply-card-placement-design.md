@@ -14,18 +14,18 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Remove the agent spinner from the saving draft card.
-- [ ] Append the queued reply card immediately after the prompt save succeeds.
-- [ ] Preserve existing pending-card behavior for non-agent saves, append drafts, and edit drafts.
-- [ ] Leave agent runtime launch, run identity, concurrency, and persistence unchanged.
+- [x] Remove the agent spinner from the saving draft card.
+- [x] Append the queued reply card immediately after the prompt save succeeds.
+- [x] Preserve existing pending-card behavior for non-agent saves, append drafts, and edit drafts.
+- [x] Leave agent runtime launch, run identity, concurrency, and persistence unchanged.
 
 ### Verification
 
-- [ ] A DOM regression test proves a saving prompt card contains no agent reply or spinner.
-- [ ] A controller/view regression test proves the separate queued reply appears as soon as the prompt save succeeds.
-- [ ] Existing draft, agent-stream, and concurrent-run tests pass.
-- [ ] The complete repository build and artifact inspection pass.
-- [ ] The built plugin is synced to `lean-startup`, reloaded, and its shipped files match the repository build.
+- [x] A DOM regression test proves a saving prompt card contains no agent reply or spinner.
+- [x] A controller/view regression test proves the separate queued reply appears as soon as the prompt save succeeds.
+- [x] Existing draft, agent-stream, and concurrent-run tests pass.
+- [x] The complete repository build and artifact inspection pass.
+- [x] The built plugin is synced to `lean-startup`, reloaded, and its shipped files match the repository build.
 
 ## Problem
 
