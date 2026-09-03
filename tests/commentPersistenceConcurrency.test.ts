@@ -370,3 +370,68 @@ test("comment persistence carries an in-flight save across a note rename", async
         globalThis.window = originalWindow;
     }
 });
+
+test("comment persistence commits complete thread entries idempotently", async () => {
+    const originalWindow = globalThis.window;
+    globalThis.window = {
+        setTimeout: () => 1,
+        clearTimeout: () => {},
+    } as unknown as typeof globalThis.window;
+
+    const file = createFile("docs/note.md");
+    const thread = createThread(file.path);
+    const harness = createHarness([file], [thread]);
+    const firstReadEntered = createDeferred();
+    const releaseFirstRead = createDeferred();
+    let readCount = 0;
+    harness.setCurrentNoteContentReader(async () => {
+        readCount += 1;
+        if (readCount === 1) {
+            firstReadEntered.resolve();
+            await releaseFirstRead.promise;
+        }
+        return "# Title\n\nAlpha target omega\n";
+    });
+
+    try {
+        const firstCommit = harness.controller.commitThreadEntry(file, thread.id, {
+            id: "agent-reply-1",
+            body: "First complete reply",
+            timestamp: 1710000001000,
+        }, {
+            insertAfterCommentId: thread.id,
+        });
+        await firstReadEntered.promise;
+        const secondCommit = harness.controller.commitThreadEntry(file, thread.id, {
+            id: "agent-reply-2",
+            body: "Second complete reply",
+            timestamp: 1710000002000,
+        }, {
+            insertAfterCommentId: thread.id,
+        });
+
+        releaseFirstRead.resolve();
+        assert.equal(await firstCommit, true);
+        assert.equal(await secondCommit, true);
+
+        assert.equal(await harness.controller.commitThreadEntry(file, thread.id, {
+            id: "agent-reply-1",
+            body: "Updated complete reply",
+            timestamp: 1710000003000,
+        }, {
+            insertAfterCommentId: thread.id,
+        }), true);
+
+        const payload = JSON.parse(await harness.adapter.read(getSidecarStoragePath(file.path))) as {
+            threads: CommentThread[];
+        };
+        const entries = payload.threads[0]?.entries ?? [];
+        assert.equal(entries.filter((entry) => entry.id === "agent-reply-1").length, 1);
+        assert.equal(entries.find((entry) => entry.id === "agent-reply-1")?.body, "Updated complete reply");
+        assert.equal(entries.find((entry) => entry.id === "agent-reply-2")?.body, "Second complete reply");
+    } finally {
+        releaseFirstRead.resolve();
+        harness.controller.dispose();
+        globalThis.window = originalWindow;
+    }
+});
