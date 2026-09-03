@@ -65,3 +65,17 @@ test("preflight failure reply redacts obvious credentials", () => {
     assert.doesNotMatch(reply, /sk-abcdefghijklmnopqrstuvwxyz123456/u);
     assert.match(reply, /Authentication failed/u);
 });
+
+test("preflight failure reply prefers an explicit error over preceding warnings", () => {
+    assert.equal(formatAgentPreflightFailureReply(
+        "codex",
+        "npm warn Unknown user config.\nError: Missing optional dependency @openai/codex-darwin-arm64.",
+    ), "Missing optional dependency @openai/codex-darwin-arm64.");
+});
+
+test("preflight failure reply rejects serialized diagnostic blobs", () => {
+    assert.equal(
+        formatAgentPreflightFailureReply("gemini", '{"error":{"code":500,"requestId":"internal"}}'),
+        "Gemini couldn’t complete this request. Try another agent.",
+    );
+});

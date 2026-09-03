@@ -32,6 +32,7 @@ export function formatAgentPreflightFailureReply(
         .split(/\r?\n/gu)
         .map((line) => line.trim().replace(/^Error:\s*/u, ""))
         .filter((line) => line.length > 0)
+        .filter((line) => !/^(?:npm warn\b|warning:|[\[{])/iu.test(line))
         .filter((line) => !/^(?:at\s|node:|npm ERR! command|PATH=|HOME=)/u.test(line));
     const firstUsefulLine = usefulLines[0];
     if (!firstUsefulLine) {
