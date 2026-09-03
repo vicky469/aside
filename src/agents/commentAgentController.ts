@@ -109,6 +109,22 @@ export interface CommentAgentHost {
             skipCommentViewRefresh?: boolean;
         },
     ): Promise<boolean>;
+    commitThreadEntry(
+        filePath: string,
+        threadId: string,
+        entry: {
+            id: string;
+            body: string;
+            timestamp: number;
+        },
+        options?: {
+            insertAfterCommentId?: string;
+            immediateAggregateRefresh?: boolean;
+            skipCommentViewRefresh?: boolean;
+            refreshEditorDecorations?: boolean;
+            refreshMarkdownPreviews?: boolean;
+        },
+    ): Promise<boolean>;
     editComment(commentId: string, newCommentText: string, options?: { skipCommentViewRefresh?: boolean }): Promise<boolean>;
     deleteComment(commentId: string, options?: { skipCommentViewRefresh?: boolean }): Promise<void>;
     runAgentRuntime(invocation: {
@@ -136,7 +152,6 @@ const AGENT_RETRY_NOTICE = "Retry requires a single explicit supported agent tar
 const AGENT_REPLY_SAVE_PENDING_NOTICE = "That agent reply is still being saved.";
 const AGENT_PENDING_SESSION_NOTICE = "The previous Aside agent run did not finish. Retry the thread to run it again.";
 const AGENT_DESKTOP_RUNTIME_NOTICE = "Agent execution requires desktop Obsidian with a filesystem-backed vault.";
-const AGENT_REGENERATE_REPLACE_FAILED_NOTICE = "Unable to replace the previous agent reply.";
 const AGENT_REPLY_SAVE_FAILED_HINT = "Couldn’t save reply";
 const AGENT_CANCELLED_NOTICE = "Cancelled.";
 const AGENT_STATUS_CANCELLED = "Cancelled";
@@ -819,7 +834,22 @@ export class CommentAgentController {
             : "";
         if (run.outputEntryId) {
             if (partialText) {
-                await this.host.editComment(run.outputEntryId, partialText, { skipCommentViewRefresh: true });
+                await this.host.commitThreadEntry(
+                    run.filePath,
+                    run.threadId,
+                    {
+                        id: run.outputEntryId,
+                        body: partialText,
+                        timestamp: this.host.now(),
+                    },
+                    {
+                        insertAfterCommentId: run.triggerEntryId,
+                        immediateAggregateRefresh: false,
+                        skipCommentViewRefresh: true,
+                        refreshEditorDecorations: false,
+                        refreshMarkdownPreviews: false,
+                    },
+                );
             }
         }
 
@@ -938,31 +968,12 @@ export class CommentAgentController {
         }
 
         const startedAt = queuedRun.startedAt ?? this.host.now();
-        const shouldAppendOutputEntry = !queuedRun.outputEntryId
-            || !this.host.getCommentManager().getCommentById(queuedRun.outputEntryId);
-        const replaceOutputEntryId = undefined;
         const outputEntryId = queuedRun.outputEntryId ?? this.host.createCommentId();
         const runtimeContext = await this.buildRuntimePromptContext(queuedRun);
         const latestQueuedRun = this.store.getRunById(runId);
         if (!latestQueuedRun || latestQueuedRun.status !== "queued") {
             return;
         }
-        const outputReady = shouldAppendOutputEntry
-            ? this.host.appendThreadEntry(queuedRun.threadId, {
-                id: outputEntryId,
-                body: "",
-                timestamp: startedAt,
-            }, {
-                insertAfterCommentId: queuedRun.triggerEntryId,
-                alwaysInsertAfterTarget: true,
-                skipCommentViewRefresh: true,
-            }).then((appended) => {
-                if (!appended) {
-                    throw new Error("Unable to append the agent reply to the thread.");
-                }
-            })
-            : Promise.resolve();
-        void outputReady.catch(() => undefined);
         const runningRun = await this.store.updateRun(runId, (run) => ({
             ...run,
             status: "running",
@@ -1006,23 +1017,15 @@ export class CommentAgentController {
             await this.executeLocalRun({
                 run: runningRun,
                 outputEntryId,
-                replaceOutputEntryId,
                 startedAt: runningRun.startedAt ?? startedAt,
                 runtimePrompt: runtimeContext.promptText,
                 execution,
-                outputReady,
             });
         } catch (error: unknown) {
-            let failure: unknown = error;
-            try {
-                await outputReady;
-            } catch (outputError: unknown) {
-                failure = outputError;
-            }
             if (this.isRunCancellationRequested(runId) || isAgentRuntimeCancelledError(error)) {
                 return;
             }
-            await this.failRun(runId, runningRun, summarizeError(failure));
+            await this.failRun(runId, runningRun, summarizeError(error));
         } finally {
             this.persistingReplyRunIds.delete(runId);
             this.activeRunExecutions.delete(runId);
@@ -1041,41 +1044,29 @@ export class CommentAgentController {
         let failureReplyPersisted = false;
         if (run.outputEntryId) {
             try {
-                failureReplyPersisted = await this.host.editComment(
-                    run.outputEntryId,
-                    failureText,
-                    { skipCommentViewRefresh: true },
+                failureReplyPersisted = await this.host.commitThreadEntry(
+                    run.filePath,
+                    run.threadId,
+                    {
+                        id: run.outputEntryId,
+                        body: failureText,
+                        timestamp: this.host.now(),
+                    },
+                    {
+                        insertAfterCommentId: run.triggerEntryId,
+                        immediateAggregateRefresh: false,
+                        skipCommentViewRefresh: true,
+                        refreshEditorDecorations: false,
+                        refreshMarkdownPreviews: false,
+                    },
                 );
             } catch (error) {
-                void this.host.log?.("warn", "agents", "agents.reply.failure_edit_failed", {
+                void this.host.log?.("warn", "agents", "agents.reply.failure_commit_failed", {
                     runId,
                     threadId: run.threadId,
                     outputEntryId: run.outputEntryId,
                     error,
                 });
-            }
-            if (
-                !failureReplyPersisted
-                && !this.host.getCommentManager().getCommentById(run.outputEntryId)
-            ) {
-                try {
-                    failureReplyPersisted = await this.host.appendThreadEntry(run.threadId, {
-                        id: run.outputEntryId,
-                        body: failureText,
-                        timestamp: this.host.now(),
-                    }, {
-                        insertAfterCommentId: run.triggerEntryId,
-                        alwaysInsertAfterTarget: true,
-                        skipCommentViewRefresh: true,
-                    });
-                } catch (error) {
-                    void this.host.log?.("warn", "agents", "agents.reply.failure_append_failed", {
-                        runId,
-                        threadId: run.threadId,
-                        outputEntryId: run.outputEntryId,
-                        error,
-                    });
-                }
             }
         }
         const failedRun = await this.store.updateRun(runId, (currentRun) => ({
@@ -1118,11 +1109,9 @@ export class CommentAgentController {
     private async executeLocalRun(options: {
         run: AgentRunRecord;
         outputEntryId: string;
-        replaceOutputEntryId?: string;
         startedAt: number;
         runtimePrompt: string;
         execution: ActiveRunExecution;
-        outputReady: Promise<void>;
     }): Promise<void> {
         const vaultRootPath = this.host.getVaultRootPath();
         const workingDirectory = options.run.requestKind === "create-script"
@@ -1131,7 +1120,6 @@ export class CommentAgentController {
             ? vaultRootPath
             : this.host.getRuntimeWorkingDirectory(options.run.filePath);
         if (!workingDirectory) {
-            await options.outputReady;
             await this.failRun(options.run.id, options.run, AGENT_DESKTOP_RUNTIME_NOTICE);
             return;
         }
@@ -1234,9 +1222,7 @@ export class CommentAgentController {
             replyText: runtimeResponse.replyText,
             replyMetadata: runtimeResponse,
             outputEntryId: options.outputEntryId,
-            replaceOutputEntryId: options.replaceOutputEntryId,
             startedAt: options.startedAt,
-            outputReady: options.outputReady,
         });
     }
 
@@ -1246,9 +1232,7 @@ export class CommentAgentController {
         replyText: string;
         replyMetadata?: AgentRunMetadata;
         outputEntryId: string;
-        replaceOutputEntryId?: string;
         startedAt: number;
-        outputReady: Promise<void>;
     }): Promise<void> {
         if (this.isRunCancellationRequested(options.run.id)) {
             return;
@@ -1276,23 +1260,42 @@ export class CommentAgentController {
             outputEntryId: options.outputEntryId,
         }));
         try {
-            await options.outputReady;
-            const replaced = await this.host.editComment(
-                options.outputEntryId,
-                replyText,
-                { skipCommentViewRefresh: true },
+            const committed = await this.host.commitThreadEntry(
+                options.run.filePath,
+                options.run.threadId,
+                {
+                    id: options.outputEntryId,
+                    body: replyText,
+                    timestamp,
+                },
+                {
+                    insertAfterCommentId: options.run.triggerEntryId,
+                    immediateAggregateRefresh: false,
+                    skipCommentViewRefresh: true,
+                    refreshEditorDecorations: false,
+                    refreshMarkdownPreviews: false,
+                },
             );
             if (this.isRunCancellationRequested(options.run.id)) {
                 return;
             }
-            if (!replaced) {
-                if (options.replaceOutputEntryId) {
-                    throw new Error(AGENT_REGENERATE_REPLACE_FAILED_NOTICE);
-                }
-                throw new Error("Unable to update the agent reply.");
+            if (!committed) {
+                throw new Error("Unable to save the agent reply.");
             }
+        } catch (error) {
+            await this.failReplyPersistence({
+                run: options.run,
+                replyText,
+                outputEntryId: options.outputEntryId,
+                startedAt: options.startedAt,
+                error,
+            });
+            return;
+        }
 
-            const completedRun = await this.store.updateRun(options.run.id, (run) => ({
+        let completedRun: AgentRunRecord | null = null;
+        try {
+            completedRun = await this.store.updateRun(options.run.id, (run) => ({
                 ...run,
                 ...mergeAgentRunMetadata(run, options.replyMetadata ?? {}),
                 runtime: options.runtime,
@@ -1304,6 +1307,16 @@ export class CommentAgentController {
             if (!completedRun) {
                 throw new Error("Unable to finalize the agent run.");
             }
+        } catch (error) {
+            void this.host.log?.("warn", "agents", "agents.run.finalize_failed", {
+                runId: options.run.id,
+                threadId: options.run.threadId,
+                outputEntryId: options.outputEntryId,
+                error,
+            });
+        }
+
+        try {
             await this.deleteDuplicateCompletedAgentReplies({
                 threadId: options.run.threadId,
                 triggerEntryId: options.run.triggerEntryId,
@@ -1313,32 +1326,34 @@ export class CommentAgentController {
                 completedAt: timestamp,
                 runId: options.run.id,
             });
-            const refreshed = await this.refreshStatusViews();
-            this.persistingReplyRunIds.delete(options.run.id);
-            if (refreshed) {
-                this.retainedRunStreamIds.delete(options.run.id);
-                this.clearRunStream(options.run.id, options.run.threadId);
-            } else {
-                this.scheduleReplyHandoffRetry(options.run.id, options.run.threadId);
-            }
-            void this.host.log?.("info", "agents", "agents.reply.appended", {
+        } catch (error) {
+            void this.host.log?.("warn", "agents", "agents.reply.cleanup_failed", {
                 runId: options.run.id,
                 threadId: options.run.threadId,
                 outputEntryId: options.outputEntryId,
+                error,
             });
+        }
+
+        const refreshed = await this.refreshStatusViews();
+        this.persistingReplyRunIds.delete(options.run.id);
+        if (refreshed && completedRun) {
+            this.retainedRunStreamIds.delete(options.run.id);
+            this.clearRunStream(options.run.id, options.run.threadId);
+        } else {
+            this.scheduleReplyHandoffRetry(options.run.id, options.run.threadId);
+        }
+        void this.host.log?.("info", "agents", "agents.reply.appended", {
+            runId: options.run.id,
+            threadId: options.run.threadId,
+            outputEntryId: options.outputEntryId,
+        });
+        if (completedRun) {
             void this.host.log?.("info", "agents", "agents.run.succeeded", {
                 runId: options.run.id,
                 threadId: options.run.threadId,
                 runtime: options.runtime,
                 outputEntryId: options.outputEntryId,
-            });
-        } catch (error) {
-            await this.failReplyPersistence({
-                run: options.run,
-                replyText,
-                outputEntryId: options.outputEntryId,
-                startedAt: options.startedAt,
-                error,
             });
         }
     }

@@ -29,21 +29,21 @@ The current lifecycle persists a blank output entry before the runtime finishes,
 
 ### To Implement
 
-- [ ] Add an idempotent canonical thread-entry commit inside the per-note persistence queue.
-- [ ] Persist an explicit thread snapshot so concurrent in-memory reloads cannot erase the committed reply.
-- [ ] Stop persisting blank agent placeholders while retaining the immediate live turning card.
-- [ ] Commit a new completed reply once; update an existing regenerate target once.
-- [ ] Defer aggregate refresh from the canonical reply commit.
-- [ ] Separate reply-save failure from run-history, cleanup, and refresh failures.
-- [ ] Keep all supported agents and different-note runs concurrent.
+- [x] Add an idempotent canonical thread-entry commit inside the per-note persistence queue.
+- [x] Persist an explicit thread snapshot so concurrent in-memory reloads cannot erase the committed reply.
+- [x] Stop persisting blank agent placeholders while retaining the immediate live turning card.
+- [x] Commit a new completed reply once; update an existing regenerate target once.
+- [x] Defer aggregate refresh from the canonical reply commit.
+- [x] Separate reply-save failure from run-history, cleanup, and refresh failures.
+- [x] Keep all supported agents and different-note runs concurrent.
 
 ### Verification
 
-- [ ] A failing regression test reproduces the blank-placeholder/final-edit lifecycle before the fix.
-- [ ] A completed new reply performs one full-body append and no blank append or final edit.
-- [ ] A regenerated durable reply performs one full-body edit and no blank write.
-- [ ] Canonical commit failure retains the response and shows `Couldn’t save reply`.
-- [ ] Post-commit bookkeeping failure does not relabel the saved reply as failed.
-- [ ] Same-note concurrent completions retain both replies; different notes remain independent.
+- [x] A failing regression test reproduces the blank-placeholder/final-edit lifecycle before the fix.
+- [x] A completed new reply performs one full-body commit and no blank append or final edit.
+- [x] A regenerated durable reply performs one full-body upsert and no blank write.
+- [x] Canonical commit failure retains the response and shows `Couldn’t save reply`.
+- [x] Post-commit bookkeeping failure does not relabel the saved reply as failed.
+- [x] Same-note concurrent completions retain both replies; different notes remain independent.
 - [ ] Full tests, lint, typecheck, Obsidian compliance, build, and artifact inspection pass.
 - [ ] The verified build is installed in `lean-startup`, reloaded, and its shipped assets match byte-for-byte.

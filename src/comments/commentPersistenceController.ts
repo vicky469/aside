@@ -1314,6 +1314,9 @@ export class CommentPersistenceController {
         }
 
         const filePath = file.path;
+        if (options.skipCommentViewRefresh) {
+            this.scheduleCommentViewRefreshSuppression(filePath, 1);
+        }
         const queueKeys = this.getCommentPersistenceQueueKeys(file, filePath);
         let committed = false;
         await this.enqueueCommentPersistence(queueKeys, async () => {

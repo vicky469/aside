@@ -4,7 +4,7 @@ import type { TFile } from "obsidian";
 import { CommentManager, type Comment } from "../src/commentManager";
 import { AgentRunStore } from "../src/agents/agentRunStore";
 import { CommentAgentController } from "../src/agents/commentAgentController";
-import type { AgentRunStreamState } from "../src/core/agents/agentRuns";
+import type { AgentRunRecord, AgentRunStreamState } from "../src/core/agents/agentRuns";
 import type { PersistedPluginData } from "../src/settings/indexNoteSettingsPlanner";
 import type {
     AgentRuntimeSelection,
@@ -81,6 +81,7 @@ function createHarness(options: {
     resolveDefaultAgentRuntimeSelection?: () => Promise<DefaultAgentRuntimeSelection>;
     customRunAgentRuntime?: (invocation: AgentRuntimeInvocation) => Promise<AgentRuntimeResult>;
     customAppendThreadEntry?: () => Promise<void>;
+    customCommitThreadEntry?: (entry: { id: string; body: string }) => Promise<boolean | void>;
     customHashText?: (text: string) => Promise<string>;
     customBeforeEditComment?: () => Promise<void>;
     customEditComment?: (commentId: string, newCommentText: string) => Promise<void>;
@@ -89,6 +90,7 @@ function createHarness(options: {
         newCommentText: string,
         commentManager: CommentManager,
     ) => boolean;
+    failSucceededRunUpdate?: boolean;
     agentsFeatureAvailable?: boolean;
     registeredScriptPaths?: string[];
 } = {}) {
@@ -97,6 +99,7 @@ function createHarness(options: {
     const defaultFilePath = (options.initialComments?.[0] ?? createComment()).filePath;
     const availableFilePaths = new Set(options.availableFilePaths ?? [defaultFilePath]);
     const appendedEntries: Array<{ threadId: string; body: string; insertAfterCommentId?: string }> = [];
+    const committedEntries: Array<{ filePath: string; threadId: string; id: string; body: string; insertAfterCommentId?: string }> = [];
     const editedEntries: Array<{ commentId: string; body: string }> = [];
     const persistedFiles: Array<{ path: string; skipCommentViewRefresh?: boolean }> = [];
     const notices: string[] = [];
@@ -119,7 +122,21 @@ function createHarness(options: {
     const store = new AgentRunStore({
         readPersistedPluginData: () => persistedData,
         updatePersistedPluginData: async (updater) => {
-            persistedData = updater({ ...persistedData });
+            const nextData = updater({ ...persistedData });
+            const nextRuns = Array.isArray(nextData.agentRuns)
+                ? nextData.agentRuns as AgentRunRecord[]
+                : [];
+            const previousRuns = Array.isArray(persistedData.agentRuns)
+                ? persistedData.agentRuns as AgentRunRecord[]
+                : [];
+            if (
+                options.failSucceededRunUpdate
+                && nextRuns.some((run) => run.status === "succeeded")
+                && !previousRuns.some((run) => run.status === "succeeded")
+            ) {
+                throw new Error("run metadata unavailable");
+            }
+            persistedData = nextData;
             return { ...persistedData };
         },
     });
@@ -186,6 +203,35 @@ function createHarness(options: {
                 );
             }
             await options.customAppendThreadEntry?.();
+            return true;
+        },
+        commitThreadEntry: async (filePath, threadId, entry, commitOptions) => {
+            committedEntries.push({
+                filePath,
+                threadId,
+                id: entry.id,
+                body: entry.body,
+                ...(commitOptions?.insertAfterCommentId
+                    ? { insertAfterCommentId: commitOptions.insertAfterCommentId }
+                    : {}),
+            });
+            const customResult = await options.customCommitThreadEntry?.(entry);
+            if (customResult === false) {
+                return false;
+            }
+            if (commentManager.getCommentById(entry.id)) {
+                commentManager.editComment(entry.id, entry.body);
+            } else {
+                commentManager.appendEntry(threadId, entry);
+                if (commitOptions?.insertAfterCommentId) {
+                    commentManager.reorderThreadEntries(
+                        threadId,
+                        entry.id,
+                        commitOptions.insertAfterCommentId,
+                        "after",
+                    );
+                }
+            }
             return true;
         },
         editComment: async (commentId, newCommentText) => {
@@ -259,6 +305,7 @@ function createHarness(options: {
         store,
         commentManager,
         appendedEntries,
+        committedEntries,
         editedEntries,
         persistedFiles,
         notices,
@@ -869,13 +916,9 @@ test("comment agent controller marks runs failed when runtime execution is unava
     assert.equal(latestRun?.status, "failed");
     assert.match(latestRun?.error ?? "", /desktop Obsidian/i);
     assert.equal(latestRun?.outputEntryId, "generated-2");
-    assert.deepEqual(harness.appendedEntries, [{
-        threadId: "thread-1",
-        body: "",
-        insertAfterCommentId: "thread-1",
-    }]);
-    assert.equal(harness.editedEntries[0]?.commentId, "generated-2");
-    assert.match(harness.editedEntries[0]?.body ?? "", /desktop Obsidian/i);
+    assert.deepEqual(harness.appendedEntries, []);
+    assert.equal(harness.committedEntries[0]?.id, "generated-2");
+    assert.match(harness.committedEntries[0]?.body ?? "", /desktop Obsidian/i);
     assert.match(harness.commentManager.getCommentById("generated-2")?.comment ?? "", /desktop Obsidian/i);
 });
 
@@ -902,14 +945,12 @@ test("comment agent controller appends a reply and marks the run succeeded", asy
         source: "built-in",
     }]);
     assert.deepEqual(latestRun?.usedFiles, ["Folder/Note.md"]);
-    assert.deepEqual(harness.appendedEntries, [{
+    assert.deepEqual(harness.committedEntries, [{
+        filePath: "Folder/Note.md",
         threadId: "thread-1",
-        body: "",
-        insertAfterCommentId: "thread-1",
-    }]);
-    assert.deepEqual(harness.editedEntries, [{
-        commentId: "generated-2",
+        id: "generated-2",
         body: "Ship it.",
+        insertAfterCommentId: "thread-1",
     }]);
     assert.equal(harness.runtimeCalls[0]?.target, "codex");
     assert.equal(harness.runtimeCalls[0]?.cwd, "/vault");
@@ -1108,9 +1149,12 @@ test("comment agent controller dispatches claude as a peer provider", async () =
         mode: "write",
         source: "built-in",
     }]);
-    assert.deepEqual(harness.editedEntries, [{
-        commentId: "generated-2",
+    assert.deepEqual(harness.committedEntries, [{
+        filePath: "Folder/Note.md",
+        threadId: "thread-1",
+        id: "generated-2",
         body: "Claude reply.",
+        insertAfterCommentId: "thread-1",
     }]);
 });
 
@@ -1137,9 +1181,12 @@ test("comment agent controller dispatches gemini as a peer provider", async () =
         mode: "write",
         source: "built-in",
     }]);
-    assert.deepEqual(harness.editedEntries, [{
-        commentId: "generated-2",
+    assert.deepEqual(harness.committedEntries, [{
+        filePath: "Folder/Note.md",
+        threadId: "thread-1",
+        id: "generated-2",
         body: "Gemini reply.",
+        insertAfterCommentId: "thread-1",
     }]);
 });
 
@@ -1161,9 +1208,12 @@ test("comment agent controller dispatches deepseek through OpenCode", async () =
     assert.equal(latestRun?.requestedAgent, "deepseek");
     assert.deepEqual(harness.runtimeSelectionCalls, ["deepseek"]);
     assert.equal(harness.runtimeCalls[0]?.target, "deepseek");
-    assert.deepEqual(harness.editedEntries, [{
-        commentId: "generated-2",
+    assert.deepEqual(harness.committedEntries, [{
+        filePath: "Folder/Note.md",
+        threadId: "thread-1",
+        id: "generated-2",
         body: "OpenCode reply.",
+        insertAfterCommentId: "thread-1",
     }]);
 });
 
@@ -1446,18 +1496,10 @@ test("comment agent controller runs local jobs in parallel within the same threa
     const childOutputEntryId = runningRuns[1]?.outputEntryId ?? null;
     assert.ok(parentOutputEntryId);
     assert.ok(childOutputEntryId);
-    assert.deepEqual(harness.appendedEntries, [{
-        threadId: "thread-1",
-        body: "",
-        insertAfterCommentId: "thread-1",
-    }, {
-        threadId: "thread-1",
-        body: "",
-        insertAfterCommentId: "entry-2",
-    }]);
+    assert.deepEqual(harness.committedEntries, []);
     assert.deepEqual(
         harness.commentManager.getThreadById("thread-1")?.entries.map((entry) => entry.id),
-        ["thread-1", parentOutputEntryId, "entry-2", childOutputEntryId, "entry-3"],
+        ["thread-1", "entry-2", "entry-3"],
     );
 
     runtimeResolvers.splice(0).forEach((resolve) => resolve());
@@ -1467,6 +1509,7 @@ test("comment agent controller runs local jobs in parallel within the same threa
         harness.controller.getAgentRuns().filter((run) => run.status === "succeeded").length,
         2,
     );
+    assert.equal(harness.committedEntries.length, 2);
     assert.deepEqual(
         [parentOutputEntryId, childOutputEntryId]
             .map((commentId) => harness.commentManager.getCommentById(commentId)?.comment ?? "")
@@ -1500,11 +1543,8 @@ test("comment agent controller inserts child-triggered replies after the trigger
     });
     await waitForAgentQueueToDrain(harness.controller);
 
-    assert.deepEqual(harness.appendedEntries, [{
-        threadId: "thread-1",
-        body: "",
-        insertAfterCommentId: "entry-2",
-    }]);
+    assert.deepEqual(harness.appendedEntries, []);
+    assert.equal(harness.committedEntries[0]?.insertAfterCommentId, "entry-2");
     assert.deepEqual(
         harness.commentManager.getThreadById("thread-1")?.entries.map((entry) => entry.id),
         ["thread-1", "entry-2", "generated-2", "entry-3"],
@@ -1539,17 +1579,18 @@ test("comment agent controller regenerates a specific reply run using the curren
     assert.equal(latestRun?.requestedAgent, "codex");
     assert.equal(latestRun?.retryOfRunId, "generated-1");
     assert.equal(harness.runtimeCalls.at(-1)?.target, "codex");
-    assert.deepEqual(harness.appendedEntries, [{
+    assert.deepEqual(harness.committedEntries, [{
+        filePath: "Folder/Note.md",
         threadId: "thread-1",
-        body: "",
-        insertAfterCommentId: "thread-1",
-    }]);
-    assert.deepEqual(harness.editedEntries, [{
-        commentId: "generated-2",
+        id: "generated-2",
         body: "First reply",
+        insertAfterCommentId: "thread-1",
     }, {
-        commentId: "generated-2",
+        filePath: "Folder/Note.md",
+        threadId: "thread-1",
+        id: "generated-2",
         body: "Second reply",
+        insertAfterCommentId: "thread-1",
     }]);
     assert.equal(harness.commentManager.getCommentById(latestRun?.outputEntryId ?? "")?.comment, "Second reply");
 });
@@ -1601,7 +1642,7 @@ test("comment agent controller regenerates a non-Markdown reply in the existing 
         harness.controller.getActiveAgentStreamForThread("thread-1")?.outputEntryId,
         outputEntryId,
     );
-    assert.equal(harness.appendedEntries.length, 1);
+    assert.equal(harness.committedEntries.length, 1);
     assert.deepEqual(harness.currentNoteContentReads, []);
 
     releaseRetry();
@@ -1644,7 +1685,7 @@ test("comment agent controller appends an output entry when a non-Markdown retry
 
     const retryRun = harness.controller.getLatestAgentRunForThread("thread-1");
     assert.notEqual(retryRun?.outputEntryId, "missing-output");
-    assert.equal(harness.appendedEntries.length, 1);
+    assert.equal(harness.committedEntries.length, 1);
     assert.equal(
         harness.commentManager.getCommentById(retryRun?.outputEntryId ?? "")?.comment,
         "Recovered document reply",
@@ -1796,9 +1837,12 @@ test("comment agent controller keeps the previous durable reply while regenerati
     assert.equal(started, true);
     assert.equal(harness.commentManager.getCommentById("generated-2")?.comment, "First reply");
     assert.equal(harness.controller.getActiveAgentStreamForThread("thread-1")?.partialText, "");
-    assert.deepEqual(harness.editedEntries.slice(-1), [{
-        commentId: "generated-2",
+    assert.deepEqual(harness.committedEntries.slice(-1), [{
+        filePath: "Folder/Note.md",
+        threadId: "thread-1",
+        id: "generated-2",
         body: "First reply",
+        insertAfterCommentId: "thread-1",
     }]);
 
     resolveSecondReply("Second reply");
@@ -1819,8 +1863,8 @@ test("comment agent controller shows success before final retry persistence fini
     });
     let runtimeCount = 0;
     const harness = createHarness({
-        customEditComment: async (_commentId, newCommentText) => {
-            if (newCommentText === "Second reply") {
+        customCommitThreadEntry: async (entry) => {
+            if (entry.body === "Second reply") {
                 markFinalEditStarted();
                 await blockedFinalEdit;
             }
@@ -1878,14 +1922,17 @@ test("comment agent controller retries with one final replacement and no empty e
         body: "@codex answer this",
     });
     await waitForAgentQueueToDrain(harness.controller);
-    const editsBeforeRetry = harness.editedEntries.length;
+    const commitsBeforeRetry = harness.committedEntries.length;
 
     assert.equal(await harness.controller.retryRun("generated-1"), true);
     await waitForAgentQueueToDrain(harness.controller);
 
-    assert.deepEqual(harness.editedEntries.slice(editsBeforeRetry), [{
-        commentId: "generated-2",
+    assert.deepEqual(harness.committedEntries.slice(commitsBeforeRetry), [{
+        filePath: "Folder/Note.md",
+        threadId: "thread-1",
+        id: "generated-2",
         body: "Second reply",
+        insertAfterCommentId: "thread-1",
     }]);
 });
 
@@ -1936,9 +1983,9 @@ test("comment agent controller keeps an unsaved completed reply visible", async 
                 replyText: runtimeCount === 1 ? "First reply" : "Second reply",
             };
         },
-        resolveEditCommentResult: (_commentId, newCommentText) => {
-            if (newCommentText !== "Second reply") {
-                return true;
+        customCommitThreadEntry: async (entry) => {
+            if (entry.body !== "Second reply") {
+                return;
             }
             finalEditAttempts += 1;
             return false;
@@ -1967,6 +2014,38 @@ test("comment agent controller keeps an unsaved completed reply visible", async 
     assert.equal(harness.editedEntries.some((entry) => entry.body === ""), false);
 });
 
+test("comment agent controller does not relabel a saved reply when run finalization fails", async () => {
+    const harness = createHarness({
+        runtimeReplyText: "Durable reply",
+        failSucceededRunUpdate: true,
+    });
+
+    await harness.controller.handleSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "@codex answer this",
+    });
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+        if (harness.logEntries.some((entry) => entry.event === "agents.run.finalize_failed")) {
+            break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+
+    assert.equal(harness.commentManager.getCommentById("generated-2")?.comment, "Durable reply");
+    assert.equal(harness.controller.getActiveAgentStreamForThread("thread-1")?.status, "succeeded");
+    assert.equal(harness.controller.getActiveAgentStreamForThread("thread-1")?.statusHintText, undefined);
+    assert.equal(
+        harness.logEntries.some((entry) => entry.event === "agents.reply.persist_failed"),
+        false,
+    );
+    assert.equal(
+        harness.logEntries.some((entry) => entry.event === "agents.run.finalize_failed"),
+        true,
+    );
+});
+
 test("comment agent controller rejects cancellation while a completed reply is persisting", async () => {
     let releaseFinalEdit: () => void = () => undefined;
     let markFinalEditStarted: () => void = () => undefined;
@@ -1979,8 +2058,8 @@ test("comment agent controller rejects cancellation while a completed reply is p
     let finalEditCount = 0;
     let runtimeCount = 0;
     const harness = createHarness({
-        customEditComment: async (_commentId, newCommentText) => {
-            if (newCommentText !== "Second reply") {
+        customCommitThreadEntry: async (entry) => {
+            if (entry.body !== "Second reply") {
                 return;
             }
             finalEditCount += 1;
@@ -2029,8 +2108,8 @@ test("comment agent controller rejects regenerate while a completed reply is per
     let runtimeCount = 0;
     let finalEditCount = 0;
     const harness = createHarness({
-        customEditComment: async (_commentId, newCommentText) => {
-            if (newCommentText !== "Second reply") {
+        customCommitThreadEntry: async (entry) => {
+            if (entry.body !== "Second reply") {
                 return;
             }
             finalEditCount += 1;
@@ -2174,8 +2253,8 @@ test("comment agent controller shows optimistic success for a peer provider", as
         releaseFinalEdit = resolve;
     });
     const harness = createHarness({
-        customEditComment: async (_commentId, newCommentText) => {
-            if (newCommentText === "Gemini reply") {
+        customCommitThreadEntry: async (entry) => {
+            if (entry.body === "Gemini reply") {
                 markFinalEditStarted();
                 await blockedFinalEdit;
             }
@@ -2223,11 +2302,7 @@ test("comment agent controller can retry a saved agent prompt when run metadata 
     assert.equal(latestRun?.requestedAgent, "codex");
     assert.equal(latestRun?.retryOfRunId, undefined);
     assert.equal(harness.runtimeCalls.at(-1)?.target, "codex");
-    assert.deepEqual(harness.appendedEntries, [{
-        threadId: "thread-1",
-        body: "",
-        insertAfterCommentId: "thread-1",
-    }]);
+    assert.equal(harness.committedEntries.length, 1);
     assert.equal(harness.commentManager.getCommentById("generated-2")?.comment, "Recovered from prompt");
 });
 
@@ -2266,11 +2341,7 @@ test("comment agent controller retries a renamed thread when old run output is m
     assert.equal(latestRun?.retryOfRunId, "run-old");
     assert.equal(latestRun?.filePath, "Folder/Renamed.md");
     assert.notEqual(latestRun?.outputEntryId, "missing-output-entry");
-    assert.deepEqual(harness.appendedEntries, [{
-        threadId: "thread-1",
-        body: "",
-        insertAfterCommentId: "thread-1",
-    }]);
+    assert.equal(harness.committedEntries.length, 1);
     assert.equal(harness.commentManager.getCommentById(latestRun?.outputEntryId ?? "")?.comment, "Recovered after rename");
     assert.deepEqual(harness.notices, []);
 });
@@ -2362,11 +2433,8 @@ test("comment agent controller keeps failed runs retryable through the same outp
     assert.equal(retriedRun?.status, "succeeded");
     assert.equal(retriedRun?.retryOfRunId, "generated-1");
     assert.equal(retriedRun?.outputEntryId, "generated-2");
-    assert.deepEqual(harness.appendedEntries, [{
-        threadId: "thread-1",
-        body: "",
-        insertAfterCommentId: "thread-1",
-    }]);
+    assert.deepEqual(harness.appendedEntries, []);
+    assert.equal(harness.committedEntries.length, 2);
     assert.equal(harness.commentManager.getCommentById(retriedRun?.outputEntryId ?? "")?.comment, "Recovered reply");
 });
 
@@ -2537,16 +2605,16 @@ test("comment agent controller shows starting status and launches while refresh 
     }
 });
 
-test("comment agent controller launches runtime while the blank reply is still persisting", async () => {
-    let releaseAppend: () => void = () => undefined;
-    const blockedAppend = new Promise<void>((resolve) => {
-        releaseAppend = resolve;
+test("comment agent controller shows the live reply without persisting a blank entry", async () => {
+    let releaseRuntime: () => void = () => undefined;
+    const blockedRuntime = new Promise<void>((resolve) => {
+        releaseRuntime = resolve;
     });
     let runtimeStarted = false;
     const harness = createHarness({
-        customAppendThreadEntry: async () => blockedAppend,
         customRunAgentRuntime: async () => {
             runtimeStarted = true;
+            await blockedRuntime;
             return { runtime: "direct-cli", replyText: "Done" };
         },
     });
@@ -2562,10 +2630,16 @@ test("comment agent controller launches runtime while the blank reply is still p
         await new Promise((resolve) => setTimeout(resolve, 20));
         assert.equal(runtimeStarted, true);
         assert.equal(harness.controller.getActiveAgentStreamForThread("thread-1")?.outputEntryId, "generated-2");
+        assert.deepEqual(harness.appendedEntries, []);
+        assert.deepEqual(harness.editedEntries, []);
     } finally {
-        releaseAppend();
+        releaseRuntime();
         await waitForAgentQueueToDrain(harness.controller);
     }
+    assert.deepEqual(harness.appendedEntries, []);
+    assert.deepEqual(harness.editedEntries, []);
+    assert.equal(harness.committedEntries.length, 1);
+    assert.equal(harness.committedEntries[0]?.body, "Done");
 });
 
 test("comment agent controller keeps running streams free of stage labels", async () => {
@@ -2698,7 +2772,7 @@ test("comment agent controller keeps process log lines separate from streamed re
     await waitForAgentQueueToDrain(harness.controller);
     unsubscribe();
 
-    assert.equal(harness.editedEntries.at(-1)?.body, "Draft reply");
+    assert.equal(harness.committedEntries.at(-1)?.body, "Draft reply");
 });
 
 test("comment agent controller cancels a running run without reviving the stream", async () => {
@@ -2758,7 +2832,7 @@ test("comment agent controller keeps the cancelled reply card when no text has s
 
     assert.equal(cancelled, true);
     assert.equal(harness.controller.getActiveAgentStreamForThread("thread-1")?.status, "cancelled");
-    assert.equal(harness.commentManager.getCommentById("generated-2")?.comment, "");
+    assert.equal(harness.commentManager.getCommentById("generated-2"), undefined);
     assert.equal(harness.controller.getLatestAgentRunForThread("thread-1")?.status, "cancelled");
 });
 
@@ -3000,8 +3074,8 @@ test("comment agent controller does not synthesize transient stream text when th
         squashConsecutiveValues(streamUpdates),
         ["", Array.from({ length: 12 }, (_value, index) => `Line ${index + 1}`).join("\n"), null],
     );
-    assert.equal(harness.appendedEntries[0]?.body, "");
-    assert.equal(harness.editedEntries[0]?.body, Array.from({ length: 12 }, (_value, index) => `Line ${index + 1}`).join("\n"));
+    assert.deepEqual(harness.appendedEntries, []);
+    assert.equal(harness.committedEntries[0]?.body, Array.from({ length: 12 }, (_value, index) => `Line ${index + 1}`).join("\n"));
     assert.equal(harness.getRefreshCount(), 3);
 });
 

@@ -540,6 +540,13 @@ export default class Aside extends Plugin {
                 skipCommentViewRefresh?: boolean;
             },
         ): Promise<boolean> => this.commentMutationController.appendThreadEntry(threadId, entry, options),
+        commitThreadEntry: async (filePath, threadId, entry, options): Promise<boolean> => {
+            const file = this.workspaceViewController.getFileByPath(filePath);
+            if (!file) {
+                return false;
+            }
+            return this.commentPersistenceController.commitThreadEntry(file, threadId, entry, options);
+        },
         editComment: (commentId: string, newCommentText: string, options?: { skipCommentViewRefresh?: boolean }): Promise<boolean> =>
             this.commentMutationController.editComment(commentId, newCommentText, options),
         deleteComment: async (commentId: string, options?: { skipCommentViewRefresh?: boolean }): Promise<void> => {
