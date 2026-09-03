@@ -14,7 +14,7 @@
 ### To Implement
 
 - [ ] Preserve locally active agent runs when external plugin-data refreshes arrive.
-- [ ] Prevent Generate from starting a second run while the first run is executing or persisting its reply.
+- [ ] Prevent duplicate Generate for the same prompt/output replacement slot while preserving concurrent runs for every other prompt and card.
 - [ ] Reuse and immediately clear the prior output card when a valid stored run is regenerated.
 - [ ] Keep the active draft, source selection, editor focus, active anchor, and source viewport unchanged while another card regenerates or completes.
 - [ ] Apply the regenerate and viewport rules through shared agent paths for every supported agent.
@@ -22,7 +22,7 @@
 ### Verification
 
 - [ ] A store regression reproduces an external settings refresh during an active run and proves the run remains available.
-- [ ] A controller regression proves the preserved run blocks overlapping Generate and keeps one output entry.
+- [ ] Controller regressions prove the preserved run blocks only a duplicate Generate for its own replacement slot, keeps one output entry, and does not block concurrent runs for distinct prompts/cards.
 - [ ] UI regressions prove regeneration does not save or focus an unrelated draft and background completion does not reveal an anchor.
 - [ ] Focused tests, the complete build, code review, and release artifact inspection pass.
 - [ ] The verified build is installed in `lean-startup` and the three shipped assets match byte-for-byte.
@@ -42,7 +42,8 @@ The same incident logs contain `navigation.reveal.requested` for the original re
 
 Regenerate is a replacement operation, not an append operation.
 
-- A prompt may have only one active agent run at a time, including the interval after the runtime returns but before reply persistence and handoff finish.
+- Each prompt/output replacement slot may have only one active agent run at a time, including the interval after the runtime returns but before reply persistence and handoff finish.
+- This is not a global or thread-level lock: different prompts/cards may run concurrently, including multiple agents triggered from distinct entries in the same thread.
 - Generate reuses the valid prior output entry and immediately presents that card as the one empty, spinning replacement card.
 - It does not show the old response beside a new placeholder.
 - If the prior output was actually deleted, Generate creates one fresh output entry, preserving the existing deleted-output recovery behavior.
@@ -61,7 +62,7 @@ Working on another side-note draft creates a viewport lock for source navigation
 
 `AgentRunStore` remains the source of truth for local run lifecycle. External plugin-data refresh must merge persisted records into the store without deleting locally queued, running, or persistence-pending runs. Startup loading may still replace the empty initial state. The external-settings adapter uses the preserving reload path.
 
-This fixes the source of the duplicate: retry lookup continues to resolve the exact active or completed run and its output entry ID. The existing controller busy checks then reject overlapping Generate, and normal regeneration reuses the existing output card.
+This fixes the source of the duplicate: retry lookup continues to resolve the exact active or completed run and its output entry ID. The controller then rejects only a competing Generate for that same trigger/output replacement slot. Runs belonging to other prompts/cards remain independent, and normal regeneration reuses the existing output card.
 
 ### Regenerate action isolation
 
@@ -79,14 +80,15 @@ The guard belongs at the navigation adapter rather than in Markdown rendering, s
 2. The run store persists the queued/running record and retains it across external settings refreshes.
 3. The user creates or edits anchored-note draft B; its source viewport and editor focus become protected.
 4. Agent A streams and completes without invoking source navigation or draft persistence.
-5. If Generate is invoked for A while A is still active or persisting, the controller rejects the overlap and leaves both A and draft B unchanged.
-6. If Generate is invoked after A is terminal, the controller resolves A's exact stored output ID, clears that one visible card into its spinner state, and runs the replacement.
-7. Completion or failure updates that same card. Draft B and the source editor remain untouched throughout.
+5. Other prompts/cards may start and run concurrently, including prompts in A's thread.
+6. If Generate is invoked again for A's exact replacement slot while A is still active or persisting, the controller rejects only that duplicate and leaves A, all unrelated runs, and draft B unchanged.
+7. If Generate is invoked after A is terminal, the controller resolves A's exact stored output ID, clears that one visible card into its spinner state, and runs the replacement.
+8. Completion or failure updates that same card. Draft B and the source editor remain untouched throughout.
 
 ## Failure Handling
 
 - A stale external snapshot cannot remove an active local run.
-- A conflicting active run causes Generate to return unavailable without allocating an output ID.
+- An active run for the same trigger/output replacement slot causes only that duplicate Generate to return unavailable without allocating an output ID; unrelated agent runs continue normally.
 - A missing or soft-deleted prior output receives one fresh output ID; it never revives a deleted card.
 - A failed runtime or failed reply save remains visible in the single replacement card.
 - A blocked source reveal is silent because preserving an active draft is expected behavior, not an error.
@@ -94,7 +96,8 @@ The guard belongs at the navigation adapter rather than in Markdown rendering, s
 ## Testing
 
 - `AgentRunStore` tests load persisted data, add an active local run, simulate older external data, invoke preserving reload, and assert the active run and its output mapping remain.
-- `CommentAgentController` tests simulate the same refresh boundary, attempt Generate during runtime and persistence, and assert no second run or appended output is created.
+- `CommentAgentController` tests simulate the same refresh boundary, attempt duplicate Generate for the same slot during runtime and persistence, and assert no second run or appended output is created.
+- Concurrency regressions assert that distinct prompts/cards—including distinct trigger entries in one thread—can still run at the same time.
 - Regenerate tests assert one card/output ID is reused and its visible stream body clears immediately.
 - Sidebar action tests assert Generate does not call `saveVisibleDraftIfPresent` for a different draft.
 - Navigation policy tests assert a different active draft blocks reveal and active-comment changes, while no draft or the same target preserves normal explicit navigation.
@@ -102,6 +105,6 @@ The guard belongs at the navigation adapter rather than in Markdown rendering, s
 
 ## Scope
 
-Included: active agent-run preservation across external settings refresh, one-output regeneration, overlap prevention, unrelated-draft viewport isolation, and provider-neutral regression coverage.
+Included: active agent-run preservation across external settings refresh, one-output regeneration, same-slot duplicate prevention without reducing cross-card concurrency, unrelated-draft viewport isolation, and provider-neutral regression coverage.
 
 Excluded: automatically deleting ambiguous legacy/user-authored thread entries, changing ordinary card navigation when no draft is active, changing non-agent action save semantics, or changing script-run regeneration.
