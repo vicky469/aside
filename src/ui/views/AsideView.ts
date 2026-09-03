@@ -4523,6 +4523,9 @@ export default class AsideView extends ItemView {
             openSidebarInternalLink: (href, sourcePath, focusTarget, options) =>
                 this.interactionController.openSidebarInternalLink(href, sourcePath, focusTarget, options),
             openCommentFromCard: async (persistedComment) => {
+                if (!this.interactionController.canNavigateToComment(persistedComment.id)) {
+                    return;
+                }
                 const openAction = getSidebarCommentCardOpenAction({
                     isIndexView,
                     isNonDesktopClient: this.isNonDesktopClient(),

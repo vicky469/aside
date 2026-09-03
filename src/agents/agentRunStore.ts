@@ -9,7 +9,11 @@ import type {
     PersistedPluginDataUpdater,
 } from "../settings/indexNoteSettingsPlanner";
 import { resolveSourceIdentityCurrentPath } from "../sync/sourceIdentityStore";
-import { clonePersistedAgentRuns, normalizePersistedAgentRuns } from "./agentRunStorePlanner";
+import {
+    clonePersistedAgentRuns,
+    mergePersistedAgentRunsPreservingActive,
+    normalizePersistedAgentRuns,
+} from "./agentRunStorePlanner";
 
 export interface AgentRunStoreHost {
     readPersistedPluginData(): PersistedPluginData | null;
@@ -23,8 +27,40 @@ export class AgentRunStore {
     constructor(private readonly host: AgentRunStoreHost) {}
 
     public load(): void {
+        this.runs = this.readPersistedRuns();
+    }
+
+    public async reloadPreservingActiveRuns(
+        runIdsToPreserve: readonly string[] = [],
+        runIdsBeforeLoad?: readonly string[],
+    ): Promise<void> {
+        await this.enqueueMutation(() => {
+            const runIdsBeforeLoadSet = runIdsBeforeLoad
+                ? new Set(runIdsBeforeLoad)
+                : null;
+            const runIdsAddedDuringLoad = runIdsBeforeLoadSet
+                ? this.runs
+                    .filter((run) => !runIdsBeforeLoadSet.has(run.id))
+                    .map((run) => run.id)
+                : [];
+            this.runs = mergePersistedAgentRunsPreservingActive(
+                this.readPersistedRuns(),
+                this.runs,
+                [...runIdsToPreserve, ...runIdsAddedDuringLoad],
+            );
+            return Promise.resolve();
+        });
+    }
+
+    public getActiveRunIds(): string[] {
+        return this.runs
+            .filter((run) => run.status === "queued" || run.status === "running")
+            .map((run) => run.id);
+    }
+
+    private readPersistedRuns(): AgentRunRecord[] {
         const persistedData = this.host.readPersistedPluginData();
-        this.runs = normalizePersistedAgentRuns(persistedData?.agentRuns).map((run) => ({
+        return normalizePersistedAgentRuns(persistedData?.agentRuns).map((run) => ({
             ...run,
             filePath: resolveSourceIdentityCurrentPath(
                 persistedData?.sourceIdentityState,

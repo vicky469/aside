@@ -1462,6 +1462,44 @@ test("renderPersistedCommentCard reruns scripts explicitly and keeps collapsed s
     assert.deepEqual(retriedAgentPrompts, []);
 });
 
+test("renderPersistedCommentCard regenerates an agent reply without saving another draft", async () => {
+    const thread = createThreadWithEntries({
+        entries: [
+            { id: "comment-1", body: "@codex answer this", timestamp: 100 },
+            { id: "entry-2", body: "Existing reply", timestamp: 110 },
+        ],
+    });
+    let saveVisibleDraftCalls = 0;
+    const retriedAgentRunIds: string[] = [];
+    const root = new FakeElement("div");
+
+    await renderPersistedCommentCard(root as unknown as HTMLDivElement, thread, createRenderHost({
+        showNestedComments: true,
+        threadAgentRuns: [createAgentRun({
+            id: "run-1",
+            triggerEntryId: "comment-1",
+            outputEntryId: "entry-2",
+        })],
+        saveVisibleDraftIfPresent: async () => {
+            saveVisibleDraftCalls += 1;
+            return false;
+        },
+        retryAgentRun: (runId) => {
+            retriedAgentRunIds.push(runId);
+            return true;
+        },
+    }));
+
+    const regenerateButton = root.findAllByClass("aside-thread-footer-regenerate-button")[0];
+    assert.ok(regenerateButton);
+    await (regenerateButton.onclick as (event: { stopPropagation(): void }) => Promise<void>)({
+        stopPropagation() {},
+    });
+
+    assert.equal(saveVisibleDraftCalls, 0);
+    assert.deepEqual(retriedAgentRunIds, ["run-1"]);
+});
+
 test("renderPersistedCommentCard renders queued and running script outputs with spinner statuses", async () => {
     const thread = createThreadWithEntries({
         entries: [

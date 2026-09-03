@@ -13,18 +13,18 @@
 
 ### To Implement
 
-- [ ] Preserve locally active agent runs when external plugin-data refreshes arrive.
-- [ ] Prevent duplicate Generate for the same prompt/output replacement slot while preserving concurrent runs for every other prompt and card.
-- [ ] Reuse and immediately clear the prior output card when a valid stored run is regenerated.
-- [ ] Keep the active draft, source selection, editor focus, active anchor, and source viewport unchanged while another card regenerates or completes.
-- [ ] Apply the regenerate and viewport rules through shared agent paths for every supported agent.
+- [x] Preserve locally active agent runs when external plugin-data refreshes arrive.
+- [x] Prevent duplicate Generate for the same prompt/output replacement slot while preserving concurrent runs for every other prompt and card.
+- [x] Reuse and immediately clear the prior output card when a valid stored run is regenerated.
+- [x] Keep the active draft, source selection, editor focus, active anchor, and source viewport unchanged while another card regenerates or completes.
+- [x] Apply the regenerate and viewport rules through shared agent paths for every supported agent.
 
 ### Verification
 
-- [ ] A store regression reproduces an external settings refresh during an active run and proves the run remains available.
-- [ ] Controller regressions prove the preserved run blocks only a duplicate Generate for its own replacement slot, keeps one output entry, and does not block concurrent runs for distinct prompts/cards.
-- [ ] UI regressions prove regeneration does not save or focus an unrelated draft and background completion does not reveal an anchor.
-- [ ] Focused tests, the complete build, code review, and release artifact inspection pass.
+- [x] A store regression reproduces an external settings refresh during an active run and proves the run remains available.
+- [x] Controller regressions prove the preserved run blocks only a duplicate Generate for its own replacement slot, keeps one output entry, and does not block concurrent runs for distinct prompts/cards.
+- [x] UI regressions prove regeneration does not save or focus an unrelated draft and background completion does not reveal an anchor.
+- [x] Focused tests, the complete build, code review, and release artifact inspection pass.
 - [ ] The verified build is installed in `lean-startup` and the three shipped assets match byte-for-byte.
 
 ## Evidence And Root Cause

@@ -163,6 +163,14 @@ interface ActiveRunExecution {
     cancelRequested: boolean;
 }
 
+interface RetryPromptOptions {
+    triggerEntryId: string;
+    filePath: string;
+    retryOfRunId?: string;
+    missingFileNotice: string;
+    missingCommentNotice: string;
+}
+
 function summarizeError(error: unknown): string {
     if (error instanceof Error && error.message.trim()) {
         return error.message.trim();
@@ -212,6 +220,7 @@ export class CommentAgentController {
     private readonly retainedRunStreamIds = new Set<string>();
     private readonly dispatchingRunIds = new Set<string>();
     private readonly dispatchingPdfDestinationPaths = new Set<string>();
+    private readonly preparingRetryTriggerEntryIds = new Set<string>();
 
     constructor(
         private readonly host: CommentAgentHost,
@@ -247,6 +256,17 @@ export class CommentAgentController {
 
     public getAgentRuns(): AgentRunRecord[] {
         return this.store.getRuns();
+    }
+
+    public getLocallyOwnedRunIds(): string[] {
+        return Array.from(new Set([
+            ...this.store.getActiveRunIds(),
+            ...this.runStreams.keys(),
+            ...this.dispatchingRunIds,
+            ...this.activeRunExecutions.keys(),
+            ...this.persistingReplyRunIds,
+            ...this.retainedRunStreamIds,
+        ]));
     }
 
     public getLatestAgentRunForThread(threadId: string): AgentRunRecord | null {
@@ -289,6 +309,7 @@ export class CommentAgentController {
         this.retainedRunStreamIds.clear();
         this.dispatchingRunIds.clear();
         this.dispatchingPdfDestinationPaths.clear();
+        this.preparingRetryTriggerEntryIds.clear();
         this.runStreams.clear();
     }
 
@@ -482,13 +503,21 @@ export class CommentAgentController {
         });
     }
 
-    private async retryPromptForCommentInternal(options: {
-        triggerEntryId: string;
-        filePath: string;
-        retryOfRunId?: string;
-        missingFileNotice: string;
-        missingCommentNotice: string;
-    }): Promise<boolean> {
+    private async retryPromptForCommentInternal(options: RetryPromptOptions): Promise<boolean> {
+        if (this.preparingRetryTriggerEntryIds.has(options.triggerEntryId)) {
+            this.host.showNotice(AGENT_REPLY_SAVE_PENDING_NOTICE);
+            return false;
+        }
+
+        this.preparingRetryTriggerEntryIds.add(options.triggerEntryId);
+        try {
+            return await this.prepareRetryPromptForComment(options);
+        } finally {
+            this.preparingRetryTriggerEntryIds.delete(options.triggerEntryId);
+        }
+    }
+
+    private async prepareRetryPromptForComment(options: RetryPromptOptions): Promise<boolean> {
         if (!this.host.isAgentsFeatureAvailable()) {
             this.host.showNotice(AGENTS_EXPERIMENT_DISABLED_NOTICE);
             return false;
@@ -503,6 +532,14 @@ export class CommentAgentController {
         const latestComment = this.host.getCommentManager().getCommentById(options.triggerEntryId);
         if (!latestComment) {
             this.host.showNotice(options.missingCommentNotice);
+            return false;
+        }
+        const activeRunForTrigger = this.store.getRuns().find((run) => (
+            run.triggerEntryId === latestComment.id
+            && (run.status === "queued" || run.status === "running")
+        ));
+        if (activeRunForTrigger) {
+            this.host.showNotice(AGENT_REPLY_SAVE_PENDING_NOTICE);
             return false;
         }
 

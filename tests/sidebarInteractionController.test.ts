@@ -1,8 +1,12 @@
 import * as assert from "node:assert/strict";
 import test from "node:test";
+import type { TFile } from "obsidian";
 import type { Comment } from "../src/commentManager";
 import type { DraftComment } from "../src/domain/drafts";
-import { SidebarInteractionController } from "../src/ui/views/sidebarInteractionController";
+import {
+    shouldRevealPersistedComment,
+    SidebarInteractionController,
+} from "../src/ui/views/sidebarInteractionController";
 
 function createComment(overrides: Partial<Comment> = {}): Comment {
     return {
@@ -135,7 +139,10 @@ function createCommentElement(ids: { commentId?: string; draftId?: string } = {}
     };
 }
 
-function createHarness() {
+function createHarness(options: {
+    currentFilePath?: string | null;
+    activeDraft?: DraftComment | null;
+} = {}) {
     const matchingCommentEl = createCommentElement({ commentId: "comment-1" });
     const otherActiveEl = createCommentElement({ commentId: "comment-2" });
     const htmlFile = {
@@ -191,8 +198,14 @@ function createHarness() {
             querySelectorAll: () => [otherActiveEl],
             contains: () => true,
         } as never,
-        getCurrentFile: () => null,
-        getDraftForView: () => null,
+        getCurrentFile: () => options.currentFilePath
+            ? { path: options.currentFilePath } as TFile
+            : null,
+        getDraftForView: (filePath) => (
+            filePath === options.currentFilePath
+                ? options.activeDraft ?? null
+                : null
+        ),
         renderComments: async () => {
             renderCalls += 1;
         },
@@ -244,6 +257,29 @@ test("sidebar interaction controller opens a comment by marking it active and re
     assert.deepEqual(harness.revealedComments, ["comment-1"]);
     assert.deepEqual(harness.otherActiveEl.removeClassCalls, ["active"]);
     assert.deepEqual(harness.matchingCommentEl.addClassCalls, ["active"]);
+});
+
+test("sidebar interaction controller keeps an unrelated active draft and source viewport unchanged", async () => {
+    const harness = createHarness({
+        currentFilePath: "docs/architecture.md",
+        activeDraft: createDraft({
+            id: "draft-2",
+            filePath: "docs/architecture.md",
+        }),
+    });
+
+    await harness.controller.openCommentInEditor(createComment({ id: "comment-1" }));
+
+    assert.equal(harness.controller.getActiveCommentId(), null);
+    assert.deepEqual(harness.revealedComments, []);
+    assert.deepEqual(harness.otherActiveEl.removeClassCalls, []);
+    assert.deepEqual(harness.matchingCommentEl.addClassCalls, []);
+});
+
+test("shouldRevealPersistedComment allows only the active draft target while editing", () => {
+    assert.equal(shouldRevealPersistedComment(null, "comment-1"), true);
+    assert.equal(shouldRevealPersistedComment(createDraft({ id: "comment-1" }), "comment-1"), true);
+    assert.equal(shouldRevealPersistedComment(createDraft({ id: "draft-2" }), "comment-1"), false);
 });
 
 test("sidebar interaction controller routes local side note protocol links through comment open flow", async () => {

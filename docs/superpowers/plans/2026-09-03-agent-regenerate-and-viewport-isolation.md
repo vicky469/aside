@@ -18,7 +18,7 @@
 - Modify: `src/main.ts`
 - Test: `tests/agentRunStorePlanner.test.ts`
 
-- [ ] **Step 1: Write the failing store regression**
+- [x] **Step 1: Write the failing store regression**
 
 Add a test that loads a queued local run, replaces the host snapshot with older terminal data, calls `await store.reloadPreservingActiveRuns()`, and asserts that the local queued run survives while unrelated persisted records load:
 
@@ -45,7 +45,7 @@ test("AgentRunStore preserves active local runs across external reloads", async 
 });
 ```
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
 Run:
 
@@ -56,7 +56,7 @@ node --test .test-dist/tests/agentRunStorePlanner.test.js
 
 Expected: compilation fails because `reloadPreservingActiveRuns` does not exist.
 
-- [ ] **Step 3: Implement the preserving merge and reload path**
+- [x] **Step 3: Implement the preserving merge and reload path**
 
 Export a pure merge helper from `agentRunStorePlanner.ts` that overlays local `queued` and `running` records by id onto the normalized external snapshot and appends active local records absent from it. In `AgentRunStore`, factor persisted normalization/path resolution into one private reader, keep `load()` as startup replacement, and add a mutation-queue-serialized reload:
 
@@ -71,15 +71,18 @@ public async reloadPreservingActiveRuns(): Promise<void> {
 }
 ```
 
-Change `onExternalSettingsChange()` in `src/main.ts` to await this preserving reload:
+Snapshot locally owned and pre-load run IDs before `loadSettings()`, then change `onExternalSettingsChange()` in `src/main.ts` to await the preserving reload. The serialized reload also preserves every run added since the pre-load snapshot, closing completion and handoff races:
 
 ```ts
-await this.agentRunStore.reloadPreservingActiveRuns();
+await this.agentRunStore.reloadPreservingActiveRuns(
+    locallyOwnedAgentRunIds,
+    agentRunIdsBeforeLoad,
+);
 ```
 
 Leave startup `initialize()` on `load()` so stale runs from a previous process are still reconciled normally.
 
-- [ ] **Step 4: Run the focused test and verify GREEN**
+- [x] **Step 4: Run the focused test and verify GREEN**
 
 Run the two commands from Step 2. Expected: all `agentRunStorePlanner` tests pass.
 
@@ -89,7 +92,7 @@ Run the two commands from Step 2. Expected: all `agentRunStorePlanner` tests pas
 - Modify: `src/agents/commentAgentController.ts`
 - Test: `tests/commentAgentController.test.ts`
 
-- [ ] **Step 1: Write failing controller regressions**
+- [x] **Step 1: Write failing controller regressions**
 
 Add one test that holds a retry runtime open, invokes Generate again through the original and latest run ids, and asserts one retry run and one output id. Add a second assertion to the existing same-thread parallel test proving a different trigger still reaches `running` concurrently.
 
@@ -102,7 +105,7 @@ assert.equal(sameTriggerRuns.length, 2); // original plus one retry
 assert.equal(new Set(sameTriggerRuns.map((run) => run.outputEntryId)).size, 1);
 ```
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
 Run:
 
@@ -113,13 +116,13 @@ node --test .test-dist/tests/commentAgentController.test.js
 
 Expected: the repeated Generate call starts a competing retry or creates an additional run.
 
-- [ ] **Step 3: Add the same-trigger active-run guard**
+- [x] **Step 3: Add the same-trigger active-run guard**
 
-In `retryPromptForCommentInternal`, after reloading the latest comment and before runtime selection or output allocation, search the shared store for a `queued` or `running` run whose `triggerEntryId` equals `latestComment.id`. If present, return `false` with `AGENT_REPLY_SAVE_PENDING_NOTICE`.
+Reserve `options.triggerEntryId` before asynchronous retry preflight, release that short-lived reservation after the queued run persists, and reject a competing reservation. After reloading the latest comment and before runtime selection or output allocation, also search the shared store for a `queued` or `running` run whose `triggerEntryId` equals `latestComment.id`. If present, return `false` with `AGENT_REPLY_SAVE_PENDING_NOTICE`.
 
 Do not compare only `threadId`: distinct trigger entries in one thread must continue through the existing concurrency queue independently.
 
-- [ ] **Step 4: Run the focused controller test and verify GREEN**
+- [x] **Step 4: Run the focused controller test and verify GREEN**
 
 Run the commands from Step 2. Expected: all controller tests pass, including the existing parallel-across-threads and parallel-within-one-thread regressions.
 
@@ -129,7 +132,7 @@ Run the commands from Step 2. Expected: all controller tests pass, including the
 - Modify: `src/ui/views/sidebarPersistedComment.ts`
 - Test: `tests/sidebarPersistedComment.test.ts`
 
-- [ ] **Step 1: Write the failing Generate action regression**
+- [x] **Step 1: Write the failing Generate action regression**
 
 Render an agent prompt card with a successful stored run, provide a `saveVisibleDraftIfPresent` spy that returns `false`, click Generate, and assert the retry still starts while the save spy remains untouched:
 
@@ -138,7 +141,7 @@ assert.equal(saveVisibleDraftCalls, 0);
 assert.deepEqual(retriedAgentRunIds, ["run-1"]);
 ```
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
 Run:
 
@@ -149,12 +152,15 @@ node --test .test-dist/tests/sidebarPersistedComment.test.js
 
 Expected: Generate calls `saveVisibleDraftIfPresent` and does not start the retry.
 
-- [ ] **Step 3: Remove the generic save-first hook from Generate only**
+- [x] **Step 3: Remove the generic save-first hook from agent Generate only**
 
-Delete this block from the Generate click handler:
+Run this block only when `regenerateAction.kind === "script-run"`:
 
 ```ts
-if (!(await host.saveVisibleDraftIfPresent())) {
+if (
+    regenerateAction.kind === "script-run"
+    && !(await host.saveVisibleDraftIfPresent())
+) {
     retryButton.disabled = options.disableRetryAction === true;
     return;
 }
@@ -162,7 +168,7 @@ if (!(await host.saveVisibleDraftIfPresent())) {
 
 Keep save-first behavior for editing, deleting, moving, inserting, and script actions unchanged.
 
-- [ ] **Step 4: Run the focused sidebar test and verify GREEN**
+- [x] **Step 4: Run the focused sidebar test and verify GREEN**
 
 Run the commands from Step 2. Expected: all `sidebarPersistedComment` tests pass.
 
@@ -173,7 +179,7 @@ Run the commands from Step 2. Expected: all `sidebarPersistedComment` tests pass
 - Modify: `src/ui/views/AsideView.ts`
 - Test: `tests/sidebarInteractionController.test.ts`
 
-- [ ] **Step 1: Write failing navigation-policy regressions**
+- [x] **Step 1: Write failing navigation-policy regressions**
 
 Extend the interaction harness so `getCurrentFile` and `getDraftForView` can expose a draft. Assert that `openCommentInEditor(comment-1)` neither changes the active comment nor calls `revealComment` when draft `draft-2` is visible. Assert normal reveal without a draft and allow the same persisted id when the draft id equals the target id.
 
@@ -182,7 +188,7 @@ assert.equal(harness.controller.getActiveCommentId(), null);
 assert.deepEqual(harness.revealedComments, []);
 ```
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
 Run:
 
@@ -193,7 +199,7 @@ node --test .test-dist/tests/sidebarInteractionController.test.js
 
 Expected: the unrelated target becomes active and is revealed.
 
-- [ ] **Step 3: Implement one shared draft-aware navigation policy**
+- [x] **Step 3: Implement one shared draft-aware navigation policy**
 
 Add an exported pure policy and a public controller guard:
 
@@ -214,7 +220,7 @@ public canNavigateToComment(commentId: string): boolean {
 
 Call the guard at the start of `openCommentInEditor`. Also call it at the start of `AsideView`'s `openCommentFromCard` adapter so the index-reveal branch cannot bypass the policy. A blocked navigation must not call `setActiveComment`, reveal, focus, or save.
 
-- [ ] **Step 4: Run the focused navigation test and verify GREEN**
+- [x] **Step 4: Run the focused navigation test and verify GREEN**
 
 Run the commands from Step 2. Expected: all `sidebarInteractionController` tests pass.
 
@@ -225,7 +231,7 @@ Run the commands from Step 2. Expected: all `sidebarInteractionController` tests
 - Generated: `main.js`
 - Inspect: `main.js`, `manifest.json`, `styles.css`
 
-- [ ] **Step 1: Run change-surface and diff checks**
+- [x] **Step 1: Run change-surface and diff checks**
 
 Run:
 
@@ -236,7 +242,7 @@ git diff --check
 
 Expected: startup alone uses replacement `load`, external settings uses preserving reload, Generate has no save-first call, navigation routes through the shared guard, and no whitespace errors exist.
 
-- [ ] **Step 2: Run the full build**
+- [x] **Step 2: Run the full build**
 
 Run:
 
@@ -246,7 +252,7 @@ npm run build
 
 Expected: all tests, lint, typecheck, Obsidian compliance, bundle, and release artifact guard pass.
 
-- [ ] **Step 3: Inspect the exact shipped artifacts**
+- [x] **Step 3: Inspect the exact shipped artifacts**
 
 Run:
 
@@ -258,7 +264,7 @@ find . -maxdepth 1 -type f \( -name '*.map' -o -name '*.ts' -o -name '*.tsx' -o 
 
 Expected: only the three intended plugin assets are installed, no source-map references or embedded sources are found, and no secret-bearing release files are present.
 
-- [ ] **Step 4: Update the tracked spec**
+- [x] **Step 4: Update the tracked spec**
 
 Mark every implemented and freshly verified checklist item `[x]`; leave any item unchecked if its evidence did not pass.
 

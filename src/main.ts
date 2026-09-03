@@ -970,8 +970,13 @@ export default class Aside extends Plugin {
     }
 
     async onExternalSettingsChange() {
+        const agentRunIdsBeforeLoad = this.agentRunStore.getRuns().map((run) => run.id);
+        const locallyOwnedAgentRunIds = this.commentAgentController.getLocallyOwnedRunIds();
         await this.loadSettings();
-        this.agentRunStore.load();
+        await this.agentRunStore.reloadPreservingActiveRuns(
+            locallyOwnedAgentRunIds,
+            agentRunIdsBeforeLoad,
+        );
         this.scriptRunStore.load();
         const appliedEventCount = await this.refreshCoordinator.handleExternalPluginDataChange();
         await this.logEvent("info", "persistence", "sync.plugin-data.external-settings", {

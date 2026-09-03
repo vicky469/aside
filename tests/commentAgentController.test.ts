@@ -76,6 +76,7 @@ function createHarness(options: {
     isCommentableFilePath?: (filePath: string) => boolean;
     isPageNoteCapableFilePath?: (filePath: string) => boolean;
     runtimeSelection?: AgentRuntimeSelection;
+    resolveAgentRuntimeSelection?: (target: AsideAgentTarget) => Promise<AgentRuntimeSelection>;
     defaultRuntimeSelection?: DefaultAgentRuntimeSelection;
     resolveDefaultAgentRuntimeSelection?: () => Promise<DefaultAgentRuntimeSelection>;
     customRunAgentRuntime?: (invocation: AgentRuntimeInvocation) => Promise<AgentRuntimeResult>;
@@ -224,7 +225,7 @@ function createHarness(options: {
         },
         resolveAgentRuntimeSelection: async (target: AsideAgentTarget) => {
             runtimeSelectionCalls.push(target);
-            return options.runtimeSelection ?? {
+            return options.resolveAgentRuntimeSelection?.(target) ?? options.runtimeSelection ?? {
                 kind: "resolved",
                 runtime: "direct-cli",
                 modePreference: "auto",
@@ -2067,6 +2068,102 @@ test("comment agent controller rejects regenerate while a completed reply is per
     }
 });
 
+test("comment agent controller rejects duplicate regenerate for the same trigger", async () => {
+    let releaseRetryRuntime: () => void = () => undefined;
+    let markRetryRuntimeStarted: () => void = () => undefined;
+    const retryRuntimeStarted = new Promise<void>((resolve) => {
+        markRetryRuntimeStarted = resolve;
+    });
+    const blockedRetryRuntime = new Promise<void>((resolve) => {
+        releaseRetryRuntime = resolve;
+    });
+    let runtimeCount = 0;
+    const harness = createHarness({
+        customRunAgentRuntime: async () => {
+            runtimeCount += 1;
+            if (runtimeCount > 1) {
+                markRetryRuntimeStarted();
+                await blockedRetryRuntime;
+            }
+            return {
+                runtime: "direct-cli",
+                replyText: runtimeCount === 1 ? "First reply" : "Replacement reply",
+            };
+        },
+    });
+
+    await harness.controller.handleSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "@codex answer this",
+    });
+    await waitForAgentQueueToDrain(harness.controller);
+    const originalRun = harness.controller.getLatestAgentRunForThread("thread-1");
+
+    assert.equal(await harness.controller.retryRun(originalRun?.id ?? ""), true);
+    await retryRuntimeStarted;
+    try {
+        assert.equal(await harness.controller.retryRun(originalRun?.id ?? ""), false);
+        const sameTriggerRuns = harness.controller.getAgentRuns()
+            .filter((run) => run.triggerEntryId === "thread-1");
+        assert.equal(sameTriggerRuns.length, 2);
+        assert.equal(new Set(sameTriggerRuns.map((run) => run.outputEntryId)).size, 1);
+    } finally {
+        releaseRetryRuntime();
+        await waitForAgentQueueToDrain(harness.controller);
+    }
+});
+
+test("comment agent controller reserves a trigger while regenerate preflight is pending", async () => {
+    let releaseRuntimeSelection: () => void = () => undefined;
+    let markRuntimeSelectionStarted: () => void = () => undefined;
+    const runtimeSelectionStarted = new Promise<void>((resolve) => {
+        markRuntimeSelectionStarted = resolve;
+    });
+    const blockedRuntimeSelection = new Promise<void>((resolve) => {
+        releaseRuntimeSelection = resolve;
+    });
+    const harness = createHarness({
+        initialPersistedData: {
+            agentRuns: [{
+                id: "run-old",
+                threadId: "thread-1",
+                triggerEntryId: "thread-1",
+                filePath: "Folder/Note.md",
+                requestedAgent: "codex",
+                runtime: "direct-cli",
+                status: "succeeded",
+                promptText: "@codex answer this",
+                createdAt: 10,
+                outputEntryId: "missing-output",
+            }],
+        },
+        resolveAgentRuntimeSelection: async () => {
+            markRuntimeSelectionStarted();
+            await blockedRuntimeSelection;
+            return {
+                kind: "resolved",
+                runtime: "direct-cli",
+                modePreference: "auto",
+                ownershipMessage: "Using your local Codex setup",
+            };
+        },
+    });
+
+    const firstRetry = harness.controller.retryRun("run-old");
+    await runtimeSelectionStarted;
+    const duplicateRetry = harness.controller.retryRun("run-old");
+    releaseRuntimeSelection();
+
+    assert.deepEqual(await Promise.all([firstRetry, duplicateRetry]), [true, false]);
+    await waitForAgentQueueToDrain(harness.controller);
+    assert.equal(
+        harness.controller.getAgentRuns().filter((run) => run.triggerEntryId === "thread-1").length,
+        2,
+    );
+});
+
 test("comment agent controller shows optimistic success for a peer provider", async () => {
     let releaseFinalEdit: () => void = () => undefined;
     let markFinalEditStarted: () => void = () => undefined;
@@ -2789,6 +2886,7 @@ test("comment agent controller keeps optimistic success through persisted view r
     const refreshSnapshots: Array<{
         status: string | null;
         outputEntryId: string | null;
+        locallyOwnedRunIds: string[];
     }> = [];
     const harness = createHarness({
         runtimeReplyText: "Stable reply",
@@ -2797,6 +2895,7 @@ test("comment agent controller keeps optimistic success through persisted view r
             refreshSnapshots.push({
                 status: stream?.status ?? null,
                 outputEntryId: stream?.outputEntryId ?? null,
+                locallyOwnedRunIds: controller.getLocallyOwnedRunIds(),
             });
         },
     });
@@ -2816,6 +2915,7 @@ test("comment agent controller keeps optimistic success through persisted view r
     assert.deepEqual(refreshSnapshots.at(-1), {
         status: "succeeded",
         outputEntryId: "generated-2",
+        locallyOwnedRunIds: ["generated-1"],
     });
     assert.equal(harness.controller.getActiveAgentStreamForThread("thread-1"), null);
 });

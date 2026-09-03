@@ -1239,7 +1239,10 @@ function renderThreadFooterActions(
                 return;
             }
             retryButton.disabled = true;
-            if (!(await host.saveVisibleDraftIfPresent())) {
+            if (
+                regenerateAction.kind === "script-run"
+                && !(await host.saveVisibleDraftIfPresent())
+            ) {
                 retryButton.disabled = options.disableRetryAction === true;
                 return;
             }

@@ -228,3 +228,102 @@ test("AgentRunStore snapshots add input and leaves memory unchanged when persist
     assert.equal(saved.promptText, "@codex");
     assert.deepEqual(store.getRuns().map((run) => run.id), ["saved-run"]);
 });
+
+test("AgentRunStore preserves active local runs across external reloads", async () => {
+    let persistedData: PersistedPluginData = {
+        agentRuns: [createRun({
+            id: "local-run",
+            status: "queued",
+        })],
+    };
+    const store = new AgentRunStore({
+        readPersistedPluginData: () => persistedData,
+        updatePersistedPluginData: async (updater) => {
+            persistedData = updater({ ...persistedData });
+            return { ...persistedData };
+        },
+    });
+    store.load();
+    persistedData = {
+        agentRuns: [createRun({
+            id: "remote-run",
+            status: "succeeded",
+            createdAt: 50,
+        })],
+    };
+
+    await store.reloadPreservingActiveRuns();
+
+    assert.deepEqual(store.getRuns().map((run) => run.id), ["remote-run", "local-run"]);
+    assert.equal(store.getRunById("local-run")?.status, "queued");
+});
+
+test("AgentRunStore preserves a run that finishes while external settings load", async () => {
+    let persistedData: PersistedPluginData = {
+        agentRuns: [createRun({
+            id: "local-run",
+            status: "running",
+        })],
+    };
+    const store = new AgentRunStore({
+        readPersistedPluginData: () => persistedData,
+        updatePersistedPluginData: async (updater) => {
+            persistedData = updater({ ...persistedData });
+            return { ...persistedData };
+        },
+    });
+    store.load();
+    const locallyActiveRunIds = store.getActiveRunIds();
+    await store.updateRun("local-run", (run) => ({
+        ...run,
+        status: "succeeded",
+        endedAt: 200,
+    }));
+    persistedData = {
+        agentRuns: [createRun({
+            id: "remote-run",
+            status: "succeeded",
+            createdAt: 50,
+        })],
+    };
+
+    await store.reloadPreservingActiveRuns(locallyActiveRunIds);
+
+    assert.deepEqual(store.getRuns().map((run) => run.id), ["remote-run", "local-run"]);
+    assert.equal(store.getRunById("local-run")?.status, "succeeded");
+});
+
+test("AgentRunStore preserves a new run completed during external settings load", async () => {
+    const existingRun = createRun({
+        id: "existing-run",
+        status: "succeeded",
+        createdAt: 50,
+    });
+    let persistedData: PersistedPluginData = {
+        agentRuns: [existingRun],
+    };
+    const store = new AgentRunStore({
+        readPersistedPluginData: () => persistedData,
+        updatePersistedPluginData: async (updater) => {
+            persistedData = updater({ ...persistedData });
+            return { ...persistedData };
+        },
+    });
+    store.load();
+    const runIdsBeforeLoad = store.getRuns().map((run) => run.id);
+    await store.addRun(createRun({
+        id: "new-completed-run",
+        status: "succeeded",
+        createdAt: 100,
+    }));
+    persistedData = {
+        agentRuns: [existingRun],
+    };
+
+    await store.reloadPreservingActiveRuns([], runIdsBeforeLoad);
+
+    assert.deepEqual(
+        store.getRuns().map((run) => run.id),
+        ["existing-run", "new-completed-run"],
+    );
+});

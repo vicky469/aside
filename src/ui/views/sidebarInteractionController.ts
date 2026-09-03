@@ -66,6 +66,13 @@ function isHtmlFile(file: TFile): boolean {
     return extension === "html" || extension === "htm";
 }
 
+export function shouldRevealPersistedComment(
+    activeDraft: Pick<DraftComment, "id"> | null,
+    targetCommentId: string,
+): boolean {
+    return !activeDraft || activeDraft.id === targetCommentId;
+}
+
 export interface SidebarInteractionHost {
     app: App;
     leaf: WorkspaceLeaf;
@@ -463,9 +470,20 @@ export class SidebarInteractionController {
     }
 
     public async openCommentInEditor(comment: Comment): Promise<void> {
+        if (!this.canNavigateToComment(comment.id)) {
+            return;
+        }
         this.cancelPendingRevealedCommentSelectionClear();
         this.setActiveComment(comment.id);
         await this.host.revealComment(comment);
+    }
+
+    public canNavigateToComment(commentId: string): boolean {
+        const currentFile = this.host.getCurrentFile();
+        const activeDraft = currentFile
+            ? this.host.getDraftForView(currentFile.path)
+            : null;
+        return shouldRevealPersistedComment(activeDraft, commentId);
     }
 
     public clearPendingFocus(): void {
