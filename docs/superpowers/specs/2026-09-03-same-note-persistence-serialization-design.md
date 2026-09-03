@@ -15,19 +15,21 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Serialize canonical comment persistence by note path in `CommentPersistenceController`.
-- [ ] Read the latest `CommentManager` thread state only after a queued persistence operation begins.
-- [ ] Clean completed queue entries without allowing one completion to delete a newer queued tail.
-- [ ] Keep different note paths and all agent runtimes concurrent.
-- [ ] Keep sidecar encoding and the source/path sidecar format unchanged.
+- [x] Serialize canonical comment persistence by note path in `CommentPersistenceController`.
+- [x] Read the latest `CommentManager` thread state at the last synchronous boundary before reconciliation.
+- [x] Clean completed queue entries without allowing one completion to delete a newer queued tail.
+- [x] Carry the persistence transaction and in-memory retargeting across note renames.
+- [x] Keep different note paths and all agent runtimes concurrent.
+- [x] Keep sidecar encoding and the source/path sidecar format unchanged.
 
 ### Verification
 
-- [ ] A deterministic regression test reproduces overlapping same-note saves before the fix.
-- [ ] Two overlapping same-note saves complete without a rename collision and persist the newest thread state.
-- [ ] Different-note saves can enter persistence concurrently.
-- [ ] Existing sidecar, comment persistence, agent controller, and sync tests pass.
-- [ ] Typecheck, lint, complete build, and release artifact inspection pass.
+- [x] A deterministic regression test reproduces overlapping same-note saves before the fix.
+- [x] Two overlapping same-note saves complete without a rename collision and persist the newest thread state.
+- [x] A save queued during note rename waits for storage and in-memory retargeting and retains cumulative replies.
+- [x] Different-note saves can enter persistence concurrently.
+- [x] Existing sidecar, comment persistence, agent controller, and sync tests pass.
+- [x] Typecheck, lint, complete build, and release artifact inspection pass.
 - [ ] The verified build is installed in `lean-startup`, reloaded, and its three shipped assets match byte-for-byte.
 
 ## Confirmed Problem
