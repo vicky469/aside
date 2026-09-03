@@ -37,7 +37,10 @@ import {
     SourceIdentityStore,
     type SourceIdentityRecord,
 } from "../sync/sourceIdentityStore";
-import { retargetCommentThreads } from "../domain/comments/commentThreadRetarget";
+import {
+    retargetCommentThreads,
+    type CommentThreadRetargetOptions,
+} from "../domain/comments/commentThreadRetarget";
 
 type PersistOptions = {
     immediateAggregateRefresh?: boolean;
@@ -652,19 +655,27 @@ export class CommentPersistenceController {
         };
     }
 
-    private async retargetThreads(threads: CommentThread[], filePath: string): Promise<CommentThread[]> {
+    private async retargetThreads(
+        threads: CommentThread[],
+        filePath: string,
+        options?: CommentThreadRetargetOptions,
+    ): Promise<CommentThread[]> {
         if (!threads.length) {
             return [];
         }
 
-        const pageLabel = getPageCommentLabel(filePath);
-        return retargetCommentThreads(threads, filePath, {
+        const retargetOptions = options ?? {
             selectionCapable: isMarkdownCommentablePath(filePath, this.host.getAllCommentsNotePath()),
-            pageLabelHash: await this.host.hashText(pageLabel),
-        });
+            pageLabelHash: await this.host.hashText(getPageCommentLabel(filePath)),
+        };
+        return retargetCommentThreads(threads, filePath, retargetOptions);
     }
 
-    private async renameStoredCommentsNow(previousFilePath: string, nextFilePath: string): Promise<void> {
+    private async renameStoredCommentsNow(
+        previousFilePath: string,
+        nextFilePath: string,
+        retargetOptions: CommentThreadRetargetOptions,
+    ): Promise<void> {
         await this.sourceIdentityStore.refreshFromLatestPersistedData();
         const existingSourceRecord = this.sourceIdentityStore.getRecordByPath(previousFilePath)
             ?? this.sourceIdentityStore.getRecordByPath(nextFilePath);
@@ -675,7 +686,7 @@ export class CommentPersistenceController {
         const sourceRecord = await this.sourceIdentityStore.recordRename(previousFilePath, nextFilePath);
         await this.sidecarStorage.rename(previousFilePath, nextFilePath);
         if (previousThreads && previousThreads.length > 0) {
-            const retargetedThreads = await this.retargetThreads(previousThreads, nextFilePath);
+            const retargetedThreads = await this.retargetThreads(previousThreads, nextFilePath, retargetOptions);
             await this.writeSourceAndPathSidecars(sourceRecord.sourceId, nextFilePath, retargetedThreads);
             await this.syncEventStore.appendLocalEvents(previousFilePath, [{
                 op: "renameSource",
@@ -696,11 +707,16 @@ export class CommentPersistenceController {
                 threads: retargetedThreads,
             }]);
         }
+        this.host.getCommentManager().renameFile(previousFilePath, nextFilePath, retargetOptions);
     }
 
-    public async renameStoredComments(previousFilePath: string, nextFilePath: string): Promise<void> {
+    public async renameStoredComments(
+        previousFilePath: string,
+        nextFilePath: string,
+        retargetOptions: CommentThreadRetargetOptions,
+    ): Promise<void> {
         await this.enqueueCommentPersistence([previousFilePath, nextFilePath], async () => {
-            await this.renameStoredCommentsNow(previousFilePath, nextFilePath);
+            await this.renameStoredCommentsNow(previousFilePath, nextFilePath, retargetOptions);
         });
     }
 
@@ -1902,10 +1918,9 @@ export class CommentPersistenceController {
         filePath: string,
         options: PersistOptions = {},
     ): Promise<string> {
-        const threads = this.host.getCommentManager().getThreadsForFile(filePath, { includeDeleted: true });
         void this.host.log?.("info", "persistence", "storage.note.write.begin", {
             filePath,
-            threadCount: threads.length,
+            threadCount: this.host.getCommentManager().getThreadsForFile(filePath, { includeDeleted: true }).length,
         });
         const currentContent = await this.host.getCurrentNoteContent(file);
         const sourceRecord = await this.ensureSourceIdentityForFilePath(filePath, currentContent);
@@ -1913,6 +1928,7 @@ export class CommentPersistenceController {
             ?? await this.sidecarStorage.read(filePath)
             ?? [];
         const parsedCurrentContent = await this.parseAndNormalizeFileComments(filePath, currentContent);
+        const threads = this.host.getCommentManager().getThreadsForFile(filePath, { includeDeleted: true });
         const synced = await this.syncThreadsIntoVisibleNoteContent(file, parsedCurrentContent.mainContent, threads, filePath);
         const eventInputs = buildSideNoteSyncEventInputsForThreadDiff(
             await this.normalizeThreadsForFile(filePath, previousThreads),

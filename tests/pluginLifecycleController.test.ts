@@ -92,8 +92,9 @@ function createHarness(options: {
             renamedScriptRuns.push({ previousFilePath, nextFilePath });
             return true;
         },
-        renameStoredComments: async (previousFilePath, nextFilePath) => {
+        renameStoredComments: async (previousFilePath, nextFilePath, retargetOptions) => {
             renamedStoredComments.push({ previousFilePath, nextFilePath });
+            commentManager.renameFile(previousFilePath, nextFilePath, retargetOptions);
         },
         deleteStoredComments: async (filePath) => {
             deletedStoredComments.push(filePath);

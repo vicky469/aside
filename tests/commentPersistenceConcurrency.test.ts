@@ -328,21 +328,12 @@ test("comment persistence carries an in-flight save across a note rename", async
 
     let firstSave: Promise<void> | null = null;
     let renameSave: Promise<void> | null = null;
+    let nextPathSave: Promise<void> | null = null;
     try {
         firstSave = harness.controller.persistCommentsForFile(file);
         await firstReadEntered.promise;
         (file as TFile & { path: string }).path = nextPath;
-        renameSave = harness.controller.renameStoredComments(previousPath, nextPath);
-
-        assert.equal(
-            await settlesWithinMicrotasks(renameSave),
-            false,
-            "rename did not wait for the old-path persistence tail",
-        );
-
-        releaseFirstRead.resolve();
-        await Promise.all([firstSave, renameSave]);
-        harness.commentManager.renameFile(previousPath, nextPath, {
+        renameSave = harness.controller.renameStoredComments(previousPath, nextPath, {
             selectionCapable: true,
             pageLabelHash: "hash-page",
         });
@@ -351,8 +342,16 @@ test("comment persistence carries an in-flight save across a note rename", async
             body: "reply two",
             timestamp: 1710000002000,
         });
+        nextPathSave = harness.controller.persistCommentsForFile(file);
 
-        await harness.controller.persistCommentsForFile(file);
+        assert.equal(
+            await settlesWithinMicrotasks(renameSave),
+            false,
+            "rename did not wait for the old-path persistence tail",
+        );
+
+        releaseFirstRead.resolve();
+        await Promise.all([firstSave, renameSave, nextPathSave]);
 
         const payload = JSON.parse(await harness.adapter.read(getSidecarStoragePath(nextPath))) as {
             threads: CommentThread[];
@@ -363,7 +362,10 @@ test("comment persistence carries an in-flight save across a note rename", async
         );
     } finally {
         releaseFirstRead.resolve();
-        await Promise.allSettled([firstSave, renameSave].filter((promise): promise is Promise<void> => promise !== null));
+        await Promise.allSettled(
+            [firstSave, renameSave, nextPathSave]
+                .filter((promise): promise is Promise<void> => promise !== null),
+        );
         harness.controller.dispose();
         globalThis.window = originalWindow;
     }

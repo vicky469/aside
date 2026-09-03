@@ -2,6 +2,7 @@ import type { Plugin, TAbstractFile, TFile } from "obsidian";
 import type { CommentManager } from "../commentManager";
 import type { AggregateCommentIndex } from "../index/AggregateCommentIndex";
 import { getPageCommentLabel } from "../core/anchors/commentAnchors";
+import type { CommentThreadRetargetOptions } from "../domain/comments/commentThreadRetarget";
 
 export interface PluginLifecycleHost {
     app: Plugin["app"];
@@ -9,7 +10,11 @@ export interface PluginLifecycleHost {
     getAggregateCommentIndex(): AggregateCommentIndex;
     renameAgentRuns(previousFilePath: string, nextFilePath: string): Promise<boolean>;
     renameScriptRuns(previousFilePath: string, nextFilePath: string): Promise<boolean>;
-    renameStoredComments(previousFilePath: string, nextFilePath: string): Promise<void>;
+    renameStoredComments(
+        previousFilePath: string,
+        nextFilePath: string,
+        retargetOptions: CommentThreadRetargetOptions,
+    ): Promise<void>;
     deleteStoredComments(filePath: string): Promise<void>;
     deleteStoredCommentsInFolder(folderPath: string): Promise<void>;
     renamePublishedPublicArtifactPath(previousFilePath: string, nextFilePath: string): Promise<void>;
@@ -111,12 +116,11 @@ export class PluginLifecycleController {
 
         await this.host.renameAgentRuns(oldPath, file.path);
         await this.host.renameScriptRuns(oldPath, file.path);
-        await this.host.renameStoredComments(oldPath, file.path);
         const retargetOptions = {
             selectionCapable: this.host.isCommentableFile(file),
             pageLabelHash: await this.host.hashText(getPageCommentLabel(file.path)),
         };
-        this.host.getCommentManager().renameFile(oldPath, file.path, retargetOptions);
+        await this.host.renameStoredComments(oldPath, file.path, retargetOptions);
         this.host.clearParsedNoteCache(oldPath);
         this.host.clearParsedNoteCache(file.path);
         this.host.getAggregateCommentIndex().renameFile(oldPath, file.path, retargetOptions);

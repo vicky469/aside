@@ -682,8 +682,8 @@ export default class Aside extends Plugin {
             this.agentRunStore.renameFile(previousFilePath, nextFilePath),
         renameScriptRuns: (previousFilePath, nextFilePath) =>
             this.scriptRunStore.renameFile(previousFilePath, nextFilePath),
-        renameStoredComments: (previousFilePath, nextFilePath) =>
-            this.commentPersistenceController.renameStoredComments(previousFilePath, nextFilePath),
+        renameStoredComments: (previousFilePath, nextFilePath, retargetOptions) =>
+            this.commentPersistenceController.renameStoredComments(previousFilePath, nextFilePath, retargetOptions),
         deleteStoredComments: (filePath) => this.commentPersistenceController.deleteStoredComments(filePath),
         deleteStoredCommentsInFolder: (folderPath) =>
             this.commentPersistenceController.deleteStoredCommentsInFolder(folderPath),

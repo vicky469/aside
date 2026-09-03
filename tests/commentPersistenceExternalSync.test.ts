@@ -624,7 +624,10 @@ test("comment persistence retargets a renamed Markdown sidecar into reloadable D
         log: async () => {},
     });
 
-    await controller.renameStoredComments(originalFile.path, renamedFile.path);
+    await controller.renameStoredComments(originalFile.path, renamedFile.path, {
+        selectionCapable: false,
+        pageLabelHash: "hash-final proposal",
+    });
     const comments = await controller.loadCommentsForFile(renamedFile);
     const persistedPayload = JSON.parse(
         adapter.files.get(getSidecarStoragePath(renamedFile.path).toLowerCase())
@@ -636,7 +639,7 @@ test("comment persistence retargets a renamed Markdown sidecar into reloadable D
     assert.equal(currentContentReadCount, 0);
     assert.equal(storedContentReadCount, 0);
     assert.equal(parserCount, 0);
-    assert.equal(hashedTexts.filter((text) => text === "Final Proposal").length, 1);
+    assert.equal(hashedTexts.filter((text) => text === "Final Proposal").length, 0);
     assert.equal(comments.length, 1);
     assert.ok(renamedThread);
     assert.deepEqual({
