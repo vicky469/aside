@@ -3,10 +3,12 @@ import test from "node:test";
 import type { DraftComment } from "../src/domain/drafts";
 import {
     buildDraftCommentPresentation,
-    getDraftPendingAgentStart,
     isDraftSaveActionDisabled,
+    renderDraftCommentCard,
     shouldAutoOpenDraftMentionSuggest,
+    type SidebarDraftCommentHost,
 } from "../src/ui/views/sidebarDraftComment";
+import type { SidebarDraftEditorController } from "../src/ui/views/sidebarDraftEditor";
 
 function createDraft(overrides: Partial<DraftComment> = {}): DraftComment {
     return {
@@ -23,6 +25,94 @@ function createDraft(overrides: Partial<DraftComment> = {}): DraftComment {
         anchorKind: overrides.anchorKind ?? "selection",
         orphaned: overrides.orphaned ?? false,
         mode: overrides.mode ?? "new",
+    };
+}
+
+class FakeDraftElement {
+    public readonly children: FakeDraftElement[] = [];
+    public textContent = "";
+    public parentElement: FakeDraftElement | null = null;
+    private readonly attributes = new Map<string, string>();
+
+    constructor(
+        public readonly tagName: string,
+        public className: string,
+        public readonly ownerDocument: FakeDraftDocument,
+    ) {}
+
+    public createDiv(className = ""): FakeDraftElement {
+        return this.appendChild(new FakeDraftElement("div", className, this.ownerDocument));
+    }
+
+    public createEl(tagName: string, options: { cls?: string; text?: string } = {}): FakeDraftElement {
+        const child = new FakeDraftElement(tagName, options.cls ?? "", this.ownerDocument);
+        child.textContent = options.text ?? "";
+        return this.appendChild(child);
+    }
+
+    public createSpan(options: { cls?: string; text?: string } = {}): FakeDraftElement {
+        return this.createEl("span", options);
+    }
+
+    public appendChild(child: FakeDraftElement): FakeDraftElement {
+        child.parentElement = this;
+        this.children.push(child);
+        return child;
+    }
+
+    public append(...children: FakeDraftElement[]): void {
+        children.forEach((child) => this.appendChild(child));
+    }
+
+    public setAttribute(name: string, value: string): void {
+        this.attributes.set(name, value);
+    }
+
+    public querySelector(selector: string): FakeDraftElement | null {
+        const className = selector.startsWith(".") ? selector.slice(1) : "";
+        for (const child of this.children) {
+            if (className && child.className.split(/\s+/u).includes(className)) {
+                return child;
+            }
+            const nested = child.querySelector(selector);
+            if (nested) {
+                return nested;
+            }
+        }
+        return null;
+    }
+}
+
+type FakeDraftDocument = {
+    win: { createFragment(): FakeDraftElement };
+    createTextNode(text: string): FakeDraftElement;
+};
+
+function createFakeDraftRoot(): FakeDraftElement {
+    const document = {} as FakeDraftDocument;
+    document.win = {
+        createFragment: () => new FakeDraftElement("fragment", "", document),
+    };
+    document.createTextNode = (text) => {
+        const node = new FakeDraftElement("text", "", document);
+        node.textContent = text;
+        return node;
+    };
+    return new FakeDraftElement("div", "", document);
+}
+
+function createDraftRenderHost(): SidebarDraftCommentHost {
+    return {
+        activeCommentId: null,
+        shouldPinFocusedDraftToTop: false,
+        isActionableMention: () => true,
+        isAgentsFeatureAvailable: () => true,
+        isSavingDraft: () => true,
+        updateDraftCommentText: () => {},
+        setIcon: () => {},
+        claimSidebarInteractionOwnership: () => {},
+        saveDraft: () => {},
+        cancelDraft: () => {},
     };
 }
 
@@ -86,22 +176,20 @@ test("buildDraftCommentPresentation leaves saving edit drafts on the editable pa
     assert.equal(presentation.classes.includes("is-saving"), false);
 });
 
-test("saving an agent draft exposes an immediate starting reply", () => {
-    assert.deepEqual(getDraftPendingAgentStart(createDraft({
-        mode: "new",
-        comment: "@codex answer this",
-    }), true, true), {
-        target: "codex",
-        label: "Starting Codex…",
-    });
-    assert.equal(getDraftPendingAgentStart(createDraft({
-        mode: "new",
-        comment: "ordinary note",
-    }), true, true), null);
-    assert.equal(getDraftPendingAgentStart(createDraft({
-        mode: "edit",
-        comment: "@codex revise this",
-    }), true, true), null);
+test("saving an agent prompt card contains no agent activity", () => {
+    const root = createFakeDraftRoot();
+    renderDraftCommentCard(
+        root as unknown as HTMLDivElement,
+        createDraft({ mode: "new", comment: "@codex answer this" }),
+        createDraftRenderHost(),
+        {} as SidebarDraftEditorController,
+    );
+
+    const promptCard = root.querySelector(".aside-comment-draft");
+    assert.ok(promptCard);
+    assert.equal(promptCard.querySelector(".aside-thread-replies"), null);
+    assert.equal(promptCard.querySelector(".aside-agent-stream-item"), null);
+    assert.equal(promptCard.querySelector(".aside-agent-run-status-mark"), null);
 });
 
 test("buildDraftCommentPresentation mentions todo and agent directives in new draft placeholder", () => {

@@ -1,10 +1,5 @@
 import { isOrphanedComment, isPageComment } from "../../core/anchors/commentAnchors";
-import {
-    formatSupportedAgentDirectives,
-    getAgentActorLabel,
-} from "../../core/agents/agentActorRegistry";
-import type { AsideAgentTarget } from "../../core/config/agentTargets";
-import { parseAgentDirectives } from "../../core/text/agentDirectives";
+import { formatSupportedAgentDirectives } from "../../core/agents/agentActorRegistry";
 import { MAX_SIDENOTE_WORDS, countCommentWords, exceedsCommentWordLimit } from "../../core/text/commentWordLimit";
 import { PDF_TO_MARKDOWN_DIRECTIVE } from "../../core/text/pdfToMarkdownDirective";
 import { canSaveDraftWithoutComment, type DraftComment } from "../../domain/drafts";
@@ -24,29 +19,6 @@ export interface DraftCommentPresentation {
     saveLabel: string;
     placeholder: string;
     isPending: boolean;
-}
-
-export interface DraftPendingAgentStart {
-    target: AsideAgentTarget;
-    label: string;
-}
-
-export function getDraftPendingAgentStart(
-    comment: Pick<DraftComment, "comment" | "mode">,
-    agentsFeatureAvailable: boolean,
-    isSaving: boolean,
-): DraftPendingAgentStart | null {
-    if (!agentsFeatureAvailable || !isSaving || comment.mode === "edit") {
-        return null;
-    }
-    const resolution = parseAgentDirectives(comment.comment);
-    if (!resolution.target || resolution.hasConflict || resolution.unsupportedTargets.length > 0) {
-        return null;
-    }
-    return {
-        target: resolution.target,
-        label: `Starting ${getAgentActorLabel(resolution.target)}…`,
-    };
 }
 
 export interface SidebarDraftCommentHost {
@@ -171,31 +143,6 @@ export function renderDraftCommentCard(
             comment.comment,
             host.isActionableMention,
         ));
-        const pendingAgentStart = getDraftPendingAgentStart(
-            comment,
-            host.isAgentsFeatureAvailable(),
-            true,
-        );
-        if (pendingAgentStart) {
-            const repliesEl = commentEl.createDiv("aside-thread-replies aside-draft-agent-replies");
-            const replyEl = repliesEl.createDiv(
-                "aside-comment-item aside-thread-item aside-thread-entry-item aside-agent-stream-item is-empty",
-            );
-            const footerEl = replyEl.createDiv("aside-thread-footer");
-            const footerMetaEl = footerEl.createDiv("aside-thread-footer-meta");
-            const statusEl = footerMetaEl.createSpan({
-                cls: "aside-agent-run-status is-queued",
-            });
-            statusEl.setAttribute("aria-label", `${pendingAgentStart.label} queued`);
-            const markEl = statusEl.createSpan({
-                cls: "aside-agent-run-status-mark is-spinner",
-            });
-            markEl.setAttribute("aria-hidden", "true");
-            statusEl.createSpan({
-                cls: "aside-agent-run-status-hint",
-                text: pendingAgentStart.label,
-            });
-        }
         return;
     }
 

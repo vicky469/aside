@@ -1807,14 +1807,6 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
     cursor: default;
 }
 
-.aside-draft-agent-replies {
-    cursor: default;
-}
-
-.aside-comment-draft.is-append > .aside-draft-agent-replies {
-    margin-left: 0;
-}
-
 .aside-settings-tab .setting-item.setting-item-heading {
     padding: 0;
 }
