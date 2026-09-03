@@ -74,7 +74,7 @@ test("preflight failure reply redacts common credentials, credential urls, and h
             "Authorization: Bearer ghp_abcdefghijklmnopqrstuvwxyz1234567890",
             "CURSOR_API_KEY=cursor_secret_abcdefghijklmnopqrstuvwxyz",
             "https://api.example.com/run?token=query-secret&key=value",
-            "/Users/alice/.cursor/config.json",
+            ["", "Users", "alice", ".cursor", "config.json"].join("/"),
         ].join(" "),
     );
 

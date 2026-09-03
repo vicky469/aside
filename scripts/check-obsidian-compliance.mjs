@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 
@@ -27,6 +28,30 @@ const PUBLIC_SOURCE_FILES = [
     "esbuild.config.mjs",
     "eslint.config.mjs",
 ];
+const PRIVACY_SCAN_DIRECTORIES = [
+    ".github",
+    "docs",
+    "scripts",
+    "skills",
+    "src",
+    "workers",
+];
+const REPOSITORY_TEXT_EXTENSIONS = new Set([
+    ".css",
+    ".html",
+    ".js",
+    ".json",
+    ".jsx",
+    ".md",
+    ".mjs",
+    ".sh",
+    ".ts",
+    ".tsx",
+    ".txt",
+    ".yaml",
+    ".yml",
+]);
+const PLACEHOLDER_HOME_NAMES = new Set(["example", "name", "sample", "test", "tester", "user", "username"]);
 const SUPPORTED_NODE_VERSIONS = new Set([22, 24]);
 const VERSION_PATTERN = /^\d+\.\d+\.\d+$/u;
 const REQUEST_LITERAL_HOST_PATTERN = /(?:fetch|request|WebSocket)\s*\(\s*["'`]https?:\/\/([a-z0-9.-]+)(?=[/:)'"`\s]|$)/giu;
@@ -70,6 +95,73 @@ function listPublicSourceFiles(rootDir) {
         }
     }
     return files.sort();
+}
+
+function listRepositoryTextFiles(directory) {
+    if (!existsSync(directory)) {
+        return [];
+    }
+
+    const results = [];
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+        const entryPath = path.join(directory, entry.name);
+        if (entry.isDirectory()) {
+            results.push(...listRepositoryTextFiles(entryPath));
+        } else if (REPOSITORY_TEXT_EXTENSIONS.has(path.extname(entry.name))) {
+            results.push(entryPath);
+        }
+    }
+    return results.sort();
+}
+
+function listPrivacyScanFiles(rootDir) {
+    try {
+        const trackedFiles = execFileSync("git", ["ls-files", "-z"], {
+            cwd: rootDir,
+            encoding: "utf8",
+            stdio: ["ignore", "pipe", "ignore"],
+        });
+        return trackedFiles
+            .split("\0")
+            .filter(Boolean)
+            .filter((relativePath) => REPOSITORY_TEXT_EXTENSIONS.has(path.extname(relativePath)))
+            .map((relativePath) => path.join(rootDir, relativePath))
+            .filter((filePath) => existsSync(filePath) && statSync(filePath).isFile())
+            .sort();
+    } catch {
+        return PRIVACY_SCAN_DIRECTORIES.flatMap((directory) =>
+            listRepositoryTextFiles(path.join(rootDir, directory)));
+    }
+}
+
+function containsPersonalHomeDirectoryPath(contents) {
+    const unixHomeRoots = ["Users", "home"].join("|");
+    const unixPattern = new RegExp(`/(?:${unixHomeRoots})/([^/\\s"'\x60<>]+)(?=/)`, "gu");
+    for (const match of contents.matchAll(unixPattern)) {
+        if (!PLACEHOLDER_HOME_NAMES.has(match[1].toLowerCase())) {
+            return true;
+        }
+    }
+
+    const windowsPattern = new RegExp(`[A-Za-z]:\\\\${"Users"}\\\\([^\\\\\\s"'\\x60<>]+)(?=\\\\)`, "gu");
+    for (const match of contents.matchAll(windowsPattern)) {
+        if (!PLACEHOLDER_HOME_NAMES.has(match[1].toLowerCase())) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function inspectRepositoryPrivacy(rootDir) {
+    const issues = [];
+    for (const filePath of listPrivacyScanFiles(rootDir)) {
+        const contents = readFileSync(filePath, "utf8");
+        if (containsPersonalHomeDirectoryPath(contents)) {
+            const relativePath = path.relative(rootDir, filePath);
+            issues.push(`${relativePath} contains a personal home-directory path; use a placeholder`);
+        }
+    }
+    return issues;
 }
 
 function readDeclaredPluginHosts(readme) {
@@ -157,6 +249,7 @@ export function checkObsidianCompliance(rootDir = process.cwd()) {
         }
     }
     issues.push(...inspectPublicSourceArchive(rootDir));
+    issues.push(...inspectRepositoryPrivacy(rootDir));
 
     const declaredHosts = readDeclaredPluginHosts(readme);
     for (const filePath of listSourceFiles(path.join(rootDir, "src"))) {

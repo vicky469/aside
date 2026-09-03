@@ -165,3 +165,26 @@ test("compliance checker rejects dev fetch in public source archive", () => {
         ]);
     });
 });
+
+test("compliance checker rejects personal home-directory paths in code and docs", () => {
+    const macPath = ["", "Users", "alice", "Obsidian", "private-vault"].join("/");
+    const linuxPath = ["", "home", "bob", "notes", "private-vault"].join("/");
+    withFixture({
+        "src/local-path.ts": `export const vault = '${macPath}';\n`,
+        "docs/local-runbook.md": `Run with \`--vault ${linuxPath}\`.\n`,
+    }, (rootDir) => {
+        assert.deepEqual(checkObsidianCompliance(rootDir), [
+            "docs/local-runbook.md contains a personal home-directory path; use a placeholder",
+            "src/local-path.ts contains a personal home-directory path; use a placeholder",
+        ]);
+    });
+});
+
+test("compliance checker accepts explicit path placeholders", () => {
+    withFixture({
+        "src/local-path.ts": "export const vault = '/Users/tester/Obsidian/test-vault';\n",
+        "docs/local-runbook.md": "Run with `--vault /path/to/vault`.\n",
+    }, (rootDir) => {
+        assert.deepEqual(checkObsidianCompliance(rootDir), []);
+    });
+});

@@ -21,3 +21,11 @@ test("bundled Aside skill retains its essential write-safety contract", () => {
     assert.match(skill, /Do not claim.*unless/i);
     assert.match(skill, /<=250 words/);
 });
+
+test("bundled Aside skill treats written artifacts as public", () => {
+    assert.match(skill, /tracked content and commit history as public/i);
+    assert.match(skill, /code, documentation, plans, tests, examples, logs, and release notes/i);
+    assert.match(skill, /\/path\/to\/vault/u);
+    assert.match(skill, /Never print or persist secrets/i);
+    assert.match(skill, /scan the diff and staged content/i);
+});
