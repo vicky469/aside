@@ -834,22 +834,31 @@ export class CommentAgentController {
             : "";
         if (run.outputEntryId) {
             if (partialText) {
-                await this.host.commitThreadEntry(
-                    run.filePath,
-                    run.threadId,
-                    {
-                        id: run.outputEntryId,
-                        body: partialText,
-                        timestamp: this.host.now(),
-                    },
-                    {
-                        insertAfterCommentId: run.triggerEntryId,
-                        immediateAggregateRefresh: false,
-                        skipCommentViewRefresh: true,
-                        refreshEditorDecorations: false,
-                        refreshMarkdownPreviews: false,
-                    },
-                );
+                let persistenceError: unknown = null;
+                try {
+                    const committed = await this.commitRunReply(
+                        run,
+                        run.outputEntryId,
+                        partialText,
+                        this.host.now(),
+                    );
+                    if (!committed) {
+                        persistenceError = new Error("Unable to save the cancelled agent reply.");
+                    }
+                } catch (error) {
+                    persistenceError = error;
+                }
+                if (persistenceError) {
+                    await this.failReplyPersistence({
+                        run,
+                        replyText: partialText,
+                        outputEntryId: run.outputEntryId,
+                        startedAt: run.startedAt ?? run.createdAt,
+                        error: persistenceError,
+                        runError: cancellationMessage,
+                    });
+                    return true;
+                }
             }
         }
 
@@ -1042,25 +1051,20 @@ export class CommentAgentController {
             ?? (existingStream?.partialText.trim().length ? existingStream.partialText : message);
         const failureMetadata = mergeAgentRunMetadata(run, existingStream ?? {});
         let failureReplyPersisted = false;
+        let failureReplyPersistenceError: unknown = null;
         if (run.outputEntryId) {
             try {
-                failureReplyPersisted = await this.host.commitThreadEntry(
-                    run.filePath,
-                    run.threadId,
-                    {
-                        id: run.outputEntryId,
-                        body: failureText,
-                        timestamp: this.host.now(),
-                    },
-                    {
-                        insertAfterCommentId: run.triggerEntryId,
-                        immediateAggregateRefresh: false,
-                        skipCommentViewRefresh: true,
-                        refreshEditorDecorations: false,
-                        refreshMarkdownPreviews: false,
-                    },
+                failureReplyPersisted = await this.commitRunReply(
+                    run,
+                    run.outputEntryId,
+                    failureText,
+                    this.host.now(),
                 );
+                if (!failureReplyPersisted) {
+                    failureReplyPersistenceError = new Error("Unable to save the agent failure reply.");
+                }
             } catch (error) {
+                failureReplyPersistenceError = error;
                 void this.host.log?.("warn", "agents", "agents.reply.failure_commit_failed", {
                     runId,
                     threadId: run.threadId,
@@ -1068,6 +1072,24 @@ export class CommentAgentController {
                     error,
                 });
             }
+        }
+        if (run.outputEntryId && failureReplyPersistenceError) {
+            await this.failReplyPersistence({
+                run,
+                replyText: failureText,
+                outputEntryId: run.outputEntryId,
+                startedAt: run.startedAt ?? run.createdAt,
+                error: failureReplyPersistenceError,
+                runError: message,
+            });
+            void this.host.log?.("warn", "agents", "agents.run.failed", {
+                runId,
+                threadId: run.threadId,
+                requestedAgent: run.requestedAgent,
+                runtime: run.runtime,
+                error: message,
+            });
+            return;
         }
         const failedRun = await this.store.updateRun(runId, (currentRun) => ({
             ...currentRun,
@@ -1226,6 +1248,62 @@ export class CommentAgentController {
         });
     }
 
+    private commitRunReply(
+        run: AgentRunRecord,
+        outputEntryId: string,
+        body: string,
+        timestamp: number,
+    ): Promise<boolean> {
+        return this.host.commitThreadEntry(
+            run.filePath,
+            run.threadId,
+            {
+                id: outputEntryId,
+                body,
+                timestamp,
+            },
+            {
+                insertAfterCommentId: run.triggerEntryId,
+                immediateAggregateRefresh: false,
+                skipCommentViewRefresh: true,
+                refreshEditorDecorations: false,
+                refreshMarkdownPreviews: false,
+            },
+        );
+    }
+
+    private async finalizeSucceededRun(options: {
+        run: AgentRunRecord;
+        runtime: AgentRunRuntime;
+        replyMetadata?: AgentRunMetadata;
+        outputEntryId: string;
+        endedAt: number;
+    }): Promise<AgentRunRecord | null> {
+        try {
+            const completedRun = await this.store.updateRun(options.run.id, (run) => ({
+                ...run,
+                ...mergeAgentRunMetadata(run, options.replyMetadata ?? {}),
+                runtime: options.runtime,
+                status: "succeeded",
+                endedAt: options.endedAt,
+                outputEntryId: options.outputEntryId,
+                error: undefined,
+            }));
+            if (!completedRun) {
+                throw new Error("Unable to finalize the agent run.");
+            }
+            return completedRun;
+        } catch (error) {
+            void this.host.log?.("warn", "agents", "agents.run.finalize_failed", {
+                runId: options.run.id,
+                threadId: options.run.threadId,
+                outputEntryId: options.outputEntryId,
+                error,
+            });
+            return null;
+        }
+    }
+
     private async completeRunWithReply(options: {
         run: AgentRunRecord;
         runtime: AgentRunRuntime;
@@ -1260,21 +1338,11 @@ export class CommentAgentController {
             outputEntryId: options.outputEntryId,
         }));
         try {
-            const committed = await this.host.commitThreadEntry(
-                options.run.filePath,
-                options.run.threadId,
-                {
-                    id: options.outputEntryId,
-                    body: replyText,
-                    timestamp,
-                },
-                {
-                    insertAfterCommentId: options.run.triggerEntryId,
-                    immediateAggregateRefresh: false,
-                    skipCommentViewRefresh: true,
-                    refreshEditorDecorations: false,
-                    refreshMarkdownPreviews: false,
-                },
+            const committed = await this.commitRunReply(
+                options.run,
+                options.outputEntryId,
+                replyText,
+                timestamp,
             );
             if (this.isRunCancellationRequested(options.run.id)) {
                 return;
@@ -1293,28 +1361,14 @@ export class CommentAgentController {
             return;
         }
 
-        let completedRun: AgentRunRecord | null = null;
-        try {
-            completedRun = await this.store.updateRun(options.run.id, (run) => ({
-                ...run,
-                ...mergeAgentRunMetadata(run, options.replyMetadata ?? {}),
-                runtime: options.runtime,
-                status: "succeeded",
-                endedAt: timestamp,
-                outputEntryId: options.outputEntryId,
-                error: undefined,
-            }));
-            if (!completedRun) {
-                throw new Error("Unable to finalize the agent run.");
-            }
-        } catch (error) {
-            void this.host.log?.("warn", "agents", "agents.run.finalize_failed", {
-                runId: options.run.id,
-                threadId: options.run.threadId,
-                outputEntryId: options.outputEntryId,
-                error,
-            });
-        }
+        const finalizeRun = () => this.finalizeSucceededRun({
+            run: options.run,
+            runtime: options.runtime,
+            replyMetadata: options.replyMetadata,
+            outputEntryId: options.outputEntryId,
+            endedAt: timestamp,
+        });
+        const completedRun = await finalizeRun();
 
         try {
             await this.deleteDuplicateCompletedAgentReplies({
@@ -1341,7 +1395,11 @@ export class CommentAgentController {
             this.retainedRunStreamIds.delete(options.run.id);
             this.clearRunStream(options.run.id, options.run.threadId);
         } else {
-            this.scheduleReplyHandoffRetry(options.run.id, options.run.threadId);
+            this.scheduleReplyHandoffRetry(
+                options.run.id,
+                options.run.threadId,
+                completedRun ? undefined : async () => !!await finalizeRun(),
+            );
         }
         void this.host.log?.("info", "agents", "agents.reply.appended", {
             runId: options.run.id,
@@ -1364,6 +1422,7 @@ export class CommentAgentController {
         outputEntryId: string;
         startedAt: number;
         error: unknown;
+        runError?: string;
     }): Promise<void> {
         const message = summarizeError(options.error);
         const existingStream = this.runStreams.get(options.run.id);
@@ -1388,7 +1447,7 @@ export class CommentAgentController {
                 ...mergeAgentRunMetadata(run, existingStream ?? {}),
                 status: "failed",
                 endedAt: this.host.now(),
-                error: message,
+                error: options.runError ?? message,
             }));
         } catch (storeError) {
             void this.host.log?.("warn", "agents", "agents.run.failure_persist_failed", {
@@ -1923,7 +1982,11 @@ export class CommentAgentController {
         this.runStreamPruneTimers.set(runId, timer);
     }
 
-    private scheduleReplyHandoffRetry(runId: string, threadId: string): void {
+    private scheduleReplyHandoffRetry(
+        runId: string,
+        threadId: string,
+        finalizeRun?: () => Promise<boolean>,
+    ): void {
         this.clearReplyHandoffRetryTimer(runId);
         this.pendingReplyHandoffs.set(runId, threadId);
         const attempt = this.replyHandoffRetryAttempts.get(runId) ?? 0;
@@ -1937,22 +2000,32 @@ export class CommentAgentController {
 
         const timer = timerWindow.setTimeout(() => {
             this.replyHandoffRetryTimers.delete(runId);
-            void this.retryReplyHandoff(runId, threadId);
+            void this.retryReplyHandoff(runId, threadId, finalizeRun);
         }, REPLY_HANDOFF_RETRY_MS * (2 ** attempt));
         this.replyHandoffRetryAttempts.set(runId, attempt + 1);
         this.replyHandoffRetryTimers.set(runId, timer);
     }
 
-    private async retryReplyHandoff(runId: string, threadId: string): Promise<void> {
+    private async retryReplyHandoff(
+        runId: string,
+        threadId: string,
+        finalizeRun?: () => Promise<boolean>,
+    ): Promise<void> {
         if (!this.retainedRunStreamIds.has(runId) || !this.runStreams.has(runId)) {
             return;
         }
-        if (await this.refreshStatusViews()) {
+        if (finalizeRun && !await finalizeRun()) {
+            this.scheduleReplyHandoffRetry(runId, threadId, finalizeRun);
+            return;
+        }
+        if (await this.refreshStatusViews() && this.isReplyHandoffReady(runId)) {
             this.retainedRunStreamIds.delete(runId);
             this.clearRunStream(runId, threadId);
             return;
         }
-        this.scheduleReplyHandoffRetry(runId, threadId);
+        if (this.runStreams.has(runId)) {
+            this.scheduleReplyHandoffRetry(runId, threadId, finalizeRun);
+        }
     }
 
     private completePendingReplyHandoffs(): void {
@@ -1961,9 +2034,23 @@ export class CommentAgentController {
                 this.clearReplyHandoffRetryState(runId);
                 continue;
             }
+            if (!this.isReplyHandoffReady(runId)) {
+                continue;
+            }
             this.retainedRunStreamIds.delete(runId);
             this.clearRunStream(runId, threadId);
         }
+    }
+
+    private isReplyHandoffReady(runId: string): boolean {
+        const run = this.store.getRunById(runId);
+        const stream = this.runStreams.get(runId);
+        if (!run || !stream || run.status !== stream.status) {
+            return false;
+        }
+        return run.status === "succeeded"
+            || run.status === "failed"
+            || run.status === "cancelled";
     }
 
     private clearReplyHandoffRetryTimer(runId: string): void {

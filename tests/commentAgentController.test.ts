@@ -90,7 +90,7 @@ function createHarness(options: {
         newCommentText: string,
         commentManager: CommentManager,
     ) => boolean;
-    failSucceededRunUpdate?: boolean;
+    failSucceededRunUpdateAttempts?: number;
     agentsFeatureAvailable?: boolean;
     registeredScriptPaths?: string[];
 } = {}) {
@@ -115,6 +115,7 @@ function createHarness(options: {
     const vaultScriptRegistry = new VaultScriptRegistry();
     vaultScriptRegistry.seed(options.registeredScriptPaths ?? []);
     let defaultRuntimeSelectionCalls = 0;
+    let failedSucceededRunUpdates = 0;
     let refreshCount = 0;
     let idCounter = 1;
     let now = 100;
@@ -130,10 +131,11 @@ function createHarness(options: {
                 ? persistedData.agentRuns as AgentRunRecord[]
                 : [];
             if (
-                options.failSucceededRunUpdate
+                failedSucceededRunUpdates < (options.failSucceededRunUpdateAttempts ?? 0)
                 && nextRuns.some((run) => run.status === "succeeded")
                 && !previousRuns.some((run) => run.status === "succeeded")
             ) {
+                failedSucceededRunUpdates += 1;
                 throw new Error("run metadata unavailable");
             }
             persistedData = nextData;
@@ -2015,36 +2017,118 @@ test("comment agent controller keeps an unsaved completed reply visible", async 
 });
 
 test("comment agent controller does not relabel a saved reply when run finalization fails", async () => {
+    const previousWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
+    let retryCallback: () => void = () => {
+        throw new Error("Reply finalization retry was not scheduled.");
+    };
+    Object.defineProperty(globalThis, "window", {
+        configurable: true,
+        value: {
+            setTimeout(callback: () => void) {
+                retryCallback = callback;
+                return 1;
+            },
+            clearTimeout() {},
+        },
+    });
     const harness = createHarness({
         runtimeReplyText: "Durable reply",
-        failSucceededRunUpdate: true,
+        failSucceededRunUpdateAttempts: 1,
     });
 
-    await harness.controller.handleSavedUserEntry({
-        threadId: "thread-1",
-        entryId: "thread-1",
-        filePath: "Folder/Note.md",
-        body: "@codex answer this",
-    });
-    for (let attempt = 0; attempt < 40; attempt += 1) {
-        if (harness.logEntries.some((entry) => entry.event === "agents.run.finalize_failed")) {
-            break;
+    try {
+        await harness.controller.handleSavedUserEntry({
+            threadId: "thread-1",
+            entryId: "thread-1",
+            filePath: "Folder/Note.md",
+            body: "@codex answer this",
+        });
+        for (let attempt = 0; attempt < 40; attempt += 1) {
+            if (harness.logEntries.some((entry) => entry.event === "agents.run.finalize_failed")) {
+                break;
+            }
+            await new Promise((resolve) => setTimeout(resolve, 10));
         }
-        await new Promise((resolve) => setTimeout(resolve, 10));
-    }
 
-    assert.equal(harness.commentManager.getCommentById("generated-2")?.comment, "Durable reply");
-    assert.equal(harness.controller.getActiveAgentStreamForThread("thread-1")?.status, "succeeded");
-    assert.equal(harness.controller.getActiveAgentStreamForThread("thread-1")?.statusHintText, undefined);
-    assert.equal(
-        harness.logEntries.some((entry) => entry.event === "agents.reply.persist_failed"),
-        false,
-    );
-    assert.equal(
-        harness.logEntries.some((entry) => entry.event === "agents.run.finalize_failed"),
-        true,
-    );
+        assert.equal(harness.commentManager.getCommentById("generated-2")?.comment, "Durable reply");
+        assert.equal(harness.controller.getActiveAgentStreamForThread("thread-1")?.status, "succeeded");
+        assert.equal(harness.controller.getActiveAgentStreamForThread("thread-1")?.statusHintText, undefined);
+        assert.equal(harness.logEntries.some((entry) => entry.event === "agents.reply.persist_failed"), false);
+        assert.equal(harness.logEntries.some((entry) => entry.event === "agents.run.finalize_failed"), true);
+
+        retryCallback();
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        assert.equal(harness.controller.getLatestAgentRunForThread("thread-1")?.status, "succeeded");
+        assert.equal(harness.controller.getActiveAgentStreamForThread("thread-1"), null);
+    } finally {
+        harness.controller.dispose();
+        if (previousWindow) {
+            Object.defineProperty(globalThis, "window", previousWindow);
+        } else {
+            Reflect.deleteProperty(globalThis, "window");
+        }
+    }
 });
+
+for (const persistenceFailure of ["false", "throw"] as const) {
+    test(`comment agent controller reports ${persistenceFailure} while saving a cancelled partial reply`, async () => {
+        const harness = createHarness({
+            customCommitThreadEntry: async () => {
+                if (persistenceFailure === "throw") {
+                    throw new Error("cancel reply storage unavailable");
+                }
+                return false;
+            },
+            customRunAgentRuntime: async (invocation) => {
+                invocation.onPartialText?.("Partial answer");
+                await new Promise<void>((resolve) => {
+                    invocation.abortSignal?.addEventListener("abort", () => resolve(), { once: true });
+                });
+                throw new Error("Runtime cancelled");
+            },
+        });
+
+        await harness.controller.handleSavedUserEntry({
+            threadId: "thread-1",
+            entryId: "thread-1",
+            filePath: "Folder/Note.md",
+            body: "@codex cancel this",
+        });
+        await new Promise((resolve) => setTimeout(resolve, 30));
+
+        assert.equal(await harness.controller.cancelRun("generated-1"), true);
+        assert.equal(harness.controller.getActiveAgentStreamForThread("thread-1")?.status, "failed");
+        assert.equal(harness.controller.getActiveAgentStreamForThread("thread-1")?.statusHintText, "Couldn’t save reply");
+        assert.equal(harness.controller.getActiveAgentStreamForThread("thread-1")?.partialText, "Partial answer");
+    });
+}
+
+for (const persistenceFailure of ["false", "throw"] as const) {
+    test(`comment agent controller reports ${persistenceFailure} while saving a runtime failure reply`, async () => {
+        const harness = createHarness({
+            runtimeError: new Error("Runtime exploded"),
+            customCommitThreadEntry: async () => {
+                if (persistenceFailure === "throw") {
+                    throw new Error("failure reply storage unavailable");
+                }
+                return false;
+            },
+        });
+
+        await harness.controller.handleSavedUserEntry({
+            threadId: "thread-1",
+            entryId: "thread-1",
+            filePath: "Folder/Note.md",
+            body: "@codex answer this",
+        });
+        await waitForAgentQueueToDrain(harness.controller);
+
+        assert.equal(harness.controller.getActiveAgentStreamForThread("thread-1")?.status, "failed");
+        assert.equal(harness.controller.getActiveAgentStreamForThread("thread-1")?.statusHintText, "Couldn’t save reply");
+        assert.match(harness.controller.getActiveAgentStreamForThread("thread-1")?.partialText ?? "", /Runtime exploded/u);
+        assert.equal(harness.controller.getLatestAgentRunForThread("thread-1")?.error, "Runtime exploded");
+    });
+}
 
 test("comment agent controller rejects cancellation while a completed reply is persisting", async () => {
     let releaseFinalEdit: () => void = () => undefined;
