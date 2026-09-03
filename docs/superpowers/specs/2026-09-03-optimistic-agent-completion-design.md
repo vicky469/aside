@@ -15,30 +15,41 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Publish the valid final reply and `succeeded` presentation to the existing stream immediately when the runtime finishes.
-- [ ] Retain optimistic terminal streams until their canonical reply write and persisted-card handoff succeed.
-- [ ] Stop persisting an empty replacement before a retry; keep the previous durable reply as rollback protection.
-- [ ] Replace the previous retry reply with the final reply in one canonical background mutation.
-- [ ] Keep durable run status non-terminal until the reply write succeeds, while preventing regenerate or cancellation from starting an overlapping replacement.
-- [ ] On reply persistence failure, retain the new reply text and change the same card to `❌ <agent> · Couldn’t save reply`.
-- [ ] Apply the shared completion policy to every supported agent without provider-specific copies.
+- [x] Publish the valid final reply and `succeeded` presentation to the existing stream immediately when the runtime finishes.
+- [x] Retain optimistic terminal streams until their canonical reply write and persisted-card handoff succeed.
+- [x] Stop persisting an empty replacement before a retry; keep the previous durable reply as rollback protection.
+- [x] Replace the previous retry reply with the final reply in one canonical background mutation.
+- [x] Keep durable run status non-terminal until the reply write succeeds, while preventing regenerate or cancellation from starting an overlapping replacement.
+- [x] On reply persistence failure, retain the new reply text and change the same card to `❌ <agent> · Couldn’t save reply`.
+- [x] Apply the shared completion policy to every supported agent without provider-specific copies.
+- [ ] Treat a soft-deleted prior output entry as unavailable when regenerating an agent reply.
+- [ ] Allocate and persist a fresh visible output entry without restoring or overwriting the deleted reply.
 
 ### Verification
 
-- [ ] A blocked-persistence controller test proves `✅ Codex` appears immediately after runtime completion.
-- [ ] A retry test proves no empty reply mutation occurs and only one final replacement is attempted.
-- [ ] A persistence-rejection test proves the same card retains its answer and changes to `❌ Codex · Couldn’t save reply`.
-- [ ] A stream-lifetime test proves the optimistic card cannot expire before persistence and persisted-card handoff.
-- [ ] Card reconciliation coverage proves no duplicate or replacement jump occurs during optimistic completion.
-- [ ] Representative non-Codex coverage proves the policy is provider-neutral.
-- [ ] Focused controller and rendering suites, the complete build, and release artifact inspection pass.
-- [ ] The verified build is installed in `lean-startup` and all three shipped assets match byte-for-byte.
+- [x] A blocked-persistence controller test proves `✅ Codex` appears immediately after runtime completion.
+- [x] A retry test proves no empty reply mutation occurs and only one final replacement is attempted.
+- [x] A persistence-rejection test proves the same card retains its answer and changes to `❌ Codex · Couldn’t save reply`.
+- [x] A stream-lifetime test proves the optimistic card cannot expire before persistence and persisted-card handoff.
+- [x] Card reconciliation coverage proves no duplicate or replacement jump occurs during optimistic completion.
+- [x] Representative non-Codex coverage proves the policy is provider-neutral.
+- [x] Focused controller and rendering suites, the complete build, and release artifact inspection pass.
+- [x] The verified build is installed in `lean-startup` and all three shipped assets match byte-for-byte.
+- [ ] A regression test proves `deleted output → Regenerate → successful persisted handoff` creates one new visible reply.
+- [ ] The complete build and release artifact inspection pass after the regression fix.
+- [ ] The verified fix is installed in `lean-startup` and its shipped assets match byte-for-byte.
 
 ## Confirmed Problem
 
 The live run for `clippings/Omarchy Quattro.md` started at `08:20:36.476`. Its retry-clear write completed at `08:21:10.577`, and its final reply write completed at `08:21:39.246`. The run did not publish success until `08:21:40.033`. The reply text was already visible through streaming, so the grey spinner incorrectly communicated another 63.6 seconds of agent work while storage was finishing.
 
 The immediate-start work removed storage from the runtime launch path, but completion still couples the visible terminal state to durable persistence. A retry also performs two canonical writes: empty the old reply, then write the new reply.
+
+### Deleted-output retry regression
+
+The output entry `7a826548-c3fd-4748-a461-572f68075ee3` was soft-deleted at `2026-09-03T09:03:06.788Z`. Retry run `a1892ea7-219f-47aa-a455-e05770470979` reused that entry and was marked succeeded at `2026-09-03T09:03:34.507Z`. Because the entry retained `deletedAt`, persisted rendering filtered it out when the optimistic stream handed off, making the completed reply disappear.
+
+A retry may reuse a prior output entry only when the entry exists and is not soft-deleted. A deleted output remains deleted. The retry instead receives a fresh output ID, appends one new visible placeholder through the canonical mutation path, and replaces that placeholder with the final answer. This rule is provider-neutral.
 
 ## Chosen Experience
 
@@ -73,6 +84,8 @@ This design does not remove the initial durable placeholder for a brand-new run 
 ### Retry
 
 The controller assigns the previous output entry to the new run but does not edit it to an empty string. The streamed card immediately hides the previous body and presents the new run’s active state. The old stored reply remains rollback protection while the runtime works.
+
+If the previous output is soft-deleted, the controller does not assign it to the retry. The normal new-output path creates a fresh entry after the trigger, while the deleted entry and its deletion timestamp remain unchanged.
 
 When the runtime returns, the controller publishes the new answer and `✅ <agent>` immediately, then performs one canonical edit from the old stored body to the new body. The previous output entry remains excluded from retry prompt context.
 
