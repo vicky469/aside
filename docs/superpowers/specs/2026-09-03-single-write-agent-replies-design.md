@@ -46,4 +46,4 @@ The current lifecycle persists a blank output entry before the runtime finishes,
 - [x] Post-commit bookkeeping failure does not relabel the saved reply as failed.
 - [x] Same-note concurrent completions retain both replies; different notes remain independent.
 - [x] Full tests, lint, typecheck, Obsidian compliance, build, and artifact inspection pass.
-- [ ] The verified build is installed in `lean-startup`, reloaded, and its shipped assets match byte-for-byte.
+- [x] The verified build is installed in `lean-startup`, reloaded, and its shipped assets match byte-for-byte.

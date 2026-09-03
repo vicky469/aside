@@ -73,7 +73,7 @@ Run: `./node_modules/.bin/tsc -p tsconfig.test.json && node --test .test-dist/te
 
 Expected: all focused lifecycle tests pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/agents/commentAgentController.ts src/main.ts tests/commentAgentController.test.ts tests/sidebarPersistedComment.test.ts tests/streamedAgentReplyController.test.ts
@@ -106,7 +106,7 @@ Run: `npm run build`
 
 Expected: all TypeScript and script/style tests, lint, typecheck, Obsidian compliance, bundle, and release artifact inspection pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/agents/commentAgentController.ts tests/commentAgentController.test.ts docs/superpowers/specs/2026-09-03-single-write-agent-replies-design.md docs/superpowers/plans/2026-09-03-single-write-agent-replies.md
@@ -118,16 +118,16 @@ git commit -m "fix(agents): keep saved reply status monotonic"
 **Files:**
 - Modify: `docs/superpowers/specs/2026-09-03-single-write-agent-replies-design.md`
 
-- [ ] **Step 1: Install and reload**
+- [x] **Step 1: Install and reload**
 
 Run: `npm run dev:install-built -- --vault /path/to/vault`
 
 Run: `obsidian plugin:reload id=aside vault=lean-startup`
 
-- [ ] **Step 2: Compare shipped assets**
+- [x] **Step 2: Compare shipped assets**
 
 Compare repository and installed `main.js`, `manifest.json`, and `styles.css` with `cmp -s`; all must match.
 
-- [ ] **Step 3: Mark verified tracking items and commit**
+- [x] **Step 3: Mark verified tracking items and commit**
 
 Update the associated spec only after evidence exists, then commit the checklist update.
