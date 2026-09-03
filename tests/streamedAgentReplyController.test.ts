@@ -261,6 +261,30 @@ test("streamed agent reply controller shows only the latest process line as stat
     );
 });
 
+test("streamed agent reply controller shows starting hint on one grey status line", () => {
+    const controller = new StreamedAgentReplyController("thread-1") as any;
+    const statusEl = new FakeStatusElement();
+
+    controller.syncStatus(statusEl, "Codex", {
+        runId: "run-1",
+        threadId: "thread-1",
+        requestedAgent: "codex",
+        runtime: "direct-cli",
+        status: "queued",
+        statusHintText: "Starting Codex…",
+        partialText: "",
+        startedAt: 100,
+        updatedAt: 100,
+    });
+
+    assert.equal(statusEl.childNodes.length, 2);
+    assert.equal(
+        (statusEl.childNodes[1] as FakeStatusChildElement).textContent,
+        "Starting Codex…",
+    );
+    assert.equal(statusEl.getAttribute("aria-label"), "Codex Starting Codex…. queued");
+});
+
 test("streamed agent reply controller identifies the fallback author", () => {
     const previousSpan = Object.getOwnPropertyDescriptor(globalThis, "HTMLSpanElement");
     const previousDiv = Object.getOwnPropertyDescriptor(globalThis, "HTMLDivElement");
