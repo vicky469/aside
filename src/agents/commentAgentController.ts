@@ -50,7 +50,10 @@ import {
     type AgentRuntimeSelection,
     type DefaultAgentRuntimeSelection,
 } from "./agentRuntimeSelection";
-import { formatKnownAgentFailureReply } from "./agentFailurePolicy";
+import {
+    formatAgentPreflightFailureReply,
+    formatKnownAgentFailureReply,
+} from "./agentFailurePolicy";
 import { isAgentRuntimeCancelledError } from "./agentRuntimeAdapter";
 import {
     buildAgentPromptContext,
@@ -279,11 +282,6 @@ export class CommentAgentController {
             return;
         }
         const runtimeSelection = await this.host.resolveAgentRuntimeSelection(resolvedTarget);
-        if (runtimeSelection.kind === "blocked") {
-            this.host.showNotice(runtimeSelection.notice);
-            return;
-        }
-
         const run = this.buildQueuedRun({
             threadId: event.threadId,
             triggerEntryId: event.entryId,
@@ -293,7 +291,11 @@ export class CommentAgentController {
             modePreference: runtimeSelection.modePreference,
             promptText: event.body,
         });
-        await this.enqueueRun(run);
+        if (runtimeSelection.kind === "blocked") {
+            await this.persistPreflightFailure(run, runtimeSelection.diagnostic);
+        } else {
+            await this.enqueueRun(run);
+        }
         this.logBuiltInAsideSkillSelected(run, event.entryId);
         void this.host.log?.("info", "agents", "agents.directive.detected", {
             threadId: event.threadId,
@@ -1560,6 +1562,42 @@ export class CommentAgentController {
             runtime: run.runtime,
         });
         void this.processQueue();
+    }
+
+    private async persistPreflightFailure(run: AgentRunRecord, diagnostic: string): Promise<boolean> {
+        const failureText = formatAgentPreflightFailureReply(run.requestedAgent, diagnostic);
+        const outputEntryId = run.outputEntryId ?? this.host.createCommentId();
+        await this.store.addRun({
+            ...run,
+            outputEntryId,
+        });
+        const persisted = run.outputEntryId
+            ? await this.host.editComment(outputEntryId, failureText, { skipCommentViewRefresh: true })
+            : await this.host.appendThreadEntry(run.threadId, {
+                id: outputEntryId,
+                body: failureText,
+                timestamp: this.host.now(),
+            }, {
+                insertAfterCommentId: run.triggerEntryId,
+                alwaysInsertAfterTarget: true,
+                skipCommentViewRefresh: true,
+            });
+        const failedRun = await this.store.updateRun(run.id, (currentRun) => ({
+            ...currentRun,
+            status: "failed",
+            endedAt: this.host.now(),
+            error: persisted ? diagnostic : "Unable to append the agent reply to the thread.",
+            ...(!persisted && !run.outputEntryId ? { outputEntryId: undefined } : {}),
+        }));
+        await this.refreshStatusViews();
+        void this.host.log?.("warn", "agents", "agents.run.preflight-failed", {
+            runId: run.id,
+            threadId: run.threadId,
+            requestedAgent: run.requestedAgent,
+            runtime: run.runtime,
+            error: diagnostic,
+        });
+        return !!failedRun && persisted;
     }
 
     private async appendCommandReply(event: SavedUserEntryEvent, body: string): Promise<void> {

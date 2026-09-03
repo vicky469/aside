@@ -13,7 +13,10 @@ import type {
     AgentRuntimeInvocation,
     AgentRuntimeResult,
 } from "../src/agents/agentRuntimeAdapter";
-import { getAgentActorLabel } from "../src/core/agents/agentActorRegistry";
+import {
+    getAgentActorLabel,
+    getSupportedAgentActors,
+} from "../src/core/agents/agentActorRegistry";
 import type { AsideAgentTarget } from "../src/core/config/agentTargets";
 import { VaultScriptRegistry } from "../src/vaultScripts/vaultScriptRegistry";
 
@@ -1158,27 +1161,44 @@ test("comment agent controller persists runtime tool and url metadata", async ()
     }]);
 });
 
-test("comment agent controller blocks a run when runtime selection is unavailable", async () => {
-    const harness = createHarness({
-        runtimeSelection: {
-            kind: "blocked",
-            runtime: "direct-cli",
-            modePreference: "auto",
-            notice: "Built-in @codex requires desktop Obsidian.",
-            diagnostic: "Built-in @codex requires desktop Obsidian.",
-        },
-    });
+for (const actor of getSupportedAgentActors()) {
+    test(`comment agent controller persists ${actor.id} blocked preflight as a failed card`, async () => {
+        const diagnostic = actor.id === "codex"
+            ? "Error: Missing optional dependency @openai/codex-darwin-arm64.\n    at launcher.js:20:3"
+            : "    at launcher.js:20:3";
+        const harness = createHarness({
+            initialComments: [createComment({ comment: `${actor.directive} review this` })],
+            runtimeSelection: {
+                kind: "blocked",
+                runtime: "direct-cli",
+                modePreference: "auto",
+                notice: `${actor.label} is unavailable.`,
+                diagnostic,
+            },
+        });
 
-    await harness.controller.handleSavedUserEntry({
-        threadId: "thread-1",
-        entryId: "thread-1",
-        filePath: "Folder/Note.md",
-        body: "@codex review this",
-    });
+        await harness.controller.handleSavedUserEntry({
+            threadId: "thread-1",
+            entryId: "thread-1",
+            filePath: "Folder/Note.md",
+            body: `${actor.directive} review this`,
+        });
 
-    assert.deepEqual(harness.notices, ["Built-in @codex requires desktop Obsidian."]);
-    assert.equal(harness.controller.getLatestAgentRunForThread("thread-1"), null);
-});
+        const run = harness.controller.getLatestAgentRunForThread("thread-1");
+        assert.equal(run?.requestedAgent, actor.id);
+        assert.equal(run?.status, "failed");
+        assert.equal(run?.error, diagnostic);
+        assert.equal(run?.outputEntryId, "generated-2");
+        assert.equal(
+            harness.commentManager.getCommentById("generated-2")?.comment,
+            actor.id === "codex"
+                ? "Missing optional dependency @openai/codex-darwin-arm64."
+                : `${actor.label} couldn’t complete this request. Try another agent.`,
+        );
+        assert.deepEqual(harness.runtimeCalls, []);
+        assert.deepEqual(harness.notices, []);
+    });
+}
 
 test("comment agent controller runs local jobs in parallel across different threads", async () => {
     const runtimeResolvers: Array<() => void> = [];
