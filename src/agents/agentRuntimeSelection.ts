@@ -31,8 +31,6 @@ export type DefaultAgentRuntimeSelection =
     | {
         kind: "resolved";
         selectedAgent: AsideAgentTarget;
-        preferredAgent: AsideAgentTarget;
-        usedFallback: boolean;
         runtime: AgentRunRuntime;
         modePreference: AgentRuntimeModePreference;
     }

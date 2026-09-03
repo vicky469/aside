@@ -76,6 +76,13 @@ test("default agent settings render a labeled native radio group", () => {
     assert.doesNotMatch(settingSource, /agentSetting\.addDropdown/);
 });
 
+test("default agent settings omit fallback substitution UI", () => {
+    assert.doesNotMatch(settingSource, /formatDefaultAgentFallback/);
+    assert.doesNotMatch(settingSource, /getAgentSettingsDescription/);
+    assert.doesNotMatch(settingSource, /aside-default-agent-fallback/);
+    assert.doesNotMatch(styles, /\.aside-default-agent-fallback/);
+});
+
 test("default agent label exposes a Lucide info icon for hover help", () => {
     assert.match(styles, /\.aside-settings-tab \.aside-setting-info-icon/);
     assert.match(styles, /--icon-size:/);

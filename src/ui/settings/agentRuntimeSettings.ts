@@ -1,8 +1,5 @@
 import type { AgentRuntimeDiagnostics } from "../../agents/agentRuntimeAdapter";
-import {
-    getAgentActorLabel,
-    getSupportedAgentActors,
-} from "../../core/agents/agentActorRegistry";
+import { getSupportedAgentActors } from "../../core/agents/agentActorRegistry";
 import type { AsideAgentTarget } from "../../core/config/agentTargets";
 
 export type DefaultAgentOptionStatus = "checking" | "available" | "unavailable";
@@ -61,13 +58,4 @@ export function resolveDefaultAgentRadioSelection(
     target: AsideAgentTarget,
 ): AsideAgentTarget | null {
     return options.find((option) => option.target === target && !option.disabled)?.target ?? null;
-}
-
-export function formatDefaultAgentFallback(
-    preferredAgent: AsideAgentTarget,
-    selectedAgent: AsideAgentTarget,
-): string {
-    return preferredAgent === selectedAgent
-        ? ""
-        : `Using ${getAgentActorLabel(selectedAgent)} while ${getAgentActorLabel(preferredAgent)} is unavailable.`;
 }

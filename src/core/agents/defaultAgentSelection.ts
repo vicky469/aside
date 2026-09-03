@@ -1,15 +1,9 @@
 import type { AgentRuntimeDiagnostics } from "../../agents/agentRuntimeAdapter";
 import type { AsideAgentTarget } from "../config/agentTargets";
-import { getSupportedAgentActors } from "./agentActorRegistry";
 
 export type DefaultAgentSelection =
     | {
         kind: "preferred";
-        preferredAgent: AsideAgentTarget;
-        selectedAgent: AsideAgentTarget;
-    }
-    | {
-        kind: "fallback";
         preferredAgent: AsideAgentTarget;
         selectedAgent: AsideAgentTarget;
     }
@@ -22,10 +16,7 @@ export function resolveDefaultAgentSelection(
     preferredAgent: AsideAgentTarget,
     diagnosticsByTarget: ReadonlyMap<AsideAgentTarget, AgentRuntimeDiagnostics>,
 ): DefaultAgentSelection {
-    const availableTargets = getSupportedAgentActors()
-        .filter((actor) => diagnosticsByTarget.get(actor.id)?.status === "available")
-        .map((actor) => actor.id);
-    if (availableTargets.includes(preferredAgent)) {
+    if (diagnosticsByTarget.get(preferredAgent)?.status === "available") {
         return {
             kind: "preferred",
             preferredAgent,
@@ -33,15 +24,8 @@ export function resolveDefaultAgentSelection(
         };
     }
 
-    const selectedAgent = availableTargets[0];
-    return selectedAgent
-        ? {
-            kind: "fallback",
-            preferredAgent,
-            selectedAgent,
-        }
-        : {
-            kind: "none",
-            preferredAgent,
-        };
+    return {
+        kind: "none",
+        preferredAgent,
+    };
 }
