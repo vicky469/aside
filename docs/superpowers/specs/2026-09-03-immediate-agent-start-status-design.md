@@ -14,17 +14,17 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Publish a queued stream immediately with a provider-specific `Starting <agent>…` hint.
-- [ ] Start queue processing without waiting for a full comment-view refresh.
-- [ ] Transition the same stream and card from queued to running, then replace the starting hint with real runtime progress.
-- [ ] Keep background refresh failures contained by the existing refresh warning path.
+- [x] Publish a queued stream immediately with a provider-specific `Starting <agent>…` hint.
+- [x] Start queue processing without waiting for a full comment-view refresh.
+- [x] Transition the same stream and card from queued to running, then replace the starting hint with real runtime progress.
+- [x] Keep background refresh failures contained by the existing refresh warning path.
 
 ### Verification
 
-- [ ] A controller regression test proves a deliberately blocked refresh cannot delay the initial queued stream or runtime launch.
-- [ ] Stream rendering tests prove the grey line initially reads `Starting <agent>…` and later shows the latest real progress step.
-- [ ] The focused agent-controller and streamed-card suites pass.
-- [ ] The complete repository build passes.
+- [x] A controller regression test proves a deliberately blocked refresh cannot delay the initial queued stream or runtime launch.
+- [x] Stream rendering tests prove the grey line initially reads `Starting <agent>…` and later shows the latest real progress step.
+- [x] The focused agent-controller and streamed-card suites pass.
+- [x] The complete repository build passes.
 
 ## Problem
 
