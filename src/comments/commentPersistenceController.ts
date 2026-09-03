@@ -520,6 +520,7 @@ export class CommentPersistenceController {
     private aggregateIndexInitializationPromise: Promise<void> | null = null;
     private fullSyncedEventReplayPromise: Promise<number> | null = null;
     private readonly targetedSyncedEventReplayPromises = new Map<string, Promise<number>>();
+    private readonly commentPersistTails = new Map<string, Promise<void>>();
     private disposed = false;
 
     constructor(private readonly host: CommentPersistenceHost) {
@@ -560,6 +561,7 @@ export class CommentPersistenceController {
         for (const filePath of Object.keys(this.pendingCommentPersistTimers)) {
             delete this.pendingCommentPersistTimers[filePath];
         }
+        this.commentPersistTails.clear();
         this.aggregateRefreshQueued = false;
         this.commentViewRefreshSuppressions.clear();
     }
@@ -1216,6 +1218,27 @@ export class CommentPersistenceController {
         }
     }
 
+    private async enqueueCommentPersist(file: TFile, options: PersistOptions): Promise<void> {
+        const previousTail = this.commentPersistTails.get(file.path) ?? Promise.resolve();
+        const operation = previousTail
+            .catch(() => undefined)
+            .then(async () => {
+                if (this.disposed) {
+                    return;
+                }
+                await this.writeCommentsForFile(file, options);
+            });
+
+        this.commentPersistTails.set(file.path, operation);
+        try {
+            await operation;
+        } finally {
+            if (this.commentPersistTails.get(file.path) === operation) {
+                this.commentPersistTails.delete(file.path);
+            }
+        }
+    }
+
     public async persistCommentsForFile(file: TFile, options: PersistOptions = {}): Promise<void> {
         if (this.disposed) {
             return;
@@ -1224,7 +1247,7 @@ export class CommentPersistenceController {
             this.scheduleCommentViewRefreshSuppression(file.path, 1);
         }
 
-        await this.writeCommentsForFile(file, options);
+        await this.enqueueCommentPersist(file, options);
     }
 
     public scheduleAggregateNoteRefresh(): void {
@@ -1294,7 +1317,7 @@ export class CommentPersistenceController {
             return;
         }
 
-        await this.writeCommentsForFile(file);
+        await this.persistCommentsForFile(file);
     }
 
     private async ensureAggregateCommentIndexInitialized(): Promise<boolean> {
