@@ -268,7 +268,7 @@ Expected: only the three intended plugin assets are installed, no source-map ref
 
 Mark every implemented and freshly verified checklist item `[x]`; leave any item unchecked if its evidence did not pass.
 
-- [ ] **Step 5: Commit the implementation**
+- [x] **Step 5: Commit the implementation**
 
 Stage only the plan, spec, source, tests, and generated bundle, then commit with:
 
@@ -276,7 +276,7 @@ Stage only the plan, spec, source, tests, and generated bundle, then commit with
 fix(agents): isolate concurrent regeneration
 ```
 
-- [ ] **Step 6: Install and reload in `lean-startup`**
+- [x] **Step 6: Install and reload in `lean-startup`**
 
 Run:
 

@@ -25,7 +25,7 @@
 - [x] Controller regressions prove the preserved run blocks only a duplicate Generate for its own replacement slot, keeps one output entry, and does not block concurrent runs for distinct prompts/cards.
 - [x] UI regressions prove regeneration does not save or focus an unrelated draft and background completion does not reveal an anchor.
 - [x] Focused tests, the complete build, code review, and release artifact inspection pass.
-- [ ] The verified build is installed in `lean-startup` and the three shipped assets match byte-for-byte.
+- [x] The verified build is installed in `lean-startup` and the three shipped assets match byte-for-byte.
 
 ## Evidence And Root Cause
 
