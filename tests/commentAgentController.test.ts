@@ -215,8 +215,6 @@ function createHarness(options: {
                 ?? {
                     kind: "resolved",
                     selectedAgent: "codex",
-                    preferredAgent: "codex",
-                    usedFallback: false,
                     runtime: "direct-cli",
                     modePreference: "auto",
                 };
@@ -315,8 +313,6 @@ test("create-script agent request queues the preferred available agent", async (
         defaultRuntimeSelection: {
             kind: "resolved",
             selectedAgent: "claude",
-            preferredAgent: "claude",
-            usedFallback: false,
             runtime: "direct-cli",
             modePreference: "auto",
         },
@@ -344,8 +340,6 @@ test("create-script runs from the vault root instead of a nested note or reposit
         defaultRuntimeSelection: {
             kind: "resolved",
             selectedAgent: "codex",
-            preferredAgent: "codex",
-            usedFallback: false,
             runtime: "direct-cli",
             modePreference: "auto",
         },
@@ -361,33 +355,6 @@ test("create-script runs from the vault root instead of a nested note or reposit
 
     assert.equal(harness.runtimeCalls[0]?.cwd, "/vault-root");
     assert.equal(harness.runtimeCalls[0]?.vaultRootPath, "/vault-root");
-});
-
-test("create-script agent request records fallback agent metadata", async () => {
-    const harness = createHarness({
-        defaultRuntimeSelection: {
-            kind: "resolved",
-            selectedAgent: "codex",
-            preferredAgent: "gemini",
-            usedFallback: true,
-            runtime: "direct-cli",
-            modePreference: "auto",
-        },
-    });
-
-    await harness.controller.handleCreateScriptRequest({
-        threadId: "thread-1",
-        entryId: "thread-1",
-        filePath: "Folder/Note.md",
-        body: "/create-script build a cleaner",
-    }, "build a cleaner");
-    await waitForAgentQueueToDrain(harness.controller);
-
-    const latestRun = harness.controller.getLatestAgentRunForThread("thread-1");
-    assert.equal(latestRun?.requestKind, "create-script");
-    assert.equal(latestRun?.preferredAgent, "gemini");
-    assert.equal(latestRun?.requestedAgent, "codex");
-    assert.equal(harness.runtimeCalls[0]?.requestKind, "create-script");
 });
 
 test("create-script returns immediately when no agent is available", async () => {
@@ -421,8 +388,6 @@ test("pdf-to-markdown queues the preferred default agent from the vault root", a
         defaultRuntimeSelection: {
             kind: "resolved",
             selectedAgent: "claude",
-            preferredAgent: "claude",
-            usedFallback: false,
             runtime: "direct-cli",
             modePreference: "auto",
         },
@@ -443,36 +408,6 @@ test("pdf-to-markdown queues the preferred default agent from the vault root", a
     assert.equal(run?.promptText, "/pdf-to-markdown");
     assert.equal(harness.runtimeCalls[0]?.cwd, "/vault-root");
     assert.equal(harness.runtimeCalls[0]?.requestKind, "pdf-to-markdown");
-});
-
-test("pdf-to-markdown records default-agent fallback metadata", async () => {
-    const harness = createHarness({
-        initialComments: [createComment({
-            filePath: "Books/Guide.pdf",
-            comment: "/pdf-to-markdown",
-        })],
-        defaultRuntimeSelection: {
-            kind: "resolved",
-            selectedAgent: "codex",
-            preferredAgent: "gemini",
-            usedFallback: true,
-            runtime: "direct-cli",
-            modePreference: "auto",
-        },
-    });
-
-    await harness.controller.handlePdfToMarkdownRequest({
-        threadId: "thread-1",
-        entryId: "thread-1",
-        filePath: "Books/Guide.pdf",
-        body: "/pdf-to-markdown",
-    });
-    await waitForAgentQueueToDrain(harness.controller);
-
-    const run = harness.controller.getLatestAgentRunForThread("thread-1");
-    assert.equal(run?.requestKind, "pdf-to-markdown");
-    assert.equal(run?.requestedAgent, "codex");
-    assert.equal(run?.preferredAgent, "gemini");
 });
 
 test("pdf-to-markdown returns immediately when no agent is available", async () => {
@@ -548,8 +483,6 @@ test("pdf-to-markdown serializes concurrent requests for one destination", async
             return {
                 kind: "resolved",
                 selectedAgent: "codex",
-                preferredAgent: "codex",
-                usedFallback: false,
                 runtime: "direct-cli",
                 modePreference: "auto",
             };
@@ -1625,12 +1558,10 @@ test("comment agent controller rejects missing and ineligible retry sources with
     }
 });
 
-test("comment agent controller re-resolves the default fallback for create-script regenerate", async () => {
+test("comment agent controller re-resolves the configured default for create-script regenerate", async () => {
     let selection: DefaultAgentRuntimeSelection = {
         kind: "resolved",
         selectedAgent: "codex",
-        preferredAgent: "gemini",
-        usedFallback: true,
         runtime: "direct-cli",
         modePreference: "auto",
     };
@@ -1665,8 +1596,6 @@ test("comment agent controller re-resolves the default fallback for create-scrip
     selection = {
         kind: "resolved",
         selectedAgent: "claude",
-        preferredAgent: "gemini",
-        usedFallback: true,
         runtime: "direct-cli",
         modePreference: "auto",
     };
@@ -1677,7 +1606,7 @@ test("comment agent controller re-resolves the default fallback for create-scrip
     const retry = harness.controller.getLatestAgentRunForThread("thread-1");
     assert.equal(retry?.requestKind, "create-script");
     assert.equal(retry?.requestedAgent, "claude");
-    assert.equal(retry?.preferredAgent, "gemini");
+    assert.equal(retry?.preferredAgent, undefined);
     assert.equal(retry?.outputEntryId, previous?.outputEntryId);
     assert.equal(retry?.retryOfRunId, previous?.id);
     assert.equal(harness.runtimeCalls.at(-1)?.requestKind, "create-script");

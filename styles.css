@@ -1945,10 +1945,6 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
     cursor: default;
 }
 
-.aside-default-agent-fallback {
-    margin-top: var(--size-2-2);
-}
-
 .aside-agent-stream-content {
     white-space: pre-wrap;
 }

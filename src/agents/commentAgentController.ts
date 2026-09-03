@@ -326,7 +326,6 @@ export class CommentAgentController {
             triggerEntryId: event.entryId,
             filePath: event.filePath,
             requestedAgent: selection.selectedAgent,
-            ...(selection.usedFallback ? { preferredAgent: selection.preferredAgent } : {}),
             requestKind: "create-script",
             runtime: selection.runtime,
             modePreference: selection.modePreference,
@@ -360,7 +359,6 @@ export class CommentAgentController {
             triggerEntryId: event.entryId,
             filePath: event.filePath,
             requestedAgent: selection.selectedAgent,
-            ...(selection.usedFallback ? { preferredAgent: selection.preferredAgent } : {}),
             requestKind: "update-script",
             targetScriptPath: targetScript.path,
             runtime: selection.runtime,
@@ -416,7 +414,6 @@ export class CommentAgentController {
                 triggerEntryId: event.entryId,
                 filePath: event.filePath,
                 requestedAgent: selection.selectedAgent,
-                ...(selection.usedFallback ? { preferredAgent: selection.preferredAgent } : {}),
                 requestKind: "pdf-to-markdown",
                 runtime: selection.runtime,
                 modePreference: selection.modePreference,
@@ -494,7 +491,6 @@ export class CommentAgentController {
         let runtime: AgentRunRuntime;
         let modePreference: AgentRuntimeModePreference;
         let promptText: string;
-        let preferredAgent: AsideAgentTarget | undefined;
         let requestKind: AgentRunRequestKind | undefined;
         let targetScriptPath: string | undefined;
         let reservedPdfDestinationPath: string | undefined;
@@ -553,9 +549,6 @@ export class CommentAgentController {
             runtime = selection.runtime;
             modePreference = selection.modePreference;
             promptText = PDF_TO_MARKDOWN_DIRECTIVE;
-            preferredAgent = selection.usedFallback
-                ? selection.preferredAgent
-                : undefined;
             requestKind = "pdf-to-markdown";
         } else if (previousRun?.requestKind === "create-script") {
             const createResolution = parseCreateScriptDirective(latestComment.comment);
@@ -582,9 +575,6 @@ export class CommentAgentController {
             runtime = selection.runtime;
             modePreference = selection.modePreference;
             promptText = createResolution.requestText;
-            preferredAgent = selection.usedFallback
-                ? selection.preferredAgent
-                : undefined;
             requestKind = "create-script";
         } else if (previousRun?.requestKind === "update-script") {
             const updateResolution = parseUpdateScriptDirective(latestComment.comment);
@@ -625,9 +615,6 @@ export class CommentAgentController {
             runtime = selection.runtime;
             modePreference = selection.modePreference;
             promptText = updateResolution.requestText;
-            preferredAgent = selection.usedFallback
-                ? selection.preferredAgent
-                : undefined;
             requestKind = "update-script";
             targetScriptPath = targetScript.path;
         } else {
@@ -660,7 +647,6 @@ export class CommentAgentController {
                 triggerEntryId: latestComment.id,
                 filePath: latestComment.filePath,
                 requestedAgent,
-                ...(preferredAgent ? { preferredAgent } : {}),
                 ...(requestKind ? { requestKind } : {}),
                 ...(targetScriptPath ? { targetScriptPath } : {}),
                 runtime,

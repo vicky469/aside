@@ -33,16 +33,10 @@ test("default agent selection can prefer DeepSeek through OpenCode", () => {
     });
 });
 
-test("default agent selection falls back in registry order", () => {
-    assert.deepEqual(resolveDefaultAgentSelection("gemini", diagnostics(["claude"])), {
-        kind: "fallback",
-        preferredAgent: "gemini",
-        selectedAgent: "claude",
-    });
+test("default agent selection reports none when the preference is unavailable", () => {
     assert.deepEqual(resolveDefaultAgentSelection("gemini", diagnostics(["codex", "claude"])), {
-        kind: "fallback",
+        kind: "none",
         preferredAgent: "gemini",
-        selectedAgent: "codex",
     });
 });
 

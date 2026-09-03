@@ -4,7 +4,6 @@ import type { AgentRuntimeDiagnostics } from "../src/agents/agentRuntimeAdapter"
 import type { AsideAgentTarget } from "../src/core/config/agentTargets";
 import {
     buildDefaultAgentOptions,
-    formatDefaultAgentFallback,
     resolveDefaultAgentRadioSelection,
 } from "../src/ui/settings/agentRuntimeSettings";
 
@@ -75,9 +74,4 @@ test("default agent radio selection accepts only available choices", () => {
     assert.equal(resolveDefaultAgentRadioSelection(options, "codex"), "codex");
     assert.equal(resolveDefaultAgentRadioSelection(options, "claude"), null);
     assert.equal(resolveDefaultAgentRadioSelection(options, "gemini"), null);
-});
-
-test("default agent fallback copy identifies the effective provider", () => {
-    assert.equal(formatDefaultAgentFallback("codex", "claude"), "Using Claude Code while Codex is unavailable.");
-    assert.equal(formatDefaultAgentFallback("codex", "codex"), "");
 });

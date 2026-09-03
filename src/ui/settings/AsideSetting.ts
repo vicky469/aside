@@ -23,9 +23,6 @@ import {
     DEFAULT_ASIDE_AGENT_ACTOR_ID,
     getSupportedAgentActors,
 } from "../../core/agents/agentActorRegistry";
-import {
-    resolveDefaultAgentSelection,
-} from "../../core/agents/defaultAgentSelection";
 import type { AsideAgentTarget } from "../../core/config/agentTargets";
 import {
     normalizeAllCommentsNoteImageCaption,
@@ -36,7 +33,6 @@ import type { AgentRuntimeDiagnostics } from "../../agents/agentRuntimeAdapter";
 import { createCheckingAgentRuntimeDiagnostics } from "./codexRuntimeStatus";
 import {
     buildDefaultAgentOptions,
-    formatDefaultAgentFallback,
     resolveDefaultAgentRadioSelection,
 } from "./agentRuntimeSettings";
 import { resolveDefaultAgentSetupGuideState } from "./defaultAgentSetupGuide";
@@ -136,25 +132,6 @@ export default class AsideSetting extends PluginSettingTab {
     private unloadSetupGuideMarkdownComponent(): void {
         this.setupGuideMarkdownComponent?.unload();
         this.setupGuideMarkdownComponent = null;
-    }
-
-    private getAgentSettingsDescription(
-        baseDescription: string,
-        supplementalLines?: string[],
-    ): string | DocumentFragment {
-        if (!supplementalLines?.length) {
-            return baseDescription;
-        }
-
-        const fragment = createFragment();
-        fragment.append(baseDescription);
-        for (const line of supplementalLines) {
-            const lineEl = createDiv();
-            lineEl.addClass("aside-default-agent-fallback");
-            lineEl.textContent = line;
-            fragment.append(lineEl);
-        }
-        return fragment;
     }
 
     private renderDefaultAgentSettings(
@@ -276,17 +253,6 @@ export default class AsideSetting extends PluginSettingTab {
                 row.statusEl.textContent = option.statusLabel;
             }
 
-            const selection = resolveDefaultAgentSelection(
-                this.plugin.settings.defaultAgent,
-                localDiagnosticsByTarget,
-            );
-            const fallbackLine = selection.kind === "fallback"
-                ? formatDefaultAgentFallback(selection.preferredAgent, selection.selectedAgent)
-                : "";
-            agentSetting.setDesc(this.getAgentSettingsDescription(
-                "",
-                fallbackLine ? [fallbackLine] : undefined,
-            ));
             renderSetupGuide();
         };
         const refreshRuntimeSetting = async () => {

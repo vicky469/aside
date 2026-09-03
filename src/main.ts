@@ -115,7 +115,7 @@ import {
     type AgentRuntimeModePreference,
 } from "./core/agents/agentRuntimePreferences";
 import type { AsideAgentTarget } from "./core/config/agentTargets";
-import { getAgentActorById, getSupportedAgentActors } from "./core/agents/agentActorRegistry";
+import { getAgentActorById } from "./core/agents/agentActorRegistry";
 import { resolveDefaultAgentSelection } from "./core/agents/defaultAgentSelection";
 import { AGENTS_EXPERIMENT_DISABLED_NOTICE } from "./core/agents/agentsFeaturePolicy";
 import { DraftComment, DraftSelection } from "./domain/drafts";
@@ -1377,21 +1377,21 @@ export default class Aside extends Plugin {
 
     public async resolveDefaultAgentRuntimeSelection(): Promise<DefaultAgentRuntimeSelection> {
         const preferredAgent = this.getDefaultAgent();
-        const actors = getSupportedAgentActors();
-        const diagnosticsEntries = await Promise.all(actors.map(async (actor) => {
-            try {
-                return [actor.id, await this.getAgentRuntimeDiagnostics(actor.id)] as const;
-            } catch (error) {
-                return [actor.id, {
-                    status: "unavailable" as const,
-                    message: error instanceof Error && error.message.trim()
-                        ? error.message.trim()
-                        : `${actor.label} is unavailable.`,
-                }] as const;
-            }
-        }));
-        const diagnosticsByTarget = new Map(diagnosticsEntries);
-        const selection = resolveDefaultAgentSelection(preferredAgent, diagnosticsByTarget);
+        let diagnostics: AgentRuntimeDiagnostics;
+        try {
+            diagnostics = await this.getAgentRuntimeDiagnostics(preferredAgent);
+        } catch (error) {
+            diagnostics = {
+                status: "unavailable",
+                message: error instanceof Error && error.message.trim()
+                    ? error.message.trim()
+                    : `${getAgentActorById(preferredAgent).label} is unavailable.`,
+            };
+        }
+        const selection = resolveDefaultAgentSelection(
+            preferredAgent,
+            new Map([[preferredAgent, diagnostics]]),
+        );
         if (selection.kind === "none") {
             return selection;
         }
@@ -1399,10 +1399,7 @@ export default class Aside extends Plugin {
         const runtimeSelection = resolveAgentRuntimeSelectionPlan({
             target: selection.selectedAgent,
             modePreference: this.getAgentRuntimeMode(),
-            localDiagnostics: diagnosticsByTarget.get(selection.selectedAgent) ?? {
-                status: "unavailable",
-                message: `${getAgentActorById(selection.selectedAgent).label} is unavailable.`,
-            },
+            localDiagnostics: diagnostics,
         });
         if (runtimeSelection.kind === "blocked") {
             return {
@@ -1414,8 +1411,6 @@ export default class Aside extends Plugin {
         return {
             kind: "resolved",
             selectedAgent: selection.selectedAgent,
-            preferredAgent,
-            usedFallback: selection.kind === "fallback",
             runtime: runtimeSelection.runtime,
             modePreference: runtimeSelection.modePreference,
         };
