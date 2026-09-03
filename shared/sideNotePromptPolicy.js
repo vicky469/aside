@@ -47,6 +47,7 @@ function buildSideNotePrompt(options) {
         "If you cannot create those selection-anchored notes from this runtime, say that you could not create the anchored notes instead of providing the critique as a substitute.",
         "For non-annotation requests like \"one point a note/comment\", keep one parent thread and append each point as a child entry unless the user explicitly asks for separate page-note threads.",
         "Answer the user's request directly.",
+        "Choose the reply language from the newest user request only. If that request explicitly asks for a response language, use it; otherwise reply in the language used by that request. Do not infer the reply language from the note, vault, or earlier thread entries.",
         ...(isPdfToMarkdownRequest
             ? []
             : ["Only inspect or modify the current file unless the request explicitly asks for broader workspace context."]),
