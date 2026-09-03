@@ -30,7 +30,7 @@ Use this section as the working checklist. Mark an item done only after the code
 - [x] Different-note saves can enter persistence concurrently.
 - [x] Existing sidecar, comment persistence, agent controller, and sync tests pass.
 - [x] Typecheck, lint, complete build, and release artifact inspection pass.
-- [ ] The verified build is installed in `lean-startup`, reloaded, and its three shipped assets match byte-for-byte.
+- [x] The verified build is installed in `lean-startup`, reloaded, and its three shipped assets match byte-for-byte.
 
 ## Confirmed Problem
 
