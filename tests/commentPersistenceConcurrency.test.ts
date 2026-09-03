@@ -111,13 +111,36 @@ function getSidecarStoragePath(filePath: string): string {
     return `.obsidian/plugins/aside/sidenotes/by-note/${noteHash.slice(0, 2)}/${noteHash}.json`;
 }
 
-function createHarness(file: TFile, threads: CommentThread[]) {
+function createDeferred() {
+    let resolvePromise!: () => void;
+    const promise = new Promise<void>((resolve) => {
+        resolvePromise = resolve;
+    });
+    return {
+        promise,
+        resolve: resolvePromise,
+    };
+}
+
+async function settlesWithinMicrotasks(promise: Promise<void>, turnCount = 20): Promise<boolean> {
+    let settled = false;
+    void promise.then(() => {
+        settled = true;
+    });
+    for (let turn = 0; turn < turnCount && !settled; turn += 1) {
+        await Promise.resolve();
+    }
+    return settled;
+}
+
+function createHarness(files: TFile[], threads: CommentThread[]) {
     const adapter = new CollisionAwareAdapter();
     const commentManager = new CommentManager(threads);
     const aggregateCommentIndex = new AggregateCommentIndex();
     let persistedData: PersistedPluginData = {};
     let nextId = 0;
     const noteBody = "# Title\n\nAlpha target omega\n";
+    let currentNoteContentReader = async (_file: TFile) => noteBody;
     const controller = new CommentPersistenceController({
         app: {
             vault: {
@@ -128,8 +151,8 @@ function createHarness(file: TFile, threads: CommentThread[]) {
         getIndexHeaderImageUrl: () => "",
         getIndexHeaderImageCaption: () => "",
         getMarkdownViewForFile: () => null as MarkdownView | null,
-        getMarkdownFileByPath: (filePath) => filePath === file.path ? file : null,
-        getCurrentNoteContent: async () => noteBody,
+        getMarkdownFileByPath: (filePath) => files.find((file) => file.path === filePath) ?? null,
+        getCurrentNoteContent: (file) => currentNoteContentReader(file),
         getStoredNoteContent: async () => noteBody,
         getParsedNoteComments: (filePath, noteContent) => parseNoteComments(noteContent, filePath),
         getPluginDataDirPath: () => ".obsidian/plugins/aside",
@@ -159,6 +182,9 @@ function createHarness(file: TFile, threads: CommentThread[]) {
         adapter,
         commentManager,
         controller,
+        setCurrentNoteContentReader: (reader: (file: TFile) => Promise<string>) => {
+            currentNoteContentReader = reader;
+        },
     };
 }
 
@@ -171,7 +197,7 @@ test("comment persistence serializes simultaneous saves for one note", async () 
 
     const file = createFile("docs/note.md");
     const thread = createThread(file.path);
-    const { adapter, commentManager, controller } = createHarness(file, [thread]);
+    const { adapter, commentManager, controller } = createHarness([file], [thread]);
 
     try {
         const firstSave = controller.persistCommentsForFile(file);
@@ -193,6 +219,85 @@ test("comment persistence serializes simultaneous saves for one note", async () 
         );
     } finally {
         controller.dispose();
+        globalThis.window = originalWindow;
+    }
+});
+
+test("comment persistence keeps different note saves concurrent", async () => {
+    const originalWindow = globalThis.window;
+    globalThis.window = {
+        setTimeout: () => 1,
+        clearTimeout: () => {},
+    } as unknown as typeof globalThis.window;
+
+    const fileA = createFile("docs/a.md");
+    const fileB = createFile("docs/b.md");
+    const threadA = createThread(fileA.path, "thread-a");
+    const threadB = createThread(fileB.path, "thread-b");
+    const harness = createHarness([fileA, fileB], [threadA, threadB]);
+    const aEntered = createDeferred();
+    const bEntered = createDeferred();
+    const releaseA = createDeferred();
+    harness.setCurrentNoteContentReader(async (file) => {
+        if (file.path === fileA.path) {
+            aEntered.resolve();
+            await releaseA.promise;
+        } else if (file.path === fileB.path) {
+            bEntered.resolve();
+        }
+        return "# Title\n\nAlpha target omega\n";
+    });
+
+    try {
+        const saveA = harness.controller.persistCommentsForFile(fileA);
+        await aEntered.promise;
+        const saveB = harness.controller.persistCommentsForFile(fileB);
+
+        assert.equal(
+            await settlesWithinMicrotasks(bEntered.promise),
+            true,
+            "note B was globally blocked by note A",
+        );
+
+        releaseA.resolve();
+        await Promise.all([saveA, saveB]);
+        assert.equal(await harness.adapter.exists(getSidecarStoragePath(fileA.path)), true);
+        assert.equal(await harness.adapter.exists(getSidecarStoragePath(fileB.path)), true);
+    } finally {
+        releaseA.resolve();
+        harness.controller.dispose();
+        globalThis.window = originalWindow;
+    }
+});
+
+test("comment persistence continues queued saves after a same-note failure", async () => {
+    const originalWindow = globalThis.window;
+    globalThis.window = {
+        setTimeout: () => 1,
+        clearTimeout: () => {},
+    } as unknown as typeof globalThis.window;
+
+    const file = createFile("docs/note.md");
+    const harness = createHarness([file], [createThread(file.path)]);
+    let readCount = 0;
+    harness.setCurrentNoteContentReader(async () => {
+        readCount += 1;
+        if (readCount === 1) {
+            throw new Error("first save failed");
+        }
+        return "# Title\n\nAlpha target omega\n";
+    });
+
+    try {
+        const firstSave = harness.controller.persistCommentsForFile(file);
+        const secondSave = harness.controller.persistCommentsForFile(file);
+
+        await assert.rejects(firstSave, /first save failed/);
+        await secondSave;
+
+        assert.equal(await harness.adapter.exists(getSidecarStoragePath(file.path)), true);
+    } finally {
+        harness.controller.dispose();
         globalThis.window = originalWindow;
     }
 });
