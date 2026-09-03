@@ -79,3 +79,16 @@ test("preflight failure reply rejects serialized diagnostic blobs", () => {
         "Gemini couldn’t complete this request. Try another agent.",
     );
 });
+
+test("preflight failure reply replaces non-actionable probe placeholders", () => {
+    for (const diagnostic of [
+        "Codex could not be launched from this Obsidian environment.",
+        "launch failed",
+        "codex exited",
+    ]) {
+        assert.equal(
+            formatAgentPreflightFailureReply("codex", diagnostic),
+            "Codex couldn’t complete this request. Try another agent.",
+        );
+    }
+});

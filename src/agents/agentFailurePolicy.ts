@@ -37,7 +37,8 @@ export function formatAgentPreflightFailureReply(
         .map((line) => line.trim().replace(/^Error:\s*/u, ""))
         .filter((line) => line.length > 0)
         .filter((line) => !/^(?:npm warn\b|warning:|[[{])/iu.test(line))
-        .filter((line) => !/^(?:at\s|node:|npm ERR! command|PATH=|HOME=)/u.test(line));
+        .filter((line) => !/^(?:at\s|node:|npm ERR! command|PATH=|HOME=)/u.test(line))
+        .filter((line) => !/^(?:launch failed|[\w.-]+ exited|.*\bcould not (?:be launched|start)\b.*)$/iu.test(line));
     const firstUsefulLine = usefulLines[0];
     if (!firstUsefulLine) {
         return formatGenericAgentFailureReply(target);
