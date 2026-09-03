@@ -13,19 +13,19 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Convert a blocked runtime preflight for a supported `@agent` mention into a persisted failed run and reply card instead of showing only a transient notice.
-- [ ] Apply the same failed-card path when retrying a saved supported-agent prompt whose runtime preflight is blocked.
-- [ ] Extract and sanitize a useful preflight diagnostic for the failed-card body, falling back to the shared friendly failure reply only when no useful diagnostic is available.
-- [ ] Preserve the full specific preflight diagnostic in run metadata and logs even when the card uses a shorter sanitized message.
-- [ ] Keep availability handling provider-neutral and derive provider labels from the existing actor registry.
+- [x] Convert a blocked runtime preflight for a supported `@agent` mention into a persisted failed run and reply card instead of showing only a transient notice.
+- [x] Apply the same failed-card path when retrying a saved supported-agent prompt whose runtime preflight is blocked.
+- [x] Extract and sanitize a useful preflight diagnostic for the failed-card body, falling back to the shared friendly failure reply only when no useful diagnostic is available.
+- [x] Preserve the full specific preflight diagnostic in run metadata and logs even when the card uses a shorter sanitized message.
+- [x] Keep availability handling provider-neutral and derive provider labels from the existing actor registry.
 
 ### Verification
 
-- [ ] Fail-first controller tests cover initial blocked preflights and retry blocked preflights.
-- [ ] Table-driven coverage proves the behavior works for every supported agent target.
-- [ ] Regression tests prove no runtime process starts for a blocked preflight and no transient-only notice replaces the failed card.
-- [ ] The focused agent tests, full test suite, production build, and release-artifact guard pass.
-- [ ] The verified build is installed into `lean-startup` and its shipped assets match byte-for-byte.
+- [x] Fail-first controller tests cover initial blocked preflights and retry blocked preflights.
+- [x] Table-driven coverage proves the behavior works for every supported agent target.
+- [x] Regression tests prove no runtime process starts for a blocked preflight and no transient-only notice replaces the failed card.
+- [x] The focused agent tests, full test suite, production build, and release-artifact guard pass.
+- [x] The verified build is installed into `lean-startup` and its shipped assets match byte-for-byte.
 
 ## Problem
 
