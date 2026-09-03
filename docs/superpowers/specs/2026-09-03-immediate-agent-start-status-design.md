@@ -18,9 +18,9 @@ Use this section as the working checklist. Mark an item done only after the code
 - [x] Start queue processing without waiting for a full comment-view refresh.
 - [x] Transition the same stream and card from queued to running, then replace the starting hint with real runtime progress.
 - [x] Keep background refresh failures contained by the existing refresh warning path.
-- [ ] Use the same turning spinner presentation for both queued and running agent states.
-- [ ] Reconcile status marker and hint elements in place so progress updates do not restart the spinner animation.
-- [ ] Let a transient stream card adopt its persisted output entry id without removing and recreating the card.
+- [x] Use the same turning spinner presentation for both queued and running agent states.
+- [x] Reconcile status marker and hint elements in place so progress updates do not restart the spinner animation.
+- [x] Let a transient stream card adopt its persisted output entry id without removing and recreating the card.
 
 ### Verification
 
@@ -28,10 +28,10 @@ Use this section as the working checklist. Mark an item done only after the code
 - [x] Stream rendering tests prove the grey line initially reads `Starting <agent>…` and later shows the latest real progress step.
 - [x] The focused agent-controller and streamed-card suites pass.
 - [x] The complete repository build passes.
-- [ ] A presentation-policy test proves queued and running agent states share the spinner marker.
-- [ ] A streamed-card identity test proves queued-to-running updates reuse the same spinner DOM node.
-- [ ] A card identity test proves assigning the persisted output entry id reuses the same card DOM node.
-- [ ] The focused suites and complete repository build pass after the smoothness changes.
+- [x] A presentation-policy test proves queued and running agent states share the spinner marker.
+- [x] A streamed-card identity test proves queued-to-running updates reuse the same spinner DOM node.
+- [x] A card identity test proves assigning the persisted output entry id reuses the same card DOM node.
+- [x] The focused suites and complete repository build pass after the smoothness changes.
 
 ## Problem
 
