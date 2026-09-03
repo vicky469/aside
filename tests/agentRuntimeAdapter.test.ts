@@ -288,6 +288,34 @@ test("getCodexRuntimeDiagnostics reports a missing codex binary clearly", async 
     });
 });
 
+test("getCodexRuntimeDiagnostics retains actionable launcher stderr", async () => {
+    resetResolvedAgentExecutionEnvForTests();
+
+    const modules = createRuntimeModules((file, _args, _options, callback) => {
+        if (file === "/bin/zsh") {
+            callback(null, "/Users/test/.nvm/bin:/usr/bin\n", "");
+            return createTrackedProcessStub();
+        }
+
+        callback(
+            new Error("codex exited"),
+            "",
+            "Error: Missing optional dependency @openai/codex-darwin-arm64.\n    at launcher.js:20:3",
+        );
+        return createTrackedProcessStub();
+    });
+
+    assert.deepEqual(await getCodexRuntimeDiagnostics(modules, {
+        HOME: "/Users/test",
+        PATH: "/usr/bin",
+        SHELL: "/bin/zsh",
+    }), {
+        status: "unavailable",
+        message: "Codex could not be launched from this Obsidian environment.",
+        detail: "Error: Missing optional dependency @openai/codex-darwin-arm64.\n    at launcher.js:20:3",
+    });
+});
+
 test("getClaudeRuntimeDiagnostics reports Claude as available when the process can be launched", async () => {
     resetResolvedAgentExecutionEnvForTests();
 
@@ -398,6 +426,7 @@ test("getCursorRuntimeDiagnostics rejects an unrelated executable named agent", 
     }), {
         status: "unavailable",
         message: "Cursor CLI is not authenticated or could not start.",
+        detail: "The agent executable is not the Cursor Agent CLI.",
     });
 });
 
@@ -502,6 +531,7 @@ test("getGeminiRuntimeDiagnostics reports launch or authentication failures", as
     assert.deepEqual(diagnostics, {
         status: "unavailable",
         message: "Gemini CLI could not be launched or authenticated from this Obsidian environment.",
+        detail: "authentication failed",
     });
 });
 
@@ -575,6 +605,7 @@ test("getOpenCodeRuntimeDiagnostics reports generic launch failures", async () =
     }), {
         status: "unavailable",
         message: "OpenCode CLI could not be launched from this Obsidian environment.",
+        detail: "launch failed",
     });
 });
 

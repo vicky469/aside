@@ -16,6 +16,33 @@ const KNOWN_AGENT_PROVIDER_FAILURE_PATTERNS: readonly RegExp[] = [
     /\b(?:service|model|runtime) (?:is )?(?:currently )?(?:unavailable|overloaded)\b/iu,
 ];
 
+const MAX_PREFLIGHT_FAILURE_REPLY_LENGTH = 500;
+
+function formatGenericAgentFailureReply(target: AsideAgentTarget): string {
+    return `${getAgentActorLabel(target)} couldn’t complete this request. Try another agent.`;
+}
+
+export function formatAgentPreflightFailureReply(
+    target: AsideAgentTarget,
+    diagnostic: string,
+): string {
+    const usefulLines = diagnostic
+        .replace(/\u001b\[[0-?]*[ -/]*[@-~]/gu, "")
+        .replace(/\bsk-[A-Za-z0-9_-]{20,}\b/gu, "[redacted]")
+        .split(/\r?\n/gu)
+        .map((line) => line.trim().replace(/^Error:\s*/u, ""))
+        .filter((line) => line.length > 0)
+        .filter((line) => !/^(?:at\s|node:|npm ERR! command|PATH=|HOME=)/u.test(line));
+    const firstUsefulLine = usefulLines[0];
+    if (!firstUsefulLine) {
+        return formatGenericAgentFailureReply(target);
+    }
+
+    return firstUsefulLine.length <= MAX_PREFLIGHT_FAILURE_REPLY_LENGTH
+        ? firstUsefulLine
+        : `${firstUsefulLine.slice(0, MAX_PREFLIGHT_FAILURE_REPLY_LENGTH - 3).trimEnd()}...`;
+}
+
 export function isKnownAgentProviderFailure(value: string): boolean {
     const normalized = value.replace(/\s+/gu, " ").trim();
     return normalized.length > 0
@@ -27,6 +54,6 @@ export function formatKnownAgentFailureReply(
     diagnostic: string,
 ): string | null {
     return isKnownAgentProviderFailure(diagnostic)
-        ? `${getAgentActorLabel(target)} couldn’t complete this request. Try another agent.`
+        ? formatGenericAgentFailureReply(target)
         : null;
 }

@@ -96,6 +96,7 @@ export interface AgentRuntimeResult extends AgentRunMetadata {
 export type AgentRuntimeDiagnostics = {
     status: "checking" | "available" | "missing" | "unsupported" | "unavailable";
     message: string;
+    detail?: string;
 };
 export type CodexRuntimeDiagnostics = AgentRuntimeDiagnostics;
 export type ClaudeRuntimeDiagnostics = AgentRuntimeDiagnostics;
@@ -890,6 +891,24 @@ function isExecErrorWithCode(error: unknown, code: string): boolean {
         && (error as { code?: unknown }).code === code;
 }
 
+function getRuntimeProbeFailureDetail(error: unknown): string | undefined {
+    if (error && typeof error === "object" && "stderr" in error) {
+        const stderr = (error as { stderr?: unknown }).stderr;
+        if (typeof stderr === "string") {
+            const normalized = normalizeRuntimeDiagnosticText(stderr);
+            if (normalized) {
+                return normalized;
+            }
+        }
+    }
+
+    if (error instanceof Error) {
+        return normalizeRuntimeDiagnosticText(error.message) ?? undefined;
+    }
+
+    return undefined;
+}
+
 export async function getCodexRuntimeDiagnostics(
     modulesOverride?: NodeModules | null,
     baseEnv: ExecEnv = getBaseProcessEnv(),
@@ -928,6 +947,7 @@ export async function getCodexRuntimeDiagnostics(
         return {
             status: "unavailable",
             message: "Codex could not be launched from this Obsidian environment.",
+            detail: getRuntimeProbeFailureDetail(error),
         };
     }
 }
@@ -970,6 +990,7 @@ export async function getClaudeRuntimeDiagnostics(
         return {
             status: "unavailable",
             message: "Claude CLI is not authenticated or could not start.",
+            detail: getRuntimeProbeFailureDetail(error),
         };
     }
 }
@@ -1015,6 +1036,7 @@ export async function getCursorRuntimeDiagnostics(
         return {
             status: "unavailable",
             message: "Cursor CLI is not authenticated or could not start.",
+            detail: getRuntimeProbeFailureDetail(error),
         };
     }
 }
@@ -1057,6 +1079,7 @@ export async function getGeminiRuntimeDiagnostics(
         return {
             status: "unavailable",
             message: "Gemini CLI could not be launched or authenticated from this Obsidian environment.",
+            detail: getRuntimeProbeFailureDetail(error),
         };
     }
 }
@@ -1099,6 +1122,7 @@ export async function getOpenCodeRuntimeDiagnostics(
         return {
             status: "unavailable",
             message: "OpenCode CLI could not be launched from this Obsidian environment.",
+            detail: getRuntimeProbeFailureDetail(error),
         };
     }
 }
