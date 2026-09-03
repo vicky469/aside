@@ -285,6 +285,65 @@ test("streamed agent reply controller shows starting hint on one grey status lin
     assert.equal(statusEl.getAttribute("aria-label"), "Codex Starting Codex…. queued");
 });
 
+test("streamed agent reply controller reuses the spinner node across active updates", () => {
+    const controller = new StreamedAgentReplyController("thread-1") as any;
+    const statusEl = new FakeStatusElement();
+
+    controller.syncStatus(statusEl, "Codex", {
+        runId: "run-1",
+        threadId: "thread-1",
+        requestedAgent: "codex",
+        runtime: "direct-cli",
+        status: "queued",
+        statusHintText: "Starting Codex…",
+        partialText: "",
+        startedAt: 100,
+        updatedAt: 100,
+    });
+    const queuedMark = statusEl.childNodes[0];
+
+    controller.syncStatus(statusEl, "Codex", {
+        runId: "run-1",
+        threadId: "thread-1",
+        requestedAgent: "codex",
+        runtime: "direct-cli",
+        status: "running",
+        statusHintText: "Reading note context",
+        partialText: "",
+        startedAt: 100,
+        updatedAt: 101,
+    });
+
+    assert.equal(statusEl.childNodes[0], queuedMark);
+    assert.equal(
+        (statusEl.childNodes[1] as FakeStatusChildElement).textContent,
+        "Reading note context",
+    );
+});
+
+test("streamed agent reply controller adopts an output entry id without replacing its card", () => {
+    const controller = new StreamedAgentReplyController("thread-1") as any;
+    const repliesEl = new FakeContainerElement();
+    const threadEl = new FakeContainerElement();
+    const cardEl = new FakeContainerElement() as FakeContainerElement & {
+        isConnected: boolean;
+        parentElement: FakeContainerElement;
+    };
+    cardEl.isConnected = true;
+    cardEl.parentElement = repliesEl;
+    cardEl.setAttribute("data-agent-run-id", "run-1");
+    controller.cardEl = cardEl;
+    controller.ownsCard = true;
+    controller.runId = "run-1";
+    controller.clear = () => {
+        throw new Error("The active card was replaced.");
+    };
+
+    const result = controller.ensureCard(threadEl, repliesEl, "entry-1");
+
+    assert.equal(result, cardEl);
+});
+
 test("streamed agent reply controller identifies the fallback author", () => {
     const previousSpan = Object.getOwnPropertyDescriptor(globalThis, "HTMLSpanElement");
     const previousDiv = Object.getOwnPropertyDescriptor(globalThis, "HTMLDivElement");

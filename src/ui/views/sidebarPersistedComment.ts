@@ -168,7 +168,6 @@ export type SidebarCommentRegenerateAction =
 export function getAgentRunStatusPresentation(status: AgentRunRecord["status"]): AgentRunStatusPresentation {
     switch (status) {
         case "queued":
-            return { marker: "…", markerKind: "text" };
         case "running":
             return { marker: null, markerKind: "spinner" };
         case "failed":

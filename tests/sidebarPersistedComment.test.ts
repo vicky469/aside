@@ -1419,15 +1419,13 @@ test("getAgentRunStatusPresentation uses compact success and failure markers", (
     });
 });
 
-test("getAgentRunStatusPresentation distinguishes queued from running", () => {
-    assert.deepEqual(getAgentRunStatusPresentation("queued"), {
-        marker: "…",
-        markerKind: "text",
-    });
-    assert.deepEqual(getAgentRunStatusPresentation("running"), {
-        marker: null,
-        markerKind: "spinner",
-    });
+test("getAgentRunStatusPresentation uses one spinner for queued and running", () => {
+    for (const status of ["queued", "running"] as const) {
+        assert.deepEqual(getAgentRunStatusPresentation(status), {
+            marker: null,
+            markerKind: "spinner",
+        });
+    }
 });
 
 test("formatAgentRunMetadataFrontmatter renders compact run metadata", () => {

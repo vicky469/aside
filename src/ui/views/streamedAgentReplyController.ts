@@ -49,6 +49,9 @@ export class StreamedAgentReplyController {
     private contentEl: HTMLDivElement | null = null;
     private labelEl: HTMLSpanElement | null = null;
     private statusEl: HTMLSpanElement | null = null;
+    private statusMarkEl: HTMLSpanElement | null = null;
+    private statusTextEl: HTMLSpanElement | null = null;
+    private statusHintEl: HTMLSpanElement | null = null;
     private footerMetaEl: HTMLDivElement | null = null;
     private actionsEl: HTMLDivElement | null = null;
     private runId: string | null = null;
@@ -155,6 +158,9 @@ export class StreamedAgentReplyController {
         this.contentEl = null;
         this.labelEl = null;
         this.statusEl = null;
+        this.statusMarkEl = null;
+        this.statusTextEl = null;
+        this.statusHintEl = null;
         this.footerMetaEl = null;
         this.actionsEl = null;
         this.runId = null;
@@ -168,27 +174,47 @@ export class StreamedAgentReplyController {
         const statusHintText = formatAgentStatusHintText(stream);
         const shouldShowStatusText = stream.status !== "running" && stream.status !== "queued";
         statusEl.className = `aside-agent-run-status is-${stream.status}`;
-        statusEl.replaceChildren();
         const ownerDocument = statusEl.ownerDocument;
 
-        const markEl = createElement(ownerDocument, "span", `aside-agent-run-status-mark is-${presentation.markerKind}`);
+        const markEl = this.statusMarkEl
+            ?? createElement(ownerDocument, "span", `aside-agent-run-status-mark is-${presentation.markerKind}`);
+        if (!this.statusMarkEl) {
+            statusEl.appendChild(markEl);
+            this.statusMarkEl = markEl;
+        }
+        markEl.className = `aside-agent-run-status-mark is-${presentation.markerKind}`;
         if (presentation.marker) {
             markEl.textContent = presentation.marker;
+            markEl.removeAttribute("aria-hidden");
         } else {
+            markEl.textContent = "";
             markEl.setAttribute("aria-hidden", "true");
         }
-        statusEl.appendChild(markEl);
 
         if (shouldShowStatusText && statusText) {
-            const textEl = createElement(ownerDocument, "span", "aside-agent-run-status-text");
+            const textEl = this.statusTextEl
+                ?? createElement(ownerDocument, "span", "aside-agent-run-status-text");
+            if (!this.statusTextEl) {
+                statusEl.insertBefore(textEl, this.statusHintEl);
+                this.statusTextEl = textEl;
+            }
             textEl.textContent = statusText;
-            statusEl.appendChild(textEl);
+        } else {
+            this.statusTextEl?.remove();
+            this.statusTextEl = null;
         }
 
         if (statusHintText) {
-            const hintEl = createElement(ownerDocument, "span", "aside-agent-run-status-hint");
+            const hintEl = this.statusHintEl
+                ?? createElement(ownerDocument, "span", "aside-agent-run-status-hint");
+            if (!this.statusHintEl) {
+                statusEl.appendChild(hintEl);
+                this.statusHintEl = hintEl;
+            }
             hintEl.textContent = statusHintText;
-            statusEl.appendChild(hintEl);
+        } else {
+            this.statusHintEl?.remove();
+            this.statusHintEl = null;
         }
 
         const accessibleStatus = [statusHintText, statusText ?? stream.status].filter(Boolean).join(". ");
@@ -255,8 +281,11 @@ export class StreamedAgentReplyController {
         if (isCardConnected) {
             const cardCommentId = this.cardEl!.getAttribute("data-comment-id");
             const cardRunId = this.cardEl!.getAttribute("data-agent-run-id");
+            const ownsMatchingRunCard = this.ownsCard
+                && cardRunId !== null
+                && cardRunId === this.runId;
             const targetMatches = outputEntryId
-                ? cardCommentId === outputEntryId
+                ? cardCommentId === outputEntryId || ownsMatchingRunCard
                 : cardRunId === this.runId;
             if (targetMatches) {
                 return this.cardEl!;
@@ -281,6 +310,7 @@ export class StreamedAgentReplyController {
                 this.metaValueEl = nodeInstanceOf(metaValueEl, HTMLSpanElement) ? metaValueEl : null;
                 this.labelEl = nodeInstanceOf(labelEl, HTMLSpanElement) ? labelEl : null;
                 this.statusEl = nodeInstanceOf(statusEl, HTMLSpanElement) ? statusEl : null;
+                this.captureStatusElements();
                 this.footerMetaEl = nodeInstanceOf(footerMetaEl, HTMLDivElement) ? footerMetaEl : null;
                 this.processLogEl = null;
                 this.contentEl = nodeInstanceOf(contentEl, HTMLDivElement) ? contentEl : null;
@@ -307,6 +337,7 @@ export class StreamedAgentReplyController {
                 this.metaValueEl = nodeInstanceOf(metaValueEl, HTMLSpanElement) ? metaValueEl : null;
                 this.labelEl = nodeInstanceOf(labelEl, HTMLSpanElement) ? labelEl : null;
                 this.statusEl = nodeInstanceOf(statusEl, HTMLSpanElement) ? statusEl : null;
+                this.captureStatusElements();
                 this.footerMetaEl = nodeInstanceOf(footerMetaEl, HTMLDivElement) ? footerMetaEl : null;
                 this.processLogEl = null;
                 this.contentEl = nodeInstanceOf(contentEl, HTMLDivElement) ? contentEl : null;
@@ -348,11 +379,31 @@ export class StreamedAgentReplyController {
         this.metaValueEl = metaValueEl;
         this.labelEl = labelEl;
         this.statusEl = statusEl;
+        this.statusMarkEl = markEl;
+        this.statusTextEl = null;
+        this.statusHintEl = null;
         this.processLogEl = null;
         this.contentEl = contentEl;
         this.actionsEl = actionsEl;
         this.footerMetaEl = footerMetaEl;
         return cardEl;
+    }
+
+    private captureStatusElements(): void {
+        const statusEl = this.statusEl;
+        if (!statusEl) {
+            this.statusMarkEl = null;
+            this.statusTextEl = null;
+            this.statusHintEl = null;
+            return;
+        }
+
+        const markEl = statusEl.querySelector(".aside-agent-run-status-mark");
+        const textEl = statusEl.querySelector(".aside-agent-run-status-text");
+        const hintEl = statusEl.querySelector(".aside-agent-run-status-hint");
+        this.statusMarkEl = nodeInstanceOf(markEl, HTMLSpanElement) ? markEl : null;
+        this.statusTextEl = nodeInstanceOf(textEl, HTMLSpanElement) ? textEl : null;
+        this.statusHintEl = nodeInstanceOf(hintEl, HTMLSpanElement) ? hintEl : null;
     }
 
     private captureBorrowedCardSnapshot(): void {
