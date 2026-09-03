@@ -1,7 +1,7 @@
 # Aside Skill Language and Size Design
 
 **Date:** 2026-09-03
-**Status:** Approved for planning
+**Status:** Implemented
 
 ## Implementation Tracking
 
@@ -15,19 +15,19 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Make the newest user request the only implicit source of reply language.
-- [ ] Honor an explicit response-language instruction in that newest request over its written language.
-- [ ] Put the language contract in the shared provider-neutral runtime prompt rather than duplicating it in provider adapters or the bundled skill.
-- [ ] Reduce `skills/aside/SKILL.md` from 973 words to at most 500 without losing its routing, storage, mutation-safety, annotation, or concise-reply contracts.
-- [ ] Keep the existing stored example thread unchanged.
+- [x] Make the newest user request the only implicit source of reply language.
+- [x] Honor an explicit response-language instruction in that newest request over its written language.
+- [x] Put the language contract in the shared provider-neutral runtime prompt rather than duplicating it in provider adapters or the bundled skill.
+- [x] Reduce `skills/aside/SKILL.md` from 973 words to at most 500 without losing its routing, storage, mutation-safety, annotation, or concise-reply contracts.
+- [x] Keep the existing stored example thread unchanged.
 
 ### Verification
 
-- [ ] A shared-prompt regression test covers English, Chinese, prior-thread-language isolation, and explicit language override wording.
-- [ ] A skill contract test enforces the 500-word ceiling and required safety concepts.
-- [ ] Bundled-skill installation and synchronization tests remain green.
-- [ ] A final change-surface search finds one active language-policy owner and no provider-specific copies.
-- [ ] Full tests, lint, typecheck, Obsidian compliance, production bundle, and release-artifact inspection pass.
+- [x] A shared-prompt regression test covers English, Chinese, prior-thread-language isolation, and explicit language override wording.
+- [x] A skill contract test enforces the 500-word ceiling and required safety concepts.
+- [x] Bundled-skill installation and synchronization tests remain green.
+- [x] A final change-surface search finds one active language-policy owner and no provider-specific copies.
+- [x] Full tests, lint, typecheck, Obsidian compliance, production bundle, and release-artifact inspection pass.
 
 ## Problem
 
