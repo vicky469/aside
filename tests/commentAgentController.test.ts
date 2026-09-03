@@ -4,6 +4,7 @@ import type { TFile } from "obsidian";
 import { CommentManager, type Comment } from "../src/commentManager";
 import { AgentRunStore } from "../src/agents/agentRunStore";
 import { CommentAgentController } from "../src/agents/commentAgentController";
+import type { AgentRunStreamState } from "../src/core/agents/agentRuns";
 import type { PersistedPluginData } from "../src/settings/indexNoteSettingsPlanner";
 import type {
     AgentRuntimeSelection,
@@ -69,7 +70,7 @@ function createHarness(options: {
     runtimeError?: Error;
     runtimeStreamTexts?: string[];
     nowIncrement?: number;
-    onRefreshCommentViews?: (controller: CommentAgentController) => void;
+    onRefreshCommentViews?: (controller: CommentAgentController) => void | Promise<void>;
     initialComments?: Comment[];
     availableFilePaths?: string[];
     isCommentableFilePath?: (filePath: string) => boolean;
@@ -123,7 +124,7 @@ function createHarness(options: {
         getVaultRootPath: () => "/vault-root",
         refreshCommentViews: async () => {
             refreshCount += 1;
-            options.onRefreshCommentViews?.(controller);
+            await options.onRefreshCommentViews?.(controller);
         },
         getRuntimeWorkingDirectory: () => options.runtimeWorkingDirectory === undefined ? "/vault" : options.runtimeWorkingDirectory,
         getCommentManager: () => commentManager,
@@ -2019,6 +2020,46 @@ test("comment agent controller keeps the final stream card in place when a run s
     assert.equal(finalStream, null);
     assert.deepEqual(squashConsecutiveValues(streamUpdates), ["", "Hello", "Hello there", null]);
     assert.equal(harness.getRefreshCount(), 3);
+});
+
+test("comment agent controller shows starting status and launches while refresh is blocked", async () => {
+    let releaseRefresh: () => void = () => undefined;
+    const blockedRefresh = new Promise<void>((resolve) => {
+        releaseRefresh = resolve;
+    });
+    let runtimeStarted = false;
+    const updates: AgentRunStreamState[] = [];
+    const harness = createHarness({
+        onRefreshCommentViews: async () => blockedRefresh,
+        customRunAgentRuntime: async () => {
+            runtimeStarted = true;
+            return { runtime: "direct-cli", replyText: "Done" };
+        },
+    });
+    const unsubscribe = harness.controller.subscribeToStreamUpdates((update) => {
+        if (update.stream) {
+            updates.push(update.stream);
+        }
+    });
+
+    const savePromise = harness.controller.handleSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "@codex answer this",
+    });
+
+    try {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        assert.equal(runtimeStarted, true);
+        assert.equal(updates[0]?.status, "queued");
+        assert.equal(updates[0]?.statusHintText, "Starting Codex…");
+    } finally {
+        releaseRefresh();
+        await savePromise;
+        await waitForAgentQueueToDrain(harness.controller);
+        unsubscribe();
+    }
 });
 
 test("comment agent controller keeps running streams free of stage labels", async () => {

@@ -16,7 +16,10 @@ import {
 } from "../core/agents/agentRuns";
 import type { AgentRuntimeModePreference } from "../core/agents/agentRuntimePreferences";
 import { AGENTS_EXPERIMENT_DISABLED_NOTICE } from "../core/agents/agentsFeaturePolicy";
-import { resolveUnsupportedAgentNotice } from "../core/agents/agentActorRegistry";
+import {
+    getAgentActorLabel,
+    resolveUnsupportedAgentNotice,
+} from "../core/agents/agentActorRegistry";
 import { resolveRequestedAgentRunSkills } from "../core/agents/agentSkillRouting";
 import type { AsideAgentTarget } from "../core/config/agentTargets";
 import type { SavedUserEntryEvent } from "../core/comments/savedUserEntry";
@@ -140,6 +143,10 @@ const BUILT_IN_ASIDE_SKILL_NAME = "aside";
 const BUILT_IN_ASIDE_SKILL_MODE = "write";
 const MAX_AGENT_PROCESS_LOG_LINES = 80;
 const UTF8_ENCODER = new TextEncoder();
+
+function formatAgentStartingHint(target: AsideAgentTarget): string {
+    return `Starting ${getAgentActorLabel(target)}…`;
+}
 
 function normalizeAgentReplyDuplicateText(text: string): string {
     return text.replace(/\r\n?/g, "\n").trim();
@@ -935,16 +942,18 @@ export class CommentAgentController {
             cancelRequested: false,
         };
         this.activeRunExecutions.set(runId, execution);
+        const queuedStream = this.runStreams.get(runId);
         const initialStream = this.buildRunStreamState(runningRun, {
             status: "running",
-            partialText: "",
+            statusHintText: queuedStream?.statusHintText
+                ?? formatAgentStartingHint(runningRun.requestedAgent),
+            partialText: queuedStream?.partialText ?? "",
             startedAt: runningRun.startedAt ?? startedAt,
-            updatedAt: runningRun.startedAt ?? startedAt,
+            updatedAt: this.host.now(),
             outputEntryId,
         });
-        this.setRunStreamState(initialStream);
-        await this.refreshStatusViews();
-        this.emitStreamUpdate(runningRun.threadId, initialStream);
+        this.setRunStream(initialStream);
+        void this.refreshStatusViews();
 
         void this.host.log?.("info", "agents", "agents.run.started", {
             runId,
@@ -1557,7 +1566,15 @@ export class CommentAgentController {
 
     private async enqueueRun(run: AgentRunRecord): Promise<void> {
         await this.store.addRun(run);
-        await this.refreshStatusViews();
+        this.setRunStream(this.buildRunStreamState(run, {
+            status: "queued",
+            statusHintText: formatAgentStartingHint(run.requestedAgent),
+            partialText: "",
+            startedAt: run.createdAt,
+            updatedAt: this.host.now(),
+            outputEntryId: run.outputEntryId,
+        }));
+        void this.refreshStatusViews();
         void this.host.log?.("info", "agents", "agents.run.queued", {
             runId: run.id,
             threadId: run.threadId,
