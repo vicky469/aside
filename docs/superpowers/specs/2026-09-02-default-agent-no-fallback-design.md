@@ -1,7 +1,7 @@
 # Default Agent No-Fallback Design
 
 **Date:** 2026-09-02
-**Status:** Approved for planning
+**Status:** Implemented
 
 ## Implementation Tracking
 
@@ -16,19 +16,19 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Resolve only the configured default agent; never substitute another available agent.
-- [ ] Return the existing unavailable/no-agent outcome when the configured agent fails preflight.
-- [ ] Remove fallback-only fields and branching from new default-agent runtime selections and new run creation.
-- [ ] Remove the Settings fallback notice, its formatter, its CSS, and its active presentation tests.
-- [ ] Preserve normalization and display compatibility for historical runs that already contain fallback metadata.
+- [x] Resolve only the configured default agent; never substitute another available agent.
+- [x] Return the existing unavailable/no-agent outcome when the configured agent fails preflight.
+- [x] Remove fallback-only fields and branching from new default-agent runtime selections and new run creation.
+- [x] Remove the Settings fallback notice, its formatter, its CSS, and its active presentation tests.
+- [x] Preserve normalization and display compatibility for historical runs that already contain fallback metadata.
 
 ### Verification
 
-- [ ] Shared selection tests prove an unavailable preference returns no selection even when another agent is available.
-- [ ] Default-agent command and retry tests prove another available provider is never queued.
-- [ ] Settings contract tests prove the fallback notice element and copy formatter are absent.
-- [ ] Historical run normalization and author-label tests remain green.
-- [ ] Full tests, lint, typecheck, Obsidian compliance, production bundle, and release-artifact inspection pass.
+- [x] Shared selection tests prove an unavailable preference returns no selection even when another agent is available.
+- [x] Default-agent command and retry tests prove another available provider is never queued.
+- [x] Settings contract tests prove the fallback notice element and copy formatter are absent.
+- [x] Historical run normalization and author-label tests remain green.
+- [x] Full tests, lint, typecheck, Obsidian compliance, production bundle, and release-artifact inspection pass.
 
 ## Problem
 
