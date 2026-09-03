@@ -521,6 +521,7 @@ export class CommentPersistenceController {
     private fullSyncedEventReplayPromise: Promise<number> | null = null;
     private readonly targetedSyncedEventReplayPromises = new Map<string, Promise<number>>();
     private readonly commentPersistTails = new Map<string, Promise<void>>();
+    private readonly commentPersistPathByFile = new WeakMap<TFile, string>();
     private disposed = false;
 
     constructor(private readonly host: CommentPersistenceHost) {
@@ -663,7 +664,7 @@ export class CommentPersistenceController {
         });
     }
 
-    public async renameStoredComments(previousFilePath: string, nextFilePath: string): Promise<void> {
+    private async renameStoredCommentsNow(previousFilePath: string, nextFilePath: string): Promise<void> {
         await this.sourceIdentityStore.refreshFromLatestPersistedData();
         const existingSourceRecord = this.sourceIdentityStore.getRecordByPath(previousFilePath)
             ?? this.sourceIdentityStore.getRecordByPath(nextFilePath);
@@ -695,6 +696,12 @@ export class CommentPersistenceController {
                 threads: retargetedThreads,
             }]);
         }
+    }
+
+    public async renameStoredComments(previousFilePath: string, nextFilePath: string): Promise<void> {
+        await this.enqueueCommentPersistence([previousFilePath, nextFilePath], async () => {
+            await this.renameStoredCommentsNow(previousFilePath, nextFilePath);
+        });
     }
 
     private hasKnownCommentsForDeletedFile(filePath: string, previousThreads: CommentThread[] | null): boolean {
@@ -1218,25 +1225,47 @@ export class CommentPersistenceController {
         }
     }
 
-    private async enqueueCommentPersist(file: TFile, options: PersistOptions): Promise<void> {
-        const previousTail = this.commentPersistTails.get(file.path) ?? Promise.resolve();
-        const operation = previousTail
-            .catch(() => undefined)
+    private async enqueueCommentPersistence(
+        filePaths: readonly string[],
+        task: () => Promise<void>,
+    ): Promise<void> {
+        const queueKeys = Array.from(new Set(filePaths));
+        const previousTails = Array.from(new Set(queueKeys
+            .map((filePath) => this.commentPersistTails.get(filePath))
+            .filter((tail): tail is Promise<void> => tail !== undefined)));
+        const operation = Promise.all(previousTails.map((tail) => tail.catch(() => undefined)))
             .then(async () => {
                 if (this.disposed) {
                     return;
                 }
-                await this.writeCommentsForFile(file, options);
+                await task();
             });
 
-        this.commentPersistTails.set(file.path, operation);
+        for (const queueKey of queueKeys) {
+            this.commentPersistTails.set(queueKey, operation);
+        }
         try {
             await operation;
         } finally {
-            if (this.commentPersistTails.get(file.path) === operation) {
-                this.commentPersistTails.delete(file.path);
+            for (const queueKey of queueKeys) {
+                if (this.commentPersistTails.get(queueKey) === operation) {
+                    this.commentPersistTails.delete(queueKey);
+                }
             }
         }
+    }
+
+    private async enqueueCommentPersist(file: TFile, options: PersistOptions): Promise<void> {
+        const filePath = file.path;
+        const previousFilePath = this.commentPersistPathByFile.get(file);
+        this.commentPersistPathByFile.set(file, filePath);
+        const queueKeys = previousFilePath && previousFilePath !== filePath
+            ? [previousFilePath, filePath]
+            : [filePath];
+
+        await this.enqueueCommentPersistence(queueKeys, async () => {
+            await this.writeCommentsForFile(file, filePath, options);
+        });
     }
 
     public async persistCommentsForFile(file: TFile, options: PersistOptions = {}): Promise<void> {
@@ -1533,9 +1562,10 @@ export class CommentPersistenceController {
         file: TFile,
         mainContent: string,
         threads: CommentThread[],
+        filePath = file.path,
     ): Promise<VisibleSyncedFileComments> {
         const syncedComments = await syncLoadedCommentsForCurrentNote(
-            file.path,
+            filePath,
             mainContent,
             threads,
             this.host.getCommentManager(),
@@ -1853,77 +1883,89 @@ export class CommentPersistenceController {
         return normalizedThreads;
     }
 
-    private async writeCommentsForFile(file: TFile, options: PersistOptions = {}): Promise<string> {
-        this.clearPendingCommentPersistTimer(file.path);
+    private async writeCommentsForFile(
+        file: TFile,
+        filePath: string,
+        options: PersistOptions = {},
+    ): Promise<string> {
+        this.clearPendingCommentPersistTimer(filePath);
         this.host.getCommentManager().purgeExpiredDeletedComments();
         if (!this.host.isCommentableFile(file)) {
-            return this.writePageNoteCommentsForFile(file, options);
+            return this.writePageNoteCommentsForFile(file, filePath, options);
         }
 
-        return this.writeMarkdownCommentsForFile(file, options);
+        return this.writeMarkdownCommentsForFile(file, filePath, options);
     }
 
-    private async writeMarkdownCommentsForFile(file: TFile, options: PersistOptions = {}): Promise<string> {
-        const threads = this.host.getCommentManager().getThreadsForFile(file.path, { includeDeleted: true });
+    private async writeMarkdownCommentsForFile(
+        file: TFile,
+        filePath: string,
+        options: PersistOptions = {},
+    ): Promise<string> {
+        const threads = this.host.getCommentManager().getThreadsForFile(filePath, { includeDeleted: true });
         void this.host.log?.("info", "persistence", "storage.note.write.begin", {
-            filePath: file.path,
+            filePath,
             threadCount: threads.length,
         });
         const currentContent = await this.host.getCurrentNoteContent(file);
-        const sourceRecord = await this.ensureSourceIdentityForFilePath(file.path, currentContent);
-        const previousThreads = (await this.sidecarStorage.readForSource(sourceRecord.sourceId, file.path))
-            ?? await this.sidecarStorage.read(file.path)
+        const sourceRecord = await this.ensureSourceIdentityForFilePath(filePath, currentContent);
+        const previousThreads = (await this.sidecarStorage.readForSource(sourceRecord.sourceId, filePath))
+            ?? await this.sidecarStorage.read(filePath)
             ?? [];
-        const parsedCurrentContent = await this.parseAndNormalizeFileComments(file.path, currentContent);
-        const synced = await this.syncThreadsIntoVisibleNoteContent(file, parsedCurrentContent.mainContent, threads);
+        const parsedCurrentContent = await this.parseAndNormalizeFileComments(filePath, currentContent);
+        const synced = await this.syncThreadsIntoVisibleNoteContent(file, parsedCurrentContent.mainContent, threads, filePath);
         const eventInputs = buildSideNoteSyncEventInputsForThreadDiff(
-            await this.normalizeThreadsForFile(file.path, previousThreads),
+            await this.normalizeThreadsForFile(filePath, previousThreads),
             synced.threads,
         );
-        await this.syncEventStore.appendLocalEvents(file.path, eventInputs);
-        await this.writeSourceAndPathSidecars(sourceRecord.sourceId, file.path, synced.threads);
+        await this.syncEventStore.appendLocalEvents(filePath, eventInputs);
+        await this.writeSourceAndPathSidecars(sourceRecord.sourceId, filePath, synced.threads);
         await this.compactSyncedSideNoteEventsForSnapshots([{
-            notePath: file.path,
+            notePath: filePath,
             threads: synced.threads,
         }]);
-        await this.afterCommentsChanged(file.path, options);
+        await this.afterCommentsChanged(filePath, options);
         void this.host.log?.("info", "persistence", "storage.note.write.success", {
-            filePath: file.path,
+            filePath,
             threadCount: synced.threads.length,
         });
         return currentContent;
     }
 
-    private async writePageNoteCommentsForFile(file: TFile, options: PersistOptions = {}): Promise<string> {
+    private async writePageNoteCommentsForFile(
+        file: TFile,
+        filePath: string,
+        options: PersistOptions = {},
+    ): Promise<string> {
         if (!this.isPageNoteCapableFile(file)) {
             return "";
         }
 
         const threads = await this.normalizeThreadsForFile(
-            file.path,
-            this.host.getCommentManager().getThreadsForFile(file.path, { includeDeleted: true }),
+            filePath,
+            this.host.getCommentManager().getThreadsForFile(filePath, { includeDeleted: true }),
         );
         void this.host.log?.("info", "persistence", "storage.page.write.begin", {
-            filePath: file.path,
+            filePath,
             threadCount: threads.length,
         });
-        const sourceRecord = await this.ensureSourceIdentityForFilePath(file.path);
-        const previousThreads = (await this.readSourceOrPathSidecar(sourceRecord, file.path))?.threads ?? [];
+        const sourceRecord = await this.ensureSourceIdentityForFilePath(filePath);
+        const previousThreads = (await this.readSourceOrPathSidecar(sourceRecord, filePath))?.threads ?? [];
         const eventInputs = buildSideNoteSyncEventInputsForThreadDiff(
-            await this.normalizeThreadsForFile(file.path, previousThreads),
+            await this.normalizeThreadsForFile(filePath, previousThreads),
             threads,
         );
-        await this.syncEventStore.appendLocalEvents(file.path, eventInputs);
-        await this.writeSourceAndPathSidecars(sourceRecord.sourceId, file.path, threads);
+        await this.syncEventStore.appendLocalEvents(filePath, eventInputs);
+        await this.writeSourceAndPathSidecars(sourceRecord.sourceId, filePath, threads);
         await this.compactSyncedSideNoteEventsForSnapshots([{
-            notePath: file.path,
+            notePath: filePath,
             threads,
         }]);
-        this.host.getCommentManager().replaceThreadsForFile(file.path, threads);
-        this.host.getAggregateCommentIndex().updateFile(file.path, threads);
-        await this.afterCommentsChanged(file.path, options);
+        this.host.getCommentManager().replaceThreadsForFile(filePath, threads);
+        this.host.getAggregateCommentIndex().updateFile(filePath, threads);
+        await this.afterCommentsChanged(filePath, options);
         void this.host.log?.("info", "persistence", "storage.page.write.success", {
-            filePath: file.path,
+            filePath,
             threadCount: threads.length,
         });
         return "";

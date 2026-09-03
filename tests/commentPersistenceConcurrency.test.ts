@@ -301,3 +301,70 @@ test("comment persistence continues queued saves after a same-note failure", asy
         globalThis.window = originalWindow;
     }
 });
+
+test("comment persistence carries an in-flight save across a note rename", async () => {
+    const originalWindow = globalThis.window;
+    globalThis.window = {
+        setTimeout: () => 1,
+        clearTimeout: () => {},
+    } as unknown as typeof globalThis.window;
+
+    const previousPath = "docs/old.md";
+    const nextPath = "docs/new.md";
+    const file = createFile(previousPath);
+    const thread = createThread(previousPath);
+    const harness = createHarness([file], [thread]);
+    const firstReadEntered = createDeferred();
+    const releaseFirstRead = createDeferred();
+    let readCount = 0;
+    harness.setCurrentNoteContentReader(async () => {
+        readCount += 1;
+        if (readCount === 1) {
+            firstReadEntered.resolve();
+            await releaseFirstRead.promise;
+        }
+        return "# Title\n\nAlpha target omega\n";
+    });
+
+    let firstSave: Promise<void> | null = null;
+    let renameSave: Promise<void> | null = null;
+    try {
+        firstSave = harness.controller.persistCommentsForFile(file);
+        await firstReadEntered.promise;
+        (file as TFile & { path: string }).path = nextPath;
+        renameSave = harness.controller.renameStoredComments(previousPath, nextPath);
+
+        assert.equal(
+            await settlesWithinMicrotasks(renameSave),
+            false,
+            "rename did not wait for the old-path persistence tail",
+        );
+
+        releaseFirstRead.resolve();
+        await Promise.all([firstSave, renameSave]);
+        harness.commentManager.renameFile(previousPath, nextPath, {
+            selectionCapable: true,
+            pageLabelHash: "hash-page",
+        });
+        harness.commentManager.appendEntry(thread.id, {
+            id: "entry-2",
+            body: "reply two",
+            timestamp: 1710000002000,
+        });
+
+        await harness.controller.persistCommentsForFile(file);
+
+        const payload = JSON.parse(await harness.adapter.read(getSidecarStoragePath(nextPath))) as {
+            threads: CommentThread[];
+        };
+        assert.deepEqual(
+            payload.threads[0]?.entries.map((entry) => entry.id),
+            ["entry-1", "entry-2"],
+        );
+    } finally {
+        releaseFirstRead.resolve();
+        await Promise.allSettled([firstSave, renameSave].filter((promise): promise is Promise<void> => promise !== null));
+        harness.controller.dispose();
+        globalThis.window = originalWindow;
+    }
+});
