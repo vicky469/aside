@@ -1162,8 +1162,10 @@ test("comment agent controller blocks a run when runtime selection is unavailabl
     const harness = createHarness({
         runtimeSelection: {
             kind: "blocked",
+            runtime: "direct-cli",
             modePreference: "auto",
             notice: "Built-in @codex requires desktop Obsidian.",
+            diagnostic: "Built-in @codex requires desktop Obsidian.",
         },
     });
 

@@ -28,18 +28,21 @@ test("resolveAgentRuntimeSelection resolves local in auto mode when local Codex 
     });
 });
 
-test("resolveAgentRuntimeSelection blocks in auto mode on non-filesystem devices", () => {
+test("resolveAgentRuntimeSelection carries actionable blocked diagnostics", () => {
     assert.deepEqual(resolveAgentRuntimeSelection({
         target: "codex",
         modePreference: "auto",
         localDiagnostics: {
-            status: "unsupported",
-            message: "Built-in @codex requires desktop Obsidian.",
+            status: "unavailable",
+            message: "Codex could not be launched from this Obsidian environment.",
+            detail: "Missing optional dependency @openai/codex-darwin-arm64.",
         },
     }), {
         kind: "blocked",
+        runtime: "direct-cli",
         modePreference: "auto",
-        notice: "Built-in @codex requires desktop Obsidian.",
+        notice: "Codex could not be launched from this Obsidian environment.",
+        diagnostic: "Missing optional dependency @openai/codex-darwin-arm64.",
     });
 });
 
@@ -69,8 +72,10 @@ test("resolveAgentRuntimeSelection blocks in explicit local mode with the real l
         },
     }), {
         kind: "blocked",
+        runtime: "direct-cli",
         modePreference: "local",
         notice: "Built-in @codex requires desktop Obsidian.",
+        diagnostic: "Built-in @codex requires desktop Obsidian.",
     });
 });
 

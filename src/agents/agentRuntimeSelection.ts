@@ -19,8 +19,10 @@ export interface ResolvedAgentRuntimeSelection {
 
 export interface BlockedAgentRuntimeSelection {
     kind: "blocked";
+    runtime: "direct-cli";
     modePreference: AgentRuntimeModePreference;
     notice: string;
+    diagnostic: string;
 }
 
 export type AgentRuntimeSelection =
@@ -63,11 +65,17 @@ function resolveLocalRuntimeSelection(
     };
 }
 
-function blockRuntimeSelection(modePreference: AgentRuntimeModePreference, notice: string): BlockedAgentRuntimeSelection {
+function blockRuntimeSelection(
+    modePreference: AgentRuntimeModePreference,
+    diagnostics: AgentRuntimeDiagnostics,
+): BlockedAgentRuntimeSelection {
+    const notice = getLocalRuntimeUnavailableNotice(diagnostics);
     return {
         kind: "blocked",
+        runtime: "direct-cli",
         modePreference,
         notice,
+        diagnostic: diagnostics.detail?.trim() || notice,
     };
 }
 
@@ -82,5 +90,5 @@ export function resolveAgentRuntimeSelection(context: RuntimeAvailabilityContext
     const localAvailable = context.localDiagnostics.status === "available";
     return localAvailable
         ? resolveLocalRuntimeSelection(context.modePreference, context.target)
-        : blockRuntimeSelection(context.modePreference, getLocalRuntimeUnavailableNotice(context.localDiagnostics));
+        : blockRuntimeSelection(context.modePreference, context.localDiagnostics);
 }

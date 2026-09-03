@@ -80,8 +80,10 @@ test("codex runtime status presentation reflects blocked runtime selection", () 
     assert.deepEqual(
         getCodexRuntimeStatusPresentationForSelection({
             kind: "blocked",
+            runtime: "direct-cli",
             modePreference: "auto",
             notice: "Built-in @codex requires desktop Obsidian.",
+            diagnostic: "Built-in @codex requires desktop Obsidian.",
         }),
         {
             title: "Codex runtime: Unavailable",
