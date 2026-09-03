@@ -280,10 +280,10 @@ export class CommentMutationController {
                     filePath: preparedDraft.filePath,
                 });
                 if (preparedDraft.mode !== "edit") {
-                    await finalizeDraftUi();
                     if (preparedDraft.comment.trim().length > 0) {
                         void this.dispatchSavedUserEntry(preparedDraft);
                     }
+                    await finalizeDraftUi();
                 }
             }
         } catch (error) {

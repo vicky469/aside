@@ -115,6 +115,34 @@ test("reconcileSidebarItems reorders retained nodes and removes obsolete nodes",
     assert.deepEqual(removedThreadIds, ["c"]);
 });
 
+test("reconcileSidebarItems can retain a thread controller while replacing its rendered node", async () => {
+    const existing = createNode("thread:a", "old");
+    const replacement = createNode("thread:a", "new");
+    const container = createContainer([existing]);
+    const replacedPairs: Array<[string, HTMLElement, HTMLElement]> = [];
+    const removedThreadIds: string[] = [];
+
+    await reconcileSidebarItems(
+        container as unknown as HTMLElement,
+        [descriptor("thread:a", "new", async () => replacement)],
+        {
+            onReplaceThread: (threadId: string, previous: HTMLElement, next: HTMLElement) => {
+                replacedPairs.push([threadId, previous, next]);
+                return true;
+            },
+            onRemoveThread: (threadId) => removedThreadIds.push(threadId),
+        },
+    );
+
+    assert.deepEqual(replacedPairs, [[
+        "a",
+        existing as unknown as HTMLElement,
+        replacement as unknown as HTMLElement,
+    ]]);
+    assert.deepEqual(removedThreadIds, []);
+    assert.equal(container.children[0], replacement);
+});
+
 test("reconcileSidebarItems leaves mounted nodes untouched when superseded", async () => {
     const existing = createNode("thread:a", "old");
     const container = createContainer([existing]);

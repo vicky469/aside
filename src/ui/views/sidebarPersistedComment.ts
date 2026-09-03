@@ -153,6 +153,11 @@ export interface SidebarPersistedCommentHost {
     setIcon(element: HTMLElement, icon: string): void;
 }
 
+export type SidebarCommentMarkdownRenderHost = Pick<
+    SidebarPersistedCommentHost,
+    "getKnownCommentById" | "isActionableMention" | "renderMarkdown" | "openSidebarInternalLink"
+>;
+
 export interface AgentRunStatusPresentation {
     marker: string | null;
     markerKind: "text" | "spinner";
@@ -173,7 +178,7 @@ export function getAgentRunStatusPresentation(status: AgentRunRecord["status"]):
         case "failed":
             return { marker: "❌", markerKind: "text" };
         case "succeeded":
-            return { marker: "✓", markerKind: "text" };
+            return { marker: "✅", markerKind: "text" };
         case "cancelled":
             return { marker: "–", markerKind: "text" };
         default:
@@ -702,7 +707,7 @@ export function shouldRenderChildEntryMoveHandle(options: {
 function interceptSideNoteProtocolLinks(
     container: HTMLElement,
     sourcePath: string,
-    host: SidebarPersistedCommentHost,
+    host: SidebarCommentMarkdownRenderHost,
 ): void {
     const links = container.querySelectorAll<HTMLAnchorElement>('a[href^="obsidian://aside-comment"]');
     for (let i = 0; i < links.length; i++) {
@@ -719,36 +724,53 @@ function getSidebarRenderedLinkTarget(link: HTMLAnchorElement): string {
     return link.getAttribute("href") || link.getAttribute("data-href") || link.innerText;
 }
 
+export async function renderSidebarCommentMarkdown(
+    container: HTMLElement,
+    markdown: string,
+    sourcePath: string,
+    host: SidebarCommentMarkdownRenderHost,
+): Promise<void> {
+    if (!markdown.trim()) {
+        return;
+    }
+
+    await host.renderMarkdown(
+        normalizeCommentMarkdownForRenderWithOptions(markdown, {
+            resolveSideNoteReferenceLabel: (match) => formatSidebarSideNoteReferenceLabel(
+                host.getKnownCommentById(match.target.commentId),
+                match.target.filePath,
+            ),
+        }),
+        container,
+        sourcePath,
+    );
+    decorateRenderedCommentMentions(container, host.isActionableMention);
+    interceptSideNoteProtocolLinks(container, sourcePath, host);
+}
+
 async function renderThreadEntryContent(
     container: HTMLDivElement,
     thread: CommentThread,
     entryBodySection: TrailingSideNoteReferenceSection,
     host: SidebarPersistedCommentHost,
 ): Promise<void> {
-    const bodyMarkdown = entryBodySection.body;
-    if (bodyMarkdown.trim()) {
-        await host.renderMarkdown(
-            normalizeCommentMarkdownForRenderWithOptions(bodyMarkdown, {
-                resolveSideNoteReferenceLabel: (match) => formatSidebarSideNoteReferenceLabel(
-                    host.getKnownCommentById(match.target.commentId),
-                    match.target.filePath,
-                ),
-            }),
-            container,
-            thread.filePath,
-        );
-        decorateRenderedCommentMentions(container, host.isActionableMention);
-        interceptSideNoteProtocolLinks(container, thread.filePath, host);
-    }
+    await renderSidebarCommentMarkdown(container, entryBodySection.body, thread.filePath, host);
 }
 
 export function getRenderableThreadEntries(
     thread: CommentThread,
-    _agentStream: AgentRunStreamState | null = null,
+    agentStream: AgentRunStreamState | null = null,
 ): CommentThreadEntry[] {
-    return thread.entries.length > 0
+    const entries = thread.entries.length > 0
         ? thread.entries
         : [getFirstThreadEntry(thread)];
+    if (
+        !agentStream?.outputEntryId
+        || (agentStream.status !== "queued" && agentStream.status !== "running")
+    ) {
+        return entries;
+    }
+    return entries.filter((entry) => entry.id !== agentStream.outputEntryId);
 }
 
 export function getDeletedRenderableThreadEntries(
@@ -845,6 +867,20 @@ export function getAppendDraftInsertAfterEntryId(
         : null;
 }
 
+type SidebarPersistedCardInteractionCleanup = () => void;
+
+const sidebarPersistedCardInteractionAdopters = new WeakMap<
+    HTMLDivElement,
+    (targetCardEl: HTMLDivElement) => SidebarPersistedCardInteractionCleanup
+>();
+
+export function adoptSidebarPersistedCardInteractions(
+    persistedCardEl: HTMLDivElement,
+    targetCardEl: HTMLDivElement,
+): SidebarPersistedCardInteractionCleanup | null {
+    return sidebarPersistedCardInteractionAdopters.get(persistedCardEl)?.(targetCardEl) ?? null;
+}
+
 function attachSidebarCommentCardInteractions(
     commentEl: HTMLDivElement,
     contentWrapper: HTMLDivElement,
@@ -872,9 +908,17 @@ function attachSidebarCommentCardInteractions(
         return true;
     };
 
-    commentEl.addEventListener("click", (event: MouseEvent) => {
+    const openCommentFromCardClick = (event: MouseEvent) => {
         openCommentFromClick(event);
-    });
+    };
+    const attachCardClick = (targetCardEl: HTMLDivElement): SidebarPersistedCardInteractionCleanup => {
+        targetCardEl.addEventListener("click", openCommentFromCardClick);
+        return () => {
+            targetCardEl.removeEventListener("click", openCommentFromCardClick);
+        };
+    };
+    attachCardClick(commentEl);
+    sidebarPersistedCardInteractionAdopters.set(commentEl, attachCardClick);
 
     const claimContentOwnership = (target: HTMLElement | null) => {
         host.claimSidebarInteractionOwnership(

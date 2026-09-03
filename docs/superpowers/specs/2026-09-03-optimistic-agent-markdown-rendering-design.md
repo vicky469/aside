@@ -6,19 +6,19 @@
 
 ### To Implement
 
-- [ ] Extract the persisted comment Markdown pipeline into one reusable renderer.
-- [ ] Supply the shared renderer to live agent cards through `AsideView`.
-- [ ] Render terminal agent responses off-DOM and atomically swap them into the existing card.
-- [ ] Ignore duplicate and stale asynchronous render completions.
-- [ ] Preserve complete plain text when Markdown rendering fails.
-- [ ] Keep formatting independent from background reply persistence for every supported agent.
+- [x] Extract the persisted comment Markdown pipeline into one reusable renderer.
+- [x] Supply the shared renderer to live agent cards through `AsideView`.
+- [x] Render terminal agent responses off-DOM and atomically swap them into the existing card.
+- [x] Ignore duplicate and stale asynchronous render completions.
+- [x] Preserve complete plain text when Markdown rendering fails.
+- [x] Keep formatting independent from background reply persistence for every supported agent.
 
 ### Verification
 
-- [ ] Focused tests prove immediate formatting, stable card identity, stale-render rejection, and plain-text fallback.
-- [ ] Existing persisted-comment and optimistic-completion regression suites pass.
-- [ ] The complete build and release artifact inspection pass.
-- [ ] The verified build is installed in `lean-startup` and all shipped assets match byte-for-byte.
+- [x] Focused tests prove immediate formatting, stable card identity, stale-render rejection, and plain-text fallback.
+- [x] Existing persisted-comment and optimistic-completion regression suites pass.
+- [x] The complete build and release artifact inspection pass.
+- [x] The verified build is installed in `lean-startup` and all shipped assets match byte-for-byte.
 
 ## Confirmed Problem
 

@@ -133,12 +133,16 @@ export interface CommentAgentHost {
 
 const AGENT_CONFLICT_NOTICE = "Use only one explicit supported agent target per side note.";
 const AGENT_RETRY_NOTICE = "Retry requires a single explicit supported agent target in the triggering entry.";
+const AGENT_REPLY_SAVE_PENDING_NOTICE = "That agent reply is still being saved.";
 const AGENT_PENDING_SESSION_NOTICE = "The previous Aside agent run did not finish. Retry the thread to run it again.";
 const AGENT_DESKTOP_RUNTIME_NOTICE = "Agent execution requires desktop Obsidian with a filesystem-backed vault.";
 const AGENT_REGENERATE_REPLACE_FAILED_NOTICE = "Unable to replace the previous agent reply.";
+const AGENT_REPLY_SAVE_FAILED_HINT = "Couldn’t save reply";
 const AGENT_CANCELLED_NOTICE = "Cancelled.";
 const AGENT_STATUS_CANCELLED = "Cancelled";
 const LOCAL_MAX_CONCURRENT_RUNS = 3;
+const REPLY_HANDOFF_RETRY_MS = 250;
+const MAX_REPLY_HANDOFF_RETRIES = 5;
 const BUILT_IN_ASIDE_SKILL_NAME = "aside";
 const BUILT_IN_ASIDE_SKILL_MODE = "write";
 const MAX_AGENT_PROCESS_LOG_LINES = 80;
@@ -199,8 +203,13 @@ export class CommentAgentController {
     private processingQueue = false;
     private readonly runStreams = new Map<string, AgentRunStreamState>();
     private readonly runStreamPruneTimers = new Map<string, number>();
+    private readonly replyHandoffRetryTimers = new Map<string, number>();
+    private readonly replyHandoffRetryAttempts = new Map<string, number>();
+    private readonly pendingReplyHandoffs = new Map<string, string>();
     private readonly streamListeners = new Set<AgentStreamListener>();
     private readonly activeRunExecutions = new Map<string, ActiveRunExecution>();
+    private readonly persistingReplyRunIds = new Set<string>();
+    private readonly retainedRunStreamIds = new Set<string>();
     private readonly dispatchingRunIds = new Set<string>();
     private readonly dispatchingPdfDestinationPaths = new Set<string>();
 
@@ -265,11 +274,19 @@ export class CommentAgentController {
             timerWindow?.clearTimeout(timer);
         }
         this.runStreamPruneTimers.clear();
+        for (const timer of this.replyHandoffRetryTimers.values()) {
+            timerWindow?.clearTimeout(timer);
+        }
+        this.replyHandoffRetryTimers.clear();
+        this.replyHandoffRetryAttempts.clear();
+        this.pendingReplyHandoffs.clear();
         for (const execution of this.activeRunExecutions.values()) {
             execution.cancelRequested = true;
             execution.abortController.abort();
         }
         this.activeRunExecutions.clear();
+        this.persistingReplyRunIds.clear();
+        this.retainedRunStreamIds.clear();
         this.dispatchingRunIds.clear();
         this.dispatchingPdfDestinationPaths.clear();
         this.runStreams.clear();
@@ -441,6 +458,10 @@ export class CommentAgentController {
             this.host.showNotice("Unable to find that agent reply.");
             return false;
         }
+        if (this.persistingReplyRunIds.has(runId)) {
+            this.host.showNotice(AGENT_REPLY_SAVE_PENDING_NOTICE);
+            return false;
+        }
 
         const latestTriggerComment = this.host.getCommentManager().getCommentById(previousRun.triggerEntryId);
         return this.retryPromptForCommentInternal({
@@ -493,6 +514,10 @@ export class CommentAgentController {
 
         const retryOfRunId = options.retryOfRunId
             ?? getLatestAgentRunForTriggerEntry(this.store.getRuns(), latestComment.id)?.id;
+        if (retryOfRunId && this.persistingReplyRunIds.has(retryOfRunId)) {
+            this.host.showNotice(AGENT_REPLY_SAVE_PENDING_NOTICE);
+            return false;
+        }
         const previousRun = retryOfRunId
             ? this.store.getRunById(retryOfRunId)
             : null;
@@ -647,9 +672,11 @@ export class CommentAgentController {
             const storedRetryOutputEntryId = retryOfRunId
                 ? this.store.getRunById(retryOfRunId)?.outputEntryId
                 : undefined;
-            const retryOutputEntryId = storedRetryOutputEntryId
-                && this.host.getCommentManager().getCommentById(storedRetryOutputEntryId)
-                ? storedRetryOutputEntryId
+            const storedRetryOutput = storedRetryOutputEntryId
+                ? this.host.getCommentManager().getCommentById(storedRetryOutputEntryId)
+                : null;
+            const retryOutputEntryId = storedRetryOutput && storedRetryOutput.deletedAt === undefined
+                ? storedRetryOutput.id
                 : undefined;
             const run = this.buildQueuedRun({
                 threadId: thread.id,
@@ -666,11 +693,11 @@ export class CommentAgentController {
             if (retryOutputEntryId) {
                 run.outputEntryId = retryOutputEntryId;
             }
+            if (retryOfRunId && this.retainedRunStreamIds.delete(retryOfRunId)) {
+                this.clearRunStreamState(retryOfRunId);
+            }
             if (preflightDiagnostic) {
                 return this.persistPreflightFailure(run, preflightDiagnostic);
-            }
-            if (retryOutputEntryId && !(await this.clearRetryOutputEntry(run, retryOutputEntryId))) {
-                return false;
             }
             await this.enqueueRun(run);
             this.logBuiltInAsideSkillSelected(run, latestComment.id);
@@ -734,30 +761,10 @@ export class CommentAgentController {
         return destinationPath.normalize("NFC").toLocaleLowerCase("en-US");
     }
 
-    private async clearRetryOutputEntry(run: AgentRunRecord, outputEntryId: string): Promise<boolean> {
-        const cleared = await this.host.editComment(outputEntryId, "", { skipCommentViewRefresh: true });
-        if (!cleared) {
-            this.host.showNotice(AGENT_REGENERATE_REPLACE_FAILED_NOTICE);
+    public async cancelRun(runId: string, options?: { message?: string }): Promise<boolean> {
+        if (this.persistingReplyRunIds.has(runId)) {
             return false;
         }
-
-        const updatedAt = this.host.now();
-        this.setRunStream(this.buildRunStreamState(run, {
-            status: "queued",
-            partialText: "",
-            startedAt: run.createdAt,
-            updatedAt,
-            outputEntryId,
-        }));
-        void this.host.log?.("info", "agents", "agents.retry.output_cleared", {
-            runId: run.id,
-            threadId: run.threadId,
-            outputEntryId,
-        });
-        return true;
-    }
-
-    public async cancelRun(runId: string, options?: { message?: string }): Promise<boolean> {
         const run = this.store.getRunById(runId);
         if (!run || (run.status !== "queued" && run.status !== "running")) {
             return false;
@@ -894,7 +901,8 @@ export class CommentAgentController {
         }
 
         const startedAt = queuedRun.startedAt ?? this.host.now();
-        const shouldAppendOutputEntry = !queuedRun.outputEntryId;
+        const shouldAppendOutputEntry = !queuedRun.outputEntryId
+            || !this.host.getCommentManager().getCommentById(queuedRun.outputEntryId);
         const replaceOutputEntryId = undefined;
         const outputEntryId = queuedRun.outputEntryId ?? this.host.createCommentId();
         const runtimeContext = await this.buildRuntimePromptContext(queuedRun);
@@ -902,8 +910,8 @@ export class CommentAgentController {
         if (!latestQueuedRun || latestQueuedRun.status !== "queued") {
             return;
         }
-        if (shouldAppendOutputEntry) {
-            const appended = await this.host.appendThreadEntry(queuedRun.threadId, {
+        const outputReady = shouldAppendOutputEntry
+            ? this.host.appendThreadEntry(queuedRun.threadId, {
                 id: outputEntryId,
                 body: "",
                 timestamp: startedAt,
@@ -911,20 +919,13 @@ export class CommentAgentController {
                 insertAfterCommentId: queuedRun.triggerEntryId,
                 alwaysInsertAfterTarget: true,
                 skipCommentViewRefresh: true,
-            });
-            if (!appended) {
-                const failedRun = await this.store.updateRun(runId, (run) => ({
-                    ...run,
-                    status: "failed",
-                    endedAt: this.host.now(),
-                    error: "Unable to append the agent reply to the thread.",
-                }));
-                if (failedRun) {
-                    await this.refreshStatusViews();
+            }).then((appended) => {
+                if (!appended) {
+                    throw new Error("Unable to append the agent reply to the thread.");
                 }
-                return;
-            }
-        }
+            })
+            : Promise.resolve();
+        void outputReady.catch(() => undefined);
         const runningRun = await this.store.updateRun(runId, (run) => ({
             ...run,
             status: "running",
@@ -972,13 +973,21 @@ export class CommentAgentController {
                 startedAt: runningRun.startedAt ?? startedAt,
                 runtimePrompt: runtimeContext.promptText,
                 execution,
+                outputReady,
             });
-        } catch (error) {
+        } catch (error: unknown) {
+            let failure: unknown = error;
+            try {
+                await outputReady;
+            } catch (outputError: unknown) {
+                failure = outputError;
+            }
             if (this.isRunCancellationRequested(runId) || isAgentRuntimeCancelledError(error)) {
                 return;
             }
-            await this.failRun(runId, runningRun, summarizeError(error));
+            await this.failRun(runId, runningRun, summarizeError(failure));
         } finally {
+            this.persistingReplyRunIds.delete(runId);
             this.activeRunExecutions.delete(runId);
         }
     }
@@ -992,8 +1001,45 @@ export class CommentAgentController {
         const failureText = knownFailureReply
             ?? (existingStream?.partialText.trim().length ? existingStream.partialText : message);
         const failureMetadata = mergeAgentRunMetadata(run, existingStream ?? {});
+        let failureReplyPersisted = false;
         if (run.outputEntryId) {
-            await this.host.editComment(run.outputEntryId, failureText, { skipCommentViewRefresh: true });
+            try {
+                failureReplyPersisted = await this.host.editComment(
+                    run.outputEntryId,
+                    failureText,
+                    { skipCommentViewRefresh: true },
+                );
+            } catch (error) {
+                void this.host.log?.("warn", "agents", "agents.reply.failure_edit_failed", {
+                    runId,
+                    threadId: run.threadId,
+                    outputEntryId: run.outputEntryId,
+                    error,
+                });
+            }
+            if (
+                !failureReplyPersisted
+                && !this.host.getCommentManager().getCommentById(run.outputEntryId)
+            ) {
+                try {
+                    failureReplyPersisted = await this.host.appendThreadEntry(run.threadId, {
+                        id: run.outputEntryId,
+                        body: failureText,
+                        timestamp: this.host.now(),
+                    }, {
+                        insertAfterCommentId: run.triggerEntryId,
+                        alwaysInsertAfterTarget: true,
+                        skipCommentViewRefresh: true,
+                    });
+                } catch (error) {
+                    void this.host.log?.("warn", "agents", "agents.reply.failure_append_failed", {
+                        runId,
+                        threadId: run.threadId,
+                        outputEntryId: run.outputEntryId,
+                        error,
+                    });
+                }
+            }
         }
         const failedRun = await this.store.updateRun(runId, (currentRun) => ({
             ...currentRun,
@@ -1013,7 +1059,11 @@ export class CommentAgentController {
                 error: message,
             }));
             await this.refreshStatusViews();
-            this.clearRunStream(runId, run.threadId);
+            if (failureReplyPersisted) {
+                this.clearRunStream(runId, run.threadId);
+            } else {
+                this.clearRunStreamPruneTimer(runId);
+            }
         }
         void this.host.log?.("warn", "agents", "agents.run.failed", {
             runId,
@@ -1035,6 +1085,7 @@ export class CommentAgentController {
         startedAt: number;
         runtimePrompt: string;
         execution: ActiveRunExecution;
+        outputReady: Promise<void>;
     }): Promise<void> {
         const vaultRootPath = this.host.getVaultRootPath();
         const workingDirectory = options.run.requestKind === "create-script"
@@ -1043,6 +1094,7 @@ export class CommentAgentController {
             ? vaultRootPath
             : this.host.getRuntimeWorkingDirectory(options.run.filePath);
         if (!workingDirectory) {
+            await options.outputReady;
             await this.failRun(options.run.id, options.run, AGENT_DESKTOP_RUNTIME_NOTICE);
             return;
         }
@@ -1147,6 +1199,7 @@ export class CommentAgentController {
             outputEntryId: options.outputEntryId,
             replaceOutputEntryId: options.replaceOutputEntryId,
             startedAt: options.startedAt,
+            outputReady: options.outputReady,
         });
     }
 
@@ -1158,11 +1211,13 @@ export class CommentAgentController {
         outputEntryId: string;
         replaceOutputEntryId?: string;
         startedAt: number;
+        outputReady: Promise<void>;
     }): Promise<void> {
         if (this.isRunCancellationRequested(options.run.id)) {
             return;
         }
 
+        this.persistingReplyRunIds.add(options.run.id);
         const annotationResult = await this.applyAgentAnnotationProposals(options.run, options.replyText);
         const replyText = annotationResult.replyText.trim();
         if (!replyText) {
@@ -1170,64 +1225,133 @@ export class CommentAgentController {
         }
 
         const timestamp = this.host.now();
+        this.retainedRunStreamIds.add(options.run.id);
         this.updateRunStream(options.run.id, this.buildRunStreamState({
             ...options.run,
             ...mergeAgentRunMetadata(options.run, this.runStreams.get(options.run.id) ?? {}),
         }, {
-            status: "running",
+            status: "succeeded",
+            statusHintText: undefined,
             processLogLines: this.runStreams.get(options.run.id)?.processLogLines,
             partialText: replyText,
             startedAt: options.startedAt,
             updatedAt: timestamp,
             outputEntryId: options.outputEntryId,
         }));
-        const replaced = await this.host.editComment(options.outputEntryId, replyText, { skipCommentViewRefresh: true });
-        if (this.isRunCancellationRequested(options.run.id)) {
-            return;
-        }
-        if (!replaced) {
-            if (options.replaceOutputEntryId) {
-                throw new Error(AGENT_REGENERATE_REPLACE_FAILED_NOTICE);
+        try {
+            await options.outputReady;
+            const replaced = await this.host.editComment(
+                options.outputEntryId,
+                replyText,
+                { skipCommentViewRefresh: true },
+            );
+            if (this.isRunCancellationRequested(options.run.id)) {
+                return;
             }
-            throw new Error("Unable to update the agent reply.");
-        }
+            if (!replaced) {
+                if (options.replaceOutputEntryId) {
+                    throw new Error(AGENT_REGENERATE_REPLACE_FAILED_NOTICE);
+                }
+                throw new Error("Unable to update the agent reply.");
+            }
 
-        const completedRun = await this.store.updateRun(options.run.id, (run) => ({
-            ...run,
-            ...mergeAgentRunMetadata(run, options.replyMetadata ?? {}),
-            runtime: options.runtime,
-            status: "succeeded",
-            endedAt: timestamp,
-            outputEntryId: options.outputEntryId,
-            error: undefined,
-        }));
-        if (!completedRun) {
-            throw new Error("Unable to finalize the agent run.");
+            const completedRun = await this.store.updateRun(options.run.id, (run) => ({
+                ...run,
+                ...mergeAgentRunMetadata(run, options.replyMetadata ?? {}),
+                runtime: options.runtime,
+                status: "succeeded",
+                endedAt: timestamp,
+                outputEntryId: options.outputEntryId,
+                error: undefined,
+            }));
+            if (!completedRun) {
+                throw new Error("Unable to finalize the agent run.");
+            }
+            await this.deleteDuplicateCompletedAgentReplies({
+                threadId: options.run.threadId,
+                triggerEntryId: options.run.triggerEntryId,
+                outputEntryId: options.outputEntryId,
+                replyText,
+                startedAt: options.startedAt,
+                completedAt: timestamp,
+                runId: options.run.id,
+            });
+            const refreshed = await this.refreshStatusViews();
+            this.persistingReplyRunIds.delete(options.run.id);
+            if (refreshed) {
+                this.retainedRunStreamIds.delete(options.run.id);
+                this.clearRunStream(options.run.id, options.run.threadId);
+            } else {
+                this.scheduleReplyHandoffRetry(options.run.id, options.run.threadId);
+            }
+            void this.host.log?.("info", "agents", "agents.reply.appended", {
+                runId: options.run.id,
+                threadId: options.run.threadId,
+                outputEntryId: options.outputEntryId,
+            });
+            void this.host.log?.("info", "agents", "agents.run.succeeded", {
+                runId: options.run.id,
+                threadId: options.run.threadId,
+                runtime: options.runtime,
+                outputEntryId: options.outputEntryId,
+            });
+        } catch (error) {
+            await this.failReplyPersistence({
+                run: options.run,
+                replyText,
+                outputEntryId: options.outputEntryId,
+                startedAt: options.startedAt,
+                error,
+            });
         }
-        const hadActiveStream = this.clearRunStreamState(options.run.id);
-        await this.deleteDuplicateCompletedAgentReplies({
-            threadId: options.run.threadId,
-            triggerEntryId: options.run.triggerEntryId,
-            outputEntryId: options.outputEntryId,
-            replyText,
+    }
+
+    private async failReplyPersistence(options: {
+        run: AgentRunRecord;
+        replyText: string;
+        outputEntryId: string;
+        startedAt: number;
+        error: unknown;
+    }): Promise<void> {
+        const message = summarizeError(options.error);
+        const existingStream = this.runStreams.get(options.run.id);
+        this.retainedRunStreamIds.add(options.run.id);
+        this.setRunStream(this.buildRunStreamState({
+            ...options.run,
+            ...mergeAgentRunMetadata(options.run, existingStream ?? {}),
+        }, {
+            status: "failed",
+            statusHintText: AGENT_REPLY_SAVE_FAILED_HINT,
+            processLogLines: existingStream?.processLogLines,
+            partialText: options.replyText,
             startedAt: options.startedAt,
-            completedAt: timestamp,
-            runId: options.run.id,
-        });
-        await this.refreshStatusViews();
-        if (hadActiveStream) {
-            this.emitStreamUpdate(options.run.threadId, null);
+            updatedAt: this.host.now(),
+            outputEntryId: options.outputEntryId,
+            error: message,
+        }));
+        this.persistingReplyRunIds.delete(options.run.id);
+        try {
+            await this.store.updateRun(options.run.id, (run) => ({
+                ...run,
+                ...mergeAgentRunMetadata(run, existingStream ?? {}),
+                status: "failed",
+                endedAt: this.host.now(),
+                error: message,
+            }));
+        } catch (storeError) {
+            void this.host.log?.("warn", "agents", "agents.run.failure_persist_failed", {
+                runId: options.run.id,
+                threadId: options.run.threadId,
+                outputEntryId: options.outputEntryId,
+                error: storeError,
+            });
         }
-        void this.host.log?.("info", "agents", "agents.reply.appended", {
+        void this.refreshStatusViews();
+        void this.host.log?.("warn", "agents", "agents.reply.persist_failed", {
             runId: options.run.id,
             threadId: options.run.threadId,
             outputEntryId: options.outputEntryId,
-        });
-        void this.host.log?.("info", "agents", "agents.run.succeeded", {
-            runId: options.run.id,
-            threadId: options.run.threadId,
-            runtime: options.runtime,
-            outputEntryId: options.outputEntryId,
+            error: message,
         });
     }
 
@@ -1382,7 +1506,10 @@ export class CommentAgentController {
     }
 
     private async buildRuntimePromptContext(
-        run: Pick<AgentRunRecord, "id" | "threadId" | "triggerEntryId" | "filePath" | "promptText">,
+        run: Pick<
+            AgentRunRecord,
+            "id" | "threadId" | "triggerEntryId" | "filePath" | "promptText" | "retryOfRunId" | "outputEntryId"
+        >,
     ): Promise<AgentPromptContext> {
         const thread = this.host.getCommentManager().getThreadById(run.threadId);
         if (!thread) {
@@ -1408,10 +1535,16 @@ export class CommentAgentController {
             }
         }
 
+        const promptThread = run.retryOfRunId && run.outputEntryId
+            ? {
+                ...thread,
+                entries: thread.entries.filter((entry) => entry.id !== run.outputEntryId),
+            }
+            : thread;
         const context = buildAgentPromptContext({
             filePath: run.filePath,
             noteContent,
-            thread,
+            thread: promptThread,
             triggerEntryId: run.triggerEntryId,
             fallbackPromptText: run.promptText,
             threadAgentRuns: getAgentRunsForCommentThread(this.store.getRuns(), thread),
@@ -1565,21 +1698,29 @@ export class CommentAgentController {
     }
 
     private async enqueueRun(run: AgentRunRecord): Promise<void> {
-        await this.store.addRun(run);
-        this.setRunStream(this.buildRunStreamState(run, {
+        const queuedRun = run.outputEntryId
+            ? run
+            : { ...run, outputEntryId: this.host.createCommentId() };
+        this.setRunStream(this.buildRunStreamState(queuedRun, {
             status: "queued",
-            statusHintText: formatAgentStartingHint(run.requestedAgent),
+            statusHintText: formatAgentStartingHint(queuedRun.requestedAgent),
             partialText: "",
-            startedAt: run.createdAt,
+            startedAt: queuedRun.createdAt,
             updatedAt: this.host.now(),
-            outputEntryId: run.outputEntryId,
+            outputEntryId: queuedRun.outputEntryId,
         }));
         void this.refreshStatusViews();
+        try {
+            await this.store.addRun(queuedRun);
+        } catch (error) {
+            this.clearRunStream(queuedRun.id, queuedRun.threadId);
+            throw error;
+        }
         void this.host.log?.("info", "agents", "agents.run.queued", {
-            runId: run.id,
-            threadId: run.threadId,
-            requestedAgent: run.requestedAgent,
-            runtime: run.runtime,
+            runId: queuedRun.id,
+            threadId: queuedRun.threadId,
+            requestedAgent: queuedRun.requestedAgent,
+            runtime: queuedRun.runtime,
         });
         void this.processQueue();
     }
@@ -1631,13 +1772,16 @@ export class CommentAgentController {
         });
     }
 
-    private async refreshStatusViews(): Promise<void> {
+    private async refreshStatusViews(): Promise<boolean> {
         try {
             await this.host.refreshCommentViews?.();
+            this.completePendingReplyHandoffs();
+            return true;
         } catch (error) {
             void this.host.log?.("warn", "agents", "agents.refresh.warn", {
                 error,
             });
+            return false;
         }
     }
 
@@ -1680,7 +1824,10 @@ export class CommentAgentController {
     private setRunStreamState(stream: AgentRunStreamState): void {
         this.clearRunStreamPruneTimer(stream.runId);
         this.runStreams.set(stream.runId, cloneAgentRunStreamState(stream));
-        if (stream.status === "succeeded" || stream.status === "failed" || stream.status === "cancelled") {
+        if (
+            (stream.status === "succeeded" || stream.status === "failed" || stream.status === "cancelled")
+            && !this.retainedRunStreamIds.has(stream.runId)
+        ) {
             this.scheduleRunStreamPrune(stream.runId);
         }
     }
@@ -1694,6 +1841,7 @@ export class CommentAgentController {
     }
 
     private clearRunStreamState(runId: string): boolean {
+        this.clearReplyHandoffRetryState(runId);
         if (!this.runStreams.has(runId)) {
             return false;
         }
@@ -1721,6 +1869,64 @@ export class CommentAgentController {
             this.emitStreamUpdate(stream.threadId, null);
         }, FINAL_STREAM_RETENTION_MS);
         this.runStreamPruneTimers.set(runId, timer);
+    }
+
+    private scheduleReplyHandoffRetry(runId: string, threadId: string): void {
+        this.clearReplyHandoffRetryTimer(runId);
+        this.pendingReplyHandoffs.set(runId, threadId);
+        const attempt = this.replyHandoffRetryAttempts.get(runId) ?? 0;
+        if (attempt >= MAX_REPLY_HANDOFF_RETRIES) {
+            return;
+        }
+        const timerWindow = getTimerWindow();
+        if (!timerWindow) {
+            return;
+        }
+
+        const timer = timerWindow.setTimeout(() => {
+            this.replyHandoffRetryTimers.delete(runId);
+            void this.retryReplyHandoff(runId, threadId);
+        }, REPLY_HANDOFF_RETRY_MS * (2 ** attempt));
+        this.replyHandoffRetryAttempts.set(runId, attempt + 1);
+        this.replyHandoffRetryTimers.set(runId, timer);
+    }
+
+    private async retryReplyHandoff(runId: string, threadId: string): Promise<void> {
+        if (!this.retainedRunStreamIds.has(runId) || !this.runStreams.has(runId)) {
+            return;
+        }
+        if (await this.refreshStatusViews()) {
+            this.retainedRunStreamIds.delete(runId);
+            this.clearRunStream(runId, threadId);
+            return;
+        }
+        this.scheduleReplyHandoffRetry(runId, threadId);
+    }
+
+    private completePendingReplyHandoffs(): void {
+        for (const [runId, threadId] of Array.from(this.pendingReplyHandoffs.entries())) {
+            if (!this.retainedRunStreamIds.has(runId) || !this.runStreams.has(runId)) {
+                this.clearReplyHandoffRetryState(runId);
+                continue;
+            }
+            this.retainedRunStreamIds.delete(runId);
+            this.clearRunStream(runId, threadId);
+        }
+    }
+
+    private clearReplyHandoffRetryTimer(runId: string): void {
+        const timer = this.replyHandoffRetryTimers.get(runId);
+        if (!timer) {
+            return;
+        }
+        getTimerWindow()?.clearTimeout(timer);
+        this.replyHandoffRetryTimers.delete(runId);
+    }
+
+    private clearReplyHandoffRetryState(runId: string): void {
+        this.clearReplyHandoffRetryTimer(runId);
+        this.replyHandoffRetryAttempts.delete(runId);
+        this.pendingReplyHandoffs.delete(runId);
     }
 
     private clearRunStreamPruneTimer(runId: string): void {

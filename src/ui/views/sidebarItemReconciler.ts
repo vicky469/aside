@@ -7,6 +7,7 @@ export interface SidebarItemRenderDescriptor {
 
 export interface SidebarItemReconcilerOptions {
     isCurrent?(): boolean;
+    onReplaceThread?(threadId: string, previous: HTMLElement, next: HTMLElement): boolean;
     onRemoveThread?(threadId: string): void;
 }
 
@@ -25,7 +26,11 @@ export async function reconcileSidebarItems(
     }
 
     const desiredNodes: HTMLElement[] = [];
-    const replacedThreadIds: string[] = [];
+    const replacedThreads: Array<{
+        threadId: string;
+        previous: HTMLElement;
+        next: HTMLElement;
+    }> = [];
     for (const descriptor of descriptors) {
         if (!isCurrent()) {
             return false;
@@ -47,7 +52,11 @@ export async function reconcileSidebarItems(
         nextNode.dataset.asideRenderSignature = descriptor.signature;
         desiredNodes.push(nextNode);
         if (descriptor.threadId && existing) {
-            replacedThreadIds.push(descriptor.threadId);
+            replacedThreads.push({
+                threadId: descriptor.threadId,
+                previous: existing,
+                next: nextNode,
+            });
         }
     }
 
@@ -55,8 +64,15 @@ export async function reconcileSidebarItems(
         return false;
     }
 
-    for (const threadId of replacedThreadIds) {
-        options.onRemoveThread?.(threadId);
+    for (const replacement of replacedThreads) {
+        const retained = options.onReplaceThread?.(
+            replacement.threadId,
+            replacement.previous,
+            replacement.next,
+        ) ?? false;
+        if (!retained) {
+            options.onRemoveThread?.(replacement.threadId);
+        }
     }
     for (const [key, element] of existingByKey) {
         if (key.startsWith("thread:")) {

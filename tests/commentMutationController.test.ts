@@ -606,6 +606,7 @@ test("comment mutation controller closes a saved draft before a slow agent dispa
     }));
     let releaseDispatch!: () => void;
     let dispatchResolved = false;
+    let draftVisibleWhenDispatchStarted = false;
     const dispatchPromise = new Promise<void>((resolve) => {
         releaseDispatch = () => {
             dispatchResolved = true;
@@ -618,12 +619,17 @@ test("comment mutation controller closes a saved draft before a slow agent dispa
         currentNoteContentByPath: {
             [draft.filePath]: "# Title\n\nAlpha beta gamma.\n",
         },
-        handleSavedUserEntry: async () => dispatchPromise,
+        handleSavedUserEntry: async () => {
+            draftVisibleWhenDispatchStarted = host.getDraftComment()?.id === draft.id
+                && host.getSavingDraftCommentId() === draft.id;
+            await dispatchPromise;
+        },
     });
 
     await host.controller.saveDraft(draft.id);
 
     assert.equal(dispatchResolved, false);
+    assert.equal(draftVisibleWhenDispatchStarted, true);
     assert.equal(host.getDraftComment(), null);
     assert.equal(host.getSavingDraftCommentId(), null);
     assert.equal(host.getRefreshCommentViewsCount(), 2);

@@ -22,8 +22,8 @@ Use this section as the working checklist. Mark an item done only after the code
 - [x] Keep durable run status non-terminal until the reply write succeeds, while preventing regenerate or cancellation from starting an overlapping replacement.
 - [x] On reply persistence failure, retain the new reply text and change the same card to `❌ <agent> · Couldn’t save reply`.
 - [x] Apply the shared completion policy to every supported agent without provider-specific copies.
-- [ ] Treat a soft-deleted prior output entry as unavailable when regenerating an agent reply.
-- [ ] Allocate and persist a fresh visible output entry without restoring or overwriting the deleted reply.
+- [x] Treat a soft-deleted prior output entry as unavailable when regenerating an agent reply.
+- [x] Allocate and persist a fresh visible output entry without restoring or overwriting the deleted reply.
 
 ### Verification
 
@@ -35,9 +35,9 @@ Use this section as the working checklist. Mark an item done only after the code
 - [x] Representative non-Codex coverage proves the policy is provider-neutral.
 - [x] Focused controller and rendering suites, the complete build, and release artifact inspection pass.
 - [x] The verified build is installed in `lean-startup` and all three shipped assets match byte-for-byte.
-- [ ] A regression test proves `deleted output → Regenerate → successful persisted handoff` creates one new visible reply.
-- [ ] The complete build and release artifact inspection pass after the regression fix.
-- [ ] The verified fix is installed in `lean-startup` and its shipped assets match byte-for-byte.
+- [x] A regression test proves `deleted output → Regenerate → successful persisted handoff` creates one new visible reply.
+- [x] The complete build and release artifact inspection pass after the regression fix.
+- [x] The verified fix is installed in `lean-startup` and its shipped assets match byte-for-byte.
 
 ## Confirmed Problem
 

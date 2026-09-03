@@ -21,6 +21,8 @@ Use this section as the working checklist. Mark an item done only after the code
 - [x] Use the same turning spinner presentation for both queued and running agent states.
 - [x] Reconcile status marker and hint elements in place so progress updates do not restart the spinner animation.
 - [x] Let a transient stream card adopt its persisted output entry id without removing and recreating the card.
+- [x] Launch retries without waiting for the previous reply clear to finish persisting.
+- [x] Keep retry completion behind the clear-persistence barrier and exclude the stale reply from retry context.
 
 ### Verification
 
@@ -32,6 +34,7 @@ Use this section as the working checklist. Mark an item done only after the code
 - [x] A streamed-card identity test proves queued-to-running updates reuse the same spinner DOM node.
 - [x] A card identity test proves assigning the persisted output entry id reuses the same card DOM node.
 - [x] The focused suites and complete repository build pass after the smoothness changes.
+- [x] A blocked-clear regression test proves retry launch is immediate while final replacement remains ordered.
 
 ## Problem
 

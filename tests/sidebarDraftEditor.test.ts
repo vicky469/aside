@@ -811,6 +811,98 @@ test("slash suggestion ArrowDown preserves rows while moving the active option",
     ]);
 });
 
+test("mention suggestion ArrowUp wraps from the first option to the last", () => {
+    const controller = new SidebarDraftEditorController({
+        getAllIndexedComments: () => [],
+        updateDraftCommentText: () => {},
+        renderComments: async () => {},
+        scheduleDraftFocus: () => {},
+        getMentionSuggestions: () => [
+            {
+                kind: "built-in",
+                mention: "@todo",
+                label: "Todo",
+            },
+            {
+                kind: "built-in",
+                mention: "@codex",
+                label: "Codex",
+            },
+        ],
+        openMentionSuggestModal: () => {},
+        openLinkSuggestModal: () => {},
+        openTagSuggestModal: () => {},
+    });
+    const draft = createDraft({ comment: "@" });
+    const { textarea, shell } = createSuggestionTextarea(draft.comment);
+
+    assert.equal(controller.openDraftMentionSuggest(draft, textarea, false), true);
+    const container = shell.children[0] as ReturnType<typeof createFakeElement>;
+    const list = container.children[0] as ReturnType<typeof createFakeElement>;
+    const rows = [...list.children] as ReturnType<typeof createFakeElement>[];
+    rows[1].scrollIntoView = () => {};
+
+    assert.match(rows[0].className, /(?:^|\s)is-selected(?:\s|$)/u);
+
+    const event = {
+        key: "ArrowUp",
+        shiftKey: false,
+        preventDefault: () => {},
+        stopPropagation: () => {},
+        stopImmediatePropagation: () => {},
+    } as unknown as KeyboardEvent;
+
+    assert.equal(controller.handleDraftSuggestionKeydown(event, textarea), true);
+    assert.doesNotMatch(rows[0].className, /(?:^|\s)is-selected(?:\s|$)/u);
+    assert.match(rows[1].className, /(?:^|\s)is-selected(?:\s|$)/u);
+});
+
+test("mention suggestion ArrowDown wraps from the last option to the first", () => {
+    const controller = new SidebarDraftEditorController({
+        getAllIndexedComments: () => [],
+        updateDraftCommentText: () => {},
+        renderComments: async () => {},
+        scheduleDraftFocus: () => {},
+        getMentionSuggestions: () => [
+            {
+                kind: "built-in",
+                mention: "@todo",
+                label: "Todo",
+            },
+            {
+                kind: "built-in",
+                mention: "@codex",
+                label: "Codex",
+            },
+        ],
+        openMentionSuggestModal: () => {},
+        openLinkSuggestModal: () => {},
+        openTagSuggestModal: () => {},
+    });
+    const draft = createDraft({ comment: "@" });
+    const { textarea, shell } = createSuggestionTextarea(draft.comment);
+
+    assert.equal(controller.openDraftMentionSuggest(draft, textarea, false), true);
+    const container = shell.children[0] as ReturnType<typeof createFakeElement>;
+    const list = container.children[0] as ReturnType<typeof createFakeElement>;
+    const rows = [...list.children] as ReturnType<typeof createFakeElement>[];
+    rows[1].scrollIntoView = () => {};
+
+    const downEvent = {
+        key: "ArrowDown",
+        shiftKey: false,
+        preventDefault: () => {},
+        stopPropagation: () => {},
+        stopImmediatePropagation: () => {},
+    } as unknown as KeyboardEvent;
+    assert.equal(controller.handleDraftSuggestionKeydown(downEvent, textarea), true);
+    assert.match(rows[1].className, /(?:^|\s)is-selected(?:\s|$)/u);
+
+    assert.equal(controller.handleDraftSuggestionKeydown(downEvent, textarea), true);
+    assert.match(rows[0].className, /(?:^|\s)is-selected(?:\s|$)/u);
+    assert.doesNotMatch(rows[1].className, /(?:^|\s)is-selected(?:\s|$)/u);
+});
+
 test("input triggers keep @ and / inline while # opens the tag modal", () => {
     const cases = [
         {

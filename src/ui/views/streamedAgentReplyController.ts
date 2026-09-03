@@ -19,10 +19,20 @@ function createElement<K extends keyof HTMLElementTagNameMap>(
 
 type StreamedAgentReplyControllerOptions = {
     onCancelRun?: (runId: string) => void;
+    renderFinalMarkdown?: (markdown: string, container: HTMLElement) => Promise<void>;
+    onFinalMarkdownRenderError?: (error: unknown) => void;
+    adoptPersistedCardInteractions?: (
+        persistedCardEl: HTMLDivElement,
+        retainedCardEl: HTMLDivElement,
+    ) => (() => void) | null;
 };
 
 function isAgentStreamBusy(stream: Pick<AgentRunStreamState, "status">): boolean {
     return stream.status === "queued" || stream.status === "running";
+}
+
+function shouldKeepAgentStreamCardExclusive(stream: Pick<AgentRunStreamState, "status">): boolean {
+    return isAgentStreamBusy(stream) || stream.status === "succeeded";
 }
 
 export function formatAgentProcessLogText(
@@ -55,7 +65,16 @@ export class StreamedAgentReplyController {
     private footerMetaEl: HTMLDivElement | null = null;
     private actionsEl: HTMLDivElement | null = null;
     private runId: string | null = null;
+    private finalRenderGeneration = 0;
+    private finalRenderKey: string | null = null;
+    private finalRenderContentEl: HTMLDivElement | null = null;
     private ownsCard = false;
+    private persistedHandoffSnapshot: {
+        className: string;
+        attributes: Array<{ name: string; value: string }>;
+        childNodes: Node[];
+    } | null = null;
+    private persistedCardInteractionCleanup: (() => void) | null = null;
     private borrowedSnapshot: {
         metaText: string;
         labelClassName: string;
@@ -124,9 +143,7 @@ export class StreamedAgentReplyController {
         this.processLogEl?.remove();
         this.processLogEl = null;
 
-        if (contentEl.textContent !== stream.partialText) {
-            contentEl.textContent = stream.partialText;
-        }
+        this.syncContent(contentEl, stream);
         cardEl.classList.toggle(
             "is-empty",
             stream.partialText.trim().length === 0 && processLogText.length === 0,
@@ -141,7 +158,47 @@ export class StreamedAgentReplyController {
         }
     }
 
+    public handoffToPersistedThread(
+        nextThreadEl: HTMLElement,
+        stream: AgentRunStreamState,
+    ): boolean {
+        const cardEl = this.cardEl;
+        const outputEntryId = stream.outputEntryId
+            ?? cardEl?.getAttribute("data-agent-output-entry-id")
+            ?? null;
+        const canRetainCard = this.ownsCard || this.persistedHandoffSnapshot !== null;
+        if (!canRetainCard || !cardEl || stream.runId !== this.runId || !outputEntryId) {
+            return false;
+        }
+
+        const persistedCardEl = nextThreadEl.querySelector(
+            `.aside-thread-entry-item[data-comment-id="${outputEntryId}"]`,
+        );
+        if (!nodeInstanceOf(persistedCardEl, HTMLDivElement)) {
+            return false;
+        }
+
+        this.persistedHandoffSnapshot = {
+            className: persistedCardEl.className,
+            attributes: Array.from(persistedCardEl.attributes).map((attribute) => ({
+                name: attribute.name,
+                value: attribute.value,
+            })),
+            childNodes: Array.from(persistedCardEl.childNodes),
+        };
+        persistedCardEl.replaceWith(cardEl);
+        this.persistedCardInteractionCleanup?.();
+        this.persistedCardInteractionCleanup = this.options.adoptPersistedCardInteractions?.(
+            persistedCardEl,
+            cardEl,
+        ) ?? null;
+        cardEl.setAttribute("data-comment-id", outputEntryId);
+        this.ownsCard = false;
+        return true;
+    }
+
     public clear(): void {
+        this.invalidateFinalRender();
         if (this.ownsCard) {
             this.cardEl?.remove();
         } else {
@@ -165,6 +222,8 @@ export class StreamedAgentReplyController {
         this.actionsEl = null;
         this.runId = null;
         this.ownsCard = false;
+        this.persistedHandoffSnapshot = null;
+        this.persistedCardInteractionCleanup = null;
         this.borrowedSnapshot = null;
     }
 
@@ -227,16 +286,78 @@ export class StreamedAgentReplyController {
         statusEl.removeAttribute("title");
     }
 
+    private syncContent(contentEl: HTMLDivElement, stream: AgentRunStreamState): void {
+        const renderFinalMarkdown = this.options.renderFinalMarkdown;
+        const shouldRenderFinalMarkdown = (stream.status === "succeeded" || stream.status === "failed")
+            && !!stream.partialText.trim()
+            && !!renderFinalMarkdown;
+        if (!shouldRenderFinalMarkdown) {
+            this.invalidateFinalRender();
+            if (contentEl.textContent !== stream.partialText) {
+                contentEl.textContent = stream.partialText;
+            }
+            return;
+        }
+
+        const renderKey = `${stream.runId}\u0000${stream.partialText}`;
+        if (this.finalRenderKey === renderKey && this.finalRenderContentEl === contentEl) {
+            return;
+        }
+
+        this.invalidateFinalRender();
+        if (contentEl.textContent !== stream.partialText) {
+            contentEl.textContent = stream.partialText;
+        }
+        this.finalRenderKey = renderKey;
+        this.finalRenderContentEl = contentEl;
+        const renderGeneration = this.finalRenderGeneration;
+        const detached = createElement(contentEl.ownerDocument, "div", contentEl.className);
+        let renderPromise: Promise<void>;
+        try {
+            renderPromise = renderFinalMarkdown(stream.partialText, detached);
+        } catch (error) {
+            this.options.onFinalMarkdownRenderError?.(error);
+            return;
+        }
+
+        void renderPromise.then(() => {
+            if (
+                this.finalRenderGeneration !== renderGeneration
+                || this.finalRenderKey !== renderKey
+                || this.finalRenderContentEl !== contentEl
+                || this.contentEl !== contentEl
+            ) {
+                return;
+            }
+            const renderedNodes = Array.from(detached.childNodes);
+            if (!renderedNodes.length) {
+                this.options.onFinalMarkdownRenderError?.(
+                    new Error("Final Markdown renderer produced no content."),
+                );
+                return;
+            }
+            contentEl.replaceChildren(...renderedNodes);
+        }).catch((error) => {
+            this.options.onFinalMarkdownRenderError?.(error);
+        });
+    }
+
+    private invalidateFinalRender(): void {
+        this.finalRenderGeneration += 1;
+        this.finalRenderKey = null;
+        this.finalRenderContentEl = null;
+    }
+
     private syncActions(actionsEl: HTMLDivElement, stream: AgentRunStreamState): void {
         actionsEl.replaceChildren();
-        if (!isAgentStreamBusy(stream)) {
+        if (!shouldKeepAgentStreamCardExclusive(stream)) {
             if (!this.ownsCard && this.borrowedSnapshot) {
                 actionsEl.replaceChildren(...this.borrowedSnapshot.actionsNodes);
             }
             return;
         }
 
-        if (!this.options.onCancelRun) {
+        if (!isAgentStreamBusy(stream) || !this.options.onCancelRun) {
             return;
         }
 
@@ -412,6 +533,7 @@ export class StreamedAgentReplyController {
             return;
         }
 
+        this.persistedHandoffSnapshot = null;
         this.borrowedSnapshot = {
             metaText: this.metaValueEl?.textContent ?? "",
             labelClassName: this.labelEl?.className ?? "",
@@ -435,7 +557,7 @@ export class StreamedAgentReplyController {
             return;
         }
 
-        if (!isAgentStreamBusy(stream) && this.borrowedSnapshot) {
+        if (!shouldKeepAgentStreamCardExclusive(stream) && this.borrowedSnapshot) {
             this.footerMetaEl.replaceChildren(...this.borrowedSnapshot.footerMetaNodes);
             return;
         }
@@ -444,7 +566,23 @@ export class StreamedAgentReplyController {
     }
 
     private restoreBorrowedCard(): void {
-        if (this.ownsCard || !this.borrowedSnapshot) {
+        if (this.ownsCard) {
+            return;
+        }
+
+        if (this.cardEl && this.persistedHandoffSnapshot) {
+            for (const attribute of Array.from(this.cardEl.attributes)) {
+                this.cardEl.removeAttribute(attribute.name);
+            }
+            for (const attribute of this.persistedHandoffSnapshot.attributes) {
+                this.cardEl.setAttribute(attribute.name, attribute.value);
+            }
+            this.cardEl.className = this.persistedHandoffSnapshot.className;
+            this.cardEl.replaceChildren(...this.persistedHandoffSnapshot.childNodes);
+            return;
+        }
+
+        if (!this.borrowedSnapshot) {
             return;
         }
 

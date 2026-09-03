@@ -79,6 +79,15 @@ function createHarness(options: {
     defaultRuntimeSelection?: DefaultAgentRuntimeSelection;
     resolveDefaultAgentRuntimeSelection?: () => Promise<DefaultAgentRuntimeSelection>;
     customRunAgentRuntime?: (invocation: AgentRuntimeInvocation) => Promise<AgentRuntimeResult>;
+    customAppendThreadEntry?: () => Promise<void>;
+    customHashText?: (text: string) => Promise<string>;
+    customBeforeEditComment?: () => Promise<void>;
+    customEditComment?: (commentId: string, newCommentText: string) => Promise<void>;
+    resolveEditCommentResult?: (
+        commentId: string,
+        newCommentText: string,
+        commentManager: CommentManager,
+    ) => boolean;
     agentsFeatureAvailable?: boolean;
     registeredScriptPaths?: string[];
 } = {}) {
@@ -146,7 +155,7 @@ function createHarness(options: {
             return options.currentNoteContent ?? "";
         },
         loadCommentsForFile: async () => undefined,
-        hashText: async (text) => `hash:${text}`,
+        hashText: async (text) => options.customHashText?.(text) ?? `hash:${text}`,
         persistCommentsForFile: async (file, persistOptions) => {
             persistedFiles.push({
                 path: file.path,
@@ -175,12 +184,22 @@ function createHarness(options: {
                     "after",
                 );
             }
+            await options.customAppendThreadEntry?.();
             return true;
         },
         editComment: async (commentId, newCommentText) => {
+            await options.customBeforeEditComment?.();
             editedEntries.push({ commentId, body: newCommentText });
-            commentManager.editComment(commentId, newCommentText);
-            return true;
+            const edited = options.resolveEditCommentResult?.(
+                commentId,
+                newCommentText,
+                commentManager,
+            ) ?? true;
+            if (edited) {
+                commentManager.editComment(commentId, newCommentText);
+            }
+            await options.customEditComment?.(commentId, newCommentText);
+            return edited;
         },
         deleteComment: async (commentId) => {
             commentManager.deleteComment(commentId, now);
@@ -988,6 +1007,51 @@ test("comment agent controller turns annotation proposals into anchored side not
     }]);
 });
 
+test("comment agent controller rejects cancellation while annotation proposals are applied", async () => {
+    let markHashStarted: () => void = () => undefined;
+    let releaseHash: () => void = () => undefined;
+    const hashStarted = new Promise<void>((resolve) => {
+        markHashStarted = resolve;
+    });
+    const blockedHash = new Promise<void>((resolve) => {
+        releaseHash = resolve;
+    });
+    const harness = createHarness({
+        currentNoteContent: "# Plan\n\nA sharper promise matters.\n",
+        runtimeReplyText: [
+            "```aside-annotations",
+            JSON.stringify([{
+                selectedText: "sharper promise",
+                comment: "Make the promise concrete.",
+            }]),
+            "```",
+            "Added one note.",
+        ].join("\n"),
+        customHashText: async (text) => {
+            markHashStarted();
+            await blockedHash;
+            return `hash:${text}`;
+        },
+    });
+
+    const savePromise = harness.controller.handleSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "@codex add an annotation",
+    });
+    await hashStarted;
+    try {
+        assert.equal(await harness.controller.cancelRun("generated-1"), false);
+    } finally {
+        releaseHash();
+        await savePromise;
+        await waitForAgentQueueToDrain(harness.controller);
+    }
+
+    assert.equal(harness.controller.getLatestAgentRunForThread("thread-1")?.status, "succeeded");
+});
+
 test("comment agent controller removes orphan duplicate replies created during completion", async () => {
     const harness = createHarness({
         customRunAgentRuntime: async () => {
@@ -1233,6 +1297,20 @@ test("comment agent controller persists a blocked retry in the existing failed c
         body: "Previous failure",
         timestamp: 20,
     });
+    const internalController = harness.controller as any;
+    internalController.retainedRunStreamIds.add("run-old");
+    internalController.setRunStream({
+        runId: "run-old",
+        threadId: "thread-1",
+        requestedAgent: "codex",
+        runtime: "direct-cli",
+        status: "failed",
+        statusHintText: "Couldn’t save reply",
+        partialText: "Unsaved replacement",
+        startedAt: 10,
+        updatedAt: 12,
+        outputEntryId: "reply-1",
+    });
 
     assert.equal(await harness.controller.retryRun("run-old"), true);
 
@@ -1247,6 +1325,7 @@ test("comment agent controller persists a blocked retry in the existing failed c
     assert.deepEqual(harness.appendedEntries, []);
     assert.deepEqual(harness.runtimeCalls, []);
     assert.deepEqual(harness.notices, []);
+    assert.equal(harness.controller.getActiveAgentStreamForThread("thread-1"), null);
 });
 
 test("comment agent controller runs local jobs in parallel across different threads", async () => {
@@ -1469,9 +1548,6 @@ test("comment agent controller regenerates a specific reply run using the curren
         body: "First reply",
     }, {
         commentId: "generated-2",
-        body: "",
-    }, {
-        commentId: "generated-2",
         body: "Second reply",
     }]);
     assert.equal(harness.commentManager.getCommentById(latestRun?.outputEntryId ?? "")?.comment, "Second reply");
@@ -1519,7 +1595,7 @@ test("comment agent controller regenerates a non-Markdown reply in the existing 
     assert.equal(started, true);
     const retryRun = harness.controller.getLatestAgentRunForThread("thread-1");
     assert.equal(retryRun?.outputEntryId, outputEntryId);
-    assert.equal(harness.commentManager.getCommentById(outputEntryId)?.comment, "");
+    assert.equal(harness.commentManager.getCommentById(outputEntryId)?.comment, "first conversion failed");
     assert.equal(
         harness.controller.getActiveAgentStreamForThread("thread-1")?.outputEntryId,
         outputEntryId,
@@ -1683,7 +1759,7 @@ test("comment agent controller re-resolves the configured default for create-scr
     assert.equal(harness.runtimeCalls.at(-1)?.requestKind, "create-script");
 });
 
-test("comment agent controller clears the previous retry reply before the regenerated runtime completes", async () => {
+test("comment agent controller keeps the previous durable reply while regeneration runs", async () => {
     let resolveSecondReply!: (replyText: string) => void;
     const secondReply = new Promise<string>((resolve) => {
         resolveSecondReply = resolve;
@@ -1717,10 +1793,11 @@ test("comment agent controller clears the previous retry reply before the regene
     const started = await harness.controller.retryRun("generated-1");
 
     assert.equal(started, true);
-    assert.equal(harness.commentManager.getCommentById("generated-2")?.comment, "");
+    assert.equal(harness.commentManager.getCommentById("generated-2")?.comment, "First reply");
+    assert.equal(harness.controller.getActiveAgentStreamForThread("thread-1")?.partialText, "");
     assert.deepEqual(harness.editedEntries.slice(-1), [{
         commentId: "generated-2",
-        body: "",
+        body: "First reply",
     }]);
 
     resolveSecondReply("Second reply");
@@ -1728,6 +1805,307 @@ test("comment agent controller clears the previous retry reply before the regene
 
     const retriedRun = harness.controller.getLatestAgentRunForThread("thread-1");
     assert.equal(harness.commentManager.getCommentById(retriedRun?.outputEntryId ?? "")?.comment, "Second reply");
+});
+
+test("comment agent controller shows success before final retry persistence finishes", async () => {
+    let releaseFinalEdit: () => void = () => undefined;
+    let markFinalEditStarted: () => void = () => undefined;
+    const finalEditStarted = new Promise<void>((resolve) => {
+        markFinalEditStarted = resolve;
+    });
+    const blockedFinalEdit = new Promise<void>((resolve) => {
+        releaseFinalEdit = resolve;
+    });
+    let runtimeCount = 0;
+    const harness = createHarness({
+        customEditComment: async (_commentId, newCommentText) => {
+            if (newCommentText === "Second reply") {
+                markFinalEditStarted();
+                await blockedFinalEdit;
+            }
+        },
+        customRunAgentRuntime: async () => {
+            runtimeCount += 1;
+            return {
+                runtime: "direct-cli",
+                replyText: runtimeCount === 1 ? "First reply" : "Second reply",
+            };
+        },
+    });
+
+    await harness.controller.handleSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "@codex answer this",
+    });
+    await waitForAgentQueueToDrain(harness.controller);
+
+    const retryPromise = harness.controller.retryRun("generated-1");
+    await finalEditStarted;
+
+    try {
+        const stream = harness.controller.getActiveAgentStreamForThread("thread-1");
+        assert.equal(stream?.status, "succeeded");
+        assert.equal(stream?.statusHintText, undefined);
+        assert.equal(stream?.partialText, "Second reply");
+        assert.equal(stream?.outputEntryId, "generated-2");
+        assert.equal(harness.controller.getLatestAgentRunForThread("thread-1")?.status, "running");
+    } finally {
+        releaseFinalEdit();
+        assert.equal(await retryPromise, true);
+        await waitForAgentQueueToDrain(harness.controller);
+    }
+});
+
+test("comment agent controller retries with one final replacement and no empty edit", async () => {
+    let runtimeCount = 0;
+    const harness = createHarness({
+        customRunAgentRuntime: async () => {
+            runtimeCount += 1;
+            return {
+                runtime: "direct-cli",
+                replyText: runtimeCount === 1 ? "First reply" : "Second reply",
+            };
+        },
+    });
+
+    await harness.controller.handleSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "@codex answer this",
+    });
+    await waitForAgentQueueToDrain(harness.controller);
+    const editsBeforeRetry = harness.editedEntries.length;
+
+    assert.equal(await harness.controller.retryRun("generated-1"), true);
+    await waitForAgentQueueToDrain(harness.controller);
+
+    assert.deepEqual(harness.editedEntries.slice(editsBeforeRetry), [{
+        commentId: "generated-2",
+        body: "Second reply",
+    }]);
+});
+
+test("comment agent controller creates a fresh reply when the prior output was deleted", async () => {
+    let runtimeCount = 0;
+    const harness = createHarness({
+        customRunAgentRuntime: async () => {
+            runtimeCount += 1;
+            return {
+                runtime: "direct-cli",
+                replyText: runtimeCount === 1 ? "First reply" : "Second reply",
+            };
+        },
+    });
+
+    await harness.controller.handleSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "@codex answer this",
+    });
+    await waitForAgentQueueToDrain(harness.controller);
+    const firstRun = harness.controller.getLatestAgentRunForThread("thread-1");
+    const deletedOutputEntryId = firstRun?.outputEntryId ?? "";
+    const deletedAt = Date.now();
+    harness.commentManager.deleteComment(deletedOutputEntryId, deletedAt);
+
+    assert.equal(await harness.controller.retryRun(firstRun?.id ?? ""), true);
+    await waitForAgentQueueToDrain(harness.controller);
+
+    const retry = harness.controller.getLatestAgentRunForThread("thread-1");
+    const retryOutput = harness.commentManager.getCommentById(retry?.outputEntryId ?? "");
+    assert.notEqual(retry?.outputEntryId, deletedOutputEntryId);
+    assert.equal(harness.commentManager.getCommentById(deletedOutputEntryId)?.deletedAt, deletedAt);
+    assert.equal(retryOutput?.comment, "Second reply");
+    assert.equal(retryOutput?.deletedAt, undefined);
+    assert.equal(harness.controller.getActiveAgentStreamForThread("thread-1"), null);
+});
+
+test("comment agent controller keeps an unsaved completed reply visible", async () => {
+    let runtimeCount = 0;
+    let finalEditAttempts = 0;
+    const harness = createHarness({
+        customRunAgentRuntime: async () => {
+            runtimeCount += 1;
+            return {
+                runtime: "direct-cli",
+                replyText: runtimeCount === 1 ? "First reply" : "Second reply",
+            };
+        },
+        resolveEditCommentResult: (_commentId, newCommentText) => {
+            if (newCommentText !== "Second reply") {
+                return true;
+            }
+            finalEditAttempts += 1;
+            return false;
+        },
+    });
+
+    await harness.controller.handleSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "@codex answer this",
+    });
+    await waitForAgentQueueToDrain(harness.controller);
+
+    assert.equal(await harness.controller.retryRun("generated-1"), true);
+    await waitForAgentQueueToDrain(harness.controller);
+
+    const retry = harness.controller.getLatestAgentRunForThread("thread-1");
+    const stream = harness.controller.getActiveAgentStreamForThread("thread-1");
+    assert.equal(retry?.status, "failed");
+    assert.equal(stream?.status, "failed");
+    assert.equal(stream?.statusHintText, "Couldn’t save reply");
+    assert.equal(stream?.partialText, "Second reply");
+    assert.equal(harness.commentManager.getCommentById("generated-2")?.comment, "First reply");
+    assert.equal(finalEditAttempts, 1);
+    assert.equal(harness.editedEntries.some((entry) => entry.body === ""), false);
+});
+
+test("comment agent controller rejects cancellation while a completed reply is persisting", async () => {
+    let releaseFinalEdit: () => void = () => undefined;
+    let markFinalEditStarted: () => void = () => undefined;
+    const finalEditStarted = new Promise<void>((resolve) => {
+        markFinalEditStarted = resolve;
+    });
+    const blockedFinalEdit = new Promise<void>((resolve) => {
+        releaseFinalEdit = resolve;
+    });
+    let finalEditCount = 0;
+    let runtimeCount = 0;
+    const harness = createHarness({
+        customEditComment: async (_commentId, newCommentText) => {
+            if (newCommentText !== "Second reply") {
+                return;
+            }
+            finalEditCount += 1;
+            if (finalEditCount === 1) {
+                markFinalEditStarted();
+                await blockedFinalEdit;
+            }
+        },
+        customRunAgentRuntime: async () => {
+            runtimeCount += 1;
+            return {
+                runtime: "direct-cli",
+                replyText: runtimeCount === 1 ? "First reply" : "Second reply",
+            };
+        },
+    });
+
+    await harness.controller.handleSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "@codex answer this",
+    });
+    await waitForAgentQueueToDrain(harness.controller);
+
+    const retryPromise = harness.controller.retryRun("generated-1");
+    await finalEditStarted;
+    try {
+        assert.equal(await harness.controller.cancelRun("generated-3"), false);
+    } finally {
+        releaseFinalEdit();
+        await retryPromise;
+        await waitForAgentQueueToDrain(harness.controller);
+    }
+});
+
+test("comment agent controller rejects regenerate while a completed reply is persisting", async () => {
+    let releaseFinalEdit: () => void = () => undefined;
+    let markFinalEditStarted: () => void = () => undefined;
+    const finalEditStarted = new Promise<void>((resolve) => {
+        markFinalEditStarted = resolve;
+    });
+    const blockedFinalEdit = new Promise<void>((resolve) => {
+        releaseFinalEdit = resolve;
+    });
+    let runtimeCount = 0;
+    let finalEditCount = 0;
+    const harness = createHarness({
+        customEditComment: async (_commentId, newCommentText) => {
+            if (newCommentText !== "Second reply") {
+                return;
+            }
+            finalEditCount += 1;
+            if (finalEditCount === 1) {
+                markFinalEditStarted();
+                await blockedFinalEdit;
+            }
+        },
+        customRunAgentRuntime: async () => {
+            runtimeCount += 1;
+            return {
+                runtime: "direct-cli",
+                replyText: runtimeCount === 1 ? "First reply" : "Second reply",
+            };
+        },
+    });
+
+    await harness.controller.handleSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "@codex answer this",
+    });
+    await waitForAgentQueueToDrain(harness.controller);
+
+    const retryPromise = harness.controller.retryRun("generated-1");
+    await finalEditStarted;
+    try {
+        assert.equal(await harness.controller.retryRun("generated-3"), false);
+        assert.equal(harness.notices.at(-1), "That agent reply is still being saved.");
+    } finally {
+        releaseFinalEdit();
+        await retryPromise;
+        await waitForAgentQueueToDrain(harness.controller);
+    }
+});
+
+test("comment agent controller shows optimistic success for a peer provider", async () => {
+    let releaseFinalEdit: () => void = () => undefined;
+    let markFinalEditStarted: () => void = () => undefined;
+    const finalEditStarted = new Promise<void>((resolve) => {
+        markFinalEditStarted = resolve;
+    });
+    const blockedFinalEdit = new Promise<void>((resolve) => {
+        releaseFinalEdit = resolve;
+    });
+    const harness = createHarness({
+        customEditComment: async (_commentId, newCommentText) => {
+            if (newCommentText === "Gemini reply") {
+                markFinalEditStarted();
+                await blockedFinalEdit;
+            }
+        },
+        customRunAgentRuntime: async () => ({
+            runtime: "direct-cli",
+            replyText: "Gemini reply",
+        }),
+    });
+
+    const savePromise = harness.controller.handleSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "@gemini answer this",
+    });
+    await finalEditStarted;
+    try {
+        const stream = harness.controller.getActiveAgentStreamForThread("thread-1");
+        assert.equal(stream?.requestedAgent, "gemini");
+        assert.equal(stream?.status, "succeeded");
+        assert.equal(stream?.partialText, "Gemini reply");
+    } finally {
+        releaseFinalEdit();
+        await savePromise;
+        await waitForAgentQueueToDrain(harness.controller);
+    }
 });
 
 test("comment agent controller can retry a saved agent prompt when run metadata is missing", async () => {
@@ -2062,6 +2440,37 @@ test("comment agent controller shows starting status and launches while refresh 
     }
 });
 
+test("comment agent controller launches runtime while the blank reply is still persisting", async () => {
+    let releaseAppend: () => void = () => undefined;
+    const blockedAppend = new Promise<void>((resolve) => {
+        releaseAppend = resolve;
+    });
+    let runtimeStarted = false;
+    const harness = createHarness({
+        customAppendThreadEntry: async () => blockedAppend,
+        customRunAgentRuntime: async () => {
+            runtimeStarted = true;
+            return { runtime: "direct-cli", replyText: "Done" };
+        },
+    });
+
+    await harness.controller.handleSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "@codex answer this",
+    });
+
+    try {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        assert.equal(runtimeStarted, true);
+        assert.equal(harness.controller.getActiveAgentStreamForThread("thread-1")?.outputEntryId, "generated-2");
+    } finally {
+        releaseAppend();
+        await waitForAgentQueueToDrain(harness.controller);
+    }
+});
+
 test("comment agent controller keeps running streams free of stage labels", async () => {
     let releaseRuntime: () => void = () => {
         throw new Error("Expected runtime release callback to be set.");
@@ -2306,6 +2715,51 @@ test("comment agent controller emits a clear update when terminal retention expi
     }
 });
 
+test("comment agent controller does not schedule retained failure streams to expire", () => {
+    const previousWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
+    let scheduled = false;
+    Object.defineProperty(globalThis, "window", {
+        configurable: true,
+        value: {
+            setTimeout() {
+                scheduled = true;
+                return 1;
+            },
+            clearTimeout() {},
+        },
+    });
+
+    try {
+        const harness = createHarness();
+        const controller = harness.controller as any;
+        controller.retainedRunStreamIds.add("unsaved-run");
+        controller.setRunStream({
+            runId: "unsaved-run",
+            threadId: "thread-1",
+            requestedAgent: "codex",
+            runtime: "direct-cli",
+            status: "failed",
+            statusHintText: "Couldn’t save reply",
+            partialText: "Unsaved answer",
+            startedAt: 100,
+            updatedAt: 101,
+        });
+
+        assert.equal(scheduled, false);
+        assert.equal(
+            harness.controller.getActiveAgentStreamForThread("thread-1")?.partialText,
+            "Unsaved answer",
+        );
+        harness.controller.dispose();
+    } finally {
+        if (previousWindow) {
+            Object.defineProperty(globalThis, "window", previousWindow);
+        } else {
+            Reflect.deleteProperty(globalThis, "window");
+        }
+    }
+});
+
 test("comment agent controller marks thread runs cancelled before delete flow continues", async () => {
     const harness = createHarness({
         customRunAgentRuntime: async (invocation) => {
@@ -2331,7 +2785,7 @@ test("comment agent controller marks thread runs cancelled before delete flow co
     assert.equal(harness.controller.getLatestAgentRunForThread("thread-1")?.status, "cancelled");
 });
 
-test("comment agent controller refreshes views after clearing the completed stream", async () => {
+test("comment agent controller keeps optimistic success through persisted view refresh", async () => {
     const refreshSnapshots: Array<{
         status: string | null;
         outputEntryId: string | null;
@@ -2360,9 +2814,68 @@ test("comment agent controller refreshes views after clearing the completed stre
         && snapshot.outputEntryId === "generated-2"
     ));
     assert.deepEqual(refreshSnapshots.at(-1), {
-        status: null,
-        outputEntryId: null,
+        status: "succeeded",
+        outputEntryId: "generated-2",
     });
+    assert.equal(harness.controller.getActiveAgentStreamForThread("thread-1"), null);
+});
+
+test("comment agent controller retries a failed persisted-card handoff", async () => {
+    const previousWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
+    let retryCallback: () => void = () => {
+        throw new Error("Reply handoff retry was not scheduled.");
+    };
+    let retryScheduled = false;
+    let rejectedOptimisticRefresh = false;
+    Object.defineProperty(globalThis, "window", {
+        configurable: true,
+        value: {
+            setTimeout(callback: () => void) {
+                retryCallback = callback;
+                retryScheduled = true;
+                return 1;
+            },
+            clearTimeout() {},
+        },
+    });
+    const harness = createHarness({
+        runtimeReplyText: "Stable reply",
+        onRefreshCommentViews: (controller) => {
+            if (
+                controller.getActiveAgentStreamForThread("thread-1")?.status === "succeeded"
+                && !rejectedOptimisticRefresh
+            ) {
+                rejectedOptimisticRefresh = true;
+                throw new Error("View was busy");
+            }
+        },
+    });
+
+    try {
+        await harness.controller.handleSavedUserEntry({
+            threadId: "thread-1",
+            entryId: "thread-1",
+            filePath: "Folder/Note.md",
+            body: "@codex answer this",
+        });
+        await waitForAgentQueueToDrain(harness.controller);
+
+        assert.equal(
+            harness.controller.getActiveAgentStreamForThread("thread-1")?.status,
+            "succeeded",
+        );
+        assert.equal(retryScheduled, true);
+        retryCallback();
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        assert.equal(harness.controller.getActiveAgentStreamForThread("thread-1"), null);
+    } finally {
+        harness.controller.dispose();
+        if (previousWindow) {
+            Object.defineProperty(globalThis, "window", previousWindow);
+        } else {
+            Reflect.deleteProperty(globalThis, "window");
+        }
+    }
 });
 
 test("comment agent controller does not synthesize transient stream text when the runtime does not stream partials", async () => {

@@ -189,16 +189,19 @@ export class SidebarDraftEditorController {
 
         if (event.key === "ArrowDown") {
             consumeShortcut();
-            this.setInlineSuggestionSelectedIndex(
-                state,
-                Math.min(state.items.length - 1, state.selectedIndex + 1),
-            );
+            const nextIndex = state.selectedIndex >= state.items.length - 1
+                ? 0
+                : state.selectedIndex + 1;
+            this.setInlineSuggestionSelectedIndex(state, nextIndex);
             return true;
         }
 
         if (event.key === "ArrowUp") {
             consumeShortcut();
-            this.setInlineSuggestionSelectedIndex(state, Math.max(0, state.selectedIndex - 1));
+            const nextIndex = state.selectedIndex <= 0
+                ? state.items.length - 1
+                : state.selectedIndex - 1;
+            this.setInlineSuggestionSelectedIndex(state, nextIndex);
             return true;
         }
 

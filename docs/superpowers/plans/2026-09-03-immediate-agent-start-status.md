@@ -415,3 +415,15 @@ obsidian plugin:reload id=aside vault=lean-startup
 ```
 
 Then compare all three installed assets byte-for-byte with the repository build.
+
+### Task 6: Remove retry-clear latency from runtime launch
+
+**Files:**
+- Modify: `tests/commentAgentController.test.ts`
+- Modify: `src/agents/commentAgentController.ts`
+
+- [x] Block the previous-reply clear in the controller harness and prove the retry runtime starts first.
+- [x] Track the clear promise as the new run's output-readiness barrier.
+- [x] Exclude the output being cleared from retry prompt context while its persisted mutation is pending.
+- [x] Keep terminal success or failure behind the output-readiness barrier.
+- [x] Run the complete controller suite.

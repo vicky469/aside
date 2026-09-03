@@ -87,7 +87,11 @@ import {
 import { getSidebarCommentCardOpenAction } from "./sidebarCommentCardNavigation";
 import { resolveSidebarCardActionState } from "./sidebarCardActionState";
 import { canDropIndexThreadOnThread } from "./sidebarIndexReorder";
-import { renderPersistedCommentCard } from "./sidebarPersistedComment";
+import {
+    adoptSidebarPersistedCardInteractions,
+    renderPersistedCommentCard,
+    renderSidebarCommentMarkdown,
+} from "./sidebarPersistedComment";
 import { restoreSidebarComment } from "./sidebarRestoreComment";
 import {
     buildStoredOrderSidebarItems,
@@ -2090,6 +2094,8 @@ export default class AsideView extends ItemView {
                     && this.file?.path === file.path
                     && indexSearchRequestVersion === this.indexSidebarSearchRequestVersion
                 ),
+                onReplaceThread: (threadId, _previousThreadEl, nextThreadEl) =>
+                    this.handoffStreamedReplyController(threadId, nextThreadEl),
                 onRemoveThread: (threadId) => this.removeStreamedReplyController(threadId),
             });
             if (!completed) {
@@ -2361,6 +2367,8 @@ export default class AsideView extends ItemView {
         });
         const completed = await reconcileSidebarItems(shell.commentsBodyEl, renderDescriptors, {
             isCurrent: () => renderVersion === this.renderVersion && this.file?.path === file.path,
+            onReplaceThread: (threadId, _previousThreadEl, nextThreadEl) =>
+                this.handoffStreamedReplyController(threadId, nextThreadEl),
             onRemoveThread: (threadId) => this.removeStreamedReplyController(threadId),
         });
         if (!completed) {
@@ -3376,11 +3384,61 @@ export default class AsideView extends ItemView {
                 onCancelRun: (runId) => {
                     void this.plugin.cancelAgentRun(runId);
                 },
+                renderFinalMarkdown: async (markdown, container) => {
+                    const thread = this.plugin.getThreadById(threadId);
+                    if (!thread) {
+                        throw new Error(`Cannot render completed agent reply for missing thread ${threadId}.`);
+                    }
+
+                    await renderSidebarCommentMarkdown(container, markdown, thread.filePath, {
+                        getKnownCommentById: (commentId) => this.plugin.getCommentById(commentId),
+                        isActionableMention: (mention) => this.plugin.isActionableMention(mention),
+                        renderMarkdown: async (normalizedMarkdown, target, sourcePath) => {
+                            await MarkdownRenderer.render(
+                                this.app,
+                                normalizedMarkdown,
+                                target,
+                                sourcePath,
+                                this,
+                            );
+                        },
+                        openSidebarInternalLink: (href, sourcePath, focusTarget, options) =>
+                            this.interactionController.openSidebarInternalLink(
+                                href,
+                                sourcePath,
+                                focusTarget,
+                                options,
+                            ),
+                    });
+                },
+                onFinalMarkdownRenderError: (error) => {
+                    console.error("[Aside] Failed to render completed agent reply.", error);
+                },
+                adoptPersistedCardInteractions: (persistedCardEl, retainedCardEl) =>
+                    adoptSidebarPersistedCardInteractions(persistedCardEl, retainedCardEl),
             });
             this.streamedReplyControllers.set(threadId, controller);
         }
 
         return controller;
+    }
+
+    private handoffStreamedReplyController(threadId: string, nextThreadEl: HTMLElement): boolean {
+        const controller = this.streamedReplyControllers.get(threadId);
+        const stream = this.plugin.getActiveAgentStreamForThread(threadId);
+        if (
+            !controller
+            || !stream
+            || (stream.status !== "succeeded" && stream.status !== "failed")
+        ) {
+            return false;
+        }
+        const run = this.plugin.getAgentRuns().find((candidate) => candidate.id === stream.runId);
+        if (!run || stream.status !== run.status) {
+            return false;
+        }
+
+        return controller.handoffToPersistedThread(nextThreadEl, stream);
     }
 
     private removeStreamedReplyController(threadId: string): void {

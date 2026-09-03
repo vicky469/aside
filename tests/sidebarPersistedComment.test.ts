@@ -23,6 +23,7 @@ import {
     formatAgentRunMetadataFrontmatter,
     formatAgentRunVisibleMetadataLabels,
     renderPersistedCommentCard,
+    renderSidebarCommentMarkdown,
     resolveSidebarCommentAuthor,
     shouldShowRetryActionForSidebarComment,
     shouldRenderChildEntryMoveHandle,
@@ -381,6 +382,36 @@ function createRenderHost(overrides: Partial<SidebarPersistedCommentHost> = {}):
         ...overrides,
     };
 }
+
+test("renderSidebarCommentMarkdown shares persisted normalization and source path", async () => {
+    const container = new FakeElement("div");
+    let renderedMarkdown = "";
+    let renderedSourcePath = "";
+    const host = createRenderHost({
+        getKnownCommentById: () => createComment({
+            anchorKind: "page",
+            comment: "Linked note",
+            filePath: "docs/source.md",
+        }),
+        renderMarkdown: async (markdown, _container, sourcePath) => {
+            renderedMarkdown = markdown;
+            renderedSourcePath = sourcePath;
+        },
+    });
+
+    await renderSidebarCommentMarkdown(
+        container as unknown as HTMLElement,
+        "obsidian://aside-comment?vault=lean-startup&file=docs%2Fsource.md&commentId=comment-1",
+        "docs/current.md",
+        host,
+    );
+
+    assert.equal(
+        renderedMarkdown,
+        "[source: Linked note](obsidian://aside-comment?vault=lean-startup&file=docs%2Fsource.md&commentId=comment-1)",
+    );
+    assert.equal(renderedSourcePath, "docs/current.md");
+});
 
 test("buildPersistedCommentPresentation includes page and active classes for page notes", () => {
     const presentation = buildPersistedCommentPresentation(createThread({
@@ -944,6 +975,32 @@ test("getRenderableThreadEntries keeps the persisted agent output entry visible 
     );
 });
 
+test("getRenderableThreadEntries hides the persisted output while its live stream owns the reply slot", () => {
+    const thread = createThreadWithEntries({
+        entries: [
+            { id: "entry-1", body: "Parent", timestamp: 100 },
+            { id: "entry-2", body: "", timestamp: 200 },
+        ],
+        createdAt: 100,
+        updatedAt: 200,
+    });
+
+    assert.deepEqual(
+        getRenderableThreadEntries(thread, {
+            runId: "run-1",
+            threadId: thread.id,
+            requestedAgent: "codex",
+            runtime: "direct-cli",
+            status: "running",
+            partialText: "",
+            startedAt: 100,
+            updatedAt: 200,
+            outputEntryId: "entry-2",
+        }),
+        [thread.entries[0]],
+    );
+});
+
 test("getDeletedRenderableThreadEntries keeps only deleted child entries for deleted mode", () => {
     const thread = createThreadWithEntries({
         entries: [
@@ -1146,6 +1203,24 @@ test("shouldRenderSidebarCommentAuthor hides the current user badge but keeps ag
     }), true);
 });
 
+test("resolveSidebarCommentAuthor labels Cursor replies from their output run", () => {
+    assert.deepEqual(
+        resolveSidebarCommentAuthor(
+            "entry-2",
+            [createAgentRun({
+                requestedAgent: "cursor",
+                outputEntryId: "entry-2",
+                promptText: "@cursor summarize this",
+            })],
+            "You",
+        ),
+        {
+            kind: "cursor",
+            label: "Cursor",
+        },
+    );
+});
+
 test("resolveSidebarCommentAuthor labels agent-produced replies from their output run", () => {
     assert.deepEqual(
         resolveSidebarCommentAuthor(
@@ -1304,6 +1379,10 @@ test("shouldShowRetryActionForSidebarComment falls back to explicit agent prompt
         shouldShowRetryActionForSidebarComment("entry-1", "@codex explain this", []),
         true,
     );
+    assert.equal(
+        shouldShowRetryActionForSidebarComment("entry-2", "@cursor summarize this", []),
+        true,
+    );
 });
 
 test("shouldShowRetryActionForSidebarComment stays hidden for plain user comments without a stored run", () => {
@@ -1410,7 +1489,7 @@ test("renderPersistedCommentCard renders queued and running script outputs with 
 
 test("getAgentRunStatusPresentation uses compact success and failure markers", () => {
     assert.deepEqual(getAgentRunStatusPresentation("succeeded"), {
-        marker: "✓",
+        marker: "✅",
         markerKind: "text",
     });
     assert.deepEqual(getAgentRunStatusPresentation("failed"), {

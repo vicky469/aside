@@ -38,6 +38,15 @@ test("parseAgentDirectives resolves cursor as a supported peer target", () => {
     });
 });
 
+test("parseAgentDirectives resolves repeated cursor mentions case-insensitively", () => {
+    assert.deepEqual(parseAgentDirectives("ask @CURSOR twice @cursor"), {
+        target: "cursor",
+        hasConflict: false,
+        matchedTargets: ["cursor"],
+        unsupportedTargets: [],
+    });
+});
+
 test("parseAgentDirectives resolves repeated gemini mentions case-insensitively", () => {
     assert.deepEqual(parseAgentDirectives("ask @GEMINI twice @gemini"), {
         target: "gemini",

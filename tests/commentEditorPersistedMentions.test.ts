@@ -115,7 +115,7 @@ test("persisted mention decoration styles only actionable mentions", () => {
         const document = new FakeDocument();
         const container = document.createElement();
         container.appendChild(document.createTextNode(
-            "@todo @codex @hi /update-script /pdf-to-markdown /clean /missing",
+            "@todo @codex @cursor @hi /update-script /pdf-to-markdown /clean /missing",
         ));
         const registeredScripts = new Set(["/clean"]);
 
@@ -135,6 +135,7 @@ test("persisted mention decoration styles only actionable mentions", () => {
         assert.deepEqual(decorated, [
             "@todo",
             "@codex",
+            "@cursor",
             "/update-script",
             "/pdf-to-markdown",
             "/clean",
@@ -144,7 +145,7 @@ test("persisted mention decoration styles only actionable mentions", () => {
                 .filter((child): child is FakeTextNode => child instanceof FakeTextNode)
                 .map((child) => child.nodeValue)
                 .join(""),
-            "  @hi    /missing",
+            "   @hi    /missing",
         );
     } finally {
         (globalThis as { Text: typeof Text }).Text = previousText;

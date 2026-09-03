@@ -15,7 +15,7 @@
 **Files:**
 - Modify: `tests/commentAgentController.test.ts`
 
-- [ ] **Step 1: Add the failing regression test**
+- [x] **Step 1: Add the failing regression test**
 
 Create a successful run, soft-delete its output through `CommentManager`, then retry it. Assert that the retry gets a different output ID, the old entry retains `deletedAt`, the new entry contains `Second reply` without `deletedAt`, and the active optimistic stream clears after persisted handoff.
 
@@ -35,7 +35,7 @@ assert.equal(harness.commentManager.getCommentById(retry?.outputEntryId ?? "")?.
 assert.equal(harness.controller.getActiveAgentStreamForThread("thread-1"), null);
 ```
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
 Run:
 
@@ -52,7 +52,7 @@ Expected: FAIL because the retry reuses the deleted output ID.
 - Modify: `src/agents/commentAgentController.ts`
 - Test: `tests/commentAgentController.test.ts`
 
-- [ ] **Step 1: Make retry output eligibility explicit**
+- [x] **Step 1: Make retry output eligibility explicit**
 
 Resolve the stored output once and retain its ID only when it is visible:
 
@@ -67,11 +67,11 @@ const retryOutputEntryId = storedRetryOutput && storedRetryOutput.deletedAt === 
 
 Do not restore, edit, or purge the deleted output.
 
-- [ ] **Step 2: Run the focused test and verify GREEN**
+- [x] **Step 2: Run the focused test and verify GREEN**
 
 Run the focused command from Task 1. Expected: PASS with a fresh visible output entry and the deleted entry unchanged.
 
-- [ ] **Step 3: Run the controller and rendering regression suites**
+- [x] **Step 3: Run the controller and rendering regression suites**
 
 Run:
 
@@ -86,15 +86,15 @@ Expected: all tests pass.
 **Files:**
 - Modify: `docs/superpowers/specs/2026-09-03-optimistic-agent-completion-design.md`
 
-- [ ] **Step 1: Run the complete build and artifact guard**
+- [x] **Step 1: Run the complete build and artifact guard**
 
 Run `npm run build`. Require all tests, lint, typecheck, Obsidian compliance, bundling, and inspection of `main.js`, `manifest.json`, and `styles.css` to pass.
 
-- [ ] **Step 2: Mark the tracked regression items complete**
+- [x] **Step 2: Mark the tracked regression items complete**
 
 Mark only the deleted-output implementation and verification checklist items `[x]`, then run `git diff --check` and scan the spec for placeholders or contradictions.
 
-- [ ] **Step 3: Install and reload the verified build**
+- [x] **Step 3: Install and reload the verified build**
 
 ```bash
 node scripts/install-built-plugin.mjs --vault /path/to/vault
@@ -103,6 +103,6 @@ obsidian plugin:reload id=aside vault=lean-startup
 
 Compare installed `main.js`, `manifest.json`, and `styles.css` byte-for-byte with the repository build.
 
-- [ ] **Step 4: Record the result in the original Aside thread**
+- [x] **Step 4: Record the result in the original Aside thread**
 
 Append a concise implementation and verification result to comment `630ce20f-c966-4f4f-8245-f37facd1c79b` in `clippings/Omarchy Quattro.md` using `scripts/append-note-comment-entry.mjs`.

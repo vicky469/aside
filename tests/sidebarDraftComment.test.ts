@@ -3,6 +3,7 @@ import test from "node:test";
 import type { DraftComment } from "../src/domain/drafts";
 import {
     buildDraftCommentPresentation,
+    getDraftPendingAgentStart,
     isDraftSaveActionDisabled,
     shouldAutoOpenDraftMentionSuggest,
 } from "../src/ui/views/sidebarDraftComment";
@@ -83,6 +84,24 @@ test("buildDraftCommentPresentation leaves saving edit drafts on the editable pa
 
     assert.equal(presentation.isPending, false);
     assert.equal(presentation.classes.includes("is-saving"), false);
+});
+
+test("saving an agent draft exposes an immediate starting reply", () => {
+    assert.deepEqual(getDraftPendingAgentStart(createDraft({
+        mode: "new",
+        comment: "@codex answer this",
+    }), true, true), {
+        target: "codex",
+        label: "Starting Codex…",
+    });
+    assert.equal(getDraftPendingAgentStart(createDraft({
+        mode: "new",
+        comment: "ordinary note",
+    }), true, true), null);
+    assert.equal(getDraftPendingAgentStart(createDraft({
+        mode: "edit",
+        comment: "@codex revise this",
+    }), true, true), null);
 });
 
 test("buildDraftCommentPresentation mentions todo and agent directives in new draft placeholder", () => {
