@@ -1,114 +1,45 @@
 ---
 name: aside
-description: "Use when working with Aside comments in real Obsidian notes: `obsidian://aside-comment?...` URIs, page notes, anchored notes, replies, stored comment updates, or `commentId` thread context."
+description: "Use when working with Aside comments in real Obsidian notes: `obsidian://aside-comment?...` URIs, page or anchored notes, replies, stored comment updates, `commentId` thread context, or requests to add annotations to a note."
 ---
 
 # Aside
 
-User-facing Aside skill. Recognizes normal user phrasing without requiring internal repo names.
+Use this workflow for real Aside comments in Obsidian. Side note and side comment both mean an Aside thread or entry for the current note.
 
-## Trigger
+Aside is reply-based, not capability-limited. Do normal agent work needed by the request, then append the answer, result, path, or concise status to the target thread.
 
-Use for:
+## Locate
 
-- `obsidian://aside-comment?...` or legacy `obsidian://side-note2-comment?...`
-- `commentId` for an Aside thread
-- create page note, anchored note, new side note thread
-- reply, answer, continue, add another note under this
-- update, edit, rewrite, replace a stored comment
-- put each point into one comment
-- add annotations, add side comments to passages, comment on this article/note/text, 加批注, 给这篇加批注
+- An `obsidian://aside-comment?...` URI or note path plus comment id is the exact target; prefer it over rediscovery. Legacy `obsidian://side-note2-comment?...` URIs are also valid.
+- Current persisted side note data is in `.obsidian/plugins/aside` plugin data and sidecar JSON. Trailing `<!-- Aside comments -->` or legacy `<!-- SideNote2 comments -->` blocks are migration input, not canonical storage.
+- `🐰 Aside Index.md` and legacy `Aside index.md` are derived discovery aids.
+- Search hidden plugin data explicitly: `rg --hidden "<comment-id>" "/vault/.obsidian/plugins/aside"`.
 
-No resolve/archive flow: resolve functionality was removed.
+## Act
 
-## Source of truth
+- Questions, explanations, summaries, critiques: append a concise answer.
+- Proposed source revisions: reply with proposed text. Edit source only when explicitly asked to add, apply, modify, replace, or overwrite it.
+- Create requested artifacts or perform requested repository work, then append the result or path.
+- Update an existing stored comment only when explicitly asked to update or replace it; a request to reply must append.
+- If source-edit intent is ambiguous, propose the edit without mutating source.
 
-- Markdown note path plus comment id identify the user-facing target.
-- Current persisted side note data lives in Aside plugin data and local sidecar JSON cache files.
-- The trailing `<!-- Aside comments -->` block is legacy import/migration data, not current canonical storage. Built-in plugin startup/storage flows migrate it automatically; helper scripts should use the same write path and strip the managed block when they encounter one.
-- Legacy `<!-- SideNote2 comments -->` blocks may exist for migration/read compatibility, but are not canonical.
-- `🐰 Aside Index.md` is derived, but legacy `Aside index.md` may remain active when migration is blocked; use either only for discovery.
-- `page note` / `anchored note` means an Aside thread in the current note unless user explicitly asks for a separate wiki page.
+## Write safely
 
-## Searching real Aside data
+- Match by URI/comment id; otherwise use exact selected text plus nearby context. Ask when multiple threads match.
+- Preserve existing entries unless replacement is explicit. Do not hand-edit Aside JSON; use repo-local Node entrypoints or shared helpers.
+- Do not claim a change succeeded unless it was made. If the runtime cannot perform it, say so plainly.
+- Do not create a second managed block. If multiple blocks exist, stop and repair before writing. Retry helper conflicts through the helper, never by patching JSON.
+- For annotations, create selection-anchored threads. Inside the plugin runtime, return a fenced `aside-annotations` JSON array of `{ "selectedText": "exact source text", "comment": "text" }`; outside it, use the create-thread helper. Never substitute a plain critique when anchoring fails.
+- For non-annotation “one point per note” requests, create one parent and append child entries unless separate threads are explicit.
+- Keep replies `<=250 words`. Put longer detail in a linked wiki note.
+- Use `canvas-design` or `obsidian-excalidraw` only when the requested artifact requires it; Aside still owns thread targeting and the final reply.
 
-- `rg` skips hidden directories such as `.obsidian` by default. A failed vault-wide search without `--hidden` does not prove the Aside data is missing.
-- When searching real comments, plugin data, caches, or installed builds, include `--hidden` and prefer narrow `.obsidian/plugins/aside` paths.
-- Useful patterns:
-  - `rg --hidden "<comment-id>" "/path/to/vault/.obsidian/plugins/aside"`
-  - `rg --hidden "<comment-id>|<note path>" "/path/to/vault/.obsidian/plugins/aside" "/path/to/vault/<note>.md"`
+## Helpers
 
-## Default behavior
+Run the relevant script with `--help`; use `--uri` whenever supplied:
 
-Aside is reply-based, not capability-limited. When invoked by `@codex` or `@claude`, treat the request like normal CLI agent work: answer questions, inspect files, edit files, create artifacts, run allowed commands/workflows, and use tools/skills as needed. Append a concise reply to the target thread with the answer, result, path, or status unless the user explicitly asks for a different stored-comment action.
-
-| User asks | Do |
-| --- | --- |
-| question / explain / summarize / critique | reply with answer |
-| improve / revise / draft source markdown | reply with proposed text |
-| add / insert / apply / modify / replace / update / overwrite source note | edit source, then reply with concise summary |
-| create markdown / `.canvas` / `.excalidraw` / other artifact | create artifact, then reply with path/result |
-| inspect repo / run command / modify project files | do normal agent work, then reply with concise result |
-| add annotations / comment on this article or note / 加批注 | create selection-anchored Aside notes on relevant source text spans, then reply with concise status |
-| update existing Aside comment | update stored comment only if explicit |
-| ambiguous source edit | reply with proposed edit; do not mutate source |
-
-## Related skill routing
-
-Load related skills only when the request requires them; do not inline their instructions here.
-
-- `canvas-design`: Obsidian `.canvas` creation/revision, layout, grouping, spacing, hierarchy, edge crossings.
-- `obsidian-excalidraw`: Obsidian Excalidraw, `.excalidraw`, ExcalidrawAutomate, generated drawings, embeds, templates, exports, visual PKM drawings.
-
-Keep `aside` responsible for thread location and final reply. Use related skills for domain work or artifact creation.
-
-## Write rules
-
-- URI/comment id is exact thread target; prefer it over rediscovery.
-- If no URI, locate real markdown note, then search current Aside plugin data with `rg --hidden` before falling back to legacy trailing blocks.
-- Match by `commentId`; otherwise by `selectedText` plus nearby context.
-- If multiple threads match, ask for context or use URI/comment id.
-- Preserve existing entries unless user explicitly asks to replace one.
-- Keep each Aside comment body <=250 words.
-- If more detail is needed, keep reply concise and create/update a linked wiki page.
-- Annotation requests inside the Aside plugin runtime: return a fenced `aside-annotations` JSON block with entries shaped like `{"selectedText":"exact source text from the note","comment":"anchored comment text"}` plus a concise status reply. The plugin will create the top-level selection-anchored threads from that block. Do not try to run repo helper scripts from the vault.
-- Annotation requests outside the plugin runtime: create top-level selection-anchored threads for the relevant source spans unless the user explicitly asks for one parent thread, page notes, or plain replies. Do not satisfy these requests with only a summary or critique in the current thread. If the runtime cannot create anchored notes, say that plainly instead of providing the critique as a substitute.
-- One-point-per-note requests that are not annotation/review requests: create one parent thread and append each point as child entry; do not create many page-note threads.
-- Use repo-local Node entrypoints or shared helpers. Do not hand-edit Aside JSON.
-- Do not create, preserve, or normalize a second Aside/legacy managed block.
-- If multiple managed blocks already exist, stop and repair/escalate before writing.
-- If write entrypoint refuses because note changed after read, retry via entrypoint; do not manually patch JSON.
-
-## Repo-local entrypoints
-
-Create page note:
-
-```bash
-node scripts/create-note-comment-thread.mjs --file /abs/path/note.md --page --comment-file /abs/path/comment.md
-```
-
-Create parent with child comments:
-
-```bash
-node scripts/create-note-comment-thread-with-children.mjs --file /abs/path/note.md --page --root-comment-file /abs/path/root.md --children-dir /abs/path/children
-```
-
-Create anchored note:
-
-```bash
-node scripts/create-note-comment-thread.mjs --file /abs/path/note.md --selected-text "Priority conflicts" --start-line 335 --start-char 3 --end-line 335 --end-char 21 --comment-file /abs/path/comment.md
-```
-
-Append reply:
-
-```bash
-node scripts/append-note-comment-entry.mjs --uri "obsidian://aside-comment?..." --comment-file /abs/path/reply.md
-node scripts/append-note-comment-entry.mjs --file /abs/path/note.md --id "<comment-id>" --comment-file /abs/path/reply.md
-```
-
-Update stored comment:
-
-```bash
-node scripts/update-note-comment.mjs --uri "obsidian://aside-comment?..." --comment-file /abs/path/comment.md
-node scripts/update-note-comment.mjs --file /abs/path/note.md --id "<comment-id>" --comment-file /abs/path/comment.md
-```
+- Create: `node scripts/create-note-comment-thread.mjs`
+- Create parent plus children: `node scripts/create-note-comment-thread-with-children.mjs`
+- Reply: `node scripts/append-note-comment-entry.mjs`
+- Replace: `node scripts/update-note-comment.mjs`

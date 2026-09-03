@@ -23,6 +23,20 @@ test("buildSideNotePrompt falls back cleanly when no root path is provided", () 
     assert.doesNotMatch(prompt, /The active vault root is:/);
 });
 
+test("buildSideNotePrompt makes the newest request the sole implicit reply-language source", () => {
+    const prompt = sideNotePromptPolicy.buildSideNotePrompt({
+        promptText: "@codex explain this in Chinese",
+        rootLabel: "vault root",
+        rootPath: "/vault",
+    });
+
+    assert.match(prompt, /newest user request/i);
+    assert.match(prompt, /explicitly asks for a response language/i);
+    assert.match(prompt, /otherwise reply in the language used by that request/i);
+    assert.match(prompt, /Do not infer the reply language from the note, vault, or earlier thread entries/i);
+    assert.equal(prompt.match(/newest user request/gi)?.length, 1);
+});
+
 test("buildSideNotePrompt carries built-in Aside write-mode terminology", () => {
     const prompt = sideNotePromptPolicy.buildSideNotePrompt({
         promptText: "@codex add side comments for each point",
