@@ -18,6 +18,9 @@ Use this section as the working checklist. Mark an item done only after the code
 - [x] Start queue processing without waiting for a full comment-view refresh.
 - [x] Transition the same stream and card from queued to running, then replace the starting hint with real runtime progress.
 - [x] Keep background refresh failures contained by the existing refresh warning path.
+- [ ] Use the same turning spinner presentation for both queued and running agent states.
+- [ ] Reconcile status marker and hint elements in place so progress updates do not restart the spinner animation.
+- [ ] Let a transient stream card adopt its persisted output entry id without removing and recreating the card.
 
 ### Verification
 
@@ -25,6 +28,10 @@ Use this section as the working checklist. Mark an item done only after the code
 - [x] Stream rendering tests prove the grey line initially reads `Starting <agent>…` and later shows the latest real progress step.
 - [x] The focused agent-controller and streamed-card suites pass.
 - [x] The complete repository build passes.
+- [ ] A presentation-policy test proves queued and running agent states share the spinner marker.
+- [ ] A streamed-card identity test proves queued-to-running updates reuse the same spinner DOM node.
+- [ ] A card identity test proves assigning the persisted output entry id reuses the same card DOM node.
+- [ ] The focused suites and complete repository build pass after the smoothness changes.
 
 ## Problem
 
@@ -32,9 +39,9 @@ The controller currently awaits sidebar refreshes on the critical path between q
 
 ## User Experience
 
-Immediately after save, the reply position shows one compact grey line with a turning spinner and a provider-specific label such as `Starting Codex…`, `Starting Claude…`, or `Starting Gemini…`. It is the normal reply card, not a toast or a second placeholder card.
+Immediately after save, the reply position shows one compact grey line with a turning spinner and a provider-specific label such as `Starting Codex…`, `Starting Claude…`, or `Starting Gemini…`. The queued state must never show a text ellipsis in place of the spinner. It is the normal reply card, not a toast or a second placeholder card.
 
-When the runtime emits genuine progress, the latest progress line replaces `Starting <agent>…` in place. Partial answer text streams into the same card. Completion or failure keeps the existing `✅` or `❌` terminal presentation.
+When the runtime emits genuine progress, the latest progress line replaces `Starting <agent>…` in place. The status line reuses its existing spinner and hint elements, so the animation remains continuous rather than restarting on each update. Partial answer text streams into the same card. Completion or failure keeps the existing `✅` or `❌` terminal presentation.
 
 At no point should an accepted agent request be represented only by an empty white card.
 
@@ -44,7 +51,9 @@ After the queued run is durably stored, `CommentAgentController` creates and emi
 
 Queue processing begins immediately. Full comment-view refresh is requested as background reconciliation and is not awaited before queue processing, context construction, or runtime launch. When persistence and refresh later produce the stored output card, the existing run/output identifiers let the stream controller borrow that card rather than create a duplicate.
 
-The transition to `running` preserves the starting hint until the runtime supplies its first real progress event. Subsequent progress events continue to replace the single visible hint with the latest line.
+The transition to `running` preserves the starting hint until the runtime supplies its first real progress event. `getAgentRunStatusPresentation` remains the shared marker-policy owner for persisted and streaming agent cards, and both active states resolve to the same spinner presentation. `StreamedAgentReplyController` reconciles the marker and hint children instead of replacing the entire status subtree. Subsequent progress events update only the hint text.
+
+When the run first gains an `outputEntryId`, an owned transient stream card with the same run id adopts that identifier in place. It is replaced only when the full sidebar refresh has actually supplied the canonical persisted card, preventing the queued-to-running transition itself from removing and reinserting the visible card.
 
 ## Error Handling
 
