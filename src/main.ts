@@ -44,6 +44,7 @@ import {
     routeSavedUserEntry,
 } from "./vaultScripts/commentScriptController";
 import { ScriptRunStore } from "./vaultScripts/scriptRunStore";
+import { ensureVaultScriptFolder } from "./vaultScripts/vaultScriptFolderProvisioner";
 import { VaultScriptRegistry } from "./vaultScripts/vaultScriptRegistry";
 import { isActionableMention as resolveActionableMention } from "./core/text/actionableMentions";
 import {
@@ -577,6 +578,18 @@ export default class Aside extends Plugin {
                 alwaysInsertAfterTarget: true,
             });
         },
+        ensureScriptFolder: () => ensureVaultScriptFolder({
+            getPathKind: (path) => {
+                const existing = this.app.vault.getAbstractFileByPath(path);
+                if (existing instanceof TFolder) {
+                    return "folder";
+                }
+                return existing ? "occupied" : "missing";
+            },
+            createFolder: async (path) => {
+                await this.app.vault.createFolder(path);
+            },
+        }),
         dispatchRequest: (event, requestText) =>
             this.commentAgentController.handleCreateScriptRequest(event, requestText),
     });

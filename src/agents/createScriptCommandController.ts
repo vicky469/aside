@@ -7,11 +7,13 @@ import {
     parseCreateScriptDirective,
 } from "../core/text/createScriptDirective";
 import { resolveScriptDirective } from "../vaultScripts/scriptDirectives";
+import type { VaultScriptFolderProvisionResult } from "../vaultScripts/vaultScriptFolderProvisioner";
 import type { VaultScriptRegistry } from "../vaultScripts/vaultScriptRegistry";
 
 export interface CreateScriptCommandHost {
     getRegistry(): VaultScriptRegistry;
     appendReply(event: SavedUserEntryEvent, body: string): Promise<void>;
+    ensureScriptFolder(): Promise<VaultScriptFolderProvisionResult>;
     dispatchRequest(event: SavedUserEntryEvent, requestText: string): Promise<void>;
 }
 
@@ -55,6 +57,12 @@ export class CreateScriptCommandController {
         const agentResolution = parseAgentDirectives(resolution.requestText);
         if (agentResolution.matchedTargets.length > 0 || agentResolution.unsupportedTargets.length > 0) {
             await this.host.appendReply(event, CREATE_SCRIPT_MIXED_AGENT);
+            return true;
+        }
+
+        const folderResult = await this.host.ensureScriptFolder();
+        if (!folderResult.ok) {
+            await this.host.appendReply(event, folderResult.message);
             return true;
         }
 
