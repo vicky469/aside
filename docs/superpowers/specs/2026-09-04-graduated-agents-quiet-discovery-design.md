@@ -1,7 +1,7 @@
 # Graduated Agents and Quiet Discovery Design
 
 **Date:** 2026-09-04
-**Status:** Approved for implementation planning
+**Status:** Implemented and verified
 
 ## Implementation Tracking
 
@@ -16,14 +16,22 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Remove the `agents` feature flag, its disabled policy, and every availability adapter and branch.
-- [ ] Keep **Show agent tab** as a visible setting, default it off for new or missing settings, and preserve explicit existing values.
-- [ ] Replace the new-side-note placeholder with the neutral text `add a comment`.
-- [ ] Preserve the existing `@` and `/` inline dropdown, filtering, and autocomplete while removing its agent-feature availability input.
-- [ ] Lazily create `🛠️ scripts/` for a valid `/create-script` request before dispatching its agent run.
-- [ ] Change the Aside workspace view display text, and therefore its tab-icon hover label, from `Side notes` to `Aside`.
-- [ ] Move scripts into normal user documentation and document their local execution security boundary.
-- [ ] Update focused and full regression coverage.
+- [x] Remove the `agents` feature flag, its disabled policy, and every availability adapter and branch.
+- [x] Keep **Show agent tab** as a visible setting, default it off for new or missing settings, and preserve explicit existing values.
+- [x] Replace the new-side-note placeholder with the neutral text `add a comment`.
+- [x] Preserve the existing `@` and `/` inline dropdown, filtering, and autocomplete while removing its agent-feature availability input.
+- [x] Lazily create `🛠️ scripts/` for a valid `/create-script` request before dispatching its agent run.
+- [x] Change the Aside workspace view display text, and therefore its tab-icon hover label, from `Side notes` to `Aside`.
+- [x] Move scripts into normal user documentation and document their local execution security boundary.
+- [x] Update focused and full regression coverage.
+
+### Verification Evidence
+
+- `npm run build` completed successfully with 1,488 compiled tests and 147 direct tests passing.
+- ESLint, TypeScript checking, Obsidian compliance, production bundling, and the bundle-size guard passed.
+- The production bundle measured 689,371 bytes against the 750,000-byte limit.
+- Release-artifact inspection passed for the exact public assets: `main.js`, `manifest.json`, and `styles.css`.
+- The artifact guard found no source maps, embedded source content, raw TypeScript or JSX-family sources, secret-bearing files, or local absolute paths in the release set.
 
 ## Context
 

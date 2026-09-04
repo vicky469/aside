@@ -687,7 +687,7 @@ In `EXPERIMENTAL_FEATURES.md`, delete the Vault Scripts table row and the comple
 Run:
 
 ```bash
-node --test tests/agentScriptsDocumentation.test.mjs tests/obsidianCompliance.test.mjs
+node --test tests/agentScriptsDocumentation.test.mjs tests/checkObsidianCompliance.test.mjs
 ```
 
 Expected: PASS, including the repository guard that rejects personal home-directory paths in code and docs.
