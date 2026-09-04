@@ -13,23 +13,32 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Add a deterministic production bundle-size check with a 750,000-byte maximum for `main.js`.
-- [ ] Raise the production JavaScript output target from ES2018 to ES2020.
-- [ ] Replace Acorn with a focused internal lexer for the supported static JavaScript dependency forms.
-- [ ] Replace the bundled HTML named-entity table with native HTML attribute decoding in Obsidian plus a small deterministic non-DOM fallback.
-- [ ] Remove `acorn` and `entities` from runtime dependencies and the lockfile.
-- [ ] Keep release assets and every existing user-facing feature unchanged.
+- [x] Add a deterministic production bundle-size check with a 750,000-byte maximum for `main.js`.
+- [x] Raise the production JavaScript output target from ES2018 to ES2020.
+- [x] Replace Acorn with a focused internal lexer for the supported static JavaScript dependency forms.
+- [x] Replace the bundled HTML named-entity table with native HTML attribute decoding in Obsidian plus a small deterministic non-DOM fallback.
+- [x] Remove `acorn` and `entities` from direct runtime dependencies and the root runtime dependency set in the lockfile.
+- [x] Keep release assets and every existing user-facing feature unchanged.
 
 ### Verification
 
-- [ ] Architecture tests fail while heavyweight parser dependencies or imports remain.
-- [ ] The bundle budget test fails against the 871,084-byte baseline and passes only after cleanup.
-- [ ] All existing publish dependency extraction and traversal tests pass unchanged.
-- [ ] Differential fixtures cover static imports, exports, dynamic imports, `new URL(..., import.meta.url)`, strings, templates, comments, regular expressions, malformed tails, and HTML named/numeric entities.
-- [ ] Parser performance tests remain within their existing limits.
-- [ ] The full test, lint, typecheck, Obsidian compliance, build, and artifact-security checks pass.
-- [ ] The built `main.js` is at most 750,000 bytes and contains neither Acorn nor the generated HTML entity table.
-- [ ] The verified build is installed into `lean-startup`, reloaded, and matched byte-for-byte.
+- [x] Architecture tests fail while heavyweight parser dependencies or imports remain.
+- [x] The bundle budget test fails against the 871,084-byte baseline and passes only after cleanup.
+- [x] All existing publish dependency extraction and traversal tests pass unchanged.
+- [x] Differential fixtures cover static imports, exports, dynamic imports, `new URL(..., import.meta.url)`, strings, templates, comments, regular expressions, malformed tails, and HTML named/numeric entities.
+- [x] Parser performance tests remain within their existing limits.
+- [x] The full test, lint, typecheck, Obsidian compliance, build, and artifact-security checks pass.
+- [x] The built `main.js` is at most 750,000 bytes and contains neither Acorn nor the generated HTML entity table.
+- [x] The verified build is installed into `lean-startup`, reloaded, and matched byte-for-byte.
+
+### Measured Result
+
+- Production `main.js`: 688,388 bytes, down 182,696 bytes (21.0%) from the 871,084-byte baseline and 61,612 bytes below the enforced ceiling.
+- Full build: 1,487 compiled TypeScript tests plus 128 direct JavaScript tests passed; lint, typecheck, Obsidian compliance, bundle-size, and release-artifact checks passed.
+- Production metafile: zero Acorn or `entities` inputs. The focused JavaScript lexer contributes 8,223 bytes; the largest remaining source input is `AsideView.ts` at 91,597 bytes.
+- Artifact security: exactly `main.js`, `manifest.json`, and `styles.css` were inspected; no source map, embedded source, source-map marker, obvious secret, or raw TypeScript/JSX artifact was shipped.
+- SHA-256: `main.js` `aaaeaede10038edfa9a8fa4952289bd0b52bfc965ad13fa59d28f7504ab4d243`; `manifest.json` `892d341d4c4385b15199b9ecb61c3ed0bb68e710f524bf3aa23400a483e43f4b`; `styles.css` `4e43096b04dbc654cc9ccd720a3a89fce19a2c8fe13a748d416529eb2fba6830`.
+- Live verification: Aside 2.0.103 is enabled in `lean-startup`, the installed artifacts match byte-for-byte, and a cleared developer-error buffer remained empty after reload.
 
 ## Context
 
@@ -110,7 +119,7 @@ Existing expected-output tests remain authoritative. They should not be weakened
 ## Acceptance Criteria
 
 - Production `main.js` is no larger than 750,000 bytes.
-- `package.json`, the lockfile, source imports, and production metafile contain neither `acorn` nor `entities`.
+- `package.json`, root runtime lockfile dependencies, source imports, and the production metafile contain neither `acorn` nor `entities`; Acorn may remain only as a development transitive of lint tooling.
 - Existing publish dependency extraction results and graph behavior remain unchanged.
 - All current plugin features remain available through the same UI and commands.
 - Production build and release artifact security checks pass.
