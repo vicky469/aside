@@ -1,7 +1,7 @@
 # Aside Settings ASCII Thought Trail Header Design
 
 **Date:** 2026-09-04
-**Status:** Revised design approved; implementation in progress
+**Status:** Implemented and verified
 
 ## Implementation Tracking
 
@@ -18,20 +18,22 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Refine the renderer's flat graph scaffold into the approved original three-plane impossible-junction Thought Trail.
-- [ ] Prepend the header through the Obsidian 1.13 declarative settings path while retaining the Obsidian 1.12.7 legacy fallback.
-- [ ] Implement the one-shot Rabbit relay followed by continuous 3D graph turning and contained blue-dot edge motion with scoped CSS.
-- [ ] Remove the settings-header DOM on `hide()` so no animated element or related resource survives the settings window.
-- [ ] Make the header theme-aware, responsive at narrow settings widths, and static under reduced-motion preferences.
-- [ ] Extend focused renderer, lifecycle, and stylesheet regression coverage for the revised design.
+- [x] Refine the renderer's flat graph scaffold into the approved original three-plane impossible-junction Thought Trail.
+- [x] Prepend the header through the Obsidian 1.13 declarative settings path while retaining the Obsidian 1.12.7 legacy fallback.
+- [x] Implement the one-shot Rabbit relay followed by continuous 3D graph turning and contained blue-dot edge motion with scoped CSS.
+- [x] Remove the settings-header DOM on `hide()` so no animated element or related resource survives the settings window.
+- [x] Make the header theme-aware, responsive at narrow settings widths, and static under reduced-motion preferences.
+- [x] Extend focused renderer, lifecycle, and stylesheet regression coverage for the revised design.
 
 ### Verification
 
-- [ ] Focused tests prove the approved copy, semantic labeling, three-plane structure, split animation lifecycle, contained runners, `hide()` cleanup, and reduced-motion behavior.
-- [ ] Full tests, lint, typecheck, Obsidian compliance, production bundle, and release-artifact guard pass.
-- [ ] The installed plugin is visually checked in light and dark themes at normal, narrow, and mobile-like settings widths.
-- [ ] The completed entrance and continuous motion are checked to ensure every moving dot remains inside its assigned edge and only the 3D graph remains animated.
-- [ ] Closing the settings window is checked to confirm the header DOM is removed and no animation resource remains active.
+- [x] Focused tests prove the approved copy, semantic labeling, three-plane structure, split animation lifecycle, contained runners, `hide()` cleanup, and reduced-motion behavior.
+- [x] Full tests, lint, typecheck, Obsidian compliance, production bundle, and release-artifact guard pass.
+- [x] The installed plugin is visually checked in light and dark themes at normal, narrow, and mobile-like settings widths.
+- [x] The completed entrance and continuous motion are checked to ensure every moving dot remains inside its assigned edge and only the 3D graph remains animated.
+- [x] Closing the settings window is checked to confirm the header DOM is removed and no animation resource remains active.
+
+Verification used Obsidian 1.13.7 in the `dev` vault. The full build passed 1,624 tests, produced a 691,149-byte bundle within the 750,000-byte policy, and passed the exact three-file source-exposure guard. Live DOM checks confirmed the entrance/cleanup lifecycle, bounded scene turn, six clipped runners, static reduced-motion state, both themes, and no overflow at the settings window's 600px minimum width.
 
 ## Context
 
