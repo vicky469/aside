@@ -888,7 +888,7 @@ Expected: no `main.js.map`; no source-map marker, embedded source, private-key m
 
 - [ ] **Step 3: Install the verified worktree build into the development vault**
 
-From `/Users/wenqingli/Obsidian/dev/aside/.worktrees/settings-thought-trail-header`, run:
+From the isolated Aside feature worktree, run:
 
 ```bash
 npm run dev:install-built -- --vault ../../..
