@@ -1,0 +1,42 @@
+# Agents and Scripts
+
+Aside supports local agents and reusable scripts in desktop Obsidian with a filesystem-backed vault. It can invoke Codex, Claude Code, Cursor, Gemini, and DeepSeek through local CLIs. Aside bundles none of those CLIs and has no agent service of its own. The `@deepseek` mention uses your configured OpenCode CLI and the model selected there, so the label does not guarantee that the active model is DeepSeek.
+
+## Security
+
+Vault scripts are **not sandboxed**. They run in local Node with your **local account permissions** and inherited environment. Aside launches Node without a shell, uses the vault root as its working directory, and passes the absolute path of the current Markdown note as the script's only automatic argument. Output is bounded, and each run times out after 60 seconds.
+
+These controls do not prevent a script from reading, changing, or sending anything available to your local account. Review every script and run only code you wrote or trust. Do not put credentials in a script or side note.
+
+## Ask an Agent
+
+Install and sign in to the local CLI you want to use first. In a side note, type `@codex`, `@claude`, `@cursor`, `@gemini`, or `@deepseek` with your request, then save the note. Aside honors that CLI's own account, configuration, model, and permissions.
+
+The Agent tab is optional and hidden by default. Enable **Settings → Sidebar tabs → Show agent tab** for a focused agent view. This controls visibility only; agent replies remain normal entries in the List view.
+
+## Create or Update a Script
+
+- Choose the local agent used for script work under **Settings → Scripts**.
+- Use `/create-script <request>` in a side note. On the first valid request, Aside automatically creates `🛠️ scripts/` if the folder is missing, then asks the default agent to create the script.
+- Use `/update-script /script-name <request>` to ask the default agent to change an existing script.
+- Open a PDF and use `/pdf-to-markdown` by itself to ask the default agent to create a sibling Markdown file.
+
+## Run a Script
+
+1. Open the Markdown note the script should process.
+2. Add or reply to an Aside comment.
+3. Type `/` and choose the script, or enter its command directly, such as `/clean-citations`.
+4. Save the comment. Aside runs the script and appends its output to the thread.
+
+Use **Regenerate** on the script reply to run the latest version against the current note again. Use one vault script per comment, and do not mix a script command with an agent mention.
+
+## Supported Scripts
+
+- Scripts must be direct child files of `🛠️ scripts/`; nested folders are ignored.
+- Supported extensions are `.mjs`, `.js`, and `.cjs`.
+- Filenames cannot contain spaces. The filename without its extension becomes the command: `clean-citations.mjs` becomes `/clean-citations`.
+- Hidden files and filename stems ending in `.test` or `.spec` are ignored.
+- Command names are matched case-insensitively. Duplicate names are not runnable.
+- Aside's built-in names are reserved and not runnable as scripts, including `todo`, `codex`, `claude`, `cursor`, `gemini`, `deepseek`, `create-script`, `update-script`, and `pdf-to-markdown`.
+
+Aside keeps the live script registry current when eligible files are created, renamed, or deleted.

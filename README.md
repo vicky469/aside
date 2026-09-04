@@ -52,7 +52,8 @@ For durable storage and sync across devices, use Aside with [Obsidian Sync](http
 - Browse, filter, and batch-apply local side-note tags from the active note sidebar.
 - Generates `🐰 Aside Index.md` as a vault-wide comment index.
 - Lets the index sidebar switch between the comment list and a thought-trail graph built from side-note wiki links. The graph follows those links across connected markdown files, so it can show multi-step trails instead of only direct one-hop links.
-- Built-in agent help on desktop Obsidian. Type `@codex`, `@claude`, `@gemini`, or `@deepseek` in a thread to get a reply, create anchored side notes, or apply explicit edits to the source note.
+- Built-in agent help on desktop Obsidian. Type `@codex`, `@claude`, `@cursor`, `@gemini`, or `@deepseek` in a thread to get a reply, create anchored side notes, or apply explicit edits to the source note.
+- [Agents and scripts](./SCRIPTS.md) explains local agent setup and the `/create-script <request>`, `/update-script /script-name <request>`, `/pdf-to-markdown`, and `/script-name` workflows.
 
 [Experimental Features](EXPERIMENTAL_FEATURES.md) are documented separately.
 
@@ -73,7 +74,9 @@ For durable storage and sync across devices, use Aside with [Obsidian Sync](http
 2. Add a side note.
    Markdown selections can use `Add comment to selection`; any supported file-backed view can use the sidebar `Add page note` for the whole file.
 3. Write your comment in the sidebar.
-   Type `@todo` for follow-ups, `@codex` if you want Codex to take the task, `@claude` if you want Claude to take it, `@gemini` if you want Gemini to take it, or `@deepseek` to run the model currently configured in OpenCode.
+   Type `@todo` for follow-ups, or type `@codex`, `@claude`, `@cursor`, `@gemini`, or `@deepseek` to ask a local agent. The `@deepseek` mention runs the model currently configured in OpenCode.
+
+The Agent tab is optional and hidden by default; enable **Show agent tab** under Aside settings when you want the focused agent view.
 
 ## Glossary
 
@@ -105,7 +108,7 @@ For durable storage and sync across devices, use Aside with [Obsidian Sync](http
 | Save draft | Click `Save`. |
 | Insert a newline | Press `Enter`. |
 | Mark a todo | Type `@todo` in the note. |
-| Ask a local agent from a side note | Type `@codex`, `@claude`, `@gemini`, or `@deepseek` in the note, then save it. |
+| Ask a local agent from a side note | Type `@codex`, `@claude`, `@cursor`, `@gemini`, or `@deepseek` in the note, then save it. |
 | Link a note | Type `[[` to open note suggestions and insert an Obsidian wikilink. |
 | Add a tag | Type `#` to open tag suggestions and insert a tag. |
 | Reopen link or tag suggestions | Press `Tab` while the cursor is inside an unfinished `[[...` or `#...` token. |
