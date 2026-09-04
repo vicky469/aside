@@ -4,6 +4,30 @@ export const ASIDE_SETTINGS_HERO_GRAPH_LABEL = "Thought trail";
 const ASIDE_SETTINGS_HERO_ARIA_LABEL =
     "Aside: Save a highlight, add a comment, ask an agent, and connect ideas in a thought trail.";
 
+interface GraphPlaneSpec {
+    modifierClass: string;
+    topTrackClass: string;
+    armTrackClass: string;
+}
+
+const GRAPH_PLANE_SPECS: readonly GraphPlaneSpec[] = [
+    {
+        modifierClass: "is-plane-a",
+        topTrackClass: "is-track-1",
+        armTrackClass: "is-track-2",
+    },
+    {
+        modifierClass: "is-plane-b",
+        topTrackClass: "is-track-3",
+        armTrackClass: "is-track-4",
+    },
+    {
+        modifierClass: "is-plane-c",
+        topTrackClass: "is-track-5",
+        armTrackClass: "is-track-6",
+    },
+];
+
 function appendNode(parentEl: HTMLElement, core = false): void {
     parentEl.createSpan({
         cls: core
@@ -64,44 +88,32 @@ function renderRelay(parentEl: HTMLElement): void {
     }
 }
 
-function renderGraph(parentEl: HTMLElement): void {
-    const graphEl = parentEl.createEl("pre", { cls: "aside-settings-hero-graph" });
+function appendGraphPlane(parentEl: HTMLElement, spec: GraphPlaneSpec): void {
+    const planeEl = parentEl.createEl("pre", {
+        cls: `aside-settings-hero-graph-plane ${spec.modifierClass}`,
+    });
 
-    graphEl.append("          ╭──");
-    appendEdgeTrack(graphEl, 5, "is-track-1");
-    graphEl.append("──╮\n      ╭──");
-    appendNode(graphEl);
-    graphEl.append("   ╭──");
-    appendEdgeTrack(graphEl, 3, "is-track-2");
-    graphEl.append("╮   ");
-    appendNode(graphEl);
-    graphEl.append("──╮\n   ╭──");
-    appendNode(graphEl);
-    graphEl.append("   ╰──");
-    appendNode(graphEl);
-    graphEl.append("    ");
-    appendNode(graphEl);
-    graphEl.append("──╯   ");
-    appendNode(graphEl);
-    graphEl.append("──╮\n   ");
-    appendNode(graphEl);
-    graphEl.append("     ╭──");
-    appendEdgeTrack(graphEl, 3, "is-track-3");
-    graphEl.append("╮  ╭──");
-    appendEdgeTrack(graphEl, 3, "is-track-4");
-    graphEl.append("╮     ");
-    appendNode(graphEl);
-    graphEl.append("\n   ╰──");
-    appendNode(graphEl);
-    graphEl.append("──╯     ╰──╯     ╰──");
-    appendNode(graphEl);
-    graphEl.append("──╯\n      ╰──");
-    appendEdgeTrack(graphEl, 5, "is-track-5");
-    graphEl.append("╮   │   ╭");
-    appendEdgeTrack(graphEl, 5, "is-track-6");
-    graphEl.append("──╯\n              ╰──");
-    appendNode(graphEl, true);
-    graphEl.append("──╯");
+    planeEl.append("    ");
+    appendNode(planeEl);
+    appendEdgeTrack(planeEl, 4, spec.topTrackClass);
+    appendNode(planeEl);
+    planeEl.append("\n    │    │\n");
+    appendNode(planeEl);
+    appendEdgeTrack(planeEl, 3, spec.armTrackClass);
+    appendNode(planeEl, true);
+    planeEl.append("────");
+    appendNode(planeEl);
+    planeEl.append("\n    │\n    ");
+    appendNode(planeEl);
+}
+
+function renderGraph(parentEl: HTMLElement): void {
+    const stageEl = parentEl.createDiv({ cls: "aside-settings-hero-graph-stage" });
+    const sceneEl = stageEl.createDiv({ cls: "aside-settings-hero-graph-scene" });
+
+    for (const spec of GRAPH_PLANE_SPECS) {
+        appendGraphPlane(sceneEl, spec);
+    }
 
     parentEl.createDiv({
         cls: "aside-settings-hero-graph-label",

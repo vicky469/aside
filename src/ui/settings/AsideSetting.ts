@@ -80,11 +80,28 @@ export default class AsideSetting extends PluginSettingTab {
     }
 
     getSettingDefinitions(): SettingDefinitionItem[] {
-        return getAsideSettingDefinitions(this.getCatalogContext());
+        return [
+            {
+                name: "Aside workflow",
+                searchable: false,
+                render: (setting) => {
+                    setting.settingEl.addClass("aside-settings-hero-setting");
+                    setting.settingEl.empty();
+                    renderAsideSettingsHeaderArt(setting.settingEl);
+                },
+            },
+            ...getAsideSettingDefinitions(this.getCatalogContext()),
+        ];
     }
 
     display(): void {
         this.renderLegacySettings();
+    }
+
+    hide(): void {
+        this.agentStatusRefreshToken += 1;
+        this.unloadSetupGuideMarkdownComponent();
+        this.containerEl.empty();
     }
 
     private renderLegacySettings(): void {

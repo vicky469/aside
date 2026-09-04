@@ -45,3 +45,45 @@ test("settings tab mounts the header before the settings catalog", async () => {
     assert.notEqual(settingsIndex, -1);
     assert.ok(headerIndex < settingsIndex);
 });
+
+test("settings header renders one scene with three graph planes and six bounded tracks", async () => {
+    const source = await readFile(headerSourceUrl, "utf8");
+
+    assert.match(source, /aside-settings-hero-graph-stage/);
+    assert.match(source, /aside-settings-hero-graph-scene/);
+    for (const planeClass of ["is-plane-a", "is-plane-b", "is-plane-c"]) {
+        assert.match(source, new RegExp(planeClass));
+    }
+    for (let trackNumber = 1; trackNumber <= 6; trackNumber += 1) {
+        assert.match(source, new RegExp(`is-track-${trackNumber}`));
+    }
+    assert.match(source, /appendGraphPlane/);
+    assert.doesNotMatch(source, /\b(?:brain|face|wikilink)\b/i);
+});
+
+test("declarative and legacy settings paths both mount the header before the catalog", async () => {
+    const source = await readFile(settingSourceUrl, "utf8");
+    const definitionIndex = source.indexOf('name: "Aside workflow"');
+    const definitionHeaderIndex = source.indexOf(
+        "renderAsideSettingsHeaderArt(setting.settingEl)",
+        definitionIndex,
+    );
+    const definitionCatalogIndex = source.indexOf("...getAsideSettingDefinitions(");
+
+    assert.notEqual(definitionIndex, -1);
+    assert.match(source, /searchable:\s*false/);
+    assert.notEqual(definitionHeaderIndex, -1);
+    assert.notEqual(definitionCatalogIndex, -1);
+    assert.ok(definitionHeaderIndex < definitionCatalogIndex);
+    assert.match(source, /setting\.settingEl\.empty\(\)/);
+    assert.match(source, /renderAsideSettingsHeaderArt\(this\.containerEl\)/);
+});
+
+test("settings tab removes the animated header when hidden", async () => {
+    const source = await readFile(settingSourceUrl, "utf8");
+
+    assert.match(
+        source,
+        /hide\(\): void \{[\s\S]*?this\.agentStatusRefreshToken \+= 1;[\s\S]*?this\.unloadSetupGuideMarkdownComponent\(\);[\s\S]*?this\.containerEl\.empty\(\);[\s\S]*?\}/,
+    );
+});
