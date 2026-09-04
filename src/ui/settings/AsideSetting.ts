@@ -86,6 +86,7 @@ export default class AsideSetting extends PluginSettingTab {
                 searchable: false,
                 render: (setting) => {
                     setting.settingEl.addClass("aside-settings-hero-setting");
+                    setting.settingEl.parentElement?.addClass("aside-settings-hero-group");
                     setting.settingEl.empty();
                     renderAsideSettingsHeaderArt(setting.settingEl);
                 },

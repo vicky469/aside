@@ -319,6 +319,26 @@ test("settings header remains cardless while preserving its layout container", a
     assert.match(hero, /padding:\s*var\(--size-4-3\)\s*;/);
 });
 
+test("declarative settings header clears its parent group surface", async () => {
+    const [source, styles] = await Promise.all([
+        readFile(settingSourceUrl, "utf8"),
+        readFile(stylesUrl, "utf8"),
+    ]);
+    const parentGroup = getRule(
+        styles,
+        ".aside-settings-tab .setting-items.aside-settings-hero-group",
+    );
+
+    assert.match(
+        source,
+        /setting\.settingEl\.parentElement\?\.addClass\("aside-settings-hero-group"\)/,
+    );
+    assert.match(parentGroup, /background:\s*transparent\s*;/);
+    assert.match(parentGroup, /border:\s*0\s*;/);
+    assert.match(parentGroup, /border-radius:\s*0\s*;/);
+    assert.match(parentGroup, /box-shadow:\s*none\s*;/);
+});
+
 test("settings header keeps a compact centered graph scene without visible graph-label copy", async () => {
     const styles = await readFile(stylesUrl, "utf8");
     const art = getRule(styles, ".aside-settings-tab .aside-settings-hero-art");

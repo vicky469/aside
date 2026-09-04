@@ -1813,6 +1813,13 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
     border: 0;
 }
 
+.aside-settings-tab .setting-items.aside-settings-hero-group {
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+}
+
 .aside-settings-tab .aside-settings-hero {
     --aside-settings-hero-intro-duration: 7s;
     --aside-settings-hero-blue: var(--color-blue, var(--interactive-accent));
