@@ -1824,7 +1824,6 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
     --aside-settings-hero-intro-duration: 7s;
     --aside-settings-hero-blue: var(--color-blue, var(--interactive-accent));
     container-type: inline-size;
-    margin-bottom: var(--size-4-5);
     padding: var(--size-4-3);
     overflow: hidden;
     border: 0;

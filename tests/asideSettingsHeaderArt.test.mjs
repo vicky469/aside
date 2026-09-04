@@ -332,7 +332,7 @@ test("settings header remains cardless while preserving its layout container", a
     assert.match(hero, /border:\s*0\s*;/);
     assert.match(hero, /border-radius:\s*0\s*;/);
     assert.match(hero, /background:\s*transparent\s*;/);
-    assert.match(hero, /margin-bottom:\s*var\(--size-4-5\)\s*;/);
+    assert.doesNotMatch(hero, /margin-bottom:/);
     assert.match(hero, /padding:\s*var\(--size-4-3\)\s*;/);
 });
 
