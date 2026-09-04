@@ -108,14 +108,15 @@ function appendGraphPlane(parentEl: HTMLElement, spec: GraphPlaneSpec): void {
 }
 
 function renderGraph(parentEl: HTMLElement): void {
-    const stageEl = parentEl.createDiv({ cls: "aside-settings-hero-graph-stage" });
+    const rowEl = parentEl.createDiv({ cls: "aside-settings-hero-graph-row" });
+    const stageEl = rowEl.createDiv({ cls: "aside-settings-hero-graph-stage" });
     const sceneEl = stageEl.createDiv({ cls: "aside-settings-hero-graph-scene" });
 
     for (const spec of GRAPH_PLANE_SPECS) {
         appendGraphPlane(sceneEl, spec);
     }
 
-    parentEl.createDiv({
+    rowEl.createDiv({
         cls: "aside-settings-hero-graph-label",
         text: ASIDE_SETTINGS_HERO_GRAPH_LABEL,
     });

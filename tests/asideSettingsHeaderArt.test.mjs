@@ -86,16 +86,24 @@ test("settings header renders one scene with three graph planes and six bounded 
     );
     assert.notEqual(renderGraphMatch, null);
     const renderGraphBody = renderGraphMatch[1];
+    const graphRowClasses = renderGraphBody.match(/aside-settings-hero-graph-row/g) ?? [];
     const stageClasses = renderGraphBody.match(/aside-settings-hero-graph-stage/g) ?? [];
     const sceneClasses = renderGraphBody.match(/aside-settings-hero-graph-scene/g) ?? [];
+    const labelClasses = renderGraphBody.match(/aside-settings-hero-graph-label/g) ?? [];
     const planeLoopIndex = renderGraphBody.indexOf("for (const spec of GRAPH_PLANE_SPECS)");
 
+    assert.equal(graphRowClasses.length, 1);
     assert.equal(stageClasses.length, 1);
     assert.equal(sceneClasses.length, 1);
+    assert.equal(labelClasses.length, 1);
     assert.notEqual(planeLoopIndex, -1);
     assert.match(
         renderGraphBody,
         /for \(const spec of GRAPH_PLANE_SPECS\) \{\s*appendGraphPlane\(sceneEl, spec\);\s*\}/,
+    );
+    assert.ok(
+        renderGraphBody.indexOf("aside-settings-hero-graph-row")
+            < renderGraphBody.indexOf("aside-settings-hero-graph-stage"),
     );
     assert.ok(
         renderGraphBody.indexOf("aside-settings-hero-graph-stage")
@@ -164,7 +172,6 @@ test("settings header splits one-shot relay motion from continuous graph motion"
         ".aside-settings-tab .aside-settings-hero-graph-stage",
         ".aside-settings-tab .aside-settings-hero-graph-node",
         ".aside-settings-tab .aside-settings-hero-graph-core",
-        ".aside-settings-tab .aside-settings-hero-graph-label",
     ];
 
     assert.match(hero, /--aside-settings-hero-intro-duration:\s*7s\s*;/);
@@ -223,7 +230,10 @@ test("settings header uses three fixed 3d planes and a narrow-pane layout", asyn
     assert.match(styles, /\.aside-settings-tab \.aside-settings-hero-graph-plane\.is-plane-a\s*\{[^}]*rotateX\(66deg\)[^}]*rotateZ\(45deg\)/);
     assert.match(styles, /\.aside-settings-tab \.aside-settings-hero-graph-plane\.is-plane-b\s*\{[^}]*rotateY\(66deg\)[^}]*rotateZ\(45deg\)/);
     assert.match(styles, /\.aside-settings-tab \.aside-settings-hero-graph-plane\.is-plane-c\s*\{[^}]*rotateX\(-18deg\)[^}]*rotateY\(-18deg\)[^}]*rotateZ\(45deg\)/);
-    assert.match(styles, /@container\s*\(max-width:\s*360px\)[\s\S]*?\.aside-settings-tab \.aside-settings-hero-graph-stage[\s\S]*?width:\s*min\(190px,\s*100%\)\s*;/);
+    assert.match(stage, /width:\s*min\(160px,\s*100%\)\s*;/);
+    assert.match(stage, /height:\s*112px\s*;/);
+    assert.match(styles, /@container\s*\(max-width:\s*360px\)[\s\S]*?\.aside-settings-tab \.aside-settings-hero-graph-stage[\s\S]*?width:\s*min\(145px,\s*100%\)\s*;/);
+    assert.match(styles, /@container\s*\(max-width:\s*360px\)[\s\S]*?\.aside-settings-tab \.aside-settings-hero-graph-stage[\s\S]*?height:\s*102px\s*;/);
     assert.doesNotMatch(styles, /(?:^|\})\s*\.aside-settings-hero\s*\{/m);
 });
 
@@ -300,6 +310,33 @@ test("settings header keeps its ASCII and Unicode art directionally isolated", a
     assert.match(art, /unicode-bidi:\s*isolate\s*;/);
 });
 
+test("settings header remains cardless while preserving its layout container", async () => {
+    const styles = await readFile(stylesUrl, "utf8");
+    const hero = getRule(styles, ".aside-settings-tab .aside-settings-hero");
+
+    assert.match(hero, /border:\s*0\s*;/);
+    assert.match(hero, /border-radius:\s*0\s*;/);
+    assert.match(hero, /background:\s*transparent\s*;/);
+    assert.match(hero, /margin-bottom:\s*var\(--size-4-5\)\s*;/);
+    assert.match(hero, /padding:\s*var\(--size-4-3\)\s*;/);
+});
+
+test("settings header keeps a compact stationary graph label beside the scene", async () => {
+    const styles = await readFile(stylesUrl, "utf8");
+    const art = getRule(styles, ".aside-settings-tab .aside-settings-hero-art");
+    const row = getRule(styles, ".aside-settings-tab .aside-settings-hero-graph-row");
+    const label = getRule(styles, ".aside-settings-tab .aside-settings-hero-graph-label");
+
+    assert.match(row, /display:\s*flex\s*;/);
+    assert.match(row, /align-items:\s*center\s*;/);
+    assert.match(row, /justify-content:\s*center\s*;/);
+    assert.match(row, /max-width:\s*100%\s*;/);
+    assert.match(art, /gap:\s*var\(--size-4-2\)\s*;/);
+    assert.match(label, /white-space:\s*nowrap\s*;/);
+    assert.match(label, /opacity:\s*1\s*;/);
+    assert.match(label, /animation:\s*none\s*;/);
+});
+
 test("settings header aligns the action relay beneath the Aside junction without narrow-pane overflow", async () => {
     const [source, styles] = await Promise.all([
         readFile(headerSourceUrl, "utf8"),
@@ -330,7 +367,7 @@ test("settings header aligns the action relay beneath the Aside junction without
 
     assert.match(relay, /display:\s*grid\s*;/);
     assert.match(relay, /grid-template-columns:\s*max-content\s+max-content\s+max-content\s+minmax\(11ch,\s*1fr\)\s*;/);
-    assert.match(relay, /width:\s*min\(100%,\s*71ch\)\s*;/);
+    assert.match(relay, /width:\s*min\(100%,\s*72ch\)\s*;/);
     assert.match(row, /display:\s*contents\s*;/);
     assert.match(rabbit, /grid-column:\s*1\s*;/);
     assert.match(thought, /grid-column:\s*2\s*;/);
@@ -347,5 +384,17 @@ test("settings header aligns the action relay beneath the Aside junction without
     assert.match(
         styles,
         /@container\s*\(max-width:\s*360px\)[\s\S]*?\.aside-settings-tab \.aside-settings-hero-action-line[\s\S]*?grid-column:\s*1\s*\/\s*-1\s*;/,
+    );
+    assert.match(
+        styles,
+        /@container\s*\(max-width:\s*360px\)[\s\S]*?\.aside-settings-tab \.aside-settings-hero-action-line[\s\S]*?flex-direction:\s*column\s*;/,
+    );
+    assert.match(
+        styles,
+        /@container\s*\(max-width:\s*360px\)[\s\S]*?\.aside-settings-tab \.aside-settings-hero-action-line[\s\S]*?flex-wrap:\s*nowrap\s*;/,
+    );
+    assert.match(
+        styles,
+        /@container\s*\(max-width:\s*360px\)[\s\S]*?\.aside-settings-tab \.aside-settings-hero-action-chunk:not\(:first-child\)[\s\S]*?padding-left:\s*3ch\s*;/,
     );
 });
