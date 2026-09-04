@@ -19,7 +19,7 @@ Use this section as the working checklist. Mark an item done only after the code
 - [ ] Remove the `agents` feature flag, its disabled policy, and every availability adapter and branch.
 - [ ] Keep **Show agent tab** as a visible setting, default it off for new or missing settings, and preserve explicit existing values.
 - [ ] Replace the new-side-note placeholder with the neutral text `add a comment`.
-- [ ] Keep agent and command suggestions available only after the user types `@` or `/`.
+- [ ] Preserve the existing `@` and `/` inline dropdown, filtering, and autocomplete while removing its agent-feature availability input.
 - [ ] Lazily create `🛠️ scripts/` for a valid `/create-script` request before dispatching its agent run.
 - [ ] Change the Aside workspace view display text, and therefore its tab-icon hover label, from `Side notes` to `Aside`.
 - [ ] Move scripts into normal user documentation and document their local execution security boundary.
@@ -99,7 +99,7 @@ add a comment
 
 It does not enumerate formatting, todo, script, or agent commands. This is the default experience for both existing and new users.
 
-Typing `@` opens agent and todo suggestions. Typing `/` opens built-in command and eligible vault-script suggestions. Directly typed supported mentions remain actionable even if the suggestion menu was not used. The mention/action policy no longer accepts an agent-feature availability argument.
+Typing `@` already opens the inline agent and todo dropdown. Typing `/` already opens the inline built-in command and eligible vault-script dropdown. Continued typing filters the open dropdown, and click, Enter, or Tab autocompletes the selected item. This existing interaction remains unchanged. Directly typed supported mentions remain actionable even if the suggestion menu was not used. The mention/action policy no longer accepts an agent-feature availability argument.
 
 The Agent tab appears only when **Show agent tab** is on. Agent commands and replies continue to work when the tab is hidden; the tab is a filter/view preference, not a capability switch. Aside must not automatically change this preference after an agent run.
 
