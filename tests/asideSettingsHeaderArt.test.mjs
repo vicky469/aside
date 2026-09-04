@@ -155,6 +155,17 @@ test("settings header splits one-shot relay motion from continuous graph motion"
     const scene = getRule(styles, ".aside-settings-tab .aside-settings-hero-graph-scene");
     const track = getRule(styles, ".aside-settings-tab .aside-settings-hero-edge-track");
     const runner = getRule(styles, ".aside-settings-tab .aside-settings-hero-edge-runner");
+    const introSelectors = [
+        ".aside-settings-tab .aside-settings-hero-rabbit",
+        ".aside-settings-tab .aside-settings-hero-thought",
+        ".aside-settings-tab .aside-settings-hero-signal-glyph",
+        ".aside-settings-tab .aside-settings-hero-aside-box",
+        ".aside-settings-tab .aside-settings-hero-action-line",
+        ".aside-settings-tab .aside-settings-hero-graph-stage",
+        ".aside-settings-tab .aside-settings-hero-graph-node",
+        ".aside-settings-tab .aside-settings-hero-graph-core",
+        ".aside-settings-tab .aside-settings-hero-graph-label",
+    ];
 
     assert.match(hero, /--aside-settings-hero-intro-duration:\s*7s\s*;/);
     assert.match(hero, /container-type:\s*inline-size\s*;/);
@@ -162,6 +173,14 @@ test("settings header splits one-shot relay motion from continuous graph motion"
     assert.match(settingRow, /padding:\s*0\s*;/);
     assert.match(rabbit, /animation:[^;]*\s1\s+forwards\s*;/);
     assert.doesNotMatch(rabbit, /infinite/);
+    for (const selector of introSelectors) {
+        const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const rulePattern = new RegExp(`${escaped}[^{}]*\\{(?<body>[^{}]*)\\}`);
+        const rule = styles.match(rulePattern)?.groups?.body ?? "";
+
+        assert.match(rule, /animation:[^;]*\s1\s+forwards\s*;/);
+        assert.doesNotMatch(rule, /infinite/);
+    }
     assert.match(scene, /transform-style:\s*preserve-3d\s*;/);
     assert.match(scene, /animation-name:\s*aside-settings-hero-graph-turn\s*;/);
     assert.match(scene, /animation-delay:\s*var\(--aside-settings-hero-intro-duration\)\s*;/);
@@ -174,6 +193,19 @@ test("settings header splits one-shot relay motion from continuous graph motion"
     assert.match(runner, /animation-direction:\s*alternate\s*;/);
     assert.match(styles, /@keyframes aside-settings-hero-graph-turn/);
     assert.match(styles, /@keyframes aside-settings-hero-edge-flow/);
+
+    const infiniteAnimationSelectors = [
+        ...styles.matchAll(
+            /(?<selector>\.aside-settings-tab \.aside-settings-hero[^{}]*)\{(?<body>[^{}]*animation[^{}]*)\}/g,
+        ),
+    ]
+        .filter((match) => match.groups?.body.includes("infinite"))
+        .map((match) => match.groups?.selector.trim());
+
+    assert.deepEqual(infiniteAnimationSelectors, [
+        ".aside-settings-tab .aside-settings-hero-graph-scene",
+        ".aside-settings-tab .aside-settings-hero-edge-runner",
+    ]);
 });
 
 test("settings header uses three fixed 3d planes and a narrow-pane layout", async () => {
@@ -191,12 +223,52 @@ test("settings header uses three fixed 3d planes and a narrow-pane layout", asyn
     assert.match(styles, /\.aside-settings-tab \.aside-settings-hero-graph-plane\.is-plane-a\s*\{[^}]*rotateX\(66deg\)[^}]*rotateZ\(45deg\)/);
     assert.match(styles, /\.aside-settings-tab \.aside-settings-hero-graph-plane\.is-plane-b\s*\{[^}]*rotateY\(66deg\)[^}]*rotateZ\(45deg\)/);
     assert.match(styles, /\.aside-settings-tab \.aside-settings-hero-graph-plane\.is-plane-c\s*\{[^}]*rotateX\(-18deg\)[^}]*rotateY\(-18deg\)[^}]*rotateZ\(45deg\)/);
-    assert.match(styles, /@container\s*\(max-width:\s*360px\)[\s\S]*?\.aside-settings-tab \.aside-settings-hero-graph-stage[\s\S]*?width:\s*190px\s*;/);
+    assert.match(styles, /@container\s*\(max-width:\s*360px\)[\s\S]*?\.aside-settings-tab \.aside-settings-hero-graph-stage[\s\S]*?width:\s*min\(190px,\s*100%\)\s*;/);
     assert.doesNotMatch(styles, /(?:^|\})\s*\.aside-settings-hero\s*\{/m);
 });
 
 test("settings header shows a static completed composition for reduced motion", async () => {
     const styles = await readFile(stylesUrl, "utf8");
+    const animatedSelectors = [
+        ".aside-settings-tab .aside-settings-hero-rabbit",
+        ".aside-settings-tab .aside-settings-hero-thought",
+        ".aside-settings-tab .aside-settings-hero-signal-glyph",
+        ".aside-settings-tab .aside-settings-hero-aside-box",
+        ".aside-settings-tab .aside-settings-hero-action-line",
+        ".aside-settings-tab .aside-settings-hero-graph-stage",
+        ".aside-settings-tab .aside-settings-hero-graph-node",
+        ".aside-settings-tab .aside-settings-hero-graph-core",
+        ".aside-settings-tab .aside-settings-hero-graph-label",
+        ".aside-settings-tab .aside-settings-hero-graph-scene",
+        ".aside-settings-tab .aside-settings-hero-edge-runner",
+    ];
+    const visibleSelectors = [
+        ".aside-settings-tab .aside-settings-hero-action-line",
+        ".aside-settings-tab .aside-settings-hero-graph-stage",
+        ".aside-settings-tab .aside-settings-hero-graph-node",
+        ".aside-settings-tab .aside-settings-hero-graph-core",
+        ".aside-settings-tab .aside-settings-hero-graph-label",
+    ];
+
+    for (const selector of animatedSelectors) {
+        const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        assert.match(
+            styles,
+            new RegExp(
+                `@media\\s*\\(prefers-reduced-motion:\\s*reduce\\)[\\s\\S]*?${escaped}[^{}]*\\{[^{}]*animation:\\s*none\\s*;`,
+            ),
+        );
+    }
+
+    for (const selector of visibleSelectors) {
+        const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        assert.match(
+            styles,
+            new RegExp(
+                `@media\\s*\\(prefers-reduced-motion:\\s*reduce\\)[\\s\\S]*?${escaped}[^{}]*\\{[^{}]*opacity:\\s*1\\s*;`,
+            ),
+        );
+    }
 
     assert.match(
         styles,
@@ -210,4 +282,20 @@ test("settings header shows a static completed composition for reduced motion", 
         styles,
         /@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*?\.aside-settings-tab \.aside-settings-hero-graph-stage[\s\S]*?clip-path:\s*none\s*;/,
     );
+    assert.match(
+        styles,
+        /@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*?\.aside-settings-tab \.aside-settings-hero-graph-scene[\s\S]*?will-change:\s*auto\s*;/,
+    );
+    assert.match(
+        styles,
+        /@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*?\.aside-settings-tab \.aside-settings-hero-edge-runner[\s\S]*?will-change:\s*auto\s*;/,
+    );
+});
+
+test("settings header keeps its ASCII and Unicode art directionally isolated", async () => {
+    const styles = await readFile(stylesUrl, "utf8");
+    const art = getRule(styles, ".aside-settings-tab .aside-settings-hero-art");
+
+    assert.match(art, /direction:\s*ltr\s*;/);
+    assert.match(art, /unicode-bidi:\s*isolate\s*;/);
 });
