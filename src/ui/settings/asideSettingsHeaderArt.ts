@@ -1,13 +1,17 @@
-export const ASIDE_SETTINGS_HERO_INSTRUCTION = "save highlight, add comment, @agent reply";
+export const ASIDE_SETTINGS_HERO_INSTRUCTION = "add comment, @agent reply";
 export const ASIDE_SETTINGS_HERO_GRAPH_LABEL = "thought trail";
 
 const ASIDE_SETTINGS_HERO_ARIA_LABEL =
-    "Aside: Save a highlight, add a comment, receive an @agent reply, and grow a thought trail.";
+    "Aside: Add a comment, receive an @agent reply, and grow a thought trail.";
+
+type GraphNodeShape = "dot" | "square" | "core";
+type GraphSquareNodePosition = "top-right" | "arm-left" | "bottom";
 
 interface GraphPlaneSpec {
     modifierClass: string;
     topTrackClass: string;
     armTrackClass: string;
+    squareNodePosition: GraphSquareNodePosition;
 }
 
 const GRAPH_PLANE_SPECS: readonly GraphPlaneSpec[] = [
@@ -15,25 +19,30 @@ const GRAPH_PLANE_SPECS: readonly GraphPlaneSpec[] = [
         modifierClass: "is-plane-a",
         topTrackClass: "is-track-1",
         armTrackClass: "is-track-2",
+        squareNodePosition: "top-right",
     },
     {
         modifierClass: "is-plane-b",
         topTrackClass: "is-track-3",
         armTrackClass: "is-track-4",
+        squareNodePosition: "arm-left",
     },
     {
         modifierClass: "is-plane-c",
         topTrackClass: "is-track-5",
         armTrackClass: "is-track-6",
+        squareNodePosition: "bottom",
     },
 ];
 
-function appendNode(parentEl: HTMLElement, core = false): void {
+function appendNode(parentEl: HTMLElement, shape: GraphNodeShape = "dot"): void {
     parentEl.createSpan({
-        cls: core
+        cls: shape === "core"
             ? "aside-settings-hero-graph-core"
-            : "aside-settings-hero-graph-node",
-        text: core ? "●" : "·",
+            : shape === "square"
+                ? "aside-settings-hero-graph-node is-square"
+                : "aside-settings-hero-graph-node",
+        text: shape === "core" ? "●" : shape === "square" ? "□" : "·",
     });
 }
 
@@ -79,32 +88,31 @@ function renderRelay(parentEl: HTMLElement): void {
     });
 
     const actionLineEl = relayEl.createDiv({ cls: "aside-settings-hero-action-line" });
-    const actions = ASIDE_SETTINGS_HERO_INSTRUCTION.split(", ");
-    for (const [index, action] of actions.entries()) {
-        actionLineEl.createSpan({
-            cls: "aside-settings-hero-action-chunk",
-            text: `${index === 0 ? "╰─ " : ""}${action}${index < actions.length - 1 ? ", " : ""}`,
-        });
-    }
+    actionLineEl.createSpan({
+        cls: "aside-settings-hero-action-chunk",
+        text: `╰─ ${ASIDE_SETTINGS_HERO_INSTRUCTION}`,
+    });
 }
 
 function appendGraphPlane(parentEl: HTMLElement, spec: GraphPlaneSpec): void {
     const planeEl = parentEl.createEl("pre", {
         cls: `aside-settings-hero-graph-plane ${spec.modifierClass}`,
     });
+    const nodeShapeAt = (position: GraphSquareNodePosition): GraphNodeShape =>
+        spec.squareNodePosition === position ? "square" : "dot";
 
     planeEl.append("    ");
     appendNode(planeEl);
     appendEdgeTrack(planeEl, 4, spec.topTrackClass);
-    appendNode(planeEl);
+    appendNode(planeEl, nodeShapeAt("top-right"));
     planeEl.append("\n    │    │\n");
-    appendNode(planeEl);
+    appendNode(planeEl, nodeShapeAt("arm-left"));
     appendEdgeTrack(planeEl, 3, spec.armTrackClass);
-    appendNode(planeEl, true);
+    appendNode(planeEl, "core");
     planeEl.append("────");
     appendNode(planeEl);
     planeEl.append("\n    │\n    ");
-    appendNode(planeEl);
+    appendNode(planeEl, nodeShapeAt("bottom"));
 }
 
 function renderGraph(parentEl: HTMLElement): void {

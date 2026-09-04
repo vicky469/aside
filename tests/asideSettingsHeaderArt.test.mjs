@@ -16,7 +16,7 @@ test("settings header owns the approved copy and accessible art structure", asyn
 
     assert.match(
         source,
-        /ASIDE_SETTINGS_HERO_INSTRUCTION\s*=\s*"save highlight, add comment, @agent reply"/,
+        /ASIDE_SETTINGS_HERO_INSTRUCTION\s*=\s*"add comment, @agent reply"/,
     );
     assert.match(
         source,
@@ -27,7 +27,7 @@ test("settings header owns the approved copy and accessible art structure", asyn
     assert.match(source, /"aria-label":\s*ASIDE_SETTINGS_HERO_ARIA_LABEL/);
     assert.match(
         source,
-        /ASIDE_SETTINGS_HERO_ARIA_LABEL\s*=\s*"Aside: Save a highlight, add a comment, receive an @agent reply, and grow a thought trail\."/,
+        /ASIDE_SETTINGS_HERO_ARIA_LABEL\s*=\s*"Aside: Add a comment, receive an @agent reply, and grow a thought trail\."/,
     );
     assert.match(source, /"aria-hidden":\s*"true"/);
     assert.match(source, /aside-settings-hero-edge-track/);
@@ -67,6 +67,10 @@ test("settings header renders one scene with three graph planes and six bounded 
         graphPlaneSpecs.matchAll(/(?:topTrackClass|armTrackClass):\s*"([^"]+)"/g),
         (match) => match[1],
     );
+    const squareNodePositions = Array.from(
+        graphPlaneSpecs.matchAll(/squareNodePosition:\s*"([^"]+)"/g),
+        (match) => match[1],
+    );
 
     assert.deepEqual(modifierClasses, ["is-plane-a", "is-plane-b", "is-plane-c"]);
     assert.deepEqual(trackClasses, [
@@ -77,6 +81,10 @@ test("settings header renders one scene with three graph planes and six bounded 
         "is-track-5",
         "is-track-6",
     ]);
+    assert.deepEqual(squareNodePositions, ["top-right", "arm-left", "bottom"]);
+    assert.match(source, /type GraphNodeShape = "dot" \| "square" \| "core";/);
+    assert.match(source, /aside-settings-hero-graph-node is-square/);
+    assert.match(source, /shape === "square" \? "□" : "·"/);
 
     const appendGraphPlaneMatch = source.match(
         /function appendGraphPlane\([\s\S]*?\): void \{([\s\S]*?)\n\}\n\nfunction renderGraph/,
@@ -392,6 +400,11 @@ test("settings header aligns the action relay beneath the Aside junction without
     const signal = getRule(styles, ".aside-settings-tab .aside-settings-hero-signal");
     const asideBox = getRule(styles, ".aside-settings-tab .aside-settings-hero-aside-box");
     const action = getRule(styles, ".aside-settings-tab .aside-settings-hero-action-line");
+    const narrowStart = styles.indexOf("@container (max-width: 360px)");
+    const narrowEnd = styles.indexOf("@media (prefers-reduced-motion: reduce)", narrowStart);
+    const narrowStyles = styles.slice(narrowStart, narrowEnd);
+    const narrowRelay = getRule(narrowStyles, ".aside-settings-tab .aside-settings-hero-relay");
+    const narrowAction = getRule(narrowStyles, ".aside-settings-tab .aside-settings-hero-action-line");
 
     assert.match(source, /text:\s*" \/\)\/\)\\n\( \. \.\)\\n \/づ"/);
     assert.match(
@@ -405,18 +418,15 @@ test("settings header aligns the action relay beneath the Aside junction without
     );
     assert.match(
         source,
-        /const actions = ASIDE_SETTINGS_HERO_INSTRUCTION\.split\(", "\);/,
+        /text:\s*`╰─ \$\{ASIDE_SETTINGS_HERO_INSTRUCTION\}`/,
     );
-    assert.match(
-        source,
-        /text:\s*`\$\{index === 0 \? "╰─ " : ""\}\$\{action\}\$\{index < actions\.length - 1 \? ", " : ""\}`/,
-    );
+    assert.doesNotMatch(source, /ASIDE_SETTINGS_HERO_INSTRUCTION\.split/);
     assert.match(thought, /text-transform:\s*lowercase\s*;/);
     assert.match(action, /text-transform:\s*lowercase\s*;/);
 
     assert.match(relay, /display:\s*grid\s*;/);
     assert.match(relay, /grid-template-columns:\s*max-content\s+max-content\s+max-content\s+minmax\(11ch,\s*1fr\)\s*;/);
-    assert.match(relay, /width:\s*min\(100%,\s*73ch\)\s*;/);
+    assert.match(relay, /width:\s*min\(100%,\s*57ch\)\s*;/);
     assert.match(relay, /row-gap:\s*0\s*;/);
     assert.match(row, /display:\s*contents\s*;/);
     assert.match(rabbit, /grid-column:\s*1\s*;/);
@@ -428,24 +438,9 @@ test("settings header aligns the action relay beneath the Aside junction without
     assert.match(action, /margin-left:\s*5ch\s*;/);
     assert.match(action, /flex-wrap:\s*nowrap\s*;/);
     assert.match(action, /white-space:\s*nowrap\s*;/);
-    assert.match(
-        styles,
-        /@container\s*\(max-width:\s*360px\)[\s\S]*?\.aside-settings-tab \.aside-settings-hero-relay[\s\S]*?grid-template-columns:\s*minmax\(0,\s*6ch\)/,
-    );
-    assert.match(
-        styles,
-        /@container\s*\(max-width:\s*360px\)[\s\S]*?\.aside-settings-tab \.aside-settings-hero-action-line[\s\S]*?grid-column:\s*4\s*;/,
-    );
-    assert.match(
-        styles,
-        /@container\s*\(max-width:\s*360px\)[\s\S]*?\.aside-settings-tab \.aside-settings-hero-action-line[\s\S]*?margin-left:\s*5ch\s*;/,
-    );
-    assert.match(
-        styles,
-        /@container\s*\(max-width:\s*360px\)[\s\S]*?\.aside-settings-tab \.aside-settings-hero-action-line[\s\S]*?flex-direction:\s*column\s*;/,
-    );
-    assert.match(
-        styles,
-        /@container\s*\(max-width:\s*360px\)[\s\S]*?\.aside-settings-tab \.aside-settings-hero-action-chunk:not\(:first-child\)[\s\S]*?padding-left:\s*3ch\s*;/,
-    );
+    assert.match(narrowRelay, /grid-template-columns:\s*minmax\(0,\s*6ch\)/);
+    assert.match(narrowAction, /grid-column:\s*4\s*;/);
+    assert.match(narrowAction, /margin-left:\s*5ch\s*;/);
+    assert.doesNotMatch(styles, /aside-settings-hero-action-chunk:not\(:first-child\)/);
+    assert.doesNotMatch(narrowAction, /flex-direction:\s*column\s*;/);
 });
