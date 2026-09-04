@@ -13,12 +13,13 @@ Use this section as the working checklist. Mark an item done only after the code
 - [x] The settings header concept was reviewed as live motion mockups.
 - [x] The user approved the Rabbit relay and concise instructional copy.
 - [x] The user selected the original three-plane impossible-junction direction after reviewing animated 3D options and approved continuous graph motion limited to the settings window lifetime.
-- [x] The accessible settings-header renderer and mount point were implemented and verified in `e9409ed` without changing the settings catalog.
+- [x] The accessible settings-header renderer and legacy settings mount point were implemented and verified in `e9409ed` without changing the settings catalog.
 - [x] Diagon's upstream repository and MIT license were reviewed; the approved design uses original art and no Diagon code, generated output, package, or asset.
 
 ### To Implement
 
 - [ ] Refine the renderer's flat graph scaffold into the approved original three-plane impossible-junction Thought Trail.
+- [ ] Prepend the header through the Obsidian 1.13 declarative settings path while retaining the Obsidian 1.12.7 legacy fallback.
 - [ ] Implement the one-shot Rabbit relay followed by continuous 3D graph turning and contained blue-dot edge motion with scoped CSS.
 - [ ] Remove the settings-header DOM on `hide()` so no animated element or related resource survives the settings window.
 - [ ] Make the header theme-aware, responsive at narrow settings widths, and static under reduced-motion preferences.
@@ -80,7 +81,7 @@ Each accent-colored runner belongs to a dedicated edge-track element on one grap
 
 ## Architecture
 
-Add a focused `asideSettingsHeaderArt` UI module responsible only for constructing the header DOM. `AsideSetting` calls it immediately after clearing the settings container and before `renderLegacyAsideSettings` adds headings and controls.
+Keep the focused `asideSettingsHeaderArt` UI module responsible only for constructing the header DOM. On Obsidian 1.13+, `AsideSetting.getSettingDefinitions()` prepends one unsearchable custom-render definition that clears its empty setting-row chrome and mounts the header before the existing groups. The legacy `display()` fallback for the declared minimum Obsidian 1.12.7 calls the same renderer immediately after clearing the settings container and before `renderLegacyAsideSettings` adds headings and controls.
 
 The renderer uses Obsidian's DOM helpers and text nodes. It does not use `innerHTML`, a canvas, SVG, image assets, network requests, timers, or a third-party animation library. A perspective stage contains one transform-preserving scene with three graph-plane elements. Graph edges, junction nodes, and moving runners are explicit elements with stable Aside-scoped class names.
 
@@ -137,6 +138,7 @@ The GEB reference is conceptual inspiration for dimensional ambiguity only; no c
 Focused tests should verify:
 
 - the header is rendered before the first settings heading;
+- both the declarative Obsidian 1.13 path and legacy Obsidian 1.12.7 fallback render the same header before the settings catalog;
 - the exact visible copy is `save highlight, add comment, ask @agent`;
 - the visible graph caption is `thought trail`;
 - the decorative art is hidden from assistive technology and the header has a useful semantic label;

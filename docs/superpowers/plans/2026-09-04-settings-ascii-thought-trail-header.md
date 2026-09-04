@@ -1,73 +1,67 @@
-# Aside Settings ASCII Thought Trail Header Implementation Plan
+# Aside Settings 3D Thought Trail Header Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add an original animated ASCII/Unicode header above Aside's settings that teaches the anchored-note workflow and resolves into a brain-shaped Thought Trail graph with contained idle edge motion.
+**Goal:** Finish Aside's original settings-page header with a one-shot Rabbit relay and a continuously turning three-plane impossible-junction Thought Trail whose blue dots remain inside their edges until the settings window closes.
 
-**Architecture:** A focused `asideSettingsHeaderArt` module constructs static DOM with stable class hooks; `AsideSetting` mounts it before the existing settings catalog. Aside-scoped CSS owns the one-shot entrance, delayed edge runners, responsive layout, and reduced-motion final state, with no timers, stored state, external assets, or third-party runtime code.
+**Architecture:** Keep the focused `asideSettingsHeaderArt` renderer and legacy mount point from commit `e9409ed`, add an unsearchable custom-render definition for Obsidian 1.13+, and replace the flat graph scaffold with a perspective stage containing one transform-preserving scene and three explicit graph planes. Aside-scoped CSS owns the one-shot relay, delayed infinite 3D turn, clipped runner motion, responsive layout, and reduced-motion final state; `AsideSetting.hide()` removes the settings DOM so the animations have an explicit settings-window lifetime.
 
-**Tech Stack:** TypeScript, Obsidian DOM helpers, CSS keyframes, Node test runner, esbuild
+**Tech Stack:** TypeScript, Obsidian DOM helpers, CSS 3D transforms and keyframes, Node test runner, esbuild
 
 ---
 
-### Task 1: Render and Mount the Accessible Header Structure
+### Task 1: Build the Three-Plane Graph and Settings Cleanup Boundary
 
 **Files:**
-- Create: `src/ui/settings/asideSettingsHeaderArt.ts`
-- Create: `tests/asideSettingsHeaderArt.test.mjs`
-- Modify: `src/ui/settings/AsideSetting.ts:39-43,88-99`
+- Modify: `tests/asideSettingsHeaderArt.test.mjs`
+- Modify: `src/ui/settings/asideSettingsHeaderArt.ts`
+- Modify: `src/ui/settings/AsideSetting.ts:82-105`
 
-- [ ] **Step 1: Write the failing renderer and wiring tests**
+- [ ] **Step 1: Extend the source-contract tests for the revised graph and lifecycle**
 
-Create `tests/asideSettingsHeaderArt.test.mjs`:
+Append these tests to `tests/asideSettingsHeaderArt.test.mjs`:
 
 ```js
-import * as assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
-import test from "node:test";
-
-const headerSourceUrl = new URL(
-    "../src/ui/settings/asideSettingsHeaderArt.ts",
-    import.meta.url,
-);
-const settingSourceUrl = new URL(
-    "../src/ui/settings/AsideSetting.ts",
-    import.meta.url,
-);
-
-test("settings header owns the approved copy and accessible art structure", async () => {
+test("settings header renders one scene with three graph planes and six bounded tracks", async () => {
     const source = await readFile(headerSourceUrl, "utf8");
 
-    assert.match(
-        source,
-        /ASIDE_SETTINGS_HERO_INSTRUCTION\s*=\s*"Save highlight, add comment, ask @agent"/,
-    );
-    assert.match(
-        source,
-        /ASIDE_SETTINGS_HERO_GRAPH_LABEL\s*=\s*"Thought trail"/,
-    );
-    assert.match(source, /role:\s*"img"/);
-    assert.match(source, /"aria-label":\s*ASIDE_SETTINGS_HERO_ARIA_LABEL/);
-    assert.match(source, /"aria-hidden":\s*"true"/);
-    assert.match(source, /aside-settings-hero-edge-track/);
-    assert.match(source, /aside-settings-hero-edge-runner/);
-    assert.doesNotMatch(source, /innerHTML/);
-    assert.doesNotMatch(source, /setInterval|requestAnimationFrame/);
+    assert.match(source, /aside-settings-hero-graph-stage/);
+    assert.match(source, /aside-settings-hero-graph-scene/);
+    for (const planeClass of ["is-plane-a", "is-plane-b", "is-plane-c"]) {
+        assert.match(source, new RegExp(planeClass));
+    }
+    for (let trackNumber = 1; trackNumber <= 6; trackNumber += 1) {
+        assert.match(source, new RegExp(`is-track-${trackNumber}`));
+    }
+    assert.match(source, /appendGraphPlane/);
+    assert.doesNotMatch(source, /\b(?:brain|face|wikilink)\b/i);
 });
 
-test("settings tab mounts the header before the settings catalog", async () => {
+test("declarative and legacy settings paths both mount the header before the catalog", async () => {
+    const source = await readFile(settingSourceUrl, "utf8");
+    const definitionIndex = source.indexOf('name: "Aside workflow"');
+    const definitionHeaderIndex = source.indexOf(
+        "renderAsideSettingsHeaderArt(setting.settingEl)",
+        definitionIndex,
+    );
+    const definitionCatalogIndex = source.indexOf("...getAsideSettingDefinitions(");
+
+    assert.notEqual(definitionIndex, -1);
+    assert.match(source, /searchable:\s*false/);
+    assert.notEqual(definitionHeaderIndex, -1);
+    assert.notEqual(definitionCatalogIndex, -1);
+    assert.ok(definitionHeaderIndex < definitionCatalogIndex);
+    assert.match(source, /setting\.settingEl\.empty\(\)/);
+    assert.match(source, /renderAsideSettingsHeaderArt\(this\.containerEl\)/);
+});
+
+test("settings tab removes the animated header when hidden", async () => {
     const source = await readFile(settingSourceUrl, "utf8");
 
     assert.match(
         source,
-        /import \{ renderAsideSettingsHeaderArt \} from "\.\/asideSettingsHeaderArt";/,
+        /hide\(\): void \{[\s\S]*?this\.agentStatusRefreshToken \+= 1;[\s\S]*?this\.unloadSetupGuideMarkdownComponent\(\);[\s\S]*?this\.containerEl\.empty\(\);[\s\S]*?\}/,
     );
-    const headerIndex = source.indexOf("renderAsideSettingsHeaderArt(this.containerEl)");
-    const settingsIndex = source.indexOf("renderLegacyAsideSettings(");
-
-    assert.notEqual(headerIndex, -1);
-    assert.notEqual(settingsIndex, -1);
-    assert.ok(headerIndex < settingsIndex);
 });
 ```
 
@@ -79,11 +73,11 @@ Run:
 node --test tests/asideSettingsHeaderArt.test.mjs
 ```
 
-Expected: FAIL with `ENOENT` for `src/ui/settings/asideSettingsHeaderArt.ts`.
+Expected: the two existing tests pass; the graph test fails because `aside-settings-hero-graph-stage`, `aside-settings-hero-graph-scene`, and plane classes are absent; the dual-path test fails because the declarative header definition is absent; and the lifecycle test fails because `AsideSetting.hide()` is absent.
 
-- [ ] **Step 3: Add the focused header renderer**
+- [ ] **Step 3: Replace the flat graph scaffold with the three-plane scene**
 
-Create `src/ui/settings/asideSettingsHeaderArt.ts`:
+Replace `src/ui/settings/asideSettingsHeaderArt.ts` with:
 
 ```ts
 export const ASIDE_SETTINGS_HERO_INSTRUCTION = "Save highlight, add comment, ask @agent";
@@ -91,6 +85,30 @@ export const ASIDE_SETTINGS_HERO_GRAPH_LABEL = "Thought trail";
 
 const ASIDE_SETTINGS_HERO_ARIA_LABEL =
     "Aside: Save a highlight, add a comment, ask an agent, and connect ideas in a thought trail.";
+
+interface GraphPlaneSpec {
+    modifierClass: string;
+    topTrackClass: string;
+    armTrackClass: string;
+}
+
+const GRAPH_PLANE_SPECS: readonly GraphPlaneSpec[] = [
+    {
+        modifierClass: "is-plane-a",
+        topTrackClass: "is-track-1",
+        armTrackClass: "is-track-2",
+    },
+    {
+        modifierClass: "is-plane-b",
+        topTrackClass: "is-track-3",
+        armTrackClass: "is-track-4",
+    },
+    {
+        modifierClass: "is-plane-c",
+        topTrackClass: "is-track-5",
+        armTrackClass: "is-track-6",
+    },
+];
 
 function appendNode(parentEl: HTMLElement, core = false): void {
     parentEl.createSpan({
@@ -126,7 +144,7 @@ function renderRelay(parentEl: HTMLElement): void {
     });
     rowEl.createEl("pre", {
         cls: "aside-settings-hero-thought",
-        text: "┌─────────┐\n│ Thought │\n└─────────┘",
+        text: ["┌─────────┐\n│ ", "Thought", " │\n└─────────┘"].join(""),
     });
 
     const signalEl = rowEl.createSpan({ cls: "aside-settings-hero-signal" });
@@ -139,7 +157,7 @@ function renderRelay(parentEl: HTMLElement): void {
 
     rowEl.createEl("pre", {
         cls: "aside-settings-hero-aside-box",
-        text: "┌─────────┐\n│  ASIDE  │\n└────┬────┘",
+        text: ["┌─────────┐\n│  ", "ASIDE", "  │\n└────┬────┘"].join(""),
     });
 
     const actionLineEl = relayEl.createDiv({ cls: "aside-settings-hero-action-line" });
@@ -152,44 +170,32 @@ function renderRelay(parentEl: HTMLElement): void {
     }
 }
 
-function renderGraph(parentEl: HTMLElement): void {
-    const graphEl = parentEl.createEl("pre", { cls: "aside-settings-hero-graph" });
+function appendGraphPlane(parentEl: HTMLElement, spec: GraphPlaneSpec): void {
+    const planeEl = parentEl.createEl("pre", {
+        cls: `aside-settings-hero-graph-plane ${spec.modifierClass}`,
+    });
 
-    graphEl.append("          ╭──");
-    appendEdgeTrack(graphEl, 5, "is-track-1");
-    graphEl.append("──╮\n      ╭──");
-    appendNode(graphEl);
-    graphEl.append("   ╭──");
-    appendEdgeTrack(graphEl, 3, "is-track-2");
-    graphEl.append("╮   ");
-    appendNode(graphEl);
-    graphEl.append("──╮\n   ╭──");
-    appendNode(graphEl);
-    graphEl.append("   ╰──");
-    appendNode(graphEl);
-    graphEl.append("    ");
-    appendNode(graphEl);
-    graphEl.append("──╯   ");
-    appendNode(graphEl);
-    graphEl.append("──╮\n   ");
-    appendNode(graphEl);
-    graphEl.append("     ╭──");
-    appendEdgeTrack(graphEl, 3, "is-track-3");
-    graphEl.append("╮  ╭──");
-    appendEdgeTrack(graphEl, 3, "is-track-4");
-    graphEl.append("╮     ");
-    appendNode(graphEl);
-    graphEl.append("\n   ╰──");
-    appendNode(graphEl);
-    graphEl.append("──╯     ╰──╯     ╰──");
-    appendNode(graphEl);
-    graphEl.append("──╯\n      ╰──");
-    appendEdgeTrack(graphEl, 5, "is-track-5");
-    graphEl.append("╮   │   ╭");
-    appendEdgeTrack(graphEl, 5, "is-track-6");
-    graphEl.append("──╯\n              ╰──");
-    appendNode(graphEl, true);
-    graphEl.append("──╯");
+    planeEl.append("    ");
+    appendNode(planeEl);
+    appendEdgeTrack(planeEl, 4, spec.topTrackClass);
+    appendNode(planeEl);
+    planeEl.append("\n    │    │\n");
+    appendNode(planeEl);
+    appendEdgeTrack(planeEl, 3, spec.armTrackClass);
+    appendNode(planeEl, true);
+    planeEl.append("────");
+    appendNode(planeEl);
+    planeEl.append("\n    │\n    ");
+    appendNode(planeEl);
+}
+
+function renderGraph(parentEl: HTMLElement): void {
+    const stageEl = parentEl.createDiv({ cls: "aside-settings-hero-graph-stage" });
+    const sceneEl = stageEl.createDiv({ cls: "aside-settings-hero-graph-scene" });
+
+    for (const spec of GRAPH_PLANE_SPECS) {
+        appendGraphPlane(sceneEl, spec);
+    }
 
     parentEl.createDiv({
         cls: "aside-settings-hero-graph-label",
@@ -218,29 +224,38 @@ export function renderAsideSettingsHeaderArt(containerEl: HTMLElement): HTMLElem
 }
 ```
 
-- [ ] **Step 4: Mount the renderer before legacy settings**
+- [ ] **Step 4: Mount the header in the declarative path and add explicit cleanup**
 
-In `src/ui/settings/AsideSetting.ts`, add this import with the other settings UI imports:
-
-```ts
-import { renderAsideSettingsHeaderArt } from "./asideSettingsHeaderArt";
-```
-
-Then update `renderLegacySettings()` so the header is created immediately after the container is cleared:
+In `src/ui/settings/AsideSetting.ts`, replace `getSettingDefinitions()` and add `hide()` immediately after `display()`:
 
 ```ts
-private renderLegacySettings(): void {
+getSettingDefinitions(): SettingDefinitionItem[] {
+    return [
+        {
+            name: "Aside workflow",
+            searchable: false,
+            render: (setting) => {
+                setting.settingEl.addClass("aside-settings-hero-setting");
+                setting.settingEl.empty();
+                renderAsideSettingsHeaderArt(setting.settingEl);
+            },
+        },
+        ...getAsideSettingDefinitions(this.getCatalogContext()),
+    ];
+}
+
+display(): void {
+    this.renderLegacySettings();
+}
+
+hide(): void {
     this.agentStatusRefreshToken += 1;
     this.unloadSetupGuideMarkdownComponent();
     this.containerEl.empty();
-    renderAsideSettingsHeaderArt(this.containerEl);
-    renderLegacyAsideSettings(
-        this.containerEl,
-        this.getCatalogContext(),
-        (container) => new Setting(container),
-    );
 }
 ```
+
+Obsidian 1.13 bypasses `display()` when definitions are non-empty, so the unsearchable custom-render row mounts the header before the existing groups and removes the row's unused name/control chrome. Obsidian 1.12.7 continues to use the existing `display()` fallback. The documented `PluginSettingTab.hide()` lifecycle runs when the tab changes or settings modal closes; emptying the container removes either rendering path's animated DOM. No separate animation handle exists.
 
 - [ ] **Step 5: Run focused verification and verify GREEN**
 
@@ -252,79 +267,103 @@ npm run typecheck
 npx eslint src/ui/settings/asideSettingsHeaderArt.ts src/ui/settings/AsideSetting.ts tests/asideSettingsHeaderArt.test.mjs --max-warnings 0
 ```
 
-Expected: the two focused tests pass, TypeScript reports no errors, and ESLint reports no warnings or errors.
+Expected: five focused tests pass, TypeScript reports no errors, and ESLint reports no warnings or errors.
 
-- [ ] **Step 6: Commit the renderer slice**
+- [ ] **Step 6: Commit the revised structure**
 
 ```bash
 git add src/ui/settings/asideSettingsHeaderArt.ts src/ui/settings/AsideSetting.ts tests/asideSettingsHeaderArt.test.mjs
-git commit -m "feat(settings): add ascii header structure"
+git commit -m "refactor(settings): build 3d thought trail scene"
 ```
 
-### Task 2: Style the One-Shot Reveal and Contained Idle Motion
+### Task 2: Animate the One-Shot Relay and Continuous Spatial Graph
 
 **Files:**
 - Modify: `tests/asideSettingsHeaderArt.test.mjs`
 - Modify: `styles.css:1810`
 
-- [ ] **Step 1: Extend the focused test with failing style contracts**
+- [ ] **Step 1: Add failing stylesheet contracts**
 
-Append to `tests/asideSettingsHeaderArt.test.mjs`:
+Append this code to `tests/asideSettingsHeaderArt.test.mjs`:
 
 ```js
 const stylesUrl = new URL("../styles.css", import.meta.url);
 
-function getRule(styles, selector) {
+function getRule(styles, selector, requiredDeclaration = "") {
     const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    return styles.match(new RegExp(`${escaped}\\s*\\{(?<body>[\\s\\S]*?)\\}`))
-        ?.groups?.body ?? "";
+    const matches = styles.matchAll(
+        new RegExp(`${escaped}\\s*\\{(?<body>[^}]*)\\}`, "g"),
+    );
+    return [...matches]
+        .map((match) => match.groups?.body ?? "")
+        .find((body) => body.includes(requiredDeclaration)) ?? "";
 }
 
-test("settings header animations settle before contained edge motion begins", async () => {
+test("settings header splits one-shot relay motion from continuous graph motion", async () => {
     const styles = await readFile(stylesUrl, "utf8");
     const hero = getRule(styles, ".aside-settings-tab .aside-settings-hero");
-    const actionLine = getRule(styles, ".aside-settings-tab .aside-settings-hero-action-line");
+    const settingRow = getRule(
+        styles,
+        ".aside-settings-tab .setting-item.aside-settings-hero-setting",
+    );
+    const rabbit = getRule(styles, ".aside-settings-tab .aside-settings-hero-rabbit");
+    const scene = getRule(styles, ".aside-settings-tab .aside-settings-hero-graph-scene");
     const track = getRule(styles, ".aside-settings-tab .aside-settings-hero-edge-track");
     const runner = getRule(styles, ".aside-settings-tab .aside-settings-hero-edge-runner");
 
     assert.match(hero, /--aside-settings-hero-intro-duration:\s*7s\s*;/);
     assert.match(hero, /container-type:\s*inline-size\s*;/);
-    assert.match(hero, /overflow:\s*hidden\s*;/);
-    assert.match(actionLine, /flex-wrap:\s*wrap\s*;/);
-    assert.match(actionLine, /text-transform:\s*lowercase\s*;/);
+    assert.match(settingRow, /display:\s*block\s*;/);
+    assert.match(settingRow, /padding:\s*0\s*;/);
+    assert.match(rabbit, /animation:[^;]*\s1\s+forwards\s*;/);
+    assert.doesNotMatch(rabbit, /infinite/);
+    assert.match(scene, /transform-style:\s*preserve-3d\s*;/);
+    assert.match(scene, /animation-name:\s*aside-settings-hero-graph-turn\s*;/);
+    assert.match(scene, /animation-delay:\s*var\(--aside-settings-hero-intro-duration\)\s*;/);
+    assert.match(scene, /animation-iteration-count:\s*infinite\s*;/);
+    assert.match(scene, /animation-direction:\s*alternate\s*;/);
     assert.match(track, /position:\s*relative\s*;/);
     assert.match(track, /overflow:\s*hidden\s*;/);
-    assert.match(runner, /position:\s*absolute\s*;/);
     assert.match(runner, /animation-delay:\s*calc\(/);
     assert.match(runner, /animation-iteration-count:\s*infinite\s*;/);
     assert.match(runner, /animation-direction:\s*alternate\s*;/);
-    assert.match(
-        styles,
-        /\.aside-settings-tab \.aside-settings-hero-rabbit\s*\{[\s\S]*?animation:[^;]*\s1\s+forwards\s*;/,
-    );
-    assert.match(
-        styles,
-        /\.aside-settings-tab \.aside-settings-hero-graph\s*\{[\s\S]*?animation:[^;]*\s1\s+forwards\s*;/,
-    );
+    assert.match(styles, /@keyframes aside-settings-hero-graph-turn/);
     assert.match(styles, /@keyframes aside-settings-hero-edge-flow/);
-    assert.match(
+});
+
+test("settings header uses three fixed 3d planes and a narrow-pane layout", async () => {
+    const styles = await readFile(stylesUrl, "utf8");
+    const stage = getRule(styles, ".aside-settings-tab .aside-settings-hero-graph-stage");
+    const plane = getRule(
         styles,
-        /@container\s*\(max-width:\s*360px\)[\s\S]*?\.aside-settings-tab \.aside-settings-hero-art[\s\S]*?font-size:\s*9px\s*;/,
+        ".aside-settings-tab .aside-settings-hero-graph-plane",
+        "position: absolute",
     );
+
+    assert.match(stage, /perspective:\s*620px\s*;/);
+    assert.match(plane, /position:\s*absolute\s*;/);
+    assert.match(plane, /transform-style:\s*preserve-3d\s*;/);
+    assert.match(styles, /\.aside-settings-tab \.aside-settings-hero-graph-plane\.is-plane-a\s*\{[^}]*rotateX\(66deg\)[^}]*rotateZ\(45deg\)/);
+    assert.match(styles, /\.aside-settings-tab \.aside-settings-hero-graph-plane\.is-plane-b\s*\{[^}]*rotateY\(66deg\)[^}]*rotateZ\(45deg\)/);
+    assert.match(styles, /\.aside-settings-tab \.aside-settings-hero-graph-plane\.is-plane-c\s*\{[^}]*rotateX\(-18deg\)[^}]*rotateY\(-18deg\)[^}]*rotateZ\(45deg\)/);
+    assert.match(styles, /@container\s*\(max-width:\s*360px\)[\s\S]*?\.aside-settings-tab \.aside-settings-hero-graph-stage[\s\S]*?width:\s*190px\s*;/);
     assert.doesNotMatch(styles, /(?:^|\})\s*\.aside-settings-hero\s*\{/m);
 });
 
-test("settings header becomes a static final composition for reduced motion", async () => {
+test("settings header shows a static completed composition for reduced motion", async () => {
     const styles = await readFile(stylesUrl, "utf8");
 
-    assert.match(styles, /@media\s*\(prefers-reduced-motion:\s*reduce\)/);
     assert.match(
         styles,
-        /prefers-reduced-motion:[\s\S]*?\.aside-settings-tab \.aside-settings-hero-edge-runner[\s\S]*?animation:\s*none\s*;/,
+        /@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*?\.aside-settings-tab \.aside-settings-hero-graph-scene[\s\S]*?animation:\s*none\s*;/,
     );
     assert.match(
         styles,
-        /prefers-reduced-motion:[\s\S]*?\.aside-settings-tab \.aside-settings-hero-graph[\s\S]*?clip-path:\s*none\s*;/,
+        /@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*?\.aside-settings-tab \.aside-settings-hero-edge-runner[\s\S]*?animation:\s*none\s*;/,
+    );
+    assert.match(
+        styles,
+        /@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*?\.aside-settings-tab \.aside-settings-hero-graph-stage[\s\S]*?clip-path:\s*none\s*;/,
     );
 });
 ```
@@ -337,15 +376,22 @@ Run:
 node --test tests/asideSettingsHeaderArt.test.mjs
 ```
 
-Expected: the renderer tests pass and both new stylesheet tests fail because the hero rules and keyframes do not exist.
+Expected: the five renderer/integration/lifecycle tests pass and the three new style tests fail because no settings-hero stylesheet or keyframes exist.
 
-- [ ] **Step 3: Add the complete Aside-scoped header stylesheet**
+- [ ] **Step 3: Add the complete scoped stylesheet**
 
-Insert the following block immediately before the existing `.aside-settings-tab .setting-item.setting-item-heading` rule in `styles.css`:
+Insert this block immediately before `.aside-settings-tab .setting-item.setting-item-heading` in `styles.css`:
 
 ```css
+.aside-settings-tab .setting-item.aside-settings-hero-setting {
+    display: block;
+    padding: 0;
+    border: 0;
+}
+
 .aside-settings-tab .aside-settings-hero {
     --aside-settings-hero-intro-duration: 7s;
+    --aside-settings-hero-blue: var(--color-blue, var(--interactive-accent));
     container-type: inline-size;
     margin-bottom: var(--size-4-5);
     padding: var(--size-4-4);
@@ -382,7 +428,7 @@ Insert the following block immediately before the existing `.aside-settings-tab 
 }
 
 .aside-settings-tab .aside-settings-hero-relay-row pre,
-.aside-settings-tab .aside-settings-hero-graph {
+.aside-settings-tab .aside-settings-hero-graph-plane {
     margin: 0;
     font: inherit;
     white-space: pre;
@@ -400,7 +446,7 @@ Insert the following block immediately before the existing `.aside-settings-tab 
 
 .aside-settings-tab .aside-settings-hero-signal {
     display: inline-flex;
-    color: var(--interactive-accent);
+    color: var(--aside-settings-hero-blue);
 }
 
 .aside-settings-tab .aside-settings-hero-signal-glyph {
@@ -439,21 +485,62 @@ Insert the following block immediately before the existing `.aside-settings-tab 
     white-space: pre;
 }
 
-.aside-settings-tab .aside-settings-hero-graph {
-    color: var(--text-muted);
+.aside-settings-tab .aside-settings-hero-graph-stage {
+    position: relative;
+    width: min(232px, 100%);
+    height: 164px;
+    perspective: 620px;
+    opacity: 0;
     clip-path: inset(100% 0 0 0);
-    animation: aside-settings-hero-graph var(--aside-settings-hero-intro-duration) ease-in-out 1 forwards;
+    animation: aside-settings-hero-graph-reveal var(--aside-settings-hero-intro-duration) ease-in-out 1 forwards;
+}
+
+.aside-settings-tab .aside-settings-hero-graph-scene {
+    position: absolute;
+    inset: 0;
+    transform: rotateX(-7deg) rotateY(-18deg);
+    transform-style: preserve-3d;
+    will-change: transform;
+    animation-name: aside-settings-hero-graph-turn;
+    animation-duration: 9s;
+    animation-delay: var(--aside-settings-hero-intro-duration);
+    animation-timing-function: ease-in-out;
+    animation-iteration-count: infinite;
+    animation-direction: alternate;
+}
+
+.aside-settings-tab .aside-settings-hero-graph-plane {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    color: var(--text-muted);
+    transform-origin: center;
+    transform-style: preserve-3d;
+    backface-visibility: visible;
+}
+
+.aside-settings-tab .aside-settings-hero-graph-plane.is-plane-a {
+    transform: translate(-50%, -50%) rotateX(66deg) rotateZ(45deg);
+}
+
+.aside-settings-tab .aside-settings-hero-graph-plane.is-plane-b {
+    transform: translate(-50%, -50%) rotateY(66deg) rotateZ(45deg);
+}
+
+.aside-settings-tab .aside-settings-hero-graph-plane.is-plane-c {
+    transform: translate(-50%, -50%) rotateX(-18deg) rotateY(-18deg) rotateZ(45deg);
 }
 
 .aside-settings-tab .aside-settings-hero-graph-node,
 .aside-settings-tab .aside-settings-hero-graph-core {
     display: inline-block;
-    color: var(--interactive-accent);
+    color: var(--aside-settings-hero-blue);
     transform-origin: center;
     animation: aside-settings-hero-node var(--aside-settings-hero-intro-duration) ease-out 1 forwards;
 }
 
 .aside-settings-tab .aside-settings-hero-graph-core {
+    color: var(--text-normal);
     animation-name: aside-settings-hero-core;
 }
 
@@ -464,22 +551,35 @@ Insert the following block immediately before the existing `.aside-settings-tab 
     vertical-align: bottom;
 }
 
+.aside-settings-tab .aside-settings-hero-edge-track.is-track-1,
+.aside-settings-tab .aside-settings-hero-edge-track.is-track-3,
+.aside-settings-tab .aside-settings-hero-edge-track.is-track-5 {
+    --aside-settings-hero-runner-travel: 3ch;
+}
+
+.aside-settings-tab .aside-settings-hero-edge-track.is-track-2,
+.aside-settings-tab .aside-settings-hero-edge-track.is-track-4,
+.aside-settings-tab .aside-settings-hero-edge-track.is-track-6 {
+    --aside-settings-hero-runner-travel: 2ch;
+}
+
 .aside-settings-tab .aside-settings-hero-edge-runner {
     position: absolute;
     top: 0;
     left: 0;
     width: 1ch;
     overflow: hidden;
-    color: var(--interactive-accent);
+    color: var(--aside-settings-hero-blue);
     text-align: center;
     opacity: 0;
+    transform: translateX(0);
+    will-change: transform;
     animation-name: aside-settings-hero-edge-flow;
     animation-duration: var(--aside-settings-hero-runner-duration, 3.2s);
     animation-delay: calc(var(--aside-settings-hero-intro-duration) + var(--aside-settings-hero-runner-delay, 0s));
     animation-timing-function: ease-in-out;
     animation-iteration-count: infinite;
     animation-direction: alternate;
-    animation-fill-mode: both;
 }
 
 .aside-settings-tab .aside-settings-hero-edge-track.is-track-2 {
@@ -561,8 +661,8 @@ Insert the following block immediately before the existing `.aside-settings-tab 
         filter: none;
     }
     42%, 56% {
-        color: var(--interactive-accent);
-        filter: drop-shadow(0 0 4px var(--interactive-accent));
+        color: var(--aside-settings-hero-blue);
+        filter: drop-shadow(0 0 4px var(--aside-settings-hero-blue));
     }
     64%, 100% {
         color: inherit;
@@ -581,7 +681,7 @@ Insert the following block immediately before the existing `.aside-settings-tab 
     }
 }
 
-@keyframes aside-settings-hero-graph {
+@keyframes aside-settings-hero-graph-reveal {
     0%, 49% {
         opacity: 0;
         clip-path: inset(100% 0 0 0);
@@ -622,7 +722,7 @@ Insert the following block immediately before the existing `.aside-settings-tab 
     64%, 78% {
         opacity: 1;
         transform: scale(1.15);
-        text-shadow: 0 0 10px currentColor;
+        text-shadow: 0 0 10px var(--aside-settings-hero-blue);
     }
     90%, 100% {
         opacity: 1;
@@ -642,17 +742,26 @@ Insert the following block immediately before the existing `.aside-settings-tab 
     }
 }
 
+@keyframes aside-settings-hero-graph-turn {
+    0% {
+        transform: rotateX(-7deg) rotateY(-18deg);
+    }
+    100% {
+        transform: rotateX(8deg) rotateY(20deg);
+    }
+}
+
 @keyframes aside-settings-hero-edge-flow {
     0% {
-        left: 0;
         opacity: 0.72;
+        transform: translateX(0);
     }
     12%, 88% {
         opacity: 1;
     }
     100% {
-        left: calc(100% - 1ch);
         opacity: 0.72;
+        transform: translateX(var(--aside-settings-hero-runner-travel));
     }
 }
 
@@ -665,6 +774,11 @@ Insert the following block immediately before the existing `.aside-settings-tab 
     .aside-settings-tab .aside-settings-hero-relay-row {
         gap: 0.5ch;
     }
+
+    .aside-settings-tab .aside-settings-hero-graph-stage {
+        width: 190px;
+        height: 138px;
+    }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -673,37 +787,55 @@ Insert the following block immediately before the existing `.aside-settings-tab 
     .aside-settings-tab .aside-settings-hero-signal-glyph,
     .aside-settings-tab .aside-settings-hero-aside-box,
     .aside-settings-tab .aside-settings-hero-action-line,
-    .aside-settings-tab .aside-settings-hero-graph,
+    .aside-settings-tab .aside-settings-hero-graph-stage,
     .aside-settings-tab .aside-settings-hero-graph-node,
     .aside-settings-tab .aside-settings-hero-graph-core,
     .aside-settings-tab .aside-settings-hero-graph-label,
+    .aside-settings-tab .aside-settings-hero-graph-scene,
     .aside-settings-tab .aside-settings-hero-edge-runner {
         animation: none;
-        transform: none;
         text-shadow: none;
         filter: none;
     }
 
+    .aside-settings-tab .aside-settings-hero-rabbit,
+    .aside-settings-tab .aside-settings-hero-thought,
+    .aside-settings-tab .aside-settings-hero-aside-box,
     .aside-settings-tab .aside-settings-hero-action-line,
-    .aside-settings-tab .aside-settings-hero-graph,
+    .aside-settings-tab .aside-settings-hero-graph-node,
+    .aside-settings-tab .aside-settings-hero-graph-core,
+    .aside-settings-tab .aside-settings-hero-graph-label {
+        transform: none;
+    }
+
+    .aside-settings-tab .aside-settings-hero-action-line,
+    .aside-settings-tab .aside-settings-hero-graph-stage,
     .aside-settings-tab .aside-settings-hero-graph-node,
     .aside-settings-tab .aside-settings-hero-graph-core,
     .aside-settings-tab .aside-settings-hero-graph-label {
         opacity: 1;
     }
 
-    .aside-settings-tab .aside-settings-hero-graph {
+    .aside-settings-tab .aside-settings-hero-signal-glyph {
+        opacity: 0.45;
+    }
+
+    .aside-settings-tab .aside-settings-hero-graph-stage {
         clip-path: none;
     }
 
+    .aside-settings-tab .aside-settings-hero-graph-scene {
+        transform: rotateX(2deg) rotateY(-12deg);
+    }
+
     .aside-settings-tab .aside-settings-hero-edge-runner {
-        left: 50%;
         opacity: 0.8;
+        transform: translateX(0);
     }
 }
 ```
 
-- [ ] **Step 4: Run the focused tests, typecheck, and lint and verify GREEN**
+- [ ] **Step 4: Run focused verification and verify GREEN**
 
 Run:
 
@@ -713,16 +845,16 @@ npm run typecheck
 npx eslint src/ui/settings/asideSettingsHeaderArt.ts src/ui/settings/AsideSetting.ts tests/asideSettingsHeaderArt.test.mjs --max-warnings 0
 ```
 
-Expected: all focused tests pass, TypeScript reports no errors, and ESLint reports no warnings or errors.
+Expected: eight focused tests pass, TypeScript reports no errors, and ESLint reports no warnings or errors.
 
-- [ ] **Step 5: Commit the animation slice**
+- [ ] **Step 5: Commit the continuous-motion slice**
 
 ```bash
 git add styles.css tests/asideSettingsHeaderArt.test.mjs
-git commit -m "style(settings): animate thought trail header"
+git commit -m "style(settings): animate 3d thought trail"
 ```
 
-### Task 3: Verify, Install, and Update Tracking
+### Task 3: Verify, Install, and Finish Tracking
 
 **Files:**
 - Modify: `docs/superpowers/specs/2026-09-04-settings-ascii-thought-trail-header-design.md`
@@ -730,22 +862,17 @@ git commit -m "style(settings): animate thought trail header"
 - Verify: `manifest.json`
 - Verify: `styles.css`
 
-- [ ] **Step 1: Run the complete repository gate**
+- [ ] **Step 1: Run the full repository gate**
 
 Run:
 
 ```bash
-npm test
-npm run lint
-npm run typecheck
-npm run check:obsidian
-npm run bundle
-npm run release:artifacts:check
+npm run build
 ```
 
-Expected: zero test failures, zero lint warnings, successful typecheck and Obsidian compliance, a successful production bundle, and a passing release-artifact guard.
+Expected: all tests pass, lint has zero warnings, typecheck and Obsidian compliance succeed, the production bundle stays within the size policy, and the release-artifact guard passes.
 
-- [ ] **Step 2: Inspect the exact generated release assets**
+- [ ] **Step 2: Inspect the exact generated public plugin assets**
 
 Run:
 
@@ -757,48 +884,50 @@ fi
 find . -maxdepth 1 -type f \( -name '.env*' -o -name '.npmrc' -o -name '*.pem' -o -name '*.key' -o -name '*.p12' \) -print
 ```
 
-Expected: no `main.js.map`; no source-map markers, embedded source, private-key material, or access-key markers in the shipped assets; and no secret-bearing file printed at the package root.
+Expected: no `main.js.map`; no source-map marker, embedded source, private-key material, or access-key marker in `main.js`, `manifest.json`, or `styles.css`; and no secret-bearing root file printed. This is inspection only, not a release or publish.
 
-- [ ] **Step 3: Install the verified build into the development vault**
+- [ ] **Step 3: Install the verified worktree build into the development vault**
 
-Run:
+From `/Users/wenqingli/Obsidian/dev/aside/.worktrees/settings-thought-trail-header`, run:
 
 ```bash
-npm run dev:install-built -- --vault ..
+npm run dev:install-built -- --vault ../../..
 obsidian plugin:reload id=aside vault=dev
 ```
 
-Expected: the installer copies `main.js`, `manifest.json`, and `styles.css`, and Obsidian reports that the `aside` plugin reloaded.
+Expected: the installer copies only `main.js`, `manifest.json`, and `styles.css` into the development vault plugin folder, and Obsidian reports that the `aside` plugin reloaded.
 
-- [ ] **Step 4: Perform visual acceptance checks**
+- [ ] **Step 4: Perform visual and lifecycle acceptance checks**
 
-Open **Settings → Aside** and verify all of the following:
+Open **Settings → Aside** and verify:
 
-- the header appears before the Agents heading;
-- the rabbit relay plays once;
+- the header appears before the Agents heading on the current declarative settings path, with no empty setting-row chrome and no divider between its two beats;
+- the Rabbit relay plays once and holds still;
 - the visible copy reads `save highlight, add comment, ask @agent`;
-- the brain-shaped graph reveals after the action line;
-- `thought trail` appears below the graph;
-- after the reveal, each blue runner stays inside its own edge and reverses at the endpoint;
-- the settings controls do not shift while the settled animation idles;
+- the impossible-junction graph assembles only after the relay;
+- `thought trail` remains stationary below the graph;
+- after the reveal, the three-plane graph keeps rocking in 3D without a full revolution;
+- every blue runner moves with its plane, stays inside its own edge, and reverses at its endpoint;
+- no Rabbit, signal, instruction, caption, or settings control continues moving;
 - light and dark themes preserve sufficient contrast;
-- a narrow and mobile-like pane wraps the instructional chunks without horizontal page overflow;
-- reduced-motion mode immediately shows the final composition with stationary runners.
+- narrow and mobile-like panes wrap the instruction without horizontal page overflow;
+- reduced-motion mode immediately shows the final static composition;
+- closing the settings window removes `.aside-settings-hero` from the document, and reopening recreates it and replays the entrance.
 
-Expected: every item passes. If an item fails, keep the corresponding spec verification checkbox unchecked, fix the implementation, and rerun the focused and full gates.
+Expected: every item passes. If any item fails, keep its spec verification checkbox unchecked, add a focused failing regression where possible, fix the implementation, and rerun the focused and full gates.
 
 - [ ] **Step 5: Record verified completion in the tracked spec**
 
-In `docs/superpowers/specs/2026-09-04-settings-ascii-thought-trail-header-design.md`:
+Update `docs/superpowers/specs/2026-09-04-settings-ascii-thought-trail-header-design.md`:
 
-- change the status to `Implemented; frontend acceptance pending` if automated checks pass but any manual visual check remains;
-- change the status to `Implemented and verified` only if all automated and manual checks pass;
-- mark each `To Implement` item `[x]` only after the corresponding source and focused tests pass;
-- mark each `Verification` item `[x]` only after its listed automated or manual evidence exists.
+- set status to `Implemented; frontend acceptance pending` if automated checks pass but any manual item remains;
+- set status to `Implemented and verified` only after all automated and manual checks pass;
+- mark every `To Implement` item `[x]` only after its source and focused tests pass;
+- mark every `Verification` item `[x]` only after its listed automated or manual evidence exists.
 
 - [ ] **Step 6: Commit verification tracking**
 
 ```bash
 git add -f docs/superpowers/specs/2026-09-04-settings-ascii-thought-trail-header-design.md
-git commit -m "docs(settings): track ascii header verification"
+git commit -m "docs(settings): verify 3d thought trail header"
 ```
