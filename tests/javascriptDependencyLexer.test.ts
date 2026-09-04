@@ -35,11 +35,14 @@ test("JavaScript dependency lexer distinguishes statement regexes from division"
 	assert.deepEqual(references(`
 if (ready) /import(".\\/if-ghost.js")/.test(text);
 function declared() {} /import("function-ghost.js")/.test(text);
+label: {} /import("labeled-block-ghost.js")/.test(text);
 const callRatio = calculate() / import("./call.js");
 const objectRatio = { value: 4 } / import("./object.js");
+const functionRatio = function() {} / import("./function.js");
+const classRatio = class {} / import("./class.js");
 break
 /import("break-ghost.js")/.test(text);
-`), ["./call.js", "./object.js"]);
+`), ["./call.js", "./object.js", "./function.js", "./class.js"]);
 });
 
 test("JavaScript dependency lexer scans template expressions and markup chunks", () => {
@@ -51,6 +54,15 @@ import(\`./\${name}.js\`);
 	assert.deepEqual(result.references.map((reference) => reference.value), ["./chunk.js"]);
 	assert.deepEqual(result.markupFragments.map((fragment) => fragment.contents), [
 		'<img src="./image.png">',
+	]);
+});
+
+test("JavaScript dependency lexer cooks template escapes before scanning markup", () => {
+	const result = scanJavascriptDependencies(
+		"const markup = `<img src=\\x22./escaped.png\\u0022>`;",
+	);
+	assert.deepEqual(result.markupFragments.map((fragment) => fragment.contents), [
+		'<img src="./escaped.png">',
 	]);
 });
 

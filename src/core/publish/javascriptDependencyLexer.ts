@@ -38,6 +38,11 @@ interface ReadStringResult {
 	token: JavascriptToken | null;
 }
 
+interface ReadEscapeResult {
+	end: number;
+	value: string;
+}
+
 const KEYWORDS = new Set([
 	"await", "break", "case", "catch", "class", "continue", "debugger", "delete", "do",
 	"else", "export", "extends", "finally", "for", "function", "if", "import", "in",
@@ -50,7 +55,7 @@ const REGEX_PREFIX_KEYWORDS = new Set([
 	"throw", "typeof", "void", "yield",
 ]);
 const RESTRICTED_LINE_KEYWORDS = new Set(["break", "continue", "debugger", "return"]);
-const BLOCK_PREFIX_KEYWORDS = new Set(["do", "else", "finally", "try"]);
+const BLOCK_PREFIX_KEYWORDS = new Set(["catch", "do", "else", "finally", "try"]);
 const SIMPLE_ESCAPES: Readonly<Record<string, string>> = Object.freeze({
 	b: "\b",
 	f: "\f",
@@ -132,6 +137,24 @@ function skipInvalidString(contents: string, offset: number, quote: string): num
 	return contents.length;
 }
 
+function readEscape(contents: string, offset: number): ReadEscapeResult | null {
+	const escaped = contents[offset + 1];
+	if (escaped === undefined) return null;
+	if (escaped === "\r" || escaped === "\n" || escaped === "\u2028" || escaped === "\u2029") {
+		return {
+			end: offset + (escaped === "\r" && contents[offset + 2] === "\n" ? 3 : 2),
+			value: "",
+		};
+	}
+	if (escaped === "x") return readFixedHex(contents, offset + 2, 2);
+	if (escaped === "u") return readUnicodeEscape(contents, offset + 2);
+	if (escaped === "0" && /[0-9]/u.test(contents[offset + 2] ?? "")) return null;
+	return {
+		end: offset + 2,
+		value: escaped === "0" ? "\0" : SIMPLE_ESCAPES[escaped] ?? escaped,
+	};
+}
+
 function readString(
 	contents: string,
 	offset: number,
@@ -162,31 +185,12 @@ function readString(
 			continue;
 		}
 
-		const escaped = contents[index + 1];
-		if (escaped === undefined) return { end: contents.length, token: null };
-		if (escaped === "\r" || escaped === "\n" || escaped === "\u2028" || escaped === "\u2029") {
-			index += escaped === "\r" && contents[index + 2] === "\n" ? 3 : 2;
-			continue;
-		}
-		if (escaped === "x") {
-			const decoded = readFixedHex(contents, index + 2, 2);
-			if (!decoded) return { end: skipInvalidString(contents, index + 2, quote), token: null };
-			value += decoded.value;
-			index = decoded.end;
-			continue;
-		}
-		if (escaped === "u") {
-			const decoded = readUnicodeEscape(contents, index + 2);
-			if (!decoded) return { end: skipInvalidString(contents, index + 2, quote), token: null };
-			value += decoded.value;
-			index = decoded.end;
-			continue;
-		}
-		if (escaped === "0" && /[0-9]/u.test(contents[index + 2] ?? "")) {
+		const decoded = readEscape(contents, index);
+		if (!decoded) {
 			return { end: skipInvalidString(contents, index + 2, quote), token: null };
 		}
-		value += escaped === "0" ? "\0" : SIMPLE_ESCAPES[escaped] ?? escaped;
-		index += 2;
+		value += decoded.value;
+		index = decoded.end;
 	}
 	return { end: contents.length, token: null };
 }
@@ -242,17 +246,67 @@ function isControlParenthesis(tokens: readonly JavascriptToken[]): boolean {
 	return previous.value === "await" && tokens[tokens.length - 2]?.value === "for";
 }
 
-function isBlockBraceStart(tokens: readonly JavascriptToken[]): boolean {
+function findBodyOwnerKeyword(tokens: readonly JavascriptToken[]): number | null {
+	let delimiterDepth = 0;
+	for (let index = tokens.length - 1; index >= 0; index -= 1) {
+		const value = tokens[index].value;
+		if ([")", "]", "}"].includes(value)) {
+			delimiterDepth += 1;
+			continue;
+		}
+		if (["(", "[", "{"].includes(value)) {
+			if (delimiterDepth > 0) {
+				delimiterDepth -= 1;
+				continue;
+			}
+			break;
+		}
+		if (delimiterDepth > 0) continue;
+		if (value === "function" || value === "class") return index;
+		if (value === ";") break;
+	}
+	return null;
+}
+
+function bodyOwnerIsDeclaration(tokens: readonly JavascriptToken[], ownerIndex: number): boolean {
+	let prefixIndex = ownerIndex - 1;
+	while (["async", "default", "export"].includes(tokens[prefixIndex]?.value ?? "")) {
+		prefixIndex -= 1;
+	}
+	const prefix = tokens[prefixIndex];
+	return !prefix
+		|| [";", "{", "}"].includes(prefix.value)
+		|| prefix.controlClose === true
+		|| BLOCK_PREFIX_KEYWORDS.has(prefix.value);
+}
+
+function colonStartsBlock(
+	tokens: readonly JavascriptToken[],
+	enclosingBraceStack: readonly boolean[],
+): boolean {
+	if (enclosingBraceStack[enclosingBraceStack.length - 1] === false) return false;
+	for (let index = tokens.length - 2; index >= 0; index -= 1) {
+		const token = tokens[index];
+		if (token.value === "?") return false;
+		if (token.value === "case" || token.value === "default") return true;
+		if ([";", "{", "}"].includes(token.value)) return true;
+	}
+	return true;
+}
+
+function isBlockBraceStart(
+	tokens: readonly JavascriptToken[],
+	enclosingBraceStack: readonly boolean[],
+): boolean {
 	const previous = tokens[tokens.length - 1];
 	if (!previous) return true;
-	if (previous.controlClose || previous.value === ")" || previous.value === "=>") return true;
+	if (previous.value === "=>") return false;
+	const bodyOwnerIndex = findBodyOwnerKeyword(tokens);
+	if (bodyOwnerIndex !== null) return bodyOwnerIsDeclaration(tokens, bodyOwnerIndex);
+	if (previous.controlClose || previous.value === ")") return true;
+	if (previous.value === ":") return colonStartsBlock(tokens, enclosingBraceStack);
 	if ([";", "{", "}"].includes(previous.value)) return true;
 	if (BLOCK_PREFIX_KEYWORDS.has(previous.value)) return true;
-	for (let index = tokens.length - 1; index >= 0; index -= 1) {
-		const token = tokens[index];
-		if ([";", "{", "}"].includes(token.value)) break;
-		if (token.value === "class") return true;
-	}
 	return false;
 }
 
@@ -314,14 +368,14 @@ function scanTemplate(
 	for (let index = offset + 1; index < contents.length;) {
 		const character = contents[index];
 		if (character === "\\") {
-			const escaped = contents[index + 1];
-			if (escaped === undefined) break;
-			if (escaped === "\r" || escaped === "\n" || escaped === "\u2028" || escaped === "\u2029") {
-				index += escaped === "\r" && contents[index + 2] === "\n" ? 3 : 2;
+			const decoded = readEscape(contents, index);
+			if (!decoded) {
+				chunk += contents.slice(index, Math.min(index + 2, contents.length));
+				index = Math.min(index + 2, contents.length);
 				continue;
 			}
-			chunk += SIMPLE_ESCAPES[escaped] ?? escaped;
-			index += 2;
+			chunk += decoded.value;
+			index = decoded.end;
 			continue;
 		}
 		if (character === "`") {
@@ -416,7 +470,7 @@ function scanCode(
 		} else if (value === ")") {
 			token.controlClose = state.parenStack.pop() ?? false;
 		} else if (value === "{") {
-			state.braceStack.push(isBlockBraceStart(state.tokens.slice(0, -1)));
+			state.braceStack.push(isBlockBraceStart(state.tokens.slice(0, -1), state.braceStack));
 			if (stopAtTemplateBrace) localBraceDepth += 1;
 		} else if (value === "}") {
 			token.blockClose = state.braceStack.pop() ?? false;
