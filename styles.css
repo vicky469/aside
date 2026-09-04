@@ -1840,17 +1840,17 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
 
 .aside-settings-tab .aside-settings-hero-relay {
     display: grid;
-    justify-items: center;
-    gap: var(--size-4-2);
+    grid-template-columns: max-content max-content max-content minmax(11ch, 1fr);
+    column-gap: 1ch;
+    row-gap: var(--size-4-2);
+    align-items: center;
+    justify-content: center;
+    width: min(100%, 69ch);
     max-width: 100%;
 }
 
 .aside-settings-tab .aside-settings-hero-relay-row {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 1ch;
-    max-width: 100%;
+    display: contents;
 }
 
 .aside-settings-tab .aside-settings-hero-relay-row pre,
@@ -1861,16 +1861,22 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
 }
 
 .aside-settings-tab .aside-settings-hero-rabbit {
+    grid-column: 1;
+    grid-row: 1;
     transform-origin: bottom center;
     animation: aside-settings-hero-rabbit var(--aside-settings-hero-intro-duration) ease-in-out 1 forwards;
 }
 
 .aside-settings-tab .aside-settings-hero-thought {
+    grid-column: 2;
+    grid-row: 1;
     text-transform: lowercase;
     animation: aside-settings-hero-thought var(--aside-settings-hero-intro-duration) ease-in-out 1 forwards;
 }
 
 .aside-settings-tab .aside-settings-hero-signal {
+    grid-column: 3;
+    grid-row: 1;
     display: inline-flex;
     color: var(--aside-settings-hero-blue);
 }
@@ -1893,14 +1899,21 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
 }
 
 .aside-settings-tab .aside-settings-hero-aside-box {
+    grid-column: 4;
+    grid-row: 1;
     animation: aside-settings-hero-aside-box var(--aside-settings-hero-intro-duration) ease-in-out 1 forwards;
 }
 
 .aside-settings-tab .aside-settings-hero-action-line {
+    grid-column: 4;
+    grid-row: 2;
     display: flex;
     flex-wrap: wrap;
-    justify-content: center;
-    max-width: 100%;
+    justify-content: flex-start;
+    width: calc(100% - 5ch);
+    min-width: 0;
+    max-width: calc(100% - 5ch);
+    margin-left: 5ch;
     color: var(--text-muted);
     text-transform: lowercase;
     opacity: 0;
@@ -2121,7 +2134,17 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
         font-size: 9px;
     }
 
-    .aside-settings-tab .aside-settings-hero-relay-row { gap: 0.5ch; }
+    .aside-settings-tab .aside-settings-hero-relay {
+        width: 100%;
+        grid-template-columns: minmax(0, 5ch) minmax(0, 11ch) minmax(0, 4ch) minmax(0, 1fr);
+        column-gap: 0.5ch;
+    }
+
+    .aside-settings-tab .aside-settings-hero-action-line {
+        grid-column: 1 / -1;
+        width: calc(100% - 5ch);
+        max-width: calc(100% - 5ch);
+    }
 
     .aside-settings-tab .aside-settings-hero-graph-stage {
         width: min(190px, 100%);

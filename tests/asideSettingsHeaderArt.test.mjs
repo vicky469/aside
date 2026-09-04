@@ -299,3 +299,52 @@ test("settings header keeps its ASCII and Unicode art directionally isolated", a
     assert.match(art, /direction:\s*ltr\s*;/);
     assert.match(art, /unicode-bidi:\s*isolate\s*;/);
 });
+
+test("settings header aligns the action relay beneath the Aside junction without narrow-pane overflow", async () => {
+    const [source, styles] = await Promise.all([
+        readFile(headerSourceUrl, "utf8"),
+        readFile(stylesUrl, "utf8"),
+    ]);
+    const relay = getRule(styles, ".aside-settings-tab .aside-settings-hero-relay");
+    const row = getRule(styles, ".aside-settings-tab .aside-settings-hero-relay-row");
+    const rabbit = getRule(styles, ".aside-settings-tab .aside-settings-hero-rabbit");
+    const thought = getRule(styles, ".aside-settings-tab .aside-settings-hero-thought");
+    const signal = getRule(styles, ".aside-settings-tab .aside-settings-hero-signal");
+    const asideBox = getRule(styles, ".aside-settings-tab .aside-settings-hero-aside-box");
+    const action = getRule(styles, ".aside-settings-tab .aside-settings-hero-action-line");
+    const label = getRule(styles, ".aside-settings-tab .aside-settings-hero-graph-label");
+
+    assert.match(source, /text:\s*" \/\)\/\)\\n\( \. \.\)\\n \/づ"/);
+    assert.match(
+        source,
+        /\["┌─────────┐\\n│ ", "Thought", " │\\n└─────────┘"\]\.join\(""\)/,
+    );
+    assert.match(source, /for \(const glyph of \["·", "─", "─", "▶"\]\)/);
+    assert.match(
+        source,
+        /\["┌─────────┐\\n│ {2}", "ASIDE", " {2}│\\n└────┬────┘"\]\.join\(""\)/,
+    );
+    assert.match(thought, /text-transform:\s*lowercase\s*;/);
+    assert.match(action, /text-transform:\s*lowercase\s*;/);
+    assert.match(label, /text-transform:\s*lowercase\s*;/);
+
+    assert.match(relay, /display:\s*grid\s*;/);
+    assert.match(relay, /grid-template-columns:\s*max-content\s+max-content\s+max-content\s+minmax\(11ch,\s*1fr\)\s*;/);
+    assert.match(row, /display:\s*contents\s*;/);
+    assert.match(rabbit, /grid-column:\s*1\s*;/);
+    assert.match(thought, /grid-column:\s*2\s*;/);
+    assert.match(signal, /grid-column:\s*3\s*;/);
+    assert.match(asideBox, /grid-column:\s*4\s*;/);
+    assert.match(action, /grid-column:\s*4\s*;/);
+    assert.match(action, /grid-row:\s*2\s*;/);
+    assert.match(action, /margin-left:\s*5ch\s*;/);
+    assert.match(action, /flex-wrap:\s*wrap\s*;/);
+    assert.match(
+        styles,
+        /@container\s*\(max-width:\s*360px\)[\s\S]*?\.aside-settings-tab \.aside-settings-hero-relay[\s\S]*?grid-template-columns:\s*minmax\(/,
+    );
+    assert.match(
+        styles,
+        /@container\s*\(max-width:\s*360px\)[\s\S]*?\.aside-settings-tab \.aside-settings-hero-action-line[\s\S]*?grid-column:\s*1\s*\/\s*-1\s*;/,
+    );
+});
