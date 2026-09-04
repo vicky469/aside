@@ -106,7 +106,6 @@ function createDraftRenderHost(): SidebarDraftCommentHost {
         activeCommentId: null,
         shouldPinFocusedDraftToTop: false,
         isActionableMention: () => true,
-        isAgentsFeatureAvailable: () => true,
         isSavingDraft: () => true,
         updateDraftCommentText: () => {},
         setIcon: () => {},
@@ -120,12 +119,12 @@ test("buildDraftCommentPresentation includes draft state classes and add/save la
     const createPresentation = buildDraftCommentPresentation(createDraft({
         anchorKind: "page",
         mode: "new",
-    }), "draft-1", true);
+    }), "draft-1");
     const editPresentation = buildDraftCommentPresentation(createDraft({
         id: "draft-2",
         orphaned: true,
         mode: "edit",
-    }), null, true);
+    }), null);
 
     assert.deepEqual(createPresentation.classes, [
         "aside-comment-item",
@@ -148,7 +147,7 @@ test("buildDraftCommentPresentation includes draft state classes and add/save la
 test("buildDraftCommentPresentation keeps append drafts distinct from new drafts", () => {
     const appendPresentation = buildDraftCommentPresentation(createDraft({
         mode: "append",
-    }), null, true);
+    }), null);
 
     assert.deepEqual(appendPresentation.classes, [
         "aside-comment-item",
@@ -160,8 +159,8 @@ test("buildDraftCommentPresentation keeps append drafts distinct from new drafts
 });
 
 test("buildDraftCommentPresentation makes saving new and append drafts read-only pending cards", () => {
-    const newPresentation = buildDraftCommentPresentation(createDraft({ mode: "new" }), null, true, true);
-    const appendPresentation = buildDraftCommentPresentation(createDraft({ mode: "append" }), null, true, true);
+    const newPresentation = buildDraftCommentPresentation(createDraft({ mode: "new" }), null, true);
+    const appendPresentation = buildDraftCommentPresentation(createDraft({ mode: "append" }), null, true);
 
     assert.equal(newPresentation.isPending, true);
     assert.equal(appendPresentation.isPending, true);
@@ -170,7 +169,7 @@ test("buildDraftCommentPresentation makes saving new and append drafts read-only
 });
 
 test("buildDraftCommentPresentation leaves saving edit drafts on the editable path", () => {
-    const presentation = buildDraftCommentPresentation(createDraft({ mode: "edit" }), null, true, true);
+    const presentation = buildDraftCommentPresentation(createDraft({ mode: "edit" }), null, true);
 
     assert.equal(presentation.isPending, false);
     assert.equal(presentation.classes.includes("is-saving"), false);
@@ -192,26 +191,12 @@ test("saving an agent prompt card contains no agent activity", () => {
     assert.equal(promptCard.querySelector(".aside-agent-run-status-mark"), null);
 });
 
-test("buildDraftCommentPresentation mentions todo and agent directives in new draft placeholder", () => {
-	const presentation = buildDraftCommentPresentation(createDraft({
-		mode: "new",
-	}), null, true);
+test("buildDraftCommentPresentation uses the concise new-comment placeholder", () => {
+    const newPresentation = buildDraftCommentPresentation(createDraft({ mode: "new" }), null);
+    const editPresentation = buildDraftCommentPresentation(createDraft({ mode: "edit" }), null);
 
-    assert.equal(
-        presentation.placeholder,
-        "Write a side note. Use B or H for styling, or type /create-script, /update-script, /pdf-to-markdown, /script-name, @todo, @codex, @claude, @cursor, @gemini, or @deepseek.",
-    );
-});
-
-test("buildDraftCommentPresentation hides agent guidance when Agents is disabled", () => {
-    const presentation = buildDraftCommentPresentation(createDraft({
-        mode: "new",
-    }), null, false);
-
-    assert.equal(
-        presentation.placeholder,
-        "Write a side note. Use B or H for styling, or type /script-name or @todo.",
-    );
+    assert.equal(newPresentation.placeholder, "add a comment");
+    assert.equal(editPresentation.placeholder, "add a comment");
 });
 
 test("draft mention suggestions auto-open from a bare / at the caret", () => {

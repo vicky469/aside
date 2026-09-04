@@ -30,10 +30,8 @@ export interface MentionSuggestionPresentation {
     title: string;
 }
 
-export function getMentionSuggestionPlaceholder(agentsFeatureAvailable: boolean): string {
-    return agentsFeatureAvailable
-        ? "Mention an agent, todo, /create-script, /update-script, /pdf-to-markdown, or a vault script"
-        : "Mention todo or a vault script";
+export function getMentionSuggestionPlaceholder(): string {
+    return "Mention an agent, command, todo, or vault script";
 }
 
 export function getMentionSuggestionPresentation(
@@ -90,7 +88,6 @@ export function replaceOpenMentionQuery(
 export function buildMentionSuggestions(
     scripts: readonly VaultScriptRegistration[],
     rawQuery: string,
-    agentsFeatureAvailable: boolean,
 ): SideNoteMentionSuggestion[] {
     const normalizedRawQuery = rawQuery.trim();
     const query = normalizedRawQuery.replace(/^[@/]/u, "").toLowerCase();
@@ -98,9 +95,7 @@ export function buildMentionSuggestions(
     const shouldIncludeAtBuiltIns = !normalizedRawQuery.startsWith("/");
     const shouldIncludeSlashBuiltIns = !normalizedRawQuery.startsWith("@");
     const shouldFilterBuiltInsByQuery = query.length > 0;
-    const builtInCandidates: SideNoteMentionSuggestion[] = getActionableBuiltInMentions(
-        agentsFeatureAvailable,
-    )
+    const builtInCandidates: SideNoteMentionSuggestion[] = getActionableBuiltInMentions()
         .filter((item) => item.mention.startsWith("@")
             ? shouldIncludeAtBuiltIns
             : shouldIncludeSlashBuiltIns)

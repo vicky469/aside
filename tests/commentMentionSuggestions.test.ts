@@ -33,14 +33,10 @@ test("mention presentation exposes only the insertion value", () => {
     });
 });
 
-test("mention modal guidance follows the Agents capability", () => {
+test("mention modal guidance covers every suggestion provider", () => {
     assert.equal(
-        getMentionSuggestionPlaceholder(true),
-        "Mention an agent, todo, /create-script, /update-script, /pdf-to-markdown, or a vault script",
-    );
-    assert.equal(
-        getMentionSuggestionPlaceholder(false),
-        "Mention todo or a vault script",
+        getMentionSuggestionPlaceholder(),
+        "Mention an agent, command, todo, or vault script",
     );
 });
 
@@ -112,45 +108,45 @@ test("buildMentionSuggestions matches case-insensitively and ranks exact before 
     ];
 
     assert.deepEqual(
-        buildMentionSuggestions(scripts, "/CL", true).map((item) => item.mention),
+        buildMentionSuggestions(scripts, "/CL").map((item) => item.mention),
         ["/cl", "/clean-links", "/reclean"],
     );
 });
 
 test("buildMentionSuggestions filters explicit built-in queries case-insensitively", () => {
     assert.deepEqual(
-        buildMentionSuggestions([cleanLinksScript], "@co", true).map((item) => item.mention),
+        buildMentionSuggestions([cleanLinksScript], "@co").map((item) => item.mention),
         ["@codex"],
     );
     assert.deepEqual(
-        buildMentionSuggestions([cleanLinksScript], "@CO", true).map((item) => item.mention),
+        buildMentionSuggestions([cleanLinksScript], "@CO").map((item) => item.mention),
         ["@codex"],
     );
     assert.equal(
-        buildMentionSuggestions([cleanLinksScript], "@claude", true)[0]?.label,
+        buildMentionSuggestions([cleanLinksScript], "@claude")[0]?.label,
         "Claude Code",
     );
 });
 
 test("buildMentionSuggestions keeps todo and supported agents before live scripts", () => {
     assert.deepEqual(
-        buildMentionSuggestions([cleanLinksScript], "", true).map((item) => item.mention),
+        buildMentionSuggestions([cleanLinksScript], "").map((item) => item.mention),
         ["@todo", "@codex", "@claude", "@cursor", "@gemini", "@deepseek", "/create-script", "/update-script", "/pdf-to-markdown", "/clean-links"],
     );
     assert.deepEqual(
-        buildMentionSuggestions([cleanLinksScript], "cl", true).map((item) => item.mention),
+        buildMentionSuggestions([cleanLinksScript], "cl").map((item) => item.mention),
         ["@claude", "/clean-links"],
     );
     assert.deepEqual(
-        buildMentionSuggestions([cleanLinksScript], "/cl", true).map((item) => item.mention),
+        buildMentionSuggestions([cleanLinksScript], "/cl").map((item) => item.mention),
         ["/clean-links"],
     );
     assert.deepEqual(
-        buildMentionSuggestions([cleanLinksScript], "/", true).map((item) => item.mention),
+        buildMentionSuggestions([cleanLinksScript], "/").map((item) => item.mention),
         ["/create-script", "/update-script", "/pdf-to-markdown", "/clean-links"],
     );
     assert.deepEqual(
-        buildMentionSuggestions([cleanLinksScript], "@cl", true).map((item) => item.mention),
+        buildMentionSuggestions([cleanLinksScript], "@cl").map((item) => item.mention),
         ["@claude"],
     );
 });
@@ -203,23 +199,7 @@ test("buildMentionSuggestions omits scripts whose normalized mentions are reserv
     ];
 
     assert.deepEqual(
-        buildMentionSuggestions(scripts, "", true).map((item) => item.mention),
+        buildMentionSuggestions(scripts, "").map((item) => item.mention),
         ["@todo", "@codex", "@claude", "@cursor", "@gemini", "@deepseek", "/create-script", "/update-script", "/pdf-to-markdown", "/clean-links"],
     );
-
-    assert.deepEqual(
-        buildMentionSuggestions(scripts, "", false).map((item) => item.mention),
-        ["@todo", "/clean-links"],
-    );
-});
-
-test("disabled Agents suggestions keep todo and vault scripts only", () => {
-    assert.deepEqual(
-        buildMentionSuggestions([cleanLinksScript], "", false).map((item) => item.mention),
-        ["@todo", "/clean-links"],
-    );
-    assert.deepEqual(buildMentionSuggestions([cleanLinksScript], "@co", false), []);
-    assert.deepEqual(buildMentionSuggestions([cleanLinksScript], "/create", false), []);
-    assert.deepEqual(buildMentionSuggestions([cleanLinksScript], "/update", false), []);
-    assert.deepEqual(buildMentionSuggestions([cleanLinksScript], "/pdf", false), []);
 });

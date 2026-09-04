@@ -7,7 +7,6 @@ import type { SideNoteMentionSuggestion } from "../editor/commentMentionSuggesti
 
 export interface SideNoteMentionSuggestModalOptions {
     initialQuery: string;
-    agentsFeatureAvailable: boolean;
     getSuggestions(query: string): SideNoteMentionSuggestion[];
     onChooseMention(mention: string): void | Promise<void>;
     onCloseModal(): void;
@@ -20,7 +19,7 @@ export default class SideNoteMentionSuggestModal extends SuggestModal<SideNoteMe
     ) {
         super(app);
         this.limit = 40;
-        this.setPlaceholder(getMentionSuggestionPlaceholder(options.agentsFeatureAvailable));
+        this.setPlaceholder(getMentionSuggestionPlaceholder());
         this.emptyStateText = "No matching mention.";
     }
 

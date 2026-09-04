@@ -122,7 +122,6 @@ test("persisted mention decoration styles only actionable mentions", () => {
         decorateRenderedCommentMentions(
             container as unknown as HTMLElement,
             (mention) => isActionableMention(mention, {
-                agentsFeatureAvailable: true,
                 isRunnableVaultScriptMention: (candidate) => (
                     registeredScripts.has(candidate.toLowerCase())
                 ),

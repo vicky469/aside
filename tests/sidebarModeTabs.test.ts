@@ -44,7 +44,6 @@ test("sidebar mode tab groups omit optional tabs when top-level settings are off
         isThoughtTrailEnabled: true,
         showTodoSidebarTab: false,
         showAgentSidebarTab: false,
-        agentsFeatureAvailable: true,
     };
 
     assert.deepEqual(
@@ -65,7 +64,6 @@ test("sidebar mode tab groups include todo and agent on note and index surfaces 
         isThoughtTrailEnabled: true,
         showTodoSidebarTab: true,
         showAgentSidebarTab: true,
-        agentsFeatureAvailable: true,
     };
 
     assert.deepEqual(
@@ -83,7 +81,6 @@ test("turned-off active todo and agent modes fall back to list", () => {
         resolveModeWithSidebarModeVisibility("todo", {
             showTodoSidebarTab: false,
             showAgentSidebarTab: true,
-            agentsFeatureAvailable: true,
         }),
         "list",
     );
@@ -91,7 +88,6 @@ test("turned-off active todo and agent modes fall back to list", () => {
         resolveModeWithSidebarModeVisibility("agent", {
             showTodoSidebarTab: true,
             showAgentSidebarTab: false,
-            agentsFeatureAvailable: true,
         }),
         "list",
     );
@@ -99,13 +95,12 @@ test("turned-off active todo and agent modes fall back to list", () => {
         resolveModeWithSidebarModeVisibility("thought-trail", {
             showTodoSidebarTab: false,
             showAgentSidebarTab: false,
-            agentsFeatureAvailable: true,
         }),
         "thought-trail",
     );
 });
 
-test("disabled Agents capability hides the tab and falls active agent mode back to list", () => {
+test("agent tab visibility depends only on the show-agent-tab setting", () => {
     const availability = {
         isTagsEnabled: true,
         isTodoEnabled: true,
@@ -113,13 +108,12 @@ test("disabled Agents capability hides the tab and falls active agent mode back 
         isThoughtTrailEnabled: true,
         showTodoSidebarTab: true,
         showAgentSidebarTab: true,
-        agentsFeatureAvailable: false,
     };
 
     assert.deepEqual(
         getSidebarModeTabGroups(availability, "note")
             .flatMap((group) => group.tabs.map((tab) => tab.mode)),
-        ["list", "tags", "todo", "thought-trail"],
+        ["list", "tags", "todo", "agent", "thought-trail"],
     );
-    assert.equal(resolveModeWithSidebarModeVisibility("agent", availability), "list");
+    assert.equal(resolveModeWithSidebarModeVisibility("agent", availability), "agent");
 });

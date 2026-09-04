@@ -185,7 +185,6 @@ test("toggleMarkdownBold wraps multiline list selections per content line", () =
 
 const registeredScripts = new Set(["/clean-youtube-transcript"]);
 const isRecognizedMention = (mention: string) => isActionableMention(mention, {
-    agentsFeatureAvailable: true,
     isRunnableVaultScriptMention: (candidate) => registeredScripts.has(candidate.toLowerCase()),
 });
 

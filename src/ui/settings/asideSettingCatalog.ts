@@ -55,10 +55,6 @@ function isPublishFeatureAvailable(context: AsideSettingCatalogContext): boolean
     return isFeatureFlagEnabled(context.plugin.settings.featureFlags, FeatureFlag.publish);
 }
 
-function isAgentsFeatureAvailable(context: AsideSettingCatalogContext): boolean {
-    return isFeatureFlagEnabled(context.plugin.settings.featureFlags, FeatureFlag.agents);
-}
-
 function isPublishingSettingVisible(context: AsideSettingCatalogContext): boolean {
     return isPublishFeatureAvailable(context) && context.plugin.settings.publishEnabled;
 }
@@ -77,7 +73,6 @@ export const ASIDE_SETTING_CATALOG: readonly AsideSettingCatalogEntry[] = [
         description: DEFAULT_AGENT_SETTING_DESCRIPTION,
         aliases: getSupportedAgentActors().map((actor) => actor.label),
         keywords: ["runtime", "availability", "fallback"],
-        visible: isAgentsFeatureAvailable,
         render: (setting, context) => {
             context.renderDefaultAgentSettings(
                 setting,
@@ -108,7 +103,6 @@ export const ASIDE_SETTING_CATALOG: readonly AsideSettingCatalogEntry[] = [
         description: "Show the agent sidebar tab for local agent replies.",
         aliases: getSupportedAgentActors().map((actor) => `${actor.label} tab`),
         keywords: ["local agent", "assistant"],
-        visible: isAgentsFeatureAvailable,
         render: (setting, context) => {
             setting.addToggle((toggle) => toggle
                 .setValue(context.plugin.settings.showAgentSidebarTab)

@@ -1,7 +1,5 @@
 import { isOrphanedComment, isPageComment } from "../../core/anchors/commentAnchors";
-import { formatSupportedAgentDirectives } from "../../core/agents/agentActorRegistry";
 import { MAX_SIDENOTE_WORDS, countCommentWords, exceedsCommentWordLimit } from "../../core/text/commentWordLimit";
-import { PDF_TO_MARKDOWN_DIRECTIVE } from "../../core/text/pdfToMarkdownDirective";
 import { canSaveDraftWithoutComment, type DraftComment } from "../../domain/drafts";
 import { applyDraftPasteEditToTextarea, type HtmlToMarkdownConverter } from "../editor/commentEditorPaste";
 import {
@@ -25,7 +23,6 @@ export interface SidebarDraftCommentHost {
     activeCommentId: string | null;
     shouldPinFocusedDraftToTop: boolean;
     isActionableMention: ActionableMentionPredicate;
-    isAgentsFeatureAvailable(): boolean;
     isSavingDraft(commentId: string): boolean;
     updateDraftCommentText(commentId: string, commentText: string): void;
     convertHtmlToMarkdown?: HtmlToMarkdownConverter;
@@ -73,17 +70,8 @@ export function shouldAutoOpenDraftMentionSuggest(
 export function buildDraftCommentPresentation(
     comment: DraftComment,
     activeCommentId: string | null,
-    agentsFeatureAvailable: boolean,
     isSaving = false,
 ): DraftCommentPresentation {
-    const supportedAgentDirectives = agentsFeatureAvailable
-        ? formatSupportedAgentDirectives("or")
-        : "";
-    const newDraftPlaceholder = !agentsFeatureAvailable
-        ? "Write a side note. Use B or H for styling, or type /script-name or @todo."
-        : supportedAgentDirectives
-            ? `Write a side note. Use B or H for styling, or type /create-script, /update-script, ${PDF_TO_MARKDOWN_DIRECTIVE}, /script-name, @todo, ${supportedAgentDirectives}.`
-            : `Write a side note. Use B or H for styling, or type /create-script, /update-script, ${PDF_TO_MARKDOWN_DIRECTIVE}, /script-name, or @todo.`;
     const classes = [
         "aside-comment-item",
         "aside-comment-draft",
@@ -109,7 +97,7 @@ export function buildDraftCommentPresentation(
         saveLabel: comment.mode === "edit" ? "Save" : "Add",
         placeholder: comment.mode === "append"
             ? "Add another entry to this thread."
-            : newDraftPlaceholder,
+            : "add a comment",
         isPending,
     };
 }
@@ -123,7 +111,6 @@ export function renderDraftCommentCard(
     const presentation = buildDraftCommentPresentation(
         comment,
         host.activeCommentId,
-        host.isAgentsFeatureAvailable(),
         host.isSavingDraft(comment.id),
     );
     const commentEl = commentsContainer.createDiv(presentation.classes.join(" "));
@@ -158,7 +145,6 @@ export function renderInlineEditDraftContent(
     const presentation = buildDraftCommentPresentation(
         comment,
         host.activeCommentId,
-        host.isAgentsFeatureAvailable(),
     );
     renderDraftEditor(container, comment, presentation, host, draftEditorController, "inline-edit");
 }

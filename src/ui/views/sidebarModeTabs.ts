@@ -20,7 +20,6 @@ export interface SidebarModeAvailability {
 export interface SidebarModeVisibility {
     showTodoSidebarTab: boolean;
     showAgentSidebarTab: boolean;
-    agentsFeatureAvailable: boolean;
 }
 
 type SidebarModeTabOptions = SidebarModeAvailability & SidebarModeVisibility;
@@ -42,7 +41,7 @@ export function getSidebarModeTabs(options: SidebarModeTabOptions): SidebarModeT
             return options.showTodoSidebarTab;
         }
         if (tab.mode === "agent") {
-            return options.showAgentSidebarTab && options.agentsFeatureAvailable;
+            return options.showAgentSidebarTab;
         }
         return true;
     });
@@ -108,7 +107,7 @@ export function resolveModeWithSidebarModeVisibility(
     if (mode === "todo" && !visibility.showTodoSidebarTab) {
         return "list";
     }
-    if (mode === "agent" && (!visibility.showAgentSidebarTab || !visibility.agentsFeatureAvailable)) {
+    if (mode === "agent" && !visibility.showAgentSidebarTab) {
         return "list";
     }
 
