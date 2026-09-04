@@ -39,6 +39,7 @@ import { resolveDefaultAgentSetupGuideState } from "./defaultAgentSetupGuide";
 import { appendAsideSettingInfoIcon } from "./asideSettingInfoIcon";
 import { type AsideSettingCatalogContext } from "./asideSettingCatalog";
 import { getAsideSettingDefinitions } from "./asideSettingDefinitionsAdapter";
+import { renderAsideSettingsHeaderArt } from "./asideSettingsHeaderArt";
 import { renderLegacyAsideSettings } from "./asideSettingLegacyAdapter";
 import type Aside from "../../main";
 
@@ -90,6 +91,7 @@ export default class AsideSetting extends PluginSettingTab {
         this.agentStatusRefreshToken += 1;
         this.unloadSetupGuideMarkdownComponent();
         this.containerEl.empty();
+        renderAsideSettingsHeaderArt(this.containerEl);
         renderLegacyAsideSettings(
             this.containerEl,
             this.getCatalogContext(),
