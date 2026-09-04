@@ -37,9 +37,12 @@ test("Agents and scripts guide documents setup and everyday workflows", () => {
     }
     assert.match(guide, /bundles none/iu);
     assert.match(guide, /no agent service/iu);
+    assert.match(guide, /In a side note,[^\n]*type[^\n]*@codex[^\n]*save/iu);
     assert.match(guide, /Show agent tab/u);
     assert.match(guide, /Settings → Sidebar tabs/u);
+    assert.match(guide, /controls visibility only[^\n]*replies remain[^\n]*List view/iu);
     assert.match(guide, /Settings → Scripts/u);
+    assert.match(guide, /default (?:local )?agent[^\n]*Settings → Scripts/iu);
     assert.match(guide, /🛠️ scripts\//u);
     assert.match(guide, /first valid request/iu);
     assert.match(guide, /\/create-script <request>/u);
@@ -63,7 +66,7 @@ test("Agents and scripts guide documents registration rules and the security bou
     assert.match(guide, /case-insensitive/iu);
     assert.match(guide, /duplicate/iu);
     assert.match(guide, /reserved/iu);
-    assert.match(guide, /hidden/iu);
+    assert.match(guide, /Hidden files[^\n]*ignored/iu);
     assert.match(guide, /\.test/u);
     assert.match(guide, /\.spec/u);
     assert.match(guide, /created, renamed, or deleted/iu);
@@ -80,10 +83,37 @@ test("Agents and scripts guide documents registration rules and the security bou
     assert.match(guide, /do not put credentials.*(?:script|side note)/isu);
 });
 
+test("Agents and scripts guide explains headless agent access and privacy boundaries", () => {
+    const guide = readRequiredFile("SCRIPTS.md");
+
+    assert.match(guide, /configured account and model[^\n]*does not override/iu);
+    assert.match(guide, /non-interactive/iu);
+    assert.match(guide, /permission-affecting flags/iu);
+    assert.doesNotMatch(guide, /honors[^\n]*permissions/iu);
+    assert.match(guide, /@deepseek[^\n]*OpenCode[^\n]*selected model/iu);
+    assert.match(guide, /saved (?:side-note|side note) request/iu);
+    assert.match(guide, /relevant source-note context/iu);
+    assert.match(guide, /thread transcript/iu);
+    assert.match(guide, /paths needed for the task/iu);
+    assert.match(guide, /CLI and its model provider may receive/iu);
+    assert.match(guide, /read or change vault files/iu);
+    assert.match(guide, /network-capable tools/iu);
+    assert.match(guide, /do not rely on[^\n]*interactive approval prompts/iu);
+    assert.match(guide, /Review the CLI and provider settings[^\n]*sensitive note context/iu);
+    assert.match(guide, /Codex[^\n]*workspace-write/iu);
+    assert.match(guide, /Claude[^\n]*WebSearch[^\n]*Bash[^\n]*Read[^\n]*Write[^\n]*Edit[^\n]*Glob[^\n]*Grep/iu);
+    assert.match(guide, /Cursor[^\n]*--force[^\n]*--trust[^\n]*sandbox/iu);
+    assert.match(guide, /Gemini[^\n]*--skip-trust[^\n]*--sandbox[^\n]*--approval-mode yolo/iu);
+    assert.match(guide, /OpenCode[^\n]*run --auto/iu);
+});
+
 test("experimental documentation retains publishing and removes Vault Scripts", () => {
     const experimental = readRequiredFile("EXPERIMENTAL_FEATURES.md");
 
     assert.doesNotMatch(experimental, /Vault Scripts/iu);
     assert.match(experimental, /\[Cloudflare Pages Publishing\]\(#cloudflare-pages-publishing\)/u);
     assert.match(experimental, /^## Cloudflare Pages Publishing$/mu);
+    assert.match(experimental, /^### Network and Data Access$/mu);
+    assert.match(experimental, /^### Setup$/mu);
+    assert.match(experimental, /^### Publishing Workflow$/mu);
 });
