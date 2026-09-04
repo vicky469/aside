@@ -5,7 +5,7 @@ import {
 	type Comment,
 	type Token,
 } from "acorn";
-import { decodeHTMLAttribute } from "entities";
+import { decodeHtmlAttributeReferences } from "./htmlAttributeDecoder";
 import { normalizeVaultRelativePublishPath } from "./publishPath";
 import { normalizePublishAllowedRoot } from "./publishSettings";
 
@@ -776,10 +776,6 @@ function findHtmlTagEnd(contents: string, offset: number): number {
 		}
 	}
 	return -1;
-}
-
-function decodeHtmlAttributeReferences(value: string): string {
-	return decodeHTMLAttribute(value);
 }
 
 function scanHtmlAttributes(contents: string, start: number, end: number): HtmlAttribute[] {
