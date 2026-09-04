@@ -18,7 +18,7 @@ Use this section as the working checklist. Mark an item done only after the code
 
 - [ ] Remove the `agents` feature flag, its disabled policy, and every availability adapter and branch.
 - [ ] Keep **Show agent tab** as a visible setting, default it off for new or missing settings, and preserve explicit existing values.
-- [ ] Replace the new-side-note placeholder with the neutral text `Write a side note…`.
+- [ ] Replace the new-side-note placeholder with the neutral text `add a comment`.
 - [ ] Keep agent and command suggestions available only after the user types `@` or `/`.
 - [ ] Lazily create `🛠️ scripts/` for a valid `/create-script` request before dispatching its agent run.
 - [ ] Change the Aside workspace view display text, and therefore its tab-icon hover label, from `Side notes` to `Aside`.
@@ -62,7 +62,7 @@ Discovery remains quiet:
 
 ```text
 Normal use
-→ Write a side note…
+→ add a comment
 → no Agent tab by default
 → no agent process or startup prompt
 
@@ -94,7 +94,7 @@ The **Show agent tab** control remains visible under Settings → Sidebar tabs a
 The empty new-side-note editor uses exactly:
 
 ```text
-Write a side note…
+add a comment
 ```
 
 It does not enumerate formatting, todo, script, or agent commands. This is the default experience for both existing and new users.
@@ -176,7 +176,7 @@ Repository verification runs focused tests, the full test suite, lint, typecheck
 - Supported `@agent` mentions and built-in agent commands work without localStorage activation.
 - New and migrated users with no explicit Agent-tab preference do not see the Agent tab.
 - Users can always find and change **Show agent tab** in settings, and explicit existing preferences are preserved.
-- The empty editor says `Write a side note…`; agent and script choices appear after `@` or `/`.
+- The empty editor says `add a comment`; agent and script choices appear after `@` or `/`.
 - A valid `/create-script` request creates `🛠️ scripts/` when missing and dispatches exactly once.
 - Folder conflicts and creation errors produce one visible reply and never overwrite an existing path.
 - The Aside workspace icon hover label says `Aside`.
