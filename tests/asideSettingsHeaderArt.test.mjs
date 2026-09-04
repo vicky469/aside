@@ -18,11 +18,8 @@ test("settings header owns the approved copy and accessible art structure", asyn
         source,
         /ASIDE_SETTINGS_HERO_INSTRUCTION\s*=\s*"add comment, @agent reply"/,
     );
-    assert.match(
-        source,
-        /ASIDE_SETTINGS_HERO_GRAPH_LABEL\s*=\s*"thought trail"/,
-    );
-    assert.match(source, /aside-settings-hero-graph-label/);
+    assert.doesNotMatch(source, /ASIDE_SETTINGS_HERO_GRAPH_LABEL/);
+    assert.doesNotMatch(source, /aside-settings-hero-graph-label/);
     assert.match(source, /role:\s*"img"/);
     assert.match(source, /"aria-label":\s*ASIDE_SETTINGS_HERO_ARIA_LABEL/);
     assert.match(
@@ -51,7 +48,7 @@ test("settings tab mounts the header before the settings catalog", async () => {
     assert.ok(headerIndex < settingsIndex);
 });
 
-test("settings header renders one scene with three graph planes and six bounded tracks", async () => {
+test("settings header renders the original small GEB scene with six bounded tracks", async () => {
     const source = await readFile(headerSourceUrl, "utf8");
     const graphPlaneSpecsMatch = source.match(
         /const GRAPH_PLANE_SPECS: readonly GraphPlaneSpec\[\] = \[([\s\S]*?)\n\];/,
@@ -67,10 +64,6 @@ test("settings header renders one scene with three graph planes and six bounded 
         graphPlaneSpecs.matchAll(/(?:topTrackClass|armTrackClass):\s*"([^"]+)"/g),
         (match) => match[1],
     );
-    const squareNodePositions = Array.from(
-        graphPlaneSpecs.matchAll(/squareNodePosition:\s*"([^"]+)"/g),
-        (match) => match[1],
-    );
 
     assert.deepEqual(modifierClasses, ["is-plane-a", "is-plane-b", "is-plane-c"]);
     assert.deepEqual(trackClasses, [
@@ -81,10 +74,8 @@ test("settings header renders one scene with three graph planes and six bounded 
         "is-track-5",
         "is-track-6",
     ]);
-    assert.deepEqual(squareNodePositions, ["top-right", "arm-left", "bottom"]);
-    assert.match(source, /type GraphNodeShape = "dot" \| "square" \| "core";/);
-    assert.match(source, /aside-settings-hero-graph-node is-square/);
-    assert.match(source, /shape === "square" \? "□" : "·"/);
+    assert.doesNotMatch(source, /GraphNodeShape|GraphFrameNodePosition|frameNodePosition/);
+    assert.doesNotMatch(source, /aside-settings-hero-graph-node is-frame/);
 
     const appendGraphPlaneMatch = source.match(
         /function appendGraphPlane\([\s\S]*?\): void \{([\s\S]*?)\n\}\n\nfunction renderGraph/,
@@ -93,6 +84,8 @@ test("settings header renders one scene with three graph planes and six bounded 
     const edgeTrackCalls = appendGraphPlaneMatch[1].match(/appendEdgeTrack\(planeEl,/g) ?? [];
 
     assert.equal(edgeTrackCalls.length, 2);
+    assert.doesNotMatch(appendGraphPlaneMatch[1], /appendNode\(planeEl, true\)/);
+    assert.match(appendGraphPlaneMatch[1], /appendEdgeTrack\(planeEl, 3, spec\.armTrackClass\);\s*planeEl\.append\("─────"\);/);
 
     const renderGraphMatch = source.match(
         /function renderGraph\(parentEl: HTMLElement\): void \{([\s\S]*?)\n\}\n\nexport function/,
@@ -102,13 +95,11 @@ test("settings header renders one scene with three graph planes and six bounded 
     const graphRowClasses = renderGraphBody.match(/aside-settings-hero-graph-row/g) ?? [];
     const stageClasses = renderGraphBody.match(/aside-settings-hero-graph-stage/g) ?? [];
     const sceneClasses = renderGraphBody.match(/aside-settings-hero-graph-scene/g) ?? [];
-    const labelClasses = renderGraphBody.match(/aside-settings-hero-graph-label/g) ?? [];
     const planeLoopIndex = renderGraphBody.indexOf("for (const spec of GRAPH_PLANE_SPECS)");
 
     assert.equal(graphRowClasses.length, 1);
     assert.equal(stageClasses.length, 1);
     assert.equal(sceneClasses.length, 1);
-    assert.equal(labelClasses.length, 1);
     assert.notEqual(planeLoopIndex, -1);
     assert.match(
         renderGraphBody,
@@ -123,9 +114,9 @@ test("settings header renders one scene with three graph planes and six bounded 
             < renderGraphBody.indexOf("aside-settings-hero-graph-scene"),
     );
     assert.ok(renderGraphBody.indexOf("aside-settings-hero-graph-scene") < planeLoopIndex);
-    assert.ok(
-        planeLoopIndex < renderGraphBody.indexOf("aside-settings-hero-graph-label"),
-    );
+    assert.doesNotMatch(renderGraphBody, /aside-settings-hero-graph-label/);
+    assert.doesNotMatch(source, /aside-settings-hero-graph-core|●/);
+    assert.doesNotMatch(source, /is-square|□/);
     assert.doesNotMatch(source, /\b(?:brain|face|wikilink)\b/i);
 });
 
@@ -168,7 +159,7 @@ function getRule(styles, selector, requiredDeclaration = "") {
         .find((body) => body.includes(requiredDeclaration)) ?? "";
 }
 
-test("settings header splits one-shot relay motion from continuous graph motion", async () => {
+test("settings header splits one-shot reveal motion from continuous ambient motion", async () => {
     const styles = await readFile(stylesUrl, "utf8");
     const hero = getRule(styles, ".aside-settings-tab .aside-settings-hero");
     const settingRow = getRule(
@@ -180,23 +171,21 @@ test("settings header splits one-shot relay motion from continuous graph motion"
     const track = getRule(styles, ".aside-settings-tab .aside-settings-hero-edge-track");
     const runner = getRule(styles, ".aside-settings-tab .aside-settings-hero-edge-runner");
     const introSelectors = [
-        ".aside-settings-tab .aside-settings-hero-rabbit",
         ".aside-settings-tab .aside-settings-hero-thought",
         ".aside-settings-tab .aside-settings-hero-signal-glyph",
         ".aside-settings-tab .aside-settings-hero-aside-box",
         ".aside-settings-tab .aside-settings-hero-action-line",
         ".aside-settings-tab .aside-settings-hero-graph-stage",
         ".aside-settings-tab .aside-settings-hero-graph-node",
-        ".aside-settings-tab .aside-settings-hero-graph-core",
-        ".aside-settings-tab .aside-settings-hero-graph-label",
     ];
 
     assert.match(hero, /--aside-settings-hero-intro-duration:\s*7s\s*;/);
+    assert.match(hero, /--aside-settings-hero-motion-delay:\s*5\.8s\s*;/);
     assert.match(hero, /container-type:\s*inline-size\s*;/);
     assert.match(settingRow, /display:\s*block\s*;/);
     assert.match(settingRow, /padding:\s*0\s*;/);
-    assert.match(rabbit, /animation:[^;]*\s1\s+forwards\s*;/);
-    assert.doesNotMatch(rabbit, /infinite/);
+    assert.match(rabbit, /aside-settings-hero-rabbit[^,;]*\s1\s+forwards/);
+    assert.match(rabbit, /aside-settings-hero-rabbit-idle\s+3\.8s\s+ease-in-out\s+1\.4s\s+infinite\s+alternate/);
     for (const selector of introSelectors) {
         const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
         const rulePattern = new RegExp(`${escaped}[^{}]*\\{(?<body>[^{}]*)\\}`);
@@ -207,16 +196,17 @@ test("settings header splits one-shot relay motion from continuous graph motion"
     }
     assert.match(scene, /transform-style:\s*preserve-3d\s*;/);
     assert.match(scene, /animation-name:\s*aside-settings-hero-graph-turn\s*;/);
-    assert.match(scene, /animation-delay:\s*var\(--aside-settings-hero-intro-duration\)\s*;/);
+    assert.match(scene, /animation-delay:\s*var\(--aside-settings-hero-motion-delay\)\s*;/);
     assert.match(scene, /animation-iteration-count:\s*infinite\s*;/);
     assert.match(scene, /animation-direction:\s*alternate\s*;/);
     assert.match(track, /position:\s*relative\s*;/);
     assert.match(track, /overflow:\s*hidden\s*;/);
-    assert.match(runner, /animation-delay:\s*calc\(/);
+    assert.match(runner, /animation-delay:\s*calc\(var\(--aside-settings-hero-motion-delay\)/);
     assert.match(runner, /animation-iteration-count:\s*infinite\s*;/);
     assert.match(runner, /animation-direction:\s*alternate\s*;/);
     assert.match(styles, /@keyframes aside-settings-hero-graph-turn/);
     assert.match(styles, /@keyframes aside-settings-hero-edge-flow/);
+    assert.match(styles, /@keyframes aside-settings-hero-rabbit-idle/);
 
     const infiniteAnimationSelectors = [
         ...styles.matchAll(
@@ -227,14 +217,18 @@ test("settings header splits one-shot relay motion from continuous graph motion"
         .map((match) => match.groups?.selector.trim());
 
     assert.deepEqual(infiniteAnimationSelectors, [
+        ".aside-settings-tab .aside-settings-hero-rabbit",
         ".aside-settings-tab .aside-settings-hero-graph-scene",
         ".aside-settings-tab .aside-settings-hero-edge-runner",
     ]);
 });
 
-test("settings header uses three fixed 3d planes and a narrow-pane layout", async () => {
+test("settings header uses the original small GEB planes and narrow-pane layout", async () => {
     const styles = await readFile(stylesUrl, "utf8");
+    const hero = getRule(styles, ".aside-settings-tab .aside-settings-hero");
     const stage = getRule(styles, ".aside-settings-tab .aside-settings-hero-graph-stage");
+    const scene = getRule(styles, ".aside-settings-tab .aside-settings-hero-graph-scene");
+    const runner = getRule(styles, ".aside-settings-tab .aside-settings-hero-edge-runner");
     const plane = getRule(
         styles,
         ".aside-settings-tab .aside-settings-hero-graph-plane",
@@ -244,19 +238,31 @@ test("settings header uses three fixed 3d planes and a narrow-pane layout", asyn
     assert.match(stage, /perspective:\s*620px\s*;/);
     assert.match(plane, /position:\s*absolute\s*;/);
     assert.match(plane, /transform-style:\s*preserve-3d\s*;/);
-    assert.match(plane, /font-size:\s*14px\s*;/);
-    assert.match(styles, /\.aside-settings-tab \.aside-settings-hero-graph-plane\.is-plane-a\s*\{[^}]*rotateX\(66deg\)[^}]*rotateZ\(45deg\)/);
-    assert.match(styles, /\.aside-settings-tab \.aside-settings-hero-graph-plane\.is-plane-b\s*\{[^}]*rotateY\(66deg\)[^}]*rotateZ\(45deg\)/);
-    assert.match(styles, /\.aside-settings-tab \.aside-settings-hero-graph-plane\.is-plane-c\s*\{[^}]*rotateX\(-18deg\)[^}]*rotateY\(-18deg\)[^}]*rotateZ\(45deg\)/);
-    assert.match(stage, /width:\s*210px\s*;/);
+    assert.match(hero, /--aside-settings-hero-blue-glow:\s*color-mix\(/);
+    assert.match(hero, /--aside-settings-hero-brass-shadow:\s*color-mix\(/);
+    assert.match(hero, /--aside-settings-hero-brass-mid:\s*color-mix\(/);
+    assert.match(hero, /--aside-settings-hero-brass-light:\s*color-mix\(/);
+    assert.match(hero, /--aside-settings-hero-amber-glow:\s*color-mix\(/);
+    assert.match(plane, /color:\s*var\(--aside-settings-hero-brass-mid\)\s*;/);
+    assert.match(scene, /animation-duration:\s*11s\s*;/);
+    assert.match(scene, /animation-timing-function:\s*cubic-bezier\(0\.45,\s*0,\s*0\.55,\s*1\)\s*;/);
+    assert.match(runner, /text-shadow:\s*0 0 5px var\(--aside-settings-hero-blue-glow\)\s*;/);
+    assert.match(styles, /\.aside-settings-tab \.aside-settings-hero-graph-stage::before\s*\{[^}]*radial-gradient\(circle,[^}]*var\(--aside-settings-hero-amber-glow\)/);
+    assert.match(styles, /\.aside-settings-tab \.aside-settings-hero-graph-plane\.is-plane-a\s*\{[^}]*color:\s*var\(--aside-settings-hero-brass-shadow\)[^}]*opacity:\s*0\.72[^}]*rotateX\(66deg\)[^}]*rotateZ\(45deg\)/);
+    assert.match(styles, /\.aside-settings-tab \.aside-settings-hero-graph-plane\.is-plane-b\s*\{[^}]*color:\s*var\(--aside-settings-hero-brass-mid\)[^}]*opacity:\s*0\.86[^}]*rotateY\(66deg\)[^}]*rotateZ\(45deg\)/);
+    assert.match(styles, /\.aside-settings-tab \.aside-settings-hero-graph-plane\.is-plane-c\s*\{[^}]*color:\s*var\(--aside-settings-hero-brass-light\)[^}]*opacity:\s*0\.98[^}]*rotateX\(-18deg\)[^}]*rotateY\(-18deg\)[^}]*rotateZ\(45deg\)/);
+    assert.doesNotMatch(styles, /aside-settings-hero-graph-node\.is-frame/);
+    assert.doesNotMatch(styles, /aside-settings-hero-graph-core|aside-settings-hero-core/);
+    assert.doesNotMatch(styles, /aside-settings-hero-gold/);
+    assert.doesNotMatch(styles, /radial-gradient\(ellipse/);
+    assert.match(stage, /width:\s*160px\s*;/);
     assert.match(stage, /max-width:\s*100%\s*;/);
-    assert.match(stage, /flex:\s*0\s+0\s+210px\s*;/);
+    assert.match(stage, /flex:\s*0\s+0\s+160px\s*;/);
     assert.doesNotMatch(stage, /width:\s*min\(/);
-    assert.match(stage, /height:\s*132px\s*;/);
-    assert.match(styles, /@container\s*\(max-width:\s*360px\)[\s\S]*?\.aside-settings-tab \.aside-settings-hero-graph-stage[\s\S]*?width:\s*174px\s*;/);
-    assert.match(styles, /@container\s*\(max-width:\s*360px\)[\s\S]*?\.aside-settings-tab \.aside-settings-hero-graph-stage[\s\S]*?flex-basis:\s*174px\s*;/);
-    assert.match(styles, /@container\s*\(max-width:\s*360px\)[\s\S]*?\.aside-settings-tab \.aside-settings-hero-graph-stage[\s\S]*?height:\s*112px\s*;/);
-    assert.match(styles, /@container\s*\(max-width:\s*360px\)[\s\S]*?\.aside-settings-tab \.aside-settings-hero-graph-plane[\s\S]*?font-size:\s*12px\s*;/);
+    assert.match(stage, /height:\s*112px\s*;/);
+    assert.match(styles, /@container\s*\(max-width:\s*360px\)[\s\S]*?\.aside-settings-tab \.aside-settings-hero-graph-stage[\s\S]*?width:\s*145px\s*;/);
+    assert.match(styles, /@container\s*\(max-width:\s*360px\)[\s\S]*?\.aside-settings-tab \.aside-settings-hero-graph-stage[\s\S]*?flex-basis:\s*145px\s*;/);
+    assert.match(styles, /@container\s*\(max-width:\s*360px\)[\s\S]*?\.aside-settings-tab \.aside-settings-hero-graph-stage[\s\S]*?height:\s*102px\s*;/);
     assert.doesNotMatch(styles, /(?:^|\})\s*\.aside-settings-hero\s*\{/m);
 });
 
@@ -270,8 +276,6 @@ test("settings header shows a static completed composition for reduced motion", 
         ".aside-settings-tab .aside-settings-hero-action-line",
         ".aside-settings-tab .aside-settings-hero-graph-stage",
         ".aside-settings-tab .aside-settings-hero-graph-node",
-        ".aside-settings-tab .aside-settings-hero-graph-core",
-        ".aside-settings-tab .aside-settings-hero-graph-label",
         ".aside-settings-tab .aside-settings-hero-graph-scene",
         ".aside-settings-tab .aside-settings-hero-edge-runner",
     ];
@@ -279,8 +283,6 @@ test("settings header shows a static completed composition for reduced motion", 
         ".aside-settings-tab .aside-settings-hero-action-line",
         ".aside-settings-tab .aside-settings-hero-graph-stage",
         ".aside-settings-tab .aside-settings-hero-graph-node",
-        ".aside-settings-tab .aside-settings-hero-graph-core",
-        ".aside-settings-tab .aside-settings-hero-graph-label",
     ];
 
     for (const selector of animatedSelectors) {
@@ -364,11 +366,10 @@ test("declarative settings header clears its parent group surface", async () => 
     assert.match(parentGroup, /box-shadow:\s*none\s*;/);
 });
 
-test("settings header keeps a premium static label beside its larger graph", async () => {
+test("settings header keeps the compact GEB graph without a visible caption", async () => {
     const styles = await readFile(stylesUrl, "utf8");
     const art = getRule(styles, ".aside-settings-tab .aside-settings-hero-art");
     const row = getRule(styles, ".aside-settings-tab .aside-settings-hero-graph-row");
-    const label = getRule(styles, ".aside-settings-tab .aside-settings-hero-graph-label");
 
     assert.match(row, /display:\s*flex\s*;/);
     assert.match(row, /align-items:\s*center\s*;/);
@@ -376,16 +377,8 @@ test("settings header keeps a premium static label beside its larger graph", asy
     assert.match(row, /flex-wrap:\s*wrap\s*;/);
     assert.match(row, /max-width:\s*100%\s*;/);
     assert.match(art, /gap:\s*var\(--size-4-2\)\s*;/);
-    assert.match(label, /color:\s*var\(--text-muted\)\s*;/);
-    assert.match(label, /font-family:\s*var\(--font-monospace\)\s*;/);
-    assert.match(label, /font-weight:\s*var\(--font-semibold\)\s*;/);
-    assert.match(label, /letter-spacing:\s*0\.1em\s*;/);
-    assert.match(label, /white-space:\s*nowrap\s*;/);
-    assert.match(label, /animation:[^;]*\s1\s+forwards\s*;/);
-    assert.match(
-        styles,
-        /@keyframes aside-settings-hero-label\s*\{\s*0%, 84% \{ opacity: 0; \}\s*94%, 100% \{ opacity: 1; \}\s*\}/,
-    );
+    assert.doesNotMatch(styles, /aside-settings-hero-graph-label/);
+    assert.doesNotMatch(styles, /aside-settings-hero-label/);
 });
 
 test("settings header aligns the action relay beneath the Aside junction without narrow-pane overflow", async () => {

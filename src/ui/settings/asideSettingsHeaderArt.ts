@@ -1,17 +1,12 @@
 export const ASIDE_SETTINGS_HERO_INSTRUCTION = "add comment, @agent reply";
-export const ASIDE_SETTINGS_HERO_GRAPH_LABEL = "thought trail";
 
 const ASIDE_SETTINGS_HERO_ARIA_LABEL =
     "Aside: Add a comment, receive an @agent reply, and grow a thought trail.";
-
-type GraphNodeShape = "dot" | "square" | "core";
-type GraphSquareNodePosition = "top-right" | "arm-left" | "bottom";
 
 interface GraphPlaneSpec {
     modifierClass: string;
     topTrackClass: string;
     armTrackClass: string;
-    squareNodePosition: GraphSquareNodePosition;
 }
 
 const GRAPH_PLANE_SPECS: readonly GraphPlaneSpec[] = [
@@ -19,30 +14,23 @@ const GRAPH_PLANE_SPECS: readonly GraphPlaneSpec[] = [
         modifierClass: "is-plane-a",
         topTrackClass: "is-track-1",
         armTrackClass: "is-track-2",
-        squareNodePosition: "top-right",
     },
     {
         modifierClass: "is-plane-b",
         topTrackClass: "is-track-3",
         armTrackClass: "is-track-4",
-        squareNodePosition: "arm-left",
     },
     {
         modifierClass: "is-plane-c",
         topTrackClass: "is-track-5",
         armTrackClass: "is-track-6",
-        squareNodePosition: "bottom",
     },
 ];
 
-function appendNode(parentEl: HTMLElement, shape: GraphNodeShape = "dot"): void {
+function appendNode(parentEl: HTMLElement): void {
     parentEl.createSpan({
-        cls: shape === "core"
-            ? "aside-settings-hero-graph-core"
-            : shape === "square"
-                ? "aside-settings-hero-graph-node is-square"
-                : "aside-settings-hero-graph-node",
-        text: shape === "core" ? "●" : shape === "square" ? "□" : "·",
+        cls: "aside-settings-hero-graph-node",
+        text: "·",
     });
 }
 
@@ -98,21 +86,17 @@ function appendGraphPlane(parentEl: HTMLElement, spec: GraphPlaneSpec): void {
     const planeEl = parentEl.createEl("pre", {
         cls: `aside-settings-hero-graph-plane ${spec.modifierClass}`,
     });
-    const nodeShapeAt = (position: GraphSquareNodePosition): GraphNodeShape =>
-        spec.squareNodePosition === position ? "square" : "dot";
-
     planeEl.append("    ");
     appendNode(planeEl);
     appendEdgeTrack(planeEl, 4, spec.topTrackClass);
-    appendNode(planeEl, nodeShapeAt("top-right"));
+    appendNode(planeEl);
     planeEl.append("\n    │    │\n");
-    appendNode(planeEl, nodeShapeAt("arm-left"));
+    appendNode(planeEl);
     appendEdgeTrack(planeEl, 3, spec.armTrackClass);
-    appendNode(planeEl, "core");
-    planeEl.append("────");
+    planeEl.append("─────");
     appendNode(planeEl);
     planeEl.append("\n    │\n    ");
-    appendNode(planeEl, nodeShapeAt("bottom"));
+    appendNode(planeEl);
 }
 
 function renderGraph(parentEl: HTMLElement): void {
@@ -123,11 +107,6 @@ function renderGraph(parentEl: HTMLElement): void {
     for (const spec of GRAPH_PLANE_SPECS) {
         appendGraphPlane(sceneEl, spec);
     }
-
-    rowEl.createDiv({
-        cls: "aside-settings-hero-graph-label",
-        text: ASIDE_SETTINGS_HERO_GRAPH_LABEL,
-    });
 }
 
 export function renderAsideSettingsHeaderArt(containerEl: HTMLElement): HTMLElement {

@@ -2,11 +2,13 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Finish Aside's original settings-page header with a one-shot Rabbit relay and a continuously turning three-plane impossible-junction Thought Trail whose blue dots remain inside their edges until the settings window closes.
+**Goal:** Finish Aside's original settings-page header with an animated Rabbit relay and a continuously turning three-plane impossible-junction Thought Trail whose blue dots remain inside their edges until the settings window closes.
 
-**Architecture:** Keep the focused `asideSettingsHeaderArt` renderer and legacy mount point from commit `e9409ed`, add an unsearchable custom-render definition for Obsidian 1.13+, and replace the flat graph scaffold with a perspective stage containing one transform-preserving scene and three explicit graph planes. Aside-scoped CSS owns the one-shot relay, delayed infinite 3D turn, clipped runner motion, responsive layout, and reduced-motion final state; `AsideSetting.hide()` removes the settings DOM so the animations have an explicit settings-window lifetime.
+**Architecture:** Keep the focused `asideSettingsHeaderArt` renderer and legacy mount point from commit `e9409ed`, add an unsearchable custom-render definition for Obsidian 1.13+, and replace the flat graph scaffold with a perspective stage containing one transform-preserving scene and three explicit graph planes. Aside-scoped CSS owns the finite relay entrance, subtle Rabbit idle loop, delayed infinite 3D turn, clipped runner motion, responsive layout, and reduced-motion final state; `AsideSetting.hide()` removes the settings DOM so the animations have an explicit settings-window lifetime.
 
 **Tech Stack:** TypeScript, Obsidian DOM helpers, CSS 3D transforms and keyframes, Node test runner, esbuild
+
+> **Final user refinements:** The shipped result supersedes the intermediate snippets below. It removes both card surfaces, the divider, added bottom margin, visible graph label, square-frame nodes, and solid center marker. It restores the approved compact 160-by-112-pixel GEB-inspired three-plane geometry, uses original brass/amber projection styling without bundling reference artwork, keeps six blue edge runners, overlaps continuous graph motion with the reveal tail to avoid a stop/restart, adds a subtle continuous Rabbit idle sway, and shortens the exact instruction to `add comment, @agent reply`. The implementation and focused regression tests are authoritative for these post-plan refinements.
 
 ---
 
@@ -902,13 +904,14 @@ Expected: the installer copies only `main.js`, `manifest.json`, and `styles.css`
 Open **Settings → Aside** and verify:
 
 - the header appears before the Agents heading on the current declarative settings path, with no empty setting-row chrome and no divider between its two beats;
-- the Rabbit relay plays once and holds still;
-- the visible copy reads `save highlight, add comment, ask @agent`;
+- the Rabbit relay plays once and settles into a subtle continuous idle sway;
+- the visible copy reads `add comment, @agent reply`;
 - the impossible-junction graph assembles only after the relay;
-- `thought trail` remains stationary below the graph;
-- after the reveal, the three-plane graph keeps rocking in 3D without a full revolution;
+- the compact graph has no visible label, square frame, or solid center marker;
+- the three planes use restrained brass depth tones and a faint amber halo;
+- during the reveal tail, the graph begins rocking in 3D without pausing or making a full revolution;
 - every blue runner moves with its plane, stays inside its own edge, and reverses at its endpoint;
-- no Rabbit, signal, instruction, caption, or settings control continues moving;
+- no signal, instruction, or settings control continues moving;
 - light and dark themes preserve sufficient contrast;
 - narrow and mobile-like panes wrap the instruction without horizontal page overflow;
 - reduced-motion mode immediately shows the final static composition;
