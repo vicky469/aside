@@ -1,6 +1,5 @@
 export const FeatureFlag = {
 	publish: "publish",
-	agents: "agents",
 } as const;
 
 export type FeatureFlagKey = typeof FeatureFlag[keyof typeof FeatureFlag];
@@ -11,7 +10,6 @@ export type FeatureFlags = Record<FeatureFlagKey, boolean>;
 
 export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
 	[FeatureFlag.publish]: false,
-	[FeatureFlag.agents]: false,
 };
 
 export function normalizeFeatureFlags(value: unknown): FeatureFlags {
@@ -20,7 +18,6 @@ export function normalizeFeatureFlags(value: unknown): FeatureFlags {
 		: {};
 	return {
 		[FeatureFlag.publish]: source[FeatureFlag.publish] === true,
-		[FeatureFlag.agents]: source[FeatureFlag.agents] === true,
 	};
 }
 

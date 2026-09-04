@@ -1,4 +1,3 @@
-import { AGENTS_EXPERIMENT_DISABLED_NOTICE } from "../core/agents/agentsFeaturePolicy";
 import type { SavedUserEntryEvent } from "../core/comments/savedUserEntry";
 import {
     PDF_TO_MARKDOWN_SOURCE_REQUIRED,
@@ -7,8 +6,6 @@ import {
 } from "../core/text/pdfToMarkdownDirective";
 
 export interface PdfToMarkdownCommandHost {
-    isAgentsFeatureAvailable(): boolean;
-    showNotice(message: string): void;
     appendReply(event: SavedUserEntryEvent, body: string): Promise<void>;
     dispatchRequest(event: SavedUserEntryEvent): Promise<void>;
 }
@@ -36,10 +33,6 @@ export class PdfToMarkdownCommandController {
         }
 
         this.handledEntryIds.add(event.entryId);
-        if (!this.host.isAgentsFeatureAvailable()) {
-            this.host.showNotice(AGENTS_EXPERIMENT_DISABLED_NOTICE);
-            return true;
-        }
         if (resolution.kind === "rejected") {
             await this.host.appendReply(event, resolution.message);
             return true;

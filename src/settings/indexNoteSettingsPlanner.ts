@@ -70,8 +70,8 @@ export function hasPersistedIndexNotePath(data: PersistedPluginData | null): boo
     return typeof data?.indexNotePath === "string" && data.indexNotePath.trim().length > 0;
 }
 
-function normalizeSidebarTabToggle(value: unknown): boolean {
-    return typeof value === "boolean" ? value : true;
+function normalizeSidebarTabToggle(value: unknown, fallback: boolean): boolean {
+    return typeof value === "boolean" ? value : fallback;
 }
 
 function shouldRewriteNormalizedPublishSettings(loaded: PersistedPluginData | null, normalized: typeof DEFAULT_PUBLISH_SETTINGS): boolean {
@@ -95,11 +95,11 @@ export function resolveLoadedSettings(
     const hasAgentSidebarTabSetting = hasOwn(loaded ?? {}, "showAgentSidebarTab");
     const hasDefaultAgentSetting = hasOwn(loaded ?? {}, "defaultAgent");
     const showTodoSidebarTab = hasTodoSidebarTabSetting
-        ? normalizeSidebarTabToggle(loaded?.showTodoSidebarTab)
+        ? normalizeSidebarTabToggle(loaded?.showTodoSidebarTab, true)
         : true;
     const showAgentSidebarTab = hasAgentSidebarTabSetting
-        ? normalizeSidebarTabToggle(loaded?.showAgentSidebarTab)
-        : true;
+        ? normalizeSidebarTabToggle(loaded?.showAgentSidebarTab, false)
+        : false;
     const publishSettings = normalizePublishSettings(loaded ?? defaults);
     const featureFlags = normalizeFeatureFlags(loaded?.featureFlags);
     const defaultAgent = normalizeSupportedAgentTarget(

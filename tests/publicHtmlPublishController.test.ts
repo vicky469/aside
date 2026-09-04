@@ -48,7 +48,6 @@ function createHarness(options: {
 		getSettings: () => options.settings ?? settings,
 		getFeatureFlags: () => options.featureFlags ?? {
 			[FeatureFlag.publish]: true,
-			[FeatureFlag.agents]: false,
 		},
 		getVaultConfigDir: () => ".obsidian",
 		listMarkdownFiles: async (rootPath: string) => Array.from(files.keys())
@@ -128,7 +127,6 @@ test("public html publish controller fails closed when the publish feature flag 
 	const harness = createHarness({
 		featureFlags: {
 			[FeatureFlag.publish]: false,
-			[FeatureFlag.agents]: false,
 		},
 	});
 

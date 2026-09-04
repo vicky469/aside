@@ -17,19 +17,13 @@ function event(body: string, entryId = "entry-1"): SavedUserEntryEvent {
 
 function createHarness(options: {
     scripts?: string[];
-    agentsFeatureAvailable?: boolean;
 } = {}) {
     const registry = new VaultScriptRegistry();
     registry.seed(options.scripts ?? []);
     const replies: string[] = [];
     const dispatchedRequests: string[] = [];
-    const notices: string[] = [];
     const controller = new CreateScriptCommandController({
         getRegistry: () => registry,
-        isAgentsFeatureAvailable: () => options.agentsFeatureAvailable ?? true,
-        showNotice: (message) => {
-            notices.push(message);
-        },
         appendReply: async (_event, body) => {
             replies.push(body);
         },
@@ -42,7 +36,6 @@ function createHarness(options: {
         controller,
         replies,
         dispatchedRequests,
-        notices,
     };
 }
 
@@ -81,21 +74,9 @@ test("create-script returns usage once for one saved entry and resets on disposa
 });
 
 test("create-script controller ignores entries without the built-in directive", async () => {
-    const harness = createHarness({ agentsFeatureAvailable: false });
+    const harness = createHarness();
 
     assert.equal(await harness.controller.handleSavedUserEntry(event("ordinary note")), false);
     assert.deepEqual(harness.dispatchedRequests, []);
     assert.deepEqual(harness.replies, []);
-    assert.deepEqual(harness.notices, []);
-});
-
-test("disabled create-script is handled without dispatch or a generated reply", async () => {
-    const harness = createHarness({ agentsFeatureAvailable: false });
-
-    assert.equal(await harness.controller.handleSavedUserEntry(event(
-        "/create-script build a formatter",
-    )), true);
-    assert.deepEqual(harness.dispatchedRequests, []);
-    assert.deepEqual(harness.replies, []);
-    assert.deepEqual(harness.notices, ["Agents experiment is disabled."]);
 });

@@ -15,19 +15,13 @@ function event(body: string, entryId = "entry-1"): SavedUserEntryEvent {
 
 function createHarness(options: {
     scripts?: string[];
-    agentsFeatureAvailable?: boolean;
 } = {}) {
     const registry = new VaultScriptRegistry();
     registry.seed(options.scripts ?? []);
     const replies: string[] = [];
-    const notices: string[] = [];
     const dispatchedRequests: Array<{ requestText: string; scriptPath: string }> = [];
     const controller = new UpdateScriptCommandController({
         getRegistry: () => registry,
-        isAgentsFeatureAvailable: () => options.agentsFeatureAvailable ?? true,
-        showNotice: (message) => {
-            notices.push(message);
-        },
         appendReply: async (_event, body) => {
             replies.push(body);
         },
@@ -42,7 +36,6 @@ function createHarness(options: {
     return {
         controller,
         replies,
-        notices,
         dispatchedRequests,
     };
 }
@@ -107,25 +100,10 @@ test("update-script returns usage once for empty, malformed, and misplaced input
     assert.equal(harness.replies.length, 4);
 });
 
-test("disabled update-script stops without dispatch or a generated reply", async () => {
-    const harness = createHarness({
-        scripts: ["🛠️ scripts/clean.mjs"],
-        agentsFeatureAvailable: false,
-    });
-
-    assert.equal(await harness.controller.handleSavedUserEntry(event(
-        "/update-script /clean change it",
-    )), true);
-    assert.deepEqual(harness.dispatchedRequests, []);
-    assert.deepEqual(harness.replies, []);
-    assert.deepEqual(harness.notices, ["Agents experiment is disabled."]);
-});
-
 test("update-script controller ignores entries without the built-in directive", async () => {
-    const harness = createHarness({ agentsFeatureAvailable: false });
+    const harness = createHarness();
 
     assert.equal(await harness.controller.handleSavedUserEntry(event("ordinary note")), false);
     assert.deepEqual(harness.dispatchedRequests, []);
     assert.deepEqual(harness.replies, []);
-    assert.deepEqual(harness.notices, []);
 });

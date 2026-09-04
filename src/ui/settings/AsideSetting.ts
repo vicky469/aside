@@ -62,7 +62,7 @@ export const DEFAULT_SETTINGS: AsideSettings = {
     agentRuntimeMode: normalizeAgentRuntimeModePreference("auto"),
     defaultAgent: DEFAULT_ASIDE_AGENT_ACTOR_ID,
     showTodoSidebarTab: true,
-    showAgentSidebarTab: true,
+    showAgentSidebarTab: false,
     featureFlags: DEFAULT_FEATURE_FLAGS,
     publishedPublicArtifactPaths: [],
     ...DEFAULT_PUBLISH_SETTINGS,

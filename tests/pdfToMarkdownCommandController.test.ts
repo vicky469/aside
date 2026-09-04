@@ -16,15 +16,10 @@ function event(
     };
 }
 
-function createHarness(options: { agentsFeatureAvailable?: boolean } = {}) {
+function createHarness() {
     const replies: string[] = [];
-    const notices: string[] = [];
     const dispatchedFilePaths: string[] = [];
     const controller = new PdfToMarkdownCommandController({
-        isAgentsFeatureAvailable: () => options.agentsFeatureAvailable ?? true,
-        showNotice: (message) => {
-            notices.push(message);
-        },
         appendReply: async (_event, body) => {
             replies.push(body);
         },
@@ -36,7 +31,6 @@ function createHarness(options: { agentsFeatureAvailable?: boolean } = {}) {
     return {
         controller,
         replies,
-        notices,
         dispatchedFilePaths,
     };
 }
@@ -69,18 +63,6 @@ test("pdf-to-markdown rejects non-PDF and malformed requests before dispatch", a
         "Open a PDF and use /pdf-to-markdown.",
         "Use /pdf-to-markdown by itself on a PDF.",
     ]);
-});
-
-test("disabled pdf-to-markdown is claimed without dispatch or a generated reply", async () => {
-    const harness = createHarness({ agentsFeatureAvailable: false });
-
-    assert.equal(await harness.controller.handleSavedUserEntry(event(
-        "/pdf-to-markdown",
-        "Books/Guide.pdf",
-    )), true);
-    assert.deepEqual(harness.dispatchedFilePaths, []);
-    assert.deepEqual(harness.replies, []);
-    assert.deepEqual(harness.notices, ["Agents experiment is disabled."]);
 });
 
 test("pdf-to-markdown ignores unrelated entries and resets idempotency on disposal", async () => {

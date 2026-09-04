@@ -40,7 +40,7 @@ function createSettings(overrides: Partial<AsideSettings> = {}): AsideSettings {
         agentRuntimeMode: overrides.agentRuntimeMode ?? "auto",
         defaultAgent: overrides.defaultAgent ?? "codex",
         showTodoSidebarTab: overrides.showTodoSidebarTab ?? true,
-        showAgentSidebarTab: overrides.showAgentSidebarTab ?? true,
+        showAgentSidebarTab: overrides.showAgentSidebarTab ?? false,
         publishedPublicArtifactPaths: overrides.publishedPublicArtifactPaths ?? [],
         featureFlags: overrides.featureFlags ?? DEFAULT_FEATURE_FLAGS,
         publishEnabled: overrides.publishEnabled ?? DEFAULT_PUBLISH_SETTINGS.publishEnabled,
@@ -449,12 +449,34 @@ test("loaded settings resolution normalizes persisted values and marks legacy co
         indexHeaderImageCaption: "Custom caption",
         agentRuntimeMode: "auto",
         showTodoSidebarTab: true,
-        showAgentSidebarTab: true,
+        showAgentSidebarTab: false,
     }));
     assert.equal(resolved.shouldRewriteLegacySettings, true);
 });
 
-test("loaded settings resolution defaults sidebar tab toggles on and rewrites invalid toggle values", () => {
+test("loaded settings resolution defaults Todo on and agents off when missing or new", () => {
+    for (const loaded of [null, {}]) {
+        const resolved = resolveLoadedSettings(loaded, createSettings());
+
+        assert.equal(resolved.settings.showTodoSidebarTab, true);
+        assert.equal(resolved.settings.showAgentSidebarTab, false);
+        assert.equal(resolved.shouldRewriteLegacySettings, true);
+    }
+});
+
+test("loaded settings resolution preserves explicit agent tab booleans", () => {
+    const visible = resolveLoadedSettings({
+        showAgentSidebarTab: true,
+    }, createSettings());
+    const hidden = resolveLoadedSettings({
+        showAgentSidebarTab: false,
+    }, createSettings());
+
+    assert.equal(visible.settings.showAgentSidebarTab, true);
+    assert.equal(hidden.settings.showAgentSidebarTab, false);
+});
+
+test("loaded settings resolution defaults an invalid agent tab toggle off and rewrites it", () => {
     const resolved = resolveLoadedSettings({
         showTodoSidebarTab: false,
         showAgentSidebarTab: "no" as unknown as boolean,
@@ -466,7 +488,7 @@ test("loaded settings resolution defaults sidebar tab toggles on and rewrites in
         indexHeaderImageCaption: "Default caption",
         agentRuntimeMode: "auto",
         showTodoSidebarTab: false,
-        showAgentSidebarTab: true,
+        showAgentSidebarTab: false,
     }));
     assert.equal(resolved.shouldRewriteLegacySettings, true);
 });
@@ -573,7 +595,7 @@ test("index note settings controller rewrites legacy settings", async () => {
         indexHeaderImageCaption: "Header",
         agentRuntimeMode: "auto",
         showTodoSidebarTab: true,
-        showAgentSidebarTab: true,
+        showAgentSidebarTab: false,
     }));
     assert.equal(harness.savedPayloads.length, 1);
     assert.equal("preferredAgentTarget" in harness.savedPayloads[0], false);
@@ -739,7 +761,7 @@ test("loaded settings resolution drops legacy remote runtime settings", () => {
         indexHeaderImageCaption: "Default caption",
         agentRuntimeMode: "auto",
         showTodoSidebarTab: true,
-        showAgentSidebarTab: true,
+        showAgentSidebarTab: false,
     }));
     assert.equal(resolved.shouldRewriteLegacySettings, true);
 });
@@ -755,7 +777,7 @@ test("index note settings controller saves local runtime setting without aggrega
         indexHeaderImageCaption: "Default caption",
         agentRuntimeMode: "local",
         showTodoSidebarTab: true,
-        showAgentSidebarTab: true,
+        showAgentSidebarTab: false,
     }));
     assert.equal(harness.getRefreshAggregateNoteCount(), 0);
     assert.deepEqual(harness.savedPayloads.at(-1), withPublishDefaults({
@@ -764,7 +786,7 @@ test("index note settings controller saves local runtime setting without aggrega
         indexHeaderImageCaption: "Default caption",
         agentRuntimeMode: "local",
         showTodoSidebarTab: true,
-        showAgentSidebarTab: true,
+        showAgentSidebarTab: false,
     }));
 });
 
@@ -779,6 +801,7 @@ test("index note settings controller persists the default agent", async () => {
 
 test("index note settings controller saves sidebar tab toggles and refreshes open sidebars", async () => {
     const harness = createControllerHarness({
+        settings: createSettings({ showAgentSidebarTab: true }),
         activeSidebarFilePath: "docs/source.md",
         files: ["docs/source.md"],
     });
@@ -833,13 +856,11 @@ test("loaded settings resolution defaults publish feature flag off", () => {
     const resolved = resolveLoadedSettings({}, createSettings({
         featureFlags: {
             [FeatureFlag.publish]: true,
-            [FeatureFlag.agents]: false,
         },
     }));
 
     assert.deepEqual(resolved.settings.featureFlags, {
         [FeatureFlag.publish]: false,
-        [FeatureFlag.agents]: false,
     });
     assert.equal(resolved.shouldRewriteLegacySettings, true);
 });
@@ -848,14 +869,12 @@ test("loaded settings resolution preserves normalized publish feature flag", () 
     const resolved = resolveLoadedSettings({
         featureFlags: {
             [FeatureFlag.publish]: true,
-            [FeatureFlag.agents]: false,
             unknown: true,
         },
     } as unknown as PersistedPluginData, createSettings());
 
     assert.deepEqual(resolved.settings.featureFlags, {
         [FeatureFlag.publish]: true,
-        [FeatureFlag.agents]: false,
     });
     assert.equal(resolved.shouldRewriteLegacySettings, true);
 });
@@ -865,7 +884,6 @@ test("feature flag storage synchronization persists through the complete plugin 
         indexHeaderImageCaption: "Keep this caption",
         featureFlags: {
             [FeatureFlag.publish]: false,
-            [FeatureFlag.agents]: false,
         },
         publishPagesProjectName: "publish-example-com",
         publishBaseUrl: "https://publish.example.com",
@@ -893,7 +911,6 @@ test("feature flag storage synchronization persists through the complete plugin 
         ...persistedSettings,
         featureFlags: {
             [FeatureFlag.publish]: true,
-            [FeatureFlag.agents]: false,
         },
     }]);
 });
@@ -904,7 +921,6 @@ test("feature flag storage synchronization preserves persisted data for absent a
             indexHeaderImageCaption: "Keep this caption",
             featureFlags: {
                 [FeatureFlag.publish]: true,
-                [FeatureFlag.agents]: false,
             },
         });
         const harness = createControllerHarness({
@@ -935,7 +951,6 @@ test("feature flag storage synchronization restores persisted data when saving f
     const persistedSettings = createSettings({
         featureFlags: {
             [FeatureFlag.publish]: false,
-            [FeatureFlag.agents]: false,
         },
     });
     const harness = createControllerHarness({
@@ -965,39 +980,6 @@ test("feature flag storage synchronization restores persisted data when saving f
     assert.equal(storageValue, "false");
     assert.deepEqual(harness.savedPayloads, []);
     assert.deepEqual(errors, ["persist"]);
-});
-
-test("feature flag storage synchronization persists agents without changing publish", async () => {
-    const persistedSettings = createSettings({
-        featureFlags: {
-            [FeatureFlag.publish]: true,
-            [FeatureFlag.agents]: false,
-        },
-    });
-    const harness = createControllerHarness({ loadedData: persistedSettings });
-    let storageValue: string | null = "true";
-    const storage: FeatureFlagStorage = {
-        getItem: () => storageValue,
-        setItem: (_key, value) => {
-            storageValue = value;
-        },
-    };
-
-    await harness.controller.loadSettings();
-    await harness.controller.syncFeatureFlagStorage(
-        FeatureFlag.agents,
-        storage,
-        "aside.feature.agents.Test Vault",
-    );
-
-    assert.deepEqual(harness.getSettings().featureFlags, {
-        publish: true,
-        agents: true,
-    });
-    assert.deepEqual(harness.savedPayloads.at(-1)?.featureFlags, {
-        publish: true,
-        agents: true,
-    });
 });
 
 test("index note settings controller saves publish settings without aggregate refreshes", async () => {
