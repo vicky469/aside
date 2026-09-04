@@ -1852,7 +1852,7 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
     row-gap: 0;
     align-items: center;
     justify-content: center;
-    width: min(100%, 72ch);
+    width: min(100%, 73ch);
     max-width: 100%;
 }
 
@@ -1915,7 +1915,7 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
     grid-column: 4;
     grid-row: 2;
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     justify-content: flex-start;
     width: calc(100% - 5ch);
     min-width: 0;
@@ -1923,6 +1923,7 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
     margin-left: 5ch;
     color: var(--text-muted);
     text-transform: lowercase;
+    white-space: nowrap;
     opacity: 0;
     animation: aside-settings-hero-action var(--aside-settings-hero-intro-duration) ease-in-out 1 forwards;
 }
@@ -1935,16 +1936,17 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
     display: flex;
     align-items: center;
     justify-content: center;
+    flex-wrap: wrap;
     gap: var(--size-4-2);
     max-width: 100%;
 }
 
 .aside-settings-tab .aside-settings-hero-graph-stage {
     position: relative;
-    width: 160px;
+    width: 210px;
     max-width: 100%;
-    height: 112px;
-    flex: 0 0 160px;
+    height: 132px;
+    flex: 0 0 210px;
     perspective: 620px;
     opacity: 0;
     clip-path: inset(100% 0 0 0);
@@ -1970,6 +1972,7 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
     top: 50%;
     left: 50%;
     color: var(--text-muted);
+    font-size: 14px;
     transform-origin: center;
     transform-style: preserve-3d;
     backface-visibility: visible;
@@ -1985,6 +1988,18 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
 
 .aside-settings-tab .aside-settings-hero-graph-plane.is-plane-c {
     transform: translate(-50%, -50%) rotateX(-18deg) rotateY(-18deg) rotateZ(45deg);
+}
+
+.aside-settings-tab .aside-settings-hero-graph-label {
+    flex: 0 0 auto;
+    color: var(--text-muted);
+    font-family: var(--font-monospace);
+    font-weight: var(--font-semibold);
+    letter-spacing: 0.1em;
+    text-transform: lowercase;
+    white-space: nowrap;
+    opacity: 0;
+    animation: aside-settings-hero-label var(--aside-settings-hero-intro-duration) ease-out 1 forwards;
 }
 
 .aside-settings-tab .aside-settings-hero-graph-node,
@@ -2117,6 +2132,11 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
     90%, 100% { opacity: 1; transform: scale(1); text-shadow: none; }
 }
 
+@keyframes aside-settings-hero-label {
+    0%, 84% { opacity: 0; }
+    94%, 100% { opacity: 1; }
+}
+
 @keyframes aside-settings-hero-graph-turn {
     0% { transform: rotateX(-7deg) rotateY(-18deg); }
     100% { transform: rotateX(8deg) rotateY(20deg); }
@@ -2139,18 +2159,18 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
 
     .aside-settings-tab .aside-settings-hero-relay {
         width: 100%;
-        grid-template-columns: minmax(0, 5ch) minmax(0, 11ch) minmax(0, 4ch) minmax(0, 1fr);
+        grid-template-columns: minmax(0, 6ch) minmax(0, 11ch) minmax(0, 4ch) minmax(0, 1fr);
         column-gap: 0.5ch;
     }
 
     .aside-settings-tab .aside-settings-hero-action-line {
-        grid-column: 1 / -1;
-        display: flex;
+        grid-column: 4;
         flex-direction: column;
         flex-wrap: nowrap;
         align-items: flex-start;
         width: calc(100% - 5ch);
         max-width: calc(100% - 5ch);
+        margin-left: 5ch;
     }
 
     .aside-settings-tab .aside-settings-hero-action-chunk:not(:first-child) {
@@ -2158,9 +2178,13 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
     }
 
     .aside-settings-tab .aside-settings-hero-graph-stage {
-        width: 145px;
-        flex-basis: 145px;
-        height: 102px;
+        width: 174px;
+        flex-basis: 174px;
+        height: 112px;
+    }
+
+    .aside-settings-tab .aside-settings-hero-graph-plane {
+        font-size: 12px;
     }
 }
 
@@ -2173,6 +2197,7 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
     .aside-settings-tab .aside-settings-hero-graph-stage,
     .aside-settings-tab .aside-settings-hero-graph-node,
     .aside-settings-tab .aside-settings-hero-graph-core,
+    .aside-settings-tab .aside-settings-hero-graph-label,
     .aside-settings-tab .aside-settings-hero-graph-scene,
     .aside-settings-tab .aside-settings-hero-edge-runner {
         animation: none;
@@ -2190,7 +2215,8 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
     .aside-settings-tab .aside-settings-hero-action-line,
     .aside-settings-tab .aside-settings-hero-graph-stage,
     .aside-settings-tab .aside-settings-hero-graph-node,
-    .aside-settings-tab .aside-settings-hero-graph-core { opacity: 1; }
+    .aside-settings-tab .aside-settings-hero-graph-core,
+    .aside-settings-tab .aside-settings-hero-graph-label { opacity: 1; }
 
     .aside-settings-tab .aside-settings-hero-signal-glyph { opacity: 0.45; }
     .aside-settings-tab .aside-settings-hero-graph-stage { clip-path: none; }

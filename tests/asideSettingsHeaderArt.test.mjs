@@ -16,12 +16,19 @@ test("settings header owns the approved copy and accessible art structure", asyn
 
     assert.match(
         source,
-        /ASIDE_SETTINGS_HERO_INSTRUCTION\s*=\s*"Save highlight, add comment, ask @agent"/,
+        /ASIDE_SETTINGS_HERO_INSTRUCTION\s*=\s*"save highlight, add comment, @agent reply"/,
     );
-    assert.doesNotMatch(source, /ASIDE_SETTINGS_HERO_GRAPH_LABEL/);
-    assert.doesNotMatch(source, /aside-settings-hero-graph-label/);
+    assert.match(
+        source,
+        /ASIDE_SETTINGS_HERO_GRAPH_LABEL\s*=\s*"thought trail"/,
+    );
+    assert.match(source, /aside-settings-hero-graph-label/);
     assert.match(source, /role:\s*"img"/);
     assert.match(source, /"aria-label":\s*ASIDE_SETTINGS_HERO_ARIA_LABEL/);
+    assert.match(
+        source,
+        /ASIDE_SETTINGS_HERO_ARIA_LABEL\s*=\s*"Aside: Save a highlight, add a comment, receive an @agent reply, and grow a thought trail\."/,
+    );
     assert.match(source, /"aria-hidden":\s*"true"/);
     assert.match(source, /aside-settings-hero-edge-track/);
     assert.match(source, /aside-settings-hero-edge-runner/);
@@ -87,11 +94,13 @@ test("settings header renders one scene with three graph planes and six bounded 
     const graphRowClasses = renderGraphBody.match(/aside-settings-hero-graph-row/g) ?? [];
     const stageClasses = renderGraphBody.match(/aside-settings-hero-graph-stage/g) ?? [];
     const sceneClasses = renderGraphBody.match(/aside-settings-hero-graph-scene/g) ?? [];
+    const labelClasses = renderGraphBody.match(/aside-settings-hero-graph-label/g) ?? [];
     const planeLoopIndex = renderGraphBody.indexOf("for (const spec of GRAPH_PLANE_SPECS)");
 
     assert.equal(graphRowClasses.length, 1);
     assert.equal(stageClasses.length, 1);
     assert.equal(sceneClasses.length, 1);
+    assert.equal(labelClasses.length, 1);
     assert.notEqual(planeLoopIndex, -1);
     assert.match(
         renderGraphBody,
@@ -106,6 +115,9 @@ test("settings header renders one scene with three graph planes and six bounded 
             < renderGraphBody.indexOf("aside-settings-hero-graph-scene"),
     );
     assert.ok(renderGraphBody.indexOf("aside-settings-hero-graph-scene") < planeLoopIndex);
+    assert.ok(
+        planeLoopIndex < renderGraphBody.indexOf("aside-settings-hero-graph-label"),
+    );
     assert.doesNotMatch(source, /\b(?:brain|face|wikilink)\b/i);
 });
 
@@ -168,6 +180,7 @@ test("settings header splits one-shot relay motion from continuous graph motion"
         ".aside-settings-tab .aside-settings-hero-graph-stage",
         ".aside-settings-tab .aside-settings-hero-graph-node",
         ".aside-settings-tab .aside-settings-hero-graph-core",
+        ".aside-settings-tab .aside-settings-hero-graph-label",
     ];
 
     assert.match(hero, /--aside-settings-hero-intro-duration:\s*7s\s*;/);
@@ -223,17 +236,19 @@ test("settings header uses three fixed 3d planes and a narrow-pane layout", asyn
     assert.match(stage, /perspective:\s*620px\s*;/);
     assert.match(plane, /position:\s*absolute\s*;/);
     assert.match(plane, /transform-style:\s*preserve-3d\s*;/);
+    assert.match(plane, /font-size:\s*14px\s*;/);
     assert.match(styles, /\.aside-settings-tab \.aside-settings-hero-graph-plane\.is-plane-a\s*\{[^}]*rotateX\(66deg\)[^}]*rotateZ\(45deg\)/);
     assert.match(styles, /\.aside-settings-tab \.aside-settings-hero-graph-plane\.is-plane-b\s*\{[^}]*rotateY\(66deg\)[^}]*rotateZ\(45deg\)/);
     assert.match(styles, /\.aside-settings-tab \.aside-settings-hero-graph-plane\.is-plane-c\s*\{[^}]*rotateX\(-18deg\)[^}]*rotateY\(-18deg\)[^}]*rotateZ\(45deg\)/);
-    assert.match(stage, /width:\s*160px\s*;/);
+    assert.match(stage, /width:\s*210px\s*;/);
     assert.match(stage, /max-width:\s*100%\s*;/);
-    assert.match(stage, /flex:\s*0\s+0\s+160px\s*;/);
+    assert.match(stage, /flex:\s*0\s+0\s+210px\s*;/);
     assert.doesNotMatch(stage, /width:\s*min\(/);
-    assert.match(stage, /height:\s*112px\s*;/);
-    assert.match(styles, /@container\s*\(max-width:\s*360px\)[\s\S]*?\.aside-settings-tab \.aside-settings-hero-graph-stage[\s\S]*?width:\s*145px\s*;/);
-    assert.match(styles, /@container\s*\(max-width:\s*360px\)[\s\S]*?\.aside-settings-tab \.aside-settings-hero-graph-stage[\s\S]*?flex-basis:\s*145px\s*;/);
-    assert.match(styles, /@container\s*\(max-width:\s*360px\)[\s\S]*?\.aside-settings-tab \.aside-settings-hero-graph-stage[\s\S]*?height:\s*102px\s*;/);
+    assert.match(stage, /height:\s*132px\s*;/);
+    assert.match(styles, /@container\s*\(max-width:\s*360px\)[\s\S]*?\.aside-settings-tab \.aside-settings-hero-graph-stage[\s\S]*?width:\s*174px\s*;/);
+    assert.match(styles, /@container\s*\(max-width:\s*360px\)[\s\S]*?\.aside-settings-tab \.aside-settings-hero-graph-stage[\s\S]*?flex-basis:\s*174px\s*;/);
+    assert.match(styles, /@container\s*\(max-width:\s*360px\)[\s\S]*?\.aside-settings-tab \.aside-settings-hero-graph-stage[\s\S]*?height:\s*112px\s*;/);
+    assert.match(styles, /@container\s*\(max-width:\s*360px\)[\s\S]*?\.aside-settings-tab \.aside-settings-hero-graph-plane[\s\S]*?font-size:\s*12px\s*;/);
     assert.doesNotMatch(styles, /(?:^|\})\s*\.aside-settings-hero\s*\{/m);
 });
 
@@ -248,6 +263,7 @@ test("settings header shows a static completed composition for reduced motion", 
         ".aside-settings-tab .aside-settings-hero-graph-stage",
         ".aside-settings-tab .aside-settings-hero-graph-node",
         ".aside-settings-tab .aside-settings-hero-graph-core",
+        ".aside-settings-tab .aside-settings-hero-graph-label",
         ".aside-settings-tab .aside-settings-hero-graph-scene",
         ".aside-settings-tab .aside-settings-hero-edge-runner",
     ];
@@ -256,6 +272,7 @@ test("settings header shows a static completed composition for reduced motion", 
         ".aside-settings-tab .aside-settings-hero-graph-stage",
         ".aside-settings-tab .aside-settings-hero-graph-node",
         ".aside-settings-tab .aside-settings-hero-graph-core",
+        ".aside-settings-tab .aside-settings-hero-graph-label",
     ];
 
     for (const selector of animatedSelectors) {
@@ -339,18 +356,28 @@ test("declarative settings header clears its parent group surface", async () => 
     assert.match(parentGroup, /box-shadow:\s*none\s*;/);
 });
 
-test("settings header keeps a compact centered graph scene without visible graph-label copy", async () => {
+test("settings header keeps a premium static label beside its larger graph", async () => {
     const styles = await readFile(stylesUrl, "utf8");
     const art = getRule(styles, ".aside-settings-tab .aside-settings-hero-art");
     const row = getRule(styles, ".aside-settings-tab .aside-settings-hero-graph-row");
+    const label = getRule(styles, ".aside-settings-tab .aside-settings-hero-graph-label");
 
     assert.match(row, /display:\s*flex\s*;/);
     assert.match(row, /align-items:\s*center\s*;/);
     assert.match(row, /justify-content:\s*center\s*;/);
+    assert.match(row, /flex-wrap:\s*wrap\s*;/);
     assert.match(row, /max-width:\s*100%\s*;/);
     assert.match(art, /gap:\s*var\(--size-4-2\)\s*;/);
-    assert.doesNotMatch(styles, /aside-settings-hero-graph-label/);
-    assert.doesNotMatch(styles, /aside-settings-hero-label/);
+    assert.match(label, /color:\s*var\(--text-muted\)\s*;/);
+    assert.match(label, /font-family:\s*var\(--font-monospace\)\s*;/);
+    assert.match(label, /font-weight:\s*var\(--font-semibold\)\s*;/);
+    assert.match(label, /letter-spacing:\s*0\.1em\s*;/);
+    assert.match(label, /white-space:\s*nowrap\s*;/);
+    assert.match(label, /animation:[^;]*\s1\s+forwards\s*;/);
+    assert.match(
+        styles,
+        /@keyframes aside-settings-hero-label\s*\{\s*0%, 84% \{ opacity: 0; \}\s*94%, 100% \{ opacity: 1; \}\s*\}/,
+    );
 });
 
 test("settings header aligns the action relay beneath the Aside junction without narrow-pane overflow", async () => {
@@ -376,12 +403,20 @@ test("settings header aligns the action relay beneath the Aside junction without
         source,
         /\["┌─────────┐\\n│ {2}", "ASIDE", " {2}│\\n└────┬────┘"\]\.join\(""\)/,
     );
+    assert.match(
+        source,
+        /const actions = ASIDE_SETTINGS_HERO_INSTRUCTION\.split\(", "\);/,
+    );
+    assert.match(
+        source,
+        /text:\s*`\$\{index === 0 \? "╰─ " : ""\}\$\{action\}\$\{index < actions\.length - 1 \? ", " : ""\}`/,
+    );
     assert.match(thought, /text-transform:\s*lowercase\s*;/);
     assert.match(action, /text-transform:\s*lowercase\s*;/);
 
     assert.match(relay, /display:\s*grid\s*;/);
     assert.match(relay, /grid-template-columns:\s*max-content\s+max-content\s+max-content\s+minmax\(11ch,\s*1fr\)\s*;/);
-    assert.match(relay, /width:\s*min\(100%,\s*72ch\)\s*;/);
+    assert.match(relay, /width:\s*min\(100%,\s*73ch\)\s*;/);
     assert.match(relay, /row-gap:\s*0\s*;/);
     assert.match(row, /display:\s*contents\s*;/);
     assert.match(rabbit, /grid-column:\s*1\s*;/);
@@ -391,22 +426,23 @@ test("settings header aligns the action relay beneath the Aside junction without
     assert.match(action, /grid-column:\s*4\s*;/);
     assert.match(action, /grid-row:\s*2\s*;/);
     assert.match(action, /margin-left:\s*5ch\s*;/);
-    assert.match(action, /flex-wrap:\s*wrap\s*;/);
+    assert.match(action, /flex-wrap:\s*nowrap\s*;/);
+    assert.match(action, /white-space:\s*nowrap\s*;/);
     assert.match(
         styles,
-        /@container\s*\(max-width:\s*360px\)[\s\S]*?\.aside-settings-tab \.aside-settings-hero-relay[\s\S]*?grid-template-columns:\s*minmax\(/,
+        /@container\s*\(max-width:\s*360px\)[\s\S]*?\.aside-settings-tab \.aside-settings-hero-relay[\s\S]*?grid-template-columns:\s*minmax\(0,\s*6ch\)/,
     );
     assert.match(
         styles,
-        /@container\s*\(max-width:\s*360px\)[\s\S]*?\.aside-settings-tab \.aside-settings-hero-action-line[\s\S]*?grid-column:\s*1\s*\/\s*-1\s*;/,
+        /@container\s*\(max-width:\s*360px\)[\s\S]*?\.aside-settings-tab \.aside-settings-hero-action-line[\s\S]*?grid-column:\s*4\s*;/,
+    );
+    assert.match(
+        styles,
+        /@container\s*\(max-width:\s*360px\)[\s\S]*?\.aside-settings-tab \.aside-settings-hero-action-line[\s\S]*?margin-left:\s*5ch\s*;/,
     );
     assert.match(
         styles,
         /@container\s*\(max-width:\s*360px\)[\s\S]*?\.aside-settings-tab \.aside-settings-hero-action-line[\s\S]*?flex-direction:\s*column\s*;/,
-    );
-    assert.match(
-        styles,
-        /@container\s*\(max-width:\s*360px\)[\s\S]*?\.aside-settings-tab \.aside-settings-hero-action-line[\s\S]*?flex-wrap:\s*nowrap\s*;/,
     );
     assert.match(
         styles,

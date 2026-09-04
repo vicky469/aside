@@ -1,7 +1,8 @@
-export const ASIDE_SETTINGS_HERO_INSTRUCTION = "Save highlight, add comment, ask @agent";
+export const ASIDE_SETTINGS_HERO_INSTRUCTION = "save highlight, add comment, @agent reply";
+export const ASIDE_SETTINGS_HERO_GRAPH_LABEL = "thought trail";
 
 const ASIDE_SETTINGS_HERO_ARIA_LABEL =
-    "Aside: Save a highlight, add a comment, ask an agent, and connect ideas in a thought trail.";
+    "Aside: Save a highlight, add a comment, receive an @agent reply, and grow a thought trail.";
 
 interface GraphPlaneSpec {
     modifierClass: string;
@@ -114,6 +115,11 @@ function renderGraph(parentEl: HTMLElement): void {
     for (const spec of GRAPH_PLANE_SPECS) {
         appendGraphPlane(sceneEl, spec);
     }
+
+    rowEl.createDiv({
+        cls: "aside-settings-hero-graph-label",
+        text: ASIDE_SETTINGS_HERO_GRAPH_LABEL,
+    });
 }
 
 export function renderAsideSettingsHeaderArt(containerEl: HTMLElement): HTMLElement {
