@@ -48,16 +48,60 @@ test("settings tab mounts the header before the settings catalog", async () => {
 
 test("settings header renders one scene with three graph planes and six bounded tracks", async () => {
     const source = await readFile(headerSourceUrl, "utf8");
+    const graphPlaneSpecsMatch = source.match(
+        /const GRAPH_PLANE_SPECS: readonly GraphPlaneSpec\[\] = \[([\s\S]*?)\n\];/,
+    );
 
-    assert.match(source, /aside-settings-hero-graph-stage/);
-    assert.match(source, /aside-settings-hero-graph-scene/);
-    for (const planeClass of ["is-plane-a", "is-plane-b", "is-plane-c"]) {
-        assert.match(source, new RegExp(planeClass));
-    }
-    for (let trackNumber = 1; trackNumber <= 6; trackNumber += 1) {
-        assert.match(source, new RegExp(`is-track-${trackNumber}`));
-    }
-    assert.match(source, /appendGraphPlane/);
+    assert.notEqual(graphPlaneSpecsMatch, null);
+    const graphPlaneSpecs = graphPlaneSpecsMatch[1];
+    const modifierClasses = Array.from(
+        graphPlaneSpecs.matchAll(/modifierClass:\s*"([^"]+)"/g),
+        (match) => match[1],
+    );
+    const trackClasses = Array.from(
+        graphPlaneSpecs.matchAll(/(?:topTrackClass|armTrackClass):\s*"([^"]+)"/g),
+        (match) => match[1],
+    );
+
+    assert.deepEqual(modifierClasses, ["is-plane-a", "is-plane-b", "is-plane-c"]);
+    assert.deepEqual(trackClasses, [
+        "is-track-1",
+        "is-track-2",
+        "is-track-3",
+        "is-track-4",
+        "is-track-5",
+        "is-track-6",
+    ]);
+
+    const appendGraphPlaneMatch = source.match(
+        /function appendGraphPlane\([\s\S]*?\): void \{([\s\S]*?)\n\}\n\nfunction renderGraph/,
+    );
+    assert.notEqual(appendGraphPlaneMatch, null);
+    const edgeTrackCalls = appendGraphPlaneMatch[1].match(/appendEdgeTrack\(planeEl,/g) ?? [];
+
+    assert.equal(edgeTrackCalls.length, 2);
+
+    const renderGraphMatch = source.match(
+        /function renderGraph\(parentEl: HTMLElement\): void \{([\s\S]*?)\n\}\n\nexport function/,
+    );
+    assert.notEqual(renderGraphMatch, null);
+    const renderGraphBody = renderGraphMatch[1];
+    const stageClasses = renderGraphBody.match(/aside-settings-hero-graph-stage/g) ?? [];
+    const sceneClasses = renderGraphBody.match(/aside-settings-hero-graph-scene/g) ?? [];
+    const planeLoopIndex = renderGraphBody.indexOf("for (const spec of GRAPH_PLANE_SPECS)");
+
+    assert.equal(stageClasses.length, 1);
+    assert.equal(sceneClasses.length, 1);
+    assert.notEqual(planeLoopIndex, -1);
+    assert.match(
+        renderGraphBody,
+        /for \(const spec of GRAPH_PLANE_SPECS\) \{\s*appendGraphPlane\(sceneEl, spec\);\s*\}/,
+    );
+    assert.ok(
+        renderGraphBody.indexOf("aside-settings-hero-graph-stage")
+            < renderGraphBody.indexOf("aside-settings-hero-graph-scene"),
+    );
+    assert.ok(renderGraphBody.indexOf("aside-settings-hero-graph-scene") < planeLoopIndex);
     assert.doesNotMatch(source, /\b(?:brain|face|wikilink)\b/i);
 });
 
