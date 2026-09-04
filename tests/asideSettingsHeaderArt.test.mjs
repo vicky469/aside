@@ -330,6 +330,7 @@ test("settings header aligns the action relay beneath the Aside junction without
 
     assert.match(relay, /display:\s*grid\s*;/);
     assert.match(relay, /grid-template-columns:\s*max-content\s+max-content\s+max-content\s+minmax\(11ch,\s*1fr\)\s*;/);
+    assert.match(relay, /width:\s*min\(100%,\s*71ch\)\s*;/);
     assert.match(row, /display:\s*contents\s*;/);
     assert.match(rabbit, /grid-column:\s*1\s*;/);
     assert.match(thought, /grid-column:\s*2\s*;/);

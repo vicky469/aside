@@ -1845,7 +1845,7 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
     row-gap: var(--size-4-2);
     align-items: center;
     justify-content: center;
-    width: min(100%, 69ch);
+    width: min(100%, 71ch);
     max-width: 100%;
 }
 
