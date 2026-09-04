@@ -1405,7 +1405,7 @@ export default class AsideView extends ItemView {
     }
 
     getDisplayText() {
-        return "Side notes";
+        return "Aside";
     }
 
     getIcon() {

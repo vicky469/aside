@@ -75,3 +75,13 @@ test("note sidebar empty state omits redundant no-side-notes heading", () => {
 
     assert.doesNotMatch(asideViewSource, /No side notes yet/);
 });
+
+test("Aside workspace view uses the standardized display label", () => {
+    const asideViewSource = readFileSync("src/ui/views/AsideView.ts", "utf8");
+    const displayTextMethod = asideViewSource.match(
+        /getDisplayText\(\)\s*\{\s*return\s+"([^"]+)";\s*\}/u,
+    );
+
+    assert.equal(displayTextMethod?.[1], "Aside");
+    assert.doesNotMatch(displayTextMethod?.[0] ?? "", /return\s+"Side notes";/u);
+});
