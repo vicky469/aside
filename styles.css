@@ -1807,6 +1807,368 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
     cursor: default;
 }
 
+.aside-settings-tab .setting-item.aside-settings-hero-setting {
+    display: block;
+    padding: 0;
+    border: 0;
+}
+
+.aside-settings-tab .aside-settings-hero {
+    --aside-settings-hero-intro-duration: 7s;
+    --aside-settings-hero-blue: var(--color-blue, var(--interactive-accent));
+    container-type: inline-size;
+    margin-bottom: var(--size-4-5);
+    padding: var(--size-4-4);
+    overflow: hidden;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: var(--radius-l);
+    background: var(--background-secondary);
+    color: var(--text-normal);
+}
+
+.aside-settings-tab .aside-settings-hero-art {
+    display: grid;
+    justify-items: center;
+    gap: var(--size-4-3);
+    width: 100%;
+    font-family: var(--font-monospace);
+    font-size: var(--font-ui-smaller);
+    line-height: 1.3;
+}
+
+.aside-settings-tab .aside-settings-hero-relay {
+    display: grid;
+    justify-items: center;
+    gap: var(--size-4-2);
+    max-width: 100%;
+}
+
+.aside-settings-tab .aside-settings-hero-relay-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1ch;
+    max-width: 100%;
+}
+
+.aside-settings-tab .aside-settings-hero-relay-row pre,
+.aside-settings-tab .aside-settings-hero-graph-plane {
+    margin: 0;
+    font: inherit;
+    white-space: pre;
+}
+
+.aside-settings-tab .aside-settings-hero-rabbit {
+    transform-origin: bottom center;
+    animation: aside-settings-hero-rabbit var(--aside-settings-hero-intro-duration) ease-in-out 1 forwards;
+}
+
+.aside-settings-tab .aside-settings-hero-thought {
+    text-transform: lowercase;
+    animation: aside-settings-hero-thought var(--aside-settings-hero-intro-duration) ease-in-out 1 forwards;
+}
+
+.aside-settings-tab .aside-settings-hero-signal {
+    display: inline-flex;
+    color: var(--aside-settings-hero-blue);
+}
+
+.aside-settings-tab .aside-settings-hero-signal-glyph {
+    opacity: 0.2;
+    animation: aside-settings-hero-signal calc(var(--aside-settings-hero-intro-duration) - 600ms) steps(1, end) 1 forwards;
+}
+
+.aside-settings-tab .aside-settings-hero-signal-glyph:nth-child(2) {
+    animation-delay: 120ms;
+}
+
+.aside-settings-tab .aside-settings-hero-signal-glyph:nth-child(3) {
+    animation-delay: 240ms;
+}
+
+.aside-settings-tab .aside-settings-hero-signal-glyph:nth-child(4) {
+    animation-delay: 360ms;
+}
+
+.aside-settings-tab .aside-settings-hero-aside-box {
+    animation: aside-settings-hero-aside-box var(--aside-settings-hero-intro-duration) ease-in-out 1 forwards;
+}
+
+.aside-settings-tab .aside-settings-hero-action-line {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    max-width: 100%;
+    color: var(--text-muted);
+    text-transform: lowercase;
+    opacity: 0;
+    animation: aside-settings-hero-action var(--aside-settings-hero-intro-duration) ease-in-out 1 forwards;
+}
+
+.aside-settings-tab .aside-settings-hero-action-chunk {
+    white-space: pre;
+}
+
+.aside-settings-tab .aside-settings-hero-graph-stage {
+    position: relative;
+    width: min(232px, 100%);
+    height: 164px;
+    perspective: 620px;
+    opacity: 0;
+    clip-path: inset(100% 0 0 0);
+    animation: aside-settings-hero-graph-reveal var(--aside-settings-hero-intro-duration) ease-in-out 1 forwards;
+}
+
+.aside-settings-tab .aside-settings-hero-graph-scene {
+    position: absolute;
+    inset: 0;
+    transform: rotateX(-7deg) rotateY(-18deg);
+    transform-style: preserve-3d;
+    will-change: transform;
+    animation-name: aside-settings-hero-graph-turn;
+    animation-duration: 9s;
+    animation-delay: var(--aside-settings-hero-intro-duration);
+    animation-timing-function: ease-in-out;
+    animation-iteration-count: infinite;
+    animation-direction: alternate;
+}
+
+.aside-settings-tab .aside-settings-hero-graph-plane {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    color: var(--text-muted);
+    transform-origin: center;
+    transform-style: preserve-3d;
+    backface-visibility: visible;
+}
+
+.aside-settings-tab .aside-settings-hero-graph-plane.is-plane-a {
+    transform: translate(-50%, -50%) rotateX(66deg) rotateZ(45deg);
+}
+
+.aside-settings-tab .aside-settings-hero-graph-plane.is-plane-b {
+    transform: translate(-50%, -50%) rotateY(66deg) rotateZ(45deg);
+}
+
+.aside-settings-tab .aside-settings-hero-graph-plane.is-plane-c {
+    transform: translate(-50%, -50%) rotateX(-18deg) rotateY(-18deg) rotateZ(45deg);
+}
+
+.aside-settings-tab .aside-settings-hero-graph-node,
+.aside-settings-tab .aside-settings-hero-graph-core {
+    display: inline-block;
+    color: var(--aside-settings-hero-blue);
+    transform-origin: center;
+    animation: aside-settings-hero-node var(--aside-settings-hero-intro-duration) ease-out 1 forwards;
+}
+
+.aside-settings-tab .aside-settings-hero-graph-core {
+    color: var(--text-normal);
+    animation-name: aside-settings-hero-core;
+}
+
+.aside-settings-tab .aside-settings-hero-edge-track {
+    position: relative;
+    display: inline-block;
+    overflow: hidden;
+    vertical-align: bottom;
+}
+
+.aside-settings-tab .aside-settings-hero-edge-track.is-track-1,
+.aside-settings-tab .aside-settings-hero-edge-track.is-track-3,
+.aside-settings-tab .aside-settings-hero-edge-track.is-track-5 {
+    --aside-settings-hero-runner-travel: 3ch;
+}
+
+.aside-settings-tab .aside-settings-hero-edge-track.is-track-2,
+.aside-settings-tab .aside-settings-hero-edge-track.is-track-4,
+.aside-settings-tab .aside-settings-hero-edge-track.is-track-6 {
+    --aside-settings-hero-runner-travel: 2ch;
+}
+
+.aside-settings-tab .aside-settings-hero-edge-runner {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 1ch;
+    overflow: hidden;
+    color: var(--aside-settings-hero-blue);
+    text-align: center;
+    opacity: 0;
+    transform: translateX(0);
+    will-change: transform;
+    animation-name: aside-settings-hero-edge-flow;
+    animation-duration: var(--aside-settings-hero-runner-duration, 3.2s);
+    animation-delay: calc(var(--aside-settings-hero-intro-duration) + var(--aside-settings-hero-runner-delay, 0s));
+    animation-timing-function: ease-in-out;
+    animation-iteration-count: infinite;
+    animation-direction: alternate;
+}
+
+.aside-settings-tab .aside-settings-hero-edge-track.is-track-2 {
+    --aside-settings-hero-runner-duration: 2.7s;
+    --aside-settings-hero-runner-delay: 0.35s;
+}
+
+.aside-settings-tab .aside-settings-hero-edge-track.is-track-3 {
+    --aside-settings-hero-runner-duration: 3.6s;
+    --aside-settings-hero-runner-delay: 0.7s;
+}
+
+.aside-settings-tab .aside-settings-hero-edge-track.is-track-4 {
+    --aside-settings-hero-runner-duration: 2.9s;
+    --aside-settings-hero-runner-delay: 0.15s;
+}
+
+.aside-settings-tab .aside-settings-hero-edge-track.is-track-5 {
+    --aside-settings-hero-runner-duration: 3.8s;
+    --aside-settings-hero-runner-delay: 0.55s;
+}
+
+.aside-settings-tab .aside-settings-hero-edge-track.is-track-6 {
+    --aside-settings-hero-runner-duration: 3.1s;
+    --aside-settings-hero-runner-delay: 0.9s;
+}
+
+.aside-settings-tab .aside-settings-hero-graph-label {
+    color: var(--text-muted);
+    font-weight: var(--font-semibold);
+    letter-spacing: 0.12em;
+    text-transform: lowercase;
+    opacity: 0;
+    animation: aside-settings-hero-label var(--aside-settings-hero-intro-duration) ease-out 1 forwards;
+}
+
+@keyframes aside-settings-hero-rabbit {
+    0%, 8% { transform: translate(0, 0) rotate(-1deg); }
+    14% { transform: translate(2px, -3px) rotate(1deg); }
+    20%, 100% { transform: translate(5px, 0) rotate(0); }
+}
+
+@keyframes aside-settings-hero-thought {
+    0%, 16% { transform: translateX(0); }
+    23% { transform: translateX(3px); }
+    30%, 100% { transform: translateX(0); }
+}
+
+@keyframes aside-settings-hero-signal {
+    0%, 23% { opacity: 0.2; text-shadow: none; }
+    24%, 38% { opacity: 1; text-shadow: 0 0 8px currentColor; }
+    39%, 100% { opacity: 0.45; text-shadow: none; }
+}
+
+@keyframes aside-settings-hero-aside-box {
+    0%, 34% { color: inherit; filter: none; }
+    42%, 56% {
+        color: var(--aside-settings-hero-blue);
+        filter: drop-shadow(0 0 4px var(--aside-settings-hero-blue));
+    }
+    64%, 100% { color: inherit; filter: none; }
+}
+
+@keyframes aside-settings-hero-action {
+    0%, 43% { opacity: 0; transform: translateY(-3px); }
+    52%, 100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes aside-settings-hero-graph-reveal {
+    0%, 49% { opacity: 0; clip-path: inset(100% 0 0 0); }
+    56% { opacity: 1; }
+    82%, 100% { opacity: 1; clip-path: inset(0); }
+}
+
+@keyframes aside-settings-hero-node {
+    0%, 68% { opacity: 0.15; transform: scale(0.8); text-shadow: none; }
+    84% { opacity: 1; transform: scale(1.25); text-shadow: 0 0 8px currentColor; }
+    100% { opacity: 1; transform: scale(1); text-shadow: none; }
+}
+
+@keyframes aside-settings-hero-core {
+    0%, 50% { opacity: 0; transform: scale(0.75); text-shadow: none; }
+    64%, 78% {
+        opacity: 1;
+        transform: scale(1.15);
+        text-shadow: 0 0 10px var(--aside-settings-hero-blue);
+    }
+    90%, 100% { opacity: 1; transform: scale(1); text-shadow: none; }
+}
+
+@keyframes aside-settings-hero-label {
+    0%, 83% { opacity: 0; transform: translateY(-3px); }
+    94%, 100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes aside-settings-hero-graph-turn {
+    0% { transform: rotateX(-7deg) rotateY(-18deg); }
+    100% { transform: rotateX(8deg) rotateY(20deg); }
+}
+
+@keyframes aside-settings-hero-edge-flow {
+    0% { opacity: 0.72; transform: translateX(0); }
+    12%, 88% { opacity: 1; }
+    100% {
+        opacity: 0.72;
+        transform: translateX(var(--aside-settings-hero-runner-travel));
+    }
+}
+
+@container (max-width: 360px) {
+    .aside-settings-tab .aside-settings-hero-art {
+        gap: var(--size-4-2);
+        font-size: 9px;
+    }
+
+    .aside-settings-tab .aside-settings-hero-relay-row { gap: 0.5ch; }
+
+    .aside-settings-tab .aside-settings-hero-graph-stage {
+        width: 190px;
+        height: 138px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .aside-settings-tab .aside-settings-hero-rabbit,
+    .aside-settings-tab .aside-settings-hero-thought,
+    .aside-settings-tab .aside-settings-hero-signal-glyph,
+    .aside-settings-tab .aside-settings-hero-aside-box,
+    .aside-settings-tab .aside-settings-hero-action-line,
+    .aside-settings-tab .aside-settings-hero-graph-stage,
+    .aside-settings-tab .aside-settings-hero-graph-node,
+    .aside-settings-tab .aside-settings-hero-graph-core,
+    .aside-settings-tab .aside-settings-hero-graph-label,
+    .aside-settings-tab .aside-settings-hero-graph-scene,
+    .aside-settings-tab .aside-settings-hero-edge-runner {
+        animation: none;
+        text-shadow: none;
+        filter: none;
+    }
+
+    .aside-settings-tab .aside-settings-hero-rabbit,
+    .aside-settings-tab .aside-settings-hero-thought,
+    .aside-settings-tab .aside-settings-hero-aside-box,
+    .aside-settings-tab .aside-settings-hero-action-line,
+    .aside-settings-tab .aside-settings-hero-graph-node,
+    .aside-settings-tab .aside-settings-hero-graph-core,
+    .aside-settings-tab .aside-settings-hero-graph-label { transform: none; }
+
+    .aside-settings-tab .aside-settings-hero-action-line,
+    .aside-settings-tab .aside-settings-hero-graph-stage,
+    .aside-settings-tab .aside-settings-hero-graph-node,
+    .aside-settings-tab .aside-settings-hero-graph-core,
+    .aside-settings-tab .aside-settings-hero-graph-label { opacity: 1; }
+
+    .aside-settings-tab .aside-settings-hero-signal-glyph { opacity: 0.45; }
+    .aside-settings-tab .aside-settings-hero-graph-stage { clip-path: none; }
+    .aside-settings-tab .aside-settings-hero-graph-scene {
+        transform: rotateX(2deg) rotateY(-12deg);
+    }
+    .aside-settings-tab .aside-settings-hero-edge-runner {
+        opacity: 0.8;
+        transform: translateX(0);
+    }
+}
+
 .aside-settings-tab .setting-item.setting-item-heading {
     padding: 0;
 }

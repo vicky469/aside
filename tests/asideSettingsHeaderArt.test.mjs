@@ -131,3 +131,83 @@ test("settings tab removes the animated header when hidden", async () => {
         /hide\(\): void \{[\s\S]*?this\.agentStatusRefreshToken \+= 1;[\s\S]*?this\.unloadSetupGuideMarkdownComponent\(\);[\s\S]*?this\.containerEl\.empty\(\);[\s\S]*?\}/,
     );
 });
+
+const stylesUrl = new URL("../styles.css", import.meta.url);
+
+function getRule(styles, selector, requiredDeclaration = "") {
+    const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const matches = styles.matchAll(
+        new RegExp(`${escaped}\\s*\\{(?<body>[^}]*)\\}`, "g"),
+    );
+    return [...matches]
+        .map((match) => match.groups?.body ?? "")
+        .find((body) => body.includes(requiredDeclaration)) ?? "";
+}
+
+test("settings header splits one-shot relay motion from continuous graph motion", async () => {
+    const styles = await readFile(stylesUrl, "utf8");
+    const hero = getRule(styles, ".aside-settings-tab .aside-settings-hero");
+    const settingRow = getRule(
+        styles,
+        ".aside-settings-tab .setting-item.aside-settings-hero-setting",
+    );
+    const rabbit = getRule(styles, ".aside-settings-tab .aside-settings-hero-rabbit");
+    const scene = getRule(styles, ".aside-settings-tab .aside-settings-hero-graph-scene");
+    const track = getRule(styles, ".aside-settings-tab .aside-settings-hero-edge-track");
+    const runner = getRule(styles, ".aside-settings-tab .aside-settings-hero-edge-runner");
+
+    assert.match(hero, /--aside-settings-hero-intro-duration:\s*7s\s*;/);
+    assert.match(hero, /container-type:\s*inline-size\s*;/);
+    assert.match(settingRow, /display:\s*block\s*;/);
+    assert.match(settingRow, /padding:\s*0\s*;/);
+    assert.match(rabbit, /animation:[^;]*\s1\s+forwards\s*;/);
+    assert.doesNotMatch(rabbit, /infinite/);
+    assert.match(scene, /transform-style:\s*preserve-3d\s*;/);
+    assert.match(scene, /animation-name:\s*aside-settings-hero-graph-turn\s*;/);
+    assert.match(scene, /animation-delay:\s*var\(--aside-settings-hero-intro-duration\)\s*;/);
+    assert.match(scene, /animation-iteration-count:\s*infinite\s*;/);
+    assert.match(scene, /animation-direction:\s*alternate\s*;/);
+    assert.match(track, /position:\s*relative\s*;/);
+    assert.match(track, /overflow:\s*hidden\s*;/);
+    assert.match(runner, /animation-delay:\s*calc\(/);
+    assert.match(runner, /animation-iteration-count:\s*infinite\s*;/);
+    assert.match(runner, /animation-direction:\s*alternate\s*;/);
+    assert.match(styles, /@keyframes aside-settings-hero-graph-turn/);
+    assert.match(styles, /@keyframes aside-settings-hero-edge-flow/);
+});
+
+test("settings header uses three fixed 3d planes and a narrow-pane layout", async () => {
+    const styles = await readFile(stylesUrl, "utf8");
+    const stage = getRule(styles, ".aside-settings-tab .aside-settings-hero-graph-stage");
+    const plane = getRule(
+        styles,
+        ".aside-settings-tab .aside-settings-hero-graph-plane",
+        "position: absolute",
+    );
+
+    assert.match(stage, /perspective:\s*620px\s*;/);
+    assert.match(plane, /position:\s*absolute\s*;/);
+    assert.match(plane, /transform-style:\s*preserve-3d\s*;/);
+    assert.match(styles, /\.aside-settings-tab \.aside-settings-hero-graph-plane\.is-plane-a\s*\{[^}]*rotateX\(66deg\)[^}]*rotateZ\(45deg\)/);
+    assert.match(styles, /\.aside-settings-tab \.aside-settings-hero-graph-plane\.is-plane-b\s*\{[^}]*rotateY\(66deg\)[^}]*rotateZ\(45deg\)/);
+    assert.match(styles, /\.aside-settings-tab \.aside-settings-hero-graph-plane\.is-plane-c\s*\{[^}]*rotateX\(-18deg\)[^}]*rotateY\(-18deg\)[^}]*rotateZ\(45deg\)/);
+    assert.match(styles, /@container\s*\(max-width:\s*360px\)[\s\S]*?\.aside-settings-tab \.aside-settings-hero-graph-stage[\s\S]*?width:\s*190px\s*;/);
+    assert.doesNotMatch(styles, /(?:^|\})\s*\.aside-settings-hero\s*\{/m);
+});
+
+test("settings header shows a static completed composition for reduced motion", async () => {
+    const styles = await readFile(stylesUrl, "utf8");
+
+    assert.match(
+        styles,
+        /@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*?\.aside-settings-tab \.aside-settings-hero-graph-scene[\s\S]*?animation:\s*none\s*;/,
+    );
+    assert.match(
+        styles,
+        /@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*?\.aside-settings-tab \.aside-settings-hero-edge-runner[\s\S]*?animation:\s*none\s*;/,
+    );
+    assert.match(
+        styles,
+        /@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*?\.aside-settings-tab \.aside-settings-hero-graph-stage[\s\S]*?clip-path:\s*none\s*;/,
+    );
+});
