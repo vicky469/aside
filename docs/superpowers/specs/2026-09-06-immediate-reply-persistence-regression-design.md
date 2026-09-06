@@ -17,20 +17,20 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Give appended draft saves the same default deferred aggregate refresh and lightweight persisted-view behavior as new draft saves.
-- [ ] Let internal appended reply entries and script result edits explicitly defer aggregate, editor-decoration, and Markdown-preview refresh work.
-- [ ] Keep the pending script reply durable before execution while rendering it before that persistence settles.
-- [ ] Route Markdown modification synchronization through the existing canonical per-note persistence queue.
-- [ ] Preserve concurrent agent execution and cross-note persistence.
+- [x] Give appended draft saves the same default deferred aggregate refresh and lightweight persisted-view behavior as new draft saves.
+- [x] Let internal appended reply entries and script result edits explicitly defer aggregate, editor-decoration, and Markdown-preview refresh work.
+- [x] Keep the pending script reply durable before execution while rendering it before that persistence settles.
+- [x] Route Markdown modification synchronization through the existing canonical per-note persistence queue.
+- [x] Preserve concurrent agent execution and cross-note persistence.
 
 ### Verification
 
-- [ ] Mutation tests prove appended prompts and pending script entries request non-blocking persistence.
-- [ ] Script-controller tests prove pending and terminal script writes use the non-blocking options.
-- [ ] Persistence tests prove a Markdown modification waits behind an in-flight save for the same note.
-- [ ] Focused tests pass.
-- [ ] The complete test, lint, typecheck, compliance, bundle-size, build, and release-artifact checks pass.
-- [ ] The built plugin is installed in `lean-startup`, reloaded, and the three shipped assets match byte-for-byte.
+- [x] Mutation tests prove appended prompts and pending script entries request non-blocking persistence.
+- [x] Script-controller tests prove pending and terminal script writes use the non-blocking options.
+- [x] Persistence tests prove a Markdown modification waits behind an in-flight save for the same note.
+- [x] Focused tests pass.
+- [x] The complete test, lint, typecheck, compliance, bundle-size, build, and release-artifact checks pass.
+- [x] The built plugin is installed in `lean-startup`, reloaded, and the three shipped assets match byte-for-byte.
 
 ## Existing Contracts
 
