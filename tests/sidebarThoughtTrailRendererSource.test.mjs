@@ -3,23 +3,26 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const source = readFileSync("src/ui/views/sidebarThoughtTrailRenderer.ts", "utf8");
+const tagFileListSource = readFileSync("src/ui/views/sidebarTagFileList.ts", "utf8");
 const asideViewSource = readFileSync("src/ui/views/AsideView.ts", "utf8");
 const obsoleteGroupedPlannerName = ["buildTagGrouped", "RelatedFiles"].join("");
 
 test("tag related files render one semantic unique-file list", () => {
     assert.match(source, /createDiv\(\{\s*cls:\s*"aside-tag-related-current-file"/);
     assert.match(source, /setTooltip\(currentFileEl,\s*model\.currentFile\.filePath\)/);
-    const rootLists = source.match(/createEl\("ul",\s*\{\s*cls:\s*"aside-tag-related-files"/g) ?? [];
+    assert.match(source, /renderSidebarTagFilterBar/);
+    assert.match(source, /renderSidebarTagFileRows/);
+    const rootLists = tagFileListSource.match(/createEl\("ul",\s*\{\s*cls:\s*"aside-tag-related-files"/g) ?? [];
     assert.equal(rootLists.length, 1, "related files should use exactly one semantic list");
-    assert.match(source, /createEl\("li",\s*\{[\s\S]*?cls:\s*"aside-tag-related-file-row"/);
-    assert.match(source, /createEl\("button",\s*\{\s*cls:\s*"aside-tag-related-file-link"/);
-    assert.match(source, /data-file-path/);
-    assert.match(source, /aside-tag-related-file-tags/);
-    assert.match(source, /aside-tag-related-file-tag/);
-    assert.match(source, /setTooltip\(btn,\s*filePath\)/);
-    assert.doesNotMatch(source, /aside-tag-related-files-group/);
-    assert.doesNotMatch(source, /aside-tag-related-files-tag-header/);
-    assert.doesNotMatch(source, /aside-tag-related-files-list/);
+    assert.match(tagFileListSource, /createEl\("li",\s*\{[\s\S]*?cls:\s*"aside-tag-related-file-row"/);
+    assert.match(tagFileListSource, /createEl\("button",\s*\{\s*cls:\s*"aside-tag-related-file-link"/);
+    assert.match(tagFileListSource, /data-file-path/);
+    assert.match(tagFileListSource, /aside-tag-related-file-tags/);
+    assert.match(tagFileListSource, /aside-tag-related-file-tag/);
+    assert.match(tagFileListSource, /setTooltip\(buttonEl,\s*file\.filePath\)/);
+    assert.doesNotMatch(tagFileListSource, /aside-tag-related-files-group/);
+    assert.doesNotMatch(tagFileListSource, /aside-tag-related-files-tag-header/);
+    assert.doesNotMatch(tagFileListSource, /aside-tag-related-files-list/);
 });
 
 test("attachment and wikilink sources do not build the vault-wide tag model", () => {
@@ -35,43 +38,41 @@ test("attachment and wikilink sources do not build the vault-wide tag model", ()
 
 test("related file rows render every shared model tag", () => {
     assert.match(
-        source,
-        /for \(const tag of file\.tags\) \{[\s\S]*?text:\s*`#\$\{tag\.tagDisplay\}`[\s\S]*?attr:\s*\{\s*"data-tag-key":\s*tag\.tagKey\s*\}/,
+        tagFileListSource,
+        /for \(const tag of file\.tags\) \{[\s\S]*?text:\s*tag\.label[\s\S]*?attr:\s*\{\s*"data-tag-key":\s*tag\.tagKey\s*\}/,
     );
 });
 
 test("per-tag filters use model tag displays and unique counts", () => {
     assert.match(
         source,
-        /\.\.\.model\.tags\.map\(\(tag\)\s*=>\s*\(\{[\s\S]*?tagKey:\s*tag\.tagKey[\s\S]*?label:\s*`#\$\{tag\.tagDisplay\} · \$\{tag\.fileCount\}`/,
+        /\.\.\.model\.tags\.map\(\(tag\)\s*=>\s*\(\{[\s\S]*?tagKey:\s*tag\.tagKey[\s\S]*?label:\s*`#\$\{tag\.tagDisplay\}`[\s\S]*?fileCount:\s*tag\.fileCount/,
     );
 });
 
 test("tag filter bar exposes an explicit accessible group role", () => {
     assert.match(
-        source,
-        /cls:\s*"aside-tag-related-filter-bar"[\s\S]*?attr:\s*\{[\s\S]*?role:\s*"group"[\s\S]*?"aria-label":\s*"Filter related files by tag"/,
+        tagFileListSource,
+        /cls:\s*"aside-tag-related-filter-bar"[\s\S]*?attr:\s*\{[\s\S]*?role:\s*"group"[\s\S]*?"aria-label":\s*options\.ariaLabel/,
     );
 });
 
 test("tag filters are native non-submit buttons", () => {
     assert.match(
-        source,
-        /filterBarEl\.createEl\("button",\s*\{[\s\S]*?cls:\s*"aside-tag-related-filter"[\s\S]*?attr:\s*\{[\s\S]*?type:\s*"button"/,
+        tagFileListSource,
+        /filterBarEl\.createEl\("button",\s*\{[\s\S]*?cls:\s*`aside-tag-related-filter[\s\S]*?attr:\s*\{[\s\S]*?type:\s*"button"/,
     );
 });
 
-test("tag filters are accessible, single-select, and hide rows from the existing set", () => {
-    assert.match(source, /cls:\s*"aside-tag-related-filter-bar"/);
-    assert.match(source, /aria-label["']?:\s*"Filter related files by tag"/);
-    assert.match(source, /label:\s*`All · \$\{model\.files\.length\}`/);
-    assert.match(source, /"aria-pressed":\s*String\(definition\.tagKey\s*===\s*null\)/);
-    assert.match(source, /addEventListener\("click",\s*\(\)\s*=>\s*\{\s*applyFilter\(definition\.tagKey\)/);
-    assert.match(source, /button\.setAttribute\("aria-pressed",\s*String\(isSelected\)\)/);
-    assert.match(source, /button\.classList\.toggle\("is-selected",\s*isSelected\)/);
-    assert.match(source, /rowEl\.hidden\s*=\s*selectedTagKey\s*!==\s*null/);
+test("tag filters are accessible single-select controls over the existing set", () => {
+    assert.match(tagFileListSource, /cls:\s*"aside-tag-related-filter-bar"/);
+    assert.match(source, /ariaLabel:\s*"Filter related files by tag"/);
+    assert.match(source, /label:\s*"All"[\s\S]*?fileCount:\s*model\.files\.length/);
+    assert.match(tagFileListSource, /"aria-pressed":\s*String\(isSelected\)/);
+    assert.match(tagFileListSource, /button\.classList\.toggle\("is-selected",\s*isSelected\)/);
+    assert.match(tagFileListSource, /options\.onChange\(filter\.tagKey\)/);
     assert.match(source, /file\.tags\.some\(\(tag\)\s*=>\s*tag\.tagKey\s*===\s*selectedTagKey\)/);
-    assert.match(source, /applyFilter\(null\);/);
+    assert.match(source, /let selectedTagKey:\s*string \| null = null/);
 });
 
 test("AsideView uses the unique file-set planner for tag-source availability", () => {
@@ -237,9 +238,10 @@ test("tag and attachment file links share the preferred-leaf path wrapper", () =
         /function openThoughtTrailFile\(\s*filePath:\s*string,\s*context:\s*SidebarThoughtTrailRenderContext,?\s*\):\s*void\s*\{[\s\S]*?const targetUrl\s*=\s*`obsidian:\/\/open\?vault=\$\{encodeURIComponent\(context\.app\.vault\.getName\(\)\)\}&file=\$\{encodeURIComponent\(filePath\)\}`;[\s\S]*?void openThoughtTrailTarget\(targetUrl,\s*context\)/,
     );
     assert.match(
-        source,
-        /cls:\s*"aside-tag-related-file-link"[\s\S]*?attr:\s*\{\s*type:\s*"button"\s*\}[\s\S]*?addEventListener\("click",\s*\(\)\s*=>\s*\{\s*openThoughtTrailFile\(filePath,\s*context\)/,
+        tagFileListSource,
+        /cls:\s*"aside-tag-related-file-link"[\s\S]*?attr:\s*\{\s*type:\s*"button"\s*\}[\s\S]*?addEventListener\("click",\s*\(\)\s*=>\s*\{\s*options\.onOpenFile\(file\.filePath\)/,
     );
+    assert.match(source, /onOpenFile:\s*\(filePath\)\s*=>\s*openThoughtTrailFile\(filePath,\s*context\)/);
     assert.match(source, /openThoughtTrailFile\(attachment\.filePath,\s*context\)/);
     assert.match(
         source,

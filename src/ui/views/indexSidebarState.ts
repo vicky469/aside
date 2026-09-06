@@ -31,6 +31,7 @@ export const INDEX_SIDEBAR_SCOPED_SEARCH_PLACEHOLDER = "Search side notes in sel
 
 export type IndexSidebarModeScope =
     | { kind: "unavailable"; rootFilePath: null }
+    | { kind: "global-tags"; rootFilePath: null }
     | { kind: "global-todo"; rootFilePath: null }
     | { kind: "file"; rootFilePath: string };
 
@@ -38,6 +39,10 @@ export function resolveIndexSidebarModeScope(
     mode: IndexSidebarMode,
     rootFilePath: string | null | undefined,
 ): IndexSidebarModeScope {
+    if (mode === "tags") {
+        return { kind: "global-tags", rootFilePath: null };
+    }
+
     const normalizedRootPath = getNormalizedFilterPath(rootFilePath ?? "");
     if (normalizedRootPath) {
         return { kind: "file", rootFilePath: normalizedRootPath };
@@ -57,6 +62,9 @@ export function resolveIndexSidebarEmptyStateTexts(options: {
     }
     if (options.scopeKind === "global-todo") {
         return options.mode === "todo" ? GLOBAL_INDEX_TODO_EMPTY_STATE_TEXTS : null;
+    }
+    if (options.scopeKind === "global-tags") {
+        return null;
     }
     if (options.mode === "todo") {
         return FILE_INDEX_TODO_EMPTY_STATE_TEXTS;
@@ -116,6 +124,13 @@ export function scopeIndexThreadsByMode(
     scopedAllThreads: CommentThread[];
 } {
     if (scope.kind === "unavailable") {
+        return {
+            scopedVisibleThreads: [],
+            scopedAllThreads: [],
+        };
+    }
+
+    if (scope.kind === "global-tags") {
         return {
             scopedVisibleThreads: [],
             scopedAllThreads: [],

@@ -41,20 +41,21 @@ export function resolveSidebarSecondaryToolbarPlan(
 
     const isIndexCardMode = options.surface === "index"
         && (options.mode === "list" || options.mode === "todo" || options.mode === "agent");
+    const isIndexTagsMode = options.surface === "index" && options.mode === "tags";
     const isNoteListLikeMode = options.surface === "note" && isSidebarListLikeMode(options.mode);
     const isNoteFileMode = options.surface === "note" && options.mode === "list";
     const showSearch = options.surface === "index"
-        ? options.mode === "list"
+        ? options.mode === "list" || isIndexTagsMode
         : isSidebarListLikeMode(options.mode);
 
     return {
         showRow: options.surface === "index" || isNoteListLikeMode,
-        showFileFilter: options.surface === "index",
+        showFileFilter: options.surface === "index" && !isIndexTagsMode,
         showSearch,
-        showPinned: isIndexCardMode || isNoteFileMode,
-        showNested: options.hasNestedComments && (isIndexCardMode || isNoteListLikeMode),
-        showDeleted: isIndexCardMode || isNoteFileMode,
-        showAddPageComment: isNoteFileMode && options.hasAddPageCommentAction,
+        showPinned: !isIndexTagsMode && (isIndexCardMode || isNoteFileMode),
+        showNested: !isIndexTagsMode && options.hasNestedComments && (isIndexCardMode || isNoteListLikeMode),
+        showDeleted: !isIndexTagsMode && (isIndexCardMode || isNoteFileMode),
+        showAddPageComment: !isIndexTagsMode && isNoteFileMode && options.hasAddPageCommentAction,
     };
 }
 

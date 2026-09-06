@@ -332,6 +332,47 @@ test("thought trail unique tag file set stays compact and theme-native", () => {
     assert.doesNotMatch(relatedFilesRuleBodies, importantOverridePattern);
 });
 
+test("index tag search is a compact theme-native list", () => {
+    const wrapperRule = getExactCssRule(".aside-index-tag-search");
+    const countRule = getExactCssRule(".aside-index-tag-search-count");
+    const listRule = getExactCssRule(".aside-index-tag-search .aside-tag-related-files");
+    const linkRule = getExactCssRule(".aside-index-tag-search button.aside-tag-related-file-link");
+    const pathRule = getExactCssRule(".aside-index-tag-search .aside-tag-related-file-path");
+    const tagRule = getExactCssRule(".aside-index-tag-search .aside-tag-related-file-tag");
+    const showMoreRule = getExactCssRule(".aside-index-tag-search-show-more");
+    const focusRule = getExactCssRule(`
+        .aside-index-tag-search button.aside-tag-related-filter:focus-visible,
+        .aside-index-tag-search button.aside-tag-related-file-link:focus-visible,
+        .aside-index-tag-search-show-more:focus-visible
+    `);
+
+    assert.match(wrapperRule.body, /display:\s*flex\s*;/);
+    assert.match(wrapperRule.body, /flex-direction:\s*column\s*;/);
+    assert.match(wrapperRule.body, /min-width:\s*0\s*;/);
+    assert.match(countRule.body, /color:\s*var\(--text-faint\)\s*;/);
+    assert.match(countRule.body, /font-size:\s*var\(--font-ui-smaller\)\s*;/);
+    assert.match(listRule.body, /list-style:\s*none\s*;/);
+    assert.match(listRule.body, /margin:\s*0\s*;/);
+    assert.match(listRule.body, /padding:\s*0\s*;/);
+    assert.match(linkRule.body, /width:\s*100%\s*;/);
+    assert.match(linkRule.body, /background:\s*transparent\s*;/);
+    assert.match(linkRule.body, /text-align:\s*left\s*;/);
+    assert.match(pathRule.body, /color:\s*var\(--text-faint\)\s*;/);
+    assert.match(pathRule.body, /text-overflow:\s*ellipsis\s*;/);
+    assert.match(tagRule.body, /pointer-events:\s*none\s*;/);
+    assert.match(showMoreRule.body, /background:\s*transparent\s*;/);
+    assert.match(showMoreRule.body, /color:\s*var\(--text-muted\)\s*;/);
+    assert.match(focusRule.body, /outline:\s*1px solid var\(--interactive-accent\)\s*;/);
+    assert.match(focusRule.body, /outline-offset:\s*1px\s*;/);
+
+    const indexTagRules = cssRules
+        .filter((rule) => /\.aside-index-tag-search/.test(rule.selectors))
+        .map((rule) => rule.body)
+        .join("\n");
+    assert.doesNotMatch(indexTagRules, hardcodedColorPattern);
+    assert.doesNotMatch(indexTagRules, importantOverridePattern);
+});
+
 test("thought trail attachment list stays compact and theme-native", () => {
     const genericListRule = getExactCssRule(".aside-thought-trail ul");
     const genericRowRule = getExactCssRule(".aside-thought-trail li");

@@ -1813,6 +1813,10 @@ export default class Aside extends Plugin {
         return this.vaultCapabilityIndex.listTagUsage();
     }
 
+    public getIndexedMarkdownFilesForTag(tagText: string): TFile[] {
+        return this.vaultCapabilityIndex.listMarkdownFilesForTag(tagText);
+    }
+
     private async handleSavedUserEntry(event: SavedUserEntryEvent): Promise<void> {
         await routeSavedUserEntry(
             event,
