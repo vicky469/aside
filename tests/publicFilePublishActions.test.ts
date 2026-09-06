@@ -25,6 +25,18 @@ class FakeActionElement {
 		this.attributes.set("class", `${existingClassName} ${className}`);
 	}
 
+	public removeClass(className: string): void {
+		this.classes.delete(className);
+		const remaining = (this.attributes.get("class") ?? "")
+			.split(/\s+/u)
+			.filter((item) => item && item !== className);
+		if (remaining.length === 0) {
+			this.attributes.delete("class");
+			return;
+		}
+		this.attributes.set("class", remaining.join(" "));
+	}
+
 	public setAttribute(name: string, value: string): void {
 		this.attributes.set(name, value);
 	}
@@ -222,6 +234,7 @@ test("PublicFilePublishActionController renders publish actions on markdown, htm
 		getAllowedRoot: () => "public/",
 		getPublishActionStates: async (file) => statesByPath.get(file.path) ?? [],
 		runPublishAction: async () => {},
+		reportPublishActionError: () => {},
 		showNotice: () => {},
 	});
 
@@ -253,6 +266,7 @@ test("PublicFilePublishActionController avoids duplicate actions when refresh ru
 			}];
 		},
 		runPublishAction: async () => {},
+		reportPublishActionError: () => {},
 		showNotice: () => {},
 	});
 
@@ -283,6 +297,7 @@ test("PublicFilePublishActionController deduplicates repeated state kinds", asyn
 			disabled: false,
 		}],
 		runPublishAction: async () => {},
+		reportPublishActionError: () => {},
 		showNotice: () => {},
 	});
 
@@ -315,6 +330,7 @@ test("PublicFilePublishActionController clears stale publish actions before rend
 			disabled: false,
 		}],
 		runPublishAction: async () => {},
+		reportPublishActionError: () => {},
 		showNotice: () => {},
 	});
 
@@ -350,6 +366,7 @@ test("PublicFilePublishActionController clears stale publish actions from other 
 			disabled: false,
 		}],
 		runPublishAction: async () => {},
+		reportPublishActionError: () => {},
 		showNotice: () => {},
 	});
 	const restore = (result: Promise<void> | void): Promise<void> => {
@@ -364,4 +381,43 @@ test("PublicFilePublishActionController clears stale publish actions from other 
 	assert.equal(staleLegacyElement.removed, true);
 	assert.equal(staleLegacyAction.removed, true);
 	assert.equal(currentPathAction.removed, true);
+});
+
+test("PublicFilePublishActionController clears loading and reports rejected actions", async () => {
+	const htmlView = createView("public/page.html");
+	const failure = new Error("dependency scan failed");
+	let stateReads = 0;
+	let reportedFile: TFile | null = null;
+	let reportedError: unknown;
+	const host = {
+		getAllowedRoot: () => "public/",
+		getPublishActionStates: async () => {
+			stateReads += 1;
+			return [{
+				kind: "update-publish" as const,
+				label: "Republish HTML",
+				icon: "upload-cloud",
+				disabled: false as const,
+			}];
+		},
+		runPublishAction: async () => {
+			throw failure;
+		},
+		showNotice: () => {},
+		reportPublishActionError: (file: TFile, error: unknown) => {
+			reportedFile = file;
+			reportedError = error;
+		},
+	};
+	const controller = new PublicFilePublishActionController(host);
+
+	await controller.refreshViews([htmlView]);
+	const action = htmlView.actions[0];
+	action.callback({ preventDefault: () => {} } as MouseEvent);
+	await new Promise<void>((resolve) => setImmediate(resolve));
+
+	assert.equal(action.element.classes.has("is-loading"), false);
+	assert.equal(reportedFile, htmlView.file);
+	assert.equal(reportedError, failure);
+	assert.equal(stateReads, 1);
 });

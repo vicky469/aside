@@ -22,6 +22,7 @@ export interface PublicFilePublishActionHost {
 	getAllowedRoot(): string;
 	getPublishActionStates(file: TFile): Promise<PublicHtmlPublishActionState[]>;
 	runPublishAction(file: TFile, actionKind: PublicHtmlPublishActionState["kind"]): Promise<void>;
+	reportPublishActionError(file: TFile, error: unknown): void;
 	showNotice(message: string): void;
 }
 
@@ -365,8 +366,14 @@ export class PublicFilePublishActionController {
 		}
 
 		actionEl.addClass("is-loading");
-		await this.host.runPublishAction(file, state.kind);
-		actionEl.removeClass("is-loading");
+		try {
+			await this.host.runPublishAction(file, state.kind);
+		} catch (error) {
+			this.host.reportPublishActionError(file, error);
+			return;
+		} finally {
+			actionEl.removeClass("is-loading");
+		}
 		await this.refreshView(view);
 	}
 

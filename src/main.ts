@@ -665,6 +665,17 @@ export default class Aside extends Plugin {
         getAllowedRoot: () => this.settings.publishAllowedRoot,
         getPublishActionStates: (file) => this.publicHtmlPublishController.getFileActionStates(file.path),
         runPublishAction: (file, actionKind) => this.runPublicHtmlPublishAction(file, actionKind),
+        reportPublishActionError: (file, error) => {
+            this.showNotice(
+                "Publish failed unexpectedly. Check Aside logs for details.",
+                "publish",
+                "publish.html.action.error",
+                {
+                    vaultRelativePath: file.path,
+                    error,
+                },
+            );
+        },
         showNotice: (message) => {
             this.showNotice(message, "publish", "publish.notice");
         },
