@@ -93,11 +93,26 @@ test("rankExistingTags deduplicates canonical variants and returns snapshots", (
 
     assert.deepEqual(result, [{
         tag: "#an-apple",
-        tagKey: "anapple",
+        tagKey: "an-apple",
         usageCount: 5,
     }]);
     result[0].tag = "#changed";
     assert.equal(rankExistingTags({ query: "anapple", tags })[0].tag, "#an-apple");
+});
+
+test("rankExistingTags keeps hyphen-distinct Obsidian tag identities", () => {
+    const result = rankExistingTags({
+        query: "anapple",
+        tags: [
+            { tag: "#an-apple", usageCount: 1 },
+            { tag: "#anapple", usageCount: 1 },
+        ],
+    });
+
+    assert.deepEqual(
+        result.map((entry) => entry.tagKey).sort(),
+        ["an-apple", "anapple"],
+    );
 });
 
 test("rankExistingTags applies a deterministic default limit", () => {

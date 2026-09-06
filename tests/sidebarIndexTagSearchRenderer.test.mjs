@@ -36,11 +36,22 @@ test("index tag renderer has no tag mutation capability", () => {
 });
 
 test("AsideView owns a tag-only body fast path and direct file navigation", () => {
+    const renderCommentsSource = asideViewSource.match(
+        /public async renderComments\([\s\S]*?\n {4}private async renderPageSidebar\(/,
+    )?.[0];
+
+    assert.ok(renderCommentsSource, "missing renderComments method");
     assert.match(asideViewSource, /private renderIndexTagSearchBody\(/);
+    assert.match(asideViewSource, /private renderIndexTagSearchSidebar\(/);
     assert.match(asideViewSource, /renderSidebarIndexTagSearch\(/);
     assert.match(asideViewSource, /getIndexedMarkdownFilesForTag/);
     assert.match(asideViewSource, /effectiveIndexSidebarMode === "tags"/);
     assert.match(asideViewSource, /this\.renderIndexTagSearchBody\(shell\.commentsBodyEl\)/);
+    assert.ok(
+        renderCommentsSource.indexOf("this.renderIndexTagSearchSidebar(")
+            < renderCommentsSource.indexOf("ensureIndexedCommentsLoaded("),
+        "index Tags fast path must precede comment loading and scoping",
+    );
     assert.match(
         asideViewSource,
         /private async openIndexTagSearchFile\([\s\S]*?getAbstractFileByPath\(filePath\)[\s\S]*?getPreferredFileLeaf\(filePath\)[\s\S]*?openFile\(targetFile\)[\s\S]*?setActiveLeaf/,

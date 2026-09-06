@@ -36,7 +36,7 @@ Use this section as the working checklist. Mark an item done only after the code
 - [x] A synthetic 10,000-file benchmark confirms query-time work stays in memory, performs no vault reads, and remains comfortably interactive.
 - [x] Full tests, lint, typecheck, Obsidian compliance, production bundle, bundle-size guard, and release-artifact inspection pass.
 
-Verification on 2026-09-06: the synthetic 10,000-file model built in 17.79 ms, performed 21 indexed membership lookups, deduplicated 10,000 file paths, and exposed 100 rows initially. The complete build passed 1,666 tests plus lint, typecheck, Obsidian compliance, a 697,154-byte production bundle against the 750,000-byte ceiling, and exact inspection of `main.js`, `manifest.json`, and `styles.css` with no source map, embedded sources, raw source, or secret-bearing artifact detected.
+Verification on 2026-09-06: the synthetic 10,000-file model built in 20.65 ms, performed 21 indexed membership lookups, deduplicated 10,000 file paths, and exposed 100 rows initially. The complete build passed 1,668 tests plus lint, typecheck, Obsidian compliance, a 698,393-byte production bundle against the 750,000-byte ceiling, and exact inspection of `main.js`, `manifest.json`, and `styles.css` with no source map, embedded sources, raw source, or secret-bearing artifact detected.
 
 ## Problem
 

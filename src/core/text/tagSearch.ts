@@ -17,6 +17,7 @@ export interface RankExistingTagsOptions {
 }
 
 interface TagRecord extends RankedExistingTag {
+    searchKey: string;
     segments: string[];
 }
 
@@ -28,6 +29,10 @@ interface MatchScore {
 
 function normalizeQuery(value: string): string {
     return value.trim().replace(/^#+/u, "");
+}
+
+function normalizeTagIdentityKey(value: string): string {
+    return normalizeQuery(normalizeTagText(value)).toLowerCase();
 }
 
 export function canonicalizeTagSearchText(value: string): string {
@@ -83,15 +88,15 @@ function boundedDamerauLevenshtein(left: string, right: string, limit: number): 
 }
 
 function scoreTag(query: string, tag: TagRecord): MatchScore | null {
-    if (!query || tag.tagKey === query) {
+    if (!query || tag.searchKey === query) {
         return { tier: 0, distance: 0, lengthDelta: 0 };
     }
 
-    if (tag.tagKey.startsWith(query)) {
+    if (tag.searchKey.startsWith(query)) {
         return {
             tier: 1,
             distance: 0,
-            lengthDelta: tag.tagKey.length - query.length,
+            lengthDelta: tag.searchKey.length - query.length,
         };
     }
 
@@ -104,7 +109,7 @@ function scoreTag(query: string, tag: TagRecord): MatchScore | null {
         };
     }
 
-    const substring = [tag.tagKey, ...tag.segments]
+    const substring = [tag.searchKey, ...tag.segments]
         .filter((target) => target.includes(query))
         .sort((left, right) => left.length - right.length)[0];
     if (substring) {
@@ -120,7 +125,7 @@ function scoreTag(query: string, tag: TagRecord): MatchScore | null {
         return null;
     }
 
-    const best = [tag.tagKey, ...tag.segments]
+    const best = [tag.searchKey, ...tag.segments]
         .map((target) => ({
             target,
             distance: boundedDamerauLevenshtein(query, target, threshold),
@@ -145,8 +150,9 @@ function collectTagRecords(tags: readonly ExistingTagUsage[]): Map<string, TagRe
     const records = new Map<string, TagRecord>();
     for (const candidate of tags) {
         const tag = normalizeTagText(candidate.tag);
-        const tagKey = canonicalizeTagSearchText(tag);
-        if (!tag || !tagKey) {
+        const tagKey = normalizeTagIdentityKey(tag);
+        const searchKey = canonicalizeTagSearchText(tag);
+        if (!tag || !tagKey || !searchKey) {
             continue;
         }
 
@@ -159,7 +165,8 @@ function collectTagRecords(tags: readonly ExistingTagUsage[]): Map<string, TagRe
         records.set(tagKey, {
             tag,
             tagKey,
-            segments: tagKey.split("/").filter(Boolean),
+            searchKey,
+            segments: searchKey.split("/").filter(Boolean),
             usageCount: candidate.usageCount,
         });
     }

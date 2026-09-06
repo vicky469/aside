@@ -112,6 +112,28 @@ test("a fuzzy tag match filters by that tag's exact membership", () => {
     );
 });
 
+test("hyphen-insensitive discovery preserves exact tag memberships", () => {
+    const model = buildIndexTagSearchResult({
+        query: "anapple",
+        tags: [
+            { tag: "#an-apple", usageCount: 1 },
+            { tag: "#anapple", usageCount: 1 },
+        ],
+        getFilesForTag: (tag) => tag === "#an-apple"
+            ? [createFile("With Hyphen.md")]
+            : [createFile("Without Hyphen.md")],
+    });
+
+    assert.deepEqual(
+        selectIndexTagSearchFiles(model, "an-apple").map((file) => file.filePath),
+        ["With Hyphen.md"],
+    );
+    assert.deepEqual(
+        selectIndexTagSearchFiles(model, "anapple").map((file) => file.filePath),
+        ["Without Hyphen.md"],
+    );
+});
+
 test("result windows expose every file in stable increments", () => {
     const files = Array.from({ length: 205 }, (_, index) => (
         createFile(`docs/${String(index).padStart(3, "0")}.md`)

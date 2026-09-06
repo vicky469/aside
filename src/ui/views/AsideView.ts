@@ -460,6 +460,7 @@ export default class AsideView extends ItemView {
     private selectedIndexFileFilterRootPath: string | null = null;
     private indexFileFilterAutoSelectSuppressed = true;
     private indexFileFilterGraph: IndexFileFilterGraph | null = null;
+    private indexThoughtTrailToolbarEnabled: boolean | null = null;
     private indexDefaultSidebarCache: IndexDefaultSidebarCache | null = null;
     private thoughtTrailSource: SidebarThoughtTrailSource = getDefaultSidebarThoughtTrailSource();
     private reorderDragState: SidebarReorderDragState | null = null;
@@ -589,6 +590,7 @@ export default class AsideView extends ItemView {
             this.noteSidebarSearchInputValue = "";
             this.clearIndexSidebarSearchState();
             this.clearIndexTagSearchState();
+            this.indexThoughtTrailToolbarEnabled = null;
             this.thoughtTrailSource = getDefaultSidebarThoughtTrailSource();
             this.noteSidebarShell = null;
             this.indexSidebarShell = null;
@@ -1725,6 +1727,21 @@ export default class AsideView extends ItemView {
         }
 
         this.noteSidebarShell = null;
+        const effectiveRequestedIndexMode = resolveModeWithSidebarModeVisibility(
+            this.indexSidebarMode,
+            this.getSidebarModeVisibility(),
+        );
+        if (
+            file
+            && isAllCommentsView
+            && options.skipDataRefresh
+            && effectiveRequestedIndexMode === "tags"
+            && this.indexThoughtTrailToolbarEnabled !== null
+            && this.plugin.getIndexedVaultTagUsage().length > 0
+        ) {
+            this.renderIndexTagSearchSidebar(file, this.indexThoughtTrailToolbarEnabled);
+            return;
+        }
         if (file) {
             const showDeleted = this.plugin.shouldShowDeletedComments();
             if (isAllCommentsView && !options.skipDataRefresh) {
@@ -1917,6 +1934,9 @@ export default class AsideView extends ItemView {
                 })
                 : null;
             const isIndexThoughtTrailEnabled = isAllCommentsView && indexThoughtTrailUnavailableReason === null;
+            if (isAllCommentsView) {
+                this.indexThoughtTrailToolbarEnabled = isIndexThoughtTrailEnabled;
+            }
             const isIndexTagsEnabled = isAllCommentsView
                 && this.plugin.getIndexedVaultTagUsage().length > 0;
             let effectiveIndexSidebarMode = this.indexSidebarMode;
@@ -2133,24 +2153,7 @@ export default class AsideView extends ItemView {
             };
 
             if (isAllCommentsView && effectiveIndexSidebarMode === "tags") {
-                const shell = this.ensureIndexSidebarShell(file.path);
-                shell.toolbarSlotEl.empty();
-                shell.activeFiltersSlotEl.empty();
-                shell.limitNoticeSlotEl.empty();
-                shell.limitNoticeSlotEl.classList.remove("aside-list-limit-notice");
-                renderIndexChrome(shell.toolbarSlotEl, shell.activeFiltersSlotEl);
-                this.refreshIndexTagSearchResult();
-                this.renderIndexTagSearchBody(shell.commentsBodyEl);
-                this.resetStreamedReplyControllers();
-
-                shell.supportSlotEl.empty();
-                if (this.plugin.isLocalRuntime()) {
-                    renderSupportButtonIn(shell.supportSlotEl, this.plugin, {
-                        filePath: file.path,
-                        isAllCommentsView,
-                        threadCount: supportThreadCount,
-                    });
-                }
+                this.renderIndexTagSearchSidebar(file, isIndexThoughtTrailEnabled);
                 return;
             }
 
@@ -4148,6 +4151,50 @@ export default class AsideView extends ItemView {
         };
     }
 
+    private renderIndexTagSearchSidebar(file: TFile, isThoughtTrailEnabled: boolean): void {
+        const indexedThreads = this.plugin.getAllIndexedThreads();
+        const shell = this.ensureIndexSidebarShell(file.path);
+        shell.toolbarSlotEl.empty();
+        shell.activeFiltersSlotEl.empty();
+        shell.limitNoticeSlotEl.empty();
+        shell.limitNoticeSlotEl.classList.remove("aside-list-limit-notice");
+        this.renderSidebarToolbar(shell.toolbarSlotEl, {
+            isAllCommentsView: true,
+            hasDeletedComments: false,
+            deletedCommentCount: 0,
+            showDeletedComments: false,
+            hasNestedComments: false,
+            isAgentMode: false,
+            agentOutcomeCounts: {
+                succeeded: 0,
+                failed: 0,
+            },
+            isTagsEnabled: true,
+            isThoughtTrailEnabled,
+            sidebarThreadGroupCounts: getSidebarThreadGroupCounts(indexedThreads),
+            noteSidebarContentFilter: "all",
+            noteSidebarMode: this.noteSidebarMode,
+            effectiveIndexSidebarMode: "tags",
+            addPageCommentAction: null,
+            indexFileFilterOptions: [],
+            selectedIndexFileFilterRootPath: this.selectedIndexFileFilterRootPath,
+            filteredIndexFilePaths: [],
+            indexModeScope: { kind: "global-tags", rootFilePath: null },
+        });
+        this.refreshIndexTagSearchResult();
+        this.renderIndexTagSearchBody(shell.commentsBodyEl);
+        this.resetStreamedReplyControllers();
+
+        shell.supportSlotEl.empty();
+        if (this.plugin.isLocalRuntime()) {
+            renderSupportButtonIn(shell.supportSlotEl, this.plugin, {
+                filePath: file.path,
+                isAllCommentsView: true,
+                threadCount: indexedThreads.length,
+            });
+        }
+    }
+
     private renderIndexTagSearchBody(container: HTMLDivElement): void {
         renderSidebarIndexTagSearch(container, {
             result: this.indexTagSearchResult,
@@ -4304,6 +4351,7 @@ export default class AsideView extends ItemView {
 
     private renderCachedIndexDefaultSidebar(file: TFile, cache: IndexDefaultSidebarCache): void {
         this.indexFileFilterGraph = null;
+        this.indexThoughtTrailToolbarEnabled = false;
         this.noteSidebarTagIndex = null;
         const shell = this.ensureIndexSidebarShell(file.path);
         shell.toolbarSlotEl.empty();
@@ -4480,6 +4528,7 @@ export default class AsideView extends ItemView {
 
 		const didChangeFilter = this.selectedIndexFileFilterRootPath !== normalizedRootPath;
 		this.selectedIndexFileFilterRootPath = normalizedRootPath;
+        this.indexThoughtTrailToolbarEnabled = null;
         this.applyIndexSidebarSearchStateForFileScope(normalizedRootPath);
         this.updateRenderedIndexFileFilterImmediately(normalizedRootPath);
         if (this.file) {
