@@ -300,7 +300,7 @@ test("streamed agent reply controller restores borrowed nodes without cloning aw
     assert.equal(actionsEl.childNodes[0], actionNode);
 });
 
-test("streamed agent reply controller hides borrowed footer actions while streaming", () => {
+test("streamed agent reply controller keeps only Cancel for a running script-oriented agent job", () => {
     const controller = new StreamedAgentReplyController("thread-1", {
         onCancelRun: () => {},
     }) as any;
@@ -317,8 +317,8 @@ test("streamed agent reply controller hides borrowed footer actions while stream
     controller.statusEl = statusEl;
     controller.footerMetaEl = footerMetaEl;
 
-    controller.syncBorrowedFooterMeta({ runId: "run-1", status: "running" });
-    controller.syncActions(actionsEl, { runId: "run-1", status: "running" });
+    controller.syncBorrowedFooterMeta({ runId: "run-1", status: "running", requestKind: "create-script" });
+    controller.syncActions(actionsEl, { runId: "run-1", status: "running", requestKind: "create-script" });
 
     assert.deepEqual(footerMetaEl.childNodes, [labelEl, statusEl]);
     assert.equal(actionsEl.childNodes.length, 1);

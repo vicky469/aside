@@ -10,6 +10,7 @@ import {
     type AgentRunMetadata,
     type AgentRunStreamState,
 } from "../../core/agents/agentRuns";
+import { canRetryAgentRunWithScriptsCapability } from "../../core/scripts/scriptCapabilities";
 import type { AsideAgentTarget } from "../../core/config/agentTargets";
 import {
     getLatestScriptRunForTriggerEntry,
@@ -100,6 +101,7 @@ export interface SidebarPersistedCommentHost {
     activeCommentId: string | null;
     currentFilePath: string | null;
     currentUserLabel: string;
+    scriptsEnabled: boolean;
     isActionableMention: ActionableMentionPredicate;
     showSourceRedirectAction: boolean;
     showBookmarkAndPinControls: boolean;
@@ -619,17 +621,21 @@ export function getSidebarCommentRegenerateAction(
     commentId: string,
     commentBody: string,
     threadAgentRuns: readonly AgentRunRecord[],
-    threadScriptRuns: readonly ScriptRunRecord[] = [],
+    threadScriptRuns: readonly ScriptRunRecord[],
+    scriptsEnabled: boolean,
 ): SidebarCommentRegenerateAction | null {
     const retryableScriptRun = getRetryableScriptRunForSidebarComment(commentId, threadScriptRuns);
     if (retryableScriptRun) {
-        return {
+        return scriptsEnabled ? {
             kind: "script-run",
             runId: retryableScriptRun.id,
-        };
+        } : null;
     }
     const retryableAgentRun = getRetryableAgentRunForSidebarComment(commentId, threadAgentRuns);
     if (retryableAgentRun) {
+        if (!canRetryAgentRunWithScriptsCapability(scriptsEnabled, retryableAgentRun)) {
+            return null;
+        }
         return {
             kind: "agent-run",
             runId: retryableAgentRun.id,
@@ -647,9 +653,16 @@ export function shouldShowRetryActionForSidebarComment(
     commentId: string,
     commentBody: string,
     threadAgentRuns: readonly AgentRunRecord[],
-    threadScriptRuns: readonly ScriptRunRecord[] = [],
+    threadScriptRuns: readonly ScriptRunRecord[],
+    scriptsEnabled: boolean,
 ): boolean {
-    return getSidebarCommentRegenerateAction(commentId, commentBody, threadAgentRuns, threadScriptRuns) !== null;
+    return getSidebarCommentRegenerateAction(
+        commentId,
+        commentBody,
+        threadAgentRuns,
+        threadScriptRuns,
+        scriptsEnabled,
+    ) !== null;
 }
 
 export function getInsertableSidebarCommentMarkdown(
@@ -1426,6 +1439,7 @@ function renderStoredThreadEntry(
             entryComment.comment,
             host.threadAgentRuns,
             host.threadScriptRuns,
+            host.scriptsEnabled,
         );
         const entryInsertMarkdown = !entryComment.deletedAt && !thread.deletedAt
             ? getInsertableSidebarCommentMarkdown(entryComment.id, entry.body || "", host.threadAgentRuns)
@@ -1580,6 +1594,7 @@ export async function renderPersistedCommentCard(
             comment.comment,
             host.threadAgentRuns,
             host.threadScriptRuns,
+            host.scriptsEnabled,
         );
         const parentInsertMarkdown = !comment.deletedAt && !thread.deletedAt
             ? getInsertableSidebarCommentMarkdown(comment.id, entries[0]?.body || "", host.threadAgentRuns)

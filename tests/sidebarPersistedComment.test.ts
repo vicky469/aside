@@ -330,6 +330,7 @@ function createRenderHost(overrides: Partial<SidebarPersistedCommentHost> = {}):
         activeCommentId: null,
         currentFilePath: "docs/architecture.md",
         currentUserLabel: "You",
+        scriptsEnabled: true,
         isActionableMention: () => false,
         showSourceRedirectAction: false,
         showBookmarkAndPinControls: false,
@@ -1341,29 +1342,154 @@ test("script Regenerate resolves the latest run from its saved trigger entry", (
         "script-run-2",
     );
     assert.deepEqual(
-        getSidebarCommentRegenerateAction("entry-1", "/clean", [], [olderRun, newerRun]),
+        getSidebarCommentRegenerateAction("entry-1", "/clean", [], [olderRun, newerRun], true),
         { kind: "script-run", runId: "script-run-2" },
     );
     assert.equal(
-        getSidebarCommentRegenerateAction("entry-2", "Script /clean:\n\nDone", [], [newerRun]),
+        getSidebarCommentRegenerateAction("entry-2", "Script /clean:\n\nDone", [], [newerRun], true),
         null,
     );
 });
 
+test("Regenerate capability hides script-oriented runs only while Scripts is off", () => {
+    assert.equal(
+        getSidebarCommentRegenerateAction(
+            "entry-1",
+            "/clean",
+            [],
+            [createScriptRun({ triggerEntryId: "entry-1" })],
+            false,
+        ),
+        null,
+    );
+    for (const requestKind of ["create-script", "update-script", "pdf-to-markdown"] as const) {
+        assert.equal(
+            getSidebarCommentRegenerateAction(
+                "entry-1",
+                `/${requestKind}`,
+                [createAgentRun({ triggerEntryId: "entry-1", requestKind })],
+                [],
+                false,
+            ),
+            null,
+            requestKind,
+        );
+    }
+    assert.deepEqual(
+        getSidebarCommentRegenerateAction(
+            "entry-1",
+            "@codex explain this",
+            [createAgentRun({ triggerEntryId: "entry-1", requestKind: undefined })],
+            [],
+            false,
+        ),
+        { kind: "agent-run", runId: "run-1" },
+    );
+    assert.deepEqual(
+        getSidebarCommentRegenerateAction("entry-1", "@codex explain this", [], [], false),
+        { kind: "agent-prompt" },
+    );
+});
+
+test("disabled Scripts hides script Generate buttons but keeps ordinary agent Generate buttons", async () => {
+    const cases = [
+        {
+            name: "script run",
+            body: "/clean",
+            agentRuns: [] as AgentRunRecord[],
+            scriptRuns: [createScriptRun()],
+            expectedButtonCount: 0,
+        },
+        {
+            name: "script-oriented agent run",
+            body: "/create-script build it",
+            agentRuns: [createAgentRun({ requestKind: "create-script" })],
+            scriptRuns: [] as ScriptRunRecord[],
+            expectedButtonCount: 0,
+        },
+        {
+            name: "ordinary agent run",
+            body: "@codex explain this",
+            agentRuns: [createAgentRun({ requestKind: undefined })],
+            scriptRuns: [] as ScriptRunRecord[],
+            expectedButtonCount: 1,
+        },
+        {
+            name: "agent prompt",
+            body: "@codex explain this",
+            agentRuns: [] as AgentRunRecord[],
+            scriptRuns: [] as ScriptRunRecord[],
+            expectedButtonCount: 1,
+        },
+    ];
+
+    for (const testCase of cases) {
+        const root = new FakeElement("div");
+        await renderPersistedCommentCard(
+            root as unknown as HTMLDivElement,
+            createThreadWithEntries({
+                entries: [{ id: "comment-1", body: testCase.body, timestamp: 100 }],
+            }),
+            createRenderHost({
+                scriptsEnabled: false,
+                threadAgentRuns: testCase.agentRuns,
+                threadScriptRuns: testCase.scriptRuns,
+            }),
+        );
+
+        assert.equal(
+            root.findAllByClass("aside-thread-footer-regenerate-button").length,
+            testCase.expectedButtonCount,
+            testCase.name,
+        );
+    }
+});
+
+test("disabled Scripts hides Generate for a child script trigger", async () => {
+    const thread = createThreadWithEntries({
+        entries: [
+            { id: "comment-1", body: "Parent", timestamp: 100 },
+            { id: "entry-2", body: "/clean", timestamp: 110 },
+        ],
+    });
+    const scriptRun = createScriptRun({
+        triggerEntryId: "entry-2",
+        outputEntryId: "entry-3",
+    });
+
+    for (const [scriptsEnabled, expectedButtonCount] of [[false, 0], [true, 1]] as const) {
+        const root = new FakeElement("div");
+        await renderPersistedCommentCard(
+            root as unknown as HTMLDivElement,
+            thread,
+            createRenderHost({
+                scriptsEnabled,
+                threadScriptRuns: [scriptRun],
+            }),
+        );
+
+        assert.equal(
+            root.findAllByClass("aside-thread-footer-regenerate-button").length,
+            expectedButtonCount,
+            String(scriptsEnabled),
+        );
+    }
+});
+
 test("shouldShowRetryActionForSidebarComment falls back to explicit agent prompts without stored run metadata", () => {
     assert.equal(
-        shouldShowRetryActionForSidebarComment("entry-1", "@codex explain this", []),
+        shouldShowRetryActionForSidebarComment("entry-1", "@codex explain this", [], [], true),
         true,
     );
     assert.equal(
-        shouldShowRetryActionForSidebarComment("entry-2", "@cursor summarize this", []),
+        shouldShowRetryActionForSidebarComment("entry-2", "@cursor summarize this", [], [], true),
         true,
     );
 });
 
 test("shouldShowRetryActionForSidebarComment stays hidden for plain user comments without a stored run", () => {
     assert.equal(
-        shouldShowRetryActionForSidebarComment("entry-1", "plain comment", []),
+        shouldShowRetryActionForSidebarComment("entry-1", "plain comment", [], [], true),
         false,
     );
 });
@@ -2041,6 +2167,7 @@ test("renderPersistedCommentCard puts agent metadata above status and Add to fil
         activeCommentId: null,
         currentFilePath: "docs/architecture.md",
         currentUserLabel: "You",
+        scriptsEnabled: true,
         isActionableMention: () => false,
         showSourceRedirectAction: false,
         showBookmarkAndPinControls: false,
@@ -2338,6 +2465,7 @@ test("renderPersistedCommentCard reuses toolbar pin styling for page note pins",
         activeCommentId: null,
         currentFilePath: "docs/architecture.md",
         currentUserLabel: "You",
+        scriptsEnabled: true,
         isActionableMention: () => false,
         showSourceRedirectAction: false,
         showBookmarkAndPinControls: true,

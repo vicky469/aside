@@ -102,7 +102,14 @@ import {
 import type {
     PublicHtmlPairContext,
 } from "./core/publish/publishPair";
-import type { AgentRunRecord, AgentRunStreamState } from "./core/agents/agentRuns";
+import {
+    type AgentRunRecord,
+    type AgentRunStreamState,
+} from "./core/agents/agentRuns";
+import {
+    canRetryAgentRunWithScriptsCapability,
+    canRetryScriptRunWithScriptsCapability,
+} from "./core/scripts/scriptCapabilities";
 import {
     type AgentRuntimeModePreference,
 } from "./core/agents/agentRuntimePreferences";
@@ -1390,10 +1397,18 @@ export default class Aside extends Plugin {
     }
 
     public async retryAgentRun(runId: string): Promise<boolean> {
+        const run = this.commentAgentController.getAgentRuns()
+            .find((candidate) => candidate.id === runId) ?? null;
+        if (!canRetryAgentRunWithScriptsCapability(this.isScriptsEnabled(), run)) {
+            return false;
+        }
         return this.commentAgentController.retryRun(runId);
     }
 
     public async retryScriptRun(runId: string): Promise<boolean> {
+        if (!canRetryScriptRunWithScriptsCapability(this.isScriptsEnabled())) {
+            return false;
+        }
         return this.commentScriptController.retryRun(runId);
     }
 
@@ -1787,16 +1802,17 @@ export default class Aside extends Plugin {
     }
 
     private async handleSavedUserEntry(event: SavedUserEntryEvent): Promise<void> {
-        await routeSavedUserEntry(
+        await routeSavedUserEntry({
             event,
-            [
+            scriptsEnabled: this.isScriptsEnabled(),
+            builtInControllers: [
                 this.updateScriptCommandController,
                 this.createScriptCommandController,
                 this.pdfToMarkdownCommandController,
             ],
-            this.commentScriptController,
-            this.commentAgentController,
-        );
+            scriptController: this.commentScriptController,
+            agentController: this.commentAgentController,
+        });
     }
 
     private async publishSnapshotArtifacts(files: PublicHtmlPublishSnapshotFile[]): Promise<PublicHtmlDeploySnapshotResult> {

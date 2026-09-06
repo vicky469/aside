@@ -616,13 +616,19 @@ test("saved entry routing sends only unclaimed entries to the agent controller",
     const valid = createHarness();
     const validAgentEvents: string[] = [];
     await routeSavedUserEntry({
-        threadId: "thread-1",
-        entryId: "thread-1",
-        filePath: "Folder/Note.md",
-        body: "/clean",
-    }, [], valid.controller, {
-        handleSavedUserEntry: async (event) => {
-            validAgentEvents.push(event.entryId);
+        event: {
+            threadId: "thread-1",
+            entryId: "thread-1",
+            filePath: "Folder/Note.md",
+            body: "/clean",
+        },
+        scriptsEnabled: true,
+        builtInControllers: [],
+        scriptController: valid.controller,
+        agentController: {
+            handleSavedUserEntry: async (event) => {
+                validAgentEvents.push(event.entryId);
+            },
         },
     });
     assert.deepEqual(validAgentEvents, []);
@@ -640,28 +646,78 @@ test("saved entry routing sends only unclaimed entries to the agent controller",
             rejectedAgentEvents.push(event.body);
         },
     };
-    await routeSavedUserEntry(originalEvent, [], rejected.controller, agentController);
+    await routeSavedUserEntry({
+        event: originalEvent,
+        scriptsEnabled: true,
+        builtInControllers: [],
+        scriptController: rejected.controller,
+        agentController,
+    });
     rejected.registry.remove("🛠️ scripts/clean.mjs");
     await routeSavedUserEntry({
-        ...originalEvent,
-        body: "@codex after registry refresh",
-    }, [], rejected.controller, agentController);
+        event: {
+            ...originalEvent,
+            body: "@codex after registry refresh",
+        },
+        scriptsEnabled: true,
+        builtInControllers: [],
+        scriptController: rejected.controller,
+        agentController,
+    });
     assert.deepEqual(rejectedAgentEvents, []);
     assert.equal(rejected.store.getRuns().length, 1);
 
     const ordinary = createHarness();
     const ordinaryAgentEvents: string[] = [];
     await routeSavedUserEntry({
-        threadId: "thread-1",
-        entryId: "ordinary-entry",
-        filePath: "Folder/Note.md",
-        body: "ordinary @person",
-    }, [], ordinary.controller, {
-        handleSavedUserEntry: async (event) => {
-            ordinaryAgentEvents.push(event.entryId);
+        event: {
+            threadId: "thread-1",
+            entryId: "ordinary-entry",
+            filePath: "Folder/Note.md",
+            body: "ordinary @person",
+        },
+        scriptsEnabled: true,
+        builtInControllers: [],
+        scriptController: ordinary.controller,
+        agentController: {
+            handleSavedUserEntry: async (event) => {
+                ordinaryAgentEvents.push(event.entryId);
+            },
         },
     });
     assert.deepEqual(ordinaryAgentEvents, ["ordinary-entry"]);
+});
+
+test("saved entry routing sends disabled script directives only to the agent controller", async () => {
+    const routeCalls: string[] = [];
+    await routeSavedUserEntry({
+        event: {
+            threadId: "thread-1",
+            entryId: "thread-1",
+            filePath: "Folder/Note.md",
+            body: "/clean",
+        },
+        scriptsEnabled: false,
+        builtInControllers: [{
+            handleSavedUserEntry: async () => {
+                routeCalls.push("built-in");
+                return true;
+            },
+        }],
+        scriptController: {
+            handleSavedUserEntry: async () => {
+                routeCalls.push("script");
+                return true;
+            },
+        },
+        agentController: {
+            handleSavedUserEntry: async () => {
+                routeCalls.push("agent");
+            },
+        },
+    });
+
+    assert.deepEqual(routeCalls, ["agent"]);
 });
 
 test("saved entry routing tries built-in script-authoring commands before vault scripts", async () => {
@@ -673,24 +729,30 @@ test("saved entry routing tries built-in script-authoring commands before vault 
         body: "/create-script build a cleaner",
     };
 
-    await routeSavedUserEntry(savedEvent, [{
-        handleSavedUserEntry: async () => {
-            routeCalls.push("update-script");
-            return false;
+    await routeSavedUserEntry({
+        event: savedEvent,
+        scriptsEnabled: true,
+        builtInControllers: [{
+            handleSavedUserEntry: async () => {
+                routeCalls.push("update-script");
+                return false;
+            },
+        }, {
+            handleSavedUserEntry: async () => {
+                routeCalls.push("create-script");
+                return true;
+            },
+        }],
+        scriptController: {
+            handleSavedUserEntry: async () => {
+                routeCalls.push("script");
+                return true;
+            },
         },
-    }, {
-        handleSavedUserEntry: async () => {
-            routeCalls.push("create-script");
-            return true;
-        },
-    }], {
-        handleSavedUserEntry: async () => {
-            routeCalls.push("script");
-            return true;
-        },
-    }, {
-        handleSavedUserEntry: async () => {
-            routeCalls.push("agent");
+        agentController: {
+            handleSavedUserEntry: async () => {
+                routeCalls.push("agent");
+            },
         },
     });
 
@@ -701,33 +763,39 @@ test("saved entry routing claims pdf-to-markdown before scripts and generic agen
     const routeCalls: string[] = [];
 
     await routeSavedUserEntry({
-        threadId: "thread-1",
-        entryId: "thread-1",
-        filePath: "Books/Guide.pdf",
-        body: "/pdf-to-markdown",
-    }, [{
-        handleSavedUserEntry: async () => {
-            routeCalls.push("update-script");
-            return false;
+        event: {
+            threadId: "thread-1",
+            entryId: "thread-1",
+            filePath: "Books/Guide.pdf",
+            body: "/pdf-to-markdown",
         },
-    }, {
-        handleSavedUserEntry: async () => {
-            routeCalls.push("create-script");
-            return false;
+        scriptsEnabled: true,
+        builtInControllers: [{
+            handleSavedUserEntry: async () => {
+                routeCalls.push("update-script");
+                return false;
+            },
+        }, {
+            handleSavedUserEntry: async () => {
+                routeCalls.push("create-script");
+                return false;
+            },
+        }, {
+            handleSavedUserEntry: async () => {
+                routeCalls.push("pdf-to-markdown");
+                return true;
+            },
+        }],
+        scriptController: {
+            handleSavedUserEntry: async () => {
+                routeCalls.push("script");
+                return true;
+            },
         },
-    }, {
-        handleSavedUserEntry: async () => {
-            routeCalls.push("pdf-to-markdown");
-            return true;
-        },
-    }], {
-        handleSavedUserEntry: async () => {
-            routeCalls.push("script");
-            return true;
-        },
-    }, {
-        handleSavedUserEntry: async () => {
-            routeCalls.push("agent");
+        agentController: {
+            handleSavedUserEntry: async () => {
+                routeCalls.push("agent");
+            },
         },
     });
 

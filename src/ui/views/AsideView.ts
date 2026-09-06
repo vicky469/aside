@@ -4817,6 +4817,7 @@ export default class AsideView extends ItemView {
             activeCommentId: this.interactionController.getActiveCommentId(),
             currentFilePath,
             currentUserLabel: "You",
+            scriptsEnabled: this.plugin.isScriptsEnabled(),
             isActionableMention: (mention) => this.plugin.isActionableMention(mention),
             showSourceRedirectAction: isIndexView,
             showBookmarkAndPinControls: cardActions.showPin,
