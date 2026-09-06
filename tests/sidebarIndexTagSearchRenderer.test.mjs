@@ -92,9 +92,24 @@ test("metadata refresh keeps the current tag query on the body-only path", () =>
     )?.[0];
 
     assert.ok(refreshSource, "missing public index tag refresh hook");
-    assert.match(refreshSource, /indexSidebarMode !== "tags"/);
+    assert.match(refreshSource, /renderedIndexSidebarMode !== "tags"/);
     assert.match(refreshSource, /bodyEl\?\.isConnected/);
     assert.match(refreshSource, /refreshIndexTagSearchResult/);
     assert.match(refreshSource, /renderIndexTagSearchBody/);
     assert.doesNotMatch(refreshSource, /renderComments/);
+});
+
+test("metadata refresh respects a rendered Tags to List fallback", () => {
+    assert.match(
+        asideViewSource,
+        /private renderedIndexSidebarMode: IndexSidebarMode \| null = null;/,
+    );
+    assert.match(
+        asideViewSource,
+        /this\.renderedIndexSidebarMode = effectiveIndexSidebarMode;/,
+    );
+    assert.match(
+        asideViewSource,
+        /private renderIndexTagSearchSidebar\([\s\S]*?this\.renderedIndexSidebarMode = "tags";/,
+    );
 });

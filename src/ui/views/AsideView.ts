@@ -426,6 +426,7 @@ export default class AsideView extends ItemView {
         beforeAction: () => this.saveVisibleDraftIfPresent(),
     };
     private indexSidebarMode: IndexSidebarMode = "todo";
+    private renderedIndexSidebarMode: IndexSidebarMode | null = null;
     private noteSidebarMode: SidebarPrimaryMode = "list";
     private noteSidebarContentFilter: SidebarContentFilter = "all";
     private noteSidebarSearchQuery = "";
@@ -1365,7 +1366,7 @@ export default class AsideView extends ItemView {
             !bodyEl?.isConnected
             || !currentFilePath
             || !this.plugin.isAllCommentsNotePath(currentFilePath)
-            || this.indexSidebarMode !== "tags"
+            || this.renderedIndexSidebarMode !== "tags"
         ) {
             return;
         }
@@ -1553,6 +1554,7 @@ export default class AsideView extends ItemView {
         this.clearIndexTagSearchState();
         this.noteSidebarShell = null;
         this.indexSidebarShell = null;
+        this.renderedIndexSidebarMode = null;
         this.resetStreamedReplyControllers();
         const doc = this.containerEl.ownerDocument;
         doc.removeEventListener("keydown", this.interactionController.documentKeydownHandler, true);
@@ -1727,6 +1729,9 @@ export default class AsideView extends ItemView {
             this.sidebarEmptyStateReason = null;
         }
         const isAllCommentsView = !!file && this.plugin.isAllCommentsNotePath(file.path);
+        if (!isAllCommentsView) {
+            this.renderedIndexSidebarMode = null;
+        }
         this.clearReorderDragState();
         if (file && !isAllCommentsView) {
             this.indexFileFilterGraph = null;
@@ -2116,6 +2121,9 @@ export default class AsideView extends ItemView {
                 || indexSearchRequestVersion !== this.indexSidebarSearchRequestVersion
             ) {
                 return;
+            }
+            if (isAllCommentsView) {
+                this.renderedIndexSidebarMode = effectiveIndexSidebarMode;
             }
             const renderIndexChrome = (
                 toolbarContainer: HTMLElement,
@@ -4168,6 +4176,7 @@ export default class AsideView extends ItemView {
     }
 
     private renderIndexTagSearchSidebar(file: TFile, isThoughtTrailEnabled: boolean): void {
+        this.renderedIndexSidebarMode = "tags";
         const indexedThreads = this.plugin.getAllIndexedThreads();
         const shell = this.ensureIndexSidebarShell(file.path);
         shell.toolbarSlotEl.empty();
