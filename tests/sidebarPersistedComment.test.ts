@@ -1462,6 +1462,35 @@ test("renderPersistedCommentCard reruns scripts explicitly and keeps collapsed s
     assert.deepEqual(retriedAgentPrompts, []);
 });
 
+test("renderPersistedCommentCard script reply renders add-to-thread for that reply", async () => {
+    const thread = createThreadWithEntries({
+        entries: [
+            { id: "comment-1", body: "/clean", timestamp: 100 },
+            { id: "entry-2", body: "Script /clean:\n\nDone", timestamp: 110 },
+        ],
+    });
+    const appendTargets: string[] = [];
+    const root = new FakeElement("div");
+
+    await renderPersistedCommentCard(root as unknown as HTMLDivElement, thread, createRenderHost({
+        threadScriptRuns: [createScriptRun()],
+        startAppendEntryDraft: (commentId) => {
+            appendTargets.push(commentId);
+        },
+    }));
+
+    const scriptReply = root.findAllByClass("aside-comment-item")
+        .find((element) => element.getAttribute("data-comment-id") === "entry-2");
+    assert.ok(scriptReply);
+    const addButton = scriptReply.findAllByClass("aside-thread-add-entry-button")[0];
+    assert.ok(addButton);
+    await (addButton.onclick as (event: { stopPropagation(): void }) => Promise<void>)({
+        stopPropagation() {},
+    });
+
+    assert.deepEqual(appendTargets, ["entry-2"]);
+});
+
 test("renderPersistedCommentCard regenerates an agent reply without saving another draft", async () => {
     const thread = createThreadWithEntries({
         entries: [

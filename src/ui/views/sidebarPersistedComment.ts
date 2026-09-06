@@ -1456,8 +1456,7 @@ function renderStoredThreadEntry(
             entryAgentRun ?? entryScriptRun,
             {
                 showShareAction: !host.showSourceRedirectAction && !entryComment.deletedAt && !thread.deletedAt,
-                showAddEntryAction: entryAuthor.kind !== "script"
-                    && !host.showSourceRedirectAction
+                showAddEntryAction: !host.showSourceRedirectAction
                     && !entryComment.deletedAt
                     && !thread.deletedAt,
                 showRetryAction: !!entryRegenerateAction && !host.showSourceRedirectAction && !entryComment.deletedAt && !thread.deletedAt,
