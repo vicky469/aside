@@ -53,7 +53,11 @@ test("workspace view controller refreshes index tag views only", () => {
 		files: [indexFile, noteFile],
 	});
 
-	harness.controller.refreshIndexTagSearchViews();
+	const refreshIndexTagSearchViews = (
+		harness.controller as unknown as { refreshIndexTagSearchViews?: () => void }
+	).refreshIndexTagSearchViews;
+	assert.equal(typeof refreshIndexTagSearchViews, "function");
+	refreshIndexTagSearchViews?.call(harness.controller);
 
 	assert.deepEqual(noteTagRefreshes, []);
 	assert.deepEqual(indexTagRefreshes, [1]);
@@ -70,7 +74,7 @@ rm -rf .test-dist
 node --test --test-name-pattern "refreshes index tag views only" .test-dist/tests/workspaceViewController.test.js
 ```
 
-Expected: TypeScript fails because `refreshIndexTagSearchViews` does not exist.
+Expected: the new test fails because `refreshIndexTagSearchViews` is `undefined`.
 
 - [ ] **Step 3: Add the narrow workspace route**
 
