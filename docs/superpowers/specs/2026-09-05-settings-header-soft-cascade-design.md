@@ -1,7 +1,7 @@
 # Settings Header Soft-Cascade Reveal Design
 
 **Date:** 2026-09-05
-**Status:** Approved design; pending implementation plan
+**Status:** Implemented and verified
 
 ## Implementation Tracking
 
@@ -17,18 +17,20 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Hide every downstream relay element at the beginning instead of rendering the complete relay immediately.
-- [ ] Reveal the Rabbit, Thought card, signal, Aside card, action line, and Thought Trail graph in that order with short overlaps between adjacent transitions.
-- [ ] Preserve the existing header DOM, layout dimensions, copy, colors, graph geometry, and scoped CSS architecture.
-- [ ] Start the existing Rabbit idle motion, graph turn, and edge-runner motion only after the staged story is legible.
-- [ ] Preserve the immediate completed static state for reduced-motion users.
-- [ ] Update focused animation tests and run full repository verification.
+- [x] Hide every downstream relay element at the beginning instead of rendering the complete relay immediately.
+- [x] Reveal the Rabbit, Thought card, signal, Aside card, action line, and Thought Trail graph in that order with short overlaps between adjacent transitions.
+- [x] Preserve the existing header DOM, layout dimensions, copy, colors, graph geometry, and scoped CSS architecture.
+- [x] Start the existing Rabbit idle motion, graph turn, and edge-runner motion only after the staged story is legible.
+- [x] Preserve the immediate completed static state for reduced-motion users.
+- [x] Update focused animation tests and run full repository verification.
 
 ### Verification
 
-- [ ] Focused tests prove hidden initial states, ordered soft-cascade timing, finite entrance animations, delayed continuous ambient motion, and the reduced-motion final state.
-- [ ] Manual inspection confirms the header has no layout jump, reveals one conceptual element at a time, and replays on every Settings open.
-- [ ] Full tests, lint, typecheck, Obsidian compliance, production bundle, bundle-size guard, and release-artifact inspection pass.
+- [x] Focused tests prove hidden initial states, ordered soft-cascade timing, finite entrance animations, delayed continuous ambient motion, and the reduced-motion final state.
+- [x] Manual inspection confirms the header has no layout jump, reveals one conceptual element at a time, and replays on every Settings open.
+- [x] Full tests, lint, typecheck, Obsidian compliance, production bundle, bundle-size guard, and release-artifact inspection pass.
+
+Verification measured 13/13 focused Settings-header tests, 1,488/1,488 compiled tests, and 147/147 direct tests passing. Lint, typecheck, Obsidian compliance, and the production build passed; the bundle measured 689,371 of the 750,000-byte limit. Exact artifact inspection passed for only `main.js`, `manifest.json`, and `styles.css`, with no source maps, embedded sources, local paths, or obvious secret material. Browser inspection of the real stylesheet confirmed stable header bounds throughout the reveal at normal and narrow widths, no horizontal overflow or scroll movement, Rabbit-first replay after reload, and an immediate completed composition with animations disabled under reduced motion.
 
 ## Context
 
