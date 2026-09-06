@@ -458,6 +458,7 @@ export default class Aside extends Plugin {
         setDraftHostFilePath: (filePath) => this.commentSessionController.setDraftHostFilePath(filePath),
         getSidebarTargetFile: () => this.getSidebarTargetFile(),
         updateSidebarViews: (file) => this.updateSidebarViews(file),
+        refreshCommentViews: () => this.workspaceViewController.refreshCommentViews({ skipDataRefresh: true }),
         refreshAggregateNoteNow: () => this.refreshAggregateNoteNow(),
         hasRegisteredVaultScripts: () => this.vaultScriptRegistry.getRunnableScripts().length > 0,
         loadData: () => this.loadCurrentData(),

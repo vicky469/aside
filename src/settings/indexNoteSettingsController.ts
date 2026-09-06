@@ -47,6 +47,7 @@ export interface IndexNoteSettingsHost {
     setDraftHostFilePath(filePath: string | null): void;
     getSidebarTargetFile(): TFile | null;
     updateSidebarViews(file: TFile | null): Promise<void>;
+    refreshCommentViews(): Promise<void>;
     refreshAggregateNoteNow(): Promise<void>;
     hasRegisteredVaultScripts(): boolean;
     loadData(): Promise<PersistedPluginData | null>;
@@ -390,7 +391,7 @@ export class IndexNoteSettingsController {
                 scriptsEnabled: enabled,
             };
             await this.persistSettingsTransition(settings, nextSettings, ["scriptsEnabled"]);
-            await this.host.updateSidebarViews(this.host.getSidebarTargetFile());
+            await this.host.refreshCommentViews();
         });
     }
 

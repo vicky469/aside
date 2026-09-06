@@ -127,6 +127,7 @@ function createControllerHarness(options: {
     const savedPayloads: PersistedPluginData[] = [];
     const notices: string[] = [];
     const refreshedTargets: Array<string | null> = [];
+    let refreshCommentViewsCount = 0;
     let refreshAggregateNoteCount = 0;
     const renamedFiles: Array<{ from: string; to: string }> = [];
     const adapterRenamedFiles: Array<{ from: string; to: string }> = [];
@@ -246,6 +247,9 @@ function createControllerHarness(options: {
         updateSidebarViews: async (file: TFile | null) => {
             refreshedTargets.push(file?.path ?? null);
         },
+        refreshCommentViews: async () => {
+            refreshCommentViewsCount += 1;
+        },
         refreshAggregateNoteNow: async () => {
             refreshAggregateNoteCount += 1;
         },
@@ -297,6 +301,7 @@ function createControllerHarness(options: {
         savedPayloads,
         notices,
         refreshedTargets,
+        getRefreshCommentViewsCount: () => refreshCommentViewsCount,
         getRefreshAggregateNoteCount: () => refreshAggregateNoteCount,
         renamedFiles,
         adapterRenamedFiles,
@@ -927,7 +932,7 @@ test("index note settings controller saves sidebar tab toggles and refreshes ope
     }));
 });
 
-test("index note settings controller persists Scripts changes and ignores unchanged state", async () => {
+test("Scripts changes refresh every open sidebar in place, including pinned views", async () => {
     const harness = createControllerHarness({
         activeSidebarFilePath: "docs/source.md",
         files: ["docs/source.md"],
@@ -936,13 +941,15 @@ test("index note settings controller persists Scripts changes and ignores unchan
     await harness.controller.setScriptsEnabled(false);
     assert.equal(harness.savedPayloads.length, 0);
     assert.deepEqual(harness.refreshedTargets, []);
+    assert.equal(harness.getRefreshCommentViewsCount(), 0);
 
     await harness.controller.setScriptsEnabled(true);
 
     assert.equal(harness.getSettings().scriptsEnabled, true);
     assert.equal(harness.savedPayloads.length, 1);
     assert.equal(harness.savedPayloads[0]?.scriptsEnabled, true);
-    assert.deepEqual(harness.refreshedTargets, ["docs/source.md"]);
+    assert.deepEqual(harness.refreshedTargets, []);
+    assert.equal(harness.getRefreshCommentViewsCount(), 1);
 });
 
 test("capability setters restore persisted state after save failure", async () => {
@@ -953,6 +960,7 @@ test("capability setters restore persisted state after save failure", async () =
     await assert.rejects(harness.controller.setScriptsEnabled(true), /save failed/u);
     assert.equal(harness.getSettings().scriptsEnabled, false);
     assert.deepEqual(harness.refreshedTargets, []);
+    assert.equal(harness.getRefreshCommentViewsCount(), 0);
 
     await assert.rejects(harness.controller.setPublishEnabled(true), /save failed/u);
     assert.equal(harness.getSettings().publishEnabled, false);
