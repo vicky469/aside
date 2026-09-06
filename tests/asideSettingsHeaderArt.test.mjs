@@ -248,7 +248,7 @@ test("settings header stages a soft cascade before continuous ambient motion", a
     assert.match(rabbit, /aside-settings-hero-rabbit[^,;]*\s1\s+forwards/);
     assert.match(
         rabbit,
-        /aside-settings-hero-rabbit-idle\s+3\.8s\s+ease-in-out\s+var\(--aside-settings-hero-motion-delay\)\s+infinite\s+alternate/,
+        /aside-settings-hero-rabbit-float\s+3\.2s\s+ease-in-out\s+var\(--aside-settings-hero-intro-duration\)\s+infinite/,
     );
     for (const selector of finiteAnimationSelectors) {
         const rule = getRule(styles, selector);
@@ -291,8 +291,9 @@ test("settings header stages a soft cascade before continuous ambient motion", a
 
     assert.match(
         styles,
-        /@keyframes aside-settings-hero-rabbit-idle\s*\{\s*0% \{ transform: translate\(5px, 0\) rotate\(0\); \}\s*45% \{ transform: translate\(5px, -1px\) rotate\(-0\.35deg\); \}\s*100% \{ transform: translate\(6px, 0\) rotate\(0\.35deg\); \}\s*\}/,
+        /@keyframes aside-settings-hero-rabbit-float\s*\{\s*0%, 100% \{ transform: translate\(5px, 0\) rotate\(0\); \}\s*50% \{ transform: translate\(5px, -5px\) rotate\(0\.5deg\); \}\s*\}/,
     );
+    assert.doesNotMatch(styles, /aside-settings-hero-rabbit-idle/);
     assert.match(
         styles,
         /@keyframes aside-settings-hero-graph-turn\s*\{\s*0% \{ transform: rotateX\(-7deg\) rotateY\(-18deg\); \}\s*100% \{ transform: rotateX\(8deg\) rotateY\(20deg\); \}\s*\}/,
