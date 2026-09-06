@@ -64,6 +64,16 @@ test("JavaScript dependency lexer ignores property access named new", () => {
 	URL("./phantom.js", import.meta.url);`), []);
 });
 
+test("JavaScript dependency lexer ignores prototype-named identifiers during delimiter indexing", () => {
+	assert.deepEqual(references(`
+Object.prototype.hasOwnProperty.call(record, "key");
+record.constructor;
+record.toString();
+record.__proto__;
+import "./real.js";
+`), ["./real.js"]);
+});
+
 test("JavaScript dependency lexer scans template expressions and markup chunks", () => {
 	const result = scanJavascriptDependencies(`
 const markup = \`<img src="./image.png">\`;

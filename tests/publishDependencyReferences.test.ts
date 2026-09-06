@@ -579,6 +579,17 @@ test("JavaScript extraction ignores property access named new", () => {
 	}).references, []);
 });
 
+test("JavaScript extraction ignores prototype-named identifiers during delimiter indexing", () => {
+	assert.deepEqual(extractPublishDependencyReferences({
+		vaultRelativePath: "public/prototype-names.js",
+		contents: `Object.prototype.hasOwnProperty.call(record, "key");
+record.constructor;
+record.toString();
+record.__proto__;
+import "./real.js";`,
+	}).references, ["./real.js"]);
+});
+
 test("JavaScript extraction scans template expressions and accepts literal imports with options", () => {
 	assert.deepEqual(extractPublishDependencyReferences({
 		vaultRelativePath: "public/templates.js",

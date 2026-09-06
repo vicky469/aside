@@ -484,17 +484,26 @@ function scanCode(
 
 function indexClosingDelimiters(tokens: readonly JavascriptToken[]): Map<number, number> {
 	const closingByOpening = new Map<number, number>();
-	const stacks: Record<string, number[]> = { "(": [], "[": [], "{": [] };
-	const openingByClosing: Readonly<Record<string, keyof typeof stacks>> = { ")": "(", "]": "[", "}": "{" };
+	const stacks = new Map<string, number[]>([
+		["(", []],
+		["[", []],
+		["{", []],
+	]);
+	const openingByClosing = new Map<string, string>([
+		[")", "("],
+		["]", "["],
+		["}", "{"],
+	]);
 	for (let index = 0; index < tokens.length; index += 1) {
 		const value = tokens[index].value;
-		if (value in stacks) {
-			stacks[value].push(index);
+		const openingStack = stacks.get(value);
+		if (openingStack) {
+			openingStack.push(index);
 			continue;
 		}
-		const opening = openingByClosing[value];
+		const opening = openingByClosing.get(value);
 		if (opening) {
-			const openingIndex = stacks[opening].pop();
+			const openingIndex = stacks.get(opening)?.pop();
 			if (openingIndex !== undefined) closingByOpening.set(openingIndex, index);
 		}
 	}
