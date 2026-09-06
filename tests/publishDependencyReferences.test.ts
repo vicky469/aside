@@ -571,6 +571,14 @@ test("JavaScript extraction cooks surrogate escape pairs", () => {
 	}).references, ["./🚀.js"]);
 });
 
+test("JavaScript extraction ignores property access named new", () => {
+	assert.deepEqual(extractPublishDependencyReferences({
+		vaultRelativePath: "public/property-new.js",
+		contents: `registry.new
+		URL("./phantom.js", import.meta.url);`,
+	}).references, []);
+});
+
 test("JavaScript extraction scans template expressions and accepts literal imports with options", () => {
 	assert.deepEqual(extractPublishDependencyReferences({
 		vaultRelativePath: "public/templates.js",

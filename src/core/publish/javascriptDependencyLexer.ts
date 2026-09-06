@@ -575,7 +575,7 @@ function collectReferences(tokens: readonly JavascriptToken[]): JavascriptDepend
 					: findFromString(tokens, index + 1);
 		} else if (token.value === "export") {
 			literal = findFromString(tokens, index + 1);
-		} else if (token.value === "new") {
+		} else if (token.value === "new" && !isPropertyAccess(tokens, index)) {
 			literal = matchNewImportMetaUrl(tokens, index, closingByOpening);
 		}
 		if (literal) references.push({ offset: literal.start, value: literal.value });

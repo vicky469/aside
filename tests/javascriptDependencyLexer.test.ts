@@ -59,6 +59,11 @@ test("JavaScript dependency lexer cooks surrogate escape pairs", () => {
 	);
 });
 
+test("JavaScript dependency lexer ignores property access named new", () => {
+	assert.deepEqual(references(`registry.new
+	URL("./phantom.js", import.meta.url);`), []);
+});
+
 test("JavaScript dependency lexer scans template expressions and markup chunks", () => {
 	const result = scanJavascriptDependencies(`
 const markup = \`<img src="./image.png">\`;
