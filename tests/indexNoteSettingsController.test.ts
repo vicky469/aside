@@ -34,6 +34,7 @@ function createSettings(overrides: Partial<AsideSettings> = {}): AsideSettings {
         defaultAgent: overrides.defaultAgent ?? "codex",
         showTodoSidebarTab: overrides.showTodoSidebarTab ?? true,
         showAgentSidebarTab: overrides.showAgentSidebarTab ?? false,
+        scriptsEnabled: overrides.scriptsEnabled ?? false,
         publishedPublicArtifactPaths: overrides.publishedPublicArtifactPaths ?? [],
         publishEnabled: overrides.publishEnabled ?? DEFAULT_PUBLISH_SETTINGS.publishEnabled,
         publishPagesProjectName: overrides.publishPagesProjectName ?? DEFAULT_PUBLISH_SETTINGS.publishPagesProjectName,
@@ -86,14 +87,21 @@ test("loaded settings normalize the default agent and rewrite invalid values", (
 });
 
 function withPublishDefaults(
-    settings: Omit<AsideSettings, keyof typeof DEFAULT_PUBLISH_SETTINGS | "publishedPublicArtifactPaths" | "defaultAgent">,
+    settings: Omit<AsideSettings, keyof typeof DEFAULT_PUBLISH_SETTINGS | "publishedPublicArtifactPaths" | "defaultAgent" | "scriptsEnabled">,
 ): AsideSettings {
     return {
         ...settings,
         defaultAgent: "codex",
+        scriptsEnabled: false,
         publishedPublicArtifactPaths: [],
         ...DEFAULT_PUBLISH_SETTINGS,
     };
+}
+
+function withoutScriptsSetting(settings: AsideSettings = createSettings()): PersistedPluginData {
+    const loaded: PersistedPluginData = { ...settings };
+    delete loaded.scriptsEnabled;
+    return loaded;
 }
 
 function createControllerHarness(options: {
@@ -107,6 +115,7 @@ function createControllerHarness(options: {
     renameFileError?: Error;
     saveDataError?: Error;
     saveData?: (data: PersistedPluginData) => Promise<void>;
+    hasRegisteredVaultScripts?: boolean;
 } = {}) {
     let settings = options.settings ?? createSettings();
     let activeSidebarFile = options.activeSidebarFilePath ? createFile(options.activeSidebarFilePath) : null;
@@ -236,6 +245,7 @@ function createControllerHarness(options: {
         refreshAggregateNoteNow: async () => {
             refreshAggregateNoteCount += 1;
         },
+        hasRegisteredVaultScripts: () => options.hasRegisteredVaultScripts ?? false,
         loadData: async () => options.loadedData ?? null,
         saveData: async (data: PersistedPluginData) => {
             if (options.saveData) {
@@ -455,6 +465,80 @@ test("loaded settings resolution defaults Todo on and agents off when missing or
     }
 });
 
+test("loaded settings resolution defaults Scripts off for new and side-note-only state", () => {
+    const sideNoteOnlyState: PersistedPluginData = {
+        ...withoutScriptsSetting(),
+        sideNoteSyncEventState: {
+            sources: {},
+        },
+    };
+
+    for (const loaded of [null, sideNoteOnlyState]) {
+        const resolved = resolveLoadedSettings(loaded, createSettings());
+
+        assert.equal(resolved.settings.scriptsEnabled, false);
+        assert.equal(resolved.shouldRewriteLegacySettings, true);
+    }
+});
+
+test("loaded settings resolution infers Scripts on from run history or registry evidence", () => {
+    const cases: Array<{
+        loaded: PersistedPluginData;
+        hasRegisteredVaultScripts: boolean;
+    }> = [
+        {
+            loaded: { agentRuns: [{ id: "agent-run" }] },
+            hasRegisteredVaultScripts: false,
+        },
+        {
+            loaded: { scriptRuns: [{ id: "script-run" }] },
+            hasRegisteredVaultScripts: false,
+        },
+        {
+            loaded: {},
+            hasRegisteredVaultScripts: true,
+        },
+    ];
+
+    for (const { loaded, hasRegisteredVaultScripts } of cases) {
+        const resolved = resolveLoadedSettings(loaded, createSettings(), {
+            hasRegisteredVaultScripts,
+        });
+
+        assert.equal(resolved.settings.scriptsEnabled, true);
+        assert.equal(resolved.shouldRewriteLegacySettings, true);
+    }
+});
+
+test("loaded settings resolution lets explicit Scripts booleans override migration evidence", () => {
+    for (const scriptsEnabled of [true, false]) {
+        const resolved = resolveLoadedSettings({
+            scriptsEnabled,
+            agentRuns: [{ id: "agent-run" }],
+            scriptRuns: [{ id: "script-run" }],
+        }, createSettings(), {
+            hasRegisteredVaultScripts: true,
+        });
+
+        assert.equal(resolved.settings.scriptsEnabled, scriptsEnabled);
+    }
+});
+
+test("loaded settings resolution infers and rewrites invalid Scripts state", () => {
+    const inferredOn = resolveLoadedSettings({
+        scriptsEnabled: "yes" as unknown as boolean,
+        scriptRuns: [{ id: "script-run" }],
+    }, createSettings());
+    const inferredOff = resolveLoadedSettings({
+        scriptsEnabled: 1 as unknown as boolean,
+    }, createSettings());
+
+    assert.equal(inferredOn.settings.scriptsEnabled, true);
+    assert.equal(inferredOn.shouldRewriteLegacySettings, true);
+    assert.equal(inferredOff.settings.scriptsEnabled, false);
+    assert.equal(inferredOff.shouldRewriteLegacySettings, true);
+});
+
 test("loaded settings resolution preserves explicit agent tab booleans", () => {
     const visible = resolveLoadedSettings({
         showAgentSidebarTab: true,
@@ -592,6 +676,18 @@ test("index note settings controller rewrites legacy settings", async () => {
     assert.equal("preferredAgentTarget" in harness.savedPayloads[0], false);
     assert.equal("confirmDelete" in harness.savedPayloads[0], false);
     assert.equal("enableDebugMode" in harness.savedPayloads[0], false);
+});
+
+test("index note settings controller uses registered vault scripts as migration evidence", async () => {
+    const harness = createControllerHarness({
+        loadedData: withoutScriptsSetting(),
+        hasRegisteredVaultScripts: true,
+    });
+
+    await harness.controller.loadSettings();
+
+    assert.equal(harness.getSettings().scriptsEnabled, true);
+    assert.equal(harness.savedPayloads.at(-1)?.scriptsEnabled, true);
 });
 
 test("index note settings controller migrates a persisted legacy index note on load", async () => {
@@ -817,6 +913,58 @@ test("index note settings controller saves sidebar tab toggles and refreshes ope
         showTodoSidebarTab: false,
         showAgentSidebarTab: false,
     }));
+});
+
+test("index note settings controller persists Scripts changes and ignores unchanged state", async () => {
+    const harness = createControllerHarness();
+
+    await harness.controller.setScriptsEnabled(false);
+    assert.equal(harness.savedPayloads.length, 0);
+
+    await harness.controller.setScriptsEnabled(true);
+
+    assert.equal(harness.getSettings().scriptsEnabled, true);
+    assert.equal(harness.savedPayloads.length, 1);
+    assert.equal(harness.savedPayloads[0]?.scriptsEnabled, true);
+});
+
+test("capability setters restore persisted state after save failure", async () => {
+    const harness = createControllerHarness({
+        saveDataError: new Error("save failed"),
+    });
+
+    await assert.rejects(harness.controller.setScriptsEnabled(true), /save failed/u);
+    assert.equal(harness.getSettings().scriptsEnabled, false);
+
+    await assert.rejects(harness.controller.setPublishEnabled(true), /save failed/u);
+    assert.equal(harness.getSettings().publishEnabled, false);
+});
+
+test("disabling capabilities preserves run history and publishing configuration", async () => {
+    const agentRuns = [{ id: "agent-run" }];
+    const scriptRuns = [{ id: "script-run" }];
+    const publishBaseUrl = "https://publish.example.com";
+    const harness = createControllerHarness({
+        loadedData: {
+            ...createSettings({
+                scriptsEnabled: true,
+                publishEnabled: true,
+                publishBaseUrl,
+            }),
+            agentRuns,
+            scriptRuns,
+        },
+    });
+    await harness.controller.loadSettings();
+
+    await harness.controller.setScriptsEnabled(false);
+    await harness.controller.setPublishEnabled(false);
+
+    assert.deepEqual(harness.savedPayloads.at(-1)?.agentRuns, agentRuns);
+    assert.deepEqual(harness.savedPayloads.at(-1)?.scriptRuns, scriptRuns);
+    assert.equal(harness.savedPayloads.at(-1)?.publishBaseUrl, publishBaseUrl);
+    assert.equal(harness.savedPayloads.at(-1)?.scriptsEnabled, false);
+    assert.equal(harness.savedPayloads.at(-1)?.publishEnabled, false);
 });
 
 test("loaded settings resolution normalizes publish settings and rewrites changed values", () => {

@@ -460,6 +460,7 @@ export default class Aside extends Plugin {
         getSidebarTargetFile: () => this.getSidebarTargetFile(),
         updateSidebarViews: (file) => this.updateSidebarViews(file),
         refreshAggregateNoteNow: () => this.refreshAggregateNoteNow(),
+        hasRegisteredVaultScripts: () => this.vaultScriptRegistry.getRunnableScripts().length > 0,
         loadData: () => this.loadCurrentData(),
         saveData: (data) => this.saveData(data),
         ensureFolder: (folderPath) => this.ensureVaultFolder(folderPath),
@@ -858,9 +859,9 @@ export default class Aside extends Plugin {
         addIcon(ASIDE_REGENERATE_ICON_ID, ASIDE_REGENERATE_ICON_SVG);
 
         this.commentManager = new CommentManager([]);
-        await this.loadSettings();
         this.vaultScriptRegistry.seed(this.app.vault.getFiles().map((file) => file.path));
         this.pluginEventRouter.registerVaultCreateEvent();
+        await this.loadSettings();
         this.scriptRunStore.load();
         this.vaultCapabilityIndex.seed(
             this.app.vault.getMarkdownFiles(),
@@ -998,6 +999,10 @@ export default class Aside extends Plugin {
 
     public async setShowAgentSidebarTab(visible: boolean): Promise<void> {
         await this.indexNoteSettingsController.setShowAgentSidebarTab(visible);
+    }
+
+    public async setScriptsEnabled(enabled: boolean): Promise<void> {
+        await this.indexNoteSettingsController.setScriptsEnabled(enabled);
     }
 
     public async setPublishEnabled(enabled: boolean): Promise<void> {

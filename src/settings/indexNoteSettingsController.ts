@@ -48,6 +48,7 @@ export interface IndexNoteSettingsHost {
     getSidebarTargetFile(): TFile | null;
     updateSidebarViews(file: TFile | null): Promise<void>;
     refreshAggregateNoteNow(): Promise<void>;
+    hasRegisteredVaultScripts(): boolean;
     loadData(): Promise<PersistedPluginData | null>;
     saveData(data: PersistedPluginData): Promise<void>;
     ensureFolder(folderPath: string): Promise<{ ok: true } | { ok: false; notice: string }>;
@@ -147,7 +148,9 @@ export class IndexNoteSettingsController {
     public async loadSettings(): Promise<void> {
         const loaded = await this.host.loadData();
         this.persistedPluginData = clonePersistedPluginData(loaded ?? {});
-        const resolved = resolveLoadedSettings(loaded, this.host.getSettings());
+        const resolved = resolveLoadedSettings(loaded, this.host.getSettings(), {
+            hasRegisteredVaultScripts: this.host.hasRegisteredVaultScripts(),
+        });
         this.host.setSettings(resolved.settings);
 
         const migratedLegacyIndexNotePath = await this.migrateLegacyIndexNotePath(loaded);
@@ -345,6 +348,24 @@ export class IndexNoteSettingsController {
         await this.host.updateSidebarViews(this.host.getSidebarTargetFile());
     }
 
+    public async setScriptsEnabled(enabled: boolean): Promise<void> {
+        const settings = this.host.getSettings();
+        if (settings.scriptsEnabled === enabled) {
+            return;
+        }
+
+        this.host.setSettings({
+            ...settings,
+            scriptsEnabled: enabled,
+        });
+        try {
+            await this.saveSettings();
+        } catch (error) {
+            this.host.setSettings(settings);
+            throw error;
+        }
+    }
+
     public async setPublishPagesProjectName(projectName: string): Promise<void> {
         const settings = this.host.getSettings();
         const normalizedProjectName = normalizePublishProjectName(projectName);
@@ -513,7 +534,12 @@ export class IndexNoteSettingsController {
         }
 
         this.host.setSettings(nextSettings);
-        await this.saveSettings();
+        try {
+            await this.saveSettings();
+        } catch (error) {
+            this.host.setSettings(settings);
+            throw error;
+        }
     }
 
 }

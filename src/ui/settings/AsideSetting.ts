@@ -47,6 +47,7 @@ export interface AsideSettings extends PublishSettings {
     defaultAgent: AsideAgentTarget;
     showTodoSidebarTab: boolean;
     showAgentSidebarTab: boolean;
+    scriptsEnabled: boolean;
     publishedPublicArtifactPaths: string[];
 }
 
@@ -58,6 +59,7 @@ export const DEFAULT_SETTINGS: AsideSettings = {
     defaultAgent: DEFAULT_ASIDE_AGENT_ACTOR_ID,
     showTodoSidebarTab: true,
     showAgentSidebarTab: false,
+    scriptsEnabled: false,
     publishedPublicArtifactPaths: [],
     ...DEFAULT_PUBLISH_SETTINGS,
 };

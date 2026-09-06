@@ -47,6 +47,10 @@ export interface LoadedSettingsResolution {
     shouldRewriteLegacySettings: boolean;
 }
 
+export interface LoadedSettingsEvidence {
+    hasRegisteredVaultScripts: boolean;
+}
+
 export type IndexNotePathChangePlan =
     | { kind: "noop"; nextPath: string }
     | { kind: "missing-parent"; nextPath: string; parentPath: string; notice: string }
@@ -81,6 +85,7 @@ function shouldRewriteNormalizedPublishSettings(loaded: PersistedPluginData | nu
 export function resolveLoadedSettings(
     loaded: PersistedPluginData | null,
     defaults: AsideSettings,
+    evidence: LoadedSettingsEvidence = { hasRegisteredVaultScripts: false },
 ): LoadedSettingsResolution {
     const hasIndexNotePathSetting = hasPersistedIndexNotePath(loaded);
     const indexNotePath = normalizeAllCommentsNotePath(hasIndexNotePathSetting
@@ -97,6 +102,11 @@ export function resolveLoadedSettings(
     const showAgentSidebarTab = hasAgentSidebarTabSetting
         ? normalizeSidebarTabToggle(loaded?.showAgentSidebarTab, false)
         : false;
+    const scriptsEnabled = typeof loaded?.scriptsEnabled === "boolean"
+        ? loaded.scriptsEnabled
+        : (Array.isArray(loaded?.agentRuns) && loaded.agentRuns.length > 0)
+            || (Array.isArray(loaded?.scriptRuns) && loaded.scriptRuns.length > 0)
+            || evidence.hasRegisteredVaultScripts;
     const publishSettings = normalizePublishSettings(loaded ?? defaults);
     const defaultAgent = normalizeSupportedAgentTarget(
         hasDefaultAgentSetting ? loaded?.defaultAgent : defaults.defaultAgent,
@@ -115,6 +125,7 @@ export function resolveLoadedSettings(
             defaultAgent,
             showTodoSidebarTab,
             showAgentSidebarTab,
+            scriptsEnabled,
             publishedPublicArtifactPaths: normalizePublishedPublicArtifactPaths(
                 loaded?.publishedPublicArtifactPaths ?? defaults.publishedPublicArtifactPaths,
             ),
@@ -132,6 +143,7 @@ export function resolveLoadedSettings(
             || (loaded !== null && !hasDefaultAgentSetting)
             || (hasTodoSidebarTabSetting && typeof loaded?.showTodoSidebarTab !== "boolean")
             || (hasAgentSidebarTabSetting && typeof loaded?.showAgentSidebarTab !== "boolean")
+            || typeof loaded?.scriptsEnabled !== "boolean"
             || (hasOwn(loaded ?? {}, "agentRuntimeMode")
                 && normalizeAgentRuntimeModePreference(loaded?.agentRuntimeMode) !== loaded?.agentRuntimeMode)
             || (hasDefaultAgentSetting && defaultAgent !== loaded?.defaultAgent)

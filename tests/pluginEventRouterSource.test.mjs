@@ -10,10 +10,12 @@ const onloadSource = mainSource.slice(onloadStart, onloadEnd);
 test("main registers vault create immediately after script-registry seed and before full routing", () => {
     const seedIndex = onloadSource.indexOf("this.vaultScriptRegistry.seed(");
     const earlyRegisterIndex = onloadSource.indexOf("this.pluginEventRouter.registerVaultCreateEvent();");
+    const loadSettingsIndex = onloadSource.indexOf("await this.loadSettings();");
     const fullRegisterIndex = onloadSource.indexOf("await this.pluginEventRouter.register();");
 
     assert.ok(seedIndex >= 0, "onload should seed the vault script registry");
     assert.ok(earlyRegisterIndex > seedIndex, "early create registration should follow the initial seed");
+    assert.ok(loadSettingsIndex > earlyRegisterIndex, "settings migration should observe the seeded registry");
     assert.ok(fullRegisterIndex > earlyRegisterIndex, "early create registration should precede full routing");
     assert.doesNotMatch(
         onloadSource.slice(seedIndex, earlyRegisterIndex),
@@ -26,4 +28,15 @@ test("main delegates create ownership to the router exactly once", () => {
     const earlyRegistrationCalls = mainSource.match(/this\.pluginEventRouter\.registerVaultCreateEvent\(\);/g) ?? [];
     assert.equal(earlyRegistrationCalls.length, 1);
     assert.doesNotMatch(mainSource, /this\.app\.vault\.on\("create"/);
+});
+
+test("main exposes canonical registry evidence and delegates Scripts settings changes", () => {
+    assert.match(
+        mainSource,
+        /hasRegisteredVaultScripts:\s*\(\)\s*=>\s*this\.vaultScriptRegistry\.getRunnableScripts\(\)\.length\s*>\s*0/,
+    );
+    assert.match(
+        mainSource,
+        /public async setScriptsEnabled\(enabled: boolean\): Promise<void> \{\s*await this\.indexNoteSettingsController\.setScriptsEnabled\(enabled\);\s*\}/,
+    );
 });
