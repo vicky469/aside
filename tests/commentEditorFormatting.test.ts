@@ -230,6 +230,32 @@ test("renderStyledDraftCommentHtml highlights enabled script-authoring commands"
     );
 });
 
+test("renderStyledDraftCommentHtml hides script mentions when Scripts is disabled", () => {
+    const disabledScriptsMention = (mention: string) => isActionableMention(mention, {
+        scriptsEnabled: false,
+        isRunnableVaultScriptMention: (candidate) => candidate.toLowerCase() === "/clean",
+    });
+
+    assert.equal(
+        renderStyledDraftCommentHtml(
+            "@todo @codex @claude @cursor @gemini @deepseek /create-script /update-script /pdf-to-markdown /clean",
+            disabledScriptsMention,
+        ),
+        [
+            "<span class=\"aside-editor-token-mention\">@todo</span>",
+            "<span class=\"aside-editor-token-mention\">@codex</span>",
+            "<span class=\"aside-editor-token-mention\">@claude</span>",
+            "<span class=\"aside-editor-token-mention\">@cursor</span>",
+            "<span class=\"aside-editor-token-mention\">@gemini</span>",
+            "<span class=\"aside-editor-token-mention\">@deepseek</span>",
+            "/create-script",
+            "/update-script",
+            "/pdf-to-markdown",
+            "/clean",
+        ].join(" "),
+    );
+});
+
 test("renderStyledDraftCommentHtml leaves unregistered slash mentions plain", () => {
     assert.equal(
         renderStyledDraftCommentHtml("Run /missing now", isRecognizedMention),

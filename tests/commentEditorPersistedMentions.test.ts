@@ -151,3 +151,44 @@ test("persisted mention decoration styles only actionable mentions", () => {
         (globalThis as { Text: typeof Text }).Text = previousText;
     }
 });
+
+test("persisted mention decoration hides script mentions when Scripts is disabled", () => {
+    const previousText = globalThis.Text;
+    (globalThis as { Text: typeof Text }).Text = FakeTextNode as unknown as typeof Text;
+    try {
+        const document = new FakeDocument();
+        const container = document.createElement();
+        container.appendChild(document.createTextNode(
+            "@todo @codex @claude @cursor @gemini @deepseek /create-script /update-script /pdf-to-markdown /clean",
+        ));
+
+        decorateRenderedCommentMentions(
+            container as unknown as HTMLElement,
+            (mention) => isActionableMention(mention, {
+                scriptsEnabled: false,
+                isRunnableVaultScriptMention: (candidate) => candidate.toLowerCase() === "/clean",
+            }),
+        );
+
+        const decorated = container.children
+            .filter((child): child is FakeElement => child instanceof FakeElement)
+            .map((child) => child.textContent);
+        assert.deepEqual(decorated, [
+            "@todo",
+            "@codex",
+            "@claude",
+            "@cursor",
+            "@gemini",
+            "@deepseek",
+        ]);
+        assert.equal(
+            container.children
+                .filter((child): child is FakeTextNode => child instanceof FakeTextNode)
+                .map((child) => child.nodeValue)
+                .join(""),
+            "      /create-script /update-script /pdf-to-markdown /clean",
+        );
+    } finally {
+        (globalThis as { Text: typeof Text }).Text = previousText;
+    }
+});
