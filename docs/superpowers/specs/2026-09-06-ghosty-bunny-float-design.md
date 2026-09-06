@@ -12,15 +12,15 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Replace the rabbit's one-pixel idle drift with the approved weightless float.
-- [ ] Start the float only after the five-second staged reveal completes.
-- [ ] Keep the rabbit art, header layout, graph motion, and application code unchanged.
+- [x] Replace the rabbit's one-pixel idle drift with the approved weightless float.
+- [x] Start the float only after the five-second staged reveal completes.
+- [x] Keep the rabbit art, header layout, graph motion, and application code unchanged.
 
 ### Verification
 
-- [ ] Prove the motion contract with a focused settings-header test.
-- [ ] Run the complete repository verification suite.
-- [ ] Inspect the final diff for unrelated files and generated artifacts.
+- [x] Prove the motion contract with a focused settings-header test.
+- [x] Run the complete repository verification suite.
+- [x] Inspect the final diff for unrelated files and generated artifacts.
 
 ## Goal
 

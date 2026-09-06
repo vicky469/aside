@@ -16,7 +16,7 @@
 - Modify: `tests/asideSettingsHeaderArt.test.mjs`
 - Test: `tests/asideSettingsHeaderArt.test.mjs`
 
-- [ ] **Step 1: Replace the old idle-animation assertions**
+- [x] **Step 1: Replace the old idle-animation assertions**
 
 In `settings header stages a soft cascade before continuous ambient motion`, require the approved animation name, timing, and delayed start:
 
@@ -37,7 +37,7 @@ assert.match(
 assert.doesNotMatch(styles, /aside-settings-hero-rabbit-idle/);
 ```
 
-- [ ] **Step 2: Run the focused test and confirm RED**
+- [x] **Step 2: Run the focused test and confirm RED**
 
 Run:
 
@@ -47,7 +47,7 @@ node --test tests/asideSettingsHeaderArt.test.mjs
 
 Expected: FAIL because `styles.css` still declares `aside-settings-hero-rabbit-idle 3.8s` and its one-pixel keyframes.
 
-- [ ] **Step 3: Commit the test contract after GREEN in Task 2**
+- [x] **Step 3: Commit the test contract after GREEN in Task 2**
 
 Keep the test and implementation in one behavior commit so the branch never records a permanently failing test.
 
@@ -57,7 +57,7 @@ Keep the test and implementation in one behavior commit so the branch never reco
 - Modify: `styles.css`
 - Test: `tests/asideSettingsHeaderArt.test.mjs`
 
-- [ ] **Step 1: Replace the ambient animation declaration**
+- [x] **Step 1: Replace the ambient animation declaration**
 
 Keep the one-shot reveal as the first animation and replace only the second animation:
 
@@ -67,7 +67,7 @@ animation:
     aside-settings-hero-rabbit-float 3.2s ease-in-out var(--aside-settings-hero-intro-duration) infinite;
 ```
 
-- [ ] **Step 2: Replace the idle keyframes**
+- [x] **Step 2: Replace the idle keyframes**
 
 Use matching endpoints and a single five-pixel apex:
 
@@ -78,7 +78,7 @@ Use matching endpoints and a single five-pixel apex:
 }
 ```
 
-- [ ] **Step 3: Run the focused test and confirm GREEN**
+- [x] **Step 3: Run the focused test and confirm GREEN**
 
 Run:
 
@@ -88,7 +88,7 @@ node --test tests/asideSettingsHeaderArt.test.mjs
 
 Expected: all 13 settings-header tests pass.
 
-- [ ] **Step 4: Commit the tested behavior**
+- [x] **Step 4: Commit the tested behavior**
 
 ```bash
 git add styles.css tests/asideSettingsHeaderArt.test.mjs
@@ -100,7 +100,7 @@ git commit -m "feat(settings): float header bunny"
 **Files:**
 - Modify: `docs/superpowers/specs/2026-09-06-ghosty-bunny-float-design.md`
 
-- [ ] **Step 1: Run complete repository verification**
+- [x] **Step 1: Run complete repository verification**
 
 Run:
 
@@ -110,7 +110,7 @@ npm run build
 
 Expected: compiled tests, direct tests, lint, typecheck, Obsidian compliance, and bundle-size checks all pass.
 
-- [ ] **Step 2: Inspect the change surface**
+- [x] **Step 2: Inspect the change surface**
 
 Run:
 
@@ -122,11 +122,11 @@ git status --short
 
 Expected: only the approved CSS, test, spec, and plan changes; no whitespace errors or generated artifacts.
 
-- [ ] **Step 3: Mark the tracked spec complete**
+- [x] **Step 3: Mark the tracked spec complete**
 
 Change each applicable unchecked item in `## Implementation Tracking` to `[x]` only after the preceding commands pass.
 
-- [ ] **Step 4: Commit the verification record**
+- [x] **Step 4: Commit the verification record**
 
 ```bash
 git add -f docs/superpowers/specs/2026-09-06-ghosty-bunny-float-design.md docs/superpowers/plans/2026-09-06-ghosty-bunny-float.md
