@@ -263,7 +263,7 @@ git commit -m "feat(tags): index files by tag"
 - Create: `src/ui/views/indexTagSearch.ts`
 - Create: `tests/indexTagSearch.test.ts`
 
-- [ ] **Step 1: Write failing model tests**
+- [x] **Step 1: Write failing model tests**
 
 Create real `TFile` fixtures and cover empty query, no match, fuzzy ordering, union deduplication, exact filtering, duplicate basenames, deterministic sorting, stale filter fallback, and pagination:
 
@@ -308,7 +308,7 @@ test("result windows expose every file in stable increments", () => {
 });
 ```
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
 Run:
 
@@ -318,7 +318,7 @@ Run:
 
 Expected: TypeScript fails because `indexTagSearch.ts` does not exist.
 
-- [ ] **Step 3: Implement complete result construction**
+- [x] **Step 3: Implement complete result construction**
 
 Export focused immutable models:
 
@@ -363,7 +363,7 @@ export function buildIndexTagSearchWindow(
 
 Build each tag membership once, union by full path, retain all matching tags per file, and sort by best tag rank, basename, then path. Exact selection filters the cached model only. Unknown filters behave as `All matches`.
 
-- [ ] **Step 4: Run focused tests and verify GREEN**
+- [x] **Step 4: Run focused tests and verify GREEN**
 
 Run:
 
@@ -373,7 +373,7 @@ Run:
 
 Expected: all index tag model tests pass.
 
-- [ ] **Step 5: Commit the slice**
+- [x] **Step 5: Commit the slice**
 
 ```bash
 git add src/ui/views/indexTagSearch.ts tests/indexTagSearch.test.ts
