@@ -52,7 +52,7 @@ test("sidebar mode tab groups omit optional tabs when top-level settings are off
     );
     assert.deepEqual(
         getSidebarModeTabGroups(availability, "index").map((group) => group.tabs.map((tab) => tab.mode)),
-        [["list"], ["thought-trail"]],
+        [["list"], ["tags", "thought-trail"]],
     );
 });
 
@@ -72,7 +72,7 @@ test("sidebar mode tab groups include todo and agent on note and index surfaces 
     );
     assert.deepEqual(
         getSidebarModeTabGroups(availability, "index").map((group) => group.tabs.map((tab) => tab.mode)),
-        [["list"], ["todo", "agent", "thought-trail"]],
+        [["list"], ["tags", "todo", "agent", "thought-trail"]],
     );
 });
 

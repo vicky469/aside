@@ -482,11 +482,11 @@ git commit -m "refactor(sidebar): share tag file list"
 - Modify: `tests/sidebarToolbarComposition.test.mjs`
 - Create: `tests/sidebarIndexTagSearchRenderer.test.mjs`
 
-- [ ] **Step 1: Write failing tab, scope, and toolbar tests**
+- [x] **Step 1: Write failing tab, scope, and toolbar tests**
 
 Update expected index groups to `[["list"], ["tags", "todo", "agent", "thought-trail"]]`. Add a `global-tags` scope assertion when no file is selected. Assert index Tags shows only a search row, omitting file filter, pin, nested, deleted, and add-page actions. Assert the renderer source imports shared filter/file helpers and contains no mutation terms.
 
-- [ ] **Step 2: Run focused tests and verify RED**
+- [x] **Step 2: Run focused tests and verify RED**
 
 Run:
 
@@ -496,7 +496,7 @@ Run:
 
 Expected: group and scope assertions fail because index Tags is still excluded and the renderer is missing.
 
-- [ ] **Step 3: Add index-mode policy**
+- [x] **Step 3: Add index-mode policy**
 
 In `sidebarModeTabs.ts`, put `tags` first in the index global modes. In `indexSidebarState.ts`, add `{ kind: "global-tags"; rootFilePath: null }` and return it for Tags without a selected file. Keep side-note search visible only for List. In `sidebarToolbarState.ts`, make Tags a search-only index mode:
 
@@ -517,7 +517,7 @@ return {
 
 Make `scopeIndexThreadsByMode` return empty thread arrays for `global-tags`; the dedicated Tags renderer does not consume comment cards. Make `resolveIndexSidebarEmptyStateTexts` return `null` for this scope so the generic comment empty state cannot leak into Tags.
 
-- [ ] **Step 4: Implement the read-only renderer**
+- [x] **Step 4: Implement the read-only renderer**
 
 Create `sidebarIndexTagSearchRenderer.ts` with:
 
@@ -537,7 +537,7 @@ export function renderSidebarIndexTagSearch(
 
 Render the initial guidance when no non-empty result exists, `No matching tags` for an empty ranked set, shared filter chips (`All matches` plus ranked tags and unique file counts), the windowed shared file rows, and a native `Show more` button with visible/total counts. Supply path labels and matching tag metadata from the pure model.
 
-- [ ] **Step 5: Add isolated state and debounce to `AsideView`**
+- [x] **Step 5: Add isolated state and debounce to `AsideView`**
 
 Add tag-specific input/query/result/filter/limit/request/timer fields. Reuse `NOTE_SIDEBAR_SEARCH_DEBOUNCE_MS`, target Tags mode, and call:
 
@@ -553,7 +553,7 @@ this.indexTagSearchVisibleLimit = INDEX_SIDEBAR_LIST_LIMIT;
 
 After the model changes, rerender only the index Tags body through a focused `renderIndexTagSearchBody()` method. Do not call full `renderComments` for typing, chip selection, or pagination; keeping the toolbar DOM mounted also preserves input focus without restoration work. Clear the pending timer on view close and when leaving Tags. Keep the last applied query while switching filters; an empty input clears result/filter state. A metadata-driven full render rebuilds the applied query model from the updated capability index.
 
-- [ ] **Step 6: Route toolbar input and body rendering**
+- [x] **Step 6: Route toolbar input and body rendering**
 
 When active index mode is Tags, supply tag-specific search options with placeholder `Search tags across your vault` and aria label `Search vault tags`. Remove the forced Tags-to-List fallback. Calculate tag availability from `getIndexedVaultTagUsage().length > 0`, independent of selected index file and comment tags. Pass the same availability into `renderCachedIndexDefaultSidebar`, so a vault with tags but no Aside comments still exposes Tags.
 
@@ -575,7 +575,7 @@ if (isAllCommentsView && effectiveIndexSidebarMode === "tags") {
 
 Open files through `getPreferredFileLeaf(filePath)`, verify the current vault object is a `TFile`, call `openFile`, and focus the target leaf. Do not navigate through generated index headings.
 
-- [ ] **Step 7: Run focused tests and verify GREEN**
+- [x] **Step 7: Run focused tests and verify GREEN**
 
 Run:
 

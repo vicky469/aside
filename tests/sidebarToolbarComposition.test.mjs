@@ -21,7 +21,7 @@ test("index search is supplied only through the shared toolbar plan", () => {
     assert.match(asideViewSource, /search:\s*secondaryPlan\.showSearch/);
     assert.match(
         asideViewSource,
-        /\? this\.getIndexSearchInputOptions\(\)/,
+        /activePrimaryMode === "tags"[\s\S]*?\? this\.getIndexTagSearchInputOptions\(\)[\s\S]*?: this\.getIndexSearchInputOptions\(\)/,
     );
     assert.doesNotMatch(asideViewSource, /this\.renderIndexSearchInput\(/);
 });
@@ -36,7 +36,7 @@ test("shared search rendering supports native disabled semantics", () => {
 
 test("index search renders only inside a selected-file toolbar", () => {
     const methodSource = asideViewSource.match(
-        /private getIndexSearchInputOptions\([\s\S]*?\): SidebarSearchInputOptions \{[\s\S]*?\n {4}private renderPrimarySidebarModeControl\(/,
+        /private getIndexSearchInputOptions\([\s\S]*?\): SidebarSearchInputOptions \{[\s\S]*?\n {4}private getIndexTagSearchInputOptions\(/,
     )?.[0];
 
     assert.ok(methodSource, "missing index search options method");

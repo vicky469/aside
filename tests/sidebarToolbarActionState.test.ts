@@ -118,6 +118,21 @@ test("unscoped Index List and Agent omit the secondary row while Todo stays glob
         showDeleted: true,
         showAddPageComment: false,
     });
+
+    assert.deepEqual(resolveSidebarSecondaryToolbarPlan({
+        ...base,
+        surface: "index",
+        mode: "tags",
+        indexScopeKind: "global-tags",
+    }), {
+        showRow: true,
+        showFileFilter: false,
+        showSearch: true,
+        showPinned: false,
+        showNested: false,
+        showDeleted: false,
+        showAddPageComment: false,
+    });
 });
 
 test("note toolbar actions stay enabled when no exclusive mode is active", () => {

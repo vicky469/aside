@@ -64,7 +64,7 @@ export function getSidebarModeTabGroups(
     }> = surface === "index"
         ? [
             { scope: "local", modes: ["list"] },
-            { scope: "global", modes: ["todo", "agent", "thought-trail"] },
+            { scope: "global", modes: ["tags", "todo", "agent", "thought-trail"] },
         ]
         : [
             { scope: "local", modes: ["list", "tags", "todo", "agent"] },

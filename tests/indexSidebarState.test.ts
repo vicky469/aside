@@ -47,6 +47,17 @@ test("index card modes resolve global todo and gated local modes without a file"
         kind: "global-todo",
         rootFilePath: null,
     });
+    assert.deepEqual(resolveIndexSidebarModeScope("tags", null), {
+        kind: "global-tags",
+        rootFilePath: null,
+    });
+});
+
+test("index Tags stays vault-wide when a file filter is selected", () => {
+    assert.deepEqual(resolveIndexSidebarModeScope("tags", "docs/b.md"), {
+        kind: "global-tags",
+        rootFilePath: null,
+    });
 });
 
 test("a selected file scopes every index card mode", () => {
@@ -121,6 +132,10 @@ test("index mode scope selects empty, global, or file threads", () => {
         scopeIndexThreadsByMode(visibleThreads, allThreads, resolveIndexSidebarModeScope("todo", "docs/b.md"))
             .scopedAllThreads.map((thread) => thread.id),
         ["agent-b", "todo-b"],
+    );
+    assert.deepEqual(
+        scopeIndexThreadsByMode(visibleThreads, allThreads, resolveIndexSidebarModeScope("tags", null)),
+        { scopedVisibleThreads: [], scopedAllThreads: [] },
     );
 });
 
