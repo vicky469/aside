@@ -564,6 +564,13 @@ test("JavaScript extraction keeps division after returned identifiers", () => {
 	}).references, ["./asset.js"]);
 });
 
+test("JavaScript extraction cooks surrogate escape pairs", () => {
+	assert.deepEqual(extractPublishDependencyReferences({
+		vaultRelativePath: "public/surrogate-escape.js",
+		contents: `import("./\\uD83D\\uDE80.js");`,
+	}).references, ["./🚀.js"]);
+});
+
 test("JavaScript extraction scans template expressions and accepts literal imports with options", () => {
 	assert.deepEqual(extractPublishDependencyReferences({
 		vaultRelativePath: "public/templates.js",

@@ -52,6 +52,13 @@ test("JavaScript dependency lexer keeps division after returned identifiers", ()
 	}`), ["./asset.js"]);
 });
 
+test("JavaScript dependency lexer cooks surrogate escape pairs", () => {
+	assert.deepEqual(
+		references(`import("./\\uD83D\\uDE80.js");`),
+		["./🚀.js"],
+	);
+});
+
 test("JavaScript dependency lexer scans template expressions and markup chunks", () => {
 	const result = scanJavascriptDependencies(`
 const markup = \`<img src="./image.png">\`;

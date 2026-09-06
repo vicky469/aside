@@ -111,7 +111,7 @@ function readFixedHex(contents: string, offset: number, length: number): { end: 
 	const digits = contents.slice(offset, offset + length);
 	if (digits.length !== length || !new RegExp(`^[0-9a-f]{${length}}$`, "iu").test(digits)) return null;
 	const codePoint = Number.parseInt(digits, 16);
-	if (codePoint > 0x10ffff || (codePoint >= 0xd800 && codePoint <= 0xdfff)) return null;
+	if (codePoint > 0x10ffff) return null;
 	return { end: offset + length, value: String.fromCodePoint(codePoint) };
 }
 
@@ -122,7 +122,7 @@ function readUnicodeEscape(contents: string, offset: number): { end: number; val
 	const digits = contents.slice(offset + 1, closing);
 	if (!/^[0-9a-f]{1,6}$/iu.test(digits)) return null;
 	const codePoint = Number.parseInt(digits, 16);
-	if (codePoint > 0x10ffff || (codePoint >= 0xd800 && codePoint <= 0xdfff)) return null;
+	if (codePoint > 0x10ffff) return null;
 	return { end: closing + 1, value: String.fromCodePoint(codePoint) };
 }
 
