@@ -2035,7 +2035,7 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
     opacity: 0;
     animation:
         aside-settings-hero-rabbit var(--aside-settings-hero-intro-duration) ease-in-out 1 forwards,
-        aside-settings-hero-rabbit-idle 3.8s ease-in-out var(--aside-settings-hero-motion-delay) infinite alternate;
+        aside-settings-hero-rabbit-float 3.2s ease-in-out var(--aside-settings-hero-intro-duration) infinite;
 }
 
 .aside-settings-tab .aside-settings-hero-thought {
@@ -2251,10 +2251,9 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
     14%, 100% { opacity: 1; transform: translate(5px, 0) rotate(0); }
 }
 
-@keyframes aside-settings-hero-rabbit-idle {
-    0% { transform: translate(5px, 0) rotate(0); }
-    45% { transform: translate(5px, -1px) rotate(-0.35deg); }
-    100% { transform: translate(6px, 0) rotate(0.35deg); }
+@keyframes aside-settings-hero-rabbit-float {
+    0%, 100% { transform: translate(5px, 0) rotate(0); }
+    50% { transform: translate(5px, -5px) rotate(0.5deg); }
 }
 
 @keyframes aside-settings-hero-thought {
