@@ -688,6 +688,46 @@ test("update-script returns immediately when no agent is available", async () =>
     assert.equal(harness.getDefaultRuntimeSelectionCalls(), 1);
 });
 
+test("comment agent controller does not dispatch update-script after disposal", async () => {
+    let releaseSelection: () => void = () => undefined;
+    let markSelectionStarted: () => void = () => undefined;
+    const selectionStarted = new Promise<void>((resolve) => {
+        markSelectionStarted = resolve;
+    });
+    const blockedSelection = new Promise<void>((resolve) => {
+        releaseSelection = resolve;
+    });
+    const harness = createHarness({
+        registeredScriptPaths: ["🛠️ scripts/embed-image-urls.mjs"],
+        resolveDefaultAgentRuntimeSelection: async () => {
+            markSelectionStarted();
+            await blockedSelection;
+            return {
+                kind: "resolved",
+                selectedAgent: "codex",
+                runtime: "direct-cli",
+                modePreference: "auto",
+            };
+        },
+    });
+    const targetScript = harness.vaultScriptRegistry.resolve("/embed-image-urls");
+    assert.ok(targetScript);
+
+    const pendingDispatch = harness.controller.handleUpdateScriptRequest({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "/update-script /embed-image-urls make the default smaller",
+    }, "make the default smaller", targetScript);
+    await selectionStarted;
+    harness.controller.dispose();
+    releaseSelection();
+    await pendingDispatch;
+
+    assert.deepEqual(harness.controller.getAgentRuns(), []);
+    assert.deepEqual(harness.runtimeCalls, []);
+});
+
 test("update-script regenerate reparses the latest request and re-resolves its target", async () => {
     let runtimeAttempt = 0;
     const harness = createHarness({

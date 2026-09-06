@@ -224,6 +224,7 @@ type AgentStreamListener = (update: AgentStreamUpdate) => void;
 const FINAL_STREAM_RETENTION_MS = 30_000;
 
 export class CommentAgentController {
+    private disposed = false;
     private processingQueue = false;
     private readonly runStreams = new Map<string, AgentRunStreamState>();
     private readonly runStreamPruneTimers = new Map<string, number>();
@@ -244,6 +245,7 @@ export class CommentAgentController {
     ) {}
 
     public initialize(): void {
+        this.disposed = false;
         this.store.load();
     }
 
@@ -312,6 +314,7 @@ export class CommentAgentController {
     }
 
     public dispose(): void {
+        this.disposed = true;
         this.streamListeners.clear();
         const timerWindow = getTimerWindow();
         for (const timer of this.runStreamPruneTimers.values()) {
@@ -338,12 +341,18 @@ export class CommentAgentController {
     }
 
     public async handleSavedUserEntry(event: SavedUserEntryEvent): Promise<void> {
+        if (this.disposed) {
+            return;
+        }
         const resolution = parseAgentDirectives(event.body);
         const resolvedTarget = this.resolveDispatchTarget(resolution, event);
         if (!resolvedTarget) {
             return;
         }
         const runtimeSelection = await this.host.resolveAgentRuntimeSelection(resolvedTarget);
+        if (this.disposed) {
+            return;
+        }
         const run = this.buildQueuedRun({
             threadId: event.threadId,
             triggerEntryId: event.entryId,
@@ -371,11 +380,17 @@ export class CommentAgentController {
         event: SavedUserEntryEvent,
         requestText: string,
     ): Promise<void> {
+        if (this.disposed) {
+            return;
+        }
         if (getLatestAgentRunForTriggerEntry(this.store.getRuns(), event.entryId)) {
             return;
         }
 
         const selection = await this.host.resolveDefaultAgentRuntimeSelection();
+        if (this.disposed) {
+            return;
+        }
         if (selection.kind === "none") {
             await this.appendCommandReply(event, CREATE_SCRIPT_NO_AGENT);
             return;
@@ -400,11 +415,17 @@ export class CommentAgentController {
         requestText: string,
         targetScript: VaultScriptRegistration,
     ): Promise<void> {
+        if (this.disposed) {
+            return;
+        }
         if (getLatestAgentRunForTriggerEntry(this.store.getRuns(), event.entryId)) {
             return;
         }
 
         const selection = await this.host.resolveDefaultAgentRuntimeSelection();
+        if (this.disposed) {
+            return;
+        }
         if (selection.kind === "none") {
             await this.appendCommandReply(event, UPDATE_SCRIPT_NO_AGENT);
             return;
@@ -426,6 +447,9 @@ export class CommentAgentController {
     }
 
     public async handlePdfToMarkdownRequest(event: SavedUserEntryEvent): Promise<void> {
+        if (this.disposed) {
+            return;
+        }
         if (getLatestAgentRunForTriggerEntry(this.store.getRuns(), event.entryId)) {
             return;
         }
@@ -449,6 +473,9 @@ export class CommentAgentController {
 
         try {
             const selection = await this.host.resolveDefaultAgentRuntimeSelection();
+            if (this.disposed) {
+                return;
+            }
             if (selection.kind === "none") {
                 await this.appendCommandReply(event, PDF_TO_MARKDOWN_NO_AGENT);
                 return;
@@ -479,6 +506,9 @@ export class CommentAgentController {
     }
 
     public async retryRun(runId: string): Promise<boolean> {
+        if (this.disposed) {
+            return false;
+        }
         const previousRun = this.store.getRunById(runId);
         if (!previousRun) {
             this.host.showNotice("Unable to find that agent reply.");
@@ -500,6 +530,9 @@ export class CommentAgentController {
     }
 
     public async retryPromptForComment(commentId: string, filePath: string): Promise<boolean> {
+        if (this.disposed) {
+            return false;
+        }
         return this.retryPromptForCommentInternal({
             triggerEntryId: commentId,
             filePath,
@@ -895,7 +928,7 @@ export class CommentAgentController {
     }
 
     private processQueue(): void {
-        if (this.processingQueue) {
+        if (this.disposed || this.processingQueue) {
             return;
         }
 
@@ -956,6 +989,9 @@ export class CommentAgentController {
     }
 
     private async executeRun(runId: string): Promise<void> {
+        if (this.disposed) {
+            return;
+        }
         const queuedRun = this.store.getRunById(runId);
         if (!queuedRun || queuedRun.status !== "queued") {
             return;
@@ -1798,6 +1834,9 @@ export class CommentAgentController {
     }
 
     private async enqueueRun(run: AgentRunRecord): Promise<void> {
+        if (this.disposed) {
+            return;
+        }
         const queuedRun = run.outputEntryId
             ? run
             : { ...run, outputEntryId: this.host.createCommentId() };
@@ -1815,6 +1854,9 @@ export class CommentAgentController {
         } catch (error) {
             this.clearRunStream(queuedRun.id, queuedRun.threadId);
             throw error;
+        }
+        if (this.disposed) {
+            return;
         }
         void this.host.log?.("info", "agents", "agents.run.queued", {
             runId: queuedRun.id,
