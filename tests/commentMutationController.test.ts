@@ -774,6 +774,49 @@ test("comment mutation controller dispatches saved append entries to the agent h
         filePath: draft.filePath,
         body: "@codex explain this",
     }]);
+    assert.deepEqual(host.persistedFiles, [{
+        path: draft.filePath,
+        immediateAggregateRefresh: false,
+        skipCommentViewRefresh: true,
+    }]);
+});
+
+test("comment mutation controller does not dispatch an appended entry before persistence succeeds", async () => {
+    const existing = createComment({ id: "thread-1", comment: "Original" });
+    const draft: DraftComment = {
+        ...toDraft(existing, {
+            id: "entry-2",
+            comment: "@codex explain this",
+            mode: "append",
+        }),
+        threadId: existing.id,
+    };
+    let releasePersistence!: () => void;
+    let markPersistenceStarted!: () => void;
+    const persistenceStarted = new Promise<void>((resolve) => {
+        markPersistenceStarted = resolve;
+    });
+    const persistencePending = new Promise<void>((resolve) => {
+        releasePersistence = resolve;
+    });
+    const host = createHost({
+        draftComment: draft,
+        knownComments: [existing],
+        loadedComments: [existing],
+        persistCommentsForFile: async () => {
+            markPersistenceStarted();
+            await persistencePending;
+        },
+    });
+
+    const savePromise = host.controller.saveDraft(draft.id);
+    await persistenceStarted;
+
+    assert.deepEqual(host.savedUserEntryEvents, []);
+
+    releasePersistence();
+    await savePromise;
+    assert.equal(host.savedUserEntryEvents.length, 1);
 });
 
 test("comment mutation controller inserts child-targeted append drafts after the clicked child entry", async () => {
@@ -927,12 +970,22 @@ test("comment mutation controller can refresh an appended entry before persisten
         alwaysInsertAfterTarget: true,
         refreshBeforePersist: true,
         skipCommentViewRefresh: true,
+        immediateAggregateRefresh: false,
+        refreshEditorDecorations: false,
+        refreshMarkdownPreviews: false,
     });
     await new Promise<void>((resolve) => setImmediate(resolve));
 
     assert.equal(persistStarted, true);
     assert.equal(host.getRefreshCommentViewsCount(), 1);
     assert.equal(host.manager.getCommentById("pending-script-output")?.comment, "");
+    assert.deepEqual(host.persistedFiles, [{
+        path: existing.filePath,
+        immediateAggregateRefresh: false,
+        skipCommentViewRefresh: true,
+        refreshEditorDecorations: false,
+        refreshMarkdownPreviews: false,
+    }]);
 
     releasePersist();
     assert.equal(await appendPromise, true);
@@ -956,6 +1009,30 @@ test("comment mutation controller does not dispatch edited entries to the agent 
     assert.deepEqual(host.savedUserEntryEvents, []);
     assert.equal(host.getRefreshCommentViewsCount(), 1);
     assert.equal(host.getRefreshEditorDecorationsCount(), 1);
+});
+
+test("comment mutation controller can defer terminal reply refresh work", async () => {
+    const existing = createComment({ id: "thread-1", comment: "Pending reply" });
+    const host = createHost({
+        knownComments: [existing],
+        loadedComments: [existing],
+    });
+
+    const edited = await host.controller.editComment(existing.id, "Completed reply", {
+        skipCommentViewRefresh: true,
+        deferAggregateRefresh: true,
+        refreshEditorDecorations: false,
+        refreshMarkdownPreviews: false,
+    });
+
+    assert.equal(edited, true);
+    assert.deepEqual(host.persistedFiles, [{
+        path: existing.filePath,
+        immediateAggregateRefresh: false,
+        skipCommentViewRefresh: true,
+        refreshEditorDecorations: false,
+        refreshMarkdownPreviews: false,
+    }]);
 });
 
 test("comment mutation controller can defer delete refresh work for lightweight local sidebar updates", async () => {

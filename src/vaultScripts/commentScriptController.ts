@@ -33,13 +33,21 @@ export interface CommentScriptHost {
             insertAfterCommentId?: string;
             alwaysInsertAfterTarget?: boolean;
             refreshBeforePersist?: boolean;
+            immediateAggregateRefresh?: boolean;
             skipCommentViewRefresh?: boolean;
+            refreshEditorDecorations?: boolean;
+            refreshMarkdownPreviews?: boolean;
         },
     ): Promise<boolean>;
     editComment(
         commentId: string,
         body: string,
-        options?: { skipCommentViewRefresh?: boolean },
+        options?: {
+            skipCommentViewRefresh?: boolean;
+            deferAggregateRefresh?: boolean;
+            refreshEditorDecorations?: boolean;
+            refreshMarkdownPreviews?: boolean;
+        },
     ): Promise<boolean>;
     refreshCommentViews(): Promise<void>;
     showNotice(message: string): void;
@@ -444,7 +452,10 @@ export class CommentScriptController {
                 insertAfterCommentId: run.triggerEntryId,
                 alwaysInsertAfterTarget: true,
                 refreshBeforePersist: true,
+                immediateAggregateRefresh: false,
                 skipCommentViewRefresh: true,
+                refreshEditorDecorations: false,
+                refreshMarkdownPreviews: false,
             },
         );
         if (!appended) {
@@ -484,7 +495,12 @@ export class CommentScriptController {
             const edited = await this.host.editComment(
                 run.outputEntryId,
                 body,
-                { skipCommentViewRefresh: true },
+                {
+                    skipCommentViewRefresh: true,
+                    deferAggregateRefresh: true,
+                    refreshEditorDecorations: false,
+                    refreshMarkdownPreviews: false,
+                },
             );
             if (!edited) {
                 throw new Error(SCRIPT_RETRY_REPLACE_NOTICE);
@@ -502,7 +518,10 @@ export class CommentScriptController {
             },
             {
                 insertAfterCommentId: run.triggerEntryId,
+                immediateAggregateRefresh: false,
                 skipCommentViewRefresh: true,
+                refreshEditorDecorations: false,
+                refreshMarkdownPreviews: false,
             },
         );
         if (!appended) {

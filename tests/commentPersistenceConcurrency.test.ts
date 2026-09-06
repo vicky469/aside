@@ -141,6 +141,7 @@ function createHarness(files: TFile[], threads: CommentThread[]) {
     let nextId = 0;
     const noteBody = "# Title\n\nAlpha target omega\n";
     let currentNoteContentReader = async (_file: TFile) => noteBody;
+    const parsedNoteFilePaths: string[] = [];
     const controller = new CommentPersistenceController({
         app: {
             vault: {
@@ -154,7 +155,10 @@ function createHarness(files: TFile[], threads: CommentThread[]) {
         getMarkdownFileByPath: (filePath) => files.find((file) => file.path === filePath) ?? null,
         getCurrentNoteContent: (file) => currentNoteContentReader(file),
         getStoredNoteContent: async () => noteBody,
-        getParsedNoteComments: (filePath, noteContent) => parseNoteComments(noteContent, filePath),
+        getParsedNoteComments: (filePath, noteContent) => {
+            parsedNoteFilePaths.push(filePath);
+            return parseNoteComments(noteContent, filePath);
+        },
         getPluginDataDirPath: () => ".obsidian/plugins/aside",
         getSideNoteSyncDeviceId: () => "device-a",
         readPersistedPluginData: () => persistedData,
@@ -182,6 +186,7 @@ function createHarness(files: TFile[], threads: CommentThread[]) {
         adapter,
         commentManager,
         controller,
+        parsedNoteFilePaths,
         setCurrentNoteContentReader: (reader: (file: TFile) => Promise<string>) => {
             currentNoteContentReader = reader;
         },
@@ -297,6 +302,118 @@ test("comment persistence continues queued saves after a same-note failure", asy
 
         assert.equal(await harness.adapter.exists(getSidecarStoragePath(file.path)), true);
     } finally {
+        harness.controller.dispose();
+        globalThis.window = originalWindow;
+    }
+});
+
+test("markdown modification synchronization joins the same-note persistence queue", async () => {
+    const originalWindow = globalThis.window;
+    globalThis.window = {
+        setTimeout: () => 1,
+        clearTimeout: () => {},
+    } as unknown as typeof globalThis.window;
+
+    const file = createFile("docs/note.md");
+    const harness = createHarness([file], [createThread(file.path)]);
+    const firstReadEntered = createDeferred();
+    const secondReadEntered = createDeferred();
+    const releaseFirstRead = createDeferred();
+    let readCount = 0;
+    harness.setCurrentNoteContentReader(async () => {
+        readCount += 1;
+        if (readCount === 1) {
+            firstReadEntered.resolve();
+            await releaseFirstRead.promise;
+        } else if (readCount === 2) {
+            secondReadEntered.resolve();
+        }
+        return "# Title\n\nAlpha target omega\n";
+    });
+
+    let savePromise: Promise<void> | null = null;
+    let modificationPromise: Promise<void> | null = null;
+    try {
+        savePromise = harness.controller.persistCommentsForFile(file);
+        await firstReadEntered.promise;
+        modificationPromise = harness.controller.handleMarkdownFileModified(file);
+
+        assert.equal(
+            await settlesWithinMicrotasks(secondReadEntered.promise),
+            false,
+            "same-note Markdown synchronization bypassed the persistence queue",
+        );
+
+        releaseFirstRead.resolve();
+        await Promise.all([savePromise, modificationPromise]);
+
+        assert.equal(readCount >= 2, true);
+        assert.equal(await harness.adapter.exists(getSidecarStoragePath(file.path)), true);
+    } finally {
+        releaseFirstRead.resolve();
+        await Promise.allSettled(
+            [savePromise, modificationPromise]
+                .filter((promise): promise is Promise<void> => promise !== null),
+        );
+        harness.controller.dispose();
+        globalThis.window = originalWindow;
+    }
+});
+
+test("queued Markdown synchronization keeps its captured path across a rename", async () => {
+    const originalWindow = globalThis.window;
+    globalThis.window = {
+        setTimeout: () => 1,
+        clearTimeout: () => {},
+    } as unknown as typeof globalThis.window;
+
+    const previousPath = "docs/old.md";
+    const nextPath = "docs/new.md";
+    const file = createFile(previousPath);
+    const harness = createHarness([file], [createThread(previousPath)]);
+    const firstReadEntered = createDeferred();
+    const releaseFirstRead = createDeferred();
+    let readCount = 0;
+    harness.setCurrentNoteContentReader(async () => {
+        readCount += 1;
+        if (readCount === 1) {
+            firstReadEntered.resolve();
+            await releaseFirstRead.promise;
+        }
+        return "# Title\n\nAlpha target omega\n";
+    });
+
+    let savePromise: Promise<void> | null = null;
+    let modificationPromise: Promise<void> | null = null;
+    let renamePromise: Promise<void> | null = null;
+    try {
+        savePromise = harness.controller.persistCommentsForFile(file);
+        await firstReadEntered.promise;
+        modificationPromise = harness.controller.handleMarkdownFileModified(file);
+        (file as TFile & { path: string }).path = nextPath;
+        renamePromise = harness.controller.renameStoredComments(previousPath, nextPath, {
+            selectionCapable: true,
+            pageLabelHash: "hash-page",
+        });
+
+        releaseFirstRead.resolve();
+        await Promise.all([savePromise, modificationPromise, renamePromise]);
+
+        assert.equal(
+            harness.parsedNoteFilePaths.includes(nextPath),
+            false,
+            "the old-path modification transaction read mutable file.path after waiting",
+        );
+        const payload = JSON.parse(await harness.adapter.read(getSidecarStoragePath(nextPath))) as {
+            threads: CommentThread[];
+        };
+        assert.equal(payload.threads[0]?.filePath, nextPath);
+    } finally {
+        releaseFirstRead.resolve();
+        await Promise.allSettled(
+            [savePromise, modificationPromise, renamePromise]
+                .filter((promise): promise is Promise<void> => promise !== null),
+        );
         harness.controller.dispose();
         globalThis.window = originalWindow;
     }

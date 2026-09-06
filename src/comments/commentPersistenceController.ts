@@ -1149,54 +1149,67 @@ export class CommentPersistenceController {
             return;
         }
 
+        const filePath = file.path;
         try {
-            const fileContent = await this.host.getCurrentNoteContent(file);
-            if (this.disposed) {
-                return;
-            }
-            const sourceRecord = await this.ensureSourceIdentityForFilePath(file.path, fileContent);
-            const storedContent = await this.host.getStoredNoteContent(file);
-            if (this.disposed) {
-                return;
-            }
-            const hasSidecar = await this.sidecarStorage.exists(file.path);
-            if (!hasSidecar && fileContent !== storedContent && this.host.getMarkdownViewForFile(file)) {
-                const currentParsed = await this.parseAndNormalizeFileComments(file.path, fileContent);
-                const storedParsed = await this.parseAndNormalizeFileComments(file.path, storedContent);
-                if (currentParsed.mainContent === storedParsed.mainContent && storedParsed.threads.length > 0) {
-                    const synced = await this.syncThreadsIntoVisibleNoteContent(file, currentParsed.mainContent, storedParsed.threads);
-                    await this.writeSourceAndPathSidecars(sourceRecord.sourceId, file.path, synced.threads);
-                    await this.syncEventStore.appendLocalEvents(
-                        file.path,
-                        buildSideNoteSyncEventInputsForThreadDiff([], synced.threads),
-                    );
-                    await this.compactSyncedSideNoteEventsForSnapshots([{
-                        notePath: file.path,
-                        threads: synced.threads,
-                    }]);
-                    this.clearPendingCommentPersistTimer(file.path);
-                    await this.afterCommentsChanged(file.path);
-                    void this.host.log?.("info", "persistence", "storage.note.external-managed-sync", {
-                        filePath: file.path,
-                        threadCount: synced.threads.length,
-                    });
-                    return;
-                }
-            }
-            const parsed = await this.syncFileCommentsFromContent(file, fileContent);
-            if (parsed.source !== "none" || parsed.threads.length > 0) {
-                await this.writeSourceAndPathSidecars(sourceRecord.sourceId, file.path, parsed.threads);
-            }
-
-            this.clearPendingCommentPersistTimer(file.path);
-            await this.afterCommentsChanged(file.path);
+            const queueKeys = this.getCommentPersistenceQueueKeys(file, filePath);
+            await this.enqueueCommentPersistence(queueKeys, async () => {
+                await this.syncModifiedMarkdownFile(file, filePath);
+            });
         } catch (error) {
             console.error("Error syncing note-backed comments:", error);
             void this.host.log?.("error", "persistence", "storage.note.write.error", {
-                filePath: file.path,
+                filePath,
                 error,
             });
         }
+    }
+
+    private async syncModifiedMarkdownFile(file: TFile, filePath: string): Promise<void> {
+        const fileContent = await this.host.getCurrentNoteContent(file);
+        if (this.disposed) {
+            return;
+        }
+        const sourceRecord = await this.ensureSourceIdentityForFilePath(filePath, fileContent);
+        const storedContent = await this.host.getStoredNoteContent(file);
+        if (this.disposed) {
+            return;
+        }
+        const hasSidecar = await this.sidecarStorage.exists(filePath);
+        if (!hasSidecar && fileContent !== storedContent && this.host.getMarkdownViewForFile(file)) {
+            const currentParsed = await this.parseAndNormalizeFileComments(filePath, fileContent);
+            const storedParsed = await this.parseAndNormalizeFileComments(filePath, storedContent);
+            if (currentParsed.mainContent === storedParsed.mainContent && storedParsed.threads.length > 0) {
+                const synced = await this.syncThreadsIntoVisibleNoteContent(
+                    file,
+                    currentParsed.mainContent,
+                    storedParsed.threads,
+                    filePath,
+                );
+                await this.writeSourceAndPathSidecars(sourceRecord.sourceId, filePath, synced.threads);
+                await this.syncEventStore.appendLocalEvents(
+                    filePath,
+                    buildSideNoteSyncEventInputsForThreadDiff([], synced.threads),
+                );
+                await this.compactSyncedSideNoteEventsForSnapshots([{
+                    notePath: filePath,
+                    threads: synced.threads,
+                }]);
+                this.clearPendingCommentPersistTimer(filePath);
+                await this.afterCommentsChanged(filePath);
+                void this.host.log?.("info", "persistence", "storage.note.external-managed-sync", {
+                    filePath,
+                    threadCount: synced.threads.length,
+                });
+                return;
+            }
+        }
+        const parsed = await this.syncFileCommentsFromContent(file, fileContent, filePath);
+        if (parsed.source !== "none" || parsed.threads.length > 0) {
+            await this.writeSourceAndPathSidecars(sourceRecord.sourceId, filePath, parsed.threads);
+        }
+
+        this.clearPendingCommentPersistTimer(filePath);
+        await this.afterCommentsChanged(filePath);
     }
 
     public async loadCommentsForFile(file: TFile | null): Promise<Comment[]> {
@@ -1642,9 +1655,13 @@ export class CommentPersistenceController {
         };
     }
 
-    private async syncFileCommentsFromContent(file: TFile, noteContent: string): Promise<SyncedFileComments> {
-        const parsed = await this.getCanonicalThreadState(file, noteContent);
-        const synced = await this.syncThreadsIntoVisibleNoteContent(file, parsed.mainContent, parsed.threads);
+    private async syncFileCommentsFromContent(
+        file: TFile,
+        noteContent: string,
+        filePath = file.path,
+    ): Promise<SyncedFileComments> {
+        const parsed = await this.getCanonicalThreadState(file, noteContent, filePath);
+        const synced = await this.syncThreadsIntoVisibleNoteContent(file, parsed.mainContent, parsed.threads, filePath);
         return {
             ...synced,
             source: parsed.source,
@@ -1934,42 +1951,43 @@ export class CommentPersistenceController {
     private async recoverRenamedSourceThreadsForFile(
         file: TFile,
         noteContent: string,
+        filePath = file.path,
     ): Promise<CommentThread[] | null> {
-        const candidate = await this.findRenamedSourceCandidate(file.path, noteContent);
+        const candidate = await this.findRenamedSourceCandidate(filePath, noteContent);
         if (!candidate) {
             return null;
         }
 
-        const normalizedThreads = await this.normalizeThreadsForFile(file.path, candidate.threads);
+        const normalizedThreads = await this.normalizeThreadsForFile(filePath, candidate.threads);
         if (normalizedThreads.length === 0) {
             return null;
         }
 
         const fingerprint = await this.getSourceContentFingerprint(noteContent);
-        const sourceRecord = await this.sourceIdentityStore.recordRename(candidate.notePath, file.path, fingerprint);
-        await this.writeSourceAndPathSidecars(sourceRecord.sourceId, file.path, normalizedThreads);
+        const sourceRecord = await this.sourceIdentityStore.recordRename(candidate.notePath, filePath, fingerprint);
+        await this.writeSourceAndPathSidecars(sourceRecord.sourceId, filePath, normalizedThreads);
         await this.sidecarStorage.remove(candidate.notePath);
         await this.syncEventStore.appendLocalEvents(candidate.notePath, [{
             op: "renameSource",
             payload: {
                 sourceId: sourceRecord.sourceId,
                 previousPath: candidate.notePath,
-                nextPath: file.path,
+                nextPath: filePath,
                 previousNotePath: candidate.notePath,
-                nextNotePath: file.path,
+                nextNotePath: filePath,
             },
         }]);
         await this.compactSyncedSideNoteEventsForSnapshots([{
-            notePath: file.path,
+            notePath: filePath,
             coveredNotePath: candidate.notePath,
             threads: normalizedThreads,
         }, {
-            notePath: file.path,
+            notePath: filePath,
             threads: normalizedThreads,
         }]);
         void this.host.log?.("info", "persistence", "sync.plugin-data.rename.recover", {
             previousNotePath: candidate.notePath,
-            nextNotePath: file.path,
+            nextNotePath: filePath,
             threadCount: normalizedThreads.length,
             origin: candidate.origin,
         });
@@ -2068,14 +2086,14 @@ export class CommentPersistenceController {
         return "";
     }
 
-    private async getCanonicalThreadState(file: TFile, noteContent: string): Promise<{
+    private async getCanonicalThreadState(file: TFile, noteContent: string, filePath = file.path): Promise<{
         mainContent: string;
         threads: CommentThread[];
         source: CanonicalCommentStorageSource;
     }> {
-        const inlineParsed = await this.parseAndNormalizeFileComments(file.path, noteContent);
-        const sourceRecord = await this.ensureSourceIdentityForFilePath(file.path, noteContent);
-        const sidecarResult = await this.readSourceOrPathSidecar(sourceRecord, file.path);
+        const inlineParsed = await this.parseAndNormalizeFileComments(filePath, noteContent);
+        const sourceRecord = await this.ensureSourceIdentityForFilePath(filePath, noteContent);
+        const sidecarResult = await this.readSourceOrPathSidecar(sourceRecord, filePath);
         const sidecarThreads = sidecarResult?.threads ?? null;
         const storagePlan = planCanonicalCommentStorage({
             sidecarRecordFound: sidecarResult !== null,
@@ -2084,13 +2102,13 @@ export class CommentPersistenceController {
         if (storagePlan.action === "use-sidecar" && sidecarThreads) {
             return {
                 mainContent: inlineParsed.mainContent,
-                threads: await this.normalizeThreadsForFile(file.path, sidecarThreads),
+                threads: await this.normalizeThreadsForFile(filePath, sidecarThreads),
                 source: storagePlan.source,
             };
         }
 
         if (storagePlan.shouldRecoverRenamedSource) {
-            const recoveredThreads = await this.recoverRenamedSourceThreadsForFile(file, noteContent);
+            const recoveredThreads = await this.recoverRenamedSourceThreadsForFile(file, noteContent, filePath);
             if (recoveredThreads) {
                 return {
                     mainContent: inlineParsed.mainContent,
