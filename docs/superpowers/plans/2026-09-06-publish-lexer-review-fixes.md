@@ -17,7 +17,7 @@
 - Modify: `tests/publishDependencyReferences.test.ts`
 - Modify: `src/core/publish/javascriptDependencyLexer.ts:43-47,313-332`
 
-- [ ] **Step 1: Write the failing direct and facade tests**
+- [x] **Step 1: Write the failing direct and facade tests**
 
 Add to `tests/javascriptDependencyLexer.test.ts`:
 
@@ -44,7 +44,7 @@ test("JavaScript extraction keeps division after returned identifiers", () => {
 });
 ```
 
-- [ ] **Step 2: Run the focused tests and verify RED**
+- [x] **Step 2: Run the focused tests and verify RED**
 
 Run:
 
@@ -56,7 +56,7 @@ node --test --test-name-pattern "keeps division after returned identifiers" .tes
 
 Expected: both new tests fail because the scanner returns `[]`.
 
-- [ ] **Step 3: Implement the restricted-label distinction**
+- [x] **Step 3: Implement the restricted-label distinction**
 
 Add a dedicated label-owner set beside the existing restricted-line set:
 
@@ -74,13 +74,13 @@ if (previous.kind === "identifier"
 	&& LABELLED_LINE_KEYWORDS.has(tokens[tokens.length - 2]?.value ?? "")) return true;
 ```
 
-- [ ] **Step 4: Run the focused tests and verify GREEN**
+- [x] **Step 4: Run the focused tests and verify GREEN**
 
 Run the Step 2 command again.
 
 Expected: both matching tests pass with zero failures.
 
-- [ ] **Step 5: Commit the slice**
+- [x] **Step 5: Commit the slice**
 
 ```bash
 git add src/core/publish/javascriptDependencyLexer.ts tests/javascriptDependencyLexer.test.ts tests/publishDependencyReferences.test.ts
@@ -94,7 +94,7 @@ git commit -m "fix(publish): preserve return division imports"
 - Modify: `tests/publishDependencyReferences.test.ts`
 - Modify: `src/core/publish/javascriptDependencyLexer.ts:109-125`
 
-- [ ] **Step 1: Write the failing direct and facade tests**
+- [x] **Step 1: Write the failing direct and facade tests**
 
 Add to `tests/javascriptDependencyLexer.test.ts`:
 
@@ -118,7 +118,7 @@ test("JavaScript extraction cooks surrogate escape pairs", () => {
 });
 ```
 
-- [ ] **Step 2: Run the focused tests and verify RED**
+- [x] **Step 2: Run the focused tests and verify RED**
 
 Run:
 
@@ -130,7 +130,7 @@ node --test --test-name-pattern "cooks surrogate escape pairs" .test-dist/tests/
 
 Expected: both new tests fail because the scanner returns `[]`.
 
-- [ ] **Step 3: Accept JavaScript surrogate values**
+- [x] **Step 3: Accept JavaScript surrogate values**
 
 Keep the upper-bound validation but remove the surrogate rejection from fixed and braced Unicode decoding:
 
@@ -146,13 +146,13 @@ if (codePoint > 0x10ffff) return null;
 return { end: closing + 1, value: String.fromCodePoint(codePoint) };
 ```
 
-- [ ] **Step 4: Run the focused tests and verify GREEN**
+- [x] **Step 4: Run the focused tests and verify GREEN**
 
 Run the Step 2 command again.
 
 Expected: both matching tests pass with zero failures.
 
-- [ ] **Step 5: Commit the slice**
+- [x] **Step 5: Commit the slice**
 
 ```bash
 git add src/core/publish/javascriptDependencyLexer.ts tests/javascriptDependencyLexer.test.ts tests/publishDependencyReferences.test.ts
@@ -166,7 +166,7 @@ git commit -m "fix(publish): decode surrogate escapes"
 - Modify: `tests/publishDependencyReferences.test.ts`
 - Modify: `src/core/publish/javascriptDependencyLexer.ts:563-580`
 
-- [ ] **Step 1: Write the failing direct and facade tests**
+- [x] **Step 1: Write the failing direct and facade tests**
 
 Add to `tests/javascriptDependencyLexer.test.ts`:
 
@@ -189,7 +189,7 @@ test("JavaScript extraction ignores property access named new", () => {
 });
 ```
 
-- [ ] **Step 2: Run the focused tests and verify RED**
+- [x] **Step 2: Run the focused tests and verify RED**
 
 Run:
 
@@ -201,7 +201,7 @@ node --test --test-name-pattern "ignores property access named new" .test-dist/t
 
 Expected: both new tests fail because the scanner returns `["./phantom.js"]`.
 
-- [ ] **Step 3: Apply the existing property-access guard**
+- [x] **Step 3: Apply the existing property-access guard**
 
 Change the `new` branch in `collectReferences`:
 
@@ -211,13 +211,13 @@ Change the `new` branch in `collectReferences`:
 }
 ```
 
-- [ ] **Step 4: Run the focused tests and verify GREEN**
+- [x] **Step 4: Run the focused tests and verify GREEN**
 
 Run the Step 2 command again.
 
 Expected: both matching tests pass with zero failures.
 
-- [ ] **Step 5: Commit the slice**
+- [x] **Step 5: Commit the slice**
 
 ```bash
 git add src/core/publish/javascriptDependencyLexer.ts tests/javascriptDependencyLexer.test.ts tests/publishDependencyReferences.test.ts
@@ -232,7 +232,7 @@ git commit -m "fix(publish): ignore property new references"
 - Verify: `tests/javascriptDependencyLexer.test.ts`
 - Verify: `tests/publishDependencyReferences.test.ts`
 
-- [ ] **Step 1: Re-run the change-surface search**
+- [x] **Step 1: Re-run the change-surface search**
 
 Run:
 
@@ -242,7 +242,7 @@ rg -n "RESTRICTED_LINE_KEYWORDS|LABELLED_LINE_KEYWORDS|readFixedHex|readUnicodeE
 
 Expected: lexical decisions remain owned by `javascriptDependencyLexer.ts`; the facade only consumes scanner output; direct and facade fixtures contain the reviewed cases.
 
-- [ ] **Step 2: Run the complete publish-focused tests**
+- [x] **Step 2: Run the complete publish-focused tests**
 
 Run:
 

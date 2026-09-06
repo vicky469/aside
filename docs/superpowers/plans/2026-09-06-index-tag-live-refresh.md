@@ -16,7 +16,7 @@
 - Modify: `tests/workspaceViewController.test.ts`
 - Modify: `src/app/workspaceViewController.ts:25-30,220-250`
 
-- [ ] **Step 1: Extend the test sidebar helper and write the failing routing test**
+- [x] **Step 1: Extend the test sidebar helper and write the failing routing test**
 
 Extend `createSidebarView` in `tests/workspaceViewController.test.ts`:
 
@@ -64,7 +64,7 @@ test("workspace view controller refreshes index tag views only", () => {
 });
 ```
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
 Run:
 
@@ -76,7 +76,7 @@ node --test --test-name-pattern "refreshes index tag views only" .test-dist/test
 
 Expected: the new test fails because `refreshIndexTagSearchViews` is `undefined`.
 
-- [ ] **Step 3: Add the narrow workspace route**
+- [x] **Step 3: Add the narrow workspace route**
 
 Extend `SidebarViewLike` in `src/app/workspaceViewController.ts`:
 
@@ -105,13 +105,13 @@ public refreshIndexTagSearchViews(): void {
 }
 ```
 
-- [ ] **Step 4: Run the focused test and verify GREEN**
+- [x] **Step 4: Run the focused test and verify GREEN**
 
 Run the Step 2 command again.
 
 Expected: the matching test passes with zero failures.
 
-- [ ] **Step 5: Commit the route**
+- [x] **Step 5: Commit the route**
 
 ```bash
 git add src/app/workspaceViewController.ts tests/workspaceViewController.test.ts
@@ -126,7 +126,7 @@ git commit -m "fix(index): route tag metadata refreshes"
 - Modify: `src/ui/views/AsideView.ts:1345-1382`
 - Modify: `src/main.ts:865-871`
 
-- [ ] **Step 1: Write the failing AsideView source contract**
+- [x] **Step 1: Write the failing AsideView source contract**
 
 Add to `tests/sidebarIndexTagSearchRenderer.test.mjs`:
 
@@ -145,7 +145,7 @@ test("metadata refresh keeps the current tag query on the body-only path", () =>
 });
 ```
 
-- [ ] **Step 2: Write the failing metadata-wiring contract**
+- [x] **Step 2: Write the failing metadata-wiring contract**
 
 Add to `tests/pluginStartupOrder.test.ts`:
 
@@ -164,7 +164,7 @@ test("metadata changes update tag membership before refreshing visible tag resul
 });
 ```
 
-- [ ] **Step 3: Run both focused tests and verify RED**
+- [x] **Step 3: Run both focused tests and verify RED**
 
 Run:
 
@@ -176,7 +176,7 @@ node --test .test-dist/tests/pluginStartupOrder.test.js tests/sidebarIndexTagSea
 
 Expected: the two new tests fail because neither refresh hook nor metadata notification exists.
 
-- [ ] **Step 4: Add the guarded body-only refresh hook**
+- [x] **Step 4: Add the guarded body-only refresh hook**
 
 Add beside `refreshIndexTagSearchResult` in `src/ui/views/AsideView.ts`:
 
@@ -198,7 +198,7 @@ public refreshIndexTagSearch(): void {
 }
 ```
 
-- [ ] **Step 5: Notify visible index Tags views after index mutation**
+- [x] **Step 5: Notify visible index Tags views after index mutation**
 
 Extend the existing metadata-cache callback in `src/main.ts`:
 
@@ -209,13 +209,13 @@ this.registerEvent(this.app.metadataCache.on("changed", (file, _data, cache) => 
 }));
 ```
 
-- [ ] **Step 6: Run both focused tests and verify GREEN**
+- [x] **Step 6: Run both focused tests and verify GREEN**
 
 Run the Step 3 command again.
 
 Expected: all selected tests pass with zero failures.
 
-- [ ] **Step 7: Commit the visible refresh slice**
+- [x] **Step 7: Commit the visible refresh slice**
 
 ```bash
 git add src/main.ts src/ui/views/AsideView.ts tests/pluginStartupOrder.test.ts tests/sidebarIndexTagSearchRenderer.test.mjs
@@ -230,7 +230,7 @@ git commit -m "fix(index): refresh visible tag results"
 - Verify: `manifest.json`
 - Verify: `styles.css`
 
-- [ ] **Step 1: Re-run the metadata change-surface search**
+- [x] **Step 1: Re-run the metadata change-surface search**
 
 Run:
 
@@ -240,7 +240,7 @@ rg -n "metadataCache\.on\(\"changed\"|refreshIndexTagSearchViews|refreshIndexTag
 
 Expected: `main.ts` is the event adapter, `WorkspaceViewController` is the workspace route, `AsideView` owns the guarded body refresh, and tests cover each boundary.
 
-- [ ] **Step 2: Run full release-quality verification**
+- [x] **Step 2: Run full release-quality verification**
 
 Run:
 
@@ -250,7 +250,7 @@ npm run build
 
 Expected: compiled and direct tests, lint, typecheck, Obsidian compliance, production bundle, 750,000-byte size guard, and exact release-artifact security inspection all pass.
 
-- [ ] **Step 3: Inspect the exact generated artifact set**
+- [x] **Step 3: Inspect the exact generated artifact set**
 
 Run:
 
@@ -262,7 +262,7 @@ find . -maxdepth 1 -type f \( -name '*.map' -o -name '*.ts' -o -name '*.tsx' -o 
 
 Expected: the three named artifacts exist; the source-map marker search returns no matches; no forbidden root artifact is listed.
 
-- [ ] **Step 4: Update the tracked spec with measured evidence**
+- [x] **Step 4: Update the tracked spec with measured evidence**
 
 In `docs/superpowers/specs/2026-09-06-local-review-fixes-design.md`:
 
@@ -270,7 +270,7 @@ In `docs/superpowers/specs/2026-09-06-local-review-fixes-design.md`:
 - mark every implemented and verified checklist item `[x]`;
 - add a concise verification paragraph with the fresh test counts, bundle byte count, and artifact-inspection result from Steps 2-3.
 
-- [ ] **Step 5: Commit verification tracking**
+- [x] **Step 5: Commit verification tracking**
 
 ```bash
 git add docs/superpowers/specs/2026-09-06-local-review-fixes-design.md

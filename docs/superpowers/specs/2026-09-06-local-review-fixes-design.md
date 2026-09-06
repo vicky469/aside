@@ -1,7 +1,7 @@
 # Local Review Fixes Design
 
 **Date:** 2026-09-06
-**Status:** Approved for planning
+**Status:** Implemented and verified
 
 ## Implementation Tracking
 
@@ -16,19 +16,21 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Restrict newline label handling in the JavaScript lexer to `break` and `continue` so division expressions after `return <identifier>` remain scannable.
-- [ ] Decode valid surrogate code-unit escapes in JavaScript string literals so escaped non-BMP dependency paths are retained.
-- [ ] Exclude property-access tokens named `new` from `new URL(..., import.meta.url)` dependency matching.
-- [ ] Refresh only an open index Tags result after the capability index accepts a metadata change.
-- [ ] Keep the production bundle free of Acorn and other general-purpose parser dependencies.
+- [x] Restrict newline label handling in the JavaScript lexer to `break` and `continue` so division expressions after `return <identifier>` remain scannable.
+- [x] Decode valid surrogate code-unit escapes in JavaScript string literals so escaped non-BMP dependency paths are retained.
+- [x] Exclude property-access tokens named `new` from `new URL(..., import.meta.url)` dependency matching.
+- [x] Refresh only an open index Tags result after the capability index accepts a metadata change.
+- [x] Keep the production bundle free of Acorn and other general-purpose parser dependencies.
 
 ### Verification
 
-- [ ] Fail-first tests reproduce each JavaScript scanner regression through the focused lexer and the public dependency-extraction facade.
-- [ ] A fail-first lifecycle test proves a visible index Tags query refreshes after tag metadata changes without rebuilding unrelated sidebar modes.
-- [ ] The focused regression tests pass after the minimal fixes.
-- [ ] The change-surface audit confirms one lexer owner and one metadata-to-view refresh route.
-- [ ] Full tests, lint, typecheck, Obsidian compliance, production bundle, bundle-size guard, and release-artifact inspection pass.
+- [x] Fail-first tests reproduce each JavaScript scanner regression through the focused lexer and the public dependency-extraction facade.
+- [x] Fail-first boundary tests prove metadata changes reach only visible index tag views and use a Tags-body-only refresh path.
+- [x] The focused regression tests pass after the minimal fixes.
+- [x] The change-surface audit confirms one lexer owner and one metadata-to-view refresh route.
+- [x] Full tests, lint, typecheck, Obsidian compliance, production bundle, bundle-size guard, and release-artifact inspection pass.
+
+Fresh verification on 2026-09-06 passed 1,509 compiled TypeScript tests and 159 direct `.mjs` tests (1,668 total), plus lint, typecheck, Obsidian compliance, and the production build. The generated `main.js` is 697,702 bytes against the 750,000-byte ceiling. Exact inspection of `main.js`, `manifest.json`, and `styles.css` found no source-map markers or embedded source content; no root source maps, raw TypeScript/TSX files, environment files, npm credentials, private keys, or certificates were present in the artifact set.
 
 ## Problem
 
