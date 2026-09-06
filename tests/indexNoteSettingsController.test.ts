@@ -940,6 +940,100 @@ test("capability setters restore persisted state after save failure", async () =
     assert.equal(harness.getSettings().publishEnabled, false);
 });
 
+test("overlapping Scripts changes persist the final requested value", async () => {
+    const saveCalls: PersistedPluginData[] = [];
+    const releases: Array<() => void> = [];
+    const harness = createControllerHarness({
+        loadedData: createSettings({ scriptsEnabled: false }),
+        saveData: async (data) => {
+            saveCalls.push(data);
+            await new Promise<void>((resolve) => releases.push(resolve));
+        },
+    });
+    await harness.controller.loadSettings();
+
+    const enable = harness.controller.setScriptsEnabled(true);
+    const disable = harness.controller.setScriptsEnabled(false);
+
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.deepEqual(saveCalls.map((data) => data.scriptsEnabled), [true]);
+    releases.shift()?.();
+    await enable;
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.deepEqual(saveCalls.map((data) => data.scriptsEnabled), [true, false]);
+    releases.shift()?.();
+    await disable;
+
+    assert.equal(harness.getSettings().scriptsEnabled, false);
+    assert.equal(harness.controller.readPersistedPluginData().scriptsEnabled, false);
+});
+
+test("overlapping Publishing changes persist the final requested value", async () => {
+    const saveCalls: PersistedPluginData[] = [];
+    const releases: Array<() => void> = [];
+    const harness = createControllerHarness({
+        loadedData: createSettings({ publishEnabled: false }),
+        saveData: async (data) => {
+            saveCalls.push(data);
+            await new Promise<void>((resolve) => releases.push(resolve));
+        },
+    });
+    await harness.controller.loadSettings();
+
+    const enable = harness.controller.setPublishEnabled(true);
+    const disable = harness.controller.setPublishEnabled(false);
+
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.deepEqual(saveCalls.map((data) => data.publishEnabled), [true]);
+    releases.shift()?.();
+    await enable;
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.deepEqual(saveCalls.map((data) => data.publishEnabled), [true, false]);
+    releases.shift()?.();
+    await disable;
+
+    assert.equal(harness.getSettings().publishEnabled, false);
+    assert.equal(harness.controller.readPersistedPluginData().publishEnabled, false);
+});
+
+test("a failed capability write cannot restore stale state over a later capability request", async () => {
+    const saveCalls: PersistedPluginData[] = [];
+    const pendingSaves: Array<{
+        resolve: () => void;
+        reject: (error: Error) => void;
+    }> = [];
+    const harness = createControllerHarness({
+        loadedData: createSettings({
+            scriptsEnabled: false,
+            publishEnabled: false,
+        }),
+        saveData: async (data) => {
+            saveCalls.push(data);
+            await new Promise<void>((resolve, reject) => pendingSaves.push({ resolve, reject }));
+        },
+    });
+    await harness.controller.loadSettings();
+
+    const enableScripts = harness.controller.setScriptsEnabled(true);
+    const enablePublishing = harness.controller.setPublishEnabled(true);
+
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(saveCalls.length, 1);
+    pendingSaves.shift()?.reject(new Error("save failed"));
+    await assert.rejects(enableScripts, /save failed/u);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(saveCalls.length, 2);
+    assert.equal(saveCalls[1]?.scriptsEnabled, false);
+    assert.equal(saveCalls[1]?.publishEnabled, true);
+    pendingSaves.shift()?.resolve();
+    await enablePublishing;
+
+    assert.equal(harness.getSettings().scriptsEnabled, false);
+    assert.equal(harness.getSettings().publishEnabled, true);
+    assert.equal(harness.controller.readPersistedPluginData().scriptsEnabled, false);
+    assert.equal(harness.controller.readPersistedPluginData().publishEnabled, true);
+});
+
 test("disabling capabilities preserves run history and publishing configuration", async () => {
     const agentRuns = [{ id: "agent-run" }];
     const scriptRuns = [{ id: "script-run" }];

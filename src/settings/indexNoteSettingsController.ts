@@ -142,6 +142,7 @@ function buildPersistedPluginDataPatch(
 export class IndexNoteSettingsController {
     private persistedPluginData: PersistedPluginData = {};
     private persistedPluginDataWriteQueue: Promise<void> = Promise.resolve();
+    private capabilitySettingsTransitionQueue: Promise<void> = Promise.resolve();
 
     constructor(private readonly host: IndexNoteSettingsHost) {}
 
@@ -349,47 +350,48 @@ export class IndexNoteSettingsController {
     }
 
     public async setScriptsEnabled(enabled: boolean): Promise<void> {
-        const settings = this.host.getSettings();
-        if (settings.scriptsEnabled === enabled) {
-            return;
-        }
+        await this.enqueueCapabilitySettingsTransition(async () => {
+            const settings = this.host.getSettings();
+            if (settings.scriptsEnabled === enabled) {
+                return;
+            }
 
-        this.host.setSettings({
-            ...settings,
-            scriptsEnabled: enabled,
+            const nextSettings = {
+                ...settings,
+                scriptsEnabled: enabled,
+            };
+            await this.persistCapabilitySettings(settings, nextSettings, ["scriptsEnabled"]);
         });
-        try {
-            await this.saveSettings();
-        } catch (error) {
-            this.host.setSettings(settings);
-            throw error;
-        }
     }
 
     public async setPublishPagesProjectName(projectName: string): Promise<void> {
-        const settings = this.host.getSettings();
-        const normalizedProjectName = normalizePublishProjectName(projectName);
-        const patch: Partial<PublishSettings> = {
-            publishPagesProjectName: projectName,
-        };
-        if (normalizedProjectName && isDefaultPagesPublishBaseUrl(settings.publishBaseUrl)) {
-            patch.publishBaseUrl = derivePublishBaseUrlFromProjectName(normalizedProjectName);
-        }
+        await this.enqueueCapabilitySettingsTransition(async () => {
+            const settings = this.host.getSettings();
+            const normalizedProjectName = normalizePublishProjectName(projectName);
+            const patch: Partial<PublishSettings> = {
+                publishPagesProjectName: projectName,
+            };
+            if (normalizedProjectName && isDefaultPagesPublishBaseUrl(settings.publishBaseUrl)) {
+                patch.publishBaseUrl = derivePublishBaseUrlFromProjectName(normalizedProjectName);
+            }
 
-        await this.setPublishSettings(patch);
+            await this.applyPublishSettings(patch);
+        });
     }
 
     public async setPublishEnabled(enabled: boolean): Promise<void> {
-        if (enabled) {
-            const folderResult = await this.host.ensureFolder("public");
-            if (!folderResult.ok) {
-                this.host.showNotice(folderResult.notice);
-                return;
+        await this.enqueueCapabilitySettingsTransition(async () => {
+            if (enabled) {
+                const folderResult = await this.host.ensureFolder("public");
+                if (!folderResult.ok) {
+                    this.host.showNotice(folderResult.notice);
+                    return;
+                }
             }
-        }
 
-        await this.setPublishSettings({
-            publishEnabled: enabled,
+            await this.applyPublishSettings({
+                publishEnabled: enabled,
+            });
         });
     }
 
@@ -517,6 +519,12 @@ export class IndexNoteSettingsController {
     }
 
     private async setPublishSettings(patch: Partial<PublishSettings>): Promise<void> {
+        await this.enqueueCapabilitySettingsTransition(async () => {
+            await this.applyPublishSettings(patch);
+        });
+    }
+
+    private async applyPublishSettings(patch: Partial<PublishSettings>): Promise<void> {
         const settings = this.host.getSettings();
         const nextPublishSettings = normalizePublishSettings({
             ...settings,
@@ -526,20 +534,50 @@ export class IndexNoteSettingsController {
             ...settings,
             ...nextPublishSettings,
         };
-        const changed = (Object.keys(nextPublishSettings) as Array<keyof PublishSettings>).some((key) =>
-            settings[key] !== nextSettings[key]
-        );
-        if (!changed) {
+        const changedKeys = (Object.keys(nextPublishSettings) as Array<keyof PublishSettings>)
+            .filter((key) => settings[key] !== nextSettings[key]);
+        if (changedKeys.length === 0) {
             return;
         }
 
+        await this.persistCapabilitySettings(settings, nextSettings, changedKeys);
+    }
+
+    private async persistCapabilitySettings(
+        previousSettings: AsideSettings,
+        nextSettings: AsideSettings,
+        changedKeys: Array<keyof AsideSettings>,
+    ): Promise<void> {
         this.host.setSettings(nextSettings);
         try {
             await this.saveSettings();
         } catch (error) {
-            this.host.setSettings(settings);
+            const currentSettings = this.host.getSettings();
+            const rollbackPatch: Partial<AsideSettings> = {};
+            for (const key of changedKeys) {
+                if (currentSettings[key] === nextSettings[key]) {
+                    Object.assign(rollbackPatch, {
+                        [key]: previousSettings[key],
+                    });
+                }
+            }
+            this.host.setSettings({
+                ...currentSettings,
+                ...rollbackPatch,
+            });
             throw error;
         }
+    }
+
+    private enqueueCapabilitySettingsTransition(
+        transition: () => Promise<void>,
+    ): Promise<void> {
+        const result = this.capabilitySettingsTransitionQueue.then(transition);
+        this.capabilitySettingsTransitionQueue = result.then(
+            () => undefined,
+            () => undefined,
+        );
+        return result;
     }
 
 }
