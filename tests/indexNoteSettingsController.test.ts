@@ -115,6 +115,9 @@ function createControllerHarness(options: {
     renameFileError?: Error;
     saveDataError?: Error;
     saveData?: (data: PersistedPluginData) => Promise<void>;
+    ensureFolder?: (
+        folderPath: string,
+    ) => Promise<{ ok: true } | { ok: false; notice: string }>;
     hasRegisteredVaultScripts?: boolean;
 } = {}) {
     let settings = options.settings ?? createSettings();
@@ -259,6 +262,9 @@ function createControllerHarness(options: {
             savedPayloads.push(data);
         },
         ensureFolder: async (folderPath: string) => {
+            if (options.ensureFolder) {
+                return options.ensureFolder(folderPath);
+            }
             if (filesByPath.has(folderPath)) {
                 return {
                     ok: false as const,
@@ -1032,6 +1038,101 @@ test("a failed capability write cannot restore stale state over a later capabili
     assert.equal(harness.getSettings().publishEnabled, true);
     assert.equal(harness.controller.readPersistedPluginData().scriptsEnabled, false);
     assert.equal(harness.controller.readPersistedPluginData().publishEnabled, true);
+});
+
+test("a failed Scripts write cannot leak through a later default-agent save", async () => {
+    const saveCalls: PersistedPluginData[] = [];
+    const pendingSaves: Array<{
+        resolve: () => void;
+        reject: (error: Error) => void;
+    }> = [];
+    const harness = createControllerHarness({
+        loadedData: createSettings({
+            scriptsEnabled: false,
+            defaultAgent: "codex",
+        }),
+        saveData: async (data) => {
+            saveCalls.push(data);
+            await new Promise<void>((resolve, reject) => pendingSaves.push({ resolve, reject }));
+        },
+    });
+    await harness.controller.loadSettings();
+
+    const enableScripts = harness.controller.setScriptsEnabled(true);
+    const setDefaultAgent = harness.controller.setDefaultAgent("claude");
+
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(saveCalls.length, 1);
+    pendingSaves.shift()?.reject(new Error("save failed"));
+    await assert.rejects(enableScripts, /save failed/u);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(saveCalls.length, 2);
+    pendingSaves.shift()?.resolve();
+    await setDefaultAgent;
+
+    assert.equal(harness.getSettings().scriptsEnabled, false);
+    assert.equal(harness.getSettings().defaultAgent, "claude");
+    assert.equal(saveCalls[1]?.scriptsEnabled, false);
+    assert.equal(saveCalls[1]?.defaultAgent, "claude");
+    assert.equal(harness.controller.readPersistedPluginData().scriptsEnabled, false);
+    assert.equal(harness.controller.readPersistedPluginData().defaultAgent, "claude");
+});
+
+test("Publishing initialization is serialized with rapid enable then disable", async () => {
+    const initializationReleases: Array<() => void> = [];
+    const saveReleases: Array<() => void> = [];
+    const saveCalls: PersistedPluginData[] = [];
+    const harness = createControllerHarness({
+        loadedData: createSettings({
+            publishEnabled: false,
+            publishPagesProjectName: "",
+            publishBaseUrl: "",
+        }),
+        ensureFolder: async () => {
+            await new Promise<void>((resolve) => initializationReleases.push(resolve));
+            return { ok: true };
+        },
+        saveData: async (data) => {
+            saveCalls.push(data);
+            await new Promise<void>((resolve) => saveReleases.push(resolve));
+        },
+    });
+    await harness.controller.loadSettings();
+
+    const enable = harness.controller.setPublishEnabled(true, " My Vault ");
+    const disable = harness.controller.setPublishEnabled(false, " My Vault ");
+
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(saveCalls.length, 0);
+    initializationReleases.shift()?.();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(saveCalls.length, 1);
+    saveReleases.shift()?.();
+    await enable;
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(saveCalls.length, 2);
+    saveReleases.shift()?.();
+    await disable;
+
+    assert.deepEqual(saveCalls.map((data) => ({
+        publishEnabled: data.publishEnabled,
+        publishPagesProjectName: data.publishPagesProjectName,
+        publishBaseUrl: data.publishBaseUrl,
+    })), [{
+        publishEnabled: true,
+        publishPagesProjectName: "my-vault",
+        publishBaseUrl: "https://my-vault.pages.dev",
+    }, {
+        publishEnabled: false,
+        publishPagesProjectName: "my-vault",
+        publishBaseUrl: "https://my-vault.pages.dev",
+    }]);
+    assert.equal(harness.getSettings().publishEnabled, false);
+    assert.equal(harness.getSettings().publishPagesProjectName, "my-vault");
+    assert.equal(harness.getSettings().publishBaseUrl, "https://my-vault.pages.dev");
+    assert.equal(harness.controller.readPersistedPluginData().publishEnabled, false);
+    assert.equal(harness.controller.readPersistedPluginData().publishPagesProjectName, "my-vault");
+    assert.equal(harness.controller.readPersistedPluginData().publishBaseUrl, "https://my-vault.pages.dev");
 });
 
 test("disabling capabilities preserves run history and publishing configuration", async () => {

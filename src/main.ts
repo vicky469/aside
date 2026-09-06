@@ -90,7 +90,6 @@ import {
 import {
 	normalizePublishAllowedRoot,
 	normalizePublishProjectName,
-	derivePublishBaseUrlFromProjectName,
 } from "./core/publish/publishSettings";
 import {
 	removePublishedPublicArtifactPath,
@@ -1006,20 +1005,10 @@ export default class Aside extends Plugin {
     }
 
     public async setPublishEnabled(enabled: boolean): Promise<void> {
-		if (enabled) {
-			const configuredProjectName = normalizePublishProjectName(this.settings.publishPagesProjectName);
-			const nextProjectName = configuredProjectName || normalizePublishProjectName(this.app.vault.getName());
-			if (nextProjectName && this.settings.publishPagesProjectName !== nextProjectName) {
-				await this.setPublishPagesProjectName(nextProjectName);
-			}
-
-			if (!this.settings.publishBaseUrl) {
-				await this.setPublishBaseUrl(derivePublishBaseUrlFromProjectName(
-					nextProjectName,
-				));
-			}
-		}
-        await this.indexNoteSettingsController.setPublishEnabled(enabled);
+        await this.indexNoteSettingsController.setPublishEnabled(
+            enabled,
+            this.app.vault.getName(),
+        );
         this.syncPublicFilePublishActions();
     }
 

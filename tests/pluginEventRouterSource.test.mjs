@@ -40,3 +40,16 @@ test("main exposes canonical registry evidence and delegates Scripts settings ch
         /public async setScriptsEnabled\(enabled: boolean\): Promise<void> \{\s*await this\.indexNoteSettingsController\.setScriptsEnabled\(enabled\);\s*\}/,
     );
 });
+
+test("main delegates Publishing initialization as one controller transition", () => {
+    const methodStart = mainSource.indexOf("public async setPublishEnabled(enabled: boolean)");
+    const methodEnd = mainSource.indexOf("public async setPublishPagesProjectName", methodStart);
+    const methodSource = mainSource.slice(methodStart, methodEnd);
+
+    assert.match(
+        methodSource,
+        /await this\.indexNoteSettingsController\.setPublishEnabled\(\s*enabled,\s*this\.app\.vault\.getName\(\),?\s*\);/,
+    );
+    assert.doesNotMatch(methodSource, /this\.setPublishPagesProjectName\(/);
+    assert.doesNotMatch(methodSource, /this\.setPublishBaseUrl\(/);
+});
