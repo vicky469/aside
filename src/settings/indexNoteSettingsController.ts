@@ -147,6 +147,12 @@ export class IndexNoteSettingsController {
     constructor(private readonly host: IndexNoteSettingsHost) {}
 
     public async loadSettings(): Promise<void> {
+        await this.enqueueSettingsTransition(async () => {
+            await this.loadSettingsNow();
+        });
+    }
+
+    private async loadSettingsNow(): Promise<void> {
         const loaded = await this.host.loadData();
         this.persistedPluginData = clonePersistedPluginData(loaded ?? {});
         const resolved = resolveLoadedSettings(loaded, this.host.getSettings(), {
@@ -156,9 +162,8 @@ export class IndexNoteSettingsController {
 
         const migratedLegacyIndexNotePath = await this.migrateLegacyIndexNotePath(loaded);
         if (!migratedLegacyIndexNotePath && resolved.shouldRewriteLegacySettings) {
-            await this.saveSettings();
+            await this.saveSettingsNow();
         }
-
     }
 
     public async saveSettings(): Promise<void> {
@@ -540,7 +545,7 @@ export class IndexNoteSettingsController {
         }
 
         try {
-            await this.setIndexNotePath(ALL_COMMENTS_NOTE_PATH);
+            await this.applyIndexNotePath(ALL_COMMENTS_NOTE_PATH);
         } catch (error) {
             if (error instanceof IndexNotePathRollbackError) {
                 throw error;

@@ -112,6 +112,7 @@ function createControllerHarness(options: {
     activeSidebarFilePath?: string | null;
     draftHostFilePath?: string | null;
     loadedData?: PersistedPluginData | null;
+    loadData?: () => Promise<PersistedPluginData | null>;
     renameFileError?: Error;
     saveDataError?: Error;
     saveData?: (data: PersistedPluginData) => Promise<void>;
@@ -249,7 +250,12 @@ function createControllerHarness(options: {
             refreshAggregateNoteCount += 1;
         },
         hasRegisteredVaultScripts: () => options.hasRegisteredVaultScripts ?? false,
-        loadData: async () => options.loadedData ?? null,
+        loadData: async () => {
+            if (options.loadData) {
+                return options.loadData();
+            }
+            return options.loadedData ?? null;
+        },
         saveData: async (data: PersistedPluginData) => {
             if (options.saveData) {
                 await options.saveData(data);
@@ -1076,6 +1082,91 @@ test("a failed Scripts write cannot leak through a later default-agent save", as
     assert.equal(saveCalls[1]?.defaultAgent, "claude");
     assert.equal(harness.controller.readPersistedPluginData().scriptsEnabled, false);
     assert.equal(harness.controller.readPersistedPluginData().defaultAgent, "claude");
+});
+
+test("public settings reload waits for a pending capability save", async () => {
+    let externalData: PersistedPluginData = createSettings({ scriptsEnabled: false });
+    const events: string[] = [];
+    const saveReleases: Array<() => void> = [];
+    const harness = createControllerHarness({
+        settings: createSettings({ scriptsEnabled: false }),
+        loadData: async () => {
+            events.push("load");
+            return externalData;
+        },
+        saveData: async (data) => {
+            events.push("save:start");
+            await new Promise<void>((resolve) => saveReleases.push(resolve));
+            externalData = data;
+            events.push("save:end");
+        },
+    });
+    await harness.controller.loadSettings();
+    events.length = 0;
+
+    const enableScripts = harness.controller.setScriptsEnabled(true);
+    const reloadSettings = harness.controller.loadSettings();
+
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    saveReleases.shift()?.();
+    await enableScripts;
+    await reloadSettings;
+
+    assert.deepEqual(events, ["save:start", "save:end", "load"]);
+    assert.equal(harness.getSettings().scriptsEnabled, true);
+    assert.equal(harness.controller.readPersistedPluginData().scriptsEnabled, true);
+    assert.equal(externalData.scriptsEnabled, true);
+});
+
+test("public settings reload runs after a failed capability save and leaves the queue usable", async () => {
+    let externalData: PersistedPluginData = createSettings({
+        scriptsEnabled: false,
+        defaultAgent: "codex",
+    });
+    const events: string[] = [];
+    const saveReleases: Array<() => void> = [];
+    let saveAttempt = 0;
+    const harness = createControllerHarness({
+        settings: createSettings({
+            scriptsEnabled: false,
+            defaultAgent: "codex",
+        }),
+        loadData: async () => {
+            events.push("load");
+            return externalData;
+        },
+        saveData: async (data) => {
+            saveAttempt += 1;
+            events.push("save:start");
+            if (saveAttempt === 1) {
+                await new Promise<void>((resolve) => saveReleases.push(resolve));
+                events.push("save:error");
+                throw new Error("save failed");
+            }
+            externalData = data;
+            events.push("save:end");
+        },
+    });
+    await harness.controller.loadSettings();
+    events.length = 0;
+
+    const enableScripts = harness.controller.setScriptsEnabled(true);
+    const reloadSettings = harness.controller.loadSettings();
+
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    saveReleases.shift()?.();
+    await assert.rejects(enableScripts, /save failed/u);
+    await reloadSettings;
+
+    assert.deepEqual(events, ["save:start", "save:error", "load"]);
+    assert.equal(harness.getSettings().scriptsEnabled, false);
+    assert.equal(harness.controller.readPersistedPluginData().scriptsEnabled, false);
+    assert.equal(externalData.scriptsEnabled, false);
+
+    await harness.controller.setDefaultAgent("claude");
+    assert.equal(harness.getSettings().defaultAgent, "claude");
+    assert.equal(harness.controller.readPersistedPluginData().defaultAgent, "claude");
+    assert.equal(externalData.defaultAgent, "claude");
 });
 
 test("Publishing initialization is serialized with rapid enable then disable", async () => {
