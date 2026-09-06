@@ -30,7 +30,7 @@ Use this section as the working checklist. Mark an item done only after the code
 - [x] The change-surface audit confirms one lexer owner and one metadata-to-view refresh route.
 - [x] Full tests, lint, typecheck, Obsidian compliance, production bundle, bundle-size guard, and release-artifact inspection pass.
 
-Fresh verification on 2026-09-06 passed 1,509 compiled TypeScript tests and 159 direct `.mjs` tests (1,668 total), plus lint, typecheck, Obsidian compliance, and the production build. The generated `main.js` is 697,702 bytes against the 750,000-byte ceiling. Exact inspection of `main.js`, `manifest.json`, and `styles.css` found no source-map markers or embedded source content; no root source maps, raw TypeScript/TSX files, environment files, npm credentials, private keys, or certificates were present in the artifact set.
+Fresh verification on 2026-09-06 passed 1,509 compiled TypeScript tests and 160 direct `.mjs` tests (1,669 total), plus lint, typecheck, Obsidian compliance, and the production build. The generated `main.js` is 697,894 bytes against the 750,000-byte ceiling. Exact inspection of `main.js`, `manifest.json`, and `styles.css` found no source-map markers or embedded source content; no root source maps, raw TypeScript/TSX files, environment files, npm credentials, private keys, or certificates were present in the artifact set.
 
 ## Problem
 
@@ -88,7 +88,7 @@ Tests will assert results through both `scanJavascriptDependencies` and `extract
 
 `VaultCapabilityIndex` remains the sole owner of tag membership. The metadata-cache callback will first apply the affected file's new tags, then ask the workspace view layer to refresh visible index Tags results.
 
-The view-layer method will iterate Aside leaves and call a narrow public refresh hook only on applicable views. `AsideView` will ignore the hook unless it is attached to the generated index, currently in Tags mode, and has a connected Tags body. For an applicable view it will rebuild the current query model from the updated in-memory index and rerender only the Tags body.
+The view-layer method will iterate Aside leaves and call a narrow public refresh hook only on applicable views. `AsideView` tracks the mode actually committed to the index surface and ignores the hook unless that rendered mode is Tags and its Tags body is connected. This prevents a requested-but-unavailable Tags mode that fell back to List from replacing the List body under mismatched toolbar chrome. For an applicable view it will rebuild the current query model from the updated in-memory index and rerender only the Tags body.
 
 This route performs no vault reads, does not reset the query, selected filter, or pagination window, and does not rebuild comment cards or the toolbar.
 
@@ -116,5 +116,6 @@ Implementation uses red-green-refactor slices:
 - `import("./\uD83D\uDE80.js")` retains the cooked `./🚀.js` dependency.
 - `obj.new\nURL("./asset.js", import.meta.url)` produces no dependency.
 - A visible index Tags result updates after a metadata-cache tag change without user input.
+- A requested Tags mode that rendered a List fallback is not changed by the body-only metadata refresh.
 - Tag refresh performs no Markdown or vault read and leaves unrelated sidebar modes untouched.
 - The production bundle stays at or below 750,000 bytes and the exact release artifacts pass security inspection.

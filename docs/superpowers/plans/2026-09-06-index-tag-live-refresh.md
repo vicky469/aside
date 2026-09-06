@@ -137,11 +137,26 @@ test("metadata refresh keeps the current tag query on the body-only path", () =>
 	)?.[0];
 
 	assert.ok(refreshSource, "missing public index tag refresh hook");
-	assert.match(refreshSource, /indexSidebarMode !== "tags"/);
+	assert.match(refreshSource, /renderedIndexSidebarMode !== "tags"/);
 	assert.match(refreshSource, /bodyEl\?\.isConnected/);
 	assert.match(refreshSource, /refreshIndexTagSearchResult/);
 	assert.match(refreshSource, /renderIndexTagSearchBody/);
 	assert.doesNotMatch(refreshSource, /renderComments/);
+});
+
+test("metadata refresh respects a rendered Tags to List fallback", () => {
+	assert.match(
+		asideViewSource,
+		/private renderedIndexSidebarMode: IndexSidebarMode \| null = null;/,
+	);
+	assert.match(
+		asideViewSource,
+		/this\.renderedIndexSidebarMode = effectiveIndexSidebarMode;/,
+	);
+	assert.match(
+		asideViewSource,
+		/private renderIndexTagSearchSidebar\([\s\S]*?this\.renderedIndexSidebarMode = "tags";/,
+	);
 });
 ```
 
@@ -178,7 +193,7 @@ Expected: the two new tests fail because neither refresh hook nor metadata notif
 
 - [x] **Step 4: Add the guarded body-only refresh hook**
 
-Add beside `refreshIndexTagSearchResult` in `src/ui/views/AsideView.ts`:
+Track the actually rendered index mode beside `indexSidebarMode`, update it on each committed index render (including the Tags fast path), and clear it outside the index lifecycle. Add beside `refreshIndexTagSearchResult`:
 
 ```ts
 public refreshIndexTagSearch(): void {
@@ -188,7 +203,7 @@ public refreshIndexTagSearch(): void {
 		!bodyEl?.isConnected
 		|| !currentFilePath
 		|| !this.plugin.isAllCommentsNotePath(currentFilePath)
-		|| this.indexSidebarMode !== "tags"
+		|| this.renderedIndexSidebarMode !== "tags"
 	) {
 		return;
 	}
