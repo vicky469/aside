@@ -250,18 +250,26 @@ export class CommentAgentController {
     }
 
     public async reconcilePendingRunsFromPreviousSession(): Promise<void> {
+        if (this.disposed) {
+            return;
+        }
         let changed = false;
         const now = this.host.now();
         for (const run of this.store.getRuns()) {
+            if (this.disposed) {
+                break;
+            }
             if (run.status !== "queued" && run.status !== "running") {
                 continue;
             }
 
+            const recoveredOutputEntryId = await this.ensureInterruptedRunReply(run, now);
             const updated = await this.store.updateRun(run.id, (currentRun) => ({
                 ...currentRun,
                 status: "failed",
                 endedAt: now,
                 error: currentRun.error ?? AGENT_PENDING_SESSION_NOTICE,
+                ...(recoveredOutputEntryId ? { outputEntryId: recoveredOutputEntryId } : {}),
             }));
             changed = changed || !!updated;
         }
@@ -270,6 +278,52 @@ export class CommentAgentController {
             await this.refreshStatusViews();
         }
         void this.processQueue();
+    }
+
+    private async ensureInterruptedRunReply(
+        run: AgentRunRecord,
+        timestamp: number,
+    ): Promise<string | undefined> {
+        const outputEntryId = run.outputEntryId ?? this.host.createCommentId();
+        const file = this.host.getFileByPath(run.filePath);
+        if (!this.host.isPageNoteCapableFile(file)) {
+            return run.outputEntryId;
+        }
+
+        try {
+            await this.host.loadCommentsForFile(file);
+            const existingOutput = this.host.getCommentManager().getCommentById(outputEntryId);
+            if (existingOutput?.deletedAt !== undefined) {
+                return run.outputEntryId;
+            }
+            if (existingOutput?.comment.trim()) {
+                return outputEntryId;
+            }
+            const committed = await this.commitRunReply(
+                run,
+                outputEntryId,
+                AGENT_PENDING_SESSION_NOTICE,
+                timestamp,
+            );
+            if (committed) {
+                return outputEntryId;
+            }
+            void this.host.log?.("warn", "agents", "agents.reply.interrupted_commit_failed", {
+                runId: run.id,
+                threadId: run.threadId,
+                outputEntryId,
+                error: "Unable to save the interrupted agent reply.",
+            });
+        } catch (error) {
+            void this.host.log?.("warn", "agents", "agents.reply.interrupted_commit_failed", {
+                runId: run.id,
+                threadId: run.threadId,
+                outputEntryId,
+                error,
+            });
+        }
+
+        return run.outputEntryId;
     }
 
     public getAgentRuns(): AgentRunRecord[] {

@@ -2618,7 +2618,7 @@ test("comment agent controller packs note path, page context, and transcript int
     assert.match(prompt, /Request:\n<<<\n@codex summarize the focus section\n>>>/);
 });
 
-test("comment agent controller marks persisted in-flight runs failed after restart", async () => {
+test("comment agent controller marks persisted in-flight runs failed after restart and creates a missing reply card", async () => {
     const harness = createHarness({
         initialPersistedData: {
             agentRuns: [{
@@ -2632,6 +2632,7 @@ test("comment agent controller marks persisted in-flight runs failed after resta
                 promptText: "@codex continue",
                 createdAt: 100,
                 startedAt: 101,
+                outputEntryId: "reply-1",
             }],
         },
     });
@@ -2642,7 +2643,48 @@ test("comment agent controller marks persisted in-flight runs failed after resta
     const latestRun = harness.controller.getLatestAgentRunForThread("thread-1");
     assert.equal(latestRun?.status, "failed");
     assert.equal(latestRun?.error, "The previous Aside agent run did not finish. Retry the thread to run it again.");
-    assert.deepEqual(harness.editedEntries, []);
+    assert.deepEqual(harness.committedEntries, [{
+        filePath: "Folder/Note.md",
+        threadId: "thread-1",
+        id: "reply-1",
+        body: "The previous Aside agent run did not finish. Retry the thread to run it again.",
+        insertAfterCommentId: "thread-1",
+    }]);
+    assert.equal(
+        harness.commentManager.getCommentById("reply-1")?.comment,
+        "The previous Aside agent run did not finish. Retry the thread to run it again.",
+    );
+});
+
+test("comment agent controller marks persisted in-flight runs failed after restart without overwriting a stored reply", async () => {
+    const harness = createHarness({
+        initialPersistedData: {
+            agentRuns: [{
+                id: "run-1",
+                threadId: "thread-1",
+                triggerEntryId: "thread-1",
+                filePath: "Folder/Note.md",
+                requestedAgent: "codex",
+                runtime: "direct-cli",
+                status: "running",
+                promptText: "@codex continue",
+                createdAt: 100,
+                startedAt: 101,
+                outputEntryId: "reply-1",
+            }],
+        },
+    });
+    harness.commentManager.appendEntry("thread-1", {
+        id: "reply-1",
+        body: "Stored response",
+        timestamp: 102,
+    });
+
+    await harness.controller.reconcilePendingRunsFromPreviousSession();
+
+    assert.equal(harness.controller.getLatestAgentRunForThread("thread-1")?.status, "failed");
+    assert.equal(harness.commentManager.getCommentById("reply-1")?.comment, "Stored response");
+    assert.deepEqual(harness.committedEntries, []);
 });
 
 test("comment agent controller keeps the final stream card in place when a run succeeds", async () => {
