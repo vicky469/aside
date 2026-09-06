@@ -5,10 +5,6 @@ import {
 	type PublicHtmlPublishSnapshotFile,
 } from "../src/publish/publicHtmlPublishController";
 import type { PublishSettings } from "../src/core/publish/publishSettings";
-import {
-	FeatureFlag,
-	type FeatureFlags,
-} from "../src/core/config/featureFlags";
 
 const settings: PublishSettings = {
 	publishEnabled: true,
@@ -24,7 +20,6 @@ const fixedPublishedAt = "2026-08-06T08:00:00.000Z";
 
 function createHarness(options: {
 	settings?: PublishSettings;
-	featureFlags?: FeatureFlags;
 	files?: Record<string, string>;
 	binaryFiles?: Record<string, string>;
 	writeRequiresExistingFile?: boolean;
@@ -46,9 +41,6 @@ function createHarness(options: {
 	const purgeCalls: Array<{ url: string; sourcePath: string; event: "unpublish" | "republish" }> = [];
 	const host = {
 		getSettings: () => options.settings ?? settings,
-		getFeatureFlags: () => options.featureFlags ?? {
-			[FeatureFlag.publish]: true,
-		},
 		getVaultConfigDir: () => ".obsidian",
 		listMarkdownFiles: async (rootPath: string) => Array.from(files.keys())
 			.filter((path) => path.startsWith(rootPath) && path.endsWith(".md")),
@@ -123,23 +115,24 @@ function decodeSnapshotContents(file: PublicHtmlPublishSnapshotFile): string {
 		: new TextDecoder().decode(file.contents);
 }
 
-test("public html publish controller fails closed when the publish feature flag is disabled", async () => {
+test("public html publish controller fails closed when Publishing is turned off", async () => {
 	const harness = createHarness({
-		featureFlags: {
-			[FeatureFlag.publish]: false,
+		settings: {
+			...settings,
+			publishEnabled: false,
 		},
 	});
 
 	assert.deepEqual(await harness.controller.publishHtmlFile("public/page.html"), {
 		ok: false,
-		notice: "Publishing feature is disabled. Run the Aside CLI to enable it.",
+		notice: "Turn on Publishing in Aside settings first.",
 	});
 	assert.deepEqual(await harness.controller.getHtmlFileActionState("public/page.html"), {
 		kind: "disabled",
 		label: "Publish HTML",
 		icon: "upload-cloud",
 		disabled: true,
-		notice: "Publishing feature is disabled. Run the Aside CLI to enable it.",
+		notice: "Turn on Publishing in Aside settings first.",
 	});
 	assert.deepEqual(harness.deployCalls, []);
 	assert.deepEqual(harness.writes, []);

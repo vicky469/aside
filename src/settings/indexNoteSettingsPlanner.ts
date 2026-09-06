@@ -5,10 +5,6 @@ import {
     normalizeSupportedAgentTarget,
 } from "../core/agents/agentActorRegistry";
 import {
-    normalizeFeatureFlags,
-    shouldRewriteNormalizedFeatureFlags,
-} from "../core/config/featureFlags";
-import {
     DEFAULT_PUBLISH_SETTINGS,
     normalizePublishSettings,
 } from "../core/publish/publishSettings";
@@ -27,6 +23,7 @@ import {
 } from "../ui/settings/AsideSetting";
 
 export type PersistedPluginData = Partial<AsideSettings> & {
+    featureFlags?: unknown;
     preferredAgentTarget?: unknown;
     agentRuns?: unknown;
     scriptRuns?: unknown;
@@ -101,7 +98,6 @@ export function resolveLoadedSettings(
         ? normalizeSidebarTabToggle(loaded?.showAgentSidebarTab, false)
         : false;
     const publishSettings = normalizePublishSettings(loaded ?? defaults);
-    const featureFlags = normalizeFeatureFlags(loaded?.featureFlags);
     const defaultAgent = normalizeSupportedAgentTarget(
         hasDefaultAgentSetting ? loaded?.defaultAgent : defaults.defaultAgent,
     );
@@ -122,10 +118,10 @@ export function resolveLoadedSettings(
             publishedPublicArtifactPaths: normalizePublishedPublicArtifactPaths(
                 loaded?.publishedPublicArtifactPaths ?? defaults.publishedPublicArtifactPaths,
             ),
-            featureFlags,
             ...publishSettings,
         },
         shouldRewriteLegacySettings: hasOwn(loaded ?? {}, "confirmDelete")
+            || hasOwn(loaded ?? {}, "featureFlags")
             || hasOwn(loaded ?? {}, "preferredAgentTarget")
             || hasOwn(loaded ?? {}, "enableDebugMode")
             || hasOwn(loaded ?? {}, "remoteRuntimeBaseUrl")
@@ -139,7 +135,6 @@ export function resolveLoadedSettings(
             || (hasOwn(loaded ?? {}, "agentRuntimeMode")
                 && normalizeAgentRuntimeModePreference(loaded?.agentRuntimeMode) !== loaded?.agentRuntimeMode)
             || (hasDefaultAgentSetting && defaultAgent !== loaded?.defaultAgent)
-            || shouldRewriteNormalizedFeatureFlags(loaded?.featureFlags, featureFlags)
             || shouldRewriteNormalizedPublishSettings(loaded, publishSettings),
     };
 }

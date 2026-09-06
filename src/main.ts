@@ -93,14 +93,6 @@ import {
 	derivePublishBaseUrlFromProjectName,
 } from "./core/publish/publishSettings";
 import {
-	FEATURE_FLAG_KEYS,
-	FeatureFlag,
-	isFeatureFlagEnabled,
-} from "./core/config/featureFlags";
-import {
-    getFeatureFlagStorageKey,
-} from "./core/config/featureFlagStorageSync";
-import {
 	removePublishedPublicArtifactPath,
 	removePublishedPublicArtifactPathsInFolder,
 	renamePublishedPublicArtifactPath as renamePublishedPublicArtifactPathInList,
@@ -624,7 +616,6 @@ export default class Aside extends Plugin {
     });
     private readonly publicHtmlPublishController = new PublicHtmlPublishController({
         getSettings: () => this.settings,
-        getFeatureFlags: () => this.settings.featureFlags,
         getVaultConfigDir: () => this.app.vault.configDir,
         listMarkdownFiles: (rootPath) => {
             const folderPath = normalizePath(rootPath.replace(/\/+$/u, ""));
@@ -672,9 +663,7 @@ export default class Aside extends Plugin {
     });
     private readonly publicFilePublishActionController = new PublicFilePublishActionController({
         getAllowedRoot: () => this.settings.publishAllowedRoot,
-        getPublishActionStates: (file) => this.isPublishFeatureAvailable()
-            ? this.publicHtmlPublishController.getFileActionStates(file.path)
-            : Promise.resolve([]),
+        getPublishActionStates: (file) => this.publicHtmlPublishController.getFileActionStates(file.path),
         runPublishAction: (file, actionKind) => this.runPublicHtmlPublishAction(file, actionKind),
         showNotice: (message) => {
             this.showNotice(message, "publish", "publish.notice");
@@ -873,7 +862,6 @@ export default class Aside extends Plugin {
         this.vaultScriptRegistry.seed(this.app.vault.getFiles().map((file) => file.path));
         this.pluginEventRouter.registerVaultCreateEvent();
         this.scriptRunStore.load();
-        await this.syncFeatureFlagStorage();
         this.vaultCapabilityIndex.seed(
             this.app.vault.getMarkdownFiles(),
             (file) => this.getVaultFileTags(file),
@@ -950,25 +938,6 @@ export default class Aside extends Plugin {
 
     async loadSettings() {
         await this.indexNoteSettingsController.loadSettings();
-    }
-
-    private async syncFeatureFlagStorage(): Promise<void> {
-        const storage = getSafeLocalStorage();
-        for (const flag of FEATURE_FLAG_KEYS) {
-            await this.indexNoteSettingsController.syncFeatureFlagStorage(
-                flag,
-                storage,
-                getFeatureFlagStorageKey(flag, this.app.vault.getName()),
-                (operation, error) => {
-                    this.warn(
-                        `Unable to synchronize the ${flag} feature flag (${operation}).`,
-                        error,
-                        "settings",
-                        `settings.${flag}-feature-flag.${operation}.warn`,
-                    );
-                },
-            );
-        }
     }
 
     async saveSettings() {
@@ -1153,10 +1122,6 @@ export default class Aside extends Plugin {
             }
         });
         void this.publicFilePublishActionController.refreshViews(views);
-    }
-
-    private isPublishFeatureAvailable(): boolean {
-        return isFeatureFlagEnabled(this.settings.featureFlags, FeatureFlag.publish);
     }
 
     private getPublicHtmlPairContext(filePath: string): PublicHtmlPairContext | null {

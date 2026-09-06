@@ -6,7 +6,6 @@ import {
 	normalizePublishAllowedRoot,
 	validatePublishSettings,
 } from "../core/publish/publishSettings";
-import type { FeatureFlags } from "../core/config/featureFlags";
 import {
 	inspectPublishArtifact,
 	inspectPublishDependency,
@@ -89,7 +88,6 @@ export interface PublishHtmlFileOptions {
 
 export interface PublicHtmlPublishHost {
 	getSettings(): PublishSettings;
-	getFeatureFlags(): FeatureFlags;
 	getVaultConfigDir(): string;
 	listMarkdownFiles(rootPath: string): Promise<string[]>;
 	fileExists(path: string): Promise<boolean>;
@@ -164,7 +162,7 @@ export class PublicHtmlPublishController {
 	) {}
 
 	private validateSettings(settings: PublishSettings): PublishSettingsValidation {
-		return validatePublishSettings(settings, this.host.getFeatureFlags());
+		return validatePublishSettings(settings);
 	}
 
 	public async getFileActionState(filePath: string): Promise<PublicHtmlPublishActionState> {

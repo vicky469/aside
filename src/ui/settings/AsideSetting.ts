@@ -12,10 +12,6 @@ import {
     type AgentRuntimeModePreference,
 } from "../../core/agents/agentRuntimePreferences";
 import {
-    DEFAULT_FEATURE_FLAGS,
-    type FeatureFlags,
-} from "../../core/config/featureFlags";
-import {
     DEFAULT_PUBLISH_SETTINGS,
     type PublishSettings,
 } from "../../core/publish/publishSettings";
@@ -51,7 +47,6 @@ export interface AsideSettings extends PublishSettings {
     defaultAgent: AsideAgentTarget;
     showTodoSidebarTab: boolean;
     showAgentSidebarTab: boolean;
-    featureFlags: FeatureFlags;
     publishedPublicArtifactPaths: string[];
 }
 
@@ -63,7 +58,6 @@ export const DEFAULT_SETTINGS: AsideSettings = {
     defaultAgent: DEFAULT_ASIDE_AGENT_ACTOR_ID,
     showTodoSidebarTab: true,
     showAgentSidebarTab: false,
-    featureFlags: DEFAULT_FEATURE_FLAGS,
     publishedPublicArtifactPaths: [],
     ...DEFAULT_PUBLISH_SETTINGS,
 };
