@@ -8,7 +8,7 @@
 - [ ] Add a persisted, default-off `scriptsEnabled` capability setting.
 - [ ] Make Scripts and Publishing use shared section-level enable controls in both settings renderers.
 - [ ] Hide disabled-section details from rendering and settings search.
-- [ ] Gate every new script workflow while leaving ordinary `@agent` replies available.
+- [ ] Gate every new script workflow, including retries, while leaving ordinary `@agent` replies available.
 - [ ] Preserve existing users through evidence-based Scripts migration.
 - [ ] Update current user documentation and focused regression coverage.
 - [ ] Run the complete build and exact release-artifact inspection.
@@ -116,16 +116,18 @@ With Scripts disabled, Aside prevents every new script-oriented workflow:
 - `/update-script`
 - `/pdf-to-markdown`
 - each eligible registered `/script-name` command
+- Generate/Regenerate actions for previous vault-script runs and agent runs whose request kind is create-script, update-script, or PDF-to-Markdown
 
 The same shared capability predicate governs both discovery and dispatch:
 
 1. The slash-command suggestion list omits all four categories while disabled.
 2. Script directives and registered script mentions are not classified as actionable while disabled.
 3. Saved-entry routing skips the create, update, PDF conversion, and vault-script controllers while disabled.
+4. Historical script-oriented entries do not offer an enabled Generate/Regenerate action, and host retry methods reject stale or programmatic attempts while disabled.
 
 Defense at both discovery and dispatch prevents directly typed text, stale UI state, or another call site from bypassing the setting. A disabled script directive remains ordinary side-note text; Aside does not advertise the feature with a warning card.
 
-Ordinary supported `@agent` mentions remain actionable and continue through the existing agent controller. `@todo` also remains unchanged. Turning Scripts off does not hide historical replies, remove stored runs, delete `🛠️ scripts/`, or cancel work that has already begun.
+Ordinary supported `@agent` mentions remain actionable and continue through the existing agent controller. Their ordinary Generate/Regenerate path remains available because it is not a script capability. `@todo` also remains unchanged. Turning Scripts off does not hide historical replies, remove stored runs, delete `🛠️ scripts/`, or cancel work that has already begun; cancellation controls for already-running work remain available.
 
 The shared policy should expose positive capabilities such as `canUseScripts()` or an equivalent typed value. Avoid scattered direct checks of `plugin.settings.scriptsEnabled` outside the settings owner and main runtime adapter.
 
@@ -188,7 +190,7 @@ Documentation must distinguish ordinary `@agent` replies from script-oriented co
 | --- | --- | --- | --- |
 | Scripts and Publishing default off | settings defaults and normalization | settings page, runtime adapters | default and load tests |
 | Section-level controls hide details | shared settings-section catalog | declarative and legacy adapters, search | catalog and adapter tests |
-| Script commands are truly disabled | shared scripts capability policy | mention discovery, actionability, saved-entry routing | discovery and routing tests |
+| Script commands are truly disabled | shared scripts capability policy | mention discovery, actionability, saved-entry routing, retry actions | discovery, routing, and retry tests |
 | Ordinary `@agent` replies remain | actionable-mention and routing policy | editor suggestions and agent controller | focused mention/routing regression tests |
 | Existing users retain established workflows | one migration resolver plus canonical script registry evidence | settings load/save | migration matrix tests |
 | Guides match the product | current Markdown guides | users | documentation assertions and manual audit |
@@ -203,8 +205,9 @@ Implementation follows test-first vertical slices:
 4. Prove Publishing still fails closed and its dependent remote-purge controls retain their nested visibility behavior.
 5. Prove Scripts-off suggestions omit built-in and registered slash commands while retaining `@agent` and `@todo` behavior.
 6. Prove Scripts-off actionability and saved-entry dispatch cannot invoke any of the four script-oriented flows, including directly typed directives.
-7. Prove toggling off does not delete history, scripts, publishing configuration, or existing published state.
-8. Prove current guides state the default, enable path, capability boundary, and local-script security warning.
+7. Prove Scripts-off Generate/Regenerate actions cannot retry vault scripts or script-oriented agent runs, while ordinary agent retries and active-run cancellation remain available.
+8. Prove toggling off does not delete history, scripts, publishing configuration, or existing published state.
+9. Prove current guides state the default, enable path, capability boundary, and local-script security warning.
 
 Then run the repository's focused tests and complete build pipeline: compiled and direct tests, lint, typecheck, Obsidian compliance, production bundling, bundle-size guard, and exact shipped-artifact inspection. Any installation, publication, release, or push remains separately authorized.
 
@@ -213,7 +216,7 @@ Then run the repository's focused tests and complete build pipeline: compiled an
 - New and side-note-only vaults show only the enable control under each disabled advanced section.
 - Scripts and Publishing can be enabled or disabled independently.
 - Disabled-section detail controls are neither rendered nor returned by settings search.
-- Scripts disabled means no `/create-script`, `/update-script`, `/pdf-to-markdown`, or eligible `/script-name` suggestion or new execution path works.
+- Scripts disabled means no `/create-script`, `/update-script`, `/pdf-to-markdown`, eligible `/script-name`, or script-oriented retry can begin a new execution.
 - Supported `@agent` replies and `@todo` remain unchanged when Scripts is disabled.
 - Established vaults with persisted agent/script history or eligible registered scripts migrate to Scripts enabled; explicit user choices are always preserved.
 - Publishing remains default-off and fail-closed without deleting configuration or deployed content.
