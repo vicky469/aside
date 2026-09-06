@@ -1,6 +1,6 @@
 # Reply Reload And Actions Design
 
-**Objective:** Keep agent reply state visible and non-silent across plugin reload boundaries, and make the shared `+` reply action available on every active thread entry, including vault-script replies.
+**Objective:** Keep agent reply state visible and non-silent across plugin reload boundaries, make the shared `+` reply action available on every active thread entry, and keep manual thread continuations chronological.
 
 ## Implementation Tracking
 
@@ -16,19 +16,21 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Prevent saved-entry callbacks, retry preparation, and queue processing from starting agent work after the controller is disposed.
-- [ ] Convert persisted queued or running runs from a previous session into visible failed reply cards without overwriting an existing reply body.
-- [ ] Show the shared `+` action on active script reply cards so the next prompt can be added after the latest visible reply.
-- [ ] Preserve provider-neutral routing, same-thread concurrency for distinct prompts, and existing targeted insertion semantics.
+- [x] Prevent saved-entry callbacks, retry preparation, and queue processing from starting agent work after the controller is disposed.
+- [x] Convert persisted queued or running runs from a previous session into visible failed reply cards without overwriting an existing reply body.
+- [x] Show the shared `+` action on active script reply cards.
+- [x] Append every manually added continuation at the end of its thread, regardless of which card supplied the `+` action.
+- [x] Preserve provider-neutral routing, same-thread concurrency for distinct prompts, and direct-after-trigger placement for automatic reply cards.
 
 ### Verification
 
-- [ ] A lifecycle regression test proves a late `/update-script` callback cannot queue or launch after disposal.
-- [ ] A restart regression test proves an interrupted run with no output card receives one persistent failed reply.
-- [ ] A restart regression test proves an existing non-empty output is not overwritten.
-- [ ] A sidebar regression test proves a script reply renders `+` and targets that reply entry.
-- [ ] Focused tests, complete build, lint, typecheck, Obsidian compliance, bundle-size, and release-artifact checks pass.
-- [ ] The built plugin is installed in `lean-startup`, reloaded, and the three shipped assets match byte-for-byte.
+- [x] A lifecycle regression test proves a late `/update-script` callback cannot queue or launch after disposal.
+- [x] A restart regression test proves an interrupted run with no output card receives one persistent failed reply.
+- [x] A restart regression test proves an existing non-empty output is not overwritten.
+- [x] A sidebar regression test proves a script reply renders `+` and selects the same thread.
+- [x] Mutation and render regressions prove a manual continuation stays at the end of the thread.
+- [x] Focused tests, complete build, lint, typecheck, Obsidian compliance, bundle-size, and release-artifact checks pass.
+- [x] The built plugin is installed in the configured test vault, reloaded, and the three shipped assets match byte-for-byte.
 
 ## Evidence And Root Cause
 
@@ -36,15 +38,15 @@ The reported prompt save began before a plugin reload and completed after the ol
 
 This is a lifecycle-boundary defect, not runtime startup latency or spinner rendering. The run reached `running` promptly, but it belonged to an unloaded controller.
 
-The ordering complaint has a separate confirmed cause in the same reply surface. Script-authored entries suppress the shared add-to-thread action. The user therefore had to add from an earlier prompt card, and the existing targeted-insertion rule correctly placed the new entry after that clicked prompt instead of after the latest script reply.
+The ordering complaint has a separate confirmed cause in the same reply surface. Script-authored entries suppress the shared add-to-thread action, and manual continuations inherit the clicked entry as a persistence insertion point. Adding from any older card therefore splits the visible chronology and can separate an existing prompt/reply pair.
 
 ## Selected Behavior
 
 `CommentAgentController` owns a monotonic lifecycle flag. Once disposed, it accepts no new saved-entry dispatch, retry preparation, queue work, or runtime launch. A run already persisted as queued or running is left for the next controller instance to reconcile.
 
-On startup, reconciliation loads each persisted in-flight run's current thread. If the reserved output entry is absent, it commits one provider-owned failure reply at the original trigger position before marking the run failed. If a non-deleted output entry already has content, reconciliation preserves that content and only terminalizes the run record. This keeps failures visible without reviving deleted cards or overwriting a response that reached storage before interruption.
+On startup, reconciliation loads each persisted in-flight run's current thread. It rechecks that the run is still active before writing anything. If the reserved output entry is absent, it conditionally commits one provider-owned failure reply at the original trigger position before marking the run failed. The condition is rechecked inside the serialized persistence transaction: any non-empty or deleted reply found there wins. The controller rechecks the run status again before terminalizing it. This keeps failures visible without reviving deleted cards, overwriting a response that reached storage before interruption, or downgrading a concurrently completed run.
 
-Every non-deleted thread entry uses the same add-to-thread action policy regardless of whether its author is the user, an agent, or a vault script. Clicking `+` continues to target that exact entry; no global reordering or historical migration is introduced.
+Every non-deleted thread entry uses the same add-to-thread action policy regardless of whether its author is the user, an agent, or a vault script. Clicking `+` selects that card's thread, but the draft renders at the end and persistence appends it at the end. Automatic agent and script reply cards—including script error fallbacks—still appear immediately after their own newly saved prompts. No historical migration is introduced.
 
 ## Failure Handling
 
@@ -56,6 +58,6 @@ Every non-deleted thread entry uses the same add-to-thread action policy regardl
 
 ## Scope
 
-Included: agent controller lifecycle gating, startup interruption-card recovery, script reply `+` parity, ordering regression coverage, build, and live installation.
+Included: agent and persistence lifecycle gating, conditional startup interruption-card recovery, script reply `+` parity, chronological manual continuation, ordering regression coverage, build, and live installation.
 
-Excluded: automatic migration of historical entry order, changing the targeted insert model, changing agent runtime limits, changing provider adapters, or releasing a new version.
+Excluded: automatic migration of historical entry order, changing automatic reply placement, changing agent runtime limits, changing provider adapters, or releasing a new version.
