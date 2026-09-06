@@ -1,16 +1,16 @@
 # Advanced Settings Graduation Design
 
 **Date:** 2026-09-06
-**Status:** Approved
+**Status:** Implemented and verified
 
 ## Implementation Tracking
 
-- [ ] Reorder settings groups to Sidebar tabs, Scripts (advanced), Publishing (advanced), Index note in both declarative and legacy settings renderers.
-- [ ] Remove the complete feature-flag model, browser-storage synchronization, startup sequencing, and persisted `featureFlags` setting.
-- [ ] Keep publishing unavailable until the visible **Enable publishing** toggle is on, without a second hidden gate.
-- [ ] Rename the experimental-features guide to an advanced-features guide and remove obsolete DevTools activation instructions.
-- [ ] Update settings, publishing, persistence, startup, and documentation tests.
-- [ ] Run focused regression tests and the complete build/release-artifact verification.
+- [x] Reorder settings groups to Sidebar tabs, Scripts (advanced), Publishing (advanced), Index note in both declarative and legacy settings renderers.
+- [x] Remove the complete feature-flag model, browser-storage synchronization, startup sequencing, and persisted `featureFlags` setting.
+- [x] Keep publishing unavailable until the visible **Enable publishing** toggle is on, without a second hidden gate.
+- [x] Rename the experimental-features guide to an advanced-features guide and remove obsolete DevTools activation instructions.
+- [x] Update settings, publishing, persistence, startup, and documentation tests.
+- [x] Run focused regression tests and the complete build/release-artifact verification.
 
 ## Context
 
@@ -48,3 +48,11 @@ Rename `EXPERIMENTAL_FEATURES.md` to `ADVANCED_FEATURES.md`, update the README l
 - Startup and documentation tests assert no production feature-flag synchronization or hidden activation instructions remain.
 - Full build runs TypeScript tests, direct tests, lint, typecheck, Obsidian compliance, production bundling, bundle-size checks, and exact release-artifact inspection.
 
+## Verification Evidence
+
+- Focused settings, persistence, startup, and publishing coverage passed: 102 tests.
+- Documentation coverage passed: 5 tests; updated create-script guidance passed in the compiled suite.
+- Full build passed with 1,496 compiled TypeScript tests and 158 direct tests (1,654 total).
+- ESLint, TypeScript checking, and Obsidian compliance passed.
+- Production bundle size passed at 696,361 of 750,000 bytes.
+- Exact release-artifact inspection passed for `main.js`, `manifest.json`, and `styles.css`; no source maps, embedded source content, raw TypeScript/JSX-family sources, secret-bearing files, or local absolute paths were included.
