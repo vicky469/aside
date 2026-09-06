@@ -30,7 +30,7 @@ Use this section as the working checklist. Mark an item done only after the code
 - [x] The change-surface audit confirms one lexer owner and one metadata-to-view refresh route.
 - [x] Full tests, lint, typecheck, Obsidian compliance, production bundle, bundle-size guard, and release-artifact inspection pass.
 
-Fresh verification on 2026-09-06 passed 1,509 compiled TypeScript tests and 160 direct `.mjs` tests (1,669 total), plus lint, typecheck, Obsidian compliance, and the production build. The generated `main.js` is 697,939 bytes against the 750,000-byte ceiling. Exact inspection of `main.js`, `manifest.json`, and `styles.css` found no source-map markers or embedded source content; no root source maps, raw TypeScript/TSX files, environment files, npm credentials, private keys, or certificates were present in the artifact set.
+Fresh verification on 2026-09-06 passed 1,509 compiled TypeScript tests and 160 direct `.mjs` tests (1,669 total), plus lint, typecheck, Obsidian compliance, and the production build. The generated `main.js` is 697,939 bytes against the 750,000-byte ceiling. Exact inspection of the shipped allowlist—`main.js`, `manifest.json`, and `styles.css`—found no source-map markers, embedded source content, raw TypeScript/TSX, environment data, npm credentials, private keys, or certificates. The repository's ignored local `.npmrc` is not part of that artifact set.
 
 ## Problem
 
