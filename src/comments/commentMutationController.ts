@@ -559,14 +559,6 @@ export class CommentMutationController {
                 body: draftComment.comment,
                 timestamp: draftComment.timestamp,
             });
-            if (draftComment.appendAfterCommentId && draftComment.appendAfterCommentId !== threadId) {
-                this.host.getCommentManager().reorderThreadEntries(
-                    threadId,
-                    draftComment.id,
-                    draftComment.appendAfterCommentId,
-                    "after",
-                );
-            }
             await this.host.persistCommentsForFile(
                 latestTarget.file,
                 this.buildPersistOptionsForComment(latestTarget.latestComment, {
@@ -1187,10 +1179,9 @@ export class CommentMutationController {
     }
 
     private toPersistedComment(draftComment: DraftComment & { selectedTextHash: string }): Comment {
-        const { mode, threadId, appendAfterCommentId, ...comment } = draftComment;
+        const { mode, threadId, ...comment } = draftComment;
         void mode;
         void threadId;
-        void appendAfterCommentId;
         return comment;
     }
 

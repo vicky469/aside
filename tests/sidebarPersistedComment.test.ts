@@ -17,7 +17,6 @@ import {
     getSidebarCommentRegenerateAction,
     isRetryableAgentRunBusy,
     isRetryableScriptRunBusy,
-    getAppendDraftInsertAfterEntryId,
     getRenderableThreadEntries,
     getAgentRunStatusPresentation,
     formatAgentRunMetadataFrontmatter,
@@ -892,7 +891,8 @@ test("shouldRenderThreadNestedToggle hides the toggle only while visible drafts 
     }), true);
 });
 
-test("getAppendDraftInsertAfterEntryId returns the clicked child entry id for child-targeted appends", () => {
+test("renderPersistedCommentCard renders a manual continuation after every stored reply", async () => {
+    const root = new FakeElement("div");
     const thread = createThreadWithEntries({
         id: "thread-1",
         entries: [
@@ -903,8 +903,7 @@ test("getAppendDraftInsertAfterEntryId returns the clicked child entry id for ch
         createdAt: 100,
         updatedAt: 300,
     });
-
-    assert.equal(getAppendDraftInsertAfterEntryId(thread, {
+    const appendDraft = {
         ...createComment({
             id: "draft-1",
             comment: "",
@@ -912,41 +911,18 @@ test("getAppendDraftInsertAfterEntryId returns the clicked child entry id for ch
         }),
         mode: "append",
         threadId: "thread-1",
-        appendAfterCommentId: "entry-2",
-    }), "entry-2");
-});
+    } as const;
 
-test("getAppendDraftInsertAfterEntryId falls back to end-of-thread for parent-targeted or unknown append targets", () => {
-    const thread = createThreadWithEntries({
-        id: "thread-1",
-        entries: [
-            { id: "thread-1", body: "Parent", timestamp: 100 },
-            { id: "entry-2", body: "Child", timestamp: 200 },
-        ],
-        createdAt: 100,
-        updatedAt: 200,
-    });
+    await renderPersistedCommentCard(root as unknown as HTMLDivElement, thread, createRenderHost({
+        appendDraftComment: appendDraft,
+        renderAppendDraft: (container) => {
+            (container as unknown as FakeElement).createDiv("test-append-draft");
+        },
+    }));
 
-    assert.equal(getAppendDraftInsertAfterEntryId(thread, {
-        ...createComment({
-            id: "draft-1",
-            comment: "",
-            timestamp: 300,
-        }),
-        mode: "append",
-        threadId: "thread-1",
-        appendAfterCommentId: "thread-1",
-    }), null);
-    assert.equal(getAppendDraftInsertAfterEntryId(thread, {
-        ...createComment({
-            id: "draft-2",
-            comment: "",
-            timestamp: 300,
-        }),
-        mode: "append",
-        threadId: "thread-1",
-        appendAfterCommentId: "missing-entry",
-    }), null);
+    const replies = root.findAllByClass("aside-thread-replies")[0];
+    assert.ok(replies);
+    assert.equal(replies.children.at(-1)?.classList.contains("test-append-draft"), true);
 });
 
 test("getRenderableThreadEntries keeps the persisted agent output entry visible while the live stream is retained", () => {

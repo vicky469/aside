@@ -51,6 +51,7 @@ type PersistOptions = {
 
 type CommitThreadEntryOptions = PersistOptions & {
     insertAfterCommentId?: string;
+    onlyIfEntryAbsentOrBlank?: boolean;
 };
 
 type SyncedFileComments = {
@@ -1333,16 +1334,55 @@ export class CommentPersistenceController {
         const queueKeys = this.getCommentPersistenceQueueKeys(file, filePath);
         let committed = false;
         await this.enqueueCommentPersistence(queueKeys, async () => {
+            if (this.disposed) {
+                return;
+            }
             const noteContent = this.host.isCommentableFile(file)
                 ? await this.host.getCurrentNoteContent(file)
                 : undefined;
+            if (this.disposed) {
+                return;
+            }
             const sourceRecord = await this.ensureSourceIdentityForFilePath(filePath, noteContent);
+            if (this.disposed) {
+                return;
+            }
             const storedThreads = (await this.readSourceOrPathSidecar(sourceRecord, filePath))?.threads;
+            if (this.disposed) {
+                return;
+            }
             const storedCanonicalThreads = await this.normalizeThreadsForFile(
                 filePath,
                 storedThreads ?? [],
             );
+            if (this.disposed) {
+                return;
+            }
             const liveThreads = this.host.getCommentManager().getThreadsForFile(filePath, { includeDeleted: true });
+            if (options.onlyIfEntryAbsentOrBlank) {
+                const existingCandidates = [storedCanonicalThreads, liveThreads]
+                    .map((threads) => threads
+                        .find((thread) => thread.id === threadId)
+                        ?.entries.find((candidate) => candidate.id === entry.id))
+                    .filter((candidate): candidate is CommentThreadEntry => !!candidate);
+                const protectedCandidate = existingCandidates.find((candidate) => (
+                    candidate.deletedAt !== undefined || candidate.body.trim().length > 0
+                ));
+                if (protectedCandidate) {
+                    const manager = this.host.getCommentManager();
+                    const currentEntry = manager.getCommentById(protectedCandidate.id);
+                    if (!currentEntry) {
+                        manager.appendEntry(threadId, protectedCandidate);
+                    } else if (currentEntry.comment !== protectedCandidate.body) {
+                        manager.editComment(protectedCandidate.id, protectedCandidate.body);
+                    }
+                    if (protectedCandidate.deletedAt !== undefined) {
+                        manager.deleteComment(protectedCandidate.id, protectedCandidate.deletedAt);
+                    }
+                    committed = true;
+                    return;
+                }
+            }
             const canonicalThreads = liveThreads.some((thread) => thread.id === threadId)
                 ? liveThreads
                 : storedCanonicalThreads;
@@ -1380,6 +1420,9 @@ export class CommentPersistenceController {
                 ...options,
                 immediateAggregateRefresh: options.immediateAggregateRefresh ?? false,
             });
+            if (this.disposed) {
+                return;
+            }
             committed = true;
         });
         return committed;
@@ -2020,24 +2063,55 @@ export class CommentPersistenceController {
             threadCount: this.host.getCommentManager().getThreadsForFile(filePath, { includeDeleted: true }).length,
         });
         const currentContent = await this.host.getCurrentNoteContent(file);
+        if (this.disposed) {
+            return currentContent;
+        }
         const sourceRecord = await this.ensureSourceIdentityForFilePath(filePath, currentContent);
-        const previousThreads = (await this.sidecarStorage.readForSource(sourceRecord.sourceId, filePath))
-            ?? await this.sidecarStorage.read(filePath)
-            ?? [];
+        if (this.disposed) {
+            return currentContent;
+        }
+        const sourceThreads = await this.sidecarStorage.readForSource(sourceRecord.sourceId, filePath);
+        if (this.disposed) {
+            return currentContent;
+        }
+        const pathThreads = sourceThreads ? null : await this.sidecarStorage.read(filePath);
+        if (this.disposed) {
+            return currentContent;
+        }
+        const previousThreads = sourceThreads ?? pathThreads ?? [];
         const parsedCurrentContent = await this.parseAndNormalizeFileComments(filePath, currentContent);
+        if (this.disposed) {
+            return currentContent;
+        }
         const threads = explicitThreads
             ?? this.host.getCommentManager().getThreadsForFile(filePath, { includeDeleted: true });
         const synced = await this.syncThreadsIntoVisibleNoteContent(file, parsedCurrentContent.mainContent, threads, filePath);
+        if (this.disposed) {
+            return currentContent;
+        }
+        const normalizedPreviousThreads = await this.normalizeThreadsForFile(filePath, previousThreads);
+        if (this.disposed) {
+            return currentContent;
+        }
         const eventInputs = buildSideNoteSyncEventInputsForThreadDiff(
-            await this.normalizeThreadsForFile(filePath, previousThreads),
+            normalizedPreviousThreads,
             synced.threads,
         );
         await this.syncEventStore.appendLocalEvents(filePath, eventInputs);
+        if (this.disposed) {
+            return currentContent;
+        }
         await this.writeSourceAndPathSidecars(sourceRecord.sourceId, filePath, synced.threads);
+        if (this.disposed) {
+            return currentContent;
+        }
         await this.compactSyncedSideNoteEventsForSnapshots([{
             notePath: filePath,
             threads: synced.threads,
         }]);
+        if (this.disposed) {
+            return currentContent;
+        }
         await this.afterCommentsChanged(filePath, options);
         void this.host.log?.("info", "persistence", "storage.note.write.success", {
             filePath,
@@ -2061,22 +2135,44 @@ export class CommentPersistenceController {
             explicitThreads
                 ?? this.host.getCommentManager().getThreadsForFile(filePath, { includeDeleted: true }),
         );
+        if (this.disposed) {
+            return "";
+        }
         void this.host.log?.("info", "persistence", "storage.page.write.begin", {
             filePath,
             threadCount: threads.length,
         });
         const sourceRecord = await this.ensureSourceIdentityForFilePath(filePath);
+        if (this.disposed) {
+            return "";
+        }
         const previousThreads = (await this.readSourceOrPathSidecar(sourceRecord, filePath))?.threads ?? [];
+        if (this.disposed) {
+            return "";
+        }
+        const normalizedPreviousThreads = await this.normalizeThreadsForFile(filePath, previousThreads);
+        if (this.disposed) {
+            return "";
+        }
         const eventInputs = buildSideNoteSyncEventInputsForThreadDiff(
-            await this.normalizeThreadsForFile(filePath, previousThreads),
+            normalizedPreviousThreads,
             threads,
         );
         await this.syncEventStore.appendLocalEvents(filePath, eventInputs);
+        if (this.disposed) {
+            return "";
+        }
         await this.writeSourceAndPathSidecars(sourceRecord.sourceId, filePath, threads);
+        if (this.disposed) {
+            return "";
+        }
         await this.compactSyncedSideNoteEventsForSnapshots([{
             notePath: filePath,
             threads,
         }]);
+        if (this.disposed) {
+            return "";
+        }
         this.host.getAggregateCommentIndex().updateFile(filePath, threads);
         await this.afterCommentsChanged(filePath, options);
         void this.host.log?.("info", "persistence", "storage.page.write.success", {

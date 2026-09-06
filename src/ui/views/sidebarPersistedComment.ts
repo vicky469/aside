@@ -849,24 +849,6 @@ export function shouldRenderThreadNestedToggle(options: {
         && !options.hasChildEditDraft;
 }
 
-export function getAppendDraftInsertAfterEntryId(
-    thread: CommentThread,
-    draft: DraftComment | null,
-): string | null {
-    if (!draft || draft.mode !== "append") {
-        return null;
-    }
-
-    const targetId = draft.appendAfterCommentId ?? draft.threadId ?? null;
-    if (!targetId || targetId === thread.id) {
-        return null;
-    }
-
-    return thread.entries.slice(1).some((entry) => entry.id === targetId)
-        ? targetId
-        : null;
-}
-
 type SidebarPersistedCardInteractionCleanup = () => void;
 
 const sidebarPersistedCardInteractionAdopters = new WeakMap<
@@ -1564,7 +1546,6 @@ export async function renderPersistedCommentCard(
         hasDeletedEntriesVisible: hasVisibleDeletedEntries(thread),
         hasForcedVisibleChildEntries: forcedVisibleChildEntryIds.size > 0,
     });
-    const appendDraftAfterEntryId = getAppendDraftInsertAfterEntryId(thread, host.appendDraftComment);
     const parentAuthor = resolveSidebarCommentAuthor(
         comment.id,
         host.threadAgentRuns,
@@ -1670,7 +1651,6 @@ export async function renderPersistedCommentCard(
     }
 
     const childCommentsEl = threadEl.createDiv("aside-thread-replies");
-    let renderedAppendDraft = false;
     if (shouldRenderStoredChildren) {
         const childEntries = shouldRenderAllStoredChildren
             ? entries.slice(1)
@@ -1683,14 +1663,10 @@ export async function renderPersistedCommentCard(
                 inlineEditDraft: entryEditDraft,
             }));
 
-            if (host.appendDraftComment && appendDraftAfterEntryId === entry.id) {
-                host.renderAppendDraft(childCommentsEl, host.appendDraftComment);
-                renderedAppendDraft = true;
-            }
         }
     }
 
-    if (host.appendDraftComment && !renderedAppendDraft) {
+    if (host.appendDraftComment) {
         host.renderAppendDraft(childCommentsEl, host.appendDraftComment);
     }
 

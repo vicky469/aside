@@ -60,7 +60,6 @@ function getDraftIdentity(draft: DraftComment | null): string {
         draft.deletedAt ?? "",
         draft.mode,
         draft.threadId ?? "",
-        draft.appendAfterCommentId ?? "",
         getCachedStringHash(draft.comment),
     ].join("|");
 }

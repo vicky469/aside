@@ -819,7 +819,7 @@ test("comment mutation controller does not dispatch an appended entry before per
     assert.equal(host.savedUserEntryEvents.length, 1);
 });
 
-test("comment mutation controller inserts child-targeted append drafts after the clicked child entry", async () => {
+test("comment mutation controller appends child-targeted drafts at the end of the thread", async () => {
     const existing = createComment({ id: "thread-1", comment: "Original" });
     const draft: DraftComment = {
         ...toDraft(existing, {
@@ -828,7 +828,6 @@ test("comment mutation controller inserts child-targeted append drafts after the
         }),
         id: "entry-4",
         threadId: existing.id,
-        appendAfterCommentId: "entry-2",
     };
     const host = createHost({
         draftComment: draft,
@@ -850,7 +849,7 @@ test("comment mutation controller inserts child-targeted append drafts after the
 
     assert.deepEqual(
         host.manager.getThreadById(existing.id)?.entries.map((entry) => entry.id),
-        ["thread-1", "entry-2", "entry-4", "entry-3"],
+        ["thread-1", "entry-2", "entry-3", "entry-4"],
     );
 });
 

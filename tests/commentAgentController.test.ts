@@ -66,6 +66,8 @@ function createHarness(options: {
     runtimeWorkingDirectory?: string | null;
     currentNoteContent?: string;
     currentNoteContentError?: Error;
+    customGetCurrentNoteContent?: (file: TFile) => Promise<string>;
+    customLoadCommentsForFile?: (file: TFile) => Promise<void>;
     runtimeReplyText?: string;
     runtimeError?: Error;
     runtimeStreamTexts?: string[];
@@ -80,8 +82,15 @@ function createHarness(options: {
     defaultRuntimeSelection?: DefaultAgentRuntimeSelection;
     resolveDefaultAgentRuntimeSelection?: () => Promise<DefaultAgentRuntimeSelection>;
     customRunAgentRuntime?: (invocation: AgentRuntimeInvocation) => Promise<AgentRuntimeResult>;
+    beforePersistedRunUpdate?: (
+        nextRuns: AgentRunRecord[],
+        previousRuns: AgentRunRecord[],
+    ) => Promise<void>;
     customAppendThreadEntry?: () => Promise<void>;
-    customCommitThreadEntry?: (entry: { id: string; body: string }) => Promise<boolean | void>;
+    customCommitThreadEntry?: (
+        entry: { id: string; body: string },
+        commentManager: CommentManager,
+    ) => Promise<boolean | void>;
     customHashText?: (text: string) => Promise<string>;
     customBeforeEditComment?: () => Promise<void>;
     customEditComment?: (commentId: string, newCommentText: string) => Promise<void>;
@@ -129,6 +138,7 @@ function createHarness(options: {
             const previousRuns = Array.isArray(persistedData.agentRuns)
                 ? persistedData.agentRuns as AgentRunRecord[]
                 : [];
+            await options.beforePersistedRunUpdate?.(nextRuns, previousRuns);
             if (
                 failedSucceededRunUpdates < (options.failSucceededRunUpdateAttempts ?? 0)
                 && nextRuns.some((run) => run.status === "succeeded")
@@ -168,12 +178,15 @@ function createHarness(options: {
         ),
         getCurrentNoteContent: async (file) => {
             currentNoteContentReads.push(file.path);
+            if (options.customGetCurrentNoteContent) {
+                return options.customGetCurrentNoteContent(file);
+            }
             if (options.currentNoteContentError) {
                 throw options.currentNoteContentError;
             }
             return options.currentNoteContent ?? "";
         },
-        loadCommentsForFile: async () => undefined,
+        loadCommentsForFile: async (file) => options.customLoadCommentsForFile?.(file),
         hashText: async (text) => options.customHashText?.(text) ?? `hash:${text}`,
         persistCommentsForFile: async (file, persistOptions) => {
             persistedFiles.push({
@@ -216,9 +229,17 @@ function createHarness(options: {
                     ? { insertAfterCommentId: commitOptions.insertAfterCommentId }
                     : {}),
             });
-            const customResult = await options.customCommitThreadEntry?.(entry);
+            const customResult = await options.customCommitThreadEntry?.(entry, commentManager);
             if (customResult === false) {
                 return false;
+            }
+            const currentEntry = commentManager.getCommentById(entry.id);
+            if (
+                commitOptions?.onlyIfEntryAbsentOrBlank
+                && currentEntry
+                && (currentEntry.deletedAt !== undefined || currentEntry.comment.trim().length > 0)
+            ) {
+                return true;
             }
             if (commentManager.getCommentById(entry.id)) {
                 commentManager.editComment(entry.id, entry.body);
@@ -728,6 +749,156 @@ test("comment agent controller does not dispatch update-script after disposal", 
     assert.deepEqual(harness.runtimeCalls, []);
 });
 
+test("comment agent controller does not launch after disposal during prompt context loading", async () => {
+    let releaseContext: () => void = () => undefined;
+    let markContextStarted: () => void = () => undefined;
+    const contextStarted = new Promise<void>((resolve) => {
+        markContextStarted = resolve;
+    });
+    const blockedContext = new Promise<void>((resolve) => {
+        releaseContext = resolve;
+    });
+    const harness = createHarness({
+        customGetCurrentNoteContent: async () => {
+            markContextStarted();
+            await blockedContext;
+            return "# Note";
+        },
+    });
+
+    await harness.controller.handleSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "@codex continue",
+    });
+    await contextStarted;
+    harness.controller.dispose();
+    releaseContext();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    assert.deepEqual(harness.runtimeCalls, []);
+    assert.equal(harness.controller.getAgentRuns()[0]?.status, "queued");
+});
+
+test("comment agent controller does not launch after disposal during running-state persistence", async () => {
+    let releaseRunningUpdate: () => void = () => undefined;
+    let markRunningUpdateStarted: () => void = () => undefined;
+    const runningUpdateStarted = new Promise<void>((resolve) => {
+        markRunningUpdateStarted = resolve;
+    });
+    const blockedRunningUpdate = new Promise<void>((resolve) => {
+        releaseRunningUpdate = resolve;
+    });
+    const harness = createHarness({
+        beforePersistedRunUpdate: async (nextRuns, previousRuns) => {
+            const entersRunning = nextRuns.some((run) => run.status === "running")
+                && !previousRuns.some((run) => run.status === "running");
+            if (entersRunning) {
+                markRunningUpdateStarted();
+                await blockedRunningUpdate;
+            }
+        },
+    });
+
+    await harness.controller.handleSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "@codex continue",
+    });
+    await runningUpdateStarted;
+    harness.controller.dispose();
+    releaseRunningUpdate();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    assert.deepEqual(harness.runtimeCalls, []);
+    assert.equal(harness.controller.getAgentRuns()[0]?.status, "running");
+});
+
+test("comment agent controller ignores a runtime completion after disposal", async () => {
+    let releaseRuntime: () => void = () => undefined;
+    let markRuntimeStarted: () => void = () => undefined;
+    let markRuntimeReturned: () => void = () => undefined;
+    const runtimeStarted = new Promise<void>((resolve) => {
+        markRuntimeStarted = resolve;
+    });
+    const blockedRuntime = new Promise<void>((resolve) => {
+        releaseRuntime = resolve;
+    });
+    const runtimeReturned = new Promise<void>((resolve) => {
+        markRuntimeReturned = resolve;
+    });
+    const harness = createHarness({
+        customRunAgentRuntime: async () => {
+            markRuntimeStarted();
+            await blockedRuntime;
+            markRuntimeReturned();
+            return { runtime: "direct-cli", replyText: "Late reply" };
+        },
+    });
+
+    await harness.controller.handleSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "@codex continue",
+    });
+    await runtimeStarted;
+    harness.controller.dispose();
+    releaseRuntime();
+    await runtimeReturned;
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    assert.deepEqual(harness.committedEntries, []);
+    assert.equal(harness.controller.getAgentRuns()[0]?.status, "running");
+});
+
+test("comment agent controller stops retry preparation after disposal", async () => {
+    let releaseLoad: () => void = () => undefined;
+    let markLoadStarted: () => void = () => undefined;
+    const loadStarted = new Promise<void>((resolve) => {
+        markLoadStarted = resolve;
+    });
+    const blockedLoad = new Promise<void>((resolve) => {
+        releaseLoad = resolve;
+    });
+    const harness = createHarness({
+        initialPersistedData: {
+            agentRuns: [{
+                id: "run-1",
+                threadId: "thread-1",
+                triggerEntryId: "thread-1",
+                filePath: "Folder/Note.md",
+                requestedAgent: "codex",
+                runtime: "direct-cli",
+                status: "failed",
+                promptText: "@codex continue",
+                createdAt: 100,
+                endedAt: 101,
+                error: "Stopped",
+            }],
+        },
+        customLoadCommentsForFile: async () => {
+            markLoadStarted();
+            await blockedLoad;
+        },
+        defaultRuntimeSelection: {
+            kind: "none",
+            preferredAgent: "codex",
+        },
+    });
+
+    const retry = harness.controller.retryRun("run-1");
+    await loadStarted;
+    harness.controller.dispose();
+    releaseLoad();
+
+    assert.equal(await retry, false);
+    assert.deepEqual(harness.appendedEntries, []);
+    assert.equal(harness.controller.getAgentRuns().length, 1);
+});
+
 test("update-script regenerate reparses the latest request and re-resolves its target", async () => {
     let runtimeAttempt = 0;
     const harness = createHarness({
@@ -1074,6 +1245,52 @@ test("comment agent controller rejects cancellation while annotation proposals a
     }
 
     assert.equal(harness.controller.getLatestAgentRunForThread("thread-1")?.status, "succeeded");
+});
+
+test("comment agent controller stops annotation and reply persistence after disposal", async () => {
+    let markHashStarted: () => void = () => undefined;
+    let releaseHash: () => void = () => undefined;
+    const hashStarted = new Promise<void>((resolve) => {
+        markHashStarted = resolve;
+    });
+    const blockedHash = new Promise<void>((resolve) => {
+        releaseHash = resolve;
+    });
+    const harness = createHarness({
+        currentNoteContent: "# Plan\n\nA sharper promise matters.\n",
+        runtimeReplyText: [
+            "```aside-annotations",
+            JSON.stringify([{
+                selectedText: "sharper promise",
+                comment: "Make the promise concrete.",
+            }]),
+            "```",
+            "Added one note.",
+        ].join("\n"),
+        customHashText: async (text) => {
+            markHashStarted();
+            await blockedHash;
+            return `hash:${text}`;
+        },
+    });
+
+    await harness.controller.handleSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "@codex add an annotation",
+    });
+    await hashStarted;
+    harness.controller.dispose();
+    releaseHash();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    assert.equal(
+        harness.commentManager.getThreadsForFile("Folder/Note.md", { includeDeleted: true })
+            .filter((thread) => thread.anchorKind === "selection").length,
+        0,
+    );
+    assert.deepEqual(harness.committedEntries, []);
 });
 
 test("comment agent controller removes orphan duplicate replies created during completion", async () => {
@@ -2685,6 +2902,290 @@ test("comment agent controller marks persisted in-flight runs failed after resta
     assert.equal(harness.controller.getLatestAgentRunForThread("thread-1")?.status, "failed");
     assert.equal(harness.commentManager.getCommentById("reply-1")?.comment, "Stored response");
     assert.deepEqual(harness.committedEntries, []);
+});
+
+test("comment agent controller does not overwrite a reply completed during restart recovery", async () => {
+    const harness = createHarness({
+        initialPersistedData: {
+            agentRuns: [{
+                id: "run-1",
+                threadId: "thread-1",
+                triggerEntryId: "thread-1",
+                filePath: "Folder/Note.md",
+                requestedAgent: "codex",
+                runtime: "direct-cli",
+                status: "running",
+                promptText: "@codex continue",
+                createdAt: 100,
+                startedAt: 101,
+                outputEntryId: "reply-1",
+            }],
+        },
+        customCommitThreadEntry: async (entry, commentManager) => {
+            commentManager.appendEntry("thread-1", {
+                id: entry.id,
+                body: "Completed while recovery was waiting",
+                timestamp: 102,
+            });
+        },
+    });
+
+    await harness.controller.reconcilePendingRunsFromPreviousSession();
+
+    assert.equal(
+        harness.commentManager.getCommentById("reply-1")?.comment,
+        "Completed while recovery was waiting",
+    );
+});
+
+test("comment agent controller stops restart recovery after disposal", async () => {
+    let releaseLoad: () => void = () => undefined;
+    let markLoadStarted: () => void = () => undefined;
+    const loadStarted = new Promise<void>((resolve) => {
+        markLoadStarted = resolve;
+    });
+    const blockedLoad = new Promise<void>((resolve) => {
+        releaseLoad = resolve;
+    });
+    const harness = createHarness({
+        initialPersistedData: {
+            agentRuns: [{
+                id: "run-1",
+                threadId: "thread-1",
+                triggerEntryId: "thread-1",
+                filePath: "Folder/Note.md",
+                requestedAgent: "codex",
+                runtime: "direct-cli",
+                status: "running",
+                promptText: "@codex continue",
+                createdAt: 100,
+                startedAt: 101,
+                outputEntryId: "reply-1",
+            }],
+        },
+        customLoadCommentsForFile: async () => {
+            markLoadStarted();
+            await blockedLoad;
+        },
+    });
+
+    const recovery = harness.controller.reconcilePendingRunsFromPreviousSession();
+    await loadStarted;
+    harness.controller.dispose();
+    releaseLoad();
+    await recovery;
+
+    assert.deepEqual(harness.committedEntries, []);
+    assert.equal(harness.controller.getAgentRuns()[0]?.status, "running");
+});
+
+test("comment agent controller skips interruption output when a run finishes during reload", async () => {
+    let releaseLoad: () => void = () => undefined;
+    let markLoadStarted: () => void = () => undefined;
+    const loadStarted = new Promise<void>((resolve) => {
+        markLoadStarted = resolve;
+    });
+    const blockedLoad = new Promise<void>((resolve) => {
+        releaseLoad = resolve;
+    });
+    const harness = createHarness({
+        initialPersistedData: {
+            agentRuns: [{
+                id: "run-1",
+                threadId: "thread-1",
+                triggerEntryId: "thread-1",
+                filePath: "Folder/Note.md",
+                requestedAgent: "codex",
+                runtime: "direct-cli",
+                status: "running",
+                promptText: "@codex continue",
+                createdAt: 100,
+                startedAt: 101,
+                outputEntryId: "reply-1",
+            }],
+        },
+        customLoadCommentsForFile: async () => {
+            markLoadStarted();
+            await blockedLoad;
+        },
+    });
+
+    const recovery = harness.controller.reconcilePendingRunsFromPreviousSession();
+    await loadStarted;
+    await harness.store.updateRun("run-1", (run) => ({
+        ...run,
+        status: "succeeded",
+        endedAt: 102,
+        error: undefined,
+    }));
+    releaseLoad();
+    await recovery;
+
+    assert.deepEqual(harness.committedEntries, []);
+    assert.equal(harness.commentManager.getCommentById("reply-1"), undefined);
+    assert.equal(harness.controller.getAgentRuns()[0]?.status, "succeeded");
+});
+
+test("comment agent controller recovers queued runs without a reserved output id", async () => {
+    const harness = createHarness({
+        initialPersistedData: {
+            agentRuns: [{
+                id: "run-1",
+                threadId: "thread-1",
+                triggerEntryId: "thread-1",
+                filePath: "Folder/Note.md",
+                requestedAgent: "codex",
+                runtime: "direct-cli",
+                status: "queued",
+                promptText: "@codex continue",
+                createdAt: 100,
+            }],
+        },
+    });
+
+    await harness.controller.reconcilePendingRunsFromPreviousSession();
+
+    assert.equal(harness.controller.getAgentRuns()[0]?.status, "failed");
+    assert.equal(harness.controller.getAgentRuns()[0]?.outputEntryId, "generated-1");
+    assert.equal(harness.committedEntries[0]?.id, "generated-1");
+});
+
+test("comment agent controller fills a blank interrupted reply", async () => {
+    const harness = createHarness({
+        initialPersistedData: {
+            agentRuns: [{
+                id: "run-1",
+                threadId: "thread-1",
+                triggerEntryId: "thread-1",
+                filePath: "Folder/Note.md",
+                requestedAgent: "codex",
+                runtime: "direct-cli",
+                status: "running",
+                promptText: "@codex continue",
+                createdAt: 100,
+                outputEntryId: "reply-1",
+            }],
+        },
+    });
+    harness.commentManager.appendEntry("thread-1", {
+        id: "reply-1",
+        body: "",
+        timestamp: 101,
+    });
+
+    await harness.controller.reconcilePendingRunsFromPreviousSession();
+
+    assert.match(harness.commentManager.getCommentById("reply-1")?.comment ?? "", /did not finish/);
+    assert.equal(harness.committedEntries.length, 1);
+});
+
+test("comment agent controller does not resurrect a deleted interrupted reply", async () => {
+    const harness = createHarness({
+        initialPersistedData: {
+            agentRuns: [{
+                id: "run-1",
+                threadId: "thread-1",
+                triggerEntryId: "thread-1",
+                filePath: "Folder/Note.md",
+                requestedAgent: "codex",
+                runtime: "direct-cli",
+                status: "running",
+                promptText: "@codex continue",
+                createdAt: 100,
+                outputEntryId: "reply-1",
+            }],
+        },
+    });
+    harness.commentManager.appendEntry("thread-1", {
+        id: "reply-1",
+        body: "",
+        timestamp: 101,
+    });
+    harness.commentManager.deleteComment("reply-1", Date.now());
+
+    await harness.controller.reconcilePendingRunsFromPreviousSession();
+
+    assert.notEqual(harness.commentManager.getCommentById("reply-1")?.deletedAt, undefined);
+    assert.deepEqual(harness.committedEntries, []);
+});
+
+test("comment agent controller terminalizes recovery when interruption persistence fails", async () => {
+    const harness = createHarness({
+        initialPersistedData: {
+            agentRuns: [{
+                id: "run-1",
+                threadId: "thread-1",
+                triggerEntryId: "thread-1",
+                filePath: "Folder/Note.md",
+                requestedAgent: "codex",
+                runtime: "direct-cli",
+                status: "running",
+                promptText: "@codex continue",
+                createdAt: 100,
+                outputEntryId: "reply-1",
+            }],
+        },
+        customCommitThreadEntry: async () => false,
+    });
+
+    await harness.controller.reconcilePendingRunsFromPreviousSession();
+
+    assert.equal(harness.controller.getAgentRuns()[0]?.status, "failed");
+    assert.equal(harness.commentManager.getCommentById("reply-1"), undefined);
+    assert.ok(harness.logEntries.some((entry) => entry.event === "agents.reply.interrupted_commit_failed"));
+});
+
+test("comment agent controller preserves a run completed during restart recovery", async () => {
+    let releaseCommit: () => void = () => undefined;
+    let markCommitStarted: () => void = () => undefined;
+    const commitStarted = new Promise<void>((resolve) => {
+        markCommitStarted = resolve;
+    });
+    const blockedCommit = new Promise<void>((resolve) => {
+        releaseCommit = resolve;
+    });
+    const harness = createHarness({
+        initialPersistedData: {
+            agentRuns: [{
+                id: "run-1",
+                threadId: "thread-1",
+                triggerEntryId: "thread-1",
+                filePath: "Folder/Note.md",
+                requestedAgent: "codex",
+                runtime: "direct-cli",
+                status: "running",
+                promptText: "@codex continue",
+                createdAt: 100,
+                outputEntryId: "reply-1",
+            }],
+        },
+        customCommitThreadEntry: async (_entry, commentManager) => {
+            markCommitStarted();
+            await blockedCommit;
+            commentManager.appendEntry("thread-1", {
+                id: "reply-1",
+                body: "Completed by the previous session",
+                timestamp: 102,
+            });
+        },
+    });
+
+    const recovery = harness.controller.reconcilePendingRunsFromPreviousSession();
+    await commitStarted;
+    await harness.store.updateRun("run-1", (run) => ({
+        ...run,
+        status: "succeeded",
+        endedAt: 102,
+        error: undefined,
+    }));
+    releaseCommit();
+    await recovery;
+
+    assert.equal(harness.controller.getAgentRuns()[0]?.status, "succeeded");
+    assert.equal(
+        harness.commentManager.getCommentById("reply-1")?.comment,
+        "Completed by the previous session",
+    );
 });
 
 test("comment agent controller keeps the final stream card in place when a run succeeds", async () => {
