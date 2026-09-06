@@ -100,6 +100,14 @@ test("metadata refresh keeps the current tag query on the body-only path", () =>
 });
 
 test("metadata refresh respects a rendered Tags to List fallback", () => {
+    const querySource = asideViewSource.match(
+        /private applyIndexTagSearchQuery\([\s\S]*?\n {4}(?:private|public) /,
+    )?.[0];
+    const cachedListSource = asideViewSource.match(
+        /private renderCachedIndexDefaultSidebar\([\s\S]*?\n {4}(?:private|public) /,
+    )?.[0];
+
+    assert.ok(querySource && cachedListSource);
     assert.match(
         asideViewSource,
         /private renderedIndexSidebarMode: IndexSidebarMode \| null = null;/,
@@ -112,4 +120,7 @@ test("metadata refresh respects a rendered Tags to List fallback", () => {
         asideViewSource,
         /private renderIndexTagSearchSidebar\([\s\S]*?this\.renderedIndexSidebarMode = "tags";/,
     );
+    assert.match(querySource, /this\.renderedIndexSidebarMode === "tags"/);
+    assert.doesNotMatch(querySource, /this\.indexSidebarMode === "tags"/);
+    assert.match(cachedListSource, /this\.renderedIndexSidebarMode = "list";/);
 });

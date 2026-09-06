@@ -1392,7 +1392,7 @@ export default class AsideView extends ItemView {
             bodyEl?.isConnected
             && currentFilePath
             && this.plugin.isAllCommentsNotePath(currentFilePath)
-            && this.indexSidebarMode === "tags"
+            && this.renderedIndexSidebarMode === "tags"
         ) {
             this.renderIndexTagSearchBody(bodyEl);
         }
@@ -4375,6 +4375,7 @@ export default class AsideView extends ItemView {
     }
 
     private renderCachedIndexDefaultSidebar(file: TFile, cache: IndexDefaultSidebarCache): void {
+        this.renderedIndexSidebarMode = "list";
         this.indexFileFilterGraph = null;
         this.indexThoughtTrailToolbarEnabled = false;
         this.noteSidebarTagIndex = null;
