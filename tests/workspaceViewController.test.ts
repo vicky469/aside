@@ -52,13 +52,18 @@ function createMarkdownView(
     };
 }
 
-function createSidebarView(renderCalls: number[], file: TFile | null = null) {
+function createSidebarView(
+    renderCalls: number[],
+    file: TFile | null = null,
+    refreshIndexTagSearch?: () => void,
+) {
     return {
         file,
         getViewType: () => "aside-view",
         renderComments: async () => {
             renderCalls.push(renderCalls.length + 1);
         },
+        ...(refreshIndexTagSearch ? { refreshIndexTagSearch } : {}),
     };
 }
 
@@ -241,6 +246,29 @@ test("workspace view controller syncs visible native and plugin file views while
     assert.equal(harness.controller.clearMarkdownSelection(noteFile.path), true);
     assert.deepEqual(selectionCalls, [{ from: noteCursor, to: noteCursor }]);
     assert.equal(harness.controller.clearMarkdownSelection(indexFile.path), false);
+});
+
+test("workspace view controller refreshes index tag views only", () => {
+    const indexFile = createFile("Aside index.md");
+    const noteFile = createFile("docs/note.md");
+    const noteTagRefreshes: number[] = [];
+    const indexTagRefreshes: number[] = [];
+    const harness = createHarness({
+        leaves: [
+            { view: createSidebarView([], noteFile, () => noteTagRefreshes.push(1)) },
+            { view: createSidebarView([], indexFile, () => indexTagRefreshes.push(1)) },
+        ],
+        files: [indexFile, noteFile],
+    });
+
+    const refreshIndexTagSearchViews = (
+        harness.controller as unknown as { refreshIndexTagSearchViews?: () => void }
+    ).refreshIndexTagSearchViews;
+    assert.equal(typeof refreshIndexTagSearchViews, "function");
+    refreshIndexTagSearchViews?.call(harness.controller);
+
+    assert.deepEqual(noteTagRefreshes, []);
+    assert.deepEqual(indexTagRefreshes, [1]);
 });
 
 test("workspace view controller refreshes the index note immediately when an aggregate refresh is pending", async () => {
