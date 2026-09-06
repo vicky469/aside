@@ -302,6 +302,59 @@ test("comment persistence continues queued saves after a same-note failure", asy
     }
 });
 
+test("markdown modification synchronization joins the same-note persistence queue", async () => {
+    const originalWindow = globalThis.window;
+    globalThis.window = {
+        setTimeout: () => 1,
+        clearTimeout: () => {},
+    } as unknown as typeof globalThis.window;
+
+    const file = createFile("docs/note.md");
+    const harness = createHarness([file], [createThread(file.path)]);
+    const firstReadEntered = createDeferred();
+    const secondReadEntered = createDeferred();
+    const releaseFirstRead = createDeferred();
+    let readCount = 0;
+    harness.setCurrentNoteContentReader(async () => {
+        readCount += 1;
+        if (readCount === 1) {
+            firstReadEntered.resolve();
+            await releaseFirstRead.promise;
+        } else if (readCount === 2) {
+            secondReadEntered.resolve();
+        }
+        return "# Title\n\nAlpha target omega\n";
+    });
+
+    let savePromise: Promise<void> | null = null;
+    let modificationPromise: Promise<void> | null = null;
+    try {
+        savePromise = harness.controller.persistCommentsForFile(file);
+        await firstReadEntered.promise;
+        modificationPromise = harness.controller.handleMarkdownFileModified(file);
+
+        assert.equal(
+            await settlesWithinMicrotasks(secondReadEntered.promise),
+            false,
+            "same-note Markdown synchronization bypassed the persistence queue",
+        );
+
+        releaseFirstRead.resolve();
+        await Promise.all([savePromise, modificationPromise]);
+
+        assert.equal(readCount >= 2, true);
+        assert.equal(await harness.adapter.exists(getSidecarStoragePath(file.path)), true);
+    } finally {
+        releaseFirstRead.resolve();
+        await Promise.allSettled(
+            [savePromise, modificationPromise]
+                .filter((promise): promise is Promise<void> => promise !== null),
+        );
+        harness.controller.dispose();
+        globalThis.window = originalWindow;
+    }
+});
+
 test("comment persistence carries an in-flight save across a note rename", async () => {
     const originalWindow = globalThis.window;
     globalThis.window = {
