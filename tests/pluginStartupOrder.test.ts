@@ -20,26 +20,16 @@ test("plugin registers its UI before expensive startup maintenance", () => {
     );
 });
 
-test("plugin synchronizes every declared feature flag before registering UI", () => {
+test("plugin startup has no hidden feature-flag synchronization", () => {
     const source = readFileSync("src/main.ts", "utf8");
     const onloadStart = source.indexOf("async onload()");
     const unloadStart = source.indexOf("onunload()");
     const onloadBody = source.slice(onloadStart, unloadStart);
-    const loadSettingsIndex = onloadBody.indexOf("await this.loadSettings();");
-    const syncFeatureFlagIndex = onloadBody.indexOf("await this.syncFeatureFlagStorage();");
-    const registerIndex = onloadBody.indexOf("this.pluginRegistrationController.register();");
 
-    assert.ok(loadSettingsIndex >= 0);
-    assert.ok(syncFeatureFlagIndex > loadSettingsIndex);
-    assert.ok(registerIndex > syncFeatureFlagIndex);
-    assert.match(
-        source,
-        /for \(const flag of FEATURE_FLAG_KEYS\)/u,
-    );
-    assert.match(
-        source,
-        /getFeatureFlagStorageKey\(flag, this\.app\.vault\.getName\(\)\)/u,
-    );
+    assert.ok(onloadBody.indexOf("await this.loadSettings();") >= 0);
+    assert.equal(onloadBody.includes("syncFeatureFlagStorage"), false);
+    assert.equal(source.includes("FEATURE_FLAG_KEYS"), false);
+    assert.equal(source.includes("getFeatureFlagStorageKey"), false);
 });
 
 test("plugin refreshes the public inventory during startup maintenance", () => {

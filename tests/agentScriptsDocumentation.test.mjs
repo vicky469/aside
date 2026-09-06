@@ -16,6 +16,7 @@ test("README publishes the complete agent and script entry points", () => {
         "feature and workflow copy must use the complete ordered agent list",
     );
     assert.match(readme, /\[Agents and scripts\]\(\.\/SCRIPTS\.md\)/u);
+    assert.match(readme, /\[Advanced features\]\(ADVANCED_FEATURES\.md\)/u);
     for (const command of ["/create-script", "/update-script", "/pdf-to-markdown", "/script-name"]) {
         assert.match(readme, new RegExp(command.replace("/", "\\/"), "u"));
     }
@@ -41,8 +42,8 @@ test("Agents and scripts guide documents setup and everyday workflows", () => {
     assert.match(guide, /Show agent tab/u);
     assert.match(guide, /Settings → Sidebar tabs/u);
     assert.match(guide, /controls visibility only[^\n]*replies remain[^\n]*List view/iu);
-    assert.match(guide, /Settings → Scripts/u);
-    assert.match(guide, /default (?:local )?agent[^\n]*Settings → Scripts/iu);
+    assert.match(guide, /Settings → Aside → Scripts \(advanced\)/u);
+    assert.match(guide, /default (?:local )?agent[^\n]*Settings → Aside → Scripts \(advanced\)/iu);
     assert.match(guide, /🛠️ scripts\//u);
     assert.match(guide, /first valid request/iu);
     assert.match(guide, /\/create-script <request>/u);
@@ -107,13 +108,20 @@ test("Agents and scripts guide explains headless agent access and privacy bounda
     assert.match(guide, /OpenCode[^\n]*run --auto/iu);
 });
 
-test("experimental documentation retains publishing and removes Vault Scripts", () => {
-    const experimental = readRequiredFile("EXPERIMENTAL_FEATURES.md");
+test("advanced documentation covers scripts and publishing without a hidden activation step", () => {
+    const advanced = readRequiredFile("ADVANCED_FEATURES.md");
 
-    assert.doesNotMatch(experimental, /Vault Scripts/iu);
-    assert.match(experimental, /\[Cloudflare Pages Publishing\]\(#cloudflare-pages-publishing\)/u);
-    assert.match(experimental, /^## Cloudflare Pages Publishing$/mu);
-    assert.match(experimental, /^### Network and Data Access$/mu);
-    assert.match(experimental, /^### Setup$/mu);
-    assert.match(experimental, /^### Publishing Workflow$/mu);
+    assert.equal(existsSync("EXPERIMENTAL_FEATURES.md"), false);
+    assert.match(advanced, /^# Advanced Features$/mu);
+    assert.match(advanced, /\[Agents and Scripts\]\(SCRIPTS\.md\)/u);
+    assert.match(advanced, /Settings → Aside → Scripts \(advanced\)/u);
+    assert.match(advanced, /\[Cloudflare Pages Publishing\]\(#cloudflare-pages-publishing\)/u);
+    assert.match(advanced, /^## Cloudflare Pages Publishing$/mu);
+    assert.match(advanced, /Settings → Aside → Publishing \(advanced\)/u);
+    assert.match(advanced, /\*\*Enable publishing\*\*/u);
+    assert.match(advanced, /^### Network and Data Access$/mu);
+    assert.match(advanced, /^### Setup$/mu);
+    assert.match(advanced, /^### Publishing Workflow$/mu);
+    assert.doesNotMatch(advanced, /localStorage|aside\.feature\.publish/iu);
+    assert.doesNotMatch(advanced, /^# Experimental Features$/mu);
 });

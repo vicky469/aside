@@ -8,12 +8,6 @@ import {
 } from "../core/agents/agentActorRegistry";
 import type { AsideAgentTarget } from "../core/config/agentTargets";
 import {
-    syncFeatureFlagStorage as syncStoredFeatureFlag,
-    type FeatureFlagStorage,
-    type FeatureFlagStorageSyncOperation,
-} from "../core/config/featureFlagStorageSync";
-import type { FeatureFlagKey } from "../core/config/featureFlags";
-import {
     derivePublishBaseUrlFromProjectName,
     isDefaultPagesPublishBaseUrl,
     normalizePublishProjectName,
@@ -167,28 +161,6 @@ export class IndexNoteSettingsController {
         await this.writePersistedPluginData({
             ...this.persistedPluginData,
             ...this.host.getSettings(),
-        });
-    }
-
-    public async syncFeatureFlagStorage(
-        flag: FeatureFlagKey,
-        storage: FeatureFlagStorage | null,
-        storageKey: string,
-        onError?: (operation: FeatureFlagStorageSyncOperation, error: unknown) => void,
-    ): Promise<void> {
-        await syncStoredFeatureFlag({
-            flag,
-            storage,
-            storageKey,
-            getFeatureFlags: () => this.host.getSettings().featureFlags,
-            setFeatureFlags: (featureFlags) => {
-                this.host.setSettings({
-                    ...this.host.getSettings(),
-                    featureFlags,
-                });
-            },
-            persist: () => this.saveSettings(),
-            onError,
         });
     }
 
@@ -470,6 +442,7 @@ export class IndexNoteSettingsController {
         const persistedData = clonePersistedPluginData(data);
         delete persistedData.confirmDelete;
         delete persistedData.enableDebugMode;
+        delete persistedData.featureFlags;
         delete persistedData.preferredAgentTarget;
         delete persistedData.remoteRuntimeBaseUrl;
         delete (persistedData as Record<string, unknown>).publishWranglerCommand;

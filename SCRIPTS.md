@@ -30,7 +30,7 @@ The Agent tab is optional and hidden by default. Enable **Settings → Sidebar t
 
 ## Create or Update a Script
 
-- Choose the default local agent used for script work under **Settings → Scripts**.
+- Choose the default local agent used for script work under **Settings → Aside → Scripts (advanced)**.
 - Use `/create-script <request>` in a side note. On the first valid request, Aside automatically creates `🛠️ scripts/` if the folder is missing, then asks the default agent to create the script.
 - Use `/update-script /script-name <request>` to ask the default agent to change an existing script.
 - Open a PDF and use `/pdf-to-markdown` by itself to ask the default agent to create a sibling Markdown file.

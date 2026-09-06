@@ -6,10 +6,6 @@ import {
     ALL_COMMENTS_NOTE_IMAGE_CAPTION,
     ALL_COMMENTS_NOTE_IMAGE_URL,
 } from "../../core/derived/allCommentsNote";
-import {
-    FeatureFlag,
-    isFeatureFlagEnabled,
-} from "../../core/config/featureFlags";
 
 export type AsideSettingSection = "agents" | "sidebar" | "publishing" | "index-note";
 
@@ -35,9 +31,9 @@ export const ASIDE_SETTING_SECTIONS: ReadonlyArray<{
     key: AsideSettingSection;
     heading: string;
 }> = [
-    { key: "agents", heading: "Scripts" },
     { key: "sidebar", heading: "Sidebar tabs" },
-    { key: "publishing", heading: "Publishing (experimental)" },
+    { key: "agents", heading: "Scripts (advanced)" },
+    { key: "publishing", heading: "Publishing (advanced)" },
     { key: "index-note", heading: "Index note" },
 ];
 
@@ -51,12 +47,8 @@ function getPublishHost(baseUrl: string): string {
     }
 }
 
-function isPublishFeatureAvailable(context: AsideSettingCatalogContext): boolean {
-    return isFeatureFlagEnabled(context.plugin.settings.featureFlags, FeatureFlag.publish);
-}
-
 function isPublishingSettingVisible(context: AsideSettingCatalogContext): boolean {
-    return isPublishFeatureAvailable(context) && context.plugin.settings.publishEnabled;
+    return context.plugin.settings.publishEnabled;
 }
 
 function isRemotePurgeSettingVisible(context: AsideSettingCatalogContext): boolean {
@@ -117,10 +109,9 @@ export const ASIDE_SETTING_CATALOG: readonly AsideSettingCatalogEntry[] = [
         key: "publish-enabled",
         section: "publishing",
         name: "Enable publishing",
-        description: "Show experimental publish controls for supported files in the public folder.",
+        description: "Show advanced publish controls for supported files in the public folder.",
         aliases: ["Cloudflare Pages"],
         keywords: ["public folder", "deploy"],
-        visible: isPublishFeatureAvailable,
         render: (setting, context) => {
             setting.addToggle((toggle) => toggle
                 .setValue(context.plugin.settings.publishEnabled)

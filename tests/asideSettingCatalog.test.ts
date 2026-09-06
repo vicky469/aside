@@ -9,7 +9,6 @@ import {
     getAsideSettingDefinitions,
     getDefinitionAsideSettingKeys,
 } from "../src/ui/settings/asideSettingDefinitionsAdapter";
-import { FeatureFlag } from "../src/core/config/featureFlags";
 
 const EXPECTED_KEYS = [
     "default-agent",
@@ -42,12 +41,12 @@ test("every Aside setting has searchable metadata and one section owner", () => 
     }
 });
 
-test("Scripts section is the first settings section", () => {
-    assert.deepEqual(ASIDE_SETTING_SECTIONS.map((section) => section.key), [
-        "agents",
-        "sidebar",
-        "publishing",
-        "index-note",
+test("settings sections use the approved order and advanced labels", () => {
+    assert.deepEqual(ASIDE_SETTING_SECTIONS, [
+        { key: "sidebar", heading: "Sidebar tabs" },
+        { key: "agents", heading: "Scripts (advanced)" },
+        { key: "publishing", heading: "Publishing (advanced)" },
+        { key: "index-note", heading: "Index note" },
     ]);
 });
 
@@ -78,16 +77,12 @@ function getCatalogEntry(key: string) {
 }
 
 function createCatalogContext(options: {
-    publishFeatureEnabled: boolean;
     publishEnabled?: boolean;
     remotePurgeEnabled?: boolean;
-}) {
+} = {}) {
     return {
         plugin: {
             settings: {
-                featureFlags: {
-                    [FeatureFlag.publish]: options.publishFeatureEnabled,
-                },
                 publishEnabled: options.publishEnabled ?? false,
                 publishRemotePurgeEnabled: options.remotePurgeEnabled ?? false,
             },
@@ -99,13 +94,13 @@ function createCatalogContext(options: {
 }
 
 test("graduated agent settings have no feature visibility predicate", () => {
-    const context = createCatalogContext({ publishFeatureEnabled: false });
+    const context = createCatalogContext();
 
     assert.equal(getCatalogEntry("default-agent").visible, undefined);
     assert.equal(getCatalogEntry("show-agent-tab").visible, undefined);
 
     const group = getAsideSettingDefinitions(context)
-        .find((item) => "heading" in item && item.heading === "Scripts");
+        .find((item) => "heading" in item && item.heading === "Scripts (advanced)");
     assert.ok(group && typeof group.visible === "function");
     assert.equal(group.visible(), true);
 });
@@ -115,47 +110,26 @@ function isVisible(key: string, context: ReturnType<typeof createCatalogContext>
     return entry.visible?.(context) ?? true;
 }
 
-test("publishing settings are hidden until the publish feature flag is enabled", () => {
-    const disabledContext = createCatalogContext({
-        publishFeatureEnabled: false,
-        publishEnabled: true,
-        remotePurgeEnabled: true,
-    });
-    const enabledContext = createCatalogContext({
-        publishFeatureEnabled: true,
+test("publishing is always discoverable and dependent settings follow visible toggles", () => {
+    const disabledContext = createCatalogContext();
+    const publishingContext = createCatalogContext({ publishEnabled: true });
+    const purgeContext = createCatalogContext({
         publishEnabled: true,
         remotePurgeEnabled: true,
     });
 
-    for (const key of EXPECTED_KEYS.filter((candidate) => candidate.startsWith("publish-"))) {
-        assert.equal(isVisible(key, disabledContext), false, `${key} should be hidden`);
-        assert.equal(isVisible(key, enabledContext), true, `${key} should be visible`);
+    assert.equal(isVisible("publish-enabled", disabledContext), true);
+    for (const key of ["publish-base-url", "publish-project-name", "publish-remote-purge-enabled"]) {
+        assert.equal(isVisible(key, disabledContext), false, `${key} should follow Enable publishing`);
+        assert.equal(isVisible(key, publishingContext), true, `${key} should show when publishing is on`);
     }
-});
+    for (const key of ["publish-purge-broker-url", "publish-purge-broker-secret", "publish-purge-allowed-host"]) {
+        assert.equal(isVisible(key, publishingContext), false, `${key} should follow Remote cache purge`);
+        assert.equal(isVisible(key, purgeContext), true, `${key} should show when remote purge is on`);
+    }
 
-test("publishing setting definition group follows the publish feature flag", () => {
-    const disabledContext = createCatalogContext({
-        publishFeatureEnabled: false,
-        publishEnabled: true,
-        remotePurgeEnabled: true,
-    });
-    const enabledContext = createCatalogContext({
-        publishFeatureEnabled: true,
-        publishEnabled: true,
-        remotePurgeEnabled: true,
-    });
-
-    const getPublishingGroupVisible = (context: ReturnType<typeof createCatalogContext>): boolean => {
-        const group = getAsideSettingDefinitions(context)
-            .find((item) => "heading" in item && item.heading === "Publishing (experimental)");
-        assert.ok(group, "Publishing settings group should exist");
-        const visible = group.visible;
-        if (typeof visible !== "function") {
-            assert.fail("Publishing settings group should define visible as a function");
-        }
-        return visible();
-    };
-
-    assert.equal(getPublishingGroupVisible(disabledContext), false);
-    assert.equal(getPublishingGroupVisible(enabledContext), true);
+    const group = getAsideSettingDefinitions(disabledContext)
+        .find((item) => "heading" in item && item.heading === "Publishing (advanced)");
+    assert.ok(group && typeof group.visible === "function");
+    assert.equal(group.visible(), true);
 });
