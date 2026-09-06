@@ -1,7 +1,7 @@
 # Index Tag Search Design
 
 **Date:** 2026-09-06
-**Status:** Approved for implementation planning
+**Status:** Implemented and verified
 
 ## Implementation Tracking
 
@@ -16,25 +16,27 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Add a vault-wide, read-only `Tags` tab to the index sidebar.
-- [ ] Extend the vault capability index with one normalized tag-to-file reverse index and immutable query results.
-- [ ] Extract shared existing-tag ranking so editor suggestions and index search consume one source of truth while only the editor can offer tag creation.
-- [ ] Add isolated index-tag query and selected-filter state with the existing 120 ms search debounce.
-- [ ] Render ranked exact and similar tags above a deduplicated file result set.
-- [ ] Make `All matches` a union keyed by normalized full file path and make individual tag filters use exact reverse-index membership.
-- [ ] Render compact file cards with filename, disambiguating path, and matched tags; open the source Markdown note on activation.
-- [ ] Exclude every tag mutation affordance from the index surface.
-- [ ] Limit the initial DOM result window to 100 unique files and expose the complete result set through incremental `Show more` pagination.
+- [x] Add a vault-wide, read-only `Tags` tab to the index sidebar.
+- [x] Extend the vault capability index with one normalized tag-to-file reverse index and immutable query results.
+- [x] Extract shared existing-tag ranking so editor suggestions and index search consume one source of truth while only the editor can offer tag creation.
+- [x] Add isolated index-tag query and selected-filter state with the existing 120 ms search debounce.
+- [x] Render ranked exact and similar tags above a deduplicated file result set.
+- [x] Make `All matches` a union keyed by normalized full file path and make individual tag filters use exact reverse-index membership.
+- [x] Render compact file rows with filename, disambiguating path, and matched tags; open the source Markdown note on activation.
+- [x] Exclude every tag mutation affordance from the index surface.
+- [x] Limit the initial DOM result window to 100 unique files and expose the complete result set through incremental `Show more` pagination.
 
 ### Verification
 
-- [ ] Fail-first tests cover reverse-index seed, update, rename, delete, normalization, and immutable query behavior.
-- [ ] Fail-first tests cover shared fuzzy ranking and the index-only exclusion of create suggestions.
-- [ ] Fail-first tests cover empty queries, no matches, exact/similar ordering, union deduplication, exact tag filtering, same-basename paths, and pagination.
-- [ ] Fail-first source or renderer tests confirm the index tab is present and no add, remove, create, checkbox, or batch-tag controls are wired into it.
-- [ ] Navigation tests confirm every result opens its source note, including notes with no Aside comments.
-- [ ] A synthetic 10,000-file benchmark confirms query-time work stays in memory, performs no vault reads, and remains comfortably interactive.
-- [ ] Full tests, lint, typecheck, Obsidian compliance, production bundle, bundle-size guard, and release-artifact inspection pass.
+- [x] Fail-first tests cover reverse-index seed, update, rename, delete, normalization, and immutable query behavior.
+- [x] Fail-first tests cover shared fuzzy ranking and the index-only exclusion of create suggestions.
+- [x] Fail-first tests cover empty queries, no matches, exact/similar ordering, union deduplication, exact tag filtering, same-basename paths, and pagination.
+- [x] Fail-first source or renderer tests confirm the index tab is present and no add, remove, create, checkbox, or batch-tag controls are wired into it.
+- [x] Navigation tests confirm every result opens its source note, including notes with no Aside comments.
+- [x] A synthetic 10,000-file benchmark confirms query-time work stays in memory, performs no vault reads, and remains comfortably interactive.
+- [x] Full tests, lint, typecheck, Obsidian compliance, production bundle, bundle-size guard, and release-artifact inspection pass.
+
+Verification on 2026-09-06: the synthetic 10,000-file model built in 17.79 ms, performed 21 indexed membership lookups, deduplicated 10,000 file paths, and exposed 100 rows initially. The complete build passed 1,666 tests plus lint, typecheck, Obsidian compliance, a 697,154-byte production bundle against the 750,000-byte ceiling, and exact inspection of `main.js`, `manifest.json`, and `styles.css` with no source map, embedded sources, raw source, or secret-bearing artifact detected.
 
 ## Problem
 
@@ -81,7 +83,7 @@ A non-empty query with no matches renders `No matching tags` and no file cards.
 
 ### File results
 
-Each result is a compact, keyboard-accessible file card based on the existing related-file row presentation:
+Each result is a compact, keyboard-accessible file row based on the existing related-file presentation:
 
 - The basename is the primary label.
 - The vault-relative path is shown as secondary text when it is useful for location or basename disambiguation.
@@ -157,7 +159,7 @@ The index surface reuses the established primary mode tabs, secondary search con
 - Fuzzy ranking operates over the existing unique tag list, capped at 40 ranked tags as in current suggestions.
 - Reverse membership makes selected-tag filtering proportional to that tag's files.
 - Union construction deduplicates with a path-keyed map.
-- DOM mounting is bounded to 100 result cards per page.
+- DOM mounting is bounded to 100 result rows per page.
 
 The implementation records a synthetic 10,000-file benchmark result during verification. The benchmark is diagnostic rather than a fragile wall-clock CI gate; deterministic tests enforce the more important no-I/O and bounded-render contracts.
 
@@ -165,7 +167,7 @@ The implementation records a synthetic 10,000-file benchmark result during verif
 
 - The search field has a visible or accessible label and native search semantics.
 - Filter chips are native buttons with `aria-pressed` state and unique-file counts.
-- File cards are native buttons or links with full-path tooltips and keyboard activation.
+- File rows use native buttons or links with full-path tooltips and keyboard activation.
 - Empty and result-count messages use readable text rather than color alone.
 - Focus remains in the search field across debounced rerenders.
 
@@ -177,7 +179,7 @@ Expected implementation areas:
 - The shared tag-ranking module and its editor adapter.
 - A focused index-tag browser model/renderer under `src/ui/views/`.
 - `src/ui/views/sidebarModeTabs.ts`, `indexSidebarState.ts`, and `AsideView.ts` for mode/state wiring.
-- `styles.css` only for narrowly scoped file-card or result-layout additions not already covered by shared classes.
+- `styles.css` only for narrowly scoped file-row or result-layout additions not already covered by shared classes.
 - Unit, source-composition, renderer, navigation, and performance tests under `tests/`.
 
 No release version or manifest change is part of this feature.

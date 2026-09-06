@@ -51,7 +51,9 @@ export function renderSidebarIndexTagSearch(
         ],
         selectedTagKey: options.selectedTagKey,
         ariaLabel: "Filter tag search results",
-        onChange: options.onFilterChange,
+        onChange: (tagKey) => {
+            options.onFilterChange(tagKey);
+        },
     });
 
     const window = buildIndexTagSearchWindow(
@@ -73,7 +75,9 @@ export function renderSidebarIndexTagSearch(
                 label: tag.tag,
             })),
         })),
-        onOpenFile: options.onOpenFile,
+        onOpenFile: (filePath) => {
+            options.onOpenFile(filePath);
+        },
     });
 
     if (window.hasMore) {

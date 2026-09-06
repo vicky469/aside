@@ -585,7 +585,7 @@ Run:
 
 Expected: all index Tags mode, state, renderer, and toolbar tests pass.
 
-- [ ] **Step 8: Commit the slice**
+- [x] **Step 8: Commit the slice**
 
 ```bash
 git add src/ui/views/sidebarModeTabs.ts src/ui/views/indexSidebarState.ts src/ui/views/sidebarToolbarState.ts src/ui/views/AsideView.ts src/ui/views/sidebarIndexTagSearchRenderer.ts tests/sidebarModeTabs.test.ts tests/indexSidebarState.test.ts tests/sidebarToolbarComposition.test.mjs tests/sidebarIndexTagSearchRenderer.test.mjs
@@ -601,11 +601,11 @@ git commit -m "feat(index): add read-only tag search"
 - Modify: `docs/superpowers/specs/2026-09-06-index-tag-search-design.md`
 - Modify: `docs/superpowers/plans/2026-09-06-index-tag-search.md`
 
-- [ ] **Step 1: Write failing style and performance-contract tests**
+- [x] **Step 1: Write failing style and performance-contract tests**
 
 Add CSS source assertions for `.aside-index-tag-search`, bounded result layout, passive tag metadata, keyboard focus, and `Show more`. Add a deterministic 10,000-file model test that counts `getFilesForTag` calls, proves no external reader exists in the query API, verifies 100 visible results initially, and records elapsed model-build milliseconds with `performance.now()` as diagnostics rather than a hard timing assertion.
 
-- [ ] **Step 2: Run focused tests and verify RED**
+- [x] **Step 2: Run focused tests and verify RED**
 
 Run:
 
@@ -615,11 +615,11 @@ Run:
 
 Expected: CSS assertions fail because the scoped rules are not present.
 
-- [ ] **Step 3: Add minimal theme-native styles**
+- [x] **Step 3: Add minimal theme-native styles**
 
 Use Obsidian variables and the existing tag-related classes. Add only scoped layout rules for the index wrapper, empty/result count text, full-width compact file rows, secondary path text, passive matched-tag wrapping, and a muted `Show more` button. Include `:focus-visible`; do not add raw light/dark colors or `!important`.
 
-- [ ] **Step 4: Re-run focused tests and inspect the benchmark**
+- [x] **Step 4: Re-run focused tests and inspect the benchmark**
 
 Run:
 
@@ -629,7 +629,7 @@ Run:
 
 Expected: tests pass; output reports the 10,000-file in-memory model build duration, one reverse-index read per ranked tag, a 100-card initial window, and no vault-read callback.
 
-- [ ] **Step 5: Re-run the change-surface audit**
+- [x] **Step 5: Re-run the change-surface audit**
 
 Run:
 
@@ -639,7 +639,7 @@ rg -n "boundedDamerauLevenshtein|function scoreTag|renderTagRelatedFileLink|effe
 
 Expected: one fuzzy scorer owner, shared tag/file renderers, intentional index Tags wiring, and note-only mutation controls. Remove stale duplicates before continuing.
 
-- [ ] **Step 6: Run complete verification**
+- [x] **Step 6: Run complete verification**
 
 Run:
 
@@ -649,7 +649,7 @@ npm run build
 
 Expected: TypeScript and `.mjs` tests, ESLint, typecheck, Obsidian compliance, production bundling, bundle-size check, and release-artifact guard all pass.
 
-- [ ] **Step 7: Inspect exact shippable artifacts**
+- [x] **Step 7: Inspect exact shippable artifacts**
 
 Run:
 
@@ -661,11 +661,11 @@ find . -maxdepth 1 -type f \( -name '.env*' -o -name '.npmrc' -o -name '*.pem' -
 
 Expected: the map test passes and both searches print nothing. The exact public assets remain `main.js`, `manifest.json`, and `styles.css`.
 
-- [ ] **Step 8: Update tracked documentation**
+- [x] **Step 8: Update tracked documentation**
 
 Mark implementation and verification items `[x]` in the spec only where the preceding command output provides evidence. Record the benchmark file count, elapsed duration, final test counts, and bundle size. Mark completed plan steps `[x]`.
 
-- [ ] **Step 9: Commit the verified feature**
+- [x] **Step 9: Commit the verified feature**
 
 ```bash
 git add styles.css tests/indexTagSearchPerformance.test.ts tests/toolbarDisabledStyles.test.mjs docs/superpowers/specs/2026-09-06-index-tag-search-design.md
