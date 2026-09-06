@@ -55,7 +55,7 @@ For durable storage and sync across devices, use Aside with [Obsidian Sync](http
 - Built-in agent help on desktop Obsidian. Type `@codex`, `@claude`, `@cursor`, `@gemini`, or `@deepseek` in a thread to get a reply, create anchored side notes, or apply explicit edits to the source note.
 - [Agents and scripts](./SCRIPTS.md) explains local agent setup and the `/create-script <request>`, `/update-script /script-name <request>`, `/pdf-to-markdown`, and `/script-name` workflows.
 
-[Experimental Features](EXPERIMENTAL_FEATURES.md) are documented separately.
+[Advanced features](ADVANCED_FEATURES.md) are documented separately.
 
 ## How to Get Started
 

@@ -2,7 +2,7 @@ export const CREATE_SCRIPT_DIRECTIVE = "/create-script";
 export const CREATE_SCRIPT_USAGE = "Use /create-script followed by the script you want to create.";
 export const CREATE_SCRIPT_NO_AGENT = "No agent is available to create the script.";
 export const CREATE_SCRIPT_MIXED_SCRIPT = "Use /create-script or a vault script, not both.";
-export const CREATE_SCRIPT_MIXED_AGENT = "Use /create-script without an agent mention; choose the default under Settings → Scripts.";
+export const CREATE_SCRIPT_MIXED_AGENT = "Use /create-script without an agent mention; choose the default under Settings → Aside → Scripts (advanced).";
 
 export type CreateScriptDirectiveResolution =
     | { kind: "none" }

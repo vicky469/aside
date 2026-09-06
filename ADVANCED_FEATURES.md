@@ -1,14 +1,20 @@
-# Experimental Features
+# Advanced Features
 
-Experimental features are intended for testers. They may change or be removed without notice and can require additional local tools or service configuration.
+Aside keeps powerful local workflows visible in settings while leaving them off or idle until you choose to use them. They can require additional local tools, trusted code, or service configuration.
 
 ## At a Glance
 
 | Feature | Availability | What it does |
 | --- | --- | --- |
+| [Agents and Scripts](SCRIPTS.md) | Desktop Obsidian | Runs supported local agent CLIs and trusted vault scripts from side notes. |
 | [Cloudflare Pages Publishing](#cloudflare-pages-publishing) | Desktop Obsidian | Publishes Markdown, HTML, and PDF content from the vault's `public/` folder. |
 
-----
+## Agents and Scripts
+
+Choose the default local agent under **Settings → Aside → Scripts (advanced)**. See [Agents and Scripts](SCRIPTS.md) for setup, commands, privacy boundaries, and script registration rules.
+
+Vault scripts are not sandboxed. They run in local Node with your account permissions and inherited environment. Review every script and run only code you wrote or trust.
+
 ## Cloudflare Pages Publishing
 
 On desktop Obsidian, Aside can publish Markdown, HTML, and PDF files from the vault-relative `public/` folder to an existing Cloudflare Pages project.
@@ -24,27 +30,9 @@ If the user enables a remote HTTPS cache-purge broker, Aside sends the configure
 1. Install Wrangler so `wrangler --version` works in Terminal.
 2. Run `wrangler login` with the Cloudflare account that owns the Pages project.
 3. Create or choose a Cloudflare Pages project.
-4. Open Obsidian Developer Tools and run this in the Console to reveal the hidden publishing settings and reload Aside:
-
-   ```js
-   localStorage.setItem(`aside.feature.publish.${app.vault.getName()}`, "true");
-   await app.plugins.disablePlugin("aside");
-   await app.plugins.enablePlugin("aside");
-   ```
-
-5. To hide the publishing settings again, run:
-
-   ```js
-   localStorage.setItem(`aside.feature.publish.${app.vault.getName()}`, "false");
-   await app.plugins.disablePlugin("aside");
-   await app.plugins.enablePlugin("aside");
-   ```
-
-   You can also edit the `aside.feature.publish.<vault name>` entry directly under Developer Tools → Application → Local Storage, then reload Aside. Aside persists an exact `true` or `false` value to that vault's plugin data when it loads.
-
-6. If you use a custom domain, attach it to the Pages project in Cloudflare first.
-7. In Aside settings, turn on Publishing and set the Publishing URL to your public Pages URL, for example `https://publish.example.com`.
-8. Put publishable Markdown, HTML, and PDF files under `public/`. Aside creates `public/` when Publishing is enabled if it does not already exist.
+4. Open **Settings → Aside → Publishing (advanced)**, turn on **Enable publishing**, and set the Publishing URL to your public Pages URL, for example `https://publish.example.com`.
+5. If you use a custom domain, attach it to the Pages project in Cloudflare first.
+6. Put publishable Markdown, HTML, and PDF files under `public/`. Aside creates `public/` when Publishing is enabled if it does not already exist.
 
 ### Optional Cache Invalidation
 
@@ -66,3 +54,4 @@ Remote purge does not support `*.pages.dev`; use a custom domain in a Cloudflare
 | Republish content | Open the published file under `public/`, then click the matching `Republish Markdown`, `Republish HTML`, or `Republish PDF` action. |
 | Unpublish content | Open the published file under `public/`, then click the matching `Unpublish Markdown`, `Unpublish HTML`, or `Unpublish PDF` action. |
 | Open published content | Open the published file under `public/`, then click the matching `Open published Markdown`, `Open published HTML`, or `Open published PDF` action. |
+
