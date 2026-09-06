@@ -973,6 +973,30 @@ test("comment mutation controller does not dispatch edited entries to the agent 
     assert.equal(host.getRefreshEditorDecorationsCount(), 1);
 });
 
+test("comment mutation controller can defer terminal reply refresh work", async () => {
+    const existing = createComment({ id: "thread-1", comment: "Pending reply" });
+    const host = createHost({
+        knownComments: [existing],
+        loadedComments: [existing],
+    });
+
+    const edited = await host.controller.editComment(existing.id, "Completed reply", {
+        skipCommentViewRefresh: true,
+        deferAggregateRefresh: true,
+        refreshEditorDecorations: false,
+        refreshMarkdownPreviews: false,
+    });
+
+    assert.equal(edited, true);
+    assert.deepEqual(host.persistedFiles, [{
+        path: existing.filePath,
+        immediateAggregateRefresh: false,
+        skipCommentViewRefresh: true,
+        refreshEditorDecorations: false,
+        refreshMarkdownPreviews: false,
+    }]);
+});
+
 test("comment mutation controller can defer delete refresh work for lightweight local sidebar updates", async () => {
     const existing = createComment({
         id: "thread-1",

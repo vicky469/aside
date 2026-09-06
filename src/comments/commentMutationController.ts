@@ -395,6 +395,7 @@ export class CommentMutationController {
             skipCommentViewRefresh?: boolean;
             deferAggregateRefresh?: boolean;
             refreshEditorDecorations?: boolean;
+            refreshMarkdownPreviews?: boolean;
         } = {},
     ): Promise<boolean> {
         const latestTarget = await this.loadLatestCommentTarget(commentId);
@@ -407,6 +408,7 @@ export class CommentMutationController {
             immediateAggregateRefresh: options.deferAggregateRefresh !== true,
             skipCommentViewRefresh: options.skipCommentViewRefresh,
             refreshEditorDecorations: options.refreshEditorDecorations,
+            refreshMarkdownPreviews: options.refreshMarkdownPreviews,
         }));
         return true;
     }

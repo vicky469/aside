@@ -119,6 +119,18 @@ function createHarness(options: {
         refreshBeforePersist?: boolean;
     }> = [];
     const editedEntries: Array<{ id: string; body: string }> = [];
+    const appendPersistenceOptions: Array<{
+        immediateAggregateRefresh?: boolean;
+        skipCommentViewRefresh?: boolean;
+        refreshEditorDecorations?: boolean;
+        refreshMarkdownPreviews?: boolean;
+    }> = [];
+    const editPersistenceOptions: Array<{
+        skipCommentViewRefresh?: boolean;
+        deferAggregateRefresh?: boolean;
+        refreshEditorDecorations?: boolean;
+        refreshMarkdownPreviews?: boolean;
+    }> = [];
     const loadedFilePaths: string[] = [];
     const notices: string[] = [];
     let refreshCount = 0;
@@ -139,6 +151,7 @@ function createHarness(options: {
             await options.loadCommentsForFile?.(filePath);
         },
         appendThreadEntry: async (threadId, entry, appendOptions) => {
+            const persistenceOptions = appendOptions as typeof appendPersistenceOptions[number] | undefined;
             appendedEntries.push({
                 threadId,
                 entryId: entry.id,
@@ -152,6 +165,12 @@ function createHarness(options: {
                 ...(appendOptions?.refreshBeforePersist
                     ? { refreshBeforePersist: appendOptions.refreshBeforePersist }
                     : {}),
+            });
+            appendPersistenceOptions.push({
+                immediateAggregateRefresh: persistenceOptions?.immediateAggregateRefresh,
+                skipCommentViewRefresh: persistenceOptions?.skipCommentViewRefresh,
+                refreshEditorDecorations: persistenceOptions?.refreshEditorDecorations,
+                refreshMarkdownPreviews: persistenceOptions?.refreshMarkdownPreviews,
             });
             if (!appendSucceeds) {
                 return false;
@@ -171,8 +190,15 @@ function createHarness(options: {
             }
             return true;
         },
-        editComment: async (commentId, body) => {
+        editComment: async (commentId, body, editOptions) => {
+            const persistenceOptions = editOptions as typeof editPersistenceOptions[number] | undefined;
             editedEntries.push({ id: commentId, body });
+            editPersistenceOptions.push({
+                skipCommentViewRefresh: persistenceOptions?.skipCommentViewRefresh,
+                deferAggregateRefresh: persistenceOptions?.deferAggregateRefresh,
+                refreshEditorDecorations: persistenceOptions?.refreshEditorDecorations,
+                refreshMarkdownPreviews: persistenceOptions?.refreshMarkdownPreviews,
+            });
             await options.beforeEditComment?.();
             const nextEditResult = editResults.length > 0
                 ? editResults.shift()
@@ -205,6 +231,8 @@ function createHarness(options: {
         runtimeCalls,
         appendedEntries,
         editedEntries,
+        appendPersistenceOptions,
+        editPersistenceOptions,
         loadedFilePaths,
         notices,
         setAppendSucceeds: (value: boolean) => {
@@ -249,6 +277,12 @@ test("accepted script creates a durable pending output before background executi
     assert.equal(harness.appendedEntries[0]?.body, "");
     assert.equal(harness.appendedEntries[0]?.alwaysInsertAfterTarget, true);
     assert.equal(harness.appendedEntries[0]?.refreshBeforePersist, true);
+    assert.deepEqual(harness.appendPersistenceOptions[0], {
+        immediateAggregateRefresh: false,
+        skipCommentViewRefresh: true,
+        refreshEditorDecorations: false,
+        refreshMarkdownPreviews: false,
+    });
     assert.deepEqual(harness.editedEntries, []);
     const pendingRun = harness.store.getRuns()[0];
     assert.equal(pendingRun?.outputEntryId, harness.appendedEntries[0]?.entryId);
@@ -262,6 +296,12 @@ test("accepted script creates a durable pending output before background executi
     assert.deepEqual(harness.editedEntries[0], {
         id: pendingRun?.outputEntryId,
         body: "Script /clean:\n\ncleaned",
+    });
+    assert.deepEqual(harness.editPersistenceOptions[0], {
+        skipCommentViewRefresh: true,
+        deferAggregateRefresh: true,
+        refreshEditorDecorations: false,
+        refreshMarkdownPreviews: false,
     });
     assert.equal(harness.appendedEntries.length, 1);
 });
