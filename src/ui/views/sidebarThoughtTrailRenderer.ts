@@ -34,6 +34,10 @@ import {
 } from "./sidebarThoughtTrailSource";
 import { nodeInstanceOf } from "../domGuards";
 import { buildSidebarThoughtTrailNoteLinkGraph } from "./sidebarThoughtTrailGraph";
+import {
+    renderSidebarTagFileRows,
+    renderSidebarTagFilterBar,
+} from "./sidebarTagFileList";
 
 export interface SidebarThoughtTrailRenderContext {
     app: App;
@@ -121,92 +125,54 @@ function renderTagRelatedFilesList(
     model: TagRelatedFileSetModel,
     context: SidebarThoughtTrailRenderContext,
 ): void {
-    if (model.currentFile) {
-        const currentFileEl = container.createDiv({
-            cls: "aside-tag-related-current-file",
-            text: model.currentFile.label,
-        });
-        setTooltip(currentFileEl, model.currentFile.filePath);
-    }
-
-    const filterBarEl = container.createDiv({
-        cls: "aside-tag-related-filter-bar",
-        attr: {
-            role: "group",
-            "aria-label": "Filter related files by tag",
-        },
-    });
-    const listEl = container.createEl("ul", { cls: "aside-tag-related-files" });
-    const renderedRows = model.files.map((file) => {
-        const rowEl = listEl.createEl("li", {
-            cls: "aside-tag-related-file-row",
-            attr: { "data-file-path": file.filePath },
-        });
-        renderTagRelatedFileLink(rowEl, file.filePath, file.label, context);
-        const tagsEl = rowEl.createDiv("aside-tag-related-file-tags");
-        for (const tag of file.tags) {
-            tagsEl.createSpan({
-                cls: "aside-tag-related-file-tag",
-                text: `#${tag.tagDisplay}`,
-                attr: { "data-tag-key": tag.tagKey },
-            });
-        }
-        return { file, rowEl };
-    });
-
-    const filterDefinitions = [
-        { tagKey: null, label: `All · ${model.files.length}` },
+    let selectedTagKey: string | null = null;
+    const filters = [
+        { tagKey: null, label: "All", fileCount: model.files.length },
         ...model.tags.map((tag) => ({
             tagKey: tag.tagKey,
-            label: `#${tag.tagDisplay} · ${tag.fileCount}`,
+            label: `#${tag.tagDisplay}`,
+            fileCount: tag.fileCount,
         })),
     ];
-    const filterButtons: Array<{ tagKey: string | null; button: HTMLButtonElement }> = [];
-    const applyFilter = (selectedTagKey: string | null): void => {
-        for (const { tagKey, button } of filterButtons) {
-            const isSelected = tagKey === selectedTagKey;
-            button.setAttribute("aria-pressed", String(isSelected));
-            button.classList.toggle("is-selected", isSelected);
-        }
-        for (const { file, rowEl } of renderedRows) {
-            rowEl.hidden = selectedTagKey !== null
-                && !file.tags.some((tag) => tag.tagKey === selectedTagKey);
-        }
-    };
 
-    for (const definition of filterDefinitions) {
-        const button = filterBarEl.createEl("button", {
-            cls: "aside-tag-related-filter",
-            text: definition.label,
-            attr: {
-                type: "button",
-                "aria-pressed": String(definition.tagKey === null),
-                "data-tag-key": definition.tagKey ?? "",
+    const render = (): void => {
+        container.empty();
+        if (model.currentFile) {
+            const currentFileEl = container.createDiv({
+                cls: "aside-tag-related-current-file",
+                text: model.currentFile.label,
+            });
+            setTooltip(currentFileEl, model.currentFile.filePath);
+        }
+
+        renderSidebarTagFilterBar(container, {
+            filters,
+            selectedTagKey,
+            ariaLabel: "Filter related files by tag",
+            onChange: (tagKey) => {
+                selectedTagKey = tagKey;
+                render();
             },
         });
-        button.addEventListener("click", () => {
-            applyFilter(definition.tagKey);
-        });
-        filterButtons.push({ tagKey: definition.tagKey, button });
-    }
-    applyFilter(null);
-}
 
-function renderTagRelatedFileLink(
-    container: HTMLElement,
-    filePath: string,
-    label: string,
-    context: SidebarThoughtTrailRenderContext,
-): void {
-    const btn = container.createEl("button", {
-        cls: "aside-tag-related-file-link",
-        text: label,
-        attr: { type: "button" },
-    });
-    setTooltip(btn, filePath);
-    btn.addEventListener("click", () => {
-        openThoughtTrailFile(filePath, context);
-    });
+        const visibleFiles = selectedTagKey === null
+            ? model.files
+            : model.files.filter((file) =>
+                file.tags.some((tag) => tag.tagKey === selectedTagKey)
+            );
+        renderSidebarTagFileRows(container, {
+            files: visibleFiles.map((file) => ({
+                filePath: file.filePath,
+                label: file.label,
+                tags: file.tags.map((tag) => ({
+                    tagKey: tag.tagKey,
+                    label: `#${tag.tagDisplay}`,
+                })),
+            })),
+            onOpenFile: (filePath) => openThoughtTrailFile(filePath, context),
+        });
+    };
+    render();
 }
 
 

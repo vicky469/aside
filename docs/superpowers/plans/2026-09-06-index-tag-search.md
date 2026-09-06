@@ -388,7 +388,7 @@ git commit -m "feat(index): model tag file results"
 - Create: `tests/sidebarTagFileList.test.mjs`
 - Modify: `tests/sidebarThoughtTrailRendererSource.test.mjs`
 
-- [ ] **Step 1: Write failing source-composition tests**
+- [x] **Step 1: Write failing source-composition tests**
 
 Assert the shared renderer exports tag filters and file rows, uses native buttons, `aria-pressed`, counts, full-path tooltips, and an injected `onOpenFile`. Assert Thought Trail imports these helpers and no longer owns duplicate tag-file link markup:
 
@@ -404,7 +404,7 @@ test("shared tag file list is read only and accessible", () => {
 });
 ```
 
-- [ ] **Step 2: Run the source test and verify RED**
+- [x] **Step 2: Run the source test and verify RED**
 
 Run:
 
@@ -414,7 +414,7 @@ node --test tests/sidebarTagFileList.test.mjs
 
 Expected: test fails because `sidebarTagFileList.ts` does not exist.
 
-- [ ] **Step 3: Implement shared primitives**
+- [x] **Step 3: Implement shared primitives**
 
 Create functions with callback-only behavior:
 
@@ -448,11 +448,11 @@ export function renderSidebarTagFileRows(
 
 Use existing `aside-tag-related-*` classes, native `button` elements, and `setTooltip`. Render `pathLabel` only when supplied. Do not accept mutation callbacks.
 
-- [ ] **Step 4: Adapt Thought Trail**
+- [x] **Step 4: Adapt Thought Trail**
 
 Replace its local filter-bar, row, and link construction with the shared helpers. Preserve its current client-side filtering by passing a callback that toggles row visibility, or by rebuilding the shared list from its existing model. Keep `openThoughtTrailFile` as the injected navigation callback.
 
-- [ ] **Step 5: Run source and Thought Trail tests and verify GREEN**
+- [x] **Step 5: Run source and Thought Trail tests and verify GREEN**
 
 Run:
 
@@ -462,7 +462,7 @@ node --test tests/sidebarTagFileList.test.mjs tests/sidebarThoughtTrailRendererS
 
 Expected: both source suites pass and existing Thought Trail ownership assertions remain valid.
 
-- [ ] **Step 6: Commit the slice**
+- [x] **Step 6: Commit the slice**
 
 ```bash
 git add src/ui/views/sidebarTagFileList.ts src/ui/views/sidebarThoughtTrailRenderer.ts tests/sidebarTagFileList.test.mjs tests/sidebarThoughtTrailRendererSource.test.mjs
