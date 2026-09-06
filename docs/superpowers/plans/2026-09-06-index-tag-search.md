@@ -34,7 +34,7 @@
 - Modify: `src/ui/editor/commentTagSuggestions.ts`
 - Modify: `tests/commentTagSuggestions.test.ts`
 
-- [ ] **Step 1: Write the failing shared-ranking tests**
+- [x] **Step 1: Write the failing shared-ranking tests**
 
 Create `tests/tagSearch.test.ts` with real tag usage records and assertions for empty-query suppression, exact/prefix/segment/substring ordering, bounded typo recovery, usage tie-breaking, canonical deduplication, and a 40-result default limit:
 
@@ -81,7 +81,7 @@ test("rankExistingTags deduplicates canonical variants and returns snapshots", (
 });
 ```
 
-- [ ] **Step 2: Run the new test and verify RED**
+- [x] **Step 2: Run the new test and verify RED**
 
 Run:
 
@@ -91,7 +91,7 @@ Run:
 
 Expected: TypeScript fails because `src/core/text/tagSearch.ts` does not exist.
 
-- [ ] **Step 3: Implement the shared ranker**
+- [x] **Step 3: Implement the shared ranker**
 
 Move normalization, canonicalization, fuzzy threshold, bounded Damerau-Levenshtein distance, and scoring from `commentTagSuggestions.ts` into `src/core/text/tagSearch.ts`. Export these stable contracts:
 
@@ -116,7 +116,7 @@ export function rankExistingTags(options: {
 
 Return `[]` for an empty canonical query. Preserve current matching tiers and deterministic sorting. Deduplicate canonical variants, sum their usage, default to 40 results, and return new objects.
 
-- [ ] **Step 4: Convert editor suggestions to a thin adapter**
+- [x] **Step 4: Convert editor suggestions to a thin adapter**
 
 In `commentTagSuggestions.ts`, normalize `vaultTags` and `extraTags` into `ExistingTagUsage[]`, call `rankExistingTags`, map results to `{ type: "existing", tag }`, and retain only the editor-specific create check:
 
@@ -138,7 +138,7 @@ const canCreate = normalizedQuery.length > 0
 
 Keep creation unavailable outside this function.
 
-- [ ] **Step 5: Run shared and editor tests and verify GREEN**
+- [x] **Step 5: Run shared and editor tests and verify GREEN**
 
 Run:
 
@@ -148,7 +148,7 @@ Run:
 
 Expected: all tag-search and editor-suggestion tests pass with no warnings.
 
-- [ ] **Step 6: Commit the slice**
+- [x] **Step 6: Commit the slice**
 
 ```bash
 git add src/core/text/tagSearch.ts src/ui/editor/commentTagSuggestions.ts tests/tagSearch.test.ts tests/commentTagSuggestions.test.ts
