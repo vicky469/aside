@@ -553,6 +553,136 @@ test("comment persistence commits complete thread entries idempotently", async (
     }
 });
 
+test("interrupted reply commit preserves a concurrently stored completed reply", async () => {
+    const originalWindow = globalThis.window;
+    globalThis.window = {
+        setTimeout: () => 1,
+        clearTimeout: () => {},
+    } as unknown as typeof globalThis.window;
+
+    const file = createFile("docs/note.md");
+    const thread = createThread(file.path);
+    thread.entries.push({
+        id: "agent-reply",
+        body: "",
+        timestamp: 1710000001000,
+    });
+    const harness = createHarness([file], [thread]);
+
+    try {
+        await harness.controller.persistCommentsForFile(file);
+        const storagePath = getSidecarStoragePath(file.path);
+        let updatedSidecars = 0;
+        for (const [candidatePath, content] of harness.adapter.files) {
+            const concurrentPayload = JSON.parse(content) as { threads?: CommentThread[] };
+            const storedReply = concurrentPayload.threads?.[0]?.entries.find((entry) => entry.id === "agent-reply");
+            if (!storedReply) {
+                continue;
+            }
+            storedReply.body = "Completed reply from the previous session";
+            await harness.adapter.write(candidatePath, JSON.stringify(concurrentPayload));
+            updatedSidecars += 1;
+        }
+        assert.equal(updatedSidecars, 2);
+
+        assert.equal(await harness.controller.commitThreadEntry(file, thread.id, {
+            id: "agent-reply",
+            body: "The previous Aside agent run did not finish.",
+            timestamp: 1710000002000,
+        }, {
+            insertAfterCommentId: thread.id,
+            onlyIfEntryAbsentOrBlank: true,
+        }), true);
+
+        const persistedPayload = JSON.parse(await harness.adapter.read(storagePath)) as {
+            threads: CommentThread[];
+        };
+        assert.equal(
+            persistedPayload.threads[0]?.entries.find((entry) => entry.id === "agent-reply")?.body,
+            "Completed reply from the previous session",
+        );
+        assert.equal(
+            harness.commentManager.getCommentById("agent-reply")?.comment,
+            "Completed reply from the previous session",
+        );
+    } finally {
+        harness.controller.dispose();
+        globalThis.window = originalWindow;
+    }
+});
+
+test("agent reply commit stops when persistence is disposed during its read", async () => {
+    const originalWindow = globalThis.window;
+    globalThis.window = {
+        setTimeout: () => 1,
+        clearTimeout: () => {},
+    } as unknown as typeof globalThis.window;
+
+    const file = createFile("docs/note.md");
+    const thread = createThread(file.path);
+    const harness = createHarness([file], [thread]);
+    const readStarted = createDeferred();
+    const releaseRead = createDeferred();
+    harness.setCurrentNoteContentReader(async () => {
+        readStarted.resolve();
+        await releaseRead.promise;
+        return "# Title\n\nAlpha target omega\n";
+    });
+
+    const commit = harness.controller.commitThreadEntry(file, thread.id, {
+        id: "agent-reply",
+        body: "Late reply",
+        timestamp: 1710000001000,
+    }, {
+        insertAfterCommentId: thread.id,
+    });
+    await readStarted.promise;
+    harness.controller.dispose();
+    releaseRead.resolve();
+
+    assert.equal(await commit, false);
+    assert.equal(harness.commentManager.getCommentById("agent-reply"), undefined);
+    globalThis.window = originalWindow;
+});
+
+test("agent reply commit stops when persistence is disposed during its write preparation", async () => {
+    const originalWindow = globalThis.window;
+    globalThis.window = {
+        setTimeout: () => 1,
+        clearTimeout: () => {},
+    } as unknown as typeof globalThis.window;
+
+    const file = createFile("docs/note.md");
+    const thread = createThread(file.path);
+    const harness = createHarness([file], [thread]);
+    const secondReadStarted = createDeferred();
+    const releaseSecondRead = createDeferred();
+    let readCount = 0;
+    harness.setCurrentNoteContentReader(async () => {
+        readCount += 1;
+        if (readCount === 2) {
+            secondReadStarted.resolve();
+            await releaseSecondRead.promise;
+        }
+        return "# Title\n\nAlpha target omega\n";
+    });
+
+    const commit = harness.controller.commitThreadEntry(file, thread.id, {
+        id: "agent-reply",
+        body: "Late reply",
+        timestamp: 1710000001000,
+    }, {
+        insertAfterCommentId: thread.id,
+    });
+    await secondReadStarted.promise;
+    harness.controller.dispose();
+    releaseSecondRead.resolve();
+
+    assert.equal(await commit, false);
+    assert.equal(await harness.adapter.exists(getSidecarStoragePath(file.path)), false);
+    globalThis.window = originalWindow;
+});
+
 test("agent reply commit preserves a user mutation made while the commit is writing", async () => {
     const originalWindow = globalThis.window;
     globalThis.window = {

@@ -121,6 +121,7 @@ export interface CommentAgentHost {
         },
         options?: {
             insertAfterCommentId?: string;
+            onlyIfEntryAbsentOrBlank?: boolean;
             immediateAggregateRefresh?: boolean;
             skipCommentViewRefresh?: boolean;
             refreshEditorDecorations?: boolean;
@@ -224,6 +225,7 @@ type AgentStreamListener = (update: AgentStreamUpdate) => void;
 const FINAL_STREAM_RETENTION_MS = 30_000;
 
 export class CommentAgentController {
+    private disposed = false;
     private processingQueue = false;
     private readonly runStreams = new Map<string, AgentRunStreamState>();
     private readonly runStreamPruneTimers = new Map<string, number>();
@@ -244,30 +246,110 @@ export class CommentAgentController {
     ) {}
 
     public initialize(): void {
+        this.disposed = false;
         this.store.load();
     }
 
     public async reconcilePendingRunsFromPreviousSession(): Promise<void> {
+        if (this.disposed) {
+            return;
+        }
         let changed = false;
         const now = this.host.now();
         for (const run of this.store.getRuns()) {
+            if (this.disposed) {
+                break;
+            }
             if (run.status !== "queued" && run.status !== "running") {
                 continue;
             }
 
-            const updated = await this.store.updateRun(run.id, (currentRun) => ({
-                ...currentRun,
-                status: "failed",
-                endedAt: now,
-                error: currentRun.error ?? AGENT_PENDING_SESSION_NOTICE,
-            }));
-            changed = changed || !!updated;
+            const recoveredOutputEntryId = await this.ensureInterruptedRunReply(run, now);
+            if (this.disposed) {
+                break;
+            }
+            const currentRun = this.store.getRunById(run.id);
+            if (!currentRun || (currentRun.status !== "queued" && currentRun.status !== "running")) {
+                continue;
+            }
+            let terminalized = false;
+            const updated = await this.store.updateRun(run.id, (latestRun) => {
+                if (latestRun.status !== "queued" && latestRun.status !== "running") {
+                    return latestRun;
+                }
+                terminalized = true;
+                return {
+                    ...latestRun,
+                    status: "failed",
+                    endedAt: now,
+                    error: latestRun.error ?? AGENT_PENDING_SESSION_NOTICE,
+                    ...(recoveredOutputEntryId ? { outputEntryId: recoveredOutputEntryId } : {}),
+                };
+            });
+            changed = changed || (!!updated && terminalized);
         }
 
         if (changed) {
             await this.refreshStatusViews();
         }
         void this.processQueue();
+    }
+
+    private async ensureInterruptedRunReply(
+        run: AgentRunRecord,
+        timestamp: number,
+    ): Promise<string | undefined> {
+        const outputEntryId = run.outputEntryId ?? this.host.createCommentId();
+        const file = this.host.getFileByPath(run.filePath);
+        if (!this.host.isPageNoteCapableFile(file)) {
+            return run.outputEntryId;
+        }
+
+        try {
+            await this.host.loadCommentsForFile(file);
+            if (this.disposed) {
+                return run.outputEntryId;
+            }
+            const currentRun = this.store.getRunById(run.id);
+            if (
+                !currentRun
+                || (currentRun.status !== "queued" && currentRun.status !== "running")
+            ) {
+                return run.outputEntryId;
+            }
+            const existingOutput = this.host.getCommentManager().getCommentById(outputEntryId);
+            if (existingOutput?.deletedAt !== undefined) {
+                return run.outputEntryId;
+            }
+            if (existingOutput?.comment.trim()) {
+                return outputEntryId;
+            }
+            const committed = await this.commitRunReply(
+                run,
+                outputEntryId,
+                AGENT_PENDING_SESSION_NOTICE,
+                timestamp,
+                { onlyIfEntryAbsentOrBlank: true },
+            );
+            if (committed) {
+                return outputEntryId;
+            }
+            void this.host.log?.("warn", "agents", "agents.reply.interrupted_commit_failed", {
+                runId: run.id,
+                threadId: run.threadId,
+                outputEntryId,
+                error: "Unable to save the interrupted agent reply.",
+            });
+        } catch (error) {
+            void this.host.log?.("warn", "agents", "agents.reply.interrupted_commit_failed", {
+                runId: run.id,
+                threadId: run.threadId,
+                outputEntryId,
+                error,
+            });
+        }
+
+        return run.outputEntryId;
     }
 
     public getAgentRuns(): AgentRunRecord[] {
@@ -312,6 +394,7 @@ export class CommentAgentController {
     }
 
     public dispose(): void {
+        this.disposed = true;
         this.streamListeners.clear();
         const timerWindow = getTimerWindow();
         for (const timer of this.runStreamPruneTimers.values()) {
@@ -328,7 +411,6 @@ export class CommentAgentController {
             execution.cancelRequested = true;
             execution.abortController.abort();
         }
-        this.activeRunExecutions.clear();
         this.persistingReplyRunIds.clear();
         this.retainedRunStreamIds.clear();
         this.dispatchingRunIds.clear();
@@ -338,12 +420,18 @@ export class CommentAgentController {
     }
 
     public async handleSavedUserEntry(event: SavedUserEntryEvent): Promise<void> {
+        if (this.disposed) {
+            return;
+        }
         const resolution = parseAgentDirectives(event.body);
         const resolvedTarget = this.resolveDispatchTarget(resolution, event);
         if (!resolvedTarget) {
             return;
         }
         const runtimeSelection = await this.host.resolveAgentRuntimeSelection(resolvedTarget);
+        if (this.disposed) {
+            return;
+        }
         const run = this.buildQueuedRun({
             threadId: event.threadId,
             triggerEntryId: event.entryId,
@@ -371,11 +459,17 @@ export class CommentAgentController {
         event: SavedUserEntryEvent,
         requestText: string,
     ): Promise<void> {
+        if (this.disposed) {
+            return;
+        }
         if (getLatestAgentRunForTriggerEntry(this.store.getRuns(), event.entryId)) {
             return;
         }
 
         const selection = await this.host.resolveDefaultAgentRuntimeSelection();
+        if (this.disposed) {
+            return;
+        }
         if (selection.kind === "none") {
             await this.appendCommandReply(event, CREATE_SCRIPT_NO_AGENT);
             return;
@@ -400,11 +494,17 @@ export class CommentAgentController {
         requestText: string,
         targetScript: VaultScriptRegistration,
     ): Promise<void> {
+        if (this.disposed) {
+            return;
+        }
         if (getLatestAgentRunForTriggerEntry(this.store.getRuns(), event.entryId)) {
             return;
         }
 
         const selection = await this.host.resolveDefaultAgentRuntimeSelection();
+        if (this.disposed) {
+            return;
+        }
         if (selection.kind === "none") {
             await this.appendCommandReply(event, UPDATE_SCRIPT_NO_AGENT);
             return;
@@ -426,6 +526,9 @@ export class CommentAgentController {
     }
 
     public async handlePdfToMarkdownRequest(event: SavedUserEntryEvent): Promise<void> {
+        if (this.disposed) {
+            return;
+        }
         if (getLatestAgentRunForTriggerEntry(this.store.getRuns(), event.entryId)) {
             return;
         }
@@ -449,6 +552,9 @@ export class CommentAgentController {
 
         try {
             const selection = await this.host.resolveDefaultAgentRuntimeSelection();
+            if (this.disposed) {
+                return;
+            }
             if (selection.kind === "none") {
                 await this.appendCommandReply(event, PDF_TO_MARKDOWN_NO_AGENT);
                 return;
@@ -479,6 +585,9 @@ export class CommentAgentController {
     }
 
     public async retryRun(runId: string): Promise<boolean> {
+        if (this.disposed) {
+            return false;
+        }
         const previousRun = this.store.getRunById(runId);
         if (!previousRun) {
             this.host.showNotice("Unable to find that agent reply.");
@@ -500,6 +609,9 @@ export class CommentAgentController {
     }
 
     public async retryPromptForComment(commentId: string, filePath: string): Promise<boolean> {
+        if (this.disposed) {
+            return false;
+        }
         return this.retryPromptForCommentInternal({
             triggerEntryId: commentId,
             filePath,
@@ -509,6 +621,9 @@ export class CommentAgentController {
     }
 
     private async retryPromptForCommentInternal(options: RetryPromptOptions): Promise<boolean> {
+        if (this.disposed) {
+            return false;
+        }
         if (this.preparingRetryTriggerEntryIds.has(options.triggerEntryId)) {
             this.host.showNotice(AGENT_REPLY_SAVE_PENDING_NOTICE);
             return false;
@@ -530,6 +645,9 @@ export class CommentAgentController {
         }
 
         await this.host.loadCommentsForFile(file);
+        if (this.disposed) {
+            return false;
+        }
         const latestComment = this.host.getCommentManager().getCommentById(options.triggerEntryId);
         if (!latestComment) {
             this.host.showNotice(options.missingCommentNotice);
@@ -599,6 +717,9 @@ export class CommentAgentController {
             }
 
             const selection = await this.host.resolveDefaultAgentRuntimeSelection();
+            if (this.disposed) {
+                return false;
+            }
             if (selection.kind === "none") {
                 await this.appendCommandReply(commandEvent, PDF_TO_MARKDOWN_NO_AGENT);
                 return false;
@@ -635,6 +756,9 @@ export class CommentAgentController {
             }
 
             const selection = await this.host.resolveDefaultAgentRuntimeSelection();
+            if (this.disposed) {
+                return false;
+            }
             if (selection.kind === "none") {
                 await this.appendCommandReply({
                     threadId: thread.id,
@@ -675,6 +799,9 @@ export class CommentAgentController {
             }
 
             const selection = await this.host.resolveDefaultAgentRuntimeSelection();
+            if (this.disposed) {
+                return false;
+            }
             if (selection.kind === "none") {
                 await this.appendCommandReply({
                     threadId: thread.id,
@@ -697,6 +824,9 @@ export class CommentAgentController {
                 return false;
             }
             const runtimeSelection = await this.host.resolveAgentRuntimeSelection(resolvedTarget);
+            if (this.disposed) {
+                return false;
+            }
             requestedAgent = resolvedTarget;
             runtime = runtimeSelection.runtime;
             modePreference = runtimeSelection.modePreference;
@@ -895,7 +1025,7 @@ export class CommentAgentController {
     }
 
     private processQueue(): void {
-        if (this.processingQueue) {
+        if (this.disposed || this.processingQueue) {
             return;
         }
 
@@ -956,6 +1086,9 @@ export class CommentAgentController {
     }
 
     private async executeRun(runId: string): Promise<void> {
+        if (this.disposed) {
+            return;
+        }
         const queuedRun = this.store.getRunById(runId);
         if (!queuedRun || queuedRun.status !== "queued") {
             return;
@@ -964,6 +1097,9 @@ export class CommentAgentController {
         const startedAt = queuedRun.startedAt ?? this.host.now();
         const outputEntryId = queuedRun.outputEntryId ?? this.host.createCommentId();
         const runtimeContext = await this.buildRuntimePromptContext(queuedRun);
+        if (this.disposed) {
+            return;
+        }
         const latestQueuedRun = this.store.getRunById(runId);
         if (!latestQueuedRun || latestQueuedRun.status !== "queued") {
             return;
@@ -975,7 +1111,7 @@ export class CommentAgentController {
             error: undefined,
             outputEntryId,
         }));
-        if (!runningRun) {
+        if (this.disposed || !runningRun) {
             return;
         }
         const execution: ActiveRunExecution = {
@@ -1112,7 +1248,7 @@ export class CommentAgentController {
     }
 
     private isRunCancellationRequested(runId: string): boolean {
-        return this.activeRunExecutions.get(runId)?.cancelRequested ?? false;
+        return this.disposed || (this.activeRunExecutions.get(runId)?.cancelRequested ?? false);
     }
 
     private async executeLocalRun(options: {
@@ -1122,6 +1258,9 @@ export class CommentAgentController {
         runtimePrompt: string;
         execution: ActiveRunExecution;
     }): Promise<void> {
+        if (this.isRunCancellationRequested(options.run.id)) {
+            return;
+        }
         const vaultRootPath = this.host.getVaultRootPath();
         const workingDirectory = options.run.requestKind === "create-script"
             || options.run.requestKind === "update-script"
@@ -1240,6 +1379,7 @@ export class CommentAgentController {
         outputEntryId: string,
         body: string,
         timestamp: number,
+        options: { onlyIfEntryAbsentOrBlank?: boolean } = {},
     ): Promise<boolean> {
         const currentRun = this.store.getRunById(run.id) ?? run;
         return this.host.commitThreadEntry(
@@ -1252,6 +1392,7 @@ export class CommentAgentController {
             },
             {
                 insertAfterCommentId: currentRun.triggerEntryId,
+                ...options,
                 immediateAggregateRefresh: false,
                 skipCommentViewRefresh: true,
                 refreshEditorDecorations: false,
@@ -1306,6 +1447,9 @@ export class CommentAgentController {
 
         this.persistingReplyRunIds.add(options.run.id);
         const annotationResult = await this.applyAgentAnnotationProposals(options.run, options.replyText);
+        if (this.isRunCancellationRequested(options.run.id)) {
+            return;
+        }
         const replyText = annotationResult.replyText.trim();
         if (!replyText) {
             throw new Error("The agent returned an empty response.");
@@ -1357,6 +1501,9 @@ export class CommentAgentController {
             endedAt: timestamp,
         });
         const completedRun = await finalizeRun();
+        if (this.isRunCancellationRequested(options.run.id)) {
+            return;
+        }
 
         try {
             await this.deleteDuplicateCompletedAgentReplies({
@@ -1493,8 +1640,15 @@ export class CommentAgentController {
                 unmatchedCount: extracted.proposals.length,
             };
         }
+        if (this.isRunCancellationRequested(run.id)) {
+            return {
+                replyText: extracted.replyText,
+                createdCount: 0,
+                unmatchedCount: extracted.proposals.length,
+            };
+        }
 
-        let createdCount = 0;
+        const preparedComments: Array<Parameters<CommentManager["addComment"]>[0]> = [];
         let unmatchedCount = 0;
         for (const proposal of extracted.proposals) {
             const resolved = resolveAgentAnnotationProposal(run.filePath, noteContent, proposal);
@@ -1504,14 +1658,26 @@ export class CommentAgentController {
             }
 
             const timestamp = this.host.now();
-            this.host.getCommentManager().addComment({
+            const selectedTextHash = await this.host.hashText(resolved.comment.selectedText);
+            if (this.isRunCancellationRequested(run.id)) {
+                return {
+                    replyText: extracted.replyText,
+                    createdCount: 0,
+                    unmatchedCount: extracted.proposals.length,
+                };
+            }
+            preparedComments.push({
                 ...resolved.comment,
                 id: this.host.createCommentId(),
                 timestamp,
-                selectedTextHash: await this.host.hashText(resolved.comment.selectedText),
+                selectedTextHash,
             });
-            createdCount += 1;
         }
+
+        const createdCount = preparedComments.length;
+        preparedComments.forEach((comment) => {
+            this.host.getCommentManager().addComment(comment);
+        });
 
         if (createdCount > 0) {
             await this.host.persistCommentsForFile(file, {
@@ -1798,6 +1964,9 @@ export class CommentAgentController {
     }
 
     private async enqueueRun(run: AgentRunRecord): Promise<void> {
+        if (this.disposed) {
+            return;
+        }
         const queuedRun = run.outputEntryId
             ? run
             : { ...run, outputEntryId: this.host.createCommentId() };
@@ -1816,6 +1985,9 @@ export class CommentAgentController {
             this.clearRunStream(queuedRun.id, queuedRun.threadId);
             throw error;
         }
+        if (this.disposed) {
+            return;
+        }
         void this.host.log?.("info", "agents", "agents.run.queued", {
             runId: queuedRun.id,
             threadId: queuedRun.threadId,
@@ -1826,12 +1998,18 @@ export class CommentAgentController {
     }
 
     private async persistPreflightFailure(run: AgentRunRecord, diagnostic: string): Promise<boolean> {
+        if (this.disposed) {
+            return false;
+        }
         const failureText = formatAgentPreflightFailureReply(run.requestedAgent, diagnostic);
         const outputEntryId = run.outputEntryId ?? this.host.createCommentId();
         await this.store.addRun({
             ...run,
             outputEntryId,
         });
+        if (this.disposed) {
+            return false;
+        }
         const persisted = run.outputEntryId
             ? await this.host.editComment(outputEntryId, failureText, { skipCommentViewRefresh: true })
             : await this.host.appendThreadEntry(run.threadId, {
@@ -1843,6 +2021,9 @@ export class CommentAgentController {
                 alwaysInsertAfterTarget: true,
                 skipCommentViewRefresh: true,
             });
+        if (this.disposed) {
+            return false;
+        }
         const failedRun = await this.store.updateRun(run.id, (currentRun) => ({
             ...currentRun,
             status: "failed",
@@ -1862,6 +2043,9 @@ export class CommentAgentController {
     }
 
     private async appendCommandReply(event: SavedUserEntryEvent, body: string): Promise<void> {
+        if (this.disposed) {
+            return;
+        }
         await this.host.appendThreadEntry(event.threadId, {
             id: this.host.createCommentId(),
             body,
@@ -1873,6 +2057,9 @@ export class CommentAgentController {
     }
 
     private async refreshStatusViews(): Promise<boolean> {
+        if (this.disposed) {
+            return false;
+        }
         try {
             await this.host.refreshCommentViews?.();
             this.completePendingReplyHandoffs();

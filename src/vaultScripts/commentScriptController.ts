@@ -518,6 +518,7 @@ export class CommentScriptController {
             },
             {
                 insertAfterCommentId: run.triggerEntryId,
+                alwaysInsertAfterTarget: true,
                 immediateAggregateRefresh: false,
                 skipCommentViewRefresh: true,
                 refreshEditorDecorations: false,

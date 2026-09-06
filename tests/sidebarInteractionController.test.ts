@@ -30,7 +30,6 @@ function createDraft(overrides: Partial<DraftComment> = {}): DraftComment {
         ...createComment(overrides),
         mode: overrides.mode ?? "edit",
         threadId: overrides.threadId,
-        appendAfterCommentId: overrides.appendAfterCommentId,
     };
 }
 

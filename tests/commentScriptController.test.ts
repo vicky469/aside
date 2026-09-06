@@ -769,6 +769,7 @@ test("rejected directives persist one failed result and bypass runtime and agent
         assert.equal(harness.store.getRuns().length, 1, item.body);
         assert.equal(harness.store.getRuns()[0]?.status, "failed", item.body);
         assert.equal(harness.store.getRuns()[0]?.error, item.message, item.body);
+        assert.equal(harness.appendedEntries[0]?.alwaysInsertAfterTarget, true, item.body);
         assert.match(harness.appendedEntries[0]?.body ?? "", new RegExp(item.message.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&"), "u"));
     }
 });
