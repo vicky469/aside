@@ -9,6 +9,7 @@ import {
 test("actionable mentions follow active built-ins and live scripts", () => {
     const liveScripts = new Set(["/clean"]);
     const context = {
+        scriptsEnabled: true,
         isRunnableVaultScriptMention: (mention: string) => liveScripts.has(mention.toLowerCase()),
     };
 
@@ -26,13 +27,37 @@ test("actionable mentions follow active built-ins and live scripts", () => {
     assert.equal(isActionableMention("/missing", context), false);
 });
 
+test("disabled scripts keep todo and supported agents actionable but reject slash commands", () => {
+    const liveScripts = new Set(["/clean"]);
+    const context = {
+        scriptsEnabled: false,
+        isRunnableVaultScriptMention: (mention: string) => liveScripts.has(mention.toLowerCase()),
+    };
+
+    assert.equal(isActionableMention("@todo", context), true);
+    assert.equal(isActionableMention("@codex", context), true);
+    assert.equal(isActionableMention("@claude", context), true);
+    assert.equal(isActionableMention("@cursor", context), true);
+    assert.equal(isActionableMention("@gemini", context), true);
+    assert.equal(isActionableMention("@deepseek", context), true);
+    assert.equal(isActionableMention("/create-script", context), false);
+    assert.equal(isActionableMention("/update-script", context), false);
+    assert.equal(isActionableMention("/pdf-to-markdown", context), false);
+    assert.equal(isActionableMention("/clean", context), false);
+});
+
 test("built-in candidates and reservations share one definition", () => {
     assert.deepEqual(
-        getActionableBuiltInMentions().map((item) => item.mention),
+        getActionableBuiltInMentions(true).map((item) => item.mention),
         ["@todo", "@codex", "@claude", "@cursor", "@gemini", "@deepseek", "/create-script", "/update-script", "/pdf-to-markdown"],
+    );
+    assert.deepEqual(
+        getActionableBuiltInMentions(false).map((item) => item.mention),
+        ["@todo", "@codex", "@claude", "@cursor", "@gemini", "@deepseek"],
     );
     assert.ok(RESERVED_BUILT_IN_MENTION_NAMES.has("cursor"));
     assert.ok(RESERVED_BUILT_IN_MENTION_NAMES.has("deepseek"));
+    assert.ok(RESERVED_BUILT_IN_MENTION_NAMES.has("create-script"));
     assert.ok(RESERVED_BUILT_IN_MENTION_NAMES.has("update-script"));
     assert.ok(RESERVED_BUILT_IN_MENTION_NAMES.has("pdf-to-markdown"));
 });

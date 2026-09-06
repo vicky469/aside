@@ -9,6 +9,7 @@ export interface ActionableBuiltInMention {
 }
 
 export interface ActionableMentionContext {
+    scriptsEnabled: boolean;
     isRunnableVaultScriptMention(mention: string): boolean;
 }
 
@@ -29,8 +30,15 @@ export const RESERVED_BUILT_IN_MENTION_NAMES = new Set(
     getAllBuiltInMentions().map((item) => item.mention.slice(1).toLowerCase()),
 );
 
-export function getActionableBuiltInMentions(): ActionableBuiltInMention[] {
-    return getAllBuiltInMentions();
+function isScriptBuiltInMention(item: ActionableBuiltInMention): boolean {
+    return item.mention.startsWith("/");
+}
+
+export function getActionableBuiltInMentions(
+    scriptsEnabled: boolean,
+): ActionableBuiltInMention[] {
+    return getAllBuiltInMentions()
+        .filter((item) => scriptsEnabled || !isScriptBuiltInMention(item));
 }
 
 export function isActionableMention(
@@ -38,11 +46,12 @@ export function isActionableMention(
     context: ActionableMentionContext,
 ): boolean {
     const normalized = mention.trim().toLowerCase();
-    if (getActionableBuiltInMentions()
+    if (getActionableBuiltInMentions(context.scriptsEnabled)
         .some((item) => item.mention === normalized)) {
         return true;
     }
 
-    return normalized.startsWith("/")
+    return context.scriptsEnabled
+        && normalized.startsWith("/")
         && context.isRunnableVaultScriptMention(normalized);
 }

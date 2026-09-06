@@ -1247,16 +1247,24 @@ export default class Aside extends Plugin {
         return this.commentAgentController.getAgentRuns();
     }
 
+    public isScriptsEnabled(): boolean {
+        return this.settings.scriptsEnabled;
+    }
+
     public getRunnableVaultScripts() {
-        return this.vaultScriptRegistry.getRunnableScripts();
+        return this.isScriptsEnabled()
+            ? this.vaultScriptRegistry.getRunnableScripts()
+            : [];
     }
 
     public isRunnableVaultScriptMention(mention: string): boolean {
-        return this.vaultScriptRegistry.isRunnableMention(mention);
+        return this.isScriptsEnabled()
+            && this.vaultScriptRegistry.isRunnableMention(mention);
     }
 
     public isActionableMention(mention: string): boolean {
         return resolveActionableMention(mention, {
+            scriptsEnabled: this.isScriptsEnabled(),
             isRunnableVaultScriptMention: (candidate) =>
                 this.vaultScriptRegistry.isRunnableMention(candidate),
         });

@@ -247,6 +247,7 @@ interface IndexFileFilterState {
 }
 
 type AsideWithVaultScriptMentions = Aside & {
+    isScriptsEnabled(): boolean;
     getRunnableVaultScripts(): readonly VaultScriptRegistration[];
     isActionableMention(mention: string): boolean;
     getScriptRuns(): ScriptRunRecord[];
@@ -1492,6 +1493,7 @@ export default class AsideView extends ItemView {
             getMentionSuggestions: (query) => buildMentionSuggestions(
                 this.plugin.getRunnableVaultScripts(),
                 query,
+                this.plugin.isScriptsEnabled(),
             ),
             openMentionSuggestModal: (options) => {
                 new SideNoteMentionSuggestModal(this.app, options).open();
