@@ -45,6 +45,13 @@ break
 `), ["./call.js", "./object.js", "./function.js", "./class.js"]);
 });
 
+test("JavaScript dependency lexer keeps division after returned identifiers", () => {
+	assert.deepEqual(references(`function load() {
+		return value
+		/ import("./asset.js") / divisor;
+	}`), ["./asset.js"]);
+});
+
 test("JavaScript dependency lexer scans template expressions and markup chunks", () => {
 	const result = scanJavascriptDependencies(`
 const markup = \`<img src="./image.png">\`;

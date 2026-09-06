@@ -554,6 +554,16 @@ const objectRatio = { value: 4 } / import("./object-division.js");`,
 	}).references, ["./division.js", "./member-division.js", "./object-division.js"]);
 });
 
+test("JavaScript extraction keeps division after returned identifiers", () => {
+	assert.deepEqual(extractPublishDependencyReferences({
+		vaultRelativePath: "public/return-division.js",
+		contents: `function load() {
+			return value
+			/ import("./asset.js") / divisor;
+		}`,
+	}).references, ["./asset.js"]);
+});
+
 test("JavaScript extraction scans template expressions and accepts literal imports with options", () => {
 	assert.deepEqual(extractPublishDependencyReferences({
 		vaultRelativePath: "public/templates.js",

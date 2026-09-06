@@ -55,6 +55,7 @@ const REGEX_PREFIX_KEYWORDS = new Set([
 	"throw", "typeof", "void", "yield",
 ]);
 const RESTRICTED_LINE_KEYWORDS = new Set(["break", "continue", "debugger", "return"]);
+const LABELLED_LINE_KEYWORDS = new Set(["break", "continue"]);
 const BLOCK_PREFIX_KEYWORDS = new Set(["catch", "do", "else", "finally", "try"]);
 const SIMPLE_ESCAPES: Readonly<Record<string, string>> = Object.freeze({
 	b: "\b",
@@ -318,7 +319,7 @@ function shouldStartRegex(state: JavascriptScanState): boolean {
 	if (previous.kind === "identifier"
 		&& state.pendingLineBreak
 		&& !previous.lineBreakBefore
-		&& RESTRICTED_LINE_KEYWORDS.has(tokens[tokens.length - 2]?.value ?? "")) return true;
+		&& LABELLED_LINE_KEYWORDS.has(tokens[tokens.length - 2]?.value ?? "")) return true;
 	if (previous.kind === "identifier"
 		|| previous.kind === "number"
 		|| previous.kind === "regex"
