@@ -868,6 +868,7 @@ export default class Aside extends Plugin {
         );
         this.registerEvent(this.app.metadataCache.on("changed", (file, _data, cache) => {
             this.vaultCapabilityIndex.upsert(file, getAllTags(cache) ?? []);
+            this.workspaceViewController.refreshIndexTagSearchViews();
         }));
         this.pluginRegistrationController.register();
         this.registerEditorExtension([

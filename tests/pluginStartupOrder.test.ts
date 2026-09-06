@@ -45,3 +45,16 @@ test("plugin refreshes the public inventory during startup maintenance", () => {
         /await this\.publicHtmlPublishController\.refreshPublicPublishIndex\(\);/u,
     );
 });
+
+test("metadata changes update tag membership before refreshing visible tag results", () => {
+    const source = readFileSync("src/main.ts", "utf8");
+    const callbackStart = source.indexOf('this.registerEvent(this.app.metadataCache.on("changed"');
+    const callbackEnd = source.indexOf("}));", callbackStart);
+    const callbackSource = source.slice(callbackStart, callbackEnd);
+    const upsertIndex = callbackSource.indexOf("this.vaultCapabilityIndex.upsert(");
+    const refreshIndex = callbackSource.indexOf("this.workspaceViewController.refreshIndexTagSearchViews();");
+
+    assert.ok(callbackStart >= 0 && callbackEnd > callbackStart);
+    assert.ok(upsertIndex >= 0);
+    assert.ok(refreshIndex > upsertIndex);
+});

@@ -1358,6 +1358,22 @@ export default class AsideView extends ItemView {
         }
     }
 
+    public refreshIndexTagSearch(): void {
+        const bodyEl = this.indexSidebarShell?.commentsBodyEl;
+        const currentFilePath = this.file?.path ?? null;
+        if (
+            !bodyEl?.isConnected
+            || !currentFilePath
+            || !this.plugin.isAllCommentsNotePath(currentFilePath)
+            || this.indexSidebarMode !== "tags"
+        ) {
+            return;
+        }
+
+        this.refreshIndexTagSearchResult();
+        this.renderIndexTagSearchBody(bodyEl);
+    }
+
     private applyIndexTagSearchQuery(query: string, requestVersion: number): void {
         if (requestVersion !== this.indexTagSearchRequestVersion) {
             return;

@@ -85,3 +85,16 @@ test("index tag search uses the shared debounce and read-only search copy", () =
     assert.match(asideViewSource, /placeholder:\s*"Search tags across your vault"/);
     assert.match(asideViewSource, /ariaLabel:\s*"Search vault tags"/);
 });
+
+test("metadata refresh keeps the current tag query on the body-only path", () => {
+    const refreshSource = asideViewSource.match(
+        /public refreshIndexTagSearch\(\): void \{[\s\S]*?\n {4}\}/,
+    )?.[0];
+
+    assert.ok(refreshSource, "missing public index tag refresh hook");
+    assert.match(refreshSource, /indexSidebarMode !== "tags"/);
+    assert.match(refreshSource, /bodyEl\?\.isConnected/);
+    assert.match(refreshSource, /refreshIndexTagSearchResult/);
+    assert.match(refreshSource, /renderIndexTagSearchBody/);
+    assert.doesNotMatch(refreshSource, /renderComments/);
+});
