@@ -774,6 +774,11 @@ test("comment mutation controller dispatches saved append entries to the agent h
         filePath: draft.filePath,
         body: "@codex explain this",
     }]);
+    assert.deepEqual(host.persistedFiles, [{
+        path: draft.filePath,
+        immediateAggregateRefresh: false,
+        skipCommentViewRefresh: true,
+    }]);
 });
 
 test("comment mutation controller inserts child-targeted append drafts after the clicked child entry", async () => {
@@ -927,12 +932,22 @@ test("comment mutation controller can refresh an appended entry before persisten
         alwaysInsertAfterTarget: true,
         refreshBeforePersist: true,
         skipCommentViewRefresh: true,
+        immediateAggregateRefresh: false,
+        refreshEditorDecorations: false,
+        refreshMarkdownPreviews: false,
     });
     await new Promise<void>((resolve) => setImmediate(resolve));
 
     assert.equal(persistStarted, true);
     assert.equal(host.getRefreshCommentViewsCount(), 1);
     assert.equal(host.manager.getCommentById("pending-script-output")?.comment, "");
+    assert.deepEqual(host.persistedFiles, [{
+        path: existing.filePath,
+        immediateAggregateRefresh: false,
+        skipCommentViewRefresh: true,
+        refreshEditorDecorations: false,
+        refreshMarkdownPreviews: false,
+    }]);
 
     releasePersist();
     assert.equal(await appendPromise, true);

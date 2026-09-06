@@ -295,7 +295,10 @@ export class CommentMutationController {
                     skipCommentViewRefresh: normalizedOptions.skipPersistedViewRefresh === true,
                 });
             } else if (preparedDraft.mode === "append") {
-                saved = await this.appendEntry(preparedDraft);
+                saved = await this.appendEntry(preparedDraft, {
+                    immediateAggregateRefresh: normalizedOptions.deferAggregateRefresh !== true,
+                    skipCommentViewRefresh: normalizedOptions.skipPersistedViewRefresh === true,
+                });
             } else {
                 saved = await this.editComment(preparedDraft.id, preparedDraft.comment, {
                     skipCommentViewRefresh: true,
@@ -334,7 +337,7 @@ export class CommentMutationController {
     }
 
     private normalizeSaveDraftOptions(draft: DraftComment, options: SaveDraftOptions): SaveDraftOptions {
-        if (draft.mode !== "new") {
+        if (draft.mode === "edit") {
             return options;
         }
 
@@ -537,7 +540,7 @@ export class CommentMutationController {
         });
     }
 
-    public async appendEntry(draftComment: DraftComment): Promise<boolean> {
+    public async appendEntry(draftComment: DraftComment, options: PersistOptions = {}): Promise<boolean> {
         const threadId = draftComment.threadId;
         if (!threadId) {
             return false;
@@ -564,7 +567,12 @@ export class CommentMutationController {
             }
             await this.host.persistCommentsForFile(
                 latestTarget.file,
-                this.buildPersistOptionsForComment(latestTarget.latestComment, { immediateAggregateRefresh: true }),
+                this.buildPersistOptionsForComment(latestTarget.latestComment, {
+                    immediateAggregateRefresh: options.immediateAggregateRefresh ?? true,
+                    skipCommentViewRefresh: options.skipCommentViewRefresh,
+                    refreshEditorDecorations: options.refreshEditorDecorations,
+                    refreshMarkdownPreviews: options.refreshMarkdownPreviews,
+                }),
             );
         } catch (error) {
             rollbackAppendedEntry(
@@ -622,8 +630,10 @@ export class CommentMutationController {
             await this.host.refreshCommentViews({ skipDataRefresh: true });
         }
         await this.host.persistCommentsForFile(latestTarget.file, this.buildPersistOptionsForComment(latestTarget.latestComment, {
-            immediateAggregateRefresh: true,
+            immediateAggregateRefresh: options.immediateAggregateRefresh ?? true,
             skipCommentViewRefresh: options.skipCommentViewRefresh,
+            refreshEditorDecorations: options.refreshEditorDecorations,
+            refreshMarkdownPreviews: options.refreshMarkdownPreviews,
         }));
         return true;
     }
