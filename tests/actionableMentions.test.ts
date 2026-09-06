@@ -2,8 +2,10 @@ import * as assert from "node:assert/strict";
 import test from "node:test";
 import {
     getActionableBuiltInMentions,
+    isActionableBuiltInMention,
     isActionableMention,
     RESERVED_BUILT_IN_MENTION_NAMES,
+    type ActionableBuiltInMention,
 } from "../src/core/text/actionableMentions";
 
 test("actionable mentions follow active built-ins and live scripts", () => {
@@ -47,8 +49,13 @@ test("disabled scripts keep todo and supported agents actionable but reject slas
 });
 
 test("built-in candidates and reservations share one definition", () => {
+    const enabledBuiltIns = getActionableBuiltInMentions(true);
+    const disabledMentionNames = new Set(
+        getActionableBuiltInMentions(false).map((item) => item.mention),
+    );
+
     assert.deepEqual(
-        getActionableBuiltInMentions(true).map((item) => item.mention),
+        enabledBuiltIns.map((item) => item.mention),
         ["@todo", "@codex", "@claude", "@cursor", "@gemini", "@deepseek", "/create-script", "/update-script", "/pdf-to-markdown"],
     );
     assert.deepEqual(
@@ -60,4 +67,28 @@ test("built-in candidates and reservations share one definition", () => {
     assert.ok(RESERVED_BUILT_IN_MENTION_NAMES.has("create-script"));
     assert.ok(RESERVED_BUILT_IN_MENTION_NAMES.has("update-script"));
     assert.ok(RESERVED_BUILT_IN_MENTION_NAMES.has("pdf-to-markdown"));
+    for (const item of enabledBuiltIns) {
+        assert.equal(
+            disabledMentionNames.has(item.mention),
+            item.capability === "always",
+        );
+        assert.ok(RESERVED_BUILT_IN_MENTION_NAMES.has(item.mention.slice(1).toLowerCase()));
+    }
+});
+
+test("built-in availability follows capability metadata instead of mention punctuation", () => {
+    const alwaysAvailableSlashMention: ActionableBuiltInMention = {
+        mention: "/help",
+        label: "Help",
+        capability: "always",
+    };
+    const scriptBackedAtMention: ActionableBuiltInMention = {
+        mention: "@script-agent",
+        label: "Script agent",
+        capability: "scripts",
+    };
+
+    assert.equal(isActionableBuiltInMention(alwaysAvailableSlashMention, false), true);
+    assert.equal(isActionableBuiltInMention(scriptBackedAtMention, false), false);
+    assert.equal(isActionableBuiltInMention(scriptBackedAtMention, true), true);
 });

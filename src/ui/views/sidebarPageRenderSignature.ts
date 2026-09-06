@@ -129,6 +129,7 @@ export function buildPageSidebarThreadRenderSignature(options: {
     isSelectedForTagBatch: boolean;
     enableTagSelection: boolean;
     enablePageThreadReorder: boolean;
+    scriptsEnabled: boolean;
     editDraftComment: DraftComment | null;
     appendDraftComment: DraftComment | null;
     threadAgentRuns: readonly AgentRunRecord[];
@@ -161,6 +162,7 @@ export function buildPageSidebarThreadRenderSignature(options: {
         options.showNestedCommentsByDefault ? 1 : 0,
         options.enableTagSelection ? 1 : 0,
         options.enablePageThreadReorder ? 1 : 0,
+        options.scriptsEnabled ? 1 : 0,
         options.presentationKey ?? "",
         getDraftIdentity(options.editDraftComment),
         getDraftIdentity(options.appendDraftComment),
@@ -173,11 +175,13 @@ export function buildPageSidebarThreadRenderSignature(options: {
 export function buildPageSidebarDraftRenderSignature(
     draft: DraftComment,
     activeCommentId: string | null,
-    isSavingDraft = false,
+    isSavingDraft: boolean,
+    scriptsEnabled: boolean,
 ): string {
     return [
         getDraftIdentity(draft),
         draft.id === activeCommentId ? 1 : 0,
         isSavingDraft ? 1 : 0,
+        scriptsEnabled ? 1 : 0,
     ].join("|");
 }

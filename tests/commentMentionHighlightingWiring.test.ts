@@ -25,6 +25,19 @@ test("AsideView supplies the plugin actionable predicate to comment hosts", () =
     assert.equal(adapters.length, 4);
 });
 
+test("AsideView includes live Scripts capability in draft and thread render signatures", () => {
+    const source = readFileSync("src/ui/views/AsideView.ts", "utf8");
+
+    assert.match(
+        source,
+        /buildPageSidebarDraftRenderSignature\([\s\S]*?this\.plugin\.isScriptsEnabled\(\)[\s\S]*?\)/u,
+    );
+    assert.match(
+        source,
+        /buildPageSidebarThreadRenderSignature\(\{[\s\S]*?scriptsEnabled:\s*this\.plugin\.isScriptsEnabled\(\)/u,
+    );
+});
+
 test("AsideView preserves streamed reply controllers across both thread reconcilers", () => {
     const source = readFileSync("src/ui/views/AsideView.ts", "utf8");
     const adapters = source.match(

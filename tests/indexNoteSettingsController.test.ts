@@ -928,16 +928,21 @@ test("index note settings controller saves sidebar tab toggles and refreshes ope
 });
 
 test("index note settings controller persists Scripts changes and ignores unchanged state", async () => {
-    const harness = createControllerHarness();
+    const harness = createControllerHarness({
+        activeSidebarFilePath: "docs/source.md",
+        files: ["docs/source.md"],
+    });
 
     await harness.controller.setScriptsEnabled(false);
     assert.equal(harness.savedPayloads.length, 0);
+    assert.deepEqual(harness.refreshedTargets, []);
 
     await harness.controller.setScriptsEnabled(true);
 
     assert.equal(harness.getSettings().scriptsEnabled, true);
     assert.equal(harness.savedPayloads.length, 1);
     assert.equal(harness.savedPayloads[0]?.scriptsEnabled, true);
+    assert.deepEqual(harness.refreshedTargets, ["docs/source.md"]);
 });
 
 test("capability setters restore persisted state after save failure", async () => {
@@ -947,6 +952,7 @@ test("capability setters restore persisted state after save failure", async () =
 
     await assert.rejects(harness.controller.setScriptsEnabled(true), /save failed/u);
     assert.equal(harness.getSettings().scriptsEnabled, false);
+    assert.deepEqual(harness.refreshedTargets, []);
 
     await assert.rejects(harness.controller.setPublishEnabled(true), /save failed/u);
     assert.equal(harness.getSettings().publishEnabled, false);

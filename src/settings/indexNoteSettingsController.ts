@@ -390,6 +390,7 @@ export class IndexNoteSettingsController {
                 scriptsEnabled: enabled,
             };
             await this.persistSettingsTransition(settings, nextSettings, ["scriptsEnabled"]);
+            await this.host.updateSidebarViews(this.host.getSidebarTargetFile());
         });
     }
 

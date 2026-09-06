@@ -1,9 +1,13 @@
 import * as assert from "node:assert/strict";
 import test from "node:test";
+import { isActionableMention } from "../src/core/text/actionableMentions";
+import type { DraftComment } from "../src/domain/drafts";
+import { renderStyledDraftCommentHtml } from "../src/ui/editor/commentEditorStyling";
 import {
     reconcileSidebarItems,
     type SidebarItemRenderDescriptor,
 } from "../src/ui/views/sidebarItemReconciler";
+import { buildPageSidebarDraftRenderSignature } from "../src/ui/views/sidebarPageRenderSignature";
 
 class FakeChildren extends Array<FakeElement> {
     item(index: number): FakeElement | null {
@@ -18,6 +22,7 @@ class FakeElement {
         contains: (_className: string): boolean => false,
     };
     parentElement: FakeElement | null = null;
+    renderedHtml = "";
 
     get isConnected(): boolean {
         return this.parentElement !== null;
@@ -161,4 +166,63 @@ test("reconcileSidebarItems leaves mounted nodes untouched when superseded", asy
 
     assert.equal(completed, false);
     assert.deepEqual(Array.from(container.children), [existing]);
+});
+
+test("reconcileSidebarItems removes stale script mention styling after Scripts is disabled", async () => {
+    const draft: DraftComment = {
+        id: "draft:a",
+        filePath: "docs/note.md",
+        startLine: 0,
+        startChar: 0,
+        endLine: 0,
+        endChar: 0,
+        selectedText: "",
+        selectedTextHash: "hash",
+        comment: "@todo /clean",
+        timestamp: 100,
+        anchorKind: "page",
+        orphaned: false,
+        mode: "new",
+    };
+    const renderDraft = (scriptsEnabled: boolean): FakeElement => {
+        const signature = buildPageSidebarDraftRenderSignature(
+            draft,
+            null,
+            false,
+            scriptsEnabled,
+        );
+        const node = createNode(`draft:${draft.id}`, signature);
+        node.renderedHtml = renderStyledDraftCommentHtml(
+            draft.comment,
+            (mention) => isActionableMention(mention, {
+                scriptsEnabled,
+                isRunnableVaultScriptMention: (candidate) => candidate === "/clean",
+            }),
+        );
+        return node;
+    };
+    const enabledNode = renderDraft(true);
+    const container = createContainer([enabledNode]);
+    const disabledNode = renderDraft(false);
+
+    assert.equal(
+        enabledNode.renderedHtml.includes(
+            "<span class=\"aside-editor-token-mention\">/clean</span>",
+        ),
+        true,
+    );
+    await reconcileSidebarItems(
+        container as unknown as HTMLElement,
+        [descriptor(
+            `draft:${draft.id}`,
+            disabledNode.dataset.asideRenderSignature ?? "",
+            async () => disabledNode,
+        )],
+    );
+
+    assert.equal(container.children[0], disabledNode);
+    assert.equal(
+        disabledNode.renderedHtml,
+        "<span class=\"aside-editor-token-mention\">@todo</span> /clean",
+    );
 });

@@ -5,9 +5,35 @@ import type { AgentRunRecord } from "../src/core/agents/agentRuns";
 import type { ScriptRunRecord } from "../src/core/scripts/scriptRuns";
 import type { DraftComment } from "../src/domain/drafts";
 import {
-    buildPageSidebarDraftRenderSignature,
-    buildPageSidebarThreadRenderSignature,
+    buildPageSidebarDraftRenderSignature as buildDraftRenderSignature,
+    buildPageSidebarThreadRenderSignature as buildThreadRenderSignature,
 } from "../src/ui/views/sidebarPageRenderSignature";
+
+type ThreadRenderSignatureOptions = Parameters<typeof buildThreadRenderSignature>[0];
+
+function buildPageSidebarThreadRenderSignature(
+    options: Omit<ThreadRenderSignatureOptions, "scriptsEnabled">
+        & Partial<Pick<ThreadRenderSignatureOptions, "scriptsEnabled">>,
+): string {
+    return buildThreadRenderSignature({
+        scriptsEnabled: true,
+        ...options,
+    });
+}
+
+function buildPageSidebarDraftRenderSignature(
+    draft: DraftComment,
+    activeCommentId: string | null,
+    isSavingDraft = false,
+    scriptsEnabled = true,
+): string {
+    return buildDraftRenderSignature(
+        draft,
+        activeCommentId,
+        isSavingDraft,
+        scriptsEnabled,
+    );
+}
 
 function createThread(overrides: Partial<CommentThread> = {}): CommentThread {
     return {
@@ -516,5 +542,32 @@ test("buildPageSidebarThreadRenderSignature changes when thread pin focus change
             appendDraftComment: null,
             threadAgentRuns: [],
         }),
+    );
+});
+
+test("page sidebar render signatures change when Scripts is disabled", () => {
+    const draft = createDraft();
+    const thread = createThread();
+    const threadOptions = {
+        thread,
+        activeCommentId: null,
+        isPinned: false,
+        showNestedComments: false,
+        showNestedCommentsByDefault: false,
+        isSelectedForTagBatch: false,
+        enableTagSelection: false,
+        enablePageThreadReorder: true,
+        editDraftComment: null,
+        appendDraftComment: null,
+        threadAgentRuns: [],
+    };
+
+    assert.notEqual(
+        buildPageSidebarDraftRenderSignature(draft, null, false, true),
+        buildPageSidebarDraftRenderSignature(draft, null, false, false),
+    );
+    assert.notEqual(
+        buildPageSidebarThreadRenderSignature({ ...threadOptions, scriptsEnabled: true }),
+        buildPageSidebarThreadRenderSignature({ ...threadOptions, scriptsEnabled: false }),
     );
 });

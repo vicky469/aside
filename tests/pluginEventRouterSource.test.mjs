@@ -53,3 +53,15 @@ test("main delegates Publishing initialization as one controller transition", ()
     assert.doesNotMatch(methodSource, /this\.setPublishPagesProjectName\(/);
     assert.doesNotMatch(methodSource, /this\.setPublishBaseUrl\(/);
 });
+
+test("main resolves actionable vault scripts through its public capability boundary", () => {
+    const methodStart = mainSource.indexOf("public isActionableMention(mention: string)");
+    const methodEnd = mainSource.indexOf("public getScriptRuns()", methodStart);
+    const methodSource = mainSource.slice(methodStart, methodEnd);
+
+    assert.match(
+        methodSource,
+        /isRunnableVaultScriptMention:\s*\(candidate\)\s*=>\s*this\.isRunnableVaultScriptMention\(candidate\)/u,
+    );
+    assert.doesNotMatch(methodSource, /vaultScriptRegistry\.isRunnableMention/u);
+});

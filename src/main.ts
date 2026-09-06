@@ -1266,7 +1266,7 @@ export default class Aside extends Plugin {
         return resolveActionableMention(mention, {
             scriptsEnabled: this.isScriptsEnabled(),
             isRunnableVaultScriptMention: (candidate) =>
-                this.vaultScriptRegistry.isRunnableMention(candidate),
+                this.isRunnableVaultScriptMention(candidate),
         });
     }
 

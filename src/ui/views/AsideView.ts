@@ -2955,6 +2955,7 @@ export default class AsideView extends ItemView {
                         item.draft,
                         this.interactionController.getActiveCommentId(),
                         options.isVisibleDraftSaving && options.visibleDraftComment?.id === item.draft.id,
+                        this.plugin.isScriptsEnabled(),
                     ),
                     threadId: null,
                     render: () => {
@@ -2992,6 +2993,7 @@ export default class AsideView extends ItemView {
                     isSelectedForTagBatch: options.enableTagSelection && this.noteSidebarSelectedTagIds.has(item.thread.id),
                     enablePageThreadReorder: options.enablePageThreadReorder,
                     enableTagSelection: options.enableTagSelection,
+                    scriptsEnabled: this.plugin.isScriptsEnabled(),
                     editDraftComment,
                     appendDraftComment,
                     isSavingDraft: options.isVisibleDraftSaving
