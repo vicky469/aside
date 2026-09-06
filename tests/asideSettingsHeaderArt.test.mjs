@@ -159,7 +159,57 @@ function getRule(styles, selector, requiredDeclaration = "") {
         .find((body) => body.includes(requiredDeclaration)) ?? "";
 }
 
-test("settings header splits one-shot reveal motion from continuous ambient motion", async () => {
+function getFlatRule(styles, selector, requiredDeclaration = "") {
+    const matches = styles.matchAll(
+        /(?<selectors>[^{}]+)\{(?<body>[^{}]*)\}/g,
+    );
+    return [...matches]
+        .filter((match) =>
+            (match.groups?.selectors ?? "")
+                .split(",")
+                .map((candidate) => candidate.trim())
+                .includes(selector),
+        )
+        .map((match) => match.groups?.body ?? "")
+        .find((body) => body.includes(requiredDeclaration)) ?? "";
+}
+
+function getBalancedBlockBody(styles, openingBraceIndex) {
+    let depth = 0;
+    for (let index = openingBraceIndex; index < styles.length; index += 1) {
+        if (styles[index] === "{") depth += 1;
+        if (styles[index] !== "}") continue;
+
+        depth -= 1;
+        if (depth === 0) {
+            return styles.slice(openingBraceIndex + 1, index);
+        }
+    }
+
+    return "";
+}
+
+function getAtRuleBody(styles, atRulePattern, requiredContent = "") {
+    const flags = atRulePattern.global
+        ? atRulePattern.flags
+        : `${atRulePattern.flags}g`;
+    const matches = styles.matchAll(new RegExp(atRulePattern.source, flags));
+
+    for (const match of matches) {
+        const openingBraceIndex = styles.indexOf(
+            "{",
+            (match.index ?? 0) + match[0].length,
+        );
+        if (openingBraceIndex === -1) continue;
+
+        const body = getBalancedBlockBody(styles, openingBraceIndex);
+        if (body.includes(requiredContent)) return body;
+    }
+
+    return "";
+}
+
+test("settings header stages a soft cascade before continuous ambient motion", async () => {
     const styles = await readFile(stylesUrl, "utf8");
     const hero = getRule(styles, ".aside-settings-tab .aside-settings-hero");
     const settingRow = getRule(
@@ -170,7 +220,15 @@ test("settings header splits one-shot reveal motion from continuous ambient moti
     const scene = getRule(styles, ".aside-settings-tab .aside-settings-hero-graph-scene");
     const track = getRule(styles, ".aside-settings-tab .aside-settings-hero-edge-track");
     const runner = getRule(styles, ".aside-settings-tab .aside-settings-hero-edge-runner");
-    const introSelectors = [
+    const hiddenOnFirstFrame = [
+        ".aside-settings-tab .aside-settings-hero-rabbit",
+        ".aside-settings-tab .aside-settings-hero-thought",
+        ".aside-settings-tab .aside-settings-hero-signal-glyph",
+        ".aside-settings-tab .aside-settings-hero-aside-box",
+        ".aside-settings-tab .aside-settings-hero-action-line",
+        ".aside-settings-tab .aside-settings-hero-graph-stage",
+    ];
+    const finiteAnimationSelectors = [
         ".aside-settings-tab .aside-settings-hero-thought",
         ".aside-settings-tab .aside-settings-hero-signal-glyph",
         ".aside-settings-tab .aside-settings-hero-aside-box",
@@ -179,21 +237,33 @@ test("settings header splits one-shot reveal motion from continuous ambient moti
         ".aside-settings-tab .aside-settings-hero-graph-node",
     ];
 
-    assert.match(hero, /--aside-settings-hero-intro-duration:\s*7s\s*;/);
-    assert.match(hero, /--aside-settings-hero-motion-delay:\s*5\.8s\s*;/);
+    assert.match(hero, /--aside-settings-hero-intro-duration:\s*5s\s*;/);
+    assert.match(hero, /--aside-settings-hero-motion-delay:\s*3\.35s\s*;/);
     assert.match(hero, /container-type:\s*inline-size\s*;/);
     assert.match(settingRow, /display:\s*block\s*;/);
     assert.match(settingRow, /padding:\s*0\s*;/);
+    for (const selector of hiddenOnFirstFrame) {
+        assert.match(getRule(styles, selector), /opacity:\s*0\s*;/);
+    }
     assert.match(rabbit, /aside-settings-hero-rabbit[^,;]*\s1\s+forwards/);
-    assert.match(rabbit, /aside-settings-hero-rabbit-idle\s+3\.8s\s+ease-in-out\s+1\.4s\s+infinite\s+alternate/);
-    for (const selector of introSelectors) {
-        const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-        const rulePattern = new RegExp(`${escaped}[^{}]*\\{(?<body>[^{}]*)\\}`);
-        const rule = styles.match(rulePattern)?.groups?.body ?? "";
-
+    assert.match(
+        rabbit,
+        /aside-settings-hero-rabbit-idle\s+3\.8s\s+ease-in-out\s+var\(--aside-settings-hero-motion-delay\)\s+infinite\s+alternate/,
+    );
+    for (const selector of finiteAnimationSelectors) {
+        const rule = getRule(styles, selector);
         assert.match(rule, /animation:[^;]*\s1\s+forwards\s*;/);
         assert.doesNotMatch(rule, /infinite/);
     }
+
+    assert.match(styles, /@keyframes aside-settings-hero-rabbit\s*\{\s*0%, 2% \{ opacity: 0;[^}]*\}\s*8% \{ opacity: 1;[^}]*\}\s*14%, 100% \{ opacity: 1; transform: translate\(5px, 0\) rotate\(0\); \}/);
+    assert.match(styles, /@keyframes aside-settings-hero-thought\s*\{\s*0%, 9% \{ opacity: 0;[^}]*\}\s*17%, 100% \{ opacity: 1;/);
+    assert.match(styles, /@keyframes aside-settings-hero-signal\s*\{\s*0%, 15% \{ opacity: 0;[^}]*\}\s*23%, 34% \{ opacity: 1;[^}]*\}\s*35%, 100% \{ opacity: 0\.45; text-shadow: none; \}/);
+    assert.match(styles, /@keyframes aside-settings-hero-aside-box\s*\{\s*0%, 21% \{ opacity: 0;[^}]*\}\s*30%, 42% \{\s*opacity: 1;[^}]*\}\s*50%, 100% \{ opacity: 1; transform: scale\(1\); color: inherit; filter: none; \}/);
+    assert.match(styles, /@keyframes aside-settings-hero-action\s*\{\s*0%, 28% \{ opacity: 0;[^}]*\}\s*37%, 100% \{ opacity: 1;/);
+    assert.match(styles, /@keyframes aside-settings-hero-graph-reveal\s*\{\s*0%, 35% \{ opacity: 0;[^}]*\}\s*45% \{ opacity: 1; \}\s*64%, 100% \{ opacity: 1;/);
+    assert.match(styles, /@keyframes aside-settings-hero-node\s*\{\s*0%, 47% \{ opacity: 0;[^}]*\}\s*58% \{ opacity: 1; transform: scale\(1\.25\); text-shadow: 0 0 8px currentColor; \}\s*64%, 100% \{ opacity: 1; transform: scale\(1\); text-shadow: none; \}/);
+
     assert.match(scene, /transform-style:\s*preserve-3d\s*;/);
     assert.match(scene, /animation-name:\s*aside-settings-hero-graph-turn\s*;/);
     assert.match(scene, /animation-delay:\s*var\(--aside-settings-hero-motion-delay\)\s*;/);
@@ -201,13 +271,10 @@ test("settings header splits one-shot reveal motion from continuous ambient moti
     assert.match(scene, /animation-direction:\s*alternate\s*;/);
     assert.match(track, /position:\s*relative\s*;/);
     assert.match(track, /overflow:\s*hidden\s*;/);
+    assert.match(runner, /animation-name:\s*aside-settings-hero-edge-flow\s*;/);
     assert.match(runner, /animation-delay:\s*calc\(var\(--aside-settings-hero-motion-delay\)/);
     assert.match(runner, /animation-iteration-count:\s*infinite\s*;/);
     assert.match(runner, /animation-direction:\s*alternate\s*;/);
-    assert.match(styles, /@keyframes aside-settings-hero-graph-turn/);
-    assert.match(styles, /@keyframes aside-settings-hero-edge-flow/);
-    assert.match(styles, /@keyframes aside-settings-hero-rabbit-idle/);
-
     const infiniteAnimationSelectors = [
         ...styles.matchAll(
             /(?<selector>\.aside-settings-tab \.aside-settings-hero[^{}]*)\{(?<body>[^{}]*animation[^{}]*)\}/g,
@@ -221,6 +288,19 @@ test("settings header splits one-shot reveal motion from continuous ambient moti
         ".aside-settings-tab .aside-settings-hero-graph-scene",
         ".aside-settings-tab .aside-settings-hero-edge-runner",
     ]);
+
+    assert.match(
+        styles,
+        /@keyframes aside-settings-hero-rabbit-idle\s*\{\s*0% \{ transform: translate\(5px, 0\) rotate\(0\); \}\s*45% \{ transform: translate\(5px, -1px\) rotate\(-0\.35deg\); \}\s*100% \{ transform: translate\(6px, 0\) rotate\(0\.35deg\); \}\s*\}/,
+    );
+    assert.match(
+        styles,
+        /@keyframes aside-settings-hero-graph-turn\s*\{\s*0% \{ transform: rotateX\(-7deg\) rotateY\(-18deg\); \}\s*100% \{ transform: rotateX\(8deg\) rotateY\(20deg\); \}\s*\}/,
+    );
+    assert.match(
+        styles,
+        /@keyframes aside-settings-hero-edge-flow\s*\{\s*0% \{ opacity: 0\.72; transform: translateX\(0\); \}\s*12%, 88% \{ opacity: 1; \}\s*100% \{\s*opacity: 0\.72;\s*transform: translateX\(var\(--aside-settings-hero-runner-travel\)\);\s*\}\s*\}/,
+    );
 });
 
 test("settings header uses the original small GEB planes and narrow-pane layout", async () => {
@@ -268,6 +348,11 @@ test("settings header uses the original small GEB planes and narrow-pane layout"
 
 test("settings header shows a static completed composition for reduced motion", async () => {
     const styles = await readFile(stylesUrl, "utf8");
+    const reducedMotion = getAtRuleBody(
+        styles,
+        /@media\s*\(prefers-reduced-motion:\s*reduce\)/,
+        ".aside-settings-tab .aside-settings-hero-rabbit",
+    );
     const animatedSelectors = [
         ".aside-settings-tab .aside-settings-hero-rabbit",
         ".aside-settings-tab .aside-settings-hero-thought",
@@ -280,51 +365,70 @@ test("settings header shows a static completed composition for reduced motion", 
         ".aside-settings-tab .aside-settings-hero-edge-runner",
     ];
     const visibleSelectors = [
+        ".aside-settings-tab .aside-settings-hero-rabbit",
+        ".aside-settings-tab .aside-settings-hero-thought",
+        ".aside-settings-tab .aside-settings-hero-aside-box",
         ".aside-settings-tab .aside-settings-hero-action-line",
         ".aside-settings-tab .aside-settings-hero-graph-stage",
         ".aside-settings-tab .aside-settings-hero-graph-node",
     ];
+    const transformResetSelectors = [
+        ".aside-settings-tab .aside-settings-hero-rabbit",
+        ".aside-settings-tab .aside-settings-hero-thought",
+        ".aside-settings-tab .aside-settings-hero-aside-box",
+        ".aside-settings-tab .aside-settings-hero-action-line",
+        ".aside-settings-tab .aside-settings-hero-graph-node",
+    ];
+
+    assert.notEqual(reducedMotion, "");
 
     for (const selector of animatedSelectors) {
-        const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-        assert.match(
-            styles,
-            new RegExp(
-                `@media\\s*\\(prefers-reduced-motion:\\s*reduce\\)[\\s\\S]*?${escaped}[^{}]*\\{[^{}]*animation:\\s*none\\s*;`,
-            ),
-        );
+        const rule = getFlatRule(reducedMotion, selector, "animation: none");
+        assert.match(rule, /animation:\s*none\s*;/);
+        assert.match(rule, /text-shadow:\s*none\s*;/);
+        assert.match(rule, /filter:\s*none\s*;/);
     }
 
     for (const selector of visibleSelectors) {
-        const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-        assert.match(
-            styles,
-            new RegExp(
-                `@media\\s*\\(prefers-reduced-motion:\\s*reduce\\)[\\s\\S]*?${escaped}[^{}]*\\{[^{}]*opacity:\\s*1\\s*;`,
-            ),
-        );
+        const rule = getFlatRule(reducedMotion, selector, "opacity: 1");
+        assert.match(rule, /opacity:\s*1\s*;/);
     }
 
-    assert.match(
-        styles,
-        /@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*?\.aside-settings-tab \.aside-settings-hero-graph-scene[\s\S]*?animation:\s*none\s*;/,
+    for (const selector of transformResetSelectors) {
+        const rule = getFlatRule(reducedMotion, selector, "transform: none");
+        assert.match(rule, /transform:\s*none\s*;/);
+    }
+
+    const signal = getFlatRule(
+        reducedMotion,
+        ".aside-settings-tab .aside-settings-hero-signal-glyph",
+        "opacity: 0.45",
     );
-    assert.match(
-        styles,
-        /@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*?\.aside-settings-tab \.aside-settings-hero-edge-runner[\s\S]*?animation:\s*none\s*;/,
+    assert.match(signal, /opacity:\s*0\.45\s*;/);
+
+    const stage = getFlatRule(
+        reducedMotion,
+        ".aside-settings-tab .aside-settings-hero-graph-stage",
+        "clip-path: none",
     );
-    assert.match(
-        styles,
-        /@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*?\.aside-settings-tab \.aside-settings-hero-graph-stage[\s\S]*?clip-path:\s*none\s*;/,
+    assert.match(stage, /clip-path:\s*none\s*;/);
+
+    const scene = getFlatRule(
+        reducedMotion,
+        ".aside-settings-tab .aside-settings-hero-graph-scene",
+        "will-change: auto",
     );
-    assert.match(
-        styles,
-        /@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*?\.aside-settings-tab \.aside-settings-hero-graph-scene[\s\S]*?will-change:\s*auto\s*;/,
+    assert.match(scene, /transform:\s*rotateX\(2deg\) rotateY\(-12deg\)\s*;/);
+    assert.match(scene, /will-change:\s*auto\s*;/);
+
+    const runner = getFlatRule(
+        reducedMotion,
+        ".aside-settings-tab .aside-settings-hero-edge-runner",
+        "will-change: auto",
     );
-    assert.match(
-        styles,
-        /@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*?\.aside-settings-tab \.aside-settings-hero-edge-runner[\s\S]*?will-change:\s*auto\s*;/,
-    );
+    assert.match(runner, /opacity:\s*0\.8\s*;/);
+    assert.match(runner, /transform:\s*translateX\(0\)\s*;/);
+    assert.match(runner, /will-change:\s*auto\s*;/);
 });
 
 test("settings header keeps its ASCII and Unicode art directionally isolated", async () => {

@@ -1821,8 +1821,8 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
 }
 
 .aside-settings-tab .aside-settings-hero {
-    --aside-settings-hero-intro-duration: 7s;
-    --aside-settings-hero-motion-delay: 5.8s;
+    --aside-settings-hero-intro-duration: 5s;
+    --aside-settings-hero-motion-delay: 3.35s;
     --aside-settings-hero-blue: var(--color-blue, var(--interactive-accent));
     --aside-settings-hero-blue-glow: color-mix(
         in srgb,
@@ -1896,15 +1896,17 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
     grid-column: 1;
     grid-row: 1;
     transform-origin: bottom center;
+    opacity: 0;
     animation:
         aside-settings-hero-rabbit var(--aside-settings-hero-intro-duration) ease-in-out 1 forwards,
-        aside-settings-hero-rabbit-idle 3.8s ease-in-out 1.4s infinite alternate;
+        aside-settings-hero-rabbit-idle 3.8s ease-in-out var(--aside-settings-hero-motion-delay) infinite alternate;
 }
 
 .aside-settings-tab .aside-settings-hero-thought {
     grid-column: 2;
     grid-row: 1;
     text-transform: lowercase;
+    opacity: 0;
     animation: aside-settings-hero-thought var(--aside-settings-hero-intro-duration) ease-in-out 1 forwards;
 }
 
@@ -1916,7 +1918,7 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
 }
 
 .aside-settings-tab .aside-settings-hero-signal-glyph {
-    opacity: 0.2;
+    opacity: 0;
     animation: aside-settings-hero-signal calc(var(--aside-settings-hero-intro-duration) - 600ms) steps(1, end) 1 forwards;
 }
 
@@ -1935,6 +1937,7 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
 .aside-settings-tab .aside-settings-hero-aside-box {
     grid-column: 4;
     grid-row: 1;
+    opacity: 0;
     animation: aside-settings-hero-aside-box var(--aside-settings-hero-intro-duration) ease-in-out 1 forwards;
 }
 
@@ -2107,9 +2110,9 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
 }
 
 @keyframes aside-settings-hero-rabbit {
-    0%, 8% { transform: translate(0, 0) rotate(-1deg); }
-    14% { transform: translate(2px, -3px) rotate(1deg); }
-    20%, 100% { transform: translate(5px, 0) rotate(0); }
+    0%, 2% { opacity: 0; transform: translate(0, 4px) rotate(-1deg); }
+    8% { opacity: 1; transform: translate(2px, -3px) rotate(1deg); }
+    14%, 100% { opacity: 1; transform: translate(5px, 0) rotate(0); }
 }
 
 @keyframes aside-settings-hero-rabbit-idle {
@@ -2119,41 +2122,42 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
 }
 
 @keyframes aside-settings-hero-thought {
-    0%, 16% { transform: translateX(0); }
-    23% { transform: translateX(3px); }
-    30%, 100% { transform: translateX(0); }
+    0%, 9% { opacity: 0; transform: translateX(-4px); }
+    17%, 100% { opacity: 1; transform: translateX(0); }
 }
 
 @keyframes aside-settings-hero-signal {
-    0%, 23% { opacity: 0.2; text-shadow: none; }
-    24%, 38% { opacity: 1; text-shadow: 0 0 8px currentColor; }
-    39%, 100% { opacity: 0.45; text-shadow: none; }
+    0%, 15% { opacity: 0; text-shadow: none; }
+    23%, 34% { opacity: 1; text-shadow: 0 0 8px currentColor; }
+    35%, 100% { opacity: 0.45; text-shadow: none; }
 }
 
 @keyframes aside-settings-hero-aside-box {
-    0%, 34% { color: inherit; filter: none; }
-    42%, 56% {
+    0%, 21% { opacity: 0; transform: scale(0.96); color: inherit; filter: none; }
+    30%, 42% {
+        opacity: 1;
+        transform: scale(1);
         color: var(--aside-settings-hero-blue);
         filter: drop-shadow(0 0 4px var(--aside-settings-hero-blue));
     }
-    64%, 100% { color: inherit; filter: none; }
+    50%, 100% { opacity: 1; transform: scale(1); color: inherit; filter: none; }
 }
 
 @keyframes aside-settings-hero-action {
-    0%, 43% { opacity: 0; transform: translateY(-3px); }
-    52%, 100% { opacity: 1; transform: translateY(0); }
+    0%, 28% { opacity: 0; transform: translateY(-3px); }
+    37%, 100% { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes aside-settings-hero-graph-reveal {
-    0%, 49% { opacity: 0; clip-path: inset(100% 0 0 0); }
-    56% { opacity: 1; }
-    82%, 100% { opacity: 1; clip-path: inset(0); }
+    0%, 35% { opacity: 0; clip-path: inset(100% 0 0 0); }
+    45% { opacity: 1; }
+    64%, 100% { opacity: 1; clip-path: inset(0); }
 }
 
 @keyframes aside-settings-hero-node {
-    0%, 68% { opacity: 0.15; transform: scale(0.8); text-shadow: none; }
-    84% { opacity: 1; transform: scale(1.25); text-shadow: 0 0 8px currentColor; }
-    100% { opacity: 1; transform: scale(1); text-shadow: none; }
+    0%, 47% { opacity: 0; transform: scale(0.8); text-shadow: none; }
+    58% { opacity: 1; transform: scale(1.25); text-shadow: 0 0 8px currentColor; }
+    64%, 100% { opacity: 1; transform: scale(1); text-shadow: none; }
 }
 
 @keyframes aside-settings-hero-graph-turn {
@@ -2218,6 +2222,9 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
     .aside-settings-tab .aside-settings-hero-action-line,
     .aside-settings-tab .aside-settings-hero-graph-node { transform: none; }
 
+    .aside-settings-tab .aside-settings-hero-rabbit,
+    .aside-settings-tab .aside-settings-hero-thought,
+    .aside-settings-tab .aside-settings-hero-aside-box,
     .aside-settings-tab .aside-settings-hero-action-line,
     .aside-settings-tab .aside-settings-hero-graph-stage,
     .aside-settings-tab .aside-settings-hero-graph-node { opacity: 1; }
