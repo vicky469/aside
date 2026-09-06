@@ -83,6 +83,7 @@ function createHarness(options: {
     editResults?: boolean[];
     appendSucceeds?: boolean;
     beforeEditComment?: () => Promise<void>;
+    beforeAppendThreadEntryReturn?: () => Promise<void>;
     refreshFailures?: number[];
     beforePersist?: (data: PersistedPluginData) => Promise<void>;
     loadCommentsForFile?: (filePath: string) => Promise<void>;
@@ -188,6 +189,7 @@ function createHarness(options: {
                     "after",
                 );
             }
+            await options.beforeAppendThreadEntryReturn?.();
             return true;
         },
         editComment: async (commentId, body, editOptions) => {
@@ -334,6 +336,28 @@ test("accepted script edits the pending output in place when runtime fails", asy
         body: "Script /clean:\n\nbad input",
     }]);
     assert.equal(harness.appendedEntries.length, 1);
+});
+
+test("automatic script execution waits for pending reply durability", async () => {
+    const pendingPersist = createDeferred<void>();
+    const harness = createHarness({
+        beforeAppendThreadEntryReturn: async () => pendingPersist.promise,
+    });
+
+    const handled = harness.controller.handleSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "/clean",
+    });
+    await waitForCondition(() => harness.appendedEntries.length === 1);
+
+    assert.equal(harness.runtimeCalls.length, 0);
+
+    pendingPersist.resolve();
+    assert.equal(await handled, true);
+    await waitForRunStatus(harness, "thread-1", "succeeded");
+    assert.equal(harness.runtimeCalls.length, 1);
 });
 
 test("disposing during the terminal output edit keeps the run active for startup reconciliation", async () => {

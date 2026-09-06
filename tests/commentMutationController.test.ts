@@ -781,6 +781,44 @@ test("comment mutation controller dispatches saved append entries to the agent h
     }]);
 });
 
+test("comment mutation controller does not dispatch an appended entry before persistence succeeds", async () => {
+    const existing = createComment({ id: "thread-1", comment: "Original" });
+    const draft: DraftComment = {
+        ...toDraft(existing, {
+            id: "entry-2",
+            comment: "@codex explain this",
+            mode: "append",
+        }),
+        threadId: existing.id,
+    };
+    let releasePersistence!: () => void;
+    let markPersistenceStarted!: () => void;
+    const persistenceStarted = new Promise<void>((resolve) => {
+        markPersistenceStarted = resolve;
+    });
+    const persistencePending = new Promise<void>((resolve) => {
+        releasePersistence = resolve;
+    });
+    const host = createHost({
+        draftComment: draft,
+        knownComments: [existing],
+        loadedComments: [existing],
+        persistCommentsForFile: async () => {
+            markPersistenceStarted();
+            await persistencePending;
+        },
+    });
+
+    const savePromise = host.controller.saveDraft(draft.id);
+    await persistenceStarted;
+
+    assert.deepEqual(host.savedUserEntryEvents, []);
+
+    releasePersistence();
+    await savePromise;
+    assert.equal(host.savedUserEntryEvents.length, 1);
+});
+
 test("comment mutation controller inserts child-targeted append drafts after the clicked child entry", async () => {
     const existing = createComment({ id: "thread-1", comment: "Original" });
     const draft: DraftComment = {
