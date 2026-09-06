@@ -144,7 +144,7 @@ Expected: all tests, lint, typecheck, compliance, bundle-size, and exact release
 
 Run `git diff --check`, inspect the staged diff for vault paths, comment IDs, tokens, credentials, and private URLs, and confirm the release guard ships only `main.js`, `manifest.json`, and `styles.css` without source maps or embedded sources.
 
-- [ ] **Step 4: Merge locally and verify the merged tree**
+- [x] **Step 4: Merge locally and verify the merged tree**
 
 Use the branch-finishing workflow to merge into `main`, then run `npm run build` again from the merged tree.
 
@@ -157,6 +157,6 @@ obsidian plugin:reload id=aside vault=<test-vault-name>
 
 Compare repository and installed `main.js`, `manifest.json`, and `styles.css` byte-for-byte.
 
-- [ ] **Step 6: Complete tracking**
+- [x] **Step 6: Complete tracking**
 
 Mark the associated spec items complete only after their verification evidence exists, then commit the tracking update.
