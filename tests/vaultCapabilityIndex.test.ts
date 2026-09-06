@@ -57,6 +57,64 @@ test("vault capability index stays current after create, metadata, rename, and d
     assert.deepEqual(index.listTagUsage(), [{ tag: "#new", usageCount: 1 }]);
 });
 
+test("vault capability index returns exact immutable tag membership", () => {
+    const index = new VaultCapabilityIndex();
+    index.seed([
+        createFile("docs/Alpha.md"),
+        createFile("other/Alpha.md"),
+        createFile("Beta.md"),
+    ], (file) => file.path === "Beta.md" ? ["#other"] : ["#Project", "#shared"]);
+
+    const projectFiles = index.listMarkdownFilesForTag(" #project ");
+    assert.deepEqual(projectFiles.map((file) => file.path), [
+        "docs/Alpha.md",
+        "other/Alpha.md",
+    ]);
+
+    projectFiles.pop();
+    assert.deepEqual(index.listMarkdownFilesForTag("#PROJECT").map((file) => file.path), [
+        "docs/Alpha.md",
+        "other/Alpha.md",
+    ]);
+    assert.deepEqual(index.listMarkdownFilesForTag("#missing"), []);
+    assert.deepEqual(index.listMarkdownFilesForTag(""), []);
+});
+
+test("reverse tag membership follows metadata update rename and delete", () => {
+    const index = new VaultCapabilityIndex();
+    const alpha = createFile("Alpha.md");
+    index.seed([alpha], () => ["#old", "#shared"]);
+
+    index.upsert(alpha, ["#new", "#shared"]);
+    assert.deepEqual(index.listMarkdownFilesForTag("#old"), []);
+    assert.deepEqual(
+        index.listMarkdownFilesForTag("#new").map((file) => file.path),
+        ["Alpha.md"],
+    );
+
+    const renamed = createFile("Archive/Alpha.md");
+    index.rename(renamed, "Alpha.md", ["#new"]);
+    assert.deepEqual(
+        index.listMarkdownFilesForTag("#new").map((file) => file.path),
+        ["Archive/Alpha.md"],
+    );
+    assert.deepEqual(index.listMarkdownFilesForTag("#shared"), []);
+
+    index.remove("Archive");
+    assert.deepEqual(index.listMarkdownFilesForTag("#new"), []);
+});
+
+test("non-markdown upserts remove stale reverse tag membership", () => {
+    const index = new VaultCapabilityIndex();
+    const markdown = createFile("Document.md");
+    index.seed([markdown], () => ["#project"]);
+
+    index.upsert(createFile("Document.pdf"), ["#project"]);
+    index.remove(markdown.path);
+
+    assert.deepEqual(index.listMarkdownFilesForTag("#project"), []);
+});
+
 test("vault capability index removes every indexed note under a deleted folder", () => {
     const index = new VaultCapabilityIndex();
     index.seed([

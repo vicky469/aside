@@ -27,9 +27,14 @@ function normalizeFileTags(tags: readonly string[]): string[] {
     return Array.from(normalizedByKey.values()).sort((left, right) => left.localeCompare(right));
 }
 
+function getNormalizedTagKey(tagText: string): string {
+    return normalizeTagText(tagText).slice(1).toLowerCase();
+}
+
 export class VaultCapabilityIndex {
     private readonly markdownFilesByPath = new Map<string, TFile>();
     private readonly tagsByFilePath = new Map<string, string[]>();
+    private readonly filePathsByTagKey = new Map<string, Set<string>>();
 
     public seed(
         files: readonly TFile[],
@@ -37,6 +42,7 @@ export class VaultCapabilityIndex {
     ): void {
         this.markdownFilesByPath.clear();
         this.tagsByFilePath.clear();
+        this.filePathsByTagKey.clear();
         for (const file of files) {
             this.upsert(file, getTags(file));
         }
@@ -47,8 +53,16 @@ export class VaultCapabilityIndex {
             this.remove(file.path);
             return;
         }
+        this.removePath(file.path);
+        const normalizedTags = normalizeFileTags(tags);
         this.markdownFilesByPath.set(file.path, file);
-        this.tagsByFilePath.set(file.path, normalizeFileTags(tags));
+        this.tagsByFilePath.set(file.path, normalizedTags);
+        for (const tag of normalizedTags) {
+            const tagKey = getNormalizedTagKey(tag);
+            const filePaths = this.filePathsByTagKey.get(tagKey) ?? new Set<string>();
+            filePaths.add(file.path);
+            this.filePathsByTagKey.set(tagKey, filePaths);
+        }
     }
 
     public rename(file: TFile, oldPath: string, tags: readonly string[]): void {
@@ -60,10 +74,22 @@ export class VaultCapabilityIndex {
         const prefix = `${path.replace(/\/+$/u, "")}/`;
         for (const filePath of Array.from(this.markdownFilesByPath.keys())) {
             if (filePath === path || filePath.startsWith(prefix)) {
-                this.markdownFilesByPath.delete(filePath);
-                this.tagsByFilePath.delete(filePath);
+                this.removePath(filePath);
             }
         }
+    }
+
+    private removePath(filePath: string): void {
+        for (const tag of this.tagsByFilePath.get(filePath) ?? []) {
+            const tagKey = getNormalizedTagKey(tag);
+            const filePaths = this.filePathsByTagKey.get(tagKey);
+            filePaths?.delete(filePath);
+            if (filePaths?.size === 0) {
+                this.filePathsByTagKey.delete(tagKey);
+            }
+        }
+        this.tagsByFilePath.delete(filePath);
+        this.markdownFilesByPath.delete(filePath);
     }
 
     public listMarkdownFiles(): TFile[] {
@@ -92,6 +118,18 @@ export class VaultCapabilityIndex {
         }
         return Array.from(usageByKey.values())
             .sort((left, right) => left.tag.localeCompare(right.tag));
+    }
+
+    public listMarkdownFilesForTag(tagText: string): TFile[] {
+        const tagKey = getNormalizedTagKey(tagText);
+        if (!tagKey) {
+            return [];
+        }
+
+        return Array.from(this.filePathsByTagKey.get(tagKey) ?? [])
+            .map((path) => this.markdownFilesByPath.get(path))
+            .filter((file): file is TFile => !!file)
+            .sort((left, right) => left.path.localeCompare(right.path));
     }
 
     public listMarkdownFilesInFolder(folder: TFolder): TFile[] {

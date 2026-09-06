@@ -162,7 +162,7 @@ git commit -m "refactor(tags): share fuzzy ranking"
 - Modify: `tests/vaultCapabilityIndex.test.ts`
 - Modify: `src/main.ts`
 
-- [ ] **Step 1: Write failing reverse-index lifecycle tests**
+- [x] **Step 1: Write failing reverse-index lifecycle tests**
 
 Extend `tests/vaultCapabilityIndex.test.ts`:
 
@@ -199,7 +199,7 @@ test("reverse tag membership follows metadata update rename and delete", () => {
 });
 ```
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
 Run:
 
@@ -209,7 +209,7 @@ Run:
 
 Expected: TypeScript fails because `listMarkdownFilesForTag` is missing.
 
-- [ ] **Step 3: Implement atomic forward/reverse updates**
+- [x] **Step 3: Implement atomic forward/reverse updates**
 
 Add `filePathsByTagKey = new Map<string, Set<string>>()`. Before overwriting a file, remove its old forward tags from reverse sets and delete empty sets. After storing normalized tags, add the path to every reverse set. Reuse this removal from `remove`, including folder-prefix deletion. Implement:
 
@@ -228,7 +228,7 @@ public listMarkdownFilesForTag(tagText: string): TFile[] {
 
 Ensure `seed` clears all three maps.
 
-- [ ] **Step 4: Expose the read-only adapter from `src/main.ts`**
+- [x] **Step 4: Expose the read-only adapter from `src/main.ts`**
 
 Add:
 
@@ -240,7 +240,7 @@ public getIndexedMarkdownFilesForTag(tagText: string): TFile[] {
 
 No Vault or metadata-cache call belongs in this adapter.
 
-- [ ] **Step 5: Run focused tests and verify GREEN**
+- [x] **Step 5: Run focused tests and verify GREEN**
 
 Run:
 
@@ -250,7 +250,7 @@ Run:
 
 Expected: all vault capability index tests pass.
 
-- [ ] **Step 6: Commit the slice**
+- [x] **Step 6: Commit the slice**
 
 ```bash
 git add src/core/vault/vaultCapabilityIndex.ts src/main.ts tests/vaultCapabilityIndex.test.ts
