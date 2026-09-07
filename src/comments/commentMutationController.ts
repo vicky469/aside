@@ -39,6 +39,7 @@ export type SaveDraftOptions = {
 };
 
 export type CommentMutationPersistBehaviorOptions = {
+    optimisticViewRefresh?: boolean;
     deferAggregateRefresh?: boolean;
     skipPersistedViewRefresh?: boolean;
     refreshEditorDecorations?: boolean;
@@ -56,6 +57,7 @@ export type NestCommentThreadOptions = CommentMutationPersistBehaviorOptions & {
 };
 
 const SAVE_DRAFT_FAILURE_NOTICE = "Unable to save this side note. Your draft was restored.";
+const MOVE_PERSIST_FAILURE_NOTICE = "Unable to save this side note move. The card was restored.";
 
 function buildBatchTagFileFailure(
     selectedThreadIds: readonly string[],
@@ -454,6 +456,7 @@ export class CommentMutationController {
         movedThreadId: string,
         targetThreadId: string,
         placement: ReorderPlacement,
+        options: CommentMutationPersistBehaviorOptions = {},
     ): Promise<boolean> {
         const file = this.host.getFileByPath(filePath);
         if (!this.host.isPageNoteCapableFile(file)) {
@@ -462,9 +465,8 @@ export class CommentMutationController {
 
         await this.host.loadCommentsForFile(file);
         const manager = this.host.getCommentManager();
-        const previousThreadIds = manager
-            .getThreadsForFile(file.path, { includeDeleted: true })
-            .map((thread) => thread.id);
+        const previousThreads = manager.getThreadsForFile(file.path, { includeDeleted: true });
+        const previousThreadIds = previousThreads.map((thread) => thread.id);
         const changed = manager.reorderThreadsForFile(
             file.path,
             movedThreadId,
@@ -478,9 +480,14 @@ export class CommentMutationController {
             return false;
         }
 
-        await this.host.persistCommentsForFile(file, this.buildPersistOptionsForFile(file, {
-            immediateAggregateRefresh: true,
-        }));
+        await this.persistMoveWithRollback(
+            file,
+            previousThreads,
+            options,
+            this.buildPersistOptionsForFile(file, this.buildPersistOptions(options, {
+                immediateAggregateRefresh: true,
+            })),
+        );
         return true;
     }
 
@@ -490,6 +497,7 @@ export class CommentMutationController {
         movedEntryId: string,
         targetEntryId: string,
         placement: ReorderPlacement,
+        options: CommentMutationPersistBehaviorOptions = {},
     ): Promise<boolean> {
         const file = this.host.getFileByPath(filePath);
         if (!this.host.isPageNoteCapableFile(file)) {
@@ -498,6 +506,7 @@ export class CommentMutationController {
 
         await this.host.loadCommentsForFile(file);
         const manager = this.host.getCommentManager();
+        const previousThreads = manager.getThreadsForFile(file.path, { includeDeleted: true });
         const thread = manager.getThreadById(threadId);
         if (thread?.filePath !== file.path) {
             return false;
@@ -514,9 +523,14 @@ export class CommentMutationController {
             return false;
         }
 
-        await this.host.persistCommentsForFile(file, this.buildPersistOptionsForFile(file, {
-            immediateAggregateRefresh: true,
-        }));
+        await this.persistMoveWithRollback(
+            file,
+            previousThreads,
+            options,
+            this.buildPersistOptionsForFile(file, this.buildPersistOptions(options, {
+                immediateAggregateRefresh: true,
+            })),
+        );
         return true;
     }
 
@@ -893,6 +907,11 @@ export class CommentMutationController {
             return false;
         }
 
+        const previousThreads = this.host.getCommentManager().getThreadsForFile(
+            latestTarget.file.path,
+            { includeDeleted: true },
+        );
+
         const nested = this.host.getCommentManager().nestThreadUnderThread(
             latestTarget.file.path,
             sourceThreadId,
@@ -904,7 +923,12 @@ export class CommentMutationController {
             return false;
         }
 
-        await this.host.persistCommentsForFile(latestTarget.file, this.buildPersistOptions(options));
+        await this.persistMoveWithRollback(
+            latestTarget.file,
+            previousThreads,
+            options,
+            this.buildPersistOptions(options),
+        );
 
         void this.host.log?.("info", "draft", "thread.nest.success", {
             sourceThreadId,
@@ -962,8 +986,9 @@ export class CommentMutationController {
             return false;
         }
 
-        const movedAt = this.host.now();
         const fileThreads = this.host.getCommentManager().getThreadsForFile(latestTarget.file.path, { includeDeleted: true });
+        const previousThreads = fileThreads;
+        const movedAt = this.host.now();
         const nextThreads = fileThreads.map((thread) => {
             if (thread.id === sourceThread.id) {
                 return {
@@ -986,7 +1011,12 @@ export class CommentMutationController {
         });
 
         this.host.getCommentManager().replaceThreadsForFile(latestTarget.file.path, nextThreads);
-        await this.host.persistCommentsForFile(latestTarget.file, this.buildPersistOptions(options));
+        await this.persistMoveWithRollback(
+            latestTarget.file,
+            previousThreads,
+            options,
+            this.buildPersistOptions(options),
+        );
 
         void this.host.log?.("info", "draft", "thread.entry.move.success", {
             commentId,
@@ -1046,6 +1076,34 @@ export class CommentMutationController {
             ...(options.refreshEditorDecorations === false ? { refreshEditorDecorations: false } : {}),
             ...(options.refreshMarkdownPreviews === false ? { refreshMarkdownPreviews: false } : {}),
         };
+    }
+
+    private async persistMoveWithRollback(
+        file: TFile,
+        previousThreads: CommentThread[],
+        options: CommentMutationPersistBehaviorOptions,
+        persistOptions: PersistOptions,
+    ): Promise<void> {
+        try {
+            if (options.optimisticViewRefresh === true) {
+                await this.host.refreshCommentViews({ skipDataRefresh: true });
+            }
+            await this.host.persistCommentsForFile(file, persistOptions);
+        } catch (error) {
+            this.host.getCommentManager().replaceThreadsForFile(file.path, previousThreads);
+            if (options.optimisticViewRefresh === true) {
+                try {
+                    await this.host.refreshCommentViews({ skipDataRefresh: true });
+                } catch (refreshError) {
+                    void this.host.log?.("warn", "draft", "thread.move.rollback_view.warn", {
+                        filePath: file.path,
+                        error: refreshError,
+                    });
+                }
+            }
+            this.host.showNotice(MOVE_PERSIST_FAILURE_NOTICE);
+            throw error;
+        }
     }
 
     private buildPersistOptionsForComment(

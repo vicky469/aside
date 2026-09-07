@@ -12,6 +12,7 @@ import { UpdateScriptCommandController } from "./agents/updateScriptCommandContr
 import { CommentHighlightController } from "./comments/commentHighlightController";
 import {
     CommentMutationController,
+    type CommentMutationPersistBehaviorOptions,
     type DeleteCommentOptions,
     type MoveCommentEntryOptions,
     type NestCommentThreadOptions,
@@ -2301,12 +2302,14 @@ export default class Aside extends Plugin {
         movedThreadId: string,
         targetThreadId: string,
         placement: ReorderPlacement,
+        options?: CommentMutationPersistBehaviorOptions,
     ): Promise<boolean> {
         return this.commentMutationController.reorderThreadsForFile(
             filePath,
             movedThreadId,
             targetThreadId,
             placement,
+            options,
         );
     }
 
@@ -2316,6 +2319,7 @@ export default class Aside extends Plugin {
         movedEntryId: string,
         targetEntryId: string,
         placement: ReorderPlacement,
+        options?: CommentMutationPersistBehaviorOptions,
     ): Promise<boolean> {
         return this.commentMutationController.reorderThreadEntries(
             filePath,
@@ -2323,6 +2327,7 @@ export default class Aside extends Plugin {
             movedEntryId,
             targetEntryId,
             placement,
+            options,
         );
     }
 

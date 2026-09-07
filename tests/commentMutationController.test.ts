@@ -1987,6 +1987,92 @@ test("comment mutation controller nests a root anchored thread under another thr
     assert.deepEqual(host.notices, []);
 });
 
+test("comment mutation controller renders a nested move before persistence settles", async () => {
+    const source = createComment({
+        id: "thread-1",
+        filePath: "Folder/Source.md",
+        selectedText: "Source anchor",
+        selectedTextHash: "hash:Source anchor",
+    });
+    const target = createComment({
+        id: "thread-2",
+        filePath: source.filePath,
+        selectedText: "Target anchor",
+        selectedTextHash: "hash:Target anchor",
+    });
+    let releasePersist = () => {};
+    let persistStarted = false;
+    const host = createHost({
+        knownComments: [source, target],
+        loadedComments: [source, target],
+        persistCommentsForFile: async () => {
+            persistStarted = true;
+            await new Promise<void>((resolve) => {
+                releasePersist = resolve;
+            });
+        },
+    });
+
+    const movePromise = host.controller.nestCommentThreadUnderThread(source.id, target.id, {
+        optimisticViewRefresh: true,
+        deferAggregateRefresh: true,
+        skipPersistedViewRefresh: true,
+        refreshEditorDecorations: false,
+        refreshMarkdownPreviews: false,
+    });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    assert.equal(persistStarted, true);
+    assert.equal(host.getRefreshCommentViewsCount(), 1);
+    assert.deepEqual(
+        host.manager.getThreadById(target.id)?.entries.map((entry) => entry.id),
+        [target.id, source.id],
+    );
+
+    releasePersist();
+    assert.equal(await movePromise, true);
+});
+
+test("comment mutation controller restores a nested move when persistence fails", async () => {
+    const source = createComment({
+        id: "thread-1",
+        filePath: "Folder/Source.md",
+        selectedText: "Source anchor",
+        selectedTextHash: "hash:Source anchor",
+    });
+    const target = createComment({
+        id: "thread-2",
+        filePath: source.filePath,
+        selectedText: "Target anchor",
+        selectedTextHash: "hash:Target anchor",
+    });
+    const host = createHost({
+        knownComments: [source, target],
+        loadedComments: [source, target],
+        persistCommentsForFile: async () => {
+            throw new Error("synthetic persistence failure");
+        },
+    });
+    const before = host.manager.getThreadsForFile(source.filePath, { includeDeleted: true });
+
+    await assert.rejects(
+        host.controller.nestCommentThreadUnderThread(source.id, target.id, {
+            optimisticViewRefresh: true,
+            skipPersistedViewRefresh: true,
+        }),
+        /synthetic persistence failure/,
+    );
+
+    assert.deepEqual(
+        host.manager.getThreadsForFile(source.filePath, { includeDeleted: true }),
+        before,
+    );
+    assert.equal(host.getRefreshCommentViewsCount(), 2);
+    assert.deepEqual(host.notices, [
+        "Unable to save this side note move. The card was restored.",
+    ]);
+});
+
 test("comment mutation controller moves child entries after a target child", async () => {
     const source = createComment({
         id: "thread-1",

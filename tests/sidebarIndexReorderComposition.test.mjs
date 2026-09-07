@@ -30,3 +30,30 @@ test("Index drops reorder or reparent child entries through canonical handlers",
     assert.match(dropIndexBranch, /this\.plugin\.reorderThreadEntries\(/);
     assert.match(dropIndexBranch, /this\.moveSidebarCommentEntryToThread\(/);
 });
+
+test("sidebar drop reorders request an optimistic render", () => {
+    assert.ok(methodSource, "missing sidebar reorder interaction method");
+    const reorderCalls = methodSource.match(/this\.plugin\.reorder(?:ThreadsForFile|ThreadEntries)\(/g) ?? [];
+    const optimisticOptions = methodSource.match(/optimisticViewRefresh: true/g) ?? [];
+    const skippedPersistedRefreshes = methodSource.match(/skipPersistedViewRefresh: true/g) ?? [];
+
+    assert.equal(reorderCalls.length, 4);
+    assert.equal(optimisticOptions.length, reorderCalls.length);
+    assert.equal(skippedPersistedRefreshes.length, reorderCalls.length);
+});
+
+test("nested moves preserve focus without forcing a post-save scroll", () => {
+    const nestMethod = asideViewSource.match(
+        /private async nestSidebarCommentThreadUnderThread\([\s\S]*?\n {4}private async moveSidebarCommentEntryToThread\(/,
+    )?.[0];
+    const moveMethod = asideViewSource.match(
+        /private async moveSidebarCommentEntryToThread\([\s\S]*?\n {4}private async togglePinnedSidebarMode\(/,
+    )?.[0];
+
+    assert.ok(nestMethod);
+    assert.ok(moveMethod);
+    assert.match(nestMethod, /setActiveComment\(sourceThreadId\)/);
+    assert.match(moveMethod, /setActiveComment\(entryId\)/);
+    assert.doesNotMatch(nestMethod, /highlightComment\(/);
+    assert.doesNotMatch(moveMethod, /highlightComment\(/);
+});
