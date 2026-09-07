@@ -20,6 +20,8 @@ class FakeElement {
         contains: (_className: string): boolean => false,
     };
     parentElement: FakeElement | null = null;
+    scrollTop = 0;
+    scrollLeft = 0;
 
     get isConnected(): boolean {
         return this.parentElement !== null;
@@ -170,7 +172,10 @@ test("reconcileSidebarItems can retain a thread controller while replacing its r
     const existing = createNode("thread:a", "old");
     const replacement = createNode("thread:a", "new");
     const container = createContainer([existing]);
+    container.scrollTop = 37;
+    container.scrollLeft = 11;
     const replacedPairs: Array<[string, HTMLElement, HTMLElement]> = [];
+    const connectionStates: Array<[boolean, boolean]> = [];
     const removedThreadIds: string[] = [];
 
     await reconcileSidebarItems(
@@ -179,6 +184,9 @@ test("reconcileSidebarItems can retain a thread controller while replacing its r
         {
             onReplaceThread: (threadId: string, previous: HTMLElement, next: HTMLElement) => {
                 replacedPairs.push([threadId, previous, next]);
+                connectionStates.push([previous.isConnected, next.isConnected]);
+                container.scrollTop = 0;
+                container.scrollLeft = 0;
                 return true;
             },
             onRemoveThread: (threadId) => removedThreadIds.push(threadId),
@@ -190,6 +198,9 @@ test("reconcileSidebarItems can retain a thread controller while replacing its r
         existing as unknown as HTMLElement,
         replacement as unknown as HTMLElement,
     ]]);
+    assert.deepEqual(connectionStates, [[true, true]]);
+    assert.equal(container.scrollTop, 37);
+    assert.equal(container.scrollLeft, 11);
     assert.deepEqual(removedThreadIds, []);
     assert.equal(container.children[0], replacement);
 });

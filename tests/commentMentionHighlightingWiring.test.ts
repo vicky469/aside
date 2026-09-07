@@ -28,7 +28,7 @@ test("AsideView supplies the plugin actionable predicate to comment hosts", () =
 test("AsideView preserves streamed reply controllers across both thread reconcilers", () => {
     const source = readFileSync("src/ui/views/AsideView.ts", "utf8");
     const adapters = source.match(
-        /onReplaceThread:\s*\(threadId,\s*_previousThreadEl,\s*nextThreadEl\)\s*=>\s*this\.handoffStreamedReplyController\(/g,
+        /onReplaceThread:\s*\(threadId,\s*previousThreadEl,\s*nextThreadEl\)\s*=>\s*\{\s*handoffSidebarDraftEditor\(previousThreadEl, nextThreadEl\);\s*return this\.handoffStreamedReplyController\(threadId, nextThreadEl\);\s*\}/g,
     ) ?? [];
 
     assert.equal(adapters.length, 2);

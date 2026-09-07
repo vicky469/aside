@@ -21,6 +21,7 @@
 - Modify `tests/sidebarPageRenderSignature.test.ts`: cover structural draft identity and live surrounding run updates.
 - Modify `tests/sidebarItemReconciler.test.ts`: cover mounted replacement timing and top-level draft node stability.
 - Create `tests/sidebarDraftEditorHandoff.test.ts`: cover nested append/edit subtree preservation.
+- Modify `tests/commentMentionHighlightingWiring.test.ts`: verify both sidebar adapters preserve draft and stream ownership in order.
 - Modify `tests/sidebarDraftComment.test.ts`: cover preview readiness policy.
 - Create `tests/sidebarDraftVisibilityStyles.test.mjs`: cover the fail-open CSS and blur wiring.
 - Modify `docs/superpowers/specs/2026-09-07-stable-draft-editor-reconciliation-design.md`: record completed implementation and verification evidence.
@@ -108,7 +109,7 @@ Do not change persisted thread-entry, agent-run, or script-run identities.
 
 Run the Step 3 commands. Expected: all focused tests pass.
 
-- [ ] **Step 6: Commit structural identity**
+- [x] **Step 6: Commit structural identity**
 
 ```bash
 git add src/ui/views/sidebarPageRenderSignature.ts tests/sidebarPageRenderSignature.test.ts tests/sidebarItemReconciler.test.ts
@@ -120,11 +121,12 @@ git commit -m "fix(sidebar): keep draft nodes stable"
 **Files:**
 - Modify: `tests/sidebarItemReconciler.test.ts`
 - Create: `tests/sidebarDraftEditorHandoff.test.ts`
+- Modify: `tests/commentMentionHighlightingWiring.test.ts`
 - Modify: `src/ui/views/sidebarItemReconciler.ts:28-83`
 - Create: `src/ui/views/sidebarDraftEditorHandoff.ts`
 - Modify: `src/ui/views/AsideView.ts:2238-2250,2517-2528`
 
-- [ ] **Step 1: Write the failing connected-handoff test**
+- [x] **Step 1: Write the failing connected-handoff test**
 
 Extend the reconciler test callback to capture connection state:
 
@@ -143,7 +145,7 @@ assert.deepEqual(connectionStates, [[true, true]]);
 
 Expected under current behavior: the new node is still detached when the callback runs.
 
-- [ ] **Step 2: Write failing nested handoff tests**
+- [x] **Step 2: Write failing nested handoff tests**
 
 Build synthetic old and new thread trees containing matching `[data-draft-id]` nodes. Cover both append-card and inline-edit shapes. Assert:
 
@@ -155,9 +157,9 @@ assert.equal(mountedDraft.selectionStart, 4);
 assert.equal(mountedDraft.scrollTop, 18);
 ```
 
-Add mismatch and disconnected cases that return `false` and leave both trees unchanged.
+Assert that a focused textarea is refocused on the same node with `preventScroll: true`. Add mismatch and disconnected cases that return `false` and leave both trees unchanged.
 
-- [ ] **Step 3: Run the focused tests and witness RED**
+- [x] **Step 3: Run the focused tests and witness RED**
 
 Run:
 
@@ -168,11 +170,11 @@ node --test .test-dist/tests/sidebarItemReconciler.test.js .test-dist/tests/side
 
 Expected: FAIL because the handoff module does not exist and replacement callbacks run before insertion.
 
-- [ ] **Step 4: Move replacement callbacks after insertion**
+- [x] **Step 4: Move replacement callbacks after insertion**
 
-In `reconcileSidebarItems()`, keep collecting replacement pairs, insert every desired node first, then call `onReplaceThread`, and finally remove undesired old nodes. Preserve the existing `onRemoveThread` behavior when the callback does not retain its controller.
+In `reconcileSidebarItems()`, keep collecting replacement pairs, snapshot the container and ancestor scroll positions immediately before DOM mutation, insert every desired node first, then call `onReplaceThread`, remove undesired old nodes, and restore the captured scroll positions. Preserve the existing `onRemoveThread` behavior when the callback does not retain its controller.
 
-- [ ] **Step 5: Implement one shared draft-subtree handoff**
+- [x] **Step 5: Implement one shared draft-subtree handoff**
 
 Create:
 
@@ -193,18 +195,25 @@ export function handoffSidebarDraftEditor(
         return false;
     }
 
+    const activeElement = previousDraft.ownerDocument.activeElement;
+    const focusTarget = activeElement
+        && previousDraft.contains(activeElement)
+        && typeof (activeElement as HTMLElement).focus === "function"
+        ? activeElement as HTMLElement
+        : null;
     nextDraft.replaceWith(previousDraft);
+    focusTarget?.focus({ preventScroll: true });
     return true;
 }
 ```
 
 Use this helper in both note and Index `onReplaceThread` adapters before handing off streamed-reply controllers. The callback return value remains owned by the stream-controller handoff.
 
-- [ ] **Step 6: Run the focused tests and witness GREEN**
+- [x] **Step 6: Run the focused tests and witness GREEN**
 
 Run the Step 3 commands. Expected: all focused tests pass.
 
-- [ ] **Step 7: Re-run the change-surface search**
+- [x] **Step 7: Re-run the change-surface search**
 
 Run:
 

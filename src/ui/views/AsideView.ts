@@ -48,6 +48,7 @@ import { copyTextToClipboard } from "../copyTextToClipboard";
 import { copyCommentLocationToClipboard } from "../copyCommentLocationToClipboard";
 import { buildMentionSuggestions } from "../editor/commentMentionSuggestions";
 import { SidebarDraftEditorController } from "./sidebarDraftEditor";
+import { handoffSidebarDraftEditor } from "./sidebarDraftEditorHandoff";
 import {
     renderDraftCommentCard,
     renderInlineEditDraftContent,
@@ -2244,8 +2245,10 @@ export default class AsideView extends ItemView {
                     && this.file?.path === file.path
                     && indexSearchRequestVersion === this.indexSidebarSearchRequestVersion
                 ),
-                onReplaceThread: (threadId, _previousThreadEl, nextThreadEl) =>
-                    this.handoffStreamedReplyController(threadId, nextThreadEl),
+                onReplaceThread: (threadId, previousThreadEl, nextThreadEl) => {
+                    handoffSidebarDraftEditor(previousThreadEl, nextThreadEl);
+                    return this.handoffStreamedReplyController(threadId, nextThreadEl);
+                },
                 onRemoveThread: (threadId) => this.removeStreamedReplyControllersForThread(threadId),
             });
             if (!completed) {
@@ -2520,8 +2523,10 @@ export default class AsideView extends ItemView {
         });
         const completed = await reconcileSidebarItems(shell.commentsBodyEl, renderDescriptors, {
             isCurrent: () => renderVersion === this.renderVersion && this.file?.path === file.path,
-            onReplaceThread: (threadId, _previousThreadEl, nextThreadEl) =>
-                this.handoffStreamedReplyController(threadId, nextThreadEl),
+            onReplaceThread: (threadId, previousThreadEl, nextThreadEl) => {
+                handoffSidebarDraftEditor(previousThreadEl, nextThreadEl);
+                return this.handoffStreamedReplyController(threadId, nextThreadEl);
+            },
             onRemoveThread: (threadId) => this.removeStreamedReplyControllersForThread(threadId),
         });
         if (!completed) {
