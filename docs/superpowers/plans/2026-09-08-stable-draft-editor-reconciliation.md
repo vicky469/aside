@@ -32,7 +32,7 @@
 - Modify: `tests/sidebarItemReconciler.test.ts`
 - Modify: `src/ui/views/sidebarPageRenderSignature.ts:43-64`
 
-- [ ] **Step 1: Write failing signature tests**
+- [x] **Step 1: Write failing signature tests**
 
 Add a focused test proving text edits do not alter either top-level or nested draft identity, while saving state and surrounding agent state still do:
 
@@ -64,11 +64,11 @@ test("draft render signatures ignore live editor text", () => {
 
 Keep the existing saving-state assertion and add or retain an agent-run status assertion so removing the body hash does not freeze true surrounding updates.
 
-- [ ] **Step 2: Write the failing top-level node-stability test**
+- [x] **Step 2: Write the failing top-level node-stability test**
 
 In `tests/sidebarItemReconciler.test.ts`, compose a draft signature before and after changing only `comment`. Give the fake node `value`, `selectionStart`, `selectionEnd`, and `scrollTop` fields, reconcile the second descriptor, and assert the same object and browser-owned fields remain unchanged while the descriptor renderer is not called.
 
-- [ ] **Step 3: Run the focused tests and witness RED**
+- [x] **Step 3: Run the focused tests and witness RED**
 
 Run:
 
@@ -79,7 +79,7 @@ node --test .test-dist/tests/sidebarPageRenderSignature.test.js .test-dist/tests
 
 Expected: FAIL because `getDraftIdentity()` still hashes `draft.comment`, making reconciliation replace the draft node.
 
-- [ ] **Step 4: Remove mutable body text from structural identity**
+- [x] **Step 4: Remove mutable body text from structural identity**
 
 Change `getDraftIdentity()` to end with the structural thread relationship:
 
@@ -104,7 +104,7 @@ return [
 
 Do not change persisted thread-entry, agent-run, or script-run identities.
 
-- [ ] **Step 5: Run the focused tests and witness GREEN**
+- [x] **Step 5: Run the focused tests and witness GREEN**
 
 Run the Step 3 commands. Expected: all focused tests pass.
 

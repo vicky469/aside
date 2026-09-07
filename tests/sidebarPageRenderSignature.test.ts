@@ -426,6 +426,55 @@ test("buildPageSidebarDraftRenderSignature changes only for the matching active 
     assert.notEqual(inactive, active);
 });
 
+test("draft render signatures ignore live editor text", () => {
+    const topLevelDraft = createDraft({
+        id: "draft-top",
+        mode: "new",
+        threadId: undefined,
+        comment: "first",
+    });
+    const editedTopLevelDraft = {
+        ...topLevelDraft,
+        comment: "first and second",
+    };
+
+    assert.equal(
+        buildPageSidebarDraftRenderSignature(topLevelDraft, "draft-top"),
+        buildPageSidebarDraftRenderSignature(editedTopLevelDraft, "draft-top"),
+    );
+
+    const appendDraft = createDraft({
+        id: "draft-append",
+        mode: "append",
+        threadId: "thread-1",
+        comment: "first",
+    });
+    const baseOptions: Parameters<typeof buildPageSidebarThreadRenderSignature>[0] = {
+        thread: createThread(),
+        activeCommentId: "draft-append",
+        isPinned: false,
+        showNestedComments: true,
+        showNestedCommentsByDefault: true,
+        isSelectedForTagBatch: false,
+        enableTagSelection: false,
+        enablePageThreadReorder: true,
+        editDraftComment: null,
+        appendDraftComment: appendDraft,
+        threadAgentRuns: [],
+    };
+
+    assert.equal(
+        buildPageSidebarThreadRenderSignature(baseOptions),
+        buildPageSidebarThreadRenderSignature({
+            ...baseOptions,
+            appendDraftComment: {
+                ...appendDraft,
+                comment: "first and second",
+            },
+        }),
+    );
+});
+
 test("draft render signatures change as persistence starts", () => {
     const topLevelDraft = createDraft({ id: "draft-top", mode: "new", threadId: undefined });
     const appendDraft = createDraft({ id: "draft-append", mode: "append", threadId: "thread-1" });

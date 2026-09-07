@@ -1,9 +1,11 @@
 import * as assert from "node:assert/strict";
 import test from "node:test";
+import type { DraftComment } from "../src/domain/drafts";
 import {
     reconcileSidebarItems,
     type SidebarItemRenderDescriptor,
 } from "../src/ui/views/sidebarItemReconciler";
+import { buildPageSidebarDraftRenderSignature } from "../src/ui/views/sidebarPageRenderSignature";
 
 class FakeChildren extends Array<FakeElement> {
     item(index: number): FakeElement | null {
@@ -95,6 +97,55 @@ test("reconcileSidebarItems reuses unchanged keyed nodes and renders only change
     assert.equal(completed, true);
     assert.equal(container.children[0], existing);
     assert.equal(renderCount, 1);
+});
+
+test("reconcileSidebarItems keeps a mounted draft editor stable as its text changes", async () => {
+    const draft: DraftComment = {
+        id: "draft-1",
+        filePath: "docs/note.md",
+        startLine: 4,
+        startChar: 2,
+        endLine: 4,
+        endChar: 9,
+        selectedText: "selected text",
+        selectedTextHash: "hash:selected",
+        comment: "first",
+        timestamp: 100,
+        anchorKind: "selection",
+        mode: "new",
+    };
+    const originalSignature = buildPageSidebarDraftRenderSignature(draft, "draft-1");
+    const existing = Object.assign(createNode("draft:draft-1", originalSignature), {
+        value: "first and second",
+        selectionStart: 7,
+        selectionEnd: 10,
+        scrollTop: 18,
+    });
+    const container = createContainer([existing]);
+    let renderCount = 0;
+
+    const completed = await reconcileSidebarItems(
+        container as unknown as HTMLElement,
+        [descriptor(
+            "draft:draft-1",
+            buildPageSidebarDraftRenderSignature({
+                ...draft,
+                comment: "first and second",
+            }, "draft-1"),
+            async () => {
+                renderCount += 1;
+                return createNode("draft:draft-1", "replacement");
+            },
+        )],
+    );
+
+    assert.equal(completed, true);
+    assert.equal(container.children[0], existing);
+    assert.equal(existing.value, "first and second");
+    assert.equal(existing.selectionStart, 7);
+    assert.equal(existing.selectionEnd, 10);
+    assert.equal(existing.scrollTop, 18);
+    assert.equal(renderCount, 0);
 });
 
 test("reconcileSidebarItems reorders retained nodes and removes obsolete nodes", async () => {
