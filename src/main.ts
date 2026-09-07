@@ -364,6 +364,7 @@ export default class Aside extends Plugin {
         loadCommentsForFile: (file) => this.loadCommentsForFile(file),
         persistCommentsForFile: (file, options) => this.persistCommentsForFile(file, options),
         getCommentManager: () => this.commentManager,
+        updateIndexedThreadsForFile: (filePath, threads) => this.aggregateCommentIndex.updateFile(filePath, threads),
         activateViewAndHighlightComment: (commentId) => this.activateViewAndHighlightComment(commentId),
         openMoveTargetFile: async (file) => {
             const targetLeaf = this.commentNavigationController.getOpenFileLeaf(file.path)

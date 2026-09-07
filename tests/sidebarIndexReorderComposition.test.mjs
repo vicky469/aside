@@ -36,10 +36,12 @@ test("sidebar drop reorders request an optimistic render", () => {
     const reorderCalls = methodSource.match(/this\.plugin\.reorder(?:ThreadsForFile|ThreadEntries)\(/g) ?? [];
     const optimisticOptions = methodSource.match(/optimisticViewRefresh: true/g) ?? [];
     const skippedPersistedRefreshes = methodSource.match(/skipPersistedViewRefresh: true/g) ?? [];
+    const deferredAggregateRefreshes = methodSource.match(/deferAggregateRefresh: true/g) ?? [];
 
     assert.equal(reorderCalls.length, 4);
     assert.equal(optimisticOptions.length, reorderCalls.length);
     assert.equal(skippedPersistedRefreshes.length, reorderCalls.length);
+    assert.equal(deferredAggregateRefreshes.length, reorderCalls.length);
 });
 
 test("nested moves preserve focus without forcing a post-save scroll", () => {

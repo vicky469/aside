@@ -157,6 +157,7 @@ export interface CommentMutationHost {
     loadCommentsForFile(file: TFile): Promise<unknown>;
     persistCommentsForFile(file: TFile, options?: PersistOptions): Promise<void>;
     getCommentManager(): CommentManager;
+    updateIndexedThreadsForFile(filePath: string, threads: CommentThread[]): void;
     activateViewAndHighlightComment(commentId: string): Promise<void>;
     openMoveTargetFile(file: TFile): Promise<void>;
     hashText(text: string): Promise<string>;
@@ -463,8 +464,17 @@ export class CommentMutationController {
             return false;
         }
 
-        await this.host.loadCommentsForFile(file);
         const manager = this.host.getCommentManager();
+        const loadedMovedThread = manager.getThreadById(movedThreadId);
+        const loadedTargetThread = manager.getThreadById(targetThreadId);
+        if (
+            loadedMovedThread?.id !== movedThreadId
+            || loadedTargetThread?.id !== targetThreadId
+            || loadedMovedThread.filePath !== file.path
+            || loadedTargetThread.filePath !== file.path
+        ) {
+            await this.host.loadCommentsForFile(file);
+        }
         const previousThreads = manager.getThreadsForFile(file.path, { includeDeleted: true });
         const previousThreadIds = previousThreads.map((thread) => thread.id);
         const changed = manager.reorderThreadsForFile(
@@ -504,10 +514,17 @@ export class CommentMutationController {
             return false;
         }
 
-        await this.host.loadCommentsForFile(file);
         const manager = this.host.getCommentManager();
+        let thread = manager.getThreadById(threadId);
+        if (
+            thread?.filePath !== file.path
+            || !thread.entries.some((entry) => entry.id === movedEntryId)
+            || !thread.entries.some((entry) => entry.id === targetEntryId)
+        ) {
+            await this.host.loadCommentsForFile(file);
+            thread = manager.getThreadById(threadId);
+        }
         const previousThreads = manager.getThreadsForFile(file.path, { includeDeleted: true });
-        const thread = manager.getThreadById(threadId);
         if (thread?.filePath !== file.path) {
             return false;
         }
@@ -1086,12 +1103,17 @@ export class CommentMutationController {
     ): Promise<void> {
         try {
             if (options.optimisticViewRefresh === true) {
+                this.host.updateIndexedThreadsForFile(
+                    file.path,
+                    this.host.getCommentManager().getThreadsForFile(file.path, { includeDeleted: true }),
+                );
                 await this.host.refreshCommentViews({ skipDataRefresh: true });
             }
             await this.host.persistCommentsForFile(file, persistOptions);
         } catch (error) {
             this.host.getCommentManager().replaceThreadsForFile(file.path, previousThreads);
             if (options.optimisticViewRefresh === true) {
+                this.host.updateIndexedThreadsForFile(file.path, previousThreads);
                 try {
                     await this.host.refreshCommentViews({ skipDataRefresh: true });
                 } catch (refreshError) {

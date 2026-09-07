@@ -1024,7 +1024,10 @@ export default class AsideView extends ItemView {
                 : {
                     insertAfterCommentId,
                     optimisticViewRefresh: true,
+                    deferAggregateRefresh: true,
                     skipPersistedViewRefresh: true,
+                    refreshEditorDecorations: false,
+                    refreshMarkdownPreviews: false,
                 },
         );
         if (!nested) {
@@ -1059,7 +1062,10 @@ export default class AsideView extends ItemView {
                 : {
                     insertAfterCommentId,
                     optimisticViewRefresh: true,
+                    deferAggregateRefresh: true,
                     skipPersistedViewRefresh: true,
+                    refreshEditorDecorations: false,
+                    refreshMarkdownPreviews: false,
                 },
         );
         if (!moved) {
@@ -5019,7 +5025,10 @@ export default class AsideView extends ItemView {
                         indexDropTarget.placement,
                         {
                             optimisticViewRefresh: true,
+                            deferAggregateRefresh: true,
                             skipPersistedViewRefresh: true,
+                            refreshEditorDecorations: false,
+                            refreshMarkdownPreviews: false,
                         },
                     );
                     return;
@@ -5034,7 +5043,10 @@ export default class AsideView extends ItemView {
                             entryDropTarget.placement,
                             {
                                 optimisticViewRefresh: true,
+                                deferAggregateRefresh: true,
                                 skipPersistedViewRefresh: true,
+                                refreshEditorDecorations: false,
+                                refreshMarkdownPreviews: false,
                             },
                         );
                         return;

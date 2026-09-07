@@ -1,7 +1,7 @@
 import * as assert from "node:assert/strict";
 import test from "node:test";
 import type { TFile } from "obsidian";
-import { CommentManager, type Comment } from "../src/commentManager";
+import { CommentManager, type Comment, type CommentThread } from "../src/commentManager";
 import {
     CommentMutationController,
     type CommentMutationHost,
@@ -89,6 +89,13 @@ function createHost(options: {
     const savedUserEntryEvents: SavedUserEntryEvent[] = [];
     let refreshCommentViewsCount = 0;
     let refreshEditorDecorationsCount = 0;
+    const indexedThreadsByFile = new Map<string, CommentThread[]>();
+    for (const comment of options.loadedComments ?? options.knownComments ?? []) {
+        indexedThreadsByFile.set(
+            comment.filePath,
+            manager.getThreadsForFile(comment.filePath, { includeDeleted: true }),
+        );
+    }
 
     const filesByPath = new Map<string, TFile>();
     for (const comment of options.knownComments ?? options.loadedComments ?? []) {
@@ -172,6 +179,9 @@ function createHost(options: {
             await options.persistCommentsForFile?.(file, persistOptions);
         },
         getCommentManager: () => manager,
+        updateIndexedThreadsForFile: (filePath, threads) => {
+            indexedThreadsByFile.set(filePath, threads);
+        },
         activateViewAndHighlightComment: async (commentId) => {
             highlightedCommentIds.push(commentId);
         },
@@ -204,6 +214,7 @@ function createHost(options: {
         getSavingDraftCommentId: () => savingDraftCommentId,
         getRefreshCommentViewsCount: () => refreshCommentViewsCount,
         getRefreshEditorDecorationsCount: () => refreshEditorDecorationsCount,
+        getIndexedThreadsForFile: (filePath: string) => indexedThreadsByFile.get(filePath) ?? [],
     };
 }
 
@@ -1228,7 +1239,7 @@ test("comment mutation controller reorders root page-note threads for non-markdo
         host.manager.getThreadsForFile(filePath).map((thread) => thread.id),
         [third.id, first.id, second.id],
     );
-    assert.deepEqual(host.loadedFiles, [filePath]);
+    assert.deepEqual(host.loadedFiles, []);
     assert.deepEqual(host.persistedFiles, [{
         path: filePath,
         immediateAggregateRefresh: true,
@@ -1271,7 +1282,7 @@ test("comment mutation controller reorders child page-note entries for non-markd
         host.manager.getThreadById(root.id)?.entries.map((entry) => entry.id),
         [root.id, "entry-3", "entry-2"],
     );
-    assert.deepEqual(host.loadedFiles, [filePath]);
+    assert.deepEqual(host.loadedFiles, []);
     assert.deepEqual(host.persistedFiles, [{
         path: filePath,
         immediateAggregateRefresh: true,
@@ -1346,7 +1357,7 @@ test("comment mutation controller does not persist already-satisfied root thread
         host.manager.getThreadsForFile(filePath).map((thread) => thread.id),
         [first.id, second.id, third.id],
     );
-    assert.deepEqual(host.loadedFiles, [filePath, filePath]);
+    assert.deepEqual(host.loadedFiles, []);
     assert.deepEqual(host.persistedFiles, []);
 });
 
@@ -1389,7 +1400,7 @@ test("comment mutation controller does not persist already-satisfied child entry
         host.manager.getThreadById(root.id)?.entries.map((entry) => entry.id),
         [root.id, "entry-2", "entry-3"],
     );
-    assert.deepEqual(host.loadedFiles, [filePath, filePath]);
+    assert.deepEqual(host.loadedFiles, []);
     assert.deepEqual(host.persistedFiles, []);
 });
 
@@ -1441,7 +1452,7 @@ test("comment mutation controller does not persist invalid page-note reorders", 
 
     assert.equal(rootReordered, false);
     assert.equal(childReordered, false);
-    assert.deepEqual(host.loadedFiles, [filePath, filePath]);
+    assert.deepEqual(host.loadedFiles, [filePath]);
     assert.deepEqual(host.persistedFiles, []);
 });
 
@@ -2028,6 +2039,10 @@ test("comment mutation controller renders a nested move before persistence settl
         host.manager.getThreadById(target.id)?.entries.map((entry) => entry.id),
         [target.id, source.id],
     );
+    assert.deepEqual(
+        host.getIndexedThreadsForFile(source.filePath).map((thread) => thread.id),
+        [target.id],
+    );
 
     releasePersist();
     assert.equal(await movePromise, true);
@@ -2067,6 +2082,7 @@ test("comment mutation controller restores a nested move when persistence fails"
         host.manager.getThreadsForFile(source.filePath, { includeDeleted: true }),
         before,
     );
+    assert.deepEqual(host.getIndexedThreadsForFile(source.filePath), before);
     assert.equal(host.getRefreshCommentViewsCount(), 2);
     assert.deepEqual(host.notices, [
         "Unable to save this side note move. The card was restored.",

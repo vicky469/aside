@@ -44,6 +44,10 @@ import {
     retargetCommentThreads,
     type CommentThreadRetargetOptions,
 } from "../domain/comments/commentThreadRetarget";
+import {
+    reconcileAnchoredNestedThreadDuplicates,
+    type CommentThreadReconciliationResult,
+} from "../domain/comments/commentThreadReconciliation";
 
 type PersistOptions = {
     immediateAggregateRefresh?: boolean;
@@ -1638,6 +1642,13 @@ export class CommentPersistenceController {
     }
 
     private async normalizeThreadsForFile(filePath: string, threads: CommentThread[]): Promise<CommentThread[]> {
+        return (await this.normalizeThreadsForFileWithReconciliation(filePath, threads)).threads;
+    }
+
+    private async normalizeThreadsForFileWithReconciliation(
+        filePath: string,
+        threads: CommentThread[],
+    ): Promise<CommentThreadReconciliationResult> {
         const normalizedThreads: CommentThread[] = [];
 
         for (const parsedThread of threads) {
@@ -1679,7 +1690,9 @@ export class CommentPersistenceController {
             normalizedThreads.push(normalizeCommentThread(thread));
         }
 
-        return purgeExpiredDeletedThreads(normalizedThreads);
+        return reconcileAnchoredNestedThreadDuplicates(
+            purgeExpiredDeletedThreads(normalizedThreads),
+        );
     }
 
     private async parseAndNormalizeFileComments(filePath: string, noteContent: string): Promise<ParsedNoteComments> {
@@ -1834,9 +1847,10 @@ export class CommentPersistenceController {
                 });
                 continue;
             }
-            const normalizedThreads = normalizedExistingThreads && normalizedSnapshotThreads.length > 0
+            const mergedThreads = normalizedExistingThreads && normalizedSnapshotThreads.length > 0
                 ? mergeSnapshotThreadsWithSidecar(normalizedExistingThreads, normalizedSnapshotThreads)
                 : normalizedSnapshotThreads;
+            const normalizedThreads = reconcileAnchoredNestedThreadDuplicates(mergedThreads).threads;
             if (
                 normalizedExistingThreads
                 && areCommentThreadListsEqual(normalizedExistingThreads, normalizedThreads)
@@ -1875,7 +1889,11 @@ export class CommentPersistenceController {
     }
 
     private async compactSyncedSideNoteEventsForSnapshots(snapshots: SideNoteSyncSnapshotInput[]): Promise<void> {
-        const compacted = await this.syncEventStore.compactProcessedEventsForSnapshots(snapshots);
+        const reconciledSnapshots = snapshots.map((snapshot) => ({
+            ...snapshot,
+            threads: reconcileAnchoredNestedThreadDuplicates(snapshot.threads).threads,
+        }));
+        const compacted = await this.syncEventStore.compactProcessedEventsForSnapshots(reconciledSnapshots);
         if (compacted.removedEventCount === 0 && compacted.snapshotCount === 0) {
             return;
         }
@@ -2209,9 +2227,21 @@ export class CommentPersistenceController {
         });
 
         if (storagePlan.action === "use-sidecar" && sidecarThreads) {
+            const reconciled = await this.normalizeThreadsForFileWithReconciliation(filePath, sidecarThreads);
+            if (reconciled.removedRootThreadIds.length > 0) {
+                await this.writeSourceAndPathSidecars(sourceRecord.sourceId, filePath, reconciled.threads);
+                await this.compactSyncedSideNoteEventsForSnapshots([{
+                    notePath: filePath,
+                    threads: reconciled.threads,
+                }]);
+                void this.host.log?.("info", "persistence", "storage.duplicate-root.repaired", {
+                    filePath,
+                    repairedCount: reconciled.removedRootThreadIds.length,
+                });
+            }
             return {
                 mainContent: inlineParsed.mainContent,
-                threads: await this.normalizeThreadsForFile(filePath, sidecarThreads),
+                threads: reconciled.threads,
                 source: storagePlan.source,
             };
         }
