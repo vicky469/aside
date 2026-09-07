@@ -7,6 +7,11 @@ import { parseNoteComments } from "../src/core/storage/noteCommentStorage";
 import { AggregateCommentIndex } from "../src/index/AggregateCommentIndex";
 import type { PersistedPluginData } from "../src/settings/indexNoteSettingsPlanner";
 
+const ACTIVE_EVENT_CONTEXT = {
+    signal: new AbortController().signal,
+    isActive: () => true,
+};
+
 class CollisionAwareAdapter implements Pick<DataAdapter, "exists" | "mkdir" | "write" | "read" | "remove" | "rename" | "list"> {
     public readonly directories = new Set<string>();
     public readonly files = new Map<string, string>();
@@ -145,9 +150,18 @@ async function settlesWithinMicrotasks(promise: Promise<void>, turnCount = 20): 
     return settled;
 }
 
-function createHarness(files: TFile[], threads: CommentThread[]) {
+function createHarness(
+    files: TFile[],
+    threads: CommentThread[],
+    options: {
+        beforePersistedWrite?: (
+            writeCount: number,
+            context: { readonly signal: AbortSignal; isActive(): boolean } | undefined,
+        ) => Promise<void>;
+    } = {},
+) {
     const adapter = new CollisionAwareAdapter();
-    const commentManager = new CommentManager(threads);
+    let commentManager = new CommentManager(threads);
     const aggregateCommentIndex = new AggregateCommentIndex();
     let persistedData: PersistedPluginData = {};
     let persistedWriteCount = 0;
@@ -175,8 +189,12 @@ function createHarness(files: TFile[], threads: CommentThread[]) {
         getPluginDataDirPath: () => ".obsidian/plugins/aside",
         getSideNoteSyncDeviceId: () => "device-a",
         readPersistedPluginData: () => persistedData,
-        writePersistedPluginData: async (data) => {
+        writePersistedPluginData: async (data, context) => {
             persistedWriteCount += 1;
+            await options.beforePersistedWrite?.(persistedWriteCount, context);
+            if (context && !context.isActive()) {
+                return;
+            }
             persistedData = data;
         },
         isAllCommentsNotePath: () => false,
@@ -209,6 +227,13 @@ function createHarness(files: TFile[], threads: CommentThread[]) {
         resetPersistedWriteCount: () => {
             persistedWriteCount = 0;
         },
+        replaceCommentManager: (nextManager: CommentManager) => {
+            commentManager = nextManager;
+        },
+        replacePersistedData: (nextData: PersistedPluginData) => {
+            persistedData = nextData;
+        },
+        getPersistedData: () => persistedData,
     };
 }
 
@@ -234,7 +259,7 @@ test("folder comment retarget isolates a failed sidecar, batches metadata, and r
     }));
     harness.adapter.failNextWriteContaining = "hash-Published_b.md";
 
-    const first = await harness.controller.renameStoredCommentsInFolder(retargets);
+    const first = await harness.controller.renameStoredCommentsInFolder(retargets, ACTIVE_EVENT_CONTEXT);
 
     assert.deepEqual(first.successfulRetargets.map((retarget) => retarget.nextFilePath), [
         "Published/a.md",
@@ -261,7 +286,7 @@ test("folder comment retarget isolates a failed sidecar, batches metadata, and r
     }));
 
     harness.resetPersistedWriteCount();
-    const replay = await harness.controller.renameStoredCommentsInFolder(retargets);
+    const replay = await harness.controller.renameStoredCommentsInFolder(retargets, ACTIVE_EVENT_CONTEXT);
 
     assert.equal(replay.failures.length, 0);
     assert.equal(harness.commentManager.getThreadById("thread-1")?.filePath, "Published/b.md");
@@ -276,6 +301,64 @@ test("folder comment retarget isolates a failed sidecar, batches metadata, and r
             `${label} should not be rewritten during failure-only replay`,
         );
     }
+});
+
+test("folder comment retarget aborts a stale sync commit before touching reloaded state", async () => {
+    const syncWriteStarted = createDeferred();
+    const releaseSyncWrite = createDeferred();
+    const previousPath = "Drafts/a.md";
+    const nextPath = "Published/a.md";
+    const originalThread = createThread(previousPath, "old-thread");
+    const reloadedThread = createThread("Reloaded/a.md", "reloaded-thread");
+    const abortController = new AbortController();
+    const harness = createHarness([createFile(nextPath)], [originalThread], {
+        beforePersistedWrite: async (writeCount) => {
+            if (writeCount === 2) {
+                syncWriteStarted.resolve();
+                await releaseSyncWrite.promise;
+                throw new Error("stale sync write failed after abort");
+            }
+        },
+    });
+    harness.adapter.files.set(getSidecarStoragePath(previousPath), `${JSON.stringify({
+        version: 1,
+        notePath: previousPath,
+        threads: [originalThread],
+    })}\n`);
+    const context = {
+        signal: abortController.signal,
+        isActive: () => !abortController.signal.aborted,
+    };
+
+    const staleRename = harness.controller.renameStoredCommentsInFolder([{
+        previousFilePath: previousPath,
+        nextFilePath: nextPath,
+        retargetOptions: {
+            selectionCapable: true,
+            pageLabelHash: "page-hash",
+        },
+    }], context);
+    await syncWriteStarted.promise;
+
+    abortController.abort();
+    const reloadedManager = new CommentManager([reloadedThread]);
+    const reloadedData = { marker: "reloaded" } as PersistedPluginData;
+    harness.replaceCommentManager(reloadedManager);
+    harness.replacePersistedData(reloadedData);
+    releaseSyncWrite.resolve();
+
+    assert.deepEqual(await staleRename, {
+        successfulRetargets: [],
+        failures: [],
+    });
+    assert.deepEqual(reloadedManager.getAllThreads().map((thread) => ({
+        id: thread.id,
+        filePath: thread.filePath,
+    })), [{
+        id: "reloaded-thread",
+        filePath: "Reloaded/a.md",
+    }]);
+    assert.deepEqual(harness.getPersistedData(), reloadedData);
 });
 
 test("comment persistence serializes simultaneous saves for one note", async () => {

@@ -28,6 +28,7 @@ import { CommentSessionController } from "./comments/commentSessionController";
 import { IndexNoteSettingsController } from "./settings/indexNoteSettingsController";
 import type { PersistedPluginData } from "./settings/indexNoteSettingsPlanner";
 import { PluginEventRouter } from "./app/pluginEventRouter";
+import type { PluginEventExecutionContext } from "./app/pluginEventExecutionContext";
 import { PluginLifecycleController } from "./app/pluginLifecycleController";
 import { PluginRegistrationController } from "./app/pluginRegistrationController";
 import {
@@ -431,7 +432,8 @@ export default class Aside extends Plugin {
         getSideNoteSyncDeviceId: () => this.getSideNoteSyncDeviceId(),
         readPersistedPluginData: () => this.indexNoteSettingsController.readPersistedPluginData(),
         loadPersistedPluginData: () => this.loadCurrentData(),
-        writePersistedPluginData: (data) => this.indexNoteSettingsController.writePersistedPluginData(data),
+        writePersistedPluginData: (data, context) =>
+            this.indexNoteSettingsController.writePersistedPluginData(data, context),
         isAllCommentsNotePath: (filePath) => this.isAllCommentsNotePath(filePath),
         isCommentableFile: (file): file is TFile => this.isCommentableFile(file),
         isPageNoteCapableFile: (file): file is TFile => this.isPageNoteCapableFile(file),
@@ -478,12 +480,14 @@ export default class Aside extends Plugin {
     });
     private readonly agentRunStore = new AgentRunStore({
         readPersistedPluginData: () => this.indexNoteSettingsController.readPersistedPluginData(),
-        updatePersistedPluginData: (updater) => this.indexNoteSettingsController.updatePersistedPluginData(updater),
+        updatePersistedPluginData: (updater, context) =>
+            this.indexNoteSettingsController.updatePersistedPluginData(updater, context),
     });
     private readonly vaultScriptRegistry = new VaultScriptRegistry();
     private readonly scriptRunStore = new ScriptRunStore({
         readPersistedPluginData: () => this.indexNoteSettingsController.readPersistedPluginData(),
-        updatePersistedPluginData: (updater) => this.indexNoteSettingsController.updatePersistedPluginData(updater),
+        updatePersistedPluginData: (updater, context) =>
+            this.indexNoteSettingsController.updatePersistedPluginData(updater, context),
     });
     private readonly commentScriptController = new CommentScriptController({
         isScriptsEnabled: () => this.isScriptsEnabled(),
@@ -688,21 +692,21 @@ export default class Aside extends Plugin {
             this.agentRunStore.renameFile(previousFilePath, nextFilePath),
         renameScriptRuns: (previousFilePath, nextFilePath) =>
             this.scriptRunStore.renameFile(previousFilePath, nextFilePath),
-        renameAgentRunsInFolder: (previousFolderPath, nextFolderPath) =>
-            this.agentRunStore.renameFolder(previousFolderPath, nextFolderPath),
-        renameScriptRunsInFolder: (previousFolderPath, nextFolderPath) =>
-            this.scriptRunStore.renameFolder(previousFolderPath, nextFolderPath),
+        renameAgentRunsInFolder: (previousFolderPath, nextFolderPath, context) =>
+            this.agentRunStore.renameFolder(previousFolderPath, nextFolderPath, context),
+        renameScriptRunsInFolder: (previousFolderPath, nextFolderPath, context) =>
+            this.scriptRunStore.renameFolder(previousFolderPath, nextFolderPath, context),
         renameStoredComments: (previousFilePath, nextFilePath, retargetOptions) =>
             this.commentPersistenceController.renameStoredComments(previousFilePath, nextFilePath, retargetOptions),
-        renameStoredCommentsInFolder: (retargets) =>
-            this.commentPersistenceController.renameStoredCommentsInFolder(retargets),
+        renameStoredCommentsInFolder: (retargets, context) =>
+            this.commentPersistenceController.renameStoredCommentsInFolder(retargets, context),
         deleteStoredComments: (filePath) => this.commentPersistenceController.deleteStoredComments(filePath),
         deleteStoredCommentsInFolder: (folderPath) =>
             this.commentPersistenceController.deleteStoredCommentsInFolder(folderPath),
         renamePublishedPublicArtifactPath: (previousFilePath, nextFilePath) =>
             this.renamePublishedPublicArtifactPath(previousFilePath, nextFilePath),
-        renamePublishedPublicArtifactPathsInFolder: (previousFolderPath, nextFolderPath) =>
-            this.renamePublishedPublicArtifactPathsInFolder(previousFolderPath, nextFolderPath),
+        renamePublishedPublicArtifactPathsInFolder: (previousFolderPath, nextFolderPath, context) =>
+            this.renamePublishedPublicArtifactPathsInFolder(previousFolderPath, nextFolderPath, context),
         deletePublishedPublicArtifactPath: (filePath) => this.deletePublishedPublicArtifactPath(filePath),
         deletePublishedPublicArtifactPathsInFolder: (folderPath) =>
             this.deletePublishedPublicArtifactPathsInFolder(folderPath),
@@ -1155,13 +1159,25 @@ export default class Aside extends Plugin {
     private async renamePublishedPublicArtifactPathsInFolder(
         previousFolderPath: string,
         nextFolderPath: string,
+        context: PluginEventExecutionContext,
     ): Promise<void> {
-        await this.updatePublishedPublicArtifactPaths(renamePublishedPublicArtifactPathsInFolderInList(
+        const nextPaths = renamePublishedPublicArtifactPathsInFolderInList(
             this.settings.publishedPublicArtifactPaths,
             previousFolderPath,
             nextFolderPath,
             this.settings.publishAllowedRoot,
-        ));
+        );
+        if (!context.isActive()) {
+            return;
+        }
+        const updated = await this.indexNoteSettingsController.setPublishedPublicArtifactPaths(
+            nextPaths,
+            context,
+        );
+        if (!updated || !context.isActive()) {
+            return;
+        }
+        this.syncPublicFilePublishActions();
     }
 
     private async deletePublishedPublicArtifactPath(filePath: string): Promise<void> {

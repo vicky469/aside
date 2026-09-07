@@ -1,5 +1,10 @@
 import type { PersistedPluginData } from "../settings/indexNoteSettingsPlanner";
 import { isPathInsideFolder } from "../core/files/pathScope";
+import {
+    ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT,
+    isPluginEventExecutionActive,
+    type PluginEventExecutionContext,
+} from "../core/events/pluginEventExecutionContext";
 
 export const SOURCE_IDENTITY_STATE_SCHEMA_VERSION = 1;
 
@@ -21,7 +26,10 @@ export interface SourceIdentityState {
 export interface SourceIdentityStoreHost {
     readPersistedPluginData(): PersistedPluginData;
     readLatestPersistedPluginData?(): Promise<PersistedPluginData | null>;
-    writePersistedPluginData(data: PersistedPluginData): Promise<void>;
+    writePersistedPluginData(
+        data: PersistedPluginData,
+        context?: PluginEventExecutionContext,
+    ): Promise<void>;
     createSourceId(): string;
     now(): number;
 }
@@ -379,13 +387,17 @@ export class SourceIdentityStore {
 
     public async recordRenames(
         retargets: readonly SourceIdentityPathRetarget[],
+        context: PluginEventExecutionContext = ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT,
     ): Promise<SourceIdentityRecord[]> {
-        if (retargets.length === 0) {
+        if (retargets.length === 0 || !isPluginEventExecutionActive(context)) {
             return [];
         }
 
         const latestPersistedData = await this.host.readLatestPersistedPluginData?.()
             ?? this.host.readPersistedPluginData();
+        if (!isPluginEventExecutionActive(context)) {
+            return [];
+        }
         const latestState = normalizeSourceIdentityState(latestPersistedData.sourceIdentityState);
         const state = mergeSourceIdentityStates(
             this.readState(),
@@ -427,13 +439,19 @@ export class SourceIdentityStore {
         }
 
         if (changed) {
+            if (!isPluginEventExecutionActive(context)) {
+                return [];
+            }
             await this.host.writePersistedPluginData({
                 ...latestPersistedData,
                 sourceIdentityState: cloneState({
                     ...state,
                     pathToSourceId: rebuildPathIndex(state.sources),
                 }),
-            });
+            }, context);
+            if (!isPluginEventExecutionActive(context)) {
+                return [];
+            }
         }
         return records;
     }

@@ -15,10 +15,17 @@ import {
     mergePersistedAgentRunsPreservingActive,
     normalizePersistedAgentRuns,
 } from "./agentRunStorePlanner";
+import {
+    isPluginEventExecutionActive,
+    type PluginEventExecutionContext,
+} from "../core/events/pluginEventExecutionContext";
 
 export interface AgentRunStoreHost {
     readPersistedPluginData(): PersistedPluginData | null;
-    updatePersistedPluginData(updater: PersistedPluginDataUpdater): Promise<PersistedPluginData>;
+    updatePersistedPluginData(
+        updater: PersistedPluginDataUpdater,
+        context?: PluginEventExecutionContext,
+    ): Promise<PersistedPluginData>;
 }
 
 export class AgentRunStore {
@@ -169,37 +176,75 @@ export class AgentRunStore {
         });
     }
 
-    public async renameFolder(previousFolderPath: string, nextFolderPath: string): Promise<boolean> {
-        if (previousFolderPath === nextFolderPath) {
+    public async renameFolder(
+        previousFolderPath: string,
+        nextFolderPath: string,
+        context: PluginEventExecutionContext,
+    ): Promise<boolean> {
+        if (previousFolderPath === nextFolderPath || !isPluginEventExecutionActive(context)) {
             return false;
         }
 
-        return this.enqueueMutation(async () => {
-            let changed = false;
-            const nextRuns = this.runs.map((run) => {
-                const nextFilePath = retargetPathInFolder(
-                    run.filePath,
-                    previousFolderPath,
-                    nextFolderPath,
-                );
-                if (!nextFilePath) {
-                    return run;
+        try {
+            return await this.enqueueMutation(async () => {
+                if (!isPluginEventExecutionActive(context)) {
+                    return false;
+                }
+                let changed = false;
+                const nextRuns = this.runs.map((run) => {
+                    const nextFilePath = retargetPathInFolder(
+                        run.filePath,
+                        previousFolderPath,
+                        nextFolderPath,
+                    );
+                    if (!nextFilePath) {
+                        return run;
+                    }
+
+                    changed = true;
+                    return {
+                        ...run,
+                        filePath: nextFilePath,
+                    };
+                });
+                if (!changed) {
+                    return false;
                 }
 
-                changed = true;
-                return {
-                    ...run,
-                    filePath: nextFilePath,
-                };
+                const persisted = await this.persistFolderRename(nextRuns, context);
+                if (!persisted || !isPluginEventExecutionActive(context)) {
+                    return false;
+                }
+                this.runs = nextRuns;
+                return true;
             });
-            if (!changed) {
+        } catch (error) {
+            if (!isPluginEventExecutionActive(context)) {
                 return false;
             }
+            throw error;
+        }
+    }
 
-            await this.persist(nextRuns);
-            this.runs = nextRuns;
-            return true;
-        });
+    private async persistFolderRename(
+        runs: AgentRunRecord[],
+        context: PluginEventExecutionContext,
+    ): Promise<boolean> {
+        if (!isPluginEventExecutionActive(context)) {
+            return false;
+        }
+        let applied = false;
+        await this.host.updatePersistedPluginData((persistedData) => {
+            if (!isPluginEventExecutionActive(context)) {
+                return persistedData;
+            }
+            applied = true;
+            return {
+                ...persistedData,
+                agentRuns: cloneAgentRunRecords(runs),
+            };
+        }, context);
+        return applied && isPluginEventExecutionActive(context);
     }
 
     private async persist(runs: AgentRunRecord[]): Promise<void> {

@@ -15,6 +15,11 @@ import type { PersistedPluginData } from "../src/settings/indexNoteSettingsPlann
 import { ScriptRunStore } from "../src/vaultScripts/scriptRunStore";
 import { normalizePersistedScriptRuns } from "../src/vaultScripts/scriptRunStorePlanner";
 
+const ACTIVE_EVENT_CONTEXT = {
+    signal: new AbortController().signal,
+    isActive: () => true,
+};
+
 function createRun(overrides: Partial<ScriptRunRecord> = {}): ScriptRunRecord {
     return {
         id: "script-run-1",
@@ -31,6 +36,14 @@ function createRun(overrides: Partial<ScriptRunRecord> = {}): ScriptRunRecord {
         outputEntryId: "entry-2",
         ...overrides,
     };
+}
+
+function createDeferred() {
+    let resolvePromise!: () => void;
+    const promise = new Promise<void>((resolve) => {
+        resolvePromise = resolve;
+    });
+    return { promise, resolve: resolvePromise };
 }
 
 function createAgentRun(overrides: Partial<AgentRunRecord> = {}): AgentRunRecord {
@@ -239,7 +252,7 @@ test("ScriptRunStore retargets every folder descendant with one persisted write"
     });
     store.load();
 
-    assert.equal(await store.renameFolder("Drafts", "Published"), true);
+    assert.equal(await store.renameFolder("Drafts", "Published", ACTIVE_EVENT_CONTEXT), true);
 
     assert.equal(writeCount, 1);
     assert.deepEqual(store.getRuns().map((run) => run.filePath), [
@@ -247,8 +260,56 @@ test("ScriptRunStore retargets every folder descendant with one persisted write"
         "Published/nested/b.md",
         "Draftsness/keep.md",
     ]);
-    assert.equal(await store.renameFolder("Missing", "Other"), false);
+    assert.equal(await store.renameFolder("Missing", "Other", ACTIVE_EVENT_CONTEXT), false);
     assert.equal(writeCount, 1);
+});
+
+test("ScriptRunStore aborts a queued folder retarget before stale persistence or memory commits", async () => {
+    const transactionStarted = createDeferred();
+    const releaseTransaction = createDeferred();
+    const abortController = new AbortController();
+    let persistedData: PersistedPluginData = {
+        scriptRuns: [createRun({ id: "old", filePath: "Drafts/a.md" })],
+    };
+    let transactionCount = 0;
+    const store = new ScriptRunStore({
+        readPersistedPluginData: () => persistedData,
+        updatePersistedPluginData: async (updater) => {
+            transactionCount += 1;
+            transactionStarted.resolve();
+            await releaseTransaction.promise;
+            persistedData = updater({ ...persistedData });
+            if (transactionCount === 1) {
+                throw new Error("stale persistence failed after abort");
+            }
+            return { ...persistedData };
+        },
+    });
+    store.load();
+    const context = {
+        signal: abortController.signal,
+        isActive: () => !abortController.signal.aborted,
+    };
+
+    const staleRename = store.renameFolder("Drafts", "Published", context);
+    await transactionStarted.promise;
+    abortController.abort();
+    persistedData = {
+        scriptRuns: [createRun({ id: "reloaded", filePath: "Reloaded/a.md" })],
+    };
+    store.load();
+    releaseTransaction.resolve();
+
+    assert.equal(await staleRename, false);
+    assert.deepEqual((persistedData.scriptRuns as ScriptRunRecord[]).map((run) => run.filePath), ["Reloaded/a.md"]);
+    assert.deepEqual(store.getRuns().map((run) => run.filePath), ["Reloaded/a.md"]);
+
+    const currentContext = {
+        signal: new AbortController().signal,
+        isActive: () => true,
+    };
+    assert.equal(await store.renameFolder("Reloaded", "Current", currentContext), true);
+    assert.deepEqual(store.getRuns().map((run) => run.filePath), ["Current/a.md"]);
 });
 
 test("ScriptRunStore serializes overlapping adds and snapshots caller input before awaiting", async () => {

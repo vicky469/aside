@@ -34,10 +34,19 @@ export interface PluginLifecycleHost {
         nextFilePath: string,
         retargetOptions: CommentThreadRetargetOptions,
     ): Promise<void>;
-    renameAgentRunsInFolder(previousFolderPath: string, nextFolderPath: string): Promise<boolean>;
-    renameScriptRunsInFolder(previousFolderPath: string, nextFolderPath: string): Promise<boolean>;
+    renameAgentRunsInFolder(
+        previousFolderPath: string,
+        nextFolderPath: string,
+        context: PluginEventExecutionContext,
+    ): Promise<boolean>;
+    renameScriptRunsInFolder(
+        previousFolderPath: string,
+        nextFolderPath: string,
+        context: PluginEventExecutionContext,
+    ): Promise<boolean>;
     renameStoredCommentsInFolder(
         retargets: readonly CommentFileRetarget[],
+        context: PluginEventExecutionContext,
     ): Promise<CommentFileRetargetResult>;
     deleteStoredComments(filePath: string): Promise<void>;
     deleteStoredCommentsInFolder(folderPath: string): Promise<void>;
@@ -45,6 +54,7 @@ export interface PluginLifecycleHost {
     renamePublishedPublicArtifactPathsInFolder(
         previousFolderPath: string,
         nextFolderPath: string,
+        context: PluginEventExecutionContext,
     ): Promise<void>;
     deletePublishedPublicArtifactPath(filePath: string): Promise<void>;
     deletePublishedPublicArtifactPathsInFolder(folderPath: string): Promise<void>;
@@ -323,16 +333,16 @@ export class PluginLifecycleController {
         const attemptedCommentRetargets = plan.pendingCommentPersistence;
         const [publishedResult, agentResult, scriptResult, commentsResult] = await Promise.allSettled([
             plan.pendingPublishedPaths
-                ? this.host.renamePublishedPublicArtifactPathsInFolder(oldPath, file.path)
+                ? this.host.renamePublishedPublicArtifactPathsInFolder(oldPath, file.path, context)
                 : Promise.resolve(),
             plan.pendingAgentRuns
-                ? this.host.renameAgentRunsInFolder(oldPath, file.path)
+                ? this.host.renameAgentRunsInFolder(oldPath, file.path, context)
                 : Promise.resolve(false),
             plan.pendingScriptRuns
-                ? this.host.renameScriptRunsInFolder(oldPath, file.path)
+                ? this.host.renameScriptRunsInFolder(oldPath, file.path, context)
                 : Promise.resolve(false),
             attemptedCommentRetargets.length > 0
-                ? this.host.renameStoredCommentsInFolder(attemptedCommentRetargets)
+                ? this.host.renameStoredCommentsInFolder(attemptedCommentRetargets, context)
                 : Promise.resolve({ successfulRetargets: [], failures: [] }),
         ]);
         if (!this.isActive(context)) {

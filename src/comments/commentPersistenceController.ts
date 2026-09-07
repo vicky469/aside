@@ -46,6 +46,10 @@ import type {
     CommentFileRetargetFailure,
     CommentFileRetargetResult,
 } from "../domain/comments/folderCommentRetarget";
+import {
+    isPluginEventExecutionActive,
+    type PluginEventExecutionContext,
+} from "../core/events/pluginEventExecutionContext";
 
 type PersistOptions = {
     immediateAggregateRefresh?: boolean;
@@ -90,7 +94,10 @@ export interface CommentPersistenceHost {
     getSideNoteSyncDeviceId(): string;
     readPersistedPluginData(): PersistedPluginData;
     loadPersistedPluginData?(): Promise<PersistedPluginData | null>;
-    writePersistedPluginData(data: PersistedPluginData): Promise<void>;
+    writePersistedPluginData(
+        data: PersistedPluginData,
+        context?: PluginEventExecutionContext,
+    ): Promise<void>;
     isAllCommentsNotePath(filePath: string): boolean;
     isCommentableFile(file: TFile | null): file is TFile;
     isPageNoteCapableFile?(file: TFile | null): file is TFile;
@@ -546,7 +553,7 @@ export class CommentPersistenceController {
         this.syncEventStore = new SideNoteSyncEventStore({
             readPersistedPluginData: () => host.readPersistedPluginData(),
             readLatestPersistedPluginData: () => host.loadPersistedPluginData?.() ?? Promise.resolve(host.readPersistedPluginData()),
-            writePersistedPluginData: (data) => host.writePersistedPluginData(data),
+            writePersistedPluginData: (data, context) => host.writePersistedPluginData(data, context),
             getDeviceId: () => host.getSideNoteSyncDeviceId(),
             createEventId: () => host.createCommentId(),
             hashText: (text) => host.hashText(text),
@@ -555,7 +562,7 @@ export class CommentPersistenceController {
         this.sourceIdentityStore = new SourceIdentityStore({
             readPersistedPluginData: () => host.readPersistedPluginData(),
             readLatestPersistedPluginData: () => host.loadPersistedPluginData?.() ?? Promise.resolve(host.readPersistedPluginData()),
-            writePersistedPluginData: (data) => host.writePersistedPluginData(data),
+            writePersistedPluginData: (data, context) => host.writePersistedPluginData(data, context),
             createSourceId: () => `src-${host.createCommentId()}`,
             now: () => Date.now(),
         });
@@ -732,24 +739,49 @@ export class CommentPersistenceController {
 
     public async renameStoredCommentsInFolder(
         retargets: readonly CommentFileRetarget[],
+        context: PluginEventExecutionContext,
     ): Promise<CommentFileRetargetResult> {
         let result: CommentFileRetargetResult = {
             successfulRetargets: [],
             failures: [],
         };
-        await this.enqueueCommentPersistence(
-            retargets.flatMap((retarget) => [retarget.previousFilePath, retarget.nextFilePath]),
-            async () => {
-                result = await this.renameStoredCommentsInFolderNow(retargets);
-            },
-        );
+        if (!isPluginEventExecutionActive(context)) {
+            return result;
+        }
+        try {
+            await this.enqueueCommentPersistence(
+                retargets.flatMap((retarget) => [retarget.previousFilePath, retarget.nextFilePath]),
+                async () => {
+                    if (!isPluginEventExecutionActive(context)) {
+                        return;
+                    }
+                    result = await this.renameStoredCommentsInFolderNow(retargets, context);
+                },
+            );
+        } catch (error) {
+            if (!isPluginEventExecutionActive(context)) {
+                return result;
+            }
+            throw error;
+        }
+        if (!isPluginEventExecutionActive(context)) {
+            return {
+                successfulRetargets: [],
+                failures: [],
+            };
+        }
         return result;
     }
 
     private async renameStoredCommentsInFolderNow(
         retargets: readonly CommentFileRetarget[],
+        context: PluginEventExecutionContext,
     ): Promise<CommentFileRetargetResult> {
-        if (retargets.length === 0) {
+        const abortedResult: CommentFileRetargetResult = {
+            successfulRetargets: [],
+            failures: [],
+        };
+        if (retargets.length === 0 || !isPluginEventExecutionActive(context)) {
             return {
                 successfulRetargets: [],
                 failures: [],
@@ -799,13 +831,20 @@ export class CommentPersistenceController {
                 completed,
             };
         }));
+        if (!isPluginEventExecutionActive(context)) {
+            return abortedResult;
+        }
         const pendingIndexes = retargets.flatMap((_retarget, index) => {
             const prepared = preparedRetargets[index];
             return prepared?.status === "fulfilled" && !prepared.value.completed ? [index] : [];
         });
         const sourceRecords = await this.sourceIdentityStore.recordRenames(
             pendingIndexes.map((index) => retargets[index]).filter((retarget): retarget is CommentFileRetarget => !!retarget),
+            context,
         );
+        if (!isPluginEventExecutionActive(context)) {
+            return abortedResult;
+        }
         const sourceRecordByRetargetIndex = new Map(
             pendingIndexes.map((retargetIndex, recordIndex) => [retargetIndex, sourceRecords[recordIndex]]),
         );
@@ -817,6 +856,9 @@ export class CommentPersistenceController {
         }> = [];
         for (const [index, retarget] of retargets.entries()) {
             try {
+                if (!isPluginEventExecutionActive(context)) {
+                    return abortedResult;
+                }
                 const prepared = preparedRetargets[index];
                 if (!prepared || prepared.status === "rejected") {
                     throw prepared?.reason ?? new Error(`Missing rename preparation for ${retarget.previousFilePath}`);
@@ -837,15 +879,27 @@ export class CommentPersistenceController {
                         retarget.retargetOptions,
                     )
                     : [];
+                if (!isPluginEventExecutionActive(context)) {
+                    return abortedResult;
+                }
                 if (retargetedThreads.length > 0) {
                     await this.writeSourceAndPathSidecars(
                         sourceRecord.sourceId,
                         retarget.nextFilePath,
                         retargetedThreads,
                     );
+                    if (!isPluginEventExecutionActive(context)) {
+                        return abortedResult;
+                    }
                     await this.sidecarStorage.remove(retarget.previousFilePath);
+                    if (!isPluginEventExecutionActive(context)) {
+                        return abortedResult;
+                    }
                 } else if (previousThreads !== null) {
                     await this.sidecarStorage.remove(retarget.previousFilePath);
+                    if (!isPluginEventExecutionActive(context)) {
+                        return abortedResult;
+                    }
                 }
                 successfulItems.push({
                     retarget,
@@ -881,7 +935,11 @@ export class CommentPersistenceController {
                         notePath: item.retarget.nextFilePath,
                         threads: item.threads,
                     }]),
+                    context,
                 );
+                if (!isPluginEventExecutionActive(context)) {
+                    return abortedResult;
+                }
                 void this.host.log?.("info", "persistence", "sync.plugin-data.compact", {
                     removedEventCount: compacted.removedEventCount,
                     snapshotCount: compacted.snapshotCount,
@@ -897,6 +955,9 @@ export class CommentPersistenceController {
             }
         }
 
+        if (!isPluginEventExecutionActive(context)) {
+            return abortedResult;
+        }
         this.host.getCommentManager().renameFiles(
             successfulItems.map((item) => item.retarget),
         );

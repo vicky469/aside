@@ -8,6 +8,11 @@ import {
 import type { AgentRunRecord } from "../src/core/agents/agentRuns";
 import type { PersistedPluginData } from "../src/settings/indexNoteSettingsPlanner";
 
+const ACTIVE_EVENT_CONTEXT = {
+    signal: new AbortController().signal,
+    isActive: () => true,
+};
+
 function createRun(overrides: Partial<AgentRunRecord> = {}): AgentRunRecord {
     return {
         id: "agent-run-1",
@@ -21,6 +26,14 @@ function createRun(overrides: Partial<AgentRunRecord> = {}): AgentRunRecord {
         createdAt: 100,
         ...overrides,
     };
+}
+
+function createDeferred() {
+    let resolvePromise!: () => void;
+    const promise = new Promise<void>((resolve) => {
+        resolvePromise = resolve;
+    });
+    return { promise, resolve: resolvePromise };
 }
 
 test("normalizePersistedAgentRuns keeps valid records, normalizes legacy remote runs, and drops malformed ones", () => {
@@ -248,7 +261,7 @@ test("AgentRunStore retargets every folder descendant with one persisted write",
     });
     store.load();
 
-    assert.equal(await store.renameFolder("Drafts", "Published"), true);
+    assert.equal(await store.renameFolder("Drafts", "Published", ACTIVE_EVENT_CONTEXT), true);
 
     assert.equal(writeCount, 1);
     assert.deepEqual(store.getRuns().map((run) => run.filePath), [
@@ -256,8 +269,56 @@ test("AgentRunStore retargets every folder descendant with one persisted write",
         "Published/nested/b.md",
         "Draftsness/keep.md",
     ]);
-    assert.equal(await store.renameFolder("Missing", "Other"), false);
+    assert.equal(await store.renameFolder("Missing", "Other", ACTIVE_EVENT_CONTEXT), false);
     assert.equal(writeCount, 1);
+});
+
+test("AgentRunStore aborts a queued folder retarget before stale persistence or memory commits", async () => {
+    const transactionStarted = createDeferred();
+    const releaseTransaction = createDeferred();
+    const abortController = new AbortController();
+    let persistedData: PersistedPluginData = {
+        agentRuns: [createRun({ id: "old", filePath: "Drafts/a.md" })],
+    };
+    let transactionCount = 0;
+    const store = new AgentRunStore({
+        readPersistedPluginData: () => persistedData,
+        updatePersistedPluginData: async (updater) => {
+            transactionCount += 1;
+            transactionStarted.resolve();
+            await releaseTransaction.promise;
+            persistedData = updater({ ...persistedData });
+            if (transactionCount === 1) {
+                throw new Error("stale persistence failed after abort");
+            }
+            return { ...persistedData };
+        },
+    });
+    store.load();
+    const context = {
+        signal: abortController.signal,
+        isActive: () => !abortController.signal.aborted,
+    };
+
+    const staleRename = store.renameFolder("Drafts", "Published", context);
+    await transactionStarted.promise;
+    abortController.abort();
+    persistedData = {
+        agentRuns: [createRun({ id: "reloaded", filePath: "Reloaded/a.md" })],
+    };
+    store.load();
+    releaseTransaction.resolve();
+
+    assert.equal(await staleRename, false);
+    assert.deepEqual((persistedData.agentRuns as AgentRunRecord[]).map((run) => run.filePath), ["Reloaded/a.md"]);
+    assert.deepEqual(store.getRuns().map((run) => run.filePath), ["Reloaded/a.md"]);
+
+    const currentContext = {
+        signal: new AbortController().signal,
+        isActive: () => true,
+    };
+    assert.equal(await store.renameFolder("Reloaded", "Current", currentContext), true);
+    assert.deepEqual(store.getRuns().map((run) => run.filePath), ["Current/a.md"]);
 });
 
 test("AgentRunStore preserves active local runs across external reloads", async () => {
