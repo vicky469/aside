@@ -1,6 +1,7 @@
 import * as assert from "node:assert/strict";
 import test from "node:test";
 import { CommentManager, type Comment } from "../src/commentManager";
+import type { SavedUserEntryEvent } from "../src/core/comments/savedUserEntry";
 import type { ScriptRunRecord } from "../src/core/scripts/scriptRuns";
 import type { PersistedPluginData } from "../src/settings/indexNoteSettingsPlanner";
 import {
@@ -630,6 +631,60 @@ test("script output handles empty success, truncation, and concise stderr failur
     assert.equal(blankStderr.editedEntries.at(-1)?.body, "Script /clean:\n\nCommand failed");
 });
 
+test("direct saved-entry handling is inert when Scripts is disabled", async () => {
+    const harness = createHarness({ scriptsEnabled: false });
+    const persistedDataBefore = harness.getPersistedData();
+
+    assert.equal(await harness.controller.handleSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "/clean",
+    }), false);
+
+    assert.deepEqual(harness.store.getRuns(), []);
+    assert.deepEqual(harness.getPersistedData(), persistedDataBefore);
+    assert.deepEqual(harness.appendedEntries, []);
+    assert.deepEqual(harness.editedEntries, []);
+    assert.deepEqual(harness.runtimeCalls, []);
+    assert.deepEqual(harness.notices, []);
+    assert.equal(harness.getRefreshCount(), 0);
+});
+
+test("a script admitted before Scripts turns off completes after delayed persistence", async () => {
+    let scriptsEnabled = true;
+    let delayNextPersist = true;
+    const persistStarted = createDeferred<void>();
+    const releasePersist = createDeferred<void>();
+    const harness = createHarness({
+        scriptsEnabled: () => scriptsEnabled,
+        beforePersist: async () => {
+            if (!delayNextPersist) {
+                return;
+            }
+            delayNextPersist = false;
+            persistStarted.resolve();
+            await releasePersist.promise;
+        },
+    });
+
+    const handling = harness.controller.handleSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "/clean",
+    });
+    await persistStarted.promise;
+    scriptsEnabled = false;
+    releasePersist.resolve();
+
+    assert.equal(await handling, true);
+    await waitForRunStatus(harness, "thread-1", "succeeded");
+    assert.equal(harness.appendedEntries.length, 1);
+    assert.equal(harness.runtimeCalls.length, 1);
+    assert.equal(harness.editedEntries.at(-1)?.body, "Script /clean:\n\ncleaned");
+});
+
 test("saved entry routing sends only unclaimed entries to the agent controller", async () => {
     const valid = createHarness();
     const validAgentEvents: string[] = [];
@@ -640,11 +695,11 @@ test("saved entry routing sends only unclaimed entries to the agent controller",
             filePath: "Folder/Note.md",
             body: "/clean",
         },
-        scriptsEnabled: true,
+        isScriptsEnabled: () => true,
         builtInControllers: createBuiltInControllers(),
         scriptController: valid.controller,
         agentController: {
-            handleSavedUserEntry: async (event) => {
+            handleSavedUserEntry: async (event: SavedUserEntryEvent) => {
                 validAgentEvents.push(event.entryId);
             },
         },
@@ -666,7 +721,7 @@ test("saved entry routing sends only unclaimed entries to the agent controller",
     };
     await routeSavedUserEntry({
         event: originalEvent,
-        scriptsEnabled: true,
+        isScriptsEnabled: () => true,
         builtInControllers: createBuiltInControllers(),
         scriptController: rejected.controller,
         agentController,
@@ -677,7 +732,7 @@ test("saved entry routing sends only unclaimed entries to the agent controller",
             ...originalEvent,
             body: "@codex after registry refresh",
         },
-        scriptsEnabled: true,
+        isScriptsEnabled: () => true,
         builtInControllers: createBuiltInControllers(),
         scriptController: rejected.controller,
         agentController,
@@ -694,7 +749,7 @@ test("saved entry routing sends only unclaimed entries to the agent controller",
             filePath: "Folder/Note.md",
             body: "ordinary @person",
         },
-        scriptsEnabled: true,
+        isScriptsEnabled: () => true,
         builtInControllers: createBuiltInControllers(),
         scriptController: ordinary.controller,
         agentController: {
@@ -715,7 +770,7 @@ test("saved entry routing sends disabled script directives only to the agent con
             filePath: "Folder/Note.md",
             body: "/clean",
         },
-        scriptsEnabled: false,
+        isScriptsEnabled: () => false,
         builtInControllers: createBuiltInControllers({
             updateScript: {
                 handleSavedUserEntry: async () => {
@@ -740,6 +795,99 @@ test("saved entry routing sends disabled script directives only to the agent con
     assert.deepEqual(routeCalls, ["agent"]);
 });
 
+test("saved entry routing falls back once when Scripts turns off during an earlier controller", async () => {
+    let scriptsEnabled = true;
+    const firstControllerResult = createDeferred<boolean>();
+    const routeCalls: string[] = [];
+    const scriptHarness = createHarness();
+    const route = {
+        event: {
+            threadId: "thread-1",
+            entryId: "thread-1",
+            filePath: "Folder/Note.md",
+            body: "/clean",
+        },
+        isScriptsEnabled: () => scriptsEnabled,
+        builtInControllers: createBuiltInControllers({
+            updateScript: {
+                handleSavedUserEntry: async () => {
+                    routeCalls.push("update-script");
+                    return firstControllerResult.promise;
+                },
+            },
+            createScript: {
+                handleSavedUserEntry: async () => {
+                    routeCalls.push("create-script");
+                    return false;
+                },
+            },
+            pdfToMarkdown: {
+                handleSavedUserEntry: async () => {
+                    routeCalls.push("pdf-to-markdown");
+                    return false;
+                },
+            },
+        }),
+        scriptController: {
+            handleSavedUserEntry: async (event: SavedUserEntryEvent) => {
+                routeCalls.push("script");
+                return scriptHarness.controller.handleSavedUserEntry(event);
+            },
+        },
+        agentController: {
+            handleSavedUserEntry: async () => {
+                routeCalls.push("agent");
+            },
+        },
+    };
+
+    const routing = routeSavedUserEntry(route);
+    await waitForCondition(() => routeCalls.length === 1);
+    scriptsEnabled = false;
+    firstControllerResult.resolve(false);
+    await routing;
+
+    assert.deepEqual(routeCalls, ["update-script", "agent"]);
+    assert.deepEqual(scriptHarness.store.getRuns(), []);
+    assert.deepEqual(scriptHarness.runtimeCalls, []);
+});
+
+test("saved entry routing honors an accepted controller after Scripts turns off", async () => {
+    let scriptsEnabled = true;
+    const acceptedControllerResult = createDeferred<boolean>();
+    const routeCalls: string[] = [];
+    const routing = routeSavedUserEntry({
+        event: {
+            threadId: "thread-1",
+            entryId: "thread-1",
+            filePath: "Folder/Note.md",
+            body: "/clean",
+        },
+        isScriptsEnabled: () => scriptsEnabled,
+        builtInControllers: createBuiltInControllers(),
+        scriptController: {
+            handleSavedUserEntry: async () => {
+                routeCalls.push("script-started");
+                const handled = await acceptedControllerResult.promise;
+                routeCalls.push("script-completed");
+                return handled;
+            },
+        },
+        agentController: {
+            handleSavedUserEntry: async () => {
+                routeCalls.push("agent");
+            },
+        },
+    });
+    await waitForCondition(() => routeCalls.length === 1);
+    scriptsEnabled = false;
+    acceptedControllerResult.resolve(true);
+
+    await routing;
+
+    assert.deepEqual(routeCalls, ["script-started", "script-completed"]);
+});
+
 test("saved entry routing tries built-in script-authoring commands before vault scripts", async () => {
     const routeCalls: string[] = [];
     const savedEvent = {
@@ -751,7 +899,7 @@ test("saved entry routing tries built-in script-authoring commands before vault 
 
     await routeSavedUserEntry({
         event: savedEvent,
-        scriptsEnabled: true,
+        isScriptsEnabled: () => true,
         builtInControllers: createBuiltInControllers({
             updateScript: {
                 handleSavedUserEntry: async () => {
@@ -792,7 +940,7 @@ test("saved entry routing claims pdf-to-markdown before scripts and generic agen
             filePath: "Books/Guide.pdf",
             body: "/pdf-to-markdown",
         },
-        scriptsEnabled: true,
+        isScriptsEnabled: () => true,
         builtInControllers: {
             updateScript: {
                 handleSavedUserEntry: async () => {
@@ -910,6 +1058,50 @@ test("script processes execute serially", async () => {
     await waitForRunStatus(harness, "thread-1", "succeeded");
     await waitForRunStatus(harness, "thread-2", "succeeded");
     assert.equal(harness.runtimeCalls.length, 2);
+});
+
+test("accepted queued and running scripts finish after Scripts turns off", async () => {
+    let scriptsEnabled = true;
+    const releaseFirstRuntime = createDeferred<VaultScriptRuntimeResult>();
+    const harness = createHarness({
+        scriptsEnabled: () => scriptsEnabled,
+        scripts: ["🛠️ scripts/clean.mjs", "🛠️ scripts/other-script.js"],
+        comments: [
+            createComment({ id: "thread-1", comment: "/clean" }),
+            createComment({ id: "thread-2", comment: "/other-script", timestamp: 20 }),
+        ],
+        runVaultScript: async (invocation) => invocation.scriptPath.endsWith("clean.mjs")
+            ? releaseFirstRuntime.promise
+            : { stdout: "second done", stderr: "" },
+    });
+
+    const first = harness.controller.handleSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "/clean",
+    });
+    await waitForCondition(() => harness.runtimeCalls.length === 1);
+    const second = harness.controller.handleSavedUserEntry({
+        threadId: "thread-2",
+        entryId: "thread-2",
+        filePath: "Folder/Note.md",
+        body: "/other-script",
+    });
+    await Promise.all([first, second]);
+    assert.equal(harness.store.getRuns().find((run) => run.triggerEntryId === "thread-1")?.status, "running");
+    assert.equal(harness.store.getRuns().find((run) => run.triggerEntryId === "thread-2")?.status, "queued");
+
+    scriptsEnabled = false;
+    releaseFirstRuntime.resolve({ stdout: "first done", stderr: "" });
+    await waitForRunStatus(harness, "thread-1", "succeeded");
+    await waitForRunStatus(harness, "thread-2", "succeeded");
+
+    assert.equal(harness.runtimeCalls.length, 2);
+    assert.deepEqual(
+        harness.store.getRuns().map((run) => run.status),
+        ["succeeded", "succeeded"],
+    );
 });
 
 test("queued automatic execution revalidates its script against the live registry", async () => {

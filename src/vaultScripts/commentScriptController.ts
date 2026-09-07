@@ -76,7 +76,7 @@ export interface SavedEntryBuiltInControllers {
 
 export interface SavedUserEntryRoute {
     event: SavedUserEntryEvent;
-    scriptsEnabled: boolean;
+    isScriptsEnabled: () => boolean;
     builtInControllers: SavedEntryBuiltInControllers;
     scriptController: SavedEntryScriptController;
     agentController: SavedEntryAgentController;
@@ -85,13 +85,16 @@ export interface SavedUserEntryRoute {
 export async function routeSavedUserEntry(route: SavedUserEntryRoute): Promise<void> {
     const {
         event,
-        scriptsEnabled,
+        isScriptsEnabled,
         builtInControllers,
         scriptController,
         agentController,
     } = route;
-    if (!scriptsEnabled) {
+    const fallBackToAgent = async (): Promise<void> => {
         await agentController.handleSavedUserEntry(event);
+    };
+    if (!isScriptsEnabled()) {
+        await fallBackToAgent();
         return;
     }
     for (const builtInController of [
@@ -99,14 +102,28 @@ export async function routeSavedUserEntry(route: SavedUserEntryRoute): Promise<v
         builtInControllers.createScript,
         builtInControllers.pdfToMarkdown,
     ]) {
-        if (await builtInController.handleSavedUserEntry(event)) {
+        if (!isScriptsEnabled()) {
+            await fallBackToAgent();
+            return;
+        }
+        const handled = await builtInController.handleSavedUserEntry(event);
+        if (handled) {
+            return;
+        }
+        if (!isScriptsEnabled()) {
+            await fallBackToAgent();
             return;
         }
     }
-    const handledByScript = await scriptController.handleSavedUserEntry(event);
-    if (!handledByScript) {
-        await agentController.handleSavedUserEntry(event);
+    if (!isScriptsEnabled()) {
+        await fallBackToAgent();
+        return;
     }
+    const handledByScript = await scriptController.handleSavedUserEntry(event);
+    if (handledByScript) {
+        return;
+    }
+    await fallBackToAgent();
 }
 
 function normalizeResultWords(value: string): string[] {
@@ -171,6 +188,9 @@ export class CommentScriptController {
     }
 
     public async handleSavedUserEntry(event: SavedUserEntryEvent): Promise<boolean> {
+        if (!this.canStartScriptRun()) {
+            return false;
+        }
         // A stored run is the durable routing receipt for this saved entry. This check
         // intentionally precedes current body/registry resolution so refreshes, edits,
         // or storage changes cannot reroute or repeat an already-claimed trigger.
@@ -180,11 +200,11 @@ export class CommentScriptController {
         ) {
             return true;
         }
-        if (this.disposed) {
-            return false;
-        }
         const resolution = resolveScriptDirective(event.body, this.host.getRegistry());
         if (resolution.kind === "none") {
+            return false;
+        }
+        if (!this.canStartScriptRun()) {
             return false;
         }
 
@@ -192,6 +212,9 @@ export class CommentScriptController {
         try {
             if (resolution.kind === "rejected") {
                 const rejectedRun = this.buildRejectedRun(event, resolution);
+                if (!this.canStartScriptRun()) {
+                    return false;
+                }
                 await this.store.addRun(rejectedRun);
                 const outputEntryId = await this.writeOutput(
                     rejectedRun,
@@ -206,6 +229,9 @@ export class CommentScriptController {
             }
 
             const run = this.buildQueuedRun(event, resolution);
+            if (!this.canStartScriptRun()) {
+                return false;
+            }
             await this.store.addRun(run);
             try {
                 await this.appendPendingOutput(run);
@@ -226,8 +252,7 @@ export class CommentScriptController {
 
     public async retryRun(runId: string): Promise<boolean> {
         if (
-            this.disposed
-            || !this.host.isScriptsEnabled()
+            !this.canStartScriptRun()
             || this.retryingRunIds.has(runId)
         ) {
             return false;
@@ -240,7 +265,7 @@ export class CommentScriptController {
         this.retryingRunIds.add(runId);
         try {
             await this.host.loadCommentsForFile(previous.filePath);
-            if (this.disposed || !this.host.isScriptsEnabled()) {
+            if (!this.canStartScriptRun()) {
                 return false;
             }
             const trigger = this.host.getCommentManager().getCommentById(previous.triggerEntryId);
@@ -449,6 +474,10 @@ export class CommentScriptController {
 
     private isRunScriptCurrent(run: ScriptRunRecord): boolean {
         return this.host.getRegistry().resolve(run.mentionName)?.path === run.scriptPath;
+    }
+
+    private canStartScriptRun(): boolean {
+        return !this.disposed && this.host.isScriptsEnabled();
     }
 
     private async terminalizeFailedRun(runId: string, error: string): Promise<void> {

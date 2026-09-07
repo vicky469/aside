@@ -14,6 +14,7 @@ export interface RefreshCoordinatorHost {
     replaySyncedSideNoteEvents(targetNotePath?: string): Promise<number>;
     refreshCommentViews(options?: { skipDataRefresh?: boolean }): Promise<void>;
     scheduleAggregateNoteRefresh(): void;
+    syncPublicFilePublishActions(): void;
 }
 
 export class RefreshCoordinator {
@@ -28,12 +29,14 @@ export class RefreshCoordinator {
 
     public async handleExternalPluginDataChange(): Promise<number> {
         const appliedEventCount = await this.replaySyncedSideNoteEvents("external-plugin-data");
-        if (appliedEventCount <= 0) {
-            return appliedEventCount;
+        try {
+            await this.host.refreshCommentViews({ skipDataRefresh: true });
+            if (appliedEventCount > 0) {
+                this.host.scheduleAggregateNoteRefresh();
+            }
+        } finally {
+            this.host.syncPublicFilePublishActions();
         }
-
-        await this.host.refreshCommentViews({ skipDataRefresh: true });
-        this.host.scheduleAggregateNoteRefresh();
         return appliedEventCount;
     }
 }

@@ -724,6 +724,7 @@ export default class Aside extends Plugin {
             this.commentPersistenceController.replaySyncedSideNoteEvents(targetNotePath),
         refreshCommentViews: (options) => this.workspaceViewController.refreshCommentViews(options),
         scheduleAggregateNoteRefresh: () => this.scheduleAggregateNoteRefresh(),
+        syncPublicFilePublishActions: () => this.syncPublicFilePublishActions(),
     });
     private readonly pluginRegistrationController = new PluginRegistrationController({
         manifestId: this.manifest.id,
@@ -869,7 +870,7 @@ export default class Aside extends Plugin {
 
         this.commentManager = new CommentManager([]);
         this.vaultScriptRegistry.seed(this.app.vault.getFiles().map((file) => file.path));
-        this.pluginEventRouter.registerVaultCreateEvent();
+        this.pluginEventRouter.registerVaultMaintenanceEvents();
         await this.loadSettings();
         this.scriptRunStore.load();
         this.vaultCapabilityIndex.seed(
@@ -1806,7 +1807,7 @@ export default class Aside extends Plugin {
     private async handleSavedUserEntry(event: SavedUserEntryEvent): Promise<void> {
         await routeSavedUserEntry({
             event,
-            scriptsEnabled: this.isScriptsEnabled(),
+            isScriptsEnabled: () => this.isScriptsEnabled(),
             builtInControllers: {
                 updateScript: this.updateScriptCommandController,
                 createScript: this.createScriptCommandController,

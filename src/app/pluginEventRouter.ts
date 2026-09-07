@@ -48,27 +48,40 @@ function isTAbstractFile(value: unknown): value is TAbstractFile {
 }
 
 export class PluginEventRouter {
-    private vaultCreateEventRegistered = false;
+    private vaultMaintenanceEventsRegistered = false;
 
     constructor(private readonly host: PluginEventRouterHost) {}
 
     public async register(): Promise<void> {
-        this.registerVaultCreateEvent();
+        this.registerVaultMaintenanceEvents();
         await this.registerLayoutReady();
         this.registerWorkspaceEvents();
-        this.registerVaultEvents();
+        this.registerVaultModifyEvent();
         this.registerMetadataCacheEvents();
     }
 
-    public registerVaultCreateEvent(): void {
-        if (this.vaultCreateEventRegistered) {
+    public registerVaultMaintenanceEvents(): void {
+        if (this.vaultMaintenanceEventsRegistered) {
             return;
         }
 
-        this.vaultCreateEventRegistered = true;
+        this.vaultMaintenanceEventsRegistered = true;
         this.host.registerEvent(
             this.host.app.vault.on("create", async (file) => {
                 await this.host.handleFileCreate(this.host.isTFile(file) ? file : null);
+            }),
+        );
+        this.host.registerEvent(
+            this.host.app.vault.on("rename", async (file, oldPath) => {
+                await this.host.handleFileRename(
+                    this.host.isTFile(file) ? file : null,
+                    oldPath,
+                );
+            }),
+        );
+        this.host.registerEvent(
+            this.host.app.vault.on("delete", async (file) => {
+                await this.host.handleFileDelete(isTAbstractFile(file) ? file : null);
             }),
         );
     }
@@ -104,22 +117,7 @@ export class PluginEventRouter {
         );
     }
 
-    private registerVaultEvents(): void {
-        this.host.registerEvent(
-            this.host.app.vault.on("rename", async (file, oldPath) => {
-                await this.host.handleFileRename(
-                    this.host.isTFile(file) ? file : null,
-                    oldPath,
-                );
-            }),
-        );
-
-        this.host.registerEvent(
-            this.host.app.vault.on("delete", async (file) => {
-                await this.host.handleFileDelete(isTAbstractFile(file) ? file : null);
-            }),
-        );
-
+    private registerVaultModifyEvent(): void {
         this.host.registerEvent(
             this.host.app.vault.on("modify", async (file) => {
                 await this.host.handleFileModify(this.host.isTFile(file) ? file : null);

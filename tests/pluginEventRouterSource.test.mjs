@@ -7,14 +7,14 @@ const onloadStart = mainSource.indexOf("async onload()");
 const onloadEnd = mainSource.indexOf("\n    onunload()", onloadStart);
 const onloadSource = mainSource.slice(onloadStart, onloadEnd);
 
-test("main registers vault create immediately after script-registry seed and before full routing", () => {
+test("main registers vault create, rename, and delete immediately after script-registry seed", () => {
     const seedIndex = onloadSource.indexOf("this.vaultScriptRegistry.seed(");
-    const earlyRegisterIndex = onloadSource.indexOf("this.pluginEventRouter.registerVaultCreateEvent();");
+    const earlyRegisterIndex = onloadSource.indexOf("this.pluginEventRouter.registerVaultMaintenanceEvents();");
     const loadSettingsIndex = onloadSource.indexOf("await this.loadSettings();");
     const fullRegisterIndex = onloadSource.indexOf("await this.pluginEventRouter.register();");
 
     assert.ok(seedIndex >= 0, "onload should seed the vault script registry");
-    assert.ok(earlyRegisterIndex > seedIndex, "early create registration should follow the initial seed");
+    assert.ok(earlyRegisterIndex > seedIndex, "early vault maintenance registration should follow the initial seed");
     assert.ok(loadSettingsIndex > earlyRegisterIndex, "settings migration should observe the seeded registry");
     assert.ok(fullRegisterIndex > earlyRegisterIndex, "early create registration should precede full routing");
     assert.doesNotMatch(
@@ -24,10 +24,12 @@ test("main registers vault create immediately after script-registry seed and bef
     );
 });
 
-test("main delegates create ownership to the router exactly once", () => {
-    const earlyRegistrationCalls = mainSource.match(/this\.pluginEventRouter\.registerVaultCreateEvent\(\);/g) ?? [];
+test("main delegates early vault maintenance ownership to the router exactly once", () => {
+    const earlyRegistrationCalls = mainSource.match(/this\.pluginEventRouter\.registerVaultMaintenanceEvents\(\);/g) ?? [];
     assert.equal(earlyRegistrationCalls.length, 1);
     assert.doesNotMatch(mainSource, /this\.app\.vault\.on\("create"/);
+    assert.doesNotMatch(mainSource, /this\.app\.vault\.on\("rename"/);
+    assert.doesNotMatch(mainSource, /this\.app\.vault\.on\("delete"/);
 });
 
 test("main exposes canonical registry evidence and delegates Scripts settings changes", () => {

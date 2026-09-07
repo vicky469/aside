@@ -2,6 +2,9 @@ import * as assert from "node:assert/strict";
 import test from "node:test";
 import type { EventRef, TAbstractFile, TFile, WorkspaceLeaf } from "obsidian";
 import { PluginEventRouter } from "../src/app/pluginEventRouter";
+import { resolveLoadedSettings } from "../src/settings/indexNoteSettingsPlanner";
+import type { AsideSettings } from "../src/ui/settings/AsideSetting";
+import { VaultScriptRegistry } from "../src/vaultScripts/vaultScriptRegistry";
 
 type WorkspaceEventName = "file-open" | "active-leaf-change" | "editor-change";
 type VaultEventName = "create" | "rename" | "delete" | "modify";
@@ -22,7 +25,20 @@ function createFolder(path: string): TAbstractFile {
     } as TAbstractFile;
 }
 
-function createHarness(options: { layoutReady?: boolean } = {}) {
+function createDeferred<T>() {
+    let resolve = (_value: T) => {};
+    const promise = new Promise<T>((resolvePromise) => {
+        resolve = resolvePromise;
+    });
+    return { promise, resolve };
+}
+
+function createHarness(options: {
+    layoutReady?: boolean;
+    handleFileCreate?: (file: TFile | null) => void | Promise<void>;
+    handleFileRename?: (file: TFile | null, oldPath: string) => void | Promise<void>;
+    handleFileDelete?: (file: TAbstractFile | null) => void | Promise<void>;
+} = {}) {
     const calls: string[] = [];
     const registeredEvents: EventRef[] = [];
     const workspaceHandlers = new Map<WorkspaceEventName, (...args: any[]) => void>();
@@ -85,12 +101,15 @@ function createHarness(options: { layoutReady?: boolean } = {}) {
         },
         handleFileCreate: async (file) => {
             calls.push(`create:${file?.path ?? "null"}`);
+            await options.handleFileCreate?.(file);
         },
         handleFileRename: async (file, oldPath) => {
             calls.push(`rename:${oldPath}->${file?.path ?? "null"}`);
+            await options.handleFileRename?.(file, oldPath);
         },
         handleFileDelete: async (file) => {
             calls.push(`delete:${file?.path ?? "null"}`);
+            await options.handleFileDelete?.(file);
         },
         handleFileModify: async (file) => {
             calls.push(`modify:${file?.path ?? "null"}`);
@@ -115,16 +134,18 @@ function createHarness(options: { layoutReady?: boolean } = {}) {
     };
 }
 
-test("plugin event router registers vault create early once and reuses it during full registration", async () => {
+test("plugin event router registers vault maintenance early once and reuses it during full registration", async () => {
     const harness = createHarness();
     const note = createFile("docs/early.md");
 
-    harness.router.registerVaultCreateEvent();
-    harness.router.registerVaultCreateEvent();
+    harness.router.registerVaultMaintenanceEvents();
+    harness.router.registerVaultMaintenanceEvents();
 
-    assert.deepEqual(Array.from(harness.vaultHandlers.keys()), ["create"]);
+    assert.deepEqual(Array.from(harness.vaultHandlers.keys()), ["create", "rename", "delete"]);
     assert.equal(harness.vaultRegistrationCounts.get("create"), 1);
-    assert.equal(harness.registeredEvents.length, 1);
+    assert.equal(harness.vaultRegistrationCounts.get("rename"), 1);
+    assert.equal(harness.vaultRegistrationCounts.get("delete"), 1);
+    assert.equal(harness.registeredEvents.length, 3);
 
     harness.vaultHandlers.get("create")?.(note);
     harness.vaultHandlers.get("create")?.(createFolder("Assets"));
@@ -138,7 +159,77 @@ test("plugin event router registers vault create early once and reuses it during
         ["create", "rename", "delete", "modify"],
     );
     assert.equal(harness.vaultRegistrationCounts.get("create"), 1);
+    assert.equal(harness.vaultRegistrationCounts.get("rename"), 1);
+    assert.equal(harness.vaultRegistrationCounts.get("delete"), 1);
     assert.equal(harness.registeredEvents.length, 8);
+});
+
+test("early vault maintenance keeps rename migration evidence and final script actionability live", async () => {
+    const registry = new VaultScriptRegistry();
+    registry.seed(["drafts/clean.mjs"]);
+    const harness = createHarness({
+        handleFileRename: (file, oldPath) => {
+            if (file) {
+                registry.rename(oldPath, file.path);
+            }
+        },
+    });
+    harness.router.registerVaultMaintenanceEvents();
+    const loadedData = createDeferred<Record<string, unknown>>();
+    let persistedScriptsEnabled: boolean | undefined;
+    const delayedSettingsLoad = (async () => {
+        const loaded = await loadedData.promise;
+        const resolved = resolveLoadedSettings(
+            loaded,
+            {} as AsideSettings,
+            { hasRegisteredVaultScripts: registry.getRunnableScripts().length > 0 },
+        );
+        persistedScriptsEnabled = resolved.settings.scriptsEnabled;
+    })();
+
+    await harness.vaultHandlers.get("rename")?.(
+        createFile("🛠️ scripts/clean.mjs"),
+        "drafts/clean.mjs",
+    );
+    loadedData.resolve({});
+    await delayedSettingsLoad;
+
+    assert.equal(persistedScriptsEnabled, true);
+    assert.equal(registry.isRunnableMention("/clean"), true);
+    assert.equal(registry.resolve("/clean")?.path, "🛠️ scripts/clean.mjs");
+});
+
+test("early vault maintenance keeps delete migration evidence and final script actionability live", async () => {
+    const scriptPath = "🛠️ scripts/clean.mjs";
+    const registry = new VaultScriptRegistry();
+    registry.seed([scriptPath]);
+    const harness = createHarness({
+        handleFileDelete: (file) => {
+            if (file) {
+                registry.remove(file.path);
+            }
+        },
+    });
+    harness.router.registerVaultMaintenanceEvents();
+    const loadedData = createDeferred<Record<string, unknown>>();
+    let persistedScriptsEnabled: boolean | undefined;
+    const delayedSettingsLoad = (async () => {
+        const loaded = await loadedData.promise;
+        const resolved = resolveLoadedSettings(
+            loaded,
+            {} as AsideSettings,
+            { hasRegisteredVaultScripts: registry.getRunnableScripts().length > 0 },
+        );
+        persistedScriptsEnabled = resolved.settings.scriptsEnabled;
+    })();
+
+    await harness.vaultHandlers.get("delete")?.(createFile(scriptPath));
+    loadedData.resolve({});
+    await delayedSettingsLoad;
+
+    assert.equal(persistedScriptsEnabled, false);
+    assert.equal(registry.isRunnableMention("/clean"), false);
+    assert.deepEqual(registry.getRunnableScripts(), []);
 });
 
 test("plugin event router exposes Obsidian event flow in one module", async () => {

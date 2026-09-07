@@ -13,7 +13,7 @@ function getMethodSource(source, startMarker, endMarker) {
     return source.slice(start, end);
 }
 
-test("saved entry routing reads the live Scripts capability into the named route", () => {
+test("saved entry routing passes the live Scripts capability predicate into the named route", () => {
     const methodSource = getMethodSource(
         mainSource,
         "private async handleSavedUserEntry(event: SavedUserEntryEvent)",
@@ -21,7 +21,8 @@ test("saved entry routing reads the live Scripts capability into the named route
     );
 
     assert.match(methodSource, /routeSavedUserEntry\(\{/u);
-    assert.match(methodSource, /scriptsEnabled:\s*this\.isScriptsEnabled\(\)/u);
+    assert.match(methodSource, /isScriptsEnabled:\s*\(\)\s*=>\s*this\.isScriptsEnabled\(\)/u);
+    assert.doesNotMatch(methodSource, /scriptsEnabled:\s*this\.isScriptsEnabled\(\)/u);
     assert.match(methodSource, /builtInControllers:\s*\{/u);
     assert.match(methodSource, /updateScript:\s*this\.updateScriptCommandController/u);
     assert.match(methodSource, /createScript:\s*this\.createScriptCommandController/u);
