@@ -1,17 +1,17 @@
 # Advanced Capability Section Gates Design
 
 **Date:** 2026-09-07
-**Status:** Approved design; implementation pending
+**Status:** Implemented and verified
 
 ## Implementation Tracking
 
-- [ ] Add a persisted, default-off `scriptsEnabled` capability setting.
-- [ ] Make Scripts and Publishing use shared section-level enable controls in both settings renderers.
-- [ ] Hide disabled-section details from rendering and settings search.
-- [ ] Gate every new script workflow, including retries, while leaving ordinary `@agent` replies available.
-- [ ] Preserve existing users through evidence-based Scripts migration.
-- [ ] Update current user documentation and focused regression coverage.
-- [ ] Run the complete build and exact release-artifact inspection.
+- [x] Add a persisted, default-off `scriptsEnabled` capability setting.
+- [x] Make Scripts and Publishing use shared section-level enable controls in both settings renderers.
+- [x] Hide disabled-section details from rendering and settings search.
+- [x] Gate every new script workflow, including retries, while leaving ordinary `@agent` replies available.
+- [x] Preserve existing users through evidence-based Scripts migration.
+- [x] Update current user documentation and focused regression coverage.
+- [x] Run the complete build and exact release-artifact inspection.
 
 ## Context
 
@@ -223,3 +223,14 @@ Then run the repository's focused tests and complete build pipeline: compiled an
 - Declarative and legacy settings renderers consume the same section policy.
 - `README.md`, `SCRIPTS.md`, and `ADVANCED_FEATURES.md` accurately describe the behavior.
 - Full verification passes, including the exact release-artifact exposure checks required by `AGENTS.md`.
+
+## Verification Evidence
+
+Verified on 2026-09-07 without installing, publishing, releasing, or pushing:
+
+- The worktree was clean before `npm run build`; the command exited 0 with 1,575/1,575 compiled tests and 171/171 direct-source tests passing, followed by clean ESLint, typecheck, Obsidian compliance, production bundle, bundle-size, and release-artifact checks.
+- A focused capability run exited 0 with 307/307 compiled behavior tests and 13/13 direct wiring/documentation tests passing. It explicitly covered default-off migration, section order and disabled detail/search visibility, discovery and actionability, saved routing, script-oriented Generate and retry denial, ordinary agent retry and cancellation preservation, and documentation policy.
+- `npm run release:artifacts:check` was run again after the build and exited 0 for the exact GitHub release set: `main.js`, `manifest.json`, and `styles.css`.
+- Public artifact inspection found no `main.js.map` or other shipped map, `sourceMappingURL`, `sourcesContent`, raw TypeScript/TSX/JSX source, secret-bearing file or content, test fixture, or local-only file. The artifacts were `main.js` (705,354 bytes), `manifest.json` (349 bytes), and `styles.css` (97,579 bytes). The manifest identifies `aside` / `Aside` version `2.0.103`, minimum Obsidian `1.12.7`.
+- `main.js` is an expected ignored build product; `manifest.json` and `styles.css` are tracked and the build left them unchanged. `git diff main...HEAD --check` and the post-build worktree check were clean before this verification record was added.
+- A targeted audit of production source and current guides, excluding historical release notes and historical design records, found no contradictory current default-on or Experimental-settings language. The only production `featureFlags` references are intentional legacy-data detection and removal.

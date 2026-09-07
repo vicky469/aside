@@ -38,7 +38,7 @@
 - Test: `tests/indexNoteSettingsController.test.ts`
 - Test: `tests/pluginEventRouterSource.test.mjs`
 
-- [ ] **Step 1: Write failing normalization and migration tests**
+- [x] **Step 1: Write failing normalization and migration tests**
 
 Add `scriptsEnabled` to `createSettings`, add `hasRegisteredVaultScripts` to the controller harness, and cover the complete inference matrix. Extend the harness options and host with the canonical evidence seam:
 
@@ -215,7 +215,7 @@ const loadSettingsIndex = onloadSource.indexOf("await this.loadSettings();");
 assert.ok(loadSettingsIndex > earlyRegisterIndex, "script evidence must be seeded before settings migration");
 ```
 
-- [ ] **Step 2: Run the focused tests and verify they fail**
+- [x] **Step 2: Run the focused tests and verify they fail**
 
 Run:
 
@@ -227,7 +227,7 @@ node --test tests/pluginEventRouterSource.test.mjs
 
 Expected: compilation fails because `AsideSettings.scriptsEnabled`, the evidence argument, host method, and controller setter do not exist.
 
-- [ ] **Step 3: Implement persisted state and migration inference**
+- [x] **Step 3: Implement persisted state and migration inference**
 
 Add the setting in `AsideSetting.ts`:
 
@@ -359,7 +359,7 @@ public async setScriptsEnabled(enabled: boolean): Promise<void> {
 }
 ```
 
-- [ ] **Step 4: Run focused tests and verify they pass**
+- [x] **Step 4: Run focused tests and verify they pass**
 
 Run:
 
@@ -371,7 +371,7 @@ node --test tests/pluginEventRouterSource.test.mjs
 
 Expected: all settings migration, rollback, and startup-order tests pass.
 
-- [ ] **Step 5: Commit the state slice**
+- [x] **Step 5: Commit the state slice**
 
 ```bash
 git add src/ui/settings/AsideSetting.ts src/settings/indexNoteSettingsPlanner.ts src/settings/indexNoteSettingsController.ts src/main.ts tests/indexNoteSettingsController.test.ts tests/pluginEventRouterSource.test.mjs
@@ -386,7 +386,7 @@ git commit -m "feat(settings): persist Scripts capability"
 - Modify: `src/ui/settings/asideSettingLegacyAdapter.ts`
 - Test: `tests/asideSettingCatalog.test.ts`
 
-- [ ] **Step 1: Write failing shared-catalog and adapter tests**
+- [x] **Step 1: Write failing shared-catalog and adapter tests**
 
 Change the stable UI key order to reflect actual section order and add disabled/enabled assertions for both advanced sections:
 
@@ -525,7 +525,7 @@ test("legacy settings hide disabled advanced details", () => {
 });
 ```
 
-- [ ] **Step 2: Run the focused test and verify it fails**
+- [x] **Step 2: Run the focused test and verify it fails**
 
 Run:
 
@@ -536,7 +536,7 @@ node --test .test-dist/tests/asideSettingCatalog.test.js
 
 Expected: the Scripts section has no enable control, Publishing still owns its enable toggle as a detail entry, and disabled Scripts still exposes Default agent.
 
-- [ ] **Step 3: Add section control metadata and shared visibility helpers**
+- [x] **Step 3: Add section control metadata and shared visibility helpers**
 
 In `asideSettingCatalog.ts`, define native section controls:
 
@@ -654,7 +654,7 @@ function isRemotePurgeSettingVisible(context: AsideSettingCatalogContext): boole
 }
 ```
 
-- [ ] **Step 4: Make both adapters thin translations of the shared policy**
+- [x] **Step 4: Make both adapters thin translations of the shared policy**
 
 In the declarative adapter, use `getAsideSettingSurfaceKeys`, prepend one control render item, and apply `isAsideSettingEntryVisible` to detail items:
 
@@ -710,7 +710,7 @@ if (section.control) {
 }
 ```
 
-- [ ] **Step 5: Run focused tests and verify they pass**
+- [x] **Step 5: Run focused tests and verify they pass**
 
 Run:
 
@@ -721,7 +721,7 @@ node --test .test-dist/tests/asideSettingCatalog.test.js
 
 Expected: catalog and both adapter assertions pass; disabled detail definitions report invisible.
 
-- [ ] **Step 6: Commit the section UI slice**
+- [x] **Step 6: Commit the section UI slice**
 
 ```bash
 git add src/ui/settings/asideSettingCatalog.ts src/ui/settings/asideSettingDefinitionsAdapter.ts src/ui/settings/asideSettingLegacyAdapter.ts tests/asideSettingCatalog.test.ts
@@ -740,7 +740,7 @@ git commit -m "feat(settings): gate advanced section details"
 - Test: `tests/commentEditorFormatting.test.ts`
 - Test: `tests/commentEditorPersistedMentions.test.ts`
 
-- [ ] **Step 1: Write failing off-state discovery tests**
+- [x] **Step 1: Write failing off-state discovery tests**
 
 Make capability input explicit in existing calls and add these assertions:
 
@@ -776,7 +776,7 @@ test("Scripts off omits built-in and registered slash suggestions", () => {
 
 Pass `true` in all existing tests that assert enabled script behavior. Add `scriptsEnabled: true` to existing `ActionableMentionContext` literals in formatting and persisted-mention tests.
 
-- [ ] **Step 2: Run focused tests and verify they fail**
+- [x] **Step 2: Run focused tests and verify they fail**
 
 Run:
 
@@ -787,7 +787,7 @@ node --test .test-dist/tests/actionableMentions.test.js .test-dist/tests/comment
 
 Expected: signatures and off-state assertions fail because all built-in commands and registry mentions are still unconditional.
 
-- [ ] **Step 3: Split always-available and script-oriented mention policy**
+- [x] **Step 3: Split always-available and script-oriented mention policy**
 
 Change `actionableMentions.ts` so reservations remain stable while visible/actionable candidates follow the capability:
 
@@ -825,7 +825,7 @@ export function isActionableMention(
 
 Keep `RESERVED_BUILT_IN_MENTION_NAMES` derived from `getAllBuiltInMentions()` so a disabled built-in name cannot become a colliding vault script.
 
-- [ ] **Step 4: Carry the capability through suggestions and the Obsidian adapter**
+- [x] **Step 4: Carry the capability through suggestions and the Obsidian adapter**
 
 Update the suggestion signature and filter:
 
@@ -888,7 +888,7 @@ getMentionSuggestions: (query) => buildMentionSuggestions(
 ),
 ```
 
-- [ ] **Step 5: Run focused tests and verify they pass**
+- [x] **Step 5: Run focused tests and verify they pass**
 
 Run:
 
@@ -899,7 +899,7 @@ node --test .test-dist/tests/actionableMentions.test.js .test-dist/tests/comment
 
 Expected: enabled behavior remains unchanged, off-state slash results are empty, and agent/todo mentions remain actionable.
 
-- [ ] **Step 6: Commit the discovery slice**
+- [x] **Step 6: Commit the discovery slice**
 
 ```bash
 git add src/core/text/actionableMentions.ts src/ui/editor/commentMentionSuggestions.ts src/ui/views/AsideView.ts src/main.ts tests/actionableMentions.test.ts tests/commentMentionSuggestions.test.ts tests/commentEditorFormatting.test.ts tests/commentEditorPersistedMentions.test.ts
@@ -917,7 +917,7 @@ git commit -m "feat(scripts): gate command discovery"
 - Test: `tests/sidebarPersistedComment.test.ts`
 - Create: `tests/scriptsCapabilityWiring.test.mjs`
 
-- [ ] **Step 1: Write failing routing tests**
+- [x] **Step 1: Write failing routing tests**
 
 Replace positional routing arguments with a named route and test that disabled script flows go only to the ordinary agent controller:
 
@@ -955,7 +955,7 @@ test("saved entry routing skips every script controller while Scripts is off", a
 
 Convert existing enabled routing tests to `{ scriptsEnabled: true, builtInControllers, scriptController, agentController }` and retain their exact call-order assertions.
 
-- [ ] **Step 2: Write failing regenerate-policy tests**
+- [x] **Step 2: Write failing regenerate-policy tests**
 
 Pass a required `scriptsEnabled` boolean to regenerate planning and add these cases in `sidebarPersistedComment.test.ts`:
 
@@ -1001,7 +1001,7 @@ test("Scripts off preserves ordinary agent regeneration", () => {
 
 Use the test file's existing run factories, add `scriptsEnabled: true` to its shared `createRenderHost` defaults, and pass `true` to every existing regenerate-policy call to preserve the prior enabled behavior.
 
-- [ ] **Step 3: Add a direct-source test for runtime defense in depth**
+- [x] **Step 3: Add a direct-source test for runtime defense in depth**
 
 Create `tests/scriptsCapabilityWiring.test.mjs`:
 
@@ -1028,7 +1028,7 @@ test("main gates saved script routing and both retry entrypoints", () => {
 });
 ```
 
-- [ ] **Step 4: Run focused tests and verify they fail**
+- [x] **Step 4: Run focused tests and verify they fail**
 
 Run:
 
@@ -1040,7 +1040,7 @@ node --test tests/scriptsCapabilityWiring.test.mjs
 
 Expected: named routing, required regenerate capability, and main retry guards are absent.
 
-- [ ] **Step 5: Implement named capability-aware routing**
+- [x] **Step 5: Implement named capability-aware routing**
 
 In `commentScriptController.ts`, define and consume one route object:
 
@@ -1087,7 +1087,7 @@ await routeSavedUserEntry(event, {
 });
 ```
 
-- [ ] **Step 6: Implement retry visibility and host guards**
+- [x] **Step 6: Implement retry visibility and host guards**
 
 Add `scriptsEnabled: boolean` to `SidebarPersistedCommentHost`. Require it in regenerate planning:
 
@@ -1140,7 +1140,7 @@ public async retryScriptRun(runId: string): Promise<boolean> {
 }
 ```
 
-- [ ] **Step 7: Run focused tests and verify they pass**
+- [x] **Step 7: Run focused tests and verify they pass**
 
 Run:
 
@@ -1152,7 +1152,7 @@ node --test tests/scriptsCapabilityWiring.test.mjs
 
 Expected: disabled routing reaches only the ordinary agent controller, disabled script retries disappear and reject, and ordinary agent retry cases pass.
 
-- [ ] **Step 8: Commit the runtime slice**
+- [x] **Step 8: Commit the runtime slice**
 
 ```bash
 git add src/vaultScripts/commentScriptController.ts src/ui/views/sidebarPersistedComment.ts src/ui/views/AsideView.ts src/main.ts tests/commentScriptController.test.ts tests/sidebarPersistedComment.test.ts tests/scriptsCapabilityWiring.test.mjs
@@ -1167,7 +1167,7 @@ git commit -m "feat(scripts): block disabled execution paths"
 - Modify: `ADVANCED_FEATURES.md`
 - Modify: `tests/agentScriptsDocumentation.test.mjs`
 
-- [ ] **Step 1: Write failing documentation assertions**
+- [x] **Step 1: Write failing documentation assertions**
 
 Replace the old no-activation expectation with explicit capability-boundary checks:
 
@@ -1189,7 +1189,7 @@ test("current guides document default-off advanced capabilities", () => {
 
 Retain every existing security, provider, script-registration, and workflow assertion.
 
-- [ ] **Step 2: Run documentation tests and verify they fail**
+- [x] **Step 2: Run documentation tests and verify they fail**
 
 Run:
 
@@ -1199,7 +1199,7 @@ node --test tests/agentScriptsDocumentation.test.mjs
 
 Expected: the new default-off, enable-path, and non-destructive-disable statements are absent.
 
-- [ ] **Step 3: Update README and focused guides**
+- [x] **Step 3: Update README and focused guides**
 
 Use this exact product boundary in the current guides:
 
@@ -1223,7 +1223,7 @@ Publishing is off by default. Enable it under **Settings → Aside → Publishin
 
 Keep the existing local-script warning and every local-agent privacy statement unchanged in substance.
 
-- [ ] **Step 4: Run documentation tests and verify they pass**
+- [x] **Step 4: Run documentation tests and verify they pass**
 
 Run:
 
@@ -1233,7 +1233,7 @@ node --test tests/agentScriptsDocumentation.test.mjs
 
 Expected: all README, Scripts, Advanced Features, privacy, and non-sandboxing assertions pass.
 
-- [ ] **Step 5: Commit the documentation slice**
+- [x] **Step 5: Commit the documentation slice**
 
 ```bash
 git add README.md SCRIPTS.md ADVANCED_FEATURES.md tests/agentScriptsDocumentation.test.mjs
@@ -1245,7 +1245,7 @@ git commit -m "docs: explain advanced capability controls"
 **Files:**
 - Modify: `docs/superpowers/specs/2026-09-07-advanced-capability-section-gates-design.md`
 
-- [ ] **Step 1: Run the full production build**
+- [x] **Step 1: Run the full production build**
 
 Run:
 
@@ -1255,7 +1255,7 @@ npm run build
 
 Expected: compiled TypeScript tests, direct tests, ESLint, typecheck, Obsidian compliance, production bundling, bundle-size guard, and release-artifact guard all pass.
 
-- [ ] **Step 2: Re-run exact artifact exposure inspection**
+- [x] **Step 2: Re-run exact artifact exposure inspection**
 
 Run:
 
@@ -1265,7 +1265,7 @@ npm run release:artifacts:check
 
 Expected: the exact ship set is `main.js`, `manifest.json`, and `styles.css`; no `main.js.map`, `sourceMappingURL`, `sourcesContent`, raw TypeScript/JSX-family source, secret-bearing file, or local absolute path is reported.
 
-- [ ] **Step 3: Audit the final change surface**
+- [x] **Step 3: Audit the final change surface**
 
 Run:
 
@@ -1278,7 +1278,7 @@ git status --short
 
 Expected: every Scripts setting consumer is intentional; discovery, saved routing, and retries are covered; no whitespace errors or unexpected worktree changes appear. Generated `main.js` remains ignored.
 
-- [ ] **Step 4: Update the tracked spec only after evidence exists**
+- [x] **Step 4: Update the tracked spec only after evidence exists**
 
 Mark all seven Implementation Tracking items complete, change status to `Implemented and verified`, and append this evidence section after confirming each statement against Step 1 output:
 
@@ -1291,14 +1291,14 @@ Mark all seven Implementation Tracking items complete, change status to `Impleme
 - Exact artifact inspection passed for `main.js`, `manifest.json`, and `styles.css`; no source maps, embedded source content, raw TypeScript/JSX-family source, secret-bearing files, or local absolute paths were included.
 ```
 
-- [ ] **Step 5: Commit the verification record**
+- [x] **Step 5: Commit the verification record**
 
 ```bash
 git add -f docs/superpowers/specs/2026-09-07-advanced-capability-section-gates-design.md
 git commit -m "docs(settings): record capability verification"
 ```
 
-- [ ] **Step 6: Confirm the branch is ready for review**
+- [x] **Step 6: Confirm the branch is ready for review**
 
 Run:
 
@@ -1308,3 +1308,16 @@ git log --oneline main..HEAD
 ```
 
 Expected: the worktree is clean and the feature branch contains the state, UI, discovery, runtime, documentation, and verification commits.
+
+## Verification Record
+
+Task 6 was completed on 2026-09-07 without an install, publish, release, or push:
+
+- Pre-build `git status --short --branch`: clean on `feat/advanced-capability-gates`.
+- `npm run build`: exit 0; 1,575 compiled tests and 171 direct-source tests passed with zero failures, skips, cancellations, or todos. ESLint, typecheck, Obsidian compliance, bundling, the 705,354/750,000-byte size guard, and the integrated release-artifact guard passed.
+- Focused capability verification: 307 compiled behavior tests and 13 direct wiring/documentation tests passed with zero failures, explicitly exercising the off-state and allowed retry/cancellation boundaries.
+- Explicit post-build `npm run release:artifacts:check`: exit 0 for exactly `main.js`, `manifest.json`, and `styles.css`.
+- Manual public-artifact audit: `main.js` 705,354 bytes, `manifest.json` 349 bytes, `styles.css` 97,579 bytes; manifest `aside` / `Aside` version `2.0.103`, minimum app `1.12.7`; no shipped map, embedded source markers, raw TypeScript/JSX-family source, secrets, certificates/private keys, fixtures, or local-only files.
+- Generated-artifact policy: `main.js` is ignored by `.gitignore`; `manifest.json` and `styles.css` are tracked and remained unchanged. No generated artifact was staged.
+- Targeted current-surface language audit (historical release notes and historical design records excluded): no contradictory default-on or Experimental-settings wording; legacy `featureFlags` references only detect and remove old persisted data.
+- `git diff main...HEAD --check` and post-build status were clean before adding this documentation-only record.
