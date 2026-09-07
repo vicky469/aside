@@ -38,10 +38,20 @@ function createComment(overrides: Partial<Comment> = {}): Comment {
     };
 }
 
+function createDeferred<T>() {
+    let resolve = (_value: T) => {};
+    const promise = new Promise<T>((resolvePromise) => {
+        resolve = resolvePromise;
+    });
+    return { promise, resolve };
+}
+
 function createHarness(options: {
     initialComments?: Comment[];
     refreshThrows?: boolean;
     publishedArtifactPaths?: string[];
+    getFileByPath?: (filePath: string) => TFile | null;
+    loadCommentsForFile?: (file: TFile) => void | Promise<void>;
 } = {}) {
     const commentManager = new CommentManager(options.initialComments ?? []);
     const aggregateCommentIndex = new AggregateCommentIndex();
@@ -81,7 +91,14 @@ function createHarness(options: {
     const hashedTexts: string[] = [];
 
     const controller = new PluginLifecycleController({
-        app: {} as never,
+        app: {
+            vault: {
+                getAbstractFileByPath: (filePath: string) =>
+                    options.getFileByPath
+                        ? options.getFileByPath(filePath)
+                        : createFile(filePath),
+            },
+        } as never,
         getCommentManager: () => commentManager,
         getAggregateCommentIndex: () => aggregateCommentIndex,
         renameAgentRuns: async (previousFilePath, nextFilePath) => {
@@ -127,6 +144,7 @@ function createHarness(options: {
         loadCommentsForFile: async (file) => {
             if (file) {
                 loadedFiles.push(file.path);
+                await options.loadCommentsForFile?.(file);
             }
         },
         refreshCommentViews: async (refreshOptions) => {
@@ -268,6 +286,89 @@ test("plugin lifecycle controller keeps renamed comment files and indexes aligne
     assert.equal(harness.getRefreshCommentViewsCount(), 1);
     assert.equal(harness.getRefreshEditorDecorationsCount(), 1);
     assert.equal(harness.getScheduleAggregateNoteRefreshCount(), 1);
+});
+
+test("plugin lifecycle controller retargets files under a production-shaped renamed folder", async () => {
+    const originalFolderPath = "Drafts";
+    const renamedFolder = createFolder("Published", [
+        createFile("Published/one.md"),
+        createFolder("Published/nested", [
+            createFile("Published/nested/two.pdf"),
+        ]),
+    ]);
+    const harness = createHarness({
+        initialComments: [
+            createComment({ id: "one", filePath: "Drafts/one.md" }),
+            createComment({
+                id: "two",
+                filePath: "Drafts/nested/two.pdf",
+                anchorKind: "page",
+                selectedText: "two",
+                selectedTextHash: "hash:two",
+            }),
+        ],
+    });
+
+    await harness.controller.handleFileRename(renamedFolder, originalFolderPath);
+
+    assert.deepEqual(harness.renamedAgentRuns, [
+        { previousFilePath: "Drafts/one.md", nextFilePath: "Published/one.md" },
+        { previousFilePath: "Drafts/nested/two.pdf", nextFilePath: "Published/nested/two.pdf" },
+    ]);
+    assert.deepEqual(harness.renamedScriptRuns, harness.renamedAgentRuns);
+    assert.deepEqual(harness.renamedStoredComments, harness.renamedAgentRuns);
+    assert.deepEqual(harness.renamedPublishedArtifactPaths, harness.renamedAgentRuns);
+    assert.equal(harness.commentManager.getCommentById("one")?.filePath, "Published/one.md");
+    assert.equal(harness.commentManager.getCommentById("two")?.filePath, "Published/nested/two.pdf");
+    assert.equal(harness.aggregateCommentIndex.getCommentById("one")?.filePath, "Published/one.md");
+    assert.equal(harness.aggregateCommentIndex.getCommentById("two")?.filePath, "Published/nested/two.pdf");
+    assert.equal(harness.getRefreshCommentViewsCount(), 1);
+    assert.equal(harness.getRefreshEditorDecorationsCount(), 1);
+    assert.equal(harness.getScheduleAggregateNoteRefreshCount(), 1);
+});
+
+test("plugin lifecycle controller awaits live-file hydration before rename replay completes", async () => {
+    const hydration = createDeferred<void>();
+    const harness = createHarness({
+        loadCommentsForFile: () => hydration.promise,
+    });
+    let renameCompleted = false;
+
+    const rename = harness.controller
+        .handleFileRename(createFile("docs/renamed.md"), "docs/original.md")
+        .then(() => {
+            renameCompleted = true;
+        });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    assert.equal(renameCompleted, false);
+
+    hydration.resolve(undefined);
+    await rename;
+    assert.equal(renameCompleted, true);
+});
+
+test("plugin lifecycle controller hydrates only the live target after chained startup renames", async () => {
+    const harness = createHarness({
+        getFileByPath: (filePath) => filePath === "docs/final.md"
+            ? createFile(filePath)
+            : null,
+    });
+
+    await harness.controller.handleFileRename(
+        createFile("docs/intermediate.md"),
+        "docs/original.md",
+    );
+    await harness.controller.handleFileRename(
+        createFile("docs/final.md"),
+        "docs/intermediate.md",
+    );
+
+    assert.deepEqual(harness.loadedFiles, ["docs/final.md"]);
+    assert.deepEqual(harness.renamedStoredComments, [
+        { previousFilePath: "docs/original.md", nextFilePath: "docs/intermediate.md" },
+        { previousFilePath: "docs/intermediate.md", nextFilePath: "docs/final.md" },
+    ]);
 });
 
 test("plugin lifecycle controller forwards one consistent retarget context to manager and aggregate index", async () => {

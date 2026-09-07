@@ -778,6 +778,38 @@ export default class Aside extends Plugin {
             this.registerEvent(eventRef);
         },
         isTFile: (value): value is TFile => value instanceof TFile,
+        handleFileCreateMaintenance: (file) => {
+            if (!file) {
+                return;
+            }
+
+            this.vaultScriptRegistry.upsert(file.path);
+            this.vaultCapabilityIndex.upsert(file, this.getVaultFileTags(file));
+        },
+        handleFileRenameMaintenance: (file, oldPath) => {
+            this.vaultScriptRegistry.seed(this.app.vault.getFiles().map((candidate) => candidate.path));
+            if (file instanceof TFile) {
+                this.vaultCapabilityIndex.rename(file, oldPath, this.getVaultFileTags(file));
+                return;
+            }
+
+            this.vaultCapabilityIndex.seed(
+                this.app.vault.getMarkdownFiles(),
+                (candidate) => this.getVaultFileTags(candidate),
+            );
+        },
+        handleFileDeleteMaintenance: (file) => {
+            this.vaultScriptRegistry.seed(this.app.vault.getFiles().map((candidate) => candidate.path));
+            if (file instanceof TFile) {
+                this.vaultCapabilityIndex.remove(file.path);
+                return;
+            }
+
+            this.vaultCapabilityIndex.seed(
+                this.app.vault.getMarkdownFiles(),
+                (candidate) => this.getVaultFileTags(candidate),
+            );
+        },
         handleLayoutReady: () => this.pluginLifecycleController.handleLayoutReady(),
         handleFileOpen: (file) => {
             this.workspaceContextController.handleFileOpen(file);
@@ -788,28 +820,14 @@ export default class Aside extends Plugin {
             this.syncPublicFilePublishActions();
         },
         handleFileCreate: async (file) => {
-            if (file) {
-                this.vaultScriptRegistry.upsert(file.path);
-                this.vaultCapabilityIndex.upsert(file, this.getVaultFileTags(file));
-            }
             await this.pluginLifecycleController.handleFileCreate(file);
         },
         handleFileRename: async (file, oldPath) => {
-            this.vaultScriptRegistry.seed(this.app.vault.getFiles().map((candidate) => candidate.path));
-            if (file) {
-                this.vaultCapabilityIndex.rename(file, oldPath, this.getVaultFileTags(file));
-            } else {
-                this.vaultCapabilityIndex.remove(oldPath);
-            }
             await this.pluginLifecycleController.handleFileRename(file, oldPath);
             this.syncIndexNoteViewClasses();
             this.syncPublicFilePublishActions();
         },
         handleFileDelete: async (file) => {
-            this.vaultScriptRegistry.seed(this.app.vault.getFiles().map((candidate) => candidate.path));
-            if (file) {
-                this.vaultCapabilityIndex.remove(file.path);
-            }
             await this.pluginLifecycleController.handleFileDelete(file);
             this.syncIndexNoteViewClasses();
             this.syncPublicFilePublishActions();
@@ -823,6 +841,12 @@ export default class Aside extends Plugin {
         },
         handleEditorChange: (filePath) => {
             this.pluginLifecycleController.handleEditorChange(filePath);
+        },
+        reportAsyncEventError: (eventName, error) => {
+            void this.logEvent("error", "events", "events.async-handler.error", {
+                eventName,
+                error,
+            }).catch(() => undefined);
         },
     });
     private activeMarkdownFile: TFile | null = null;
@@ -849,6 +873,8 @@ export default class Aside extends Plugin {
 
     async onload() {
         this.unloaded = false;
+        this.vaultScriptRegistry.seed(this.app.vault.getFiles().map((file) => file.path));
+        this.pluginEventRouter.registerVaultMaintenanceEvents();
         this.runtime = await this.detectRuntimeMode();
         this.logService = new AsideLogService({
             adapter: this.app.vault.adapter,
@@ -869,8 +895,6 @@ export default class Aside extends Plugin {
         addIcon(ASIDE_REGENERATE_ICON_ID, ASIDE_REGENERATE_ICON_SVG);
 
         this.commentManager = new CommentManager([]);
-        this.vaultScriptRegistry.seed(this.app.vault.getFiles().map((file) => file.path));
-        this.pluginEventRouter.registerVaultMaintenanceEvents();
         await this.loadSettings();
         this.scriptRunStore.load();
         this.vaultCapabilityIndex.seed(

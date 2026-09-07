@@ -68,6 +68,15 @@ export class PluginLifecycleController {
             .flatMap((child) => this.collectPageNoteCapableFiles(child));
     }
 
+    private collectFiles(file: TAbstractFile): TFile[] {
+        if (this.isFile(file)) {
+            return [file];
+        }
+
+        return this.getFolderChildren(file)
+            .flatMap((child) => this.collectFiles(child));
+    }
+
     private async clearDeletedCommentFile(filePath: string): Promise<void> {
         await this.host.deleteStoredComments(filePath);
         this.clearDeletedCommentFileCache(filePath);
@@ -80,15 +89,17 @@ export class PluginLifecycleController {
         this.host.clearDerivedCommentLinksForFile(filePath);
     }
 
-    private refreshAfterCommentDelete(): void {
-        void this.host.refreshCommentViews();
+    private async refreshAfterCommentDelete(): Promise<void> {
         this.host.refreshEditorDecorations();
-        void this.host.refreshAggregateNoteNow();
+        await Promise.all([
+            Promise.resolve().then(() => this.host.refreshCommentViews()),
+            Promise.resolve().then(() => this.host.refreshAggregateNoteNow()),
+        ]);
     }
 
-    public handleLayoutReady(): void {
+    public async handleLayoutReady(): Promise<void> {
         this.host.syncIndexNoteViewClasses();
-        void this.host.log?.("info", "startup", "startup.layout.ready");
+        await this.host.log?.("info", "startup", "startup.layout.ready");
     }
 
     public async handleFileCreate(file: TFile | null): Promise<void> {
@@ -103,15 +114,10 @@ export class PluginLifecycleController {
         await this.host.refreshCommentViews({ skipDataRefresh: true });
     }
 
-    public async handleFileRename(file: TFile | null, oldPath: string): Promise<void> {
-        if (!file) {
-            return;
-        }
-
+    private async applyFileRename(file: TFile, oldPath: string): Promise<boolean> {
         await this.host.renamePublishedPublicArtifactPath(oldPath, file.path);
-
         if (!this.host.isPageNoteCapableFile(file)) {
-            return;
+            return false;
         }
 
         await this.host.renameAgentRuns(oldPath, file.path);
@@ -125,10 +131,44 @@ export class PluginLifecycleController {
         this.host.clearParsedNoteCache(file.path);
         this.host.getAggregateCommentIndex().renameFile(oldPath, file.path, retargetOptions);
         this.host.clearDerivedCommentLinksForFile(oldPath);
-        void this.host.loadCommentsForFile(file);
-        void this.host.refreshCommentViews();
+        const liveFile = this.host.app.vault.getAbstractFileByPath(file.path);
+        if (liveFile && this.isFile(liveFile)) {
+            await this.host.loadCommentsForFile(liveFile);
+        }
+        return true;
+    }
+
+    private async refreshAfterFileRename(): Promise<void> {
         this.host.refreshEditorDecorations();
         this.host.scheduleAggregateNoteRefresh();
+        await this.host.refreshCommentViews();
+    }
+
+    public async handleFileRename(file: TAbstractFile | null, oldPath: string): Promise<void> {
+        if (!file) {
+            return;
+        }
+
+        if (this.isFile(file)) {
+            if (await this.applyFileRename(file, oldPath)) {
+                await this.refreshAfterFileRename();
+            }
+            return;
+        }
+
+        const nextFolderPrefix = `${file.path}/`;
+        let renamedPageNote = false;
+        for (const renamedFile of this.collectFiles(file)) {
+            const relativePath = renamedFile.path.startsWith(nextFolderPrefix)
+                ? renamedFile.path.slice(nextFolderPrefix.length)
+                : renamedFile.path;
+            const previousFilePath = oldPath ? `${oldPath}/${relativePath}` : relativePath;
+            renamedPageNote = await this.applyFileRename(renamedFile, previousFilePath)
+                || renamedPageNote;
+        }
+        if (renamedPageNote) {
+            await this.refreshAfterFileRename();
+        }
     }
 
     public async handleFileDelete(file: TAbstractFile | null): Promise<void> {
@@ -144,7 +184,7 @@ export class PluginLifecycleController {
             }
 
             await this.clearDeletedCommentFile(file.path);
-            this.refreshAfterCommentDelete();
+            await this.refreshAfterCommentDelete();
             return;
         }
 
@@ -158,7 +198,7 @@ export class PluginLifecycleController {
 
         this.host.getCommentManager().deleteFolder(file.path);
         this.host.getAggregateCommentIndex().deleteFolder(file.path);
-        this.refreshAfterCommentDelete();
+        await this.refreshAfterCommentDelete();
     }
 
     public async handleFileModify(file: TFile | null): Promise<void> {
