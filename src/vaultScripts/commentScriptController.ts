@@ -21,6 +21,7 @@ const SCRIPT_SESSION_INTERRUPTED_ERROR = "The previous vault script run did not 
 const SCRIPT_CHANGED_BEFORE_EXECUTION_ERROR = "The vault script changed or became ambiguous before execution. Regenerate it to run again.";
 
 export interface CommentScriptHost {
+    isScriptsEnabled(): boolean;
     createRunId(): string;
     now(): number;
     getVaultRootPath(): string | null;
@@ -77,7 +78,7 @@ export interface SavedUserEntryRoute {
     event: SavedUserEntryEvent;
     scriptsEnabled: boolean;
     builtInControllers: SavedEntryBuiltInControllers;
-    scriptController: SavedEntryScriptController | null;
+    scriptController: SavedEntryScriptController;
     agentController: SavedEntryAgentController;
 }
 
@@ -102,7 +103,7 @@ export async function routeSavedUserEntry(route: SavedUserEntryRoute): Promise<v
             return;
         }
     }
-    const handledByScript = await scriptController?.handleSavedUserEntry(event) ?? false;
+    const handledByScript = await scriptController.handleSavedUserEntry(event);
     if (!handledByScript) {
         await agentController.handleSavedUserEntry(event);
     }
@@ -224,7 +225,11 @@ export class CommentScriptController {
     }
 
     public async retryRun(runId: string): Promise<boolean> {
-        if (this.disposed || this.retryingRunIds.has(runId)) {
+        if (
+            this.disposed
+            || !this.host.isScriptsEnabled()
+            || this.retryingRunIds.has(runId)
+        ) {
             return false;
         }
         const previous = this.store.getRunById(runId);
@@ -235,6 +240,9 @@ export class CommentScriptController {
         this.retryingRunIds.add(runId);
         try {
             await this.host.loadCommentsForFile(previous.filePath);
+            if (this.disposed || !this.host.isScriptsEnabled()) {
+                return false;
+            }
             const trigger = this.host.getCommentManager().getCommentById(previous.triggerEntryId);
             const thread = this.host.getCommentManager().getThreadById(previous.triggerEntryId);
             const script = this.host.getRegistry().resolve(previous.mentionName);

@@ -40,6 +40,16 @@ test("agent retry preparation reads the live Scripts capability through its prod
     assert.match(controllerSource, /isScriptsEnabled:\s*\(\)\s*=>\s*this\.isScriptsEnabled\(\)/u);
 });
 
+test("vault-script retry preparation reads the live Scripts capability through its production host", () => {
+    const controllerSource = getMethodSource(
+        mainSource,
+        "private readonly commentScriptController = new CommentScriptController",
+        "private readonly commentAgentController: CommentAgentController",
+    );
+
+    assert.match(controllerSource, /isScriptsEnabled:\s*\(\)\s*=>\s*this\.isScriptsEnabled\(\)/u);
+});
+
 test("retry entry points consult the live capability before their controllers", () => {
     const agentMethodSource = getMethodSource(
         mainSource,

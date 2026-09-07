@@ -102,6 +102,7 @@ function createHarness(options: {
     beforePersist?: (data: PersistedPluginData) => Promise<void>;
     loadCommentsForFile?: (filePath: string) => Promise<void>;
     runVaultScript?: (invocation: VaultScriptRuntimeInvocation) => Promise<VaultScriptRuntimeResult>;
+    scriptsEnabled?: boolean | (() => boolean);
 } = {}) {
     let persistedData: PersistedPluginData = {
         scriptRuns: options.initialRuns ?? [],
@@ -157,6 +158,9 @@ function createHarness(options: {
     let editSucceeds = options.editSucceeds ?? true;
     let editResults = options.editResults?.slice() ?? [];
     const controller = new CommentScriptController({
+        isScriptsEnabled: () => typeof options.scriptsEnabled === "function"
+            ? options.scriptsEnabled()
+            : options.scriptsEnabled ?? true,
         createRunId: () => `script-generated-${id++}`,
         now: () => ++now,
         getVaultRootPath: () => options.vaultRootPath === undefined ? "/vault" : options.vaultRootPath,
@@ -1037,6 +1041,34 @@ test("retryRun claims concurrently before loading and creates only one retry", a
 
     assert.equal(harness.store.getRuns().length, 2);
     assert.equal(harness.runtimeCalls.length, 1);
+});
+
+test("vault-script retry stops silently when Scripts turns off during comment reload", async () => {
+    let scriptsEnabled = true;
+    const harness = createHarness({
+        scriptsEnabled: () => scriptsEnabled,
+        initialRuns: [createStoredRun({ outputEntryId: "reply-1" })],
+        loadCommentsForFile: async () => {
+            scriptsEnabled = false;
+        },
+    });
+    harness.commentManager.appendEntry("thread-1", {
+        id: "reply-1",
+        body: "Previous script output",
+        timestamp: 20,
+    });
+    const runsBeforeRetry = harness.store.getRuns();
+
+    assert.equal(await harness.controller.retryRun("stored-run"), false);
+
+    assert.deepEqual(harness.store.getRuns(), runsBeforeRetry);
+    assert.equal(harness.commentManager.getCommentById("reply-1")?.comment, "Previous script output");
+    assert.deepEqual(harness.runtimeCalls, []);
+    assert.deepEqual(harness.appendedEntries, []);
+    assert.deepEqual(harness.editedEntries, []);
+    assert.deepEqual(harness.notices, []);
+    assert.equal(harness.getRefreshCount(), 0);
+    assert.deepEqual(harness.loadedFilePaths, ["Folder/Note.md"]);
 });
 
 test("retryRun persists before clearing and leaves old output visible when persistence fails", async () => {

@@ -485,6 +485,7 @@ export default class Aside extends Plugin {
         updatePersistedPluginData: (updater) => this.indexNoteSettingsController.updatePersistedPluginData(updater),
     });
     private readonly commentScriptController = new CommentScriptController({
+        isScriptsEnabled: () => this.isScriptsEnabled(),
         createRunId: () => generateCommentId(),
         now: () => Date.now(),
         getVaultRootPath: () => this.getVaultRootPath(),

@@ -193,12 +193,6 @@ interface RetryPromptOptions {
     missingCommentNotice: string;
 }
 
-function hasScriptDirective(body: string): boolean {
-    return parseCreateScriptDirective(body).kind !== "none"
-        || parseUpdateScriptDirective(body).kind !== "none"
-        || parsePdfToMarkdownDirective(body).kind !== "none";
-}
-
 function summarizeError(error: unknown): string {
     if (error instanceof Error && error.message.trim()) {
         return error.message.trim();
@@ -470,7 +464,7 @@ export class CommentAgentController {
         event: SavedUserEntryEvent,
         requestText: string,
     ): Promise<void> {
-        if (this.disposed) {
+        if (this.disposed || !this.host.isScriptsEnabled()) {
             return;
         }
         if (getLatestAgentRunForTriggerEntry(this.store.getRuns(), event.entryId)) {
@@ -478,7 +472,7 @@ export class CommentAgentController {
         }
 
         const selection = await this.host.resolveDefaultAgentRuntimeSelection();
-        if (this.disposed) {
+        if (this.disposed || !this.host.isScriptsEnabled()) {
             return;
         }
         if (selection.kind === "none") {
@@ -505,7 +499,7 @@ export class CommentAgentController {
         requestText: string,
         targetScript: VaultScriptRegistration,
     ): Promise<void> {
-        if (this.disposed) {
+        if (this.disposed || !this.host.isScriptsEnabled()) {
             return;
         }
         if (getLatestAgentRunForTriggerEntry(this.store.getRuns(), event.entryId)) {
@@ -513,7 +507,7 @@ export class CommentAgentController {
         }
 
         const selection = await this.host.resolveDefaultAgentRuntimeSelection();
-        if (this.disposed) {
+        if (this.disposed || !this.host.isScriptsEnabled()) {
             return;
         }
         if (selection.kind === "none") {
@@ -537,7 +531,7 @@ export class CommentAgentController {
     }
 
     public async handlePdfToMarkdownRequest(event: SavedUserEntryEvent): Promise<void> {
-        if (this.disposed) {
+        if (this.disposed || !this.host.isScriptsEnabled()) {
             return;
         }
         if (getLatestAgentRunForTriggerEntry(this.store.getRuns(), event.entryId)) {
@@ -563,7 +557,7 @@ export class CommentAgentController {
 
         try {
             const selection = await this.host.resolveDefaultAgentRuntimeSelection();
-            if (this.disposed) {
+            if (this.disposed || !this.host.isScriptsEnabled()) {
                 return;
             }
             if (selection.kind === "none") {
@@ -678,10 +672,7 @@ export class CommentAgentController {
             !scriptsEnabled
             && historicalRun
             && isScriptOrientedAgentRequestKind(historicalRequestKind)
-            && (
-                options.retryOfRunId !== undefined
-                || hasScriptDirective(latestComment.comment)
-            )
+            && options.retryOfRunId !== undefined
         ) {
             return false;
         }
