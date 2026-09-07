@@ -17,7 +17,7 @@
 - Modify: `tests/publishDependencyReferences.test.ts`
 - Modify: `src/core/publish/javascriptDependencyLexer.ts:485-501`
 
-- [ ] **Step 1: Add a failing direct lexer regression**
+- [x] **Step 1: Add a failing direct lexer regression**
 
 Add this test after the existing property-access test in `tests/javascriptDependencyLexer.test.ts`:
 
@@ -33,7 +33,7 @@ import "./real.js";
 });
 ```
 
-- [ ] **Step 2: Add a failing dependency-facade regression**
+- [x] **Step 2: Add a failing dependency-facade regression**
 
 Add this test after the existing property-access test in `tests/publishDependencyReferences.test.ts`:
 
@@ -50,7 +50,7 @@ import "./real.js";`,
 });
 ```
 
-- [ ] **Step 3: Compile and run the regressions to verify RED**
+- [x] **Step 3: Compile and run the regressions to verify RED**
 
 Run:
 
@@ -62,7 +62,7 @@ node --test --test-name-pattern "prototype-named identifiers" .test-dist/tests/j
 
 Expected: both tests fail with `TypeError: stacks[value].push is not a function`; the facade may report the same underlying rejection.
 
-- [ ] **Step 4: Replace prototype-sensitive records with explicit maps**
+- [x] **Step 4: Replace prototype-sensitive records with explicit maps**
 
 Replace `indexClosingDelimiters` in `src/core/publish/javascriptDependencyLexer.ts` with:
 
@@ -96,7 +96,7 @@ function indexClosingDelimiters(tokens: readonly JavascriptToken[]): Map<number,
 }
 ```
 
-- [ ] **Step 5: Re-run focused lexer and facade tests to verify GREEN**
+- [x] **Step 5: Re-run focused lexer and facade tests to verify GREEN**
 
 Run:
 
@@ -108,7 +108,7 @@ node --test .test-dist/tests/javascriptDependencyLexer.test.js .test-dist/tests/
 
 Expected: all selected tests pass with zero failures.
 
-- [ ] **Step 6: Commit the parser repair**
+- [x] **Step 6: Commit the parser repair**
 
 ```bash
 git add src/core/publish/javascriptDependencyLexer.ts tests/javascriptDependencyLexer.test.ts tests/publishDependencyReferences.test.ts
@@ -122,7 +122,7 @@ git commit -m "fix(publish): isolate delimiter stacks"
 - Modify: `src/ui/views/publicFilePublishActions.ts:21-26,352-371`
 - Modify: `src/main.ts:664-671`
 
-- [ ] **Step 1: Extend the fake action element for loading cleanup assertions**
+- [x] **Step 1: Extend the fake action element for loading cleanup assertions**
 
 Add this method beside `addClass` in `tests/publicFilePublishActions.test.ts`:
 
@@ -140,7 +140,7 @@ Add this method beside `addClass` in `tests/publicFilePublishActions.test.ts`:
 	}
 ```
 
-- [ ] **Step 2: Add a failing rejected-action lifecycle test**
+- [x] **Step 2: Add a failing rejected-action lifecycle test**
 
 Append this test to `tests/publicFilePublishActions.test.ts`:
 
@@ -159,7 +159,7 @@ test("PublicFilePublishActionController clears loading and reports rejected acti
 				kind: "update-publish" as const,
 				label: "Republish HTML",
 				icon: "upload-cloud",
-				disabled: false,
+				disabled: false as const,
 			}];
 		},
 		runPublishAction: async () => {
@@ -185,7 +185,7 @@ test("PublicFilePublishActionController clears loading and reports rejected acti
 });
 ```
 
-- [ ] **Step 3: Compile and run the lifecycle regression to verify RED**
+- [x] **Step 3: Compile and run the lifecycle regression to verify RED**
 
 Run:
 
@@ -197,7 +197,7 @@ node --test --test-name-pattern "clears loading and reports rejected actions" .t
 
 Expected: the test fails because the rejected action is not reported and `is-loading` remains set.
 
-- [ ] **Step 4: Add the typed error-reporting boundary**
+- [x] **Step 4: Add the typed error-reporting boundary**
 
 Add this required method to `PublicFilePublishActionHost` in `src/ui/views/publicFilePublishActions.ts`:
 
@@ -225,7 +225,7 @@ Wire the production host in `src/main.ts` beside `showNotice`:
 
 This keeps the transient notice generic while `logEvent` sanitizes the original error payload.
 
-- [ ] **Step 5: Make loading cleanup unconditional**
+- [x] **Step 5: Make loading cleanup unconditional**
 
 Replace the enabled-action body at the end of `handleAction` with:
 
@@ -242,7 +242,7 @@ Replace the enabled-action body at the end of `handleAction` with:
 		await this.refreshView(view);
 ```
 
-- [ ] **Step 6: Re-run the complete publish-action test file to verify GREEN**
+- [x] **Step 6: Re-run the complete publish-action test file to verify GREEN**
 
 Run:
 
@@ -254,7 +254,7 @@ node --test .test-dist/tests/publicFilePublishActions.test.js
 
 Expected: all tests pass with zero failures, including the rejection lifecycle test.
 
-- [ ] **Step 7: Commit the action-lifecycle repair**
+- [x] **Step 7: Commit the action-lifecycle repair**
 
 ```bash
 git add src/main.ts src/ui/views/publicFilePublishActions.ts tests/publicFilePublishActions.test.ts
@@ -272,7 +272,7 @@ git commit -m "fix(publish): recover failed actions"
 - Verify: `manifest.json`
 - Verify: `styles.css`
 
-- [ ] **Step 1: Run the combined focused publish suites**
+- [x] **Step 1: Run the combined focused publish suites**
 
 Run:
 
@@ -284,7 +284,7 @@ node --test .test-dist/tests/javascriptDependencyLexer.test.js .test-dist/tests/
 
 Expected: all selected tests pass with zero failures.
 
-- [ ] **Step 2: Run the complete build**
+- [x] **Step 2: Run the complete build**
 
 Run:
 
@@ -294,7 +294,7 @@ npm run build
 
 Expected: tests, lint, typecheck, Obsidian compliance, bundle-size check, and release-artifact inspection all succeed.
 
-- [ ] **Step 3: Inspect the exact installable artifact**
+- [x] **Step 3: Inspect the exact installable artifact**
 
 Run:
 
@@ -307,24 +307,24 @@ rg -n "sourceMappingURL|sourcesContent" main.js manifest.json styles.css
 
 Expected: the guard passes; the exact shipped set remains `main.js`, `manifest.json`, and `styles.css`; no source maps, embedded sources, raw TypeScript/JSX-family source, secrets, private keys, or certificates are included.
 
-- [ ] **Step 4: Install the verified build into the test vault**
+- [x] **Step 4: Install the verified build into the test vault**
 
 Run:
 
 ```bash
-npm run dev:install-built -- --vault /Users/wenqingli/Obsidian/lean-startup
+npm run dev:install-built -- --vault /path/to/lean-startup
 obsidian plugin:reload id=aside vault=lean-startup
 ```
 
 Expected: installed `main.js`, `manifest.json`, and `styles.css` match the inspected build byte-for-byte and Aside reloads without a developer error.
 
-- [ ] **Step 5: Republish Pigeon through Aside**
+- [x] **Step 5: Republish Pigeon through Aside**
 
 Use the Pigeon file-view `Republish HTML` action after confirming the exact snapshot still passes Aside's runtime artifact guard.
 
 Expected: the action stops loading, dependency discovery completes, Wrangler starts, and Aside emits `publish.html.updated` for `public/pigeon-plan/index.html`.
 
-- [ ] **Step 6: Verify hosted freshness**
+- [x] **Step 6: Verify hosted freshness**
 
 Download the hosted entry and dependencies without altering the source vault. Compare the HTML and CSS cache-busting references and SHA-256 hashes with the current local files.
 
@@ -336,11 +336,11 @@ Expected: hosted Pigeon HTML contains the current `clickedInsidePanel` behavior 
 - Modify: `docs/superpowers/specs/2026-09-07-public-publish-failure-recovery-design.md`
 - Modify: `docs/superpowers/plans/2026-09-07-public-publish-failure-recovery.md`
 
-- [ ] **Step 1: Update implementation tracking with verified evidence**
+- [x] **Step 1: Update implementation tracking with verified evidence**
 
 Mark only completed implementation and verification items `[x]`. Add a dated verification-evidence section recording focused-test totals, full-build totals, artifact inspection, installed-build parity, publish event, and hosted hash checks.
 
-- [ ] **Step 2: Self-review the tracked documents**
+- [x] **Step 2: Self-review the tracked documents**
 
 Run:
 
@@ -351,9 +351,23 @@ git diff --check
 
 Expected: no placeholders remain; unchecked items exist only for genuinely incomplete verification; the diff has no whitespace errors.
 
-- [ ] **Step 3: Commit the verification record**
+- [x] **Step 3: Commit the verification record**
 
 ```bash
 git add docs/superpowers/specs/2026-09-07-public-publish-failure-recovery-design.md docs/superpowers/plans/2026-09-07-public-publish-failure-recovery.md
 git commit -m "docs(publish): record recovery verification"
 ```
+
+## Execution Evidence — 2026-09-07
+
+- RED: both prototype-name tests failed with the reproduced delimiter-stack `TypeError`.
+- GREEN: 67 lexer/reference tests and 7 publish-action tests passed independently.
+- Publish surface: 133 focused tests passed.
+- Review correction: the new failure event was initially suppressed by the central notice policy; its regression failed with `false !== true`, then passed after the exact publish error event was allowlisted.
+- Final review: ready to merge, with no remaining critical, important, or minor findings; 136 relevant tests and the integrated diff check passed independently.
+- Final full build: 1,691 tests passed; lint, typecheck, compliance, bundle size, bundling, and the artifact guard passed.
+- Artifact security: exact install set `main.js`, `manifest.json`, and `styles.css`; no source exposure or secret-bearing files found; final `main.js` SHA-256 `140c4cc338ff2ef5d3e8fb009699882a951d4edd34b014a048414bdf13f53359`.
+- Installation: all three installed plugin files matched the inspected build byte-for-byte.
+- Snapshot: 16 runtime-inspected files; Pigeon HTML SHA-256 `56d47e0684974f6580aec33a73b2c10a9ad67cf473a9681a74dc7558b04c31ca`.
+- Deployment: Aside event `publish.html.updated` at `2026-09-07T00:32:33.762Z`; Cloudflare production deployment `5144dc91-c934-4122-82a2-9821ff2b2709`.
+- Hosted output: CSS and SVG byte-identical; HTML byte-identical after removing Cloudflare's 938-byte challenge-script injection.

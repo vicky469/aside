@@ -13,19 +13,32 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Make delimiter indexing accept only the three actual opening delimiters without consulting inherited object properties.
-- [ ] Make publish-action loading state cleanup unconditional when an action succeeds or rejects.
-- [ ] Surface rejected publish actions through the existing user-facing notice and sanitized diagnostic paths.
+- [x] Make delimiter indexing accept only the three actual opening delimiters without consulting inherited object properties.
+- [x] Make publish-action loading state cleanup unconditional when an action succeeds or rejects.
+- [x] Surface rejected publish actions through the existing user-facing notice and sanitized diagnostic paths.
 
 ### Verification
 
-- [ ] Add direct lexer regressions for `hasOwnProperty`, `constructor`, and `toString` tokens.
-- [ ] Add publish dependency facade coverage for prototype-named JavaScript tokens.
-- [ ] Add UI action coverage proving a rejected publish action clears its loading state and reports the failure.
-- [ ] Run the focused lexer, dependency-reference, and publish-action tests.
-- [ ] Run the complete build and release artifact guard.
-- [ ] Install the verified build into the `lean-startup` vault and confirm Pigeon republish reaches Wrangler and completes.
-- [ ] Confirm the hosted Pigeon HTML and dependency hashes match the current local artifact.
+- [x] Add direct lexer regressions for `hasOwnProperty`, `constructor`, and `toString` tokens.
+- [x] Add publish dependency facade coverage for prototype-named JavaScript tokens.
+- [x] Add UI action coverage proving a rejected publish action clears its loading state and reports the failure.
+- [x] Run the focused lexer, dependency-reference, and publish-action tests.
+- [x] Run the complete build and release artifact guard.
+- [x] Install the verified build into the `lean-startup` vault and confirm Pigeon republish reaches Wrangler and completes.
+- [x] Confirm the hosted Pigeon HTML and dependency hashes match the current local artifact.
+
+### Verification Evidence — 2026-09-07
+
+- Both new prototype-name regressions failed before implementation with `TypeError: stacks[value].push is not a function`, then passed after delimiter storage moved to explicit maps.
+- The rejected-action regression failed with the uncaught `dependency scan failed` error, then passed after adding the typed error boundary and `finally` cleanup.
+- The combined publish suites passed 133 tests with zero failures.
+- Review found that the central notice policy initially suppressed the new failure notice. A new regression failed with `false !== true`, then passed after narrowly allowing only `publish.html.action.error` in the publish area.
+- The final complete build passed 1,531 compiled tests and 160 `.mjs` tests, for 1,691 total tests with zero failures. Lint, typecheck, Obsidian compliance, bundle size, and production bundling also passed.
+- The final release guard inspected exactly `main.js`, `manifest.json`, and `styles.css`. No source maps, embedded `sourcesContent`, raw TypeScript/JSX-family source, secret-bearing files, private keys, certificates, or personal paths were present. The inspected `main.js` SHA-256 was `140c4cc338ff2ef5d3e8fb009699882a951d4edd34b014a048414bdf13f53359`.
+- The final installed `lean-startup` plugin artifacts matched the inspected build byte-for-byte. After reload, captured developer errors contained only the original pre-fix failures from 02:26–02:30 and no new error.
+- A no-deploy controller run produced and runtime-inspected the exact 16-file snapshot before the live action. Pigeon entries included HTML SHA-256 `56d47e0684974f6580aec33a73b2c10a9ad67cf473a9681a74dc7558b04c31ca`, both current v7 stylesheets, the v6 stylesheet dependency, and the logo.
+- The real action emitted `publish.html.updated` at `2026-09-07T00:32:33.762Z`; its loading class cleared and Cloudflare recorded production deployment `5144dc91-c934-4122-82a2-9821ff2b2709`.
+- Hosted CSS and SVG files matched local bytes exactly. Cloudflare injected a 938-byte challenge script into the HTML response; after removing only that downstream injection, hosted HTML matched local bytes and SHA-256 exactly. The response contains `clickedInsidePanel` and the current `7def22cf` and `4ebb930d` stylesheet keys.
 
 ## Context
 
