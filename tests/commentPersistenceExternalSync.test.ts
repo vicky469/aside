@@ -313,6 +313,125 @@ test("comment persistence controller deduplicates duplicate child entries from s
     }
 });
 
+test("comment persistence controller repairs a root already stored as an anchored nested entry", async () => {
+    const originalWindow = globalThis.window;
+    globalThis.window = {
+        setTimeout: () => 1,
+        clearTimeout: () => {},
+    } as unknown as typeof globalThis.window;
+
+    const file = createFile("docs/note.md");
+    const noteBody = "# Title\n\nAlpha target omega\n";
+    const sourceThread = createThread(file.path);
+    sourceThread.id = "source-thread";
+    sourceThread.entries[0].id = sourceThread.id;
+    sourceThread.selectedText = "source";
+    sourceThread.selectedTextHash = "hash-source";
+    const targetThread = createThread(file.path);
+    targetThread.id = "target-thread";
+    targetThread.entries[0].id = targetThread.id;
+    targetThread.entries.push({
+        ...sourceThread.entries[0],
+        anchor: {
+            filePath: file.path,
+            startLine: sourceThread.startLine,
+            startChar: sourceThread.startChar,
+            endLine: sourceThread.endLine,
+            endChar: sourceThread.endChar,
+            selectedText: sourceThread.selectedText,
+            selectedTextHash: sourceThread.selectedTextHash,
+            anchorKind: "selection",
+        },
+    });
+    const duplicatedThreads = [sourceThread, targetThread];
+    const adapter = new FakeAdapter();
+    adapter.files.set(
+        getSidecarStoragePath(file.path),
+        serializeSidecarThreads(file.path, duplicatedThreads),
+    );
+    let persistedData: PersistedPluginData = {
+        sideNoteSyncEventState: {
+            schemaVersion: 1,
+            deviceLogs: {},
+            processedWatermarks: {
+                "device-a": { "device-a": 1 },
+            },
+            compactedWatermarks: { "device-a": 1 },
+            noteSnapshots: {
+                "hash-docs_note.md": {
+                    notePath: file.path,
+                    noteHash: "hash-docs_note.md",
+                    updatedAt: 1710000000300,
+                    coveredWatermarks: { "device-a": 1 },
+                    threads: duplicatedThreads,
+                },
+            },
+        },
+    };
+    const commentManager = new CommentManager([]);
+    const aggregateCommentIndex = new AggregateCommentIndex();
+    const controller = new CommentPersistenceController({
+        app: {
+            vault: {
+                adapter: adapter as unknown as DataAdapter,
+                process: async () => "",
+            },
+        } as never,
+        getAllCommentsNotePath: () => "Aside index.md",
+        getIndexHeaderImageUrl: () => "",
+        getIndexHeaderImageCaption: () => "",
+        getMarkdownViewForFile: () => null,
+        getMarkdownFileByPath: (path) => path === file.path ? file : null,
+        getCurrentNoteContent: async () => noteBody,
+        getStoredNoteContent: async () => noteBody,
+        getParsedNoteComments: (filePath, noteContent) => parseNoteComments(noteContent, filePath),
+        getPluginDataDirPath: () => ".obsidian/plugins/aside",
+        getSideNoteSyncDeviceId: () => "device-a",
+        readPersistedPluginData: () => persistedData,
+        writePersistedPluginData: async (data) => {
+            persistedData = data;
+        },
+        isAllCommentsNotePath: () => false,
+        isCommentableFile: (candidate): candidate is TFile => !!candidate && candidate.extension === "md",
+        isMarkdownEditorFocused: () => false,
+        getCommentManager: () => commentManager,
+        getAggregateCommentIndex: () => aggregateCommentIndex,
+        createCommentId: () => "generated-id",
+        hashText: async (text) => `hash-${text.replace(/\//g, "_")}`,
+        syncDerivedCommentLinksForFile: () => {},
+        refreshCommentViews: async () => {},
+        refreshAllCommentsSidebarViews: async () => {},
+        refreshEditorDecorations: () => {},
+        refreshMarkdownPreviews: () => {},
+        getCommentMentionedPageLabels: () => [],
+        syncIndexNoteLeafMode: async () => {},
+        log: async () => {},
+    });
+
+    try {
+        await controller.loadCommentsForFile(file);
+
+        assert.deepEqual(
+            commentManager.getThreadsForFile(file.path).map((thread) => thread.id),
+            [targetThread.id],
+        );
+        assert.deepEqual(
+            commentManager.getThreadById(targetThread.id)?.entries.map((entry) => entry.id),
+            [targetThread.id, sourceThread.id],
+        );
+        const pathSidecar = JSON.parse(adapter.files.get(getSidecarStoragePath(file.path)) ?? "{}") as {
+            threads?: CommentThread[];
+        };
+        assert.deepEqual(pathSidecar.threads?.map((thread) => thread.id), [targetThread.id]);
+        const snapshot = Object.values(
+            (persistedData.sideNoteSyncEventState as SideNoteSyncEventState).noteSnapshots,
+        ).find((candidate) => candidate.notePath === file.path);
+        assert.deepEqual(snapshot?.threads.map((thread) => thread.id), [targetThread.id]);
+    } finally {
+        globalThis.window = originalWindow;
+    }
+});
+
 for (const { kind, path, body } of [
     { kind: "PDF", path: "docs/diagram.pdf", body: "PDF body" },
     { kind: "DOCX", path: "docs/proposal.docx", body: "DOCX body" },
@@ -1216,6 +1335,104 @@ test("comment persistence controller hydrates compacted snapshots over a stale s
         assert.deepEqual(thread?.entries.map((entry) => entry.body), ["external body", "mobile reply"]);
         assert.deepEqual(thread?.entries[1]?.anchor, remoteThread.entries[1]?.anchor);
         assert.equal(aggregateCommentIndex.getCommentById("entry-2")?.comment, "mobile reply");
+    } finally {
+        globalThis.window = originalWindow;
+    }
+});
+
+test("comment persistence controller does not rehydrate snapshot coverage already processed locally", async () => {
+    const originalWindow = globalThis.window;
+    globalThis.window = {
+        setTimeout: () => 1,
+        clearTimeout: () => {},
+    } as unknown as typeof globalThis.window;
+
+    const file = createFile("docs/note.md");
+    const noteBody = "# Title\n\nAlpha target omega\n";
+    const adapter = new FakeAdapter();
+    const commentManager = new CommentManager([]);
+    const aggregateCommentIndex = new AggregateCommentIndex();
+    let persistedData: PersistedPluginData = {};
+    const staleThread = createThread(file.path);
+    const snapshotThread: CommentThread = {
+        ...createThread(file.path),
+        entries: staleThread.entries.concat({
+            id: "stale-snapshot-entry",
+            body: "must not return",
+            timestamp: 1710000000200,
+        }),
+        updatedAt: 1710000000200,
+    };
+    adapter.files.set(getSidecarStoragePath(file.path), serializeSidecarThreads(file.path, [staleThread]));
+
+    const createStore = (deviceId: string) => new SideNoteSyncEventStore({
+        readPersistedPluginData: () => persistedData,
+        writePersistedPluginData: async (data) => {
+            persistedData = data;
+        },
+        getDeviceId: () => deviceId,
+        createEventId: () => `${deviceId}-event`,
+        hashText: async (text) => `hash-${text.replace(/\//g, "_")}`,
+        now: () => 1710000000300,
+    });
+    const remoteStore = createStore("device-b");
+    await remoteStore.appendLocalEvents(file.path, [{
+        op: "createThread",
+        payload: { thread: snapshotThread },
+    }]);
+    await remoteStore.compactProcessedEventsForSnapshots([{
+        notePath: file.path,
+        threads: [snapshotThread],
+    }]);
+    const coveredWatermarks = remoteStore.getSnapshots()[0]?.coveredWatermarks ?? {};
+    await createStore("device-a").markWatermarksProcessed(coveredWatermarks);
+
+    const controller = new CommentPersistenceController({
+        app: {
+            vault: {
+                adapter: adapter as unknown as DataAdapter,
+                process: async () => "",
+            },
+        } as never,
+        getAllCommentsNotePath: () => "Aside index.md",
+        getIndexHeaderImageUrl: () => "",
+        getIndexHeaderImageCaption: () => "",
+        getMarkdownViewForFile: () => null,
+        getMarkdownFileByPath: (path) => path === file.path ? file : null,
+        getCurrentNoteContent: async () => noteBody,
+        getStoredNoteContent: async () => noteBody,
+        getParsedNoteComments: (filePath, noteContent) => parseNoteComments(noteContent, filePath),
+        getPluginDataDirPath: () => ".obsidian/plugins/aside",
+        getSideNoteSyncDeviceId: () => "device-a",
+        readPersistedPluginData: () => persistedData,
+        writePersistedPluginData: async (data) => {
+            persistedData = data;
+        },
+        isAllCommentsNotePath: () => false,
+        isCommentableFile: (candidate): candidate is TFile => !!candidate && candidate.extension === "md",
+        isMarkdownEditorFocused: () => false,
+        getCommentManager: () => commentManager,
+        getAggregateCommentIndex: () => aggregateCommentIndex,
+        createCommentId: () => "generated-id",
+        hashText: async (text) => `hash-${text.replace(/\//g, "_")}`,
+        syncDerivedCommentLinksForFile: () => {},
+        refreshCommentViews: async () => {},
+        refreshAllCommentsSidebarViews: async () => {},
+        refreshEditorDecorations: () => {},
+        refreshMarkdownPreviews: () => {},
+        getCommentMentionedPageLabels: () => [],
+        syncIndexNoteLeafMode: async () => {},
+        log: async () => {},
+    });
+
+    try {
+        await controller.loadCommentsForFile(file);
+
+        assert.deepEqual(
+            commentManager.getThreadById(staleThread.id)?.entries.map((entry) => entry.id),
+            staleThread.entries.map((entry) => entry.id),
+        );
+        assert.equal(commentManager.getCommentById("stale-snapshot-entry"), undefined);
     } finally {
         globalThis.window = originalWindow;
     }

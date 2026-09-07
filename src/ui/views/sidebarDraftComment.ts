@@ -7,13 +7,17 @@ import {
     type ActionableMentionPredicate,
 } from "../editor/commentEditorStyling";
 import { nodeInstanceOf } from "../domGuards";
-import { formatSidebarCommentMeta } from "./sidebarCommentSections";
+import {
+    formatSidebarCommentMeta,
+    formatSidebarCommentSelectedTextPreview,
+} from "./sidebarCommentSections";
 import type { SidebarDraftEditorController } from "./sidebarDraftEditor";
 import { estimateDraftTextareaRows } from "./sidebarDraftEditor";
 
 export interface DraftCommentPresentation {
     classes: string[];
     metaText: string;
+    metaPreviewText: string | null;
     saveLabel: string;
     placeholder: string;
     isPending: boolean;
@@ -94,6 +98,7 @@ export function buildDraftCommentPresentation(
     return {
         classes,
         metaText: formatSidebarCommentMeta(comment),
+        metaPreviewText: formatSidebarCommentSelectedTextPreview(comment),
         saveLabel: comment.mode === "edit" ? "Save" : "Add",
         placeholder: comment.mode === "append"
             ? "Add another entry to this thread."
@@ -118,9 +123,18 @@ export function renderDraftCommentCard(
     commentEl.setAttribute("data-start-line", String(comment.startLine));
 
     const headerEl = commentEl.createDiv("aside-comment-header");
-    headerEl.createEl("small", {
+    const metaEl = headerEl.createEl("small", {
+        cls: "aside-timestamp aside-comment-meta",
+    });
+    if (presentation.metaPreviewText) {
+        metaEl.createSpan({
+            cls: "aside-comment-meta-preview",
+            text: presentation.metaPreviewText,
+        });
+    }
+    metaEl.createSpan({
+        cls: "aside-comment-meta-value",
         text: presentation.metaText,
-        cls: "aside-timestamp",
     });
 
     if (presentation.isPending) {

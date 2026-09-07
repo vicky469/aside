@@ -101,12 +101,12 @@ function createFakeDraftRoot(): FakeDraftElement {
     return new FakeDraftElement("div", "", document);
 }
 
-function createDraftRenderHost(): SidebarDraftCommentHost {
+function createDraftRenderHost(isSaving = true): SidebarDraftCommentHost {
     return {
         activeCommentId: null,
         shouldPinFocusedDraftToTop: false,
         isActionableMention: () => true,
-        isSavingDraft: () => true,
+        isSavingDraft: () => isSaving,
         updateDraftCommentText: () => {},
         setIcon: () => {},
         claimSidebarInteractionOwnership: () => {},
@@ -114,6 +114,44 @@ function createDraftRenderHost(): SidebarDraftCommentHost {
         cancelDraft: () => {},
     };
 }
+
+test("anchored draft cards render selected text before and during persistence", () => {
+    const draft = createDraft({
+        mode: "new",
+        selectedText: "  Selected\n source   text  ",
+    });
+    assert.equal(buildDraftCommentPresentation(draft, null, false).metaPreviewText, "Selected source text");
+    assert.equal(buildDraftCommentPresentation(draft, null, true).metaPreviewText, "Selected source text");
+
+    const root = createFakeDraftRoot();
+    renderDraftCommentCard(
+        root as unknown as HTMLDivElement,
+        draft,
+        createDraftRenderHost(true),
+        {} as SidebarDraftEditorController,
+    );
+
+    assert.equal(
+        root.querySelector(".aside-comment-meta-preview")?.textContent,
+        "Selected source text",
+    );
+});
+
+test("page-note drafts omit the selected-text preview", () => {
+    const root = createFakeDraftRoot();
+    renderDraftCommentCard(
+        root as unknown as HTMLDivElement,
+        createDraft({
+            mode: "new",
+            anchorKind: "page",
+            selectedText: "Page note label",
+        }),
+        createDraftRenderHost(true),
+        {} as SidebarDraftEditorController,
+    );
+
+    assert.equal(root.querySelector(".aside-comment-meta-preview"), null);
+});
 
 test("buildDraftCommentPresentation includes draft state classes and add/save label", () => {
     const createPresentation = buildDraftCommentPresentation(createDraft({

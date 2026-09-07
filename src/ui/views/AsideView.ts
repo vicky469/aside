@@ -1005,36 +1005,35 @@ export default class AsideView extends ItemView {
         insertAfterCommentId?: string,
     ): Promise<boolean> {
         const currentFilePath = this.getCurrentLocalNoteSidebarFilePath();
+        this.interactionController.setActiveComment(sourceThreadId);
+        await this.plugin.setShowNestedCommentsForThread(targetThreadId, true, {
+            skipCommentViewRefresh: true,
+        });
         const nested = await this.plugin.nestCommentThreadUnderThread(
             sourceThreadId,
             targetThreadId,
             currentFilePath
                 ? {
                     insertAfterCommentId,
+                    optimisticViewRefresh: true,
                     deferAggregateRefresh: true,
                     skipPersistedViewRefresh: true,
                     refreshEditorDecorations: false,
                     refreshMarkdownPreviews: false,
                 }
-                : { insertAfterCommentId },
+                : {
+                    insertAfterCommentId,
+                    optimisticViewRefresh: true,
+                    deferAggregateRefresh: true,
+                    skipPersistedViewRefresh: true,
+                    refreshEditorDecorations: false,
+                    refreshMarkdownPreviews: false,
+                },
         );
         if (!nested) {
             return false;
         }
 
-        await this.plugin.setShowNestedCommentsForThread(targetThreadId, true, currentFilePath
-            ? {
-                skipCommentViewRefresh: true,
-            }
-            : undefined);
-        if (currentFilePath && this.file?.path === currentFilePath) {
-            this.highlightComment(sourceThreadId, {
-                skipDataRefresh: true,
-            });
-            return true;
-        }
-
-        this.highlightComment(sourceThreadId);
         return true;
     }
 
@@ -1044,36 +1043,35 @@ export default class AsideView extends ItemView {
         insertAfterCommentId?: string,
     ): Promise<boolean> {
         const currentFilePath = this.getCurrentLocalNoteSidebarFilePath();
+        this.interactionController.setActiveComment(entryId);
+        await this.plugin.setShowNestedCommentsForThread(targetThreadId, true, {
+            skipCommentViewRefresh: true,
+        });
         const moved = await this.plugin.moveCommentEntryToThread(
             entryId,
             targetThreadId,
             currentFilePath
                 ? {
                     insertAfterCommentId,
+                    optimisticViewRefresh: true,
                     deferAggregateRefresh: true,
                     skipPersistedViewRefresh: true,
                     refreshEditorDecorations: false,
                     refreshMarkdownPreviews: false,
                 }
-                : { insertAfterCommentId },
+                : {
+                    insertAfterCommentId,
+                    optimisticViewRefresh: true,
+                    deferAggregateRefresh: true,
+                    skipPersistedViewRefresh: true,
+                    refreshEditorDecorations: false,
+                    refreshMarkdownPreviews: false,
+                },
         );
         if (!moved) {
             return false;
         }
 
-        await this.plugin.setShowNestedCommentsForThread(targetThreadId, true, currentFilePath
-            ? {
-                skipCommentViewRefresh: true,
-            }
-            : undefined);
-        if (currentFilePath && this.file?.path === currentFilePath) {
-            this.highlightComment(entryId, {
-                skipDataRefresh: true,
-            });
-            return true;
-        }
-
-        this.highlightComment(entryId);
         return true;
     }
 
@@ -5025,6 +5023,13 @@ export default class AsideView extends ItemView {
                         dragState.threadId,
                         indexDropTarget.targetId,
                         indexDropTarget.placement,
+                        {
+                            optimisticViewRefresh: true,
+                            deferAggregateRefresh: true,
+                            skipPersistedViewRefresh: true,
+                            refreshEditorDecorations: false,
+                            refreshMarkdownPreviews: false,
+                        },
                     );
                     return;
                 }
@@ -5036,6 +5041,13 @@ export default class AsideView extends ItemView {
                             dragState.entryId,
                             entryDropTarget.insertAfterEntryId,
                             entryDropTarget.placement,
+                            {
+                                optimisticViewRefresh: true,
+                                deferAggregateRefresh: true,
+                                skipPersistedViewRefresh: true,
+                                refreshEditorDecorations: false,
+                                refreshMarkdownPreviews: false,
+                            },
                         );
                         return;
                     }
@@ -5060,12 +5072,19 @@ export default class AsideView extends ItemView {
             event.preventDefault();
             this.clearReorderDragState();
             if (dragState.kind === "thread" && threadDropTarget) {
-                void this.plugin.reorderThreadsForFile(
-                    dragState.filePath,
-                    dragState.threadId,
-                    threadDropTarget.targetId,
-                    threadDropTarget.placement,
-                );
+                    void this.plugin.reorderThreadsForFile(
+                        dragState.filePath,
+                        dragState.threadId,
+                        threadDropTarget.targetId,
+                        threadDropTarget.placement,
+                        {
+                            optimisticViewRefresh: true,
+                            deferAggregateRefresh: true,
+                            skipPersistedViewRefresh: true,
+                            refreshEditorDecorations: false,
+                            refreshMarkdownPreviews: false,
+                        },
+                    );
                 return;
             }
             if (dragState.kind === "thread" && threadNestDropTarget) {
@@ -5084,6 +5103,13 @@ export default class AsideView extends ItemView {
                         dragState.entryId,
                         entryDropTarget.insertAfterEntryId,
                         entryDropTarget.placement,
+                        {
+                            optimisticViewRefresh: true,
+                            deferAggregateRefresh: true,
+                            skipPersistedViewRefresh: true,
+                            refreshEditorDecorations: false,
+                            refreshMarkdownPreviews: false,
+                        },
                     );
                     return;
                 }

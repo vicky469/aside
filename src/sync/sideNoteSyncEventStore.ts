@@ -5,7 +5,10 @@ import {
     type SideNoteSyncEventInput,
 } from "../storage/comments/sideNoteSyncEvents";
 import { cloneCommentThreads, type CommentThread } from "../commentManager";
-import type { PersistedPluginData } from "../settings/indexNoteSettingsPlanner";
+import type {
+    PersistedPluginData,
+    PersistedPluginDataUpdater,
+} from "../settings/indexNoteSettingsPlanner";
 
 export const SIDE_NOTE_SYNC_EVENT_STATE_SCHEMA_VERSION = 1;
 
@@ -39,6 +42,7 @@ export interface SideNoteSyncSnapshotInput {
 export interface SideNoteSyncEventStoreHost {
     readPersistedPluginData(): PersistedPluginData;
     readLatestPersistedPluginData?(): Promise<PersistedPluginData | null>;
+    updatePersistedPluginData?(updater: PersistedPluginDataUpdater): Promise<PersistedPluginData>;
     writePersistedPluginData(data: PersistedPluginData): Promise<void>;
     getDeviceId(): string;
     createEventId(): string;
@@ -527,6 +531,14 @@ export class SideNoteSyncEventStore {
         return { ...this.readState().compactedWatermarks };
     }
 
+    public hasUnprocessedSnapshotCoverage(coveredWatermarks: Record<string, number>): boolean {
+        const state = this.readState();
+        const processorWatermarks = state.processedWatermarks[this.host.getDeviceId()] ?? {};
+        return Object.entries(coveredWatermarks).some(([eventDeviceId, logicalClock]) => (
+            logicalClock > (processorWatermarks[eventDeviceId] ?? 0)
+        ));
+    }
+
     public async markEventsProcessed(events: SideNoteSyncEvent[]): Promise<void> {
         if (events.length === 0) {
             return;
@@ -629,6 +641,18 @@ export class SideNoteSyncEventStore {
     }
 
     private async writeState(state: SideNoteSyncEventState): Promise<void> {
+        if (this.host.updatePersistedPluginData) {
+            await this.host.updatePersistedPluginData((currentData) => {
+                const latestState = normalizeSideNoteSyncEventState(currentData.sideNoteSyncEventState);
+                const mergedState = mergeSideNoteSyncEventStates(latestState, state);
+                return {
+                    ...currentData,
+                    sideNoteSyncEventState: cloneState(mergedState),
+                };
+            });
+            return;
+        }
+
         const latestPersistedData = await this.host.readLatestPersistedPluginData?.()
             ?? this.host.readPersistedPluginData();
         const latestState = normalizeSideNoteSyncEventState(latestPersistedData.sideNoteSyncEventState);

@@ -12,6 +12,7 @@ import { UpdateScriptCommandController } from "./agents/updateScriptCommandContr
 import { CommentHighlightController } from "./comments/commentHighlightController";
 import {
     CommentMutationController,
+    type CommentMutationPersistBehaviorOptions,
     type DeleteCommentOptions,
     type MoveCommentEntryOptions,
     type NestCommentThreadOptions,
@@ -363,6 +364,7 @@ export default class Aside extends Plugin {
         loadCommentsForFile: (file) => this.loadCommentsForFile(file),
         persistCommentsForFile: (file, options) => this.persistCommentsForFile(file, options),
         getCommentManager: () => this.commentManager,
+        updateIndexedThreadsForFile: (filePath, threads) => this.aggregateCommentIndex.updateFile(filePath, threads),
         activateViewAndHighlightComment: (commentId) => this.activateViewAndHighlightComment(commentId),
         openMoveTargetFile: async (file) => {
             const targetLeaf = this.commentNavigationController.getOpenFileLeaf(file.path)
@@ -424,6 +426,7 @@ export default class Aside extends Plugin {
         getSideNoteSyncDeviceId: () => this.getSideNoteSyncDeviceId(),
         readPersistedPluginData: () => this.indexNoteSettingsController.readPersistedPluginData(),
         loadPersistedPluginData: () => this.loadCurrentData(),
+        updatePersistedPluginData: (updater) => this.indexNoteSettingsController.updatePersistedPluginData(updater),
         writePersistedPluginData: (data) => this.indexNoteSettingsController.writePersistedPluginData(data),
         isAllCommentsNotePath: (filePath) => this.isAllCommentsNotePath(filePath),
         isCommentableFile: (file): file is TFile => this.isCommentableFile(file),
@@ -2312,12 +2315,14 @@ export default class Aside extends Plugin {
         movedThreadId: string,
         targetThreadId: string,
         placement: ReorderPlacement,
+        options?: CommentMutationPersistBehaviorOptions,
     ): Promise<boolean> {
         return this.commentMutationController.reorderThreadsForFile(
             filePath,
             movedThreadId,
             targetThreadId,
             placement,
+            options,
         );
     }
 
@@ -2327,6 +2332,7 @@ export default class Aside extends Plugin {
         movedEntryId: string,
         targetEntryId: string,
         placement: ReorderPlacement,
+        options?: CommentMutationPersistBehaviorOptions,
     ): Promise<boolean> {
         return this.commentMutationController.reorderThreadEntries(
             filePath,
@@ -2334,6 +2340,7 @@ export default class Aside extends Plugin {
             movedEntryId,
             targetEntryId,
             placement,
+            options,
         );
     }
 
