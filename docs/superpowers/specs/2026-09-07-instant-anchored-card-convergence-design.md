@@ -13,22 +13,22 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Render an anchored draft's selected-text preview immediately, including while the draft is saving.
-- [ ] Render a successful in-memory thread nest or entry move before awaiting persistence.
-- [ ] Keep the persisted mutation serialized while avoiding a second data refresh or forced smooth scroll.
-- [ ] Roll back the exact optimistic move and show a save notice if persistence fails.
-- [ ] Hydrate only snapshots whose covered watermarks advance beyond the current device's processed watermarks.
-- [ ] Reconcile duplicate entry IDs so an anchored entry cannot remain both nested and top-level.
-- [ ] Repair existing sidecar and snapshot duplicates through the canonical persistence path.
+- [x] Render an anchored draft's selected-text preview immediately, including while the draft is saving.
+- [x] Render a successful in-memory thread nest or entry move before awaiting persistence.
+- [x] Keep the persisted mutation serialized while avoiding a second data refresh or forced smooth scroll.
+- [x] Roll back the exact optimistic move and show a save notice if persistence fails.
+- [x] Hydrate only snapshots whose covered watermarks advance beyond the current device's processed watermarks.
+- [x] Reconcile duplicate entry IDs so an anchored entry cannot remain both nested and top-level.
+- [x] Repair existing sidecar and snapshot duplicates through the canonical persistence path.
 
 ### Verification
 
-- [ ] Draft-renderer tests prove selected text is present before persistence starts and remains stable while saving.
-- [ ] Sidebar interaction tests prove a drop rerenders before persistence settles and does not force a delayed smooth scroll.
-- [ ] Mutation tests prove successful background persistence and exact rollback on failure.
-- [ ] Sync tests reproduce the observed stale-snapshot resurrection and prove it cannot recur.
-- [ ] Reconciliation tests prove existing nested/root duplicates converge to one entry without losing the nested anchor.
-- [ ] Focused tests, the complete test suite, production build, and installed `lean-startup` artifact comparison pass.
+- [x] Draft-renderer tests prove selected text is present before persistence starts and remains stable while saving.
+- [x] Sidebar interaction tests prove a drop rerenders before persistence settles and does not force a delayed smooth scroll.
+- [x] Mutation tests prove successful background persistence and exact rollback on failure.
+- [x] Sync tests reproduce the observed stale-snapshot resurrection and prove it cannot recur.
+- [x] Reconciliation tests prove existing nested/root duplicates converge to one entry without losing the nested anchor.
+- [x] Focused tests, the complete test suite, production build, and installed `lean-startup` artifact comparison pass.
 
 ## Problem
 
