@@ -3,6 +3,7 @@ import test from "node:test";
 import type { DraftComment } from "../src/domain/drafts";
 import {
     buildDraftCommentPresentation,
+    isDraftPreviewReady,
     isDraftSaveActionDisabled,
     renderDraftCommentCard,
     shouldAutoOpenDraftMentionSuggest,
@@ -270,6 +271,12 @@ test("isDraftSaveActionDisabled allows empty new anchored notes but blocks other
 
 test("isDraftSaveActionDisabled blocks over-limit saves", () => {
     assert.equal(isDraftSaveActionDisabled(createDraft(), `${"word ".repeat(301)}`), true);
+});
+
+test("draft preview readiness never hides nonempty textarea text behind an empty preview", () => {
+    assert.equal(isDraftPreviewReady("draft text", "draft text"), true);
+    assert.equal(isDraftPreviewReady("draft text", ""), false);
+    assert.equal(isDraftPreviewReady("", "add a comment"), true);
 });
 
 test("draft mention suggestions auto-open from a bare @ at the caret", () => {

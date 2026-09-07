@@ -3096,10 +3096,6 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
     box-shadow: 0 0 0 1px var(--interactive-accent-translucent);
 }
 
-.aside-inline-editor-shell:focus-within .aside-inline-editor-preview {
-    visibility: hidden;
-}
-
 .aside-inline-editor-preview,
 .aside-inline-textarea {
     grid-area: 1 / 1;
@@ -3115,6 +3111,7 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
 
 .aside-inline-editor-preview {
     z-index: 0;
+    visibility: hidden;
     overflow: hidden;
     color: var(--text-normal);
     white-space: pre-wrap;
@@ -3133,10 +3130,19 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
     border: none;
     border-radius: 8px;
     background: transparent;
-    color: transparent;
-    -webkit-text-fill-color: transparent;
+    color: var(--text-normal);
+    -webkit-text-fill-color: var(--text-normal);
     caret-color: var(--text-normal);
     resize: vertical;
+}
+
+.aside-inline-editor-shell.is-preview-ready:not(:focus-within) .aside-inline-editor-preview {
+    visibility: visible;
+}
+
+.aside-inline-editor-shell.is-preview-ready:not(:focus-within) .aside-inline-textarea {
+    color: transparent;
+    -webkit-text-fill-color: transparent;
 }
 
 .aside-comment-draft.is-edit .aside-inline-textarea {

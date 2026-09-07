@@ -46,6 +46,10 @@ export interface SidebarDraftCommentHost {
 
 type DraftEditorLayout = "card" | "inline-edit";
 
+export function isDraftPreviewReady(commentText: string, renderedText: string): boolean {
+    return commentText.length === 0 || renderedText.length > 0;
+}
+
 export function isDraftSaveActionDisabled(
     comment: Pick<DraftComment, "mode" | "anchorKind">,
     commentText: string,
@@ -303,6 +307,7 @@ function renderDraftEditor(
     textarea.rows = estimateDraftTextareaRows(comment.comment, comment.mode === "edit");
 
     const syncPreview = () => {
+        editorShell.removeClass("is-preview-ready");
         if (!textarea.value) {
             preview.empty();
             preview.addClass("is-empty");
@@ -318,8 +323,13 @@ function renderDraftEditor(
 
         preview.scrollTop = textarea.scrollTop;
         preview.scrollLeft = textarea.scrollLeft;
+        editorShell.toggleClass(
+            "is-preview-ready",
+            isDraftPreviewReady(textarea.value, preview.textContent ?? ""),
+        );
     };
     syncPreview();
+    textarea.addEventListener("blur", syncPreview);
 
     const actionRow = editorWrap.createDiv("aside-inline-editor-actions");
     if (layout === "inline-edit") {

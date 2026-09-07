@@ -223,7 +223,7 @@ rg -n "onReplaceThread|data-draft-id|handoffSidebarDraftEditor" src tests
 
 Expected: one shared draft-handoff implementation, two thin `AsideView` adapters, and intentional tests only.
 
-- [ ] **Step 8: Commit nested preservation**
+- [x] **Step 8: Commit nested preservation**
 
 ```bash
 git add src/ui/views/sidebarItemReconciler.ts src/ui/views/sidebarDraftEditorHandoff.ts src/ui/views/AsideView.ts tests/sidebarItemReconciler.test.ts tests/sidebarDraftEditorHandoff.test.ts
@@ -238,7 +238,7 @@ git commit -m "fix(sidebar): preserve nested draft editors"
 - Modify: `src/ui/views/sidebarDraftComment.ts:296-322,383-417`
 - Modify: `styles.css:3094-3161`
 
-- [ ] **Step 1: Write failing preview-readiness tests**
+- [x] **Step 1: Write failing preview-readiness tests**
 
 Export a pure `isDraftPreviewReady()` seam and first write its required behavior:
 
@@ -250,7 +250,7 @@ test("draft preview readiness never hides nonempty textarea text behind an empty
 });
 ```
 
-- [ ] **Step 2: Write the failing wiring and stylesheet contract test**
+- [x] **Step 2: Write the failing wiring and stylesheet contract test**
 
 Read `sidebarDraftComment.ts` and `styles.css` from `tests/sidebarDraftVisibilityStyles.test.mjs`. Assert that blur calls `syncPreview`, base textarea text is normal, and transparency applies only under the same ready-and-blurred selector that makes the preview visible:
 
@@ -261,7 +261,7 @@ assert.match(styles, /\.aside-inline-editor-shell\.is-preview-ready:not\(:focus-
 assert.match(styles, /\.aside-inline-editor-shell\.is-preview-ready:not\(:focus-within\) \.aside-inline-editor-preview/);
 ```
 
-- [ ] **Step 3: Run the focused tests and witness RED**
+- [x] **Step 3: Run the focused tests and witness RED**
 
 Run:
 
@@ -273,7 +273,7 @@ node --test tests/sidebarDraftVisibilityStyles.test.mjs
 
 Expected: FAIL because preview readiness and blur synchronization are not implemented and base textarea text is transparent.
 
-- [ ] **Step 4: Implement preview readiness and blur synchronization**
+- [x] **Step 4: Implement preview readiness and blur synchronization**
 
 Add:
 
@@ -285,7 +285,7 @@ export function isDraftPreviewReady(value: string, renderedText: string): boolea
 
 At the start of `syncPreview()`, remove `is-preview-ready`. After rendering, toggle it from `isDraftPreviewReady(textarea.value, preview.textContent ?? "")`. Register `textarea.addEventListener("blur", syncPreview)` for every platform, while keeping the mobile blur listener responsible only for its viewport cleanup.
 
-- [ ] **Step 5: Make CSS switch both layers atomically**
+- [x] **Step 5: Make CSS switch both layers atomically**
 
 Use visible textarea text and a hidden preview as defaults:
 
@@ -311,7 +311,7 @@ Use visible textarea text and a hidden preview as defaults:
 
 Keep focus border, caret, placeholder, sizing, and selection styling unchanged. Remove the old independent focus-within preview-hiding and base textarea-transparency declarations.
 
-- [ ] **Step 6: Run the focused tests and witness GREEN**
+- [x] **Step 6: Run the focused tests and witness GREEN**
 
 Run the Step 3 commands. Expected: all focused tests pass.
 
