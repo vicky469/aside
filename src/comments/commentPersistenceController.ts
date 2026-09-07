@@ -32,7 +32,10 @@ import {
     type SideNoteSyncNoteSnapshot,
     type SideNoteSyncSnapshotInput,
 } from "../sync/sideNoteSyncEventStore";
-import type { PersistedPluginData } from "../settings/indexNoteSettingsPlanner";
+import type {
+    PersistedPluginData,
+    PersistedPluginDataUpdater,
+} from "../settings/indexNoteSettingsPlanner";
 import {
     SourceIdentityStore,
     type SourceIdentityRecord,
@@ -85,6 +88,7 @@ export interface CommentPersistenceHost {
     getSideNoteSyncDeviceId(): string;
     readPersistedPluginData(): PersistedPluginData;
     loadPersistedPluginData?(): Promise<PersistedPluginData | null>;
+    updatePersistedPluginData?(updater: PersistedPluginDataUpdater): Promise<PersistedPluginData>;
     writePersistedPluginData(data: PersistedPluginData): Promise<void>;
     isAllCommentsNotePath(filePath: string): boolean;
     isCommentableFile(file: TFile | null): file is TFile;
@@ -541,6 +545,9 @@ export class CommentPersistenceController {
         this.syncEventStore = new SideNoteSyncEventStore({
             readPersistedPluginData: () => host.readPersistedPluginData(),
             readLatestPersistedPluginData: () => host.loadPersistedPluginData?.() ?? Promise.resolve(host.readPersistedPluginData()),
+            updatePersistedPluginData: host.updatePersistedPluginData
+                ? (updater) => host.updatePersistedPluginData?.(updater) as Promise<PersistedPluginData>
+                : undefined,
             writePersistedPluginData: (data) => host.writePersistedPluginData(data),
             getDeviceId: () => host.getSideNoteSyncDeviceId(),
             createEventId: () => host.createCommentId(),
@@ -1805,6 +1812,12 @@ export class CommentPersistenceController {
             }
             const existingSidecarThreads = (await this.sidecarStorage.readForSource(sourceRecord.sourceId, snapshot.notePath))
                 ?? await this.sidecarStorage.read(snapshot.notePath);
+            if (
+                existingSidecarThreads
+                && !this.syncEventStore.hasUnprocessedSnapshotCoverage(snapshot.coveredWatermarks)
+            ) {
+                continue;
+            }
             const normalizedSnapshotThreads = await this.normalizeThreadsForFile(snapshot.notePath, snapshot.threads);
             const normalizedExistingThreads = existingSidecarThreads
                 ? await this.normalizeThreadsForFile(snapshot.notePath, existingSidecarThreads)

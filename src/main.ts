@@ -425,6 +425,7 @@ export default class Aside extends Plugin {
         getSideNoteSyncDeviceId: () => this.getSideNoteSyncDeviceId(),
         readPersistedPluginData: () => this.indexNoteSettingsController.readPersistedPluginData(),
         loadPersistedPluginData: () => this.loadCurrentData(),
+        updatePersistedPluginData: (updater) => this.indexNoteSettingsController.updatePersistedPluginData(updater),
         writePersistedPluginData: (data) => this.indexNoteSettingsController.writePersistedPluginData(data),
         isAllCommentsNotePath: (filePath) => this.isAllCommentsNotePath(filePath),
         isCommentableFile: (file): file is TFile => this.isCommentableFile(file),

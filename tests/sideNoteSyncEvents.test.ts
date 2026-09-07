@@ -716,6 +716,75 @@ test("side-note sync event store exposes remote events until the current device 
     assert.equal(store.readState().processedWatermarks["device-a"]?.["device-b"], 1);
 });
 
+test("side-note sync event store identifies snapshot coverage the current device has not processed", async () => {
+    let persistedData: PersistedPluginData = {};
+    const store = new SideNoteSyncEventStore({
+        readPersistedPluginData: () => persistedData,
+        writePersistedPluginData: async (data) => {
+            persistedData = data;
+        },
+        getDeviceId: () => "device-a",
+        createEventId: () => "event-1",
+        hashText: async (text) => `hash-${text}`,
+        now: () => 1710000000100,
+    });
+
+    await store.markWatermarksProcessed({ "device-b": 5 });
+
+    assert.equal(store.hasUnprocessedSnapshotCoverage({ "device-b": 5 }), false);
+    assert.equal(store.hasUnprocessedSnapshotCoverage({ "device-b": 6 }), true);
+    assert.equal(store.hasUnprocessedSnapshotCoverage({ "device-c": 1 }), true);
+});
+
+test("side-note sync event store atomically merges concurrent plugin-data updates", async () => {
+    let cachedData: PersistedPluginData = {};
+    const concurrentState = normalizeSideNoteSyncEventState({
+        schemaVersion: 1,
+        deviceLogs: {
+            "device-b": {
+                lastClock: 1,
+                events: [createEvent({
+                    eventId: "remote-event",
+                    deviceId: "device-b",
+                    logicalClock: 1,
+                })],
+            },
+        },
+        processedWatermarks: {
+            "device-b": { "device-b": 1 },
+        },
+        compactedWatermarks: {},
+        noteSnapshots: {},
+    });
+    const store = new SideNoteSyncEventStore({
+        readPersistedPluginData: () => cachedData,
+        updatePersistedPluginData: async (updater) => {
+            cachedData = updater({
+                sideNoteSyncEventState: concurrentState,
+            });
+            return cachedData;
+        },
+        writePersistedPluginData: async (data) => {
+            cachedData = data;
+        },
+        getDeviceId: () => "device-a",
+        createEventId: () => "local-event",
+        hashText: async (text) => `hash-${text}`,
+        now: () => 1710000000100,
+    });
+
+    await store.appendLocalEvents("docs/note.md", [{
+        op: "createThread",
+        payload: {
+            thread: createThread("docs/note.md"),
+        },
+    }]);
+
+    const state = store.readState();
+    assert.equal(state.deviceLogs["device-a"]?.events.length, 1);
+    assert.equal(state.deviceLogs["device-b"]?.events.length, 1);
+});
+
 test("side-note sync event store skips no-op processed watermark writes", async () => {
     let persistedData: PersistedPluginData = {};
     let writeCount = 0;
