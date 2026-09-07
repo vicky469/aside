@@ -252,7 +252,7 @@ Expected: `main.js`, `manifest.json`, and `styles.css` pass; no source map, embe
 
 - [ ] **Step 4: Sync and compare `lean-startup`**
 
-Run: `node scripts/install-built-plugin.mjs --vault /Users/wenqingli/Obsidian/lean-startup`, reload Aside, and compare SHA-256 hashes for the three shipped assets.
+Run: `node scripts/install-built-plugin.mjs --vault /path/to/lean-startup`, reload Aside, and compare SHA-256 hashes for the three shipped assets.
 
 - [ ] **Step 5: Verify and repair the reported thread through the installed build**
 
