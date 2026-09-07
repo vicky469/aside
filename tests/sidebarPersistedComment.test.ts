@@ -1391,6 +1391,58 @@ test("Regenerate capability hides script-oriented runs only while Scripts is off
     );
 });
 
+test("disabled Scripts skips a historical script run for a current agent prompt", () => {
+    assert.deepEqual(
+        getSidebarCommentRegenerateAction(
+            "entry-1",
+            "@codex explain this instead",
+            [],
+            [createScriptRun({ triggerEntryId: "entry-1" })],
+            false,
+        ),
+        { kind: "agent-prompt" },
+    );
+});
+
+test("disabled Scripts skips a historical script run for an ordinary agent-run fallback", () => {
+    assert.deepEqual(
+        getSidebarCommentRegenerateAction(
+            "entry-1",
+            "@codex explain this",
+            [createAgentRun({ triggerEntryId: "entry-1", requestKind: undefined })],
+            [createScriptRun({ triggerEntryId: "entry-1" })],
+            false,
+        ),
+        { kind: "agent-run", runId: "run-1" },
+    );
+});
+
+test("disabled Scripts skips a script-oriented agent run for a current agent prompt", () => {
+    assert.deepEqual(
+        getSidebarCommentRegenerateAction(
+            "entry-1",
+            "@codex explain this instead",
+            [createAgentRun({ triggerEntryId: "entry-1", requestKind: "create-script" })],
+            [],
+            false,
+        ),
+        { kind: "agent-prompt" },
+    );
+});
+
+test("enabled Scripts preserves script-run precedence across mixed history", () => {
+    assert.deepEqual(
+        getSidebarCommentRegenerateAction(
+            "entry-1",
+            "@codex explain this",
+            [createAgentRun({ triggerEntryId: "entry-1", requestKind: undefined })],
+            [createScriptRun({ triggerEntryId: "entry-1" })],
+            true,
+        ),
+        { kind: "script-run", runId: "script-run-1" },
+    );
+});
+
 test("disabled Scripts hides script Generate buttons but keeps ordinary agent Generate buttons", async () => {
     const cases = [
         {

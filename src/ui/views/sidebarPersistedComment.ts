@@ -625,17 +625,17 @@ export function getSidebarCommentRegenerateAction(
     scriptsEnabled: boolean,
 ): SidebarCommentRegenerateAction | null {
     const retryableScriptRun = getRetryableScriptRunForSidebarComment(commentId, threadScriptRuns);
-    if (retryableScriptRun) {
-        return scriptsEnabled ? {
+    if (scriptsEnabled && retryableScriptRun) {
+        return {
             kind: "script-run",
             runId: retryableScriptRun.id,
-        } : null;
+        };
     }
     const retryableAgentRun = getRetryableAgentRunForSidebarComment(commentId, threadAgentRuns);
-    if (retryableAgentRun) {
-        if (!canRetryAgentRunWithScriptsCapability(scriptsEnabled, retryableAgentRun)) {
-            return null;
-        }
+    if (
+        retryableAgentRun
+        && canRetryAgentRunWithScriptsCapability(scriptsEnabled, retryableAgentRun)
+    ) {
         return {
             kind: "agent-run",
             runId: retryableAgentRun.id,
