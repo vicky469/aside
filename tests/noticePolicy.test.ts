@@ -29,3 +29,11 @@ test("notice policy keeps external open failures visible", () => {
         assert.equal(shouldShowTransientNotice(notice), true, notice.message);
     }
 });
+
+test("notice policy keeps unexpected publish action failures visible", () => {
+    assert.equal(shouldShowTransientNotice({
+        message: "Publish failed unexpectedly. Check Aside logs for details.",
+        area: "publish",
+        event: "publish.html.action.error",
+    }), true);
+});

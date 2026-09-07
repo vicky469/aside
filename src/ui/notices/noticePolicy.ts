@@ -16,6 +16,10 @@ export function shouldShowTransientNotice(context: TransientNoticeContext): bool
         return true;
     }
 
+    if (context.area === "publish" && context.event === "publish.html.action.error") {
+        return true;
+    }
+
     if (context.area === "navigation" && context.event === "navigation.notice") {
         return NAVIGATION_FALLBACK_MESSAGES.has(context.message);
     }
