@@ -28,9 +28,10 @@ function getLineContaining(markdown, phrase) {
     return line;
 }
 
-function assertUsesGenerateButtonVocabulary(markdown) {
-    assert.match(markdown, /\bGenerate\b/u);
-    assert.doesNotMatch(markdown, /\b(?:Regenerate|retr(?:y|ies))\b/iu);
+function assertUsesGenerateButtonVocabulary(markdown, actionCopy) {
+    assert.match(actionCopy, /\bGenerate\b/u);
+    assert.doesNotMatch(actionCopy, /\bretr(?:y|ies)\b/iu);
+    assert.doesNotMatch(markdown, /\bRegenerate\b/iu);
 }
 
 function assertPublishingDisabledPolicy(markdown) {
@@ -48,6 +49,7 @@ function assertPublishingDisabledPolicy(markdown) {
 test("README publishes the complete agent and script entry points", () => {
     const readme = readRequiredFile("README.md");
     const capabilitiesDefaultPolicy = getParagraphContaining(readme, "Scripts and Publishing");
+    const scriptsDisabledPolicy = getParagraphContaining(readme, "Turning Scripts off");
     const orderedAgentList = /`@codex`, `@claude`, `@cursor`, `@gemini`, (?:and|or) `@deepseek`/gu;
 
     assert.ok(
@@ -63,7 +65,7 @@ test("README publishes the complete agent and script entry points", () => {
     assert.match(readme, /Ordinary agent replies do not require Scripts/iu);
     assert.equal(readme.includes(SCRIPTS_SETTINGS_PATH), true);
     assert.equal(readme.includes(PUBLISHING_SETTINGS_PATH), true);
-    assertUsesGenerateButtonVocabulary(readme);
+    assertUsesGenerateButtonVocabulary(readme, scriptsDisabledPolicy);
     assertPublishingDisabledPolicy(readme);
     for (const command of ["/create-script", "/update-script", "/pdf-to-markdown", "/script-name"]) {
         assert.match(readme, new RegExp(command.replace("/", "\\/"), "u"));
@@ -77,6 +79,7 @@ test("README publishes the complete agent and script entry points", () => {
 
 test("Agents and scripts guide documents setup and everyday workflows", () => {
     const guide = readRequiredFile("SCRIPTS.md");
+    const generateActionCopy = getParagraphContaining(guide, "Use **Generate**");
     const scriptsDefaultPolicy = getParagraphContaining(
         guide,
         "Scripts are an optional advanced capability",
@@ -104,7 +107,7 @@ test("Agents and scripts guide documents setup and everyday workflows", () => {
     assert.match(guide, /\/update-script \/script-name <request>/u);
     assert.match(guide, /\/pdf-to-markdown/u);
     assert.match(guide, /\/clean-citations/u);
-    assertUsesGenerateButtonVocabulary(guide);
+    assertUsesGenerateButtonVocabulary(guide, generateActionCopy);
     assert.match(guide, /one vault script per (?:side note|comment)/iu);
     assert.match(guide, /do not (?:combine|mix).*agent/iu);
 });
@@ -144,6 +147,7 @@ test("Agents and scripts guide explains what disabling Scripts changes and prese
 
     assert.match(disabledPolicy, /blocks new slash and script command execution/iu);
     assert.match(disabledPolicy, /script-oriented Generate actions/iu);
+    assert.doesNotMatch(disabledPolicy, /\bretr(?:y|ies)\b/iu);
     assert.match(
         disabledPolicy,
         /does not delete[^.]*registered scripts[^.]*history[^.]*saved replies/iu,
@@ -179,6 +183,7 @@ test("Agents and scripts guide explains headless agent access and privacy bounda
 
 test("advanced documentation covers the native Scripts and Publishing controls", () => {
     const advanced = readRequiredFile("ADVANCED_FEATURES.md");
+    const scriptsDisabledPolicy = getParagraphContaining(advanced, "Turning Scripts off");
     const scriptsRow = getLineContaining(advanced, "| [Agents and Scripts]");
     const publishingRow = getLineContaining(advanced, "| [Cloudflare Pages Publishing]");
     const settingsOrder = getParagraphContaining(advanced, "sections appear in this order");
@@ -195,7 +200,7 @@ test("advanced documentation covers the native Scripts and Publishing controls",
     assert.match(advanced, /\[Cloudflare Pages Publishing\]\(#cloudflare-pages-publishing\)/u);
     assert.match(advanced, /^## Cloudflare Pages Publishing$/mu);
     assert.equal(advanced.includes(PUBLISHING_SETTINGS_PATH), true);
-    assertUsesGenerateButtonVocabulary(advanced);
+    assertUsesGenerateButtonVocabulary(advanced, scriptsDisabledPolicy);
     assert.match(advanced, /^### Network and Data Access$/mu);
     assert.match(advanced, /^### Setup$/mu);
     assert.match(advanced, /^### Publishing Workflow$/mu);
@@ -207,4 +212,11 @@ test("advanced documentation explains what disabling Publishing preserves", () =
     const advanced = readRequiredFile("ADVANCED_FEATURES.md");
 
     assertPublishingDisabledPolicy(advanced);
+});
+
+test("Generate vocabulary guard allows unrelated retry guidance", () => {
+    const actionCopy = "Use Generate to run this action again.";
+    const guide = `${actionCopy}\n\nTroubleshooting may ask you to retry a network request.`;
+
+    assertUsesGenerateButtonVocabulary(guide, actionCopy);
 });
