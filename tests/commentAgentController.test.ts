@@ -20,6 +20,10 @@ import {
 } from "../src/core/agents/agentActorRegistry";
 import type { AsideAgentTarget } from "../src/core/config/agentTargets";
 import { VaultScriptRegistry } from "../src/vaultScripts/vaultScriptRegistry";
+import {
+    executeSidebarCommentRegenerateAction,
+    getSidebarCommentRegenerateAction,
+} from "../src/ui/views/sidebarPersistedComment";
 
 function createFile(path: string): TFile {
     return {
@@ -101,6 +105,7 @@ function createHarness(options: {
     ) => boolean;
     failSucceededRunUpdateAttempts?: number;
     registeredScriptPaths?: string[];
+    scriptsEnabled?: boolean | (() => boolean);
 } = {}) {
     let persistedData: PersistedPluginData = options.initialPersistedData ?? {};
     const commentManager = new CommentManager(options.initialComments ?? [createComment()]);
@@ -153,6 +158,9 @@ function createHarness(options: {
     });
 
     const controller = new CommentAgentController({
+        isScriptsEnabled: () => typeof options.scriptsEnabled === "function"
+            ? options.scriptsEnabled()
+            : options.scriptsEnabled ?? true,
         createCommentId: () => `generated-${idCounter++}`,
         now: () => {
             now += nowIncrement;
@@ -2624,6 +2632,220 @@ test("comment agent controller can retry a saved agent prompt when run metadata 
     assert.equal(harness.runtimeCalls.at(-1)?.target, "codex");
     assert.equal(harness.committedEntries.length, 1);
     assert.equal(harness.commentManager.getCommentById("generated-2")?.comment, "Recovered from prompt");
+});
+
+test("disabled Scripts retries an edited ordinary agent prompt without inheriting a historical script request kind", async () => {
+    const harness = createHarness({
+        scriptsEnabled: false,
+        initialComments: [createComment({
+            comment: "@codex explain this instead",
+        })],
+        initialPersistedData: {
+            agentRuns: [{
+                id: "run-old",
+                threadId: "thread-1",
+                triggerEntryId: "thread-1",
+                filePath: "Folder/Note.md",
+                requestedAgent: "codex",
+                requestKind: "create-script",
+                runtime: "direct-cli",
+                status: "failed",
+                promptText: "build a cleaner",
+                createdAt: 10,
+                endedAt: 12,
+                error: "previous failure",
+            }],
+        },
+        runtimeReplyText: "Ordinary reply",
+    });
+
+    const action = getSidebarCommentRegenerateAction(
+        "thread-1",
+        "@codex explain this instead",
+        harness.controller.getAgentRuns(),
+        [],
+        false,
+    );
+    assert.deepEqual(action, { kind: "agent-prompt" });
+    assert.ok(action);
+    const started = await executeSidebarCommentRegenerateAction(
+        action,
+        { id: "thread-1", filePath: "Folder/Note.md" },
+        {
+            saveVisibleDraftIfPresent: async () => true,
+            retryAgentRun: async () => false,
+            retryScriptRun: async () => false,
+            retryAgentPromptForComment: (commentId, filePath) =>
+                harness.controller.retryPromptForComment(commentId, filePath),
+        },
+    );
+    await waitForAgentQueueToDrain(harness.controller);
+
+    assert.equal(started, true);
+    assert.equal(harness.controller.getAgentRuns().length, 2);
+    const retry = harness.controller.getLatestAgentRunForThread("thread-1");
+    assert.equal(retry?.retryOfRunId, "run-old");
+    assert.equal(retry?.requestKind, undefined);
+    assert.equal(harness.runtimeCalls.at(-1)?.requestKind, undefined);
+    assert.equal(harness.getDefaultRuntimeSelectionCalls(), 0);
+    assert.deepEqual(harness.notices, []);
+});
+
+test("disabled Scripts silently blocks any mixed script directive from prompt retry before history mutation", async () => {
+    for (const body of [
+        "/create-script build a cleaner @codex",
+        "/update-script /clean improve it @codex",
+        "/pdf-to-markdown @codex",
+    ]) {
+        const harness = createHarness({
+            scriptsEnabled: false,
+            initialComments: [createComment({ comment: body })],
+            initialPersistedData: {
+                agentRuns: [{
+                    id: "run-old",
+                    threadId: "thread-1",
+                    triggerEntryId: "thread-1",
+                    filePath: "Folder/Note.md",
+                    requestedAgent: "codex",
+                    requestKind: "create-script",
+                    runtime: "direct-cli",
+                    status: "failed",
+                    promptText: "build a cleaner",
+                    createdAt: 10,
+                    endedAt: 12,
+                    error: "previous failure",
+                }],
+            },
+        });
+        const runsBeforeRetry = harness.controller.getAgentRuns();
+
+        const started = await harness.controller.retryPromptForComment("thread-1", "Folder/Note.md");
+        await waitForAgentQueueToDrain(harness.controller);
+
+        assert.equal(started, false, body);
+        assert.deepEqual(harness.controller.getAgentRuns(), runsBeforeRetry, body);
+        assert.deepEqual(harness.runtimeCalls, [], body);
+        assert.deepEqual(harness.appendedEntries, [], body);
+        assert.deepEqual(harness.committedEntries, [], body);
+        assert.deepEqual(harness.editedEntries, [], body);
+        assert.deepEqual(harness.notices, [], body);
+    }
+});
+
+test("disabled Scripts silently blocks direct retries of every historical script-oriented agent run", async () => {
+    for (const requestKind of ["create-script", "update-script", "pdf-to-markdown"] as const) {
+        const harness = createHarness({
+            scriptsEnabled: false,
+            initialPersistedData: {
+                agentRuns: [{
+                    id: "run-old",
+                    threadId: "thread-1",
+                    triggerEntryId: "thread-1",
+                    filePath: "Folder/Note.md",
+                    requestedAgent: "codex",
+                    requestKind,
+                    ...(requestKind === "update-script"
+                        ? { targetScriptPath: "🛠️ scripts/clean.mjs" }
+                        : {}),
+                    runtime: "direct-cli",
+                    status: "failed",
+                    promptText: "script work",
+                    createdAt: 10,
+                    endedAt: 12,
+                    error: "previous failure",
+                }],
+            },
+        });
+        const runsBeforeRetry = harness.controller.getAgentRuns();
+
+        assert.equal(await harness.controller.retryRun("run-old"), false, requestKind);
+        assert.deepEqual(harness.controller.getAgentRuns(), runsBeforeRetry, requestKind);
+        assert.deepEqual(harness.runtimeCalls, [], requestKind);
+        assert.deepEqual(harness.appendedEntries, [], requestKind);
+        assert.deepEqual(harness.committedEntries, [], requestKind);
+        assert.deepEqual(harness.editedEntries, [], requestKind);
+        assert.deepEqual(harness.notices, [], requestKind);
+    }
+});
+
+test("script-oriented retry rechecks the live Scripts capability after asynchronous selection", async () => {
+    let scriptsEnabled = true;
+    const harness = createHarness({
+        scriptsEnabled: () => scriptsEnabled,
+        initialComments: [createComment({
+            comment: "/create-script build a cleaner",
+        })],
+        initialPersistedData: {
+            agentRuns: [{
+                id: "run-old",
+                threadId: "thread-1",
+                triggerEntryId: "thread-1",
+                filePath: "Folder/Note.md",
+                requestedAgent: "codex",
+                requestKind: "create-script",
+                runtime: "direct-cli",
+                status: "failed",
+                promptText: "build a cleaner",
+                createdAt: 10,
+                endedAt: 12,
+                error: "previous failure",
+            }],
+        },
+        resolveDefaultAgentRuntimeSelection: async () => {
+            scriptsEnabled = false;
+            return {
+                kind: "resolved",
+                selectedAgent: "codex",
+                runtime: "direct-cli",
+                modePreference: "auto",
+            };
+        },
+    });
+    const runsBeforeRetry = harness.controller.getAgentRuns();
+
+    assert.equal(await harness.controller.retryRun("run-old"), false);
+
+    assert.deepEqual(harness.controller.getAgentRuns(), runsBeforeRetry);
+    assert.deepEqual(harness.runtimeCalls, []);
+    assert.deepEqual(harness.appendedEntries, []);
+    assert.deepEqual(harness.committedEntries, []);
+    assert.deepEqual(harness.editedEntries, []);
+    assert.deepEqual(harness.notices, []);
+});
+
+test("disabled Scripts preserves ordinary and unknown agent retry behavior", async () => {
+    const ordinary = createHarness({
+        scriptsEnabled: false,
+        initialComments: [createComment({ comment: "@codex explain this" })],
+        initialPersistedData: {
+            agentRuns: [{
+                id: "run-old",
+                threadId: "thread-1",
+                triggerEntryId: "thread-1",
+                filePath: "Folder/Note.md",
+                requestedAgent: "codex",
+                runtime: "direct-cli",
+                status: "failed",
+                promptText: "@codex explain this",
+                createdAt: 10,
+                endedAt: 12,
+                error: "previous failure",
+            }],
+        },
+        runtimeReplyText: "Ordinary retry",
+    });
+
+    assert.equal(await ordinary.controller.retryRun("run-old"), true);
+    await waitForAgentQueueToDrain(ordinary.controller);
+    assert.equal(ordinary.controller.getLatestAgentRunForThread("thread-1")?.requestKind, undefined);
+    assert.equal(ordinary.runtimeCalls.length, 1);
+    assert.deepEqual(ordinary.notices, []);
+
+    const unknown = createHarness({ scriptsEnabled: false });
+    assert.equal(await unknown.controller.retryRun("missing-run"), false);
+    assert.deepEqual(unknown.controller.getAgentRuns(), []);
+    assert.deepEqual(unknown.runtimeCalls, []);
+    assert.deepEqual(unknown.notices, ["Unable to find that agent reply."]);
 });
 
 test("comment agent controller retries a renamed thread when old run output is missing", async () => {

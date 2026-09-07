@@ -513,6 +513,7 @@ export default class Aside extends Plugin {
         },
     }, this.scriptRunStore);
     private readonly commentAgentController: CommentAgentController = new CommentAgentController({
+        isScriptsEnabled: () => this.isScriptsEnabled(),
         createCommentId: () => generateCommentId(),
         now: () => Date.now(),
         getPluginVersion: () => this.manifest.version,
@@ -1805,11 +1806,11 @@ export default class Aside extends Plugin {
         await routeSavedUserEntry({
             event,
             scriptsEnabled: this.isScriptsEnabled(),
-            builtInControllers: [
-                this.updateScriptCommandController,
-                this.createScriptCommandController,
-                this.pdfToMarkdownCommandController,
-            ],
+            builtInControllers: {
+                updateScript: this.updateScriptCommandController,
+                createScript: this.createScriptCommandController,
+                pdfToMarkdown: this.pdfToMarkdownCommandController,
+            },
             scriptController: this.commentScriptController,
             agentController: this.commentAgentController,
         });

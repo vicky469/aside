@@ -22,9 +22,22 @@ test("saved entry routing reads the live Scripts capability into the named route
 
     assert.match(methodSource, /routeSavedUserEntry\(\{/u);
     assert.match(methodSource, /scriptsEnabled:\s*this\.isScriptsEnabled\(\)/u);
-    assert.match(methodSource, /builtInControllers:\s*\[/u);
+    assert.match(methodSource, /builtInControllers:\s*\{/u);
+    assert.match(methodSource, /updateScript:\s*this\.updateScriptCommandController/u);
+    assert.match(methodSource, /createScript:\s*this\.createScriptCommandController/u);
+    assert.match(methodSource, /pdfToMarkdown:\s*this\.pdfToMarkdownCommandController/u);
     assert.match(methodSource, /scriptController:\s*this\.commentScriptController/u);
     assert.match(methodSource, /agentController:\s*this\.commentAgentController/u);
+});
+
+test("agent retry preparation reads the live Scripts capability through its production host", () => {
+    const controllerSource = getMethodSource(
+        mainSource,
+        "private readonly commentAgentController: CommentAgentController",
+        "private readonly createScriptCommandController",
+    );
+
+    assert.match(controllerSource, /isScriptsEnabled:\s*\(\)\s*=>\s*this\.isScriptsEnabled\(\)/u);
 });
 
 test("retry entry points consult the live capability before their controllers", () => {

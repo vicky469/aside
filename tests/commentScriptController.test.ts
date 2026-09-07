@@ -6,6 +6,7 @@ import type { PersistedPluginData } from "../src/settings/indexNoteSettingsPlann
 import {
     CommentScriptController,
     routeSavedUserEntry,
+    type SavedEntryBuiltInControllers,
 } from "../src/vaultScripts/commentScriptController";
 import { ScriptRunStore } from "../src/vaultScripts/scriptRunStore";
 import { VaultScriptRegistry } from "../src/vaultScripts/vaultScriptRegistry";
@@ -54,6 +55,19 @@ function createDeferred<T>() {
         reject = rejectPromise;
     });
     return { promise, resolve, reject };
+}
+
+function createBuiltInControllers(
+    overrides: Partial<SavedEntryBuiltInControllers> = {},
+): SavedEntryBuiltInControllers {
+    const skip = {
+        handleSavedUserEntry: async () => false,
+    };
+    return {
+        updateScript: overrides.updateScript ?? skip,
+        createScript: overrides.createScript ?? skip,
+        pdfToMarkdown: overrides.pdfToMarkdown ?? skip,
+    };
 }
 
 async function waitForCondition(predicate: () => boolean): Promise<void> {
@@ -623,7 +637,7 @@ test("saved entry routing sends only unclaimed entries to the agent controller",
             body: "/clean",
         },
         scriptsEnabled: true,
-        builtInControllers: [],
+        builtInControllers: createBuiltInControllers(),
         scriptController: valid.controller,
         agentController: {
             handleSavedUserEntry: async (event) => {
@@ -649,7 +663,7 @@ test("saved entry routing sends only unclaimed entries to the agent controller",
     await routeSavedUserEntry({
         event: originalEvent,
         scriptsEnabled: true,
-        builtInControllers: [],
+        builtInControllers: createBuiltInControllers(),
         scriptController: rejected.controller,
         agentController,
     });
@@ -660,7 +674,7 @@ test("saved entry routing sends only unclaimed entries to the agent controller",
             body: "@codex after registry refresh",
         },
         scriptsEnabled: true,
-        builtInControllers: [],
+        builtInControllers: createBuiltInControllers(),
         scriptController: rejected.controller,
         agentController,
     });
@@ -677,7 +691,7 @@ test("saved entry routing sends only unclaimed entries to the agent controller",
             body: "ordinary @person",
         },
         scriptsEnabled: true,
-        builtInControllers: [],
+        builtInControllers: createBuiltInControllers(),
         scriptController: ordinary.controller,
         agentController: {
             handleSavedUserEntry: async (event) => {
@@ -698,12 +712,14 @@ test("saved entry routing sends disabled script directives only to the agent con
             body: "/clean",
         },
         scriptsEnabled: false,
-        builtInControllers: [{
-            handleSavedUserEntry: async () => {
-                routeCalls.push("built-in");
-                return true;
+        builtInControllers: createBuiltInControllers({
+            updateScript: {
+                handleSavedUserEntry: async () => {
+                    routeCalls.push("built-in");
+                    return true;
+                },
             },
-        }],
+        }),
         scriptController: {
             handleSavedUserEntry: async () => {
                 routeCalls.push("script");
@@ -732,17 +748,20 @@ test("saved entry routing tries built-in script-authoring commands before vault 
     await routeSavedUserEntry({
         event: savedEvent,
         scriptsEnabled: true,
-        builtInControllers: [{
-            handleSavedUserEntry: async () => {
-                routeCalls.push("update-script");
-                return false;
+        builtInControllers: createBuiltInControllers({
+            updateScript: {
+                handleSavedUserEntry: async () => {
+                    routeCalls.push("update-script");
+                    return false;
+                },
             },
-        }, {
-            handleSavedUserEntry: async () => {
-                routeCalls.push("create-script");
-                return true;
+            createScript: {
+                handleSavedUserEntry: async () => {
+                    routeCalls.push("create-script");
+                    return true;
+                },
             },
-        }],
+        }),
         scriptController: {
             handleSavedUserEntry: async () => {
                 routeCalls.push("script");
@@ -770,22 +789,26 @@ test("saved entry routing claims pdf-to-markdown before scripts and generic agen
             body: "/pdf-to-markdown",
         },
         scriptsEnabled: true,
-        builtInControllers: [{
-            handleSavedUserEntry: async () => {
-                routeCalls.push("update-script");
-                return false;
+        builtInControllers: {
+            updateScript: {
+                handleSavedUserEntry: async () => {
+                    routeCalls.push("update-script");
+                    return false;
+                },
             },
-        }, {
-            handleSavedUserEntry: async () => {
-                routeCalls.push("create-script");
-                return false;
+            createScript: {
+                handleSavedUserEntry: async () => {
+                    routeCalls.push("create-script");
+                    return false;
+                },
             },
-        }, {
-            handleSavedUserEntry: async () => {
-                routeCalls.push("pdf-to-markdown");
-                return true;
+            pdfToMarkdown: {
+                handleSavedUserEntry: async () => {
+                    routeCalls.push("pdf-to-markdown");
+                    return true;
+                },
             },
-        }],
+        },
         scriptController: {
             handleSavedUserEntry: async () => {
                 routeCalls.push("script");

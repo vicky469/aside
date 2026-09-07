@@ -172,6 +172,35 @@ export type SidebarCommentRegenerateAction =
     | { kind: "agent-prompt" }
     | { kind: "script-run"; runId: string };
 
+type SidebarCommentRegenerateHost = Pick<
+    SidebarPersistedCommentHost,
+    | "saveVisibleDraftIfPresent"
+    | "retryAgentRun"
+    | "retryScriptRun"
+    | "retryAgentPromptForComment"
+>;
+
+export async function executeSidebarCommentRegenerateAction(
+    action: SidebarCommentRegenerateAction,
+    comment: Pick<Comment, "id" | "filePath">,
+    host: SidebarCommentRegenerateHost,
+): Promise<boolean> {
+    switch (action.kind) {
+        case "script-run":
+            if (!(await host.saveVisibleDraftIfPresent())) {
+                return false;
+            }
+            return host.retryScriptRun(action.runId);
+        case "agent-run":
+            return host.retryAgentRun(action.runId);
+        case "agent-prompt":
+            return host.retryAgentPromptForComment(comment.id, comment.filePath);
+        default:
+            action satisfies never;
+            return false;
+    }
+}
+
 export function getAgentRunStatusPresentation(status: AgentRunRecord["status"]): AgentRunStatusPresentation {
     switch (status) {
         case "queued":
@@ -1234,18 +1263,11 @@ function renderThreadFooterActions(
                 return;
             }
             retryButton.disabled = true;
-            if (
-                regenerateAction.kind === "script-run"
-                && !(await host.saveVisibleDraftIfPresent())
-            ) {
-                retryButton.disabled = options.disableRetryAction === true;
-                return;
-            }
-            const started = regenerateAction.kind === "script-run"
-                ? await host.retryScriptRun(regenerateAction.runId)
-                : regenerateAction.kind === "agent-run"
-                    ? await host.retryAgentRun(regenerateAction.runId)
-                    : await host.retryAgentPromptForComment(comment.id, comment.filePath);
+            const started = await executeSidebarCommentRegenerateAction(
+                regenerateAction,
+                comment,
+                host,
+            );
             if (!started) {
                 retryButton.disabled = options.disableRetryAction === true;
             }

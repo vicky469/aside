@@ -22,6 +22,10 @@ import {
 import { resolveRequestedAgentRunSkills } from "../core/agents/agentSkillRouting";
 import type { AsideAgentTarget } from "../core/config/agentTargets";
 import type { SavedUserEntryEvent } from "../core/comments/savedUserEntry";
+import {
+    canRetryAgentRunWithScriptsCapability,
+    isScriptOrientedAgentRequestKind,
+} from "../core/scripts/scriptCapabilities";
 import { parseAgentDirectives } from "../core/text/agentDirectives";
 import {
     CREATE_SCRIPT_NO_AGENT,
@@ -78,6 +82,7 @@ export interface AgentStreamUpdate {
 }
 
 export interface CommentAgentHost {
+    isScriptsEnabled(): boolean;
     createCommentId(): string;
     now(): number;
     getPluginVersion(): string;
@@ -186,6 +191,12 @@ interface RetryPromptOptions {
     retryOfRunId?: string;
     missingFileNotice: string;
     missingCommentNotice: string;
+}
+
+function hasScriptDirective(body: string): boolean {
+    return parseCreateScriptDirective(body).kind !== "none"
+        || parseUpdateScriptDirective(body).kind !== "none"
+        || parsePdfToMarkdownDirective(body).kind !== "none";
 }
 
 function summarizeError(error: unknown): string {
@@ -593,6 +604,9 @@ export class CommentAgentController {
             this.host.showNotice("Unable to find that agent reply.");
             return false;
         }
+        if (!canRetryAgentRunWithScriptsCapability(this.host.isScriptsEnabled(), previousRun)) {
+            return false;
+        }
         if (this.persistingReplyRunIds.has(runId)) {
             this.host.showNotice(AGENT_REPLY_SAVE_PENDING_NOTICE);
             return false;
@@ -653,6 +667,24 @@ export class CommentAgentController {
             this.host.showNotice(options.missingCommentNotice);
             return false;
         }
+        const retryOfRunId = options.retryOfRunId
+            ?? getLatestAgentRunForTriggerEntry(this.store.getRuns(), latestComment.id)?.id;
+        const historicalRun = retryOfRunId
+            ? this.store.getRunById(retryOfRunId)
+            : null;
+        const historicalRequestKind = historicalRun?.requestKind;
+        const scriptsEnabled = this.host.isScriptsEnabled();
+        if (
+            !scriptsEnabled
+            && historicalRun
+            && isScriptOrientedAgentRequestKind(historicalRequestKind)
+            && (
+                options.retryOfRunId !== undefined
+                || hasScriptDirective(latestComment.comment)
+            )
+        ) {
+            return false;
+        }
         const activeRunForTrigger = this.store.getRuns().find((run) => (
             run.triggerEntryId === latestComment.id
             && (run.status === "queued" || run.status === "running")
@@ -668,15 +700,15 @@ export class CommentAgentController {
             return false;
         }
 
-        const retryOfRunId = options.retryOfRunId
-            ?? getLatestAgentRunForTriggerEntry(this.store.getRuns(), latestComment.id)?.id;
         if (retryOfRunId && this.persistingReplyRunIds.has(retryOfRunId)) {
             this.host.showNotice(AGENT_REPLY_SAVE_PENDING_NOTICE);
             return false;
         }
-        const previousRun = retryOfRunId
-            ? this.store.getRunById(retryOfRunId)
-            : null;
+        const previousRun = !scriptsEnabled
+            && historicalRun
+            && isScriptOrientedAgentRequestKind(historicalRequestKind)
+            ? null
+            : historicalRun;
         let requestedAgent: AsideAgentTarget;
         let runtime: AgentRunRuntime;
         let modePreference: AgentRuntimeModePreference;
@@ -720,6 +752,9 @@ export class CommentAgentController {
             if (this.disposed) {
                 return false;
             }
+            if (!this.host.isScriptsEnabled()) {
+                return false;
+            }
             if (selection.kind === "none") {
                 await this.appendCommandReply(commandEvent, PDF_TO_MARKDOWN_NO_AGENT);
                 return false;
@@ -757,6 +792,9 @@ export class CommentAgentController {
 
             const selection = await this.host.resolveDefaultAgentRuntimeSelection();
             if (this.disposed) {
+                return false;
+            }
+            if (!this.host.isScriptsEnabled()) {
                 return false;
             }
             if (selection.kind === "none") {
@@ -800,6 +838,9 @@ export class CommentAgentController {
 
             const selection = await this.host.resolveDefaultAgentRuntimeSelection();
             if (this.disposed) {
+                return false;
+            }
+            if (!this.host.isScriptsEnabled()) {
                 return false;
             }
             if (selection.kind === "none") {

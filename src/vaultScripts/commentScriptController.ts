@@ -67,10 +67,16 @@ export interface SavedEntryAgentController {
     handleSavedUserEntry(event: SavedUserEntryEvent): Promise<void>;
 }
 
+export interface SavedEntryBuiltInControllers {
+    updateScript: SavedEntryBuiltInController;
+    createScript: SavedEntryBuiltInController;
+    pdfToMarkdown: SavedEntryBuiltInController;
+}
+
 export interface SavedUserEntryRoute {
     event: SavedUserEntryEvent;
     scriptsEnabled: boolean;
-    builtInControllers: readonly SavedEntryBuiltInController[];
+    builtInControllers: SavedEntryBuiltInControllers;
     scriptController: SavedEntryScriptController | null;
     agentController: SavedEntryAgentController;
 }
@@ -87,7 +93,11 @@ export async function routeSavedUserEntry(route: SavedUserEntryRoute): Promise<v
         await agentController.handleSavedUserEntry(event);
         return;
     }
-    for (const builtInController of builtInControllers) {
+    for (const builtInController of [
+        builtInControllers.updateScript,
+        builtInControllers.createScript,
+        builtInControllers.pdfToMarkdown,
+    ]) {
         if (await builtInController.handleSavedUserEntry(event)) {
             return;
         }
