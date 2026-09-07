@@ -69,6 +69,10 @@ function createHarness(options: {
         context: EventExecutionContext,
     ) => void | Promise<void>;
     handleFileDelete?: (file: TAbstractFile | null) => void | Promise<void>;
+    handleFileModify?: (
+        file: TFile | null,
+        context: EventExecutionContext,
+    ) => void | Promise<void>;
     handleFileCreateMaintenance?: (file: TAbstractFile | null) => void;
     handleFileRenameMaintenance?: (file: TAbstractFile | null, oldPath: string) => void;
     handleFileDeleteMaintenance?: (file: TAbstractFile | null) => void;
@@ -164,8 +168,9 @@ function createHarness(options: {
             calls.push(`delete:${file?.path ?? "null"}`);
             await options.handleFileDelete?.(file);
         },
-        handleFileModify: async (file: TFile | null) => {
+        handleFileModify: async (file: TFile | null, context: EventExecutionContext) => {
             calls.push(`modify:${file?.path ?? "null"}`);
+            await options.handleFileModify?.(file, context);
         },
         handleMetadataResolved: async () => {
             calls.push("metadata-resolved");
@@ -689,6 +694,44 @@ test("plugin event router aborts an in-flight old epoch before it can mutate rel
 
     await harness.router.register();
     assert.deepEqual(postAwaitMutations, ["new/A.md->new/B.md"]);
+});
+
+test("plugin event router aborts delayed modify persistence across reset and accepts the new epoch", async () => {
+    const oldModifyStarted = createDeferred<void>();
+    const releaseOldModify = createDeferred<void>();
+    const mutations: string[] = [];
+    const harness = createHarness({
+        handleFileModify: async (file, context) => {
+            if (file?.path === "old/note.md") {
+                oldModifyStarted.resolve(undefined);
+                await releaseOldModify.promise;
+                if (!context.isActive()) {
+                    return;
+                }
+                throw new Error("stale modify persistence failure");
+            }
+            if (context.isActive()) {
+                mutations.push(file?.path ?? "null");
+            }
+        },
+    });
+
+    await harness.router.register();
+    harness.vaultHandlers.get("modify")?.(createFile("old/note.md"));
+    await oldModifyStarted.promise;
+
+    harness.router.resetForReload();
+    harness.router.registerVaultMaintenanceEvents();
+    releaseOldModify.resolve(undefined);
+    await settleAsyncDispatch();
+
+    assert.deepEqual(mutations, []);
+    assert.deepEqual(harness.reportedErrors, []);
+
+    await harness.router.register();
+    harness.vaultHandlers.get("modify")?.(createFile("new/note.md"));
+    await settleAsyncDispatch();
+    assert.deepEqual(mutations, ["new/note.md"]);
 });
 
 test("plugin event router snapshots mutable Obsidian file paths for ordered startup replay", async () => {

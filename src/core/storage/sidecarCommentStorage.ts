@@ -7,6 +7,8 @@ import {
 } from "../events/pluginEventExecutionContext";
 
 const SIDECAR_STORAGE_VERSION = 1;
+const storagePathMutationTails = new WeakMap<object, Map<string, Promise<void>>>();
+const storageDiscoveryTails = new WeakMap<object, Promise<void>>();
 
 interface StoredSidecarComments {
     version: number;
@@ -83,6 +85,54 @@ function isMissingFileError(error: unknown): boolean {
     return error instanceof Error && error.message.includes("ENOENT");
 }
 
+async function enqueueStoragePathMutation<T>(
+    adapter: DataAdapter,
+    storagePath: string,
+    operation: () => Promise<T>,
+): Promise<T> {
+    let tails = storagePathMutationTails.get(adapter);
+    if (!tails) {
+        tails = new Map<string, Promise<void>>();
+        storagePathMutationTails.set(adapter, tails);
+    }
+    const previousTail = tails.get(storagePath) ?? Promise.resolve();
+    const discoveryTail = storageDiscoveryTails.get(adapter) ?? Promise.resolve();
+    const result = Promise.all([
+        previousTail.catch(() => {}),
+        discoveryTail.catch(() => {}),
+    ]).then(operation);
+    const nextTail = result.then(() => {}, () => {});
+    tails.set(storagePath, nextTail);
+    try {
+        return await result;
+    } finally {
+        if (tails.get(storagePath) === nextTail) {
+            tails.delete(storagePath);
+        }
+    }
+}
+
+async function enqueueStorageDiscovery<T>(
+    adapter: DataAdapter,
+    operation: () => Promise<T>,
+): Promise<T> {
+    const previousDiscovery = storageDiscoveryTails.get(adapter) ?? Promise.resolve();
+    const mutationTails = Array.from(storagePathMutationTails.get(adapter)?.values() ?? []);
+    const result = previousDiscovery
+        .catch(() => {})
+        .then(() => Promise.all(mutationTails))
+        .then(operation);
+    const nextDiscovery = result.then(() => {}, () => {});
+    storageDiscoveryTails.set(adapter, nextDiscovery);
+    try {
+        return await result;
+    } finally {
+        if (storageDiscoveryTails.get(adapter) === nextDiscovery) {
+            storageDiscoveryTails.delete(adapter);
+        }
+    }
+}
+
 function parseStoredSidecarComments(value: unknown): StoredSidecarComments | null {
     if (
         !isRecord(value)
@@ -135,7 +185,12 @@ export class SidecarCommentStorage {
     }
 
     public async exists(notePath: string): Promise<boolean> {
-        return this.options.adapter.exists(await this.getNoteStoragePath(notePath));
+        const storagePath = await this.getNoteStoragePath(notePath);
+        return enqueueStoragePathMutation(
+            this.options.adapter,
+            storagePath,
+            () => this.options.adapter.exists(storagePath),
+        );
     }
 
     public async read(notePath: string): Promise<CommentThread[] | null> {
@@ -143,7 +198,12 @@ export class SidecarCommentStorage {
     }
 
     public async existsForSource(sourceId: string): Promise<boolean> {
-        return this.options.adapter.exists(await this.getSourceStoragePath(sourceId));
+        const storagePath = await this.getSourceStoragePath(sourceId);
+        return enqueueStoragePathMutation(
+            this.options.adapter,
+            storagePath,
+            () => this.options.adapter.exists(storagePath),
+        );
     }
 
     public async readForSource(sourceId: string, notePath: string): Promise<CommentThread[] | null> {
@@ -158,6 +218,14 @@ export class SidecarCommentStorage {
     }
 
     private async readStoragePayload(storagePath: string): Promise<StoredSidecarComments | null> {
+        return enqueueStoragePathMutation(
+            this.options.adapter,
+            storagePath,
+            () => this.readStoragePayloadExclusive(storagePath),
+        );
+    }
+
+    private async readStoragePayloadExclusive(storagePath: string): Promise<StoredSidecarComments | null> {
         if (!(await this.options.adapter.exists(storagePath))) {
             return null;
         }
@@ -209,11 +277,25 @@ export class SidecarCommentStorage {
         context: PluginEventExecutionContext,
         sourceId?: string,
     ): Promise<void> {
+        await enqueueStoragePathMutation(
+            this.options.adapter,
+            storagePath,
+            () => this.writeStoragePathExclusive(storagePath, notePath, threads, context, sourceId),
+        );
+    }
+
+    private async writeStoragePathExclusive(
+        storagePath: string,
+        notePath: string,
+        threads: CommentThread[],
+        context: PluginEventExecutionContext,
+        sourceId?: string,
+    ): Promise<void> {
         if (!isPluginEventExecutionActive(context)) {
             return;
         }
         if (threads.length === 0) {
-            await this.removeStoragePath(storagePath, context);
+            await this.removeStoragePathExclusive(storagePath, context);
             return;
         }
 
@@ -229,6 +311,23 @@ export class SidecarCommentStorage {
         };
         const serialized = `${JSON.stringify(payload)}\n`;
         const tempPath = `${storagePath}.tmp-${createTempFileSuffix()}`;
+        let previousContent: string | null = null;
+
+        if (await this.options.adapter.exists(storagePath)) {
+            if (!isPluginEventExecutionActive(context)) {
+                return;
+            }
+            try {
+                previousContent = await this.options.adapter.read(storagePath);
+            } catch (error) {
+                if (!isMissingFileError(error)) {
+                    throw error;
+                }
+            }
+            if (!isPluginEventExecutionActive(context)) {
+                return;
+            }
+        }
 
         await ensureDirectory(this.options.adapter, getParentPath(storagePath), context);
         if (!isPluginEventExecutionActive(context)) {
@@ -239,20 +338,59 @@ export class SidecarCommentStorage {
             return;
         }
         try {
-            await this.removeStoragePath(storagePath, context);
+            await this.removeStoragePathExclusive(storagePath, context);
             if (!isPluginEventExecutionActive(context)) {
+                await this.restoreCanonicalAfterInterruptedCommit(storagePath, tempPath, previousContent);
                 return;
             }
             await this.options.adapter.rename(tempPath, storagePath);
+            if (!isPluginEventExecutionActive(context)) {
+                await this.rollbackCommittedReplacement(storagePath, previousContent);
+            }
         } catch (error) {
             if (!isPluginEventExecutionActive(context)) {
+                await this.restoreCanonicalAfterInterruptedCommit(storagePath, tempPath, previousContent);
                 return;
             }
-            await this.removeStoragePath(tempPath, context);
+            await this.restoreCanonicalAfterInterruptedCommit(storagePath, tempPath, previousContent);
             if (!isPluginEventExecutionActive(context)) {
                 return;
             }
             throw error;
+        }
+    }
+
+    private async rollbackCommittedReplacement(
+        storagePath: string,
+        previousContent: string | null,
+    ): Promise<void> {
+        if (previousContent !== null) {
+            await this.options.adapter.write(storagePath, previousContent);
+            return;
+        }
+        try {
+            await this.options.adapter.remove(storagePath);
+        } catch (error) {
+            if (!isMissingFileError(error)) {
+                throw error;
+            }
+        }
+    }
+
+    private async restoreCanonicalAfterInterruptedCommit(
+        storagePath: string,
+        tempPath: string,
+        previousContent: string | null,
+    ): Promise<void> {
+        if (previousContent !== null && !(await this.options.adapter.exists(storagePath))) {
+            await this.options.adapter.write(storagePath, previousContent);
+        }
+        try {
+            await this.options.adapter.remove(tempPath);
+        } catch (error) {
+            if (!isMissingFileError(error)) {
+                throw error;
+            }
         }
     }
 
@@ -399,6 +537,17 @@ export class SidecarCommentStorage {
         storagePath: string,
         context: PluginEventExecutionContext,
     ): Promise<void> {
+        await enqueueStoragePathMutation(
+            this.options.adapter,
+            storagePath,
+            () => this.removeStoragePathExclusive(storagePath, context),
+        );
+    }
+
+    private async removeStoragePathExclusive(
+        storagePath: string,
+        context: PluginEventExecutionContext,
+    ): Promise<void> {
         if (!isPluginEventExecutionActive(context)) {
             return;
         }
@@ -420,20 +569,44 @@ export class SidecarCommentStorage {
     }
 
     private async getAllStorageFiles(): Promise<string[]> {
-        return this.listStorageFiles([
-            this.baseDirPath,
-            this.sourceBaseDirPath,
-        ]);
+        return enqueueStorageDiscovery(
+            this.options.adapter,
+            () => this.listStorageFiles([
+                this.baseDirPath,
+                this.sourceBaseDirPath,
+            ]),
+        );
     }
 
     private async listStorageFiles(baseDirPaths: string[]): Promise<string[]> {
         const files = new Set<string>();
         for (const baseDirPath of baseDirPaths) {
             for (const filePath of await this.listStorageFilesRecursively(baseDirPath)) {
-                files.add(filePath);
+                if (this.isCanonicalStorageFilePath(baseDirPath, filePath)) {
+                    files.add(filePath);
+                }
             }
         }
         return Array.from(files).sort((left, right) => left.localeCompare(right));
+    }
+
+    private isCanonicalStorageFilePath(baseDirPath: string, filePath: string): boolean {
+        const prefix = `${normalizeStoragePath(baseDirPath)}/`;
+        const normalizedFilePath = normalizeStoragePath(filePath);
+        if (!normalizedFilePath.startsWith(prefix)) {
+            return false;
+        }
+
+        const relativeParts = normalizedFilePath.slice(prefix.length).split("/");
+        if (relativeParts.length !== 2) {
+            return false;
+        }
+        const [shard, fileName] = relativeParts;
+        if (!fileName?.endsWith(".json")) {
+            return false;
+        }
+        const hash = fileName.slice(0, -".json".length);
+        return hash.length > 0 && shard === (hash.slice(0, 2) || "00");
     }
 
     private async listStorageFilesRecursively(directoryPath: string): Promise<string[]> {

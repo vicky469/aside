@@ -444,8 +444,10 @@ export default class Aside extends Plugin {
         hashText: (text) => generateHash(text),
         syncDerivedCommentLinksForFile: (file, noteContent, comments) =>
             this.derivedCommentMetadataManager.syncDerivedCommentLinksForFile(file, noteContent, comments),
-        refreshCommentViews: (options) => this.workspaceViewController.refreshCommentViews(options),
-        refreshAllCommentsSidebarViews: (options) => this.workspaceViewController.refreshAllCommentsSidebarViews(options),
+        refreshCommentViews: (options, context) =>
+            this.workspaceViewController.refreshCommentViewsForEvent(options, context),
+        refreshAllCommentsSidebarViews: (options, context) =>
+            this.workspaceViewController.refreshAllCommentsSidebarViewsForEvent(options, context),
         refreshEditorDecorations: () => this.refreshEditorDecorations(),
         refreshMarkdownPreviews: () => this.workspaceViewController.refreshMarkdownPreviews(),
         getCommentMentionedPageLabels: (comment) => this.getCommentMentionedPageLabels(comment),
@@ -729,7 +731,8 @@ export default class Aside extends Plugin {
         refreshAggregateNoteNow: (context) => this.refreshAggregateNoteNowForEvent(context),
         scheduleAggregateNoteRefresh: () => this.scheduleAggregateNoteRefresh(),
         syncIndexNoteViewClasses: () => this.syncIndexNoteViewClasses(),
-        handleMarkdownFileModified: (file) => this.commentPersistenceController.handleMarkdownFileModified(file),
+        handleMarkdownFileModified: (file, context) =>
+            this.commentPersistenceController.handleMarkdownFileModified(file, context),
         detachSidebarViews: () => {
             this.app.workspace.detachLeavesOfType("aside-view");
         },

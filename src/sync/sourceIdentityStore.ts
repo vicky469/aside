@@ -1,6 +1,7 @@
 import type { PersistedPluginData } from "../settings/indexNoteSettingsPlanner";
 import { isPathInsideFolder } from "../core/files/pathScope";
 import {
+    ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT,
     isPluginEventExecutionActive,
     type PluginEventExecutionContext,
 } from "../core/events/pluginEventExecutionContext";
@@ -358,6 +359,25 @@ export class SourceIdentityStore {
     }
 
     public async ensureSourceForPath(filePath: string, contentFingerprint: string | null = null): Promise<SourceIdentityRecord> {
+        const record = await this.ensureSourceForPathForEvent(
+            filePath,
+            contentFingerprint,
+            ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT,
+        );
+        if (!record) {
+            throw new Error("Always-active source identity write was aborted.");
+        }
+        return record;
+    }
+
+    public async ensureSourceForPathForEvent(
+        filePath: string,
+        contentFingerprint: string | null,
+        context: PluginEventExecutionContext,
+    ): Promise<SourceIdentityRecord | null> {
+        if (!isPluginEventExecutionActive(context)) {
+            return null;
+        }
         const state = this.readState();
         const existingSourceId = state.pathToSourceId[filePath];
         if (existingSourceId && state.sources[existingSourceId]) {
@@ -369,9 +389,11 @@ export class SourceIdentityStore {
             });
             if (!areRecordsEqual(record, nextRecord)) {
                 state.sources[existingSourceId] = nextRecord;
-                await this.writeState(state);
+                if (!(await this.writeState(state, context))) {
+                    return null;
+                }
             }
-            return cloneRecord(nextRecord);
+            return isPluginEventExecutionActive(context) ? cloneRecord(nextRecord) : null;
         }
 
         const now = this.host.now();
@@ -385,11 +407,32 @@ export class SourceIdentityStore {
             updatedAt: now,
         };
         state.sources[sourceId] = record;
-        await this.writeState(state);
-        return cloneRecord(record);
+        if (!(await this.writeState(state, context))) {
+            return null;
+        }
+        return isPluginEventExecutionActive(context) ? cloneRecord(record) : null;
     }
 
     public async createSourceForPath(filePath: string, contentFingerprint: string | null = null): Promise<SourceIdentityRecord> {
+        const record = await this.createSourceForPathForEvent(
+            filePath,
+            contentFingerprint,
+            ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT,
+        );
+        if (!record) {
+            throw new Error("Always-active source identity write was aborted.");
+        }
+        return record;
+    }
+
+    public async createSourceForPathForEvent(
+        filePath: string,
+        contentFingerprint: string | null,
+        context: PluginEventExecutionContext,
+    ): Promise<SourceIdentityRecord | null> {
+        if (!isPluginEventExecutionActive(context)) {
+            return null;
+        }
         const state = this.readState();
         const now = this.host.now();
         const record: SourceIdentityRecord = {
@@ -401,8 +444,10 @@ export class SourceIdentityStore {
             updatedAt: now,
         };
         state.sources[record.sourceId] = record;
-        await this.writeState(state);
-        return cloneRecord(record);
+        if (!(await this.writeState(state, context))) {
+            return null;
+        }
+        return isPluginEventExecutionActive(context) ? cloneRecord(record) : null;
     }
 
     public async recordRename(
@@ -519,7 +564,7 @@ export class SourceIdentityStore {
             contentFingerprint: options.contentFingerprint ?? base.contentFingerprint,
         });
         state.sources[sourceId] = nextRecord;
-        await this.writeState(state);
+        await this.writeState(state, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
         return cloneRecord(nextRecord);
     }
 
@@ -573,18 +618,31 @@ export class SourceIdentityStore {
         };
     }
 
-    private async writeState(state: SourceIdentityState): Promise<void> {
+    private async writeState(
+        state: SourceIdentityState,
+        context: PluginEventExecutionContext,
+    ): Promise<boolean> {
+        if (!isPluginEventExecutionActive(context)) {
+            return false;
+        }
         const latestPersistedData = await this.host.readLatestPersistedPluginData?.()
             ?? this.host.readPersistedPluginData();
+        if (!isPluginEventExecutionActive(context)) {
+            return false;
+        }
         const latestState = normalizeSourceIdentityState(latestPersistedData.sourceIdentityState);
         const mergedState = mergeSourceIdentityStates(latestState, {
             ...state,
             pathToSourceId: rebuildPathIndex(state.sources),
         });
+        if (!isPluginEventExecutionActive(context)) {
+            return false;
+        }
         await this.host.writePersistedPluginData({
             ...latestPersistedData,
             sourceIdentityState: cloneState(mergedState),
-        });
+        }, context);
+        return isPluginEventExecutionActive(context);
     }
 
 }

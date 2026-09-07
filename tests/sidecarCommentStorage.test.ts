@@ -10,6 +10,9 @@ class FakeAdapter implements Pick<DataAdapter, "exists" | "mkdir" | "write" | "r
     public readonly directories = new Set<string>();
     public readonly files = new Map<string, string>();
     public beforeRemove: ((normalizedPath: string) => Promise<void>) | null = null;
+    public afterRemove: ((normalizedPath: string) => Promise<void>) | null = null;
+    public beforeRename: ((normalizedPath: string, normalizedNewPath: string) => Promise<void>) | null = null;
+    public afterWrite: ((normalizedPath: string) => Promise<void>) | null = null;
     public readonly removeAttempts: string[] = [];
 
     async exists(normalizedPath: string): Promise<boolean> {
@@ -22,6 +25,7 @@ class FakeAdapter implements Pick<DataAdapter, "exists" | "mkdir" | "write" | "r
 
     async write(normalizedPath: string, data: string): Promise<void> {
         this.files.set(normalizedPath, data);
+        await this.afterWrite?.(normalizedPath);
     }
 
     async read(normalizedPath: string): Promise<string> {
@@ -37,9 +41,11 @@ class FakeAdapter implements Pick<DataAdapter, "exists" | "mkdir" | "write" | "r
         this.removeAttempts.push(normalizedPath);
         await this.beforeRemove?.(normalizedPath);
         this.files.delete(normalizedPath);
+        await this.afterRemove?.(normalizedPath);
     }
 
     async rename(normalizedPath: string, normalizedNewPath: string): Promise<void> {
+        await this.beforeRename?.(normalizedPath, normalizedNewPath);
         const content = this.files.get(normalizedPath);
         if (content === undefined) {
             throw new Error(`Missing file: ${normalizedPath}`);
@@ -120,6 +126,17 @@ function createDeferred() {
         resolvePromise = resolve;
     });
     return { promise, resolve: resolvePromise };
+}
+
+async function settlesWithinMicrotasks(promise: Promise<unknown>, turnCount = 20): Promise<boolean> {
+    let settled = false;
+    void promise.then(() => {
+        settled = true;
+    });
+    for (let turn = 0; turn < turnCount && !settled; turn += 1) {
+        await Promise.resolve();
+    }
+    return settled;
 }
 
 test("sidecar comment storage writes hashed per-note files and reads them back", async () => {
@@ -437,4 +454,181 @@ test("sidecar folder removal stops before later records after its epoch aborts",
     adapter.beforeRemove = null;
     const removed = await storage.removeFolder("Deleted", ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
     assert.deepEqual(removed.map((record) => record.notePath), [secondPath]);
+});
+
+test("sidecar discovery ignores an aborted atomic-write temp while retaining canonical files", async () => {
+    const adapter = new FakeAdapter();
+    const storage = new SidecarCommentStorage({
+        adapter: adapter as unknown as DataAdapter,
+        pluginDirPath: ".obsidian/plugins/aside",
+        hashText: async (text) => hashText(text),
+    });
+    const canonicalPath = "notes/canonical.md";
+    const stalePath = "notes/stale.md";
+    await storage.write(
+        canonicalPath,
+        [createThread(canonicalPath)],
+        ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT,
+    );
+    const tempWriteStarted = createDeferred();
+    const releaseTempWrite = createDeferred();
+    const abortController = new AbortController();
+    adapter.afterWrite = async (storagePath) => {
+        if (storagePath.includes(".json.tmp-")) {
+            tempWriteStarted.resolve();
+            await releaseTempWrite.promise;
+        }
+    };
+    const context = {
+        signal: abortController.signal,
+        isActive: () => !abortController.signal.aborted,
+    };
+
+    const abortedWrite = storage.write(stalePath, [createThread(stalePath)], context);
+    await tempWriteStarted.promise;
+    abortController.abort();
+    releaseTempWrite.resolve();
+    await abortedWrite;
+
+    assert.ok(Array.from(adapter.files.keys()).some((filePath) => filePath.includes(".json.tmp-")));
+    assert.deepEqual(
+        (await storage.listStoredComments()).map((record) => record.notePath),
+        [canonicalPath],
+    );
+});
+
+test("aborting while replacing a canonical sidecar preserves the committed record", async () => {
+    const adapter = new FakeAdapter();
+    const storage = new SidecarCommentStorage({
+        adapter: adapter as unknown as DataAdapter,
+        pluginDirPath: ".obsidian/plugins/aside",
+        hashText: async (text) => hashText(text),
+    });
+    const notePath = "notes/existing.md";
+    const originalThread = createThread(notePath);
+    await storage.write(notePath, [originalThread], ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
+    const canonicalPath = await storage.getNoteStoragePath(notePath);
+    const canonicalRemoveStarted = createDeferred();
+    const releaseCanonicalRemove = createDeferred();
+    const abortController = new AbortController();
+    adapter.beforeRemove = async (storagePath) => {
+        if (storagePath === canonicalPath) {
+            canonicalRemoveStarted.resolve();
+            await releaseCanonicalRemove.promise;
+        }
+    };
+    const context = {
+        signal: abortController.signal,
+        isActive: () => !abortController.signal.aborted,
+    };
+    const replacementThread = {
+        ...originalThread,
+        entries: [{ ...originalThread.entries[0], body: "uncommitted replacement" }],
+    };
+
+    const replacement = storage.write(notePath, [replacementThread], context);
+    await canonicalRemoveStarted.promise;
+    abortController.abort();
+    releaseCanonicalRemove.resolve();
+    await replacement;
+
+    const records = await storage.listStoredComments();
+    assert.equal(adapter.files.has(canonicalPath), true);
+    assert.equal(records.length, 1);
+    assert.equal(records[0]?.notePath, notePath);
+    assert.equal(records[0]?.threads[0]?.entries[0]?.body, "hello");
+});
+
+test("aborting during the canonical rename rolls back the stale replacement", async () => {
+    const adapter = new FakeAdapter();
+    const storage = new SidecarCommentStorage({
+        adapter: adapter as unknown as DataAdapter,
+        pluginDirPath: ".obsidian/plugins/aside",
+        hashText: async (text) => hashText(text),
+    });
+    const notePath = "notes/existing.md";
+    const originalThread = createThread(notePath);
+    await storage.write(notePath, [originalThread], ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
+    const canonicalPath = await storage.getNoteStoragePath(notePath);
+    const canonicalRenameStarted = createDeferred();
+    const releaseCanonicalRename = createDeferred();
+    const abortController = new AbortController();
+    adapter.beforeRename = async (sourcePath, destinationPath) => {
+        if (sourcePath.includes(".json.tmp-") && destinationPath === canonicalPath) {
+            canonicalRenameStarted.resolve();
+            await releaseCanonicalRename.promise;
+        }
+    };
+    const context = {
+        signal: abortController.signal,
+        isActive: () => !abortController.signal.aborted,
+    };
+    const replacementThread = {
+        ...originalThread,
+        entries: [{ ...originalThread.entries[0], body: "uncommitted replacement" }],
+    };
+
+    const replacement = storage.write(notePath, [replacementThread], context);
+    await canonicalRenameStarted.promise;
+    abortController.abort();
+    releaseCanonicalRename.resolve();
+    await replacement;
+
+    const records = await storage.listStoredComments();
+    assert.equal(adapter.files.has(canonicalPath), true);
+    assert.equal(records.length, 1);
+    assert.equal(records[0]?.threads[0]?.entries[0]?.body, "hello");
+});
+
+test("sidecar discovery waits for an interrupted canonical replacement to roll back", async () => {
+    const adapter = new FakeAdapter();
+    const storage = new SidecarCommentStorage({
+        adapter: adapter as unknown as DataAdapter,
+        pluginDirPath: ".obsidian/plugins/aside",
+        hashText: async (text) => hashText(text),
+    });
+    const notePath = "notes/existing.md";
+    const originalThread = createThread(notePath);
+    await storage.write(notePath, [originalThread], ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
+    const canonicalPath = await storage.getNoteStoragePath(notePath);
+    const canonicalRemoved = createDeferred();
+    const releaseRemovedCanonical = createDeferred();
+    const abortController = new AbortController();
+    adapter.afterRemove = async (storagePath) => {
+        if (storagePath === canonicalPath) {
+            canonicalRemoved.resolve();
+            await releaseRemovedCanonical.promise;
+        }
+    };
+    const context = {
+        signal: abortController.signal,
+        isActive: () => !abortController.signal.aborted,
+    };
+
+    const replacement = storage.write(notePath, [{
+        ...originalThread,
+        entries: [{ ...originalThread.entries[0], body: "uncommitted replacement" }],
+    }], context);
+    await canonicalRemoved.promise;
+    abortController.abort();
+    const discovery = storage.listStoredComments();
+    const canonicalExists = storage.exists(notePath);
+    assert.equal(
+        await settlesWithinMicrotasks(discovery),
+        false,
+        "discovery observed the transient missing canonical path",
+    );
+    assert.equal(
+        await settlesWithinMicrotasks(canonicalExists),
+        false,
+        "existence check observed the transient missing canonical path",
+    );
+    releaseRemovedCanonical.resolve();
+    await replacement;
+
+    const records = await discovery;
+    assert.equal(await canonicalExists, true);
+    assert.equal(records.length, 1);
+    assert.equal(records[0]?.notePath, notePath);
+    assert.equal(records[0]?.threads[0]?.entries[0]?.body, "hello");
 });

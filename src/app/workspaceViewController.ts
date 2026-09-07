@@ -224,10 +224,17 @@ export class WorkspaceViewController {
     }
 
     public async refreshAllCommentsSidebarViews(options: { skipDataRefresh?: boolean } = {}): Promise<void> {
+        await this.refreshAllCommentsSidebarViewsForEvent(options, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
+    }
+
+    public async refreshAllCommentsSidebarViewsForEvent(
+        options: { skipDataRefresh?: boolean } | undefined,
+        context: PluginEventExecutionContext,
+    ): Promise<void> {
         await this.refreshSidebarViews(
             (view) => this.host.isAllCommentsNotePath(view.file?.path ?? ""),
-            options,
-            ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT,
+            options ?? {},
+            context,
         );
     }
 

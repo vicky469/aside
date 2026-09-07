@@ -119,6 +119,7 @@ function createHarness(options: {
     let refreshAggregateNoteNowCount = 0;
     let syncIndexNoteViewClassesCount = 0;
     let modifyHandledPath: string | null = null;
+    let modifyContext: { readonly signal: AbortSignal; isActive(): boolean } | null = null;
     let detachSidebarViewsCount = 0;
     const renamedAgentRuns: Array<{ previousFilePath: string; nextFilePath: string }> = [];
     const renamedScriptRuns: Array<{ previousFilePath: string; nextFilePath: string }> = [];
@@ -278,8 +279,9 @@ function createHarness(options: {
         syncIndexNoteViewClasses: () => {
             syncIndexNoteViewClassesCount += 1;
         },
-        handleMarkdownFileModified: async (file) => {
+        handleMarkdownFileModified: async (file, context) => {
             modifyHandledPath = file.path;
+            modifyContext = context;
         },
         detachSidebarViews: () => {
             detachSidebarViewsCount += 1;
@@ -318,6 +320,7 @@ function createHarness(options: {
         getSyncIndexNoteViewClassesCount: () => syncIndexNoteViewClassesCount,
         getDetachSidebarViewsCount: () => detachSidebarViewsCount,
         getModifyHandledPath: () => modifyHandledPath,
+        getModifyContext: () => modifyContext,
         renamedAgentRuns,
         renamedScriptRuns,
         renamedStoredComments,
@@ -1103,17 +1106,18 @@ test("plugin lifecycle controller prunes published standalone artifacts under de
 test("plugin lifecycle controller only forwards markdown modify events", async () => {
     const harness = createHarness();
 
-    await harness.controller.handleFileModify(createFile("docs/file.pdf"));
+    await harness.controller.handleFileModify(createFile("docs/file.pdf"), ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
     assert.equal(harness.getModifyHandledPath(), null);
 
-    await harness.controller.handleFileModify(createFile("docs/image.png"));
+    await harness.controller.handleFileModify(createFile("docs/image.png"), ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
     assert.equal(harness.getModifyHandledPath(), null);
 
-    await harness.controller.handleFileModify(createFile("docs/proposal.docx"));
+    await harness.controller.handleFileModify(createFile("docs/proposal.docx"), ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
     assert.equal(harness.getModifyHandledPath(), null);
 
-    await harness.controller.handleFileModify(createFile("docs/file.md"));
+    await harness.controller.handleFileModify(createFile("docs/file.md"), ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
     assert.equal(harness.getModifyHandledPath(), "docs/file.md");
+    assert.equal(harness.getModifyContext(), ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
 });
 
 test("plugin lifecycle controller debounces editor refreshes and reports refresh errors", () => {

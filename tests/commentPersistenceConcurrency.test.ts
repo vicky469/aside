@@ -188,13 +188,17 @@ function createHarness(
 ) {
     const adapter = new CollisionAwareAdapter();
     let commentManager = new CommentManager(threads);
-    const aggregateCommentIndex = new AggregateCommentIndex();
+    let aggregateCommentIndex = new AggregateCommentIndex();
     let persistedData: PersistedPluginData = {};
     let persistedWriteCount = 0;
     let nextId = 0;
     const noteBody = "# Title\n\nAlpha target omega\n";
     let currentNoteContentReader = async (_file: TFile) => noteBody;
     const parsedNoteFilePaths: string[] = [];
+    let commentViewRefreshCount = 0;
+    let editorRefreshCount = 0;
+    let previewRefreshCount = 0;
+    const logEvents: string[] = [];
     const controller = new CommentPersistenceController({
         app: {
             vault: {
@@ -231,13 +235,21 @@ function createHarness(
         createCommentId: () => `generated-${nextId += 1}`,
         hashText: async (text) => hashText(text),
         syncDerivedCommentLinksForFile: () => {},
-        refreshCommentViews: async () => {},
+        refreshCommentViews: async () => {
+            commentViewRefreshCount += 1;
+        },
         refreshAllCommentsSidebarViews: async () => {},
-        refreshEditorDecorations: () => {},
-        refreshMarkdownPreviews: () => {},
+        refreshEditorDecorations: () => {
+            editorRefreshCount += 1;
+        },
+        refreshMarkdownPreviews: () => {
+            previewRefreshCount += 1;
+        },
         getCommentMentionedPageLabels: () => [],
         syncIndexNoteLeafMode: async () => {},
-        log: async () => {},
+        log: async (_level, _area, event) => {
+            logEvents.push(event);
+        },
     });
 
     return {
@@ -256,10 +268,19 @@ function createHarness(
         replaceCommentManager: (nextManager: CommentManager) => {
             commentManager = nextManager;
         },
+        replaceAggregateCommentIndex: (nextIndex: AggregateCommentIndex) => {
+            aggregateCommentIndex = nextIndex;
+        },
         replacePersistedData: (nextData: PersistedPluginData) => {
             persistedData = nextData;
         },
         getPersistedData: () => persistedData,
+        getRefreshCounts: () => ({
+            commentViews: commentViewRefreshCount,
+            editor: editorRefreshCount,
+            preview: previewRefreshCount,
+        }),
+        getLogEvents: () => [...logEvents],
     };
 }
 
@@ -674,7 +695,7 @@ test("markdown modification synchronization joins the same-note persistence queu
     try {
         savePromise = harness.controller.persistCommentsForFile(file);
         await firstReadEntered.promise;
-        modificationPromise = harness.controller.handleMarkdownFileModified(file);
+        modificationPromise = harness.controller.handleMarkdownFileModified(file, ACTIVE_EVENT_CONTEXT);
 
         assert.equal(
             await settlesWithinMicrotasks(secondReadEntered.promise),
@@ -693,6 +714,68 @@ test("markdown modification synchronization joins the same-note persistence queu
             [savePromise, modificationPromise]
                 .filter((promise): promise is Promise<void> => promise !== null),
         );
+        harness.controller.dispose();
+        globalThis.window = originalWindow;
+    }
+});
+
+test("stale Markdown modification aborts before mutating reloaded state or refreshing", async () => {
+    const originalWindow = globalThis.window;
+    globalThis.window = {
+        setTimeout: () => 1,
+        clearTimeout: () => {},
+    } as unknown as typeof globalThis.window;
+
+    const file = createFile("docs/note.md");
+    const sourceWriteStarted = createDeferred();
+    const releaseSourceWrite = createDeferred();
+    const abortController = new AbortController();
+    let pauseFirstWrite = true;
+    const harness = createHarness([file], [createThread(file.path, "old-thread")], {
+        beforePersistedWrite: async (writeCount) => {
+            if (pauseFirstWrite && writeCount === 1) {
+                sourceWriteStarted.resolve();
+                await releaseSourceWrite.promise;
+                throw new Error("stale modify persistence failed after reset");
+            }
+        },
+    });
+    const staleContext = {
+        signal: abortController.signal,
+        isActive: () => !abortController.signal.aborted,
+    };
+    const invokeModify = harness.controller.handleMarkdownFileModified as unknown as (
+        target: TFile,
+        context: typeof staleContext,
+    ) => Promise<void>;
+
+    try {
+        const staleModify = invokeModify.call(harness.controller, file, staleContext);
+        await sourceWriteStarted.promise;
+        abortController.abort();
+        const reloadedData = persistedSource("reloaded/note.md", "reloaded-source");
+        const reloadedManager = new CommentManager([createThread("reloaded/note.md", "reloaded-thread")]);
+        const reloadedIndex = new AggregateCommentIndex();
+        reloadedIndex.updateFile("reloaded/note.md", [createThread("reloaded/note.md", "reloaded-thread")]);
+        harness.replacePersistedData(reloadedData);
+        harness.replaceCommentManager(reloadedManager);
+        harness.replaceAggregateCommentIndex(reloadedIndex);
+        releaseSourceWrite.resolve();
+        await staleModify;
+
+        assert.deepEqual(harness.getPersistedData(), reloadedData);
+        assert.equal(reloadedManager.getThreadById("old-thread"), undefined);
+        assert.equal(reloadedIndex.getThreadById("old-thread"), null);
+        assert.equal(harness.adapter.writeAttempts.length, 0);
+        assert.deepEqual(harness.getRefreshCounts(), { commentViews: 0, editor: 0, preview: 0 });
+        assert.equal(harness.getLogEvents().includes("storage.note.write.error"), false);
+
+        pauseFirstWrite = false;
+        await invokeModify.call(harness.controller, file, ACTIVE_EVENT_CONTEXT);
+        assert.equal(harness.getPersistedData() === reloadedData, false);
+        assert.deepEqual(harness.getRefreshCounts(), { commentViews: 1, editor: 1, preview: 1 });
+    } finally {
+        releaseSourceWrite.resolve();
         harness.controller.dispose();
         globalThis.window = originalWindow;
     }
@@ -727,7 +810,7 @@ test("queued Markdown synchronization keeps its captured path across a rename", 
     try {
         savePromise = harness.controller.persistCommentsForFile(file);
         await firstReadEntered.promise;
-        modificationPromise = harness.controller.handleMarkdownFileModified(file);
+        modificationPromise = harness.controller.handleMarkdownFileModified(file, ACTIVE_EVENT_CONTEXT);
         (file as TFile & { path: string }).path = nextPath;
         renamePromise = harness.controller.renameStoredComments(previousPath, nextPath, {
             selectionCapable: true,

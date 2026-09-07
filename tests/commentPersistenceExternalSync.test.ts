@@ -121,6 +121,14 @@ function serializeSidecarThreads(filePath: string, threads: CommentThread[]): st
     })}\n`;
 }
 
+function createDeferred() {
+    let resolvePromise!: () => void;
+    const promise = new Promise<void>((resolve) => {
+        resolvePromise = resolve;
+    });
+    return { promise, resolve: resolvePromise };
+}
+
 test("comment persistence controller syncs external sidecar updates into an open note without rewriting the file", async () => {
     const originalWindow = globalThis.window;
     globalThis.window = {
@@ -198,7 +206,7 @@ test("comment persistence controller syncs external sidecar updates into an open
     });
 
     try {
-        await controller.handleMarkdownFileModified(file);
+        await controller.handleMarkdownFileModified(file, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
 
         assert.equal(processCount, 0);
         assert.equal(adapter.files.size, 2);
@@ -2383,6 +2391,144 @@ test("comment persistence controller prunes missing sidecar records before writi
     assert.equal(aggregateCommentIndex.getThreadById("thread-1"), null);
     assert.equal(sourceIdentityState.pathToSourceId?.[missingPath], undefined);
     assert.deepEqual(snapshot?.threads, []);
+});
+
+test("event aggregate refresh preserves pending normal work, serializes, and wins with deleted state", async () => {
+    const originalWindow = globalThis.window;
+    const timerCallbacks = new Map<number, () => void>();
+    let nextTimerId = 0;
+    globalThis.window = {
+        setTimeout: (callback: () => void) => {
+            nextTimerId += 1;
+            timerCallbacks.set(nextTimerId, callback);
+            return nextTimerId;
+        },
+        clearTimeout: (timerId: number) => {
+            timerCallbacks.delete(timerId);
+        },
+    } as unknown as typeof globalThis.window;
+    const deletedPath = "docs/deleted.md";
+    const indexFile = createFile("Aside index.md");
+    const deletedFile = createFile(deletedPath);
+    const deletedThread = createThread(deletedPath);
+    const adapter = new FakeAdapter();
+    const sidecarPath = getSidecarStoragePath(deletedPath);
+    const sidecarFolder = sidecarPath.slice(0, sidecarPath.lastIndexOf("/"));
+    adapter.directories.add(".obsidian/plugins/aside/sidenotes/by-note");
+    adapter.directories.add(sidecarFolder);
+    adapter.files.set(sidecarPath, serializeSidecarThreads(deletedPath, [deletedThread]));
+    const aggregateCommentIndex = new AggregateCommentIndex();
+    aggregateCommentIndex.updateFile(deletedPath, [deletedThread]);
+    const commentManager = new CommentManager([deletedThread]);
+    const filesByPath = new Map<string, TFile>([
+        [indexFile.path, indexFile],
+        [deletedFile.path, deletedFile],
+    ]);
+    const firstIndexReadStarted = createDeferred();
+    const releaseFirstIndexRead = createDeferred();
+    let indexReadCount = 0;
+    let indexModifyCount = 0;
+    let indexContent = "# Initial\n";
+    let persistedData: PersistedPluginData = {};
+
+    const controller = new CommentPersistenceController({
+        app: {
+            vault: {
+                adapter: adapter as unknown as DataAdapter,
+                getName: () => "dev",
+                getMarkdownFiles: () => [...filesByPath.values()],
+                getAbstractFileByPath: (filePath: string) => filesByPath.get(filePath) ?? null,
+                create: async (_path: string, content: string) => {
+                    indexContent = content;
+                    return indexFile;
+                },
+                modify: async (_file: TFile, content: string) => {
+                    indexModifyCount += 1;
+                    indexContent = content;
+                },
+                process: async () => "",
+            },
+            metadataCache: {
+                getFirstLinkpathDest: () => null,
+            },
+            fileManager: {
+                renameFile: async () => {},
+            },
+        } as never,
+        getAllCommentsNotePath: () => indexFile.path,
+        getIndexHeaderImageUrl: () => "",
+        getIndexHeaderImageCaption: () => "",
+        getMarkdownViewForFile: () => null,
+        getMarkdownFileByPath: (filePath) => filesByPath.get(filePath) ?? null,
+        getCurrentNoteContent: async (file) => {
+            if (file.path !== indexFile.path) {
+                return "# Deleted\n";
+            }
+            indexReadCount += 1;
+            if (indexReadCount === 1) {
+                firstIndexReadStarted.resolve();
+                await releaseFirstIndexRead.promise;
+            }
+            return indexContent;
+        },
+        getStoredNoteContent: async () => "",
+        getParsedNoteComments: (filePath, noteContent) => parseNoteComments(noteContent, filePath),
+        getPluginDataDirPath: () => ".obsidian/plugins/aside",
+        getSideNoteSyncDeviceId: () => "device-a",
+        readPersistedPluginData: () => persistedData,
+        writePersistedPluginData: async (data) => {
+            persistedData = data;
+        },
+        isAllCommentsNotePath: (filePath) => filePath === indexFile.path,
+        isCommentableFile: (candidate): candidate is TFile => !!candidate && candidate.path !== indexFile.path,
+        isMarkdownEditorFocused: () => false,
+        getCommentManager: () => commentManager,
+        getAggregateCommentIndex: () => aggregateCommentIndex,
+        createCommentId: () => "generated-id",
+        hashText: async (text) => `hash-${text.replace(/\//g, "_")}`,
+        syncDerivedCommentLinksForFile: () => {},
+        refreshCommentViews: async () => {},
+        refreshAllCommentsSidebarViews: async () => {},
+        refreshEditorDecorations: () => {},
+        refreshMarkdownPreviews: () => {},
+        getCommentMentionedPageLabels: () => [],
+        syncIndexNoteLeafMode: async () => {},
+        log: async () => {},
+    });
+
+    let oldRefresh: Promise<void> | null = null;
+    let eventRefresh: Promise<void> | null = null;
+    try {
+        controller.scheduleAggregateNoteRefresh();
+        assert.equal(timerCallbacks.size, 1);
+        const expiringEvent = new AbortController();
+        const expiringEventContext = {
+            signal: expiringEvent.signal,
+            isActive: () => !expiringEvent.signal.aborted,
+        };
+        oldRefresh = controller.refreshAggregateNoteNowForEvent(expiringEventContext);
+        await firstIndexReadStarted.promise;
+        expiringEvent.abort();
+        aggregateCommentIndex.deleteFile(deletedPath);
+        eventRefresh = controller.refreshAggregateNoteNowForEvent(ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
+        for (let turn = 0; turn < 20; turn += 1) {
+            await Promise.resolve();
+        }
+        assert.equal(indexReadCount, 1, "event refresh bypassed the aggregate refresh queue");
+
+        releaseFirstIndexRead.resolve();
+        await Promise.all([oldRefresh, eventRefresh]);
+        assert.equal(indexReadCount, 2);
+        assert.equal(indexModifyCount, 2, "the pending normal refresh was discarded with the aborted event");
+        assert.equal(indexContent.includes(deletedPath), false);
+    } finally {
+        releaseFirstIndexRead.resolve();
+        await Promise.allSettled(
+            [oldRefresh, eventRefresh].filter((promise): promise is Promise<void> => promise !== null),
+        );
+        controller.dispose();
+        globalThis.window = originalWindow;
+    }
 });
 
 test("comment persistence controller skips incompatible compacted snapshots for existing files", async () => {

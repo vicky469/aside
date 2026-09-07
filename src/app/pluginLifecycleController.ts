@@ -88,7 +88,7 @@ export interface PluginLifecycleHost {
     refreshAggregateNoteNow(context: PluginEventExecutionContext): Promise<void>;
     scheduleAggregateNoteRefresh(): void;
     syncIndexNoteViewClasses(): void;
-    handleMarkdownFileModified(file: TFile): Promise<void>;
+    handleMarkdownFileModified(file: TFile, context: PluginEventExecutionContext): Promise<void>;
     detachSidebarViews(): void;
     scheduleTimer(callback: () => void, ms: number): number;
     clearTimer(timerId: number): void;
@@ -532,13 +532,16 @@ export class PluginLifecycleController {
 
     public async handleFileModify(
         file: TFile | null,
-        context: PluginEventExecutionContext = ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT,
+        context: PluginEventExecutionContext,
     ): Promise<void> {
         if (!(file && file.extension === "md") || !this.isActive(context)) {
             return;
         }
 
-        await this.host.handleMarkdownFileModified(file);
+        await this.host.handleMarkdownFileModified(file, context);
+        if (!this.isActive(context)) {
+            return;
+        }
     }
 
     public handleEditorChange(filePath: string | null | undefined): void {
