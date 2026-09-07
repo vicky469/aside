@@ -10,6 +10,11 @@ type WorkspaceEventName = "file-open" | "active-leaf-change" | "editor-change";
 type VaultEventName = "create" | "rename" | "delete" | "modify";
 type MetadataCacheEventName = "resolved";
 
+interface EventExecutionContext {
+    readonly signal: AbortSignal;
+    isActive(): boolean;
+}
+
 function createFile(path: string): TFile {
     return {
         path,
@@ -56,9 +61,13 @@ async function settleAsyncDispatch(): Promise<void> {
 
 function createHarness(options: {
     layoutReady?: boolean;
-    handleLayoutReady?: () => void | Promise<void>;
+    handleLayoutReady?: (context: EventExecutionContext) => void | Promise<void>;
     handleFileCreate?: (file: TFile | null) => void | Promise<void>;
-    handleFileRename?: (file: TAbstractFile | null, oldPath: string) => void | Promise<void>;
+    handleFileRename?: (
+        file: TAbstractFile | null,
+        oldPath: string,
+        context: EventExecutionContext,
+    ) => void | Promise<void>;
     handleFileDelete?: (file: TAbstractFile | null) => void | Promise<void>;
     handleFileCreateMaintenance?: (file: TAbstractFile | null) => void;
     handleFileRenameMaintenance?: (file: TAbstractFile | null, oldPath: string) => void;
@@ -129,9 +138,9 @@ function createHarness(options: {
             maintenanceCalls.push(`delete:${file?.path ?? "null"}`);
             options.handleFileDeleteMaintenance?.(file);
         },
-        handleLayoutReady: async () => {
+        handleLayoutReady: async (context: EventExecutionContext) => {
             calls.push("layout-ready");
-            await options.handleLayoutReady?.();
+            await options.handleLayoutReady?.(context);
         },
         handleFileOpen: (file: TFile | null) => {
             calls.push(`file-open:${file?.path ?? "null"}`);
@@ -143,9 +152,13 @@ function createHarness(options: {
             calls.push(`create:${file?.path ?? "null"}`);
             await options.handleFileCreate?.(file);
         },
-        handleFileRename: async (file: TAbstractFile | null, oldPath: string) => {
+        handleFileRename: async (
+            file: TAbstractFile | null,
+            oldPath: string,
+            context: EventExecutionContext,
+        ) => {
             calls.push(`rename:${oldPath}->${file?.path ?? "null"}`);
-            await options.handleFileRename?.(file, oldPath);
+            await options.handleFileRename?.(file, oldPath, context);
         },
         handleFileDelete: async (file: TAbstractFile | null) => {
             calls.push(`delete:${file?.path ?? "null"}`);
@@ -641,6 +654,43 @@ test("plugin event router resets startup buffering and ignores stale callbacks a
     ]);
 });
 
+test("plugin event router aborts an in-flight old epoch before it can mutate reloaded state", async () => {
+    const oldRenameStarted = createDeferred<void>();
+    const releaseOldRename = createDeferred<void>();
+    const staleFailure = new Error("stale epoch failure");
+    const postAwaitMutations: string[] = [];
+    const harness = createHarness({
+        handleFileRename: async (file, oldPath, context) => {
+            if (oldPath === "old/A.md") {
+                oldRenameStarted.resolve(undefined);
+                await releaseOldRename.promise;
+            }
+            if (context.isActive()) {
+                postAwaitMutations.push(`${oldPath}->${file?.path ?? "null"}`);
+            }
+            if (oldPath === "old/A.md") {
+                throw staleFailure;
+            }
+        },
+    });
+
+    await harness.router.register();
+    harness.vaultHandlers.get("rename")?.(createFile("old/B.md"), "old/A.md");
+    await oldRenameStarted.promise;
+
+    harness.router.resetForReload();
+    harness.router.registerVaultMaintenanceEvents();
+    harness.vaultHandlers.get("rename")?.(createFile("new/B.md"), "new/A.md");
+    releaseOldRename.resolve(undefined);
+    await settleAsyncDispatch();
+
+    assert.deepEqual(postAwaitMutations, []);
+    assert.deepEqual(harness.reportedErrors, []);
+
+    await harness.router.register();
+    assert.deepEqual(postAwaitMutations, ["new/A.md->new/B.md"]);
+});
+
 test("plugin event router snapshots mutable Obsidian file paths for ordered startup replay", async () => {
     const harness = createHarness();
     const renamedFile = createFile("docs/one.md");
@@ -725,4 +775,33 @@ test("plugin event router reports immediate layout-ready failures and finishes r
     ]);
     assert.equal(harness.vaultHandlers.has("modify"), true);
     assert.deepEqual(Array.from(harness.metadataCacheHandlers.keys()), ["resolved"]);
+});
+
+test("plugin event router catches a rejected deferred layout-ready callback delivered as void", async () => {
+    const failure = new Error("deferred layout failed");
+    const unhandledRejections: unknown[] = [];
+    const onUnhandledRejection = (error: unknown) => {
+        unhandledRejections.push(error);
+    };
+    process.on("unhandledRejection", onUnhandledRejection);
+    try {
+        const harness = createHarness({
+            handleLayoutReady: async () => {
+                throw failure;
+            },
+        });
+        await harness.router.register();
+
+        const callbackResult = harness.getLayoutReadyHandler()?.();
+        assert.equal(callbackResult, undefined);
+        await settleAsyncDispatch();
+
+        assert.deepEqual(harness.reportedErrors, [{
+            eventName: "workspace:layout-ready",
+            error: failure,
+        }]);
+        assert.deepEqual(unhandledRejections, []);
+    } finally {
+        process.off("unhandledRejection", onUnhandledRejection);
+    }
 });

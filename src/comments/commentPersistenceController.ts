@@ -759,7 +759,9 @@ export class CommentPersistenceController {
         // This is deliberately reconcilable rather than one filesystem transaction:
         // identities commit once, every sidecar gets an independent attempt, and only
         // successful sidecars enter the single sync-state commit and in-memory retarget.
-        // Replaying the same mapping can therefore finish any failed descendant.
+        // A source/path/snapshot completion marker lets replay skip those successes and
+        // finish only descendants that did not reach the prior sync commit.
+        const snapshots = this.syncEventStore.getSnapshots();
         const preparedRetargets = await Promise.allSettled(retargets.map(async (retarget) => {
             const sourceRecord = this.sourceIdentityStore.getRecordByPathIncludingAliases(retarget.previousFilePath)
                 ?? this.sourceIdentityStore.getRecordByPathIncludingAliases(retarget.nextFilePath);
@@ -774,23 +776,39 @@ export class CommentPersistenceController {
             }
 
             const previousPathSidecarExists = await this.sidecarStorage.exists(retarget.previousFilePath);
-            const previousPathThreads = sourceThreads ?? await this.sidecarStorage.read(retarget.previousFilePath);
-            if (!sourceThreads && previousPathSidecarExists && previousPathThreads === null) {
+            const previousPathThreads = await this.sidecarStorage.read(retarget.previousFilePath);
+            if (previousPathSidecarExists && previousPathThreads === null) {
                 throw new Error(`Unreadable path sidecar for ${retarget.previousFilePath}`);
             }
 
-            const nextPathSidecarExists = previousPathThreads === null
-                ? await this.sidecarStorage.exists(retarget.nextFilePath)
-                : false;
-            const nextPathThreads = previousPathThreads === null
-                ? await this.sidecarStorage.read(retarget.nextFilePath)
-                : null;
+            const nextPathSidecarExists = await this.sidecarStorage.exists(retarget.nextFilePath);
+            const nextPathThreads = await this.sidecarStorage.read(retarget.nextFilePath);
             if (nextPathSidecarExists && nextPathThreads === null) {
                 throw new Error(`Unreadable path sidecar for ${retarget.nextFilePath}`);
             }
-            return previousPathThreads ?? nextPathThreads;
+            const previousNoteHash = await this.host.hashText(retarget.previousFilePath);
+            const completed = sourceRecord?.currentPath === retarget.nextFilePath
+                && sourceThreads !== null
+                && !previousPathSidecarExists
+                && nextPathThreads !== null
+                && snapshots.some((snapshot) =>
+                    snapshot.noteHash === previousNoteHash
+                    && snapshot.notePath === retarget.nextFilePath);
+            return {
+                threads: sourceThreads ?? previousPathThreads ?? nextPathThreads,
+                completed,
+            };
         }));
-        const sourceRecords = await this.sourceIdentityStore.recordRenames(retargets);
+        const pendingIndexes = retargets.flatMap((_retarget, index) => {
+            const prepared = preparedRetargets[index];
+            return prepared?.status === "fulfilled" && !prepared.value.completed ? [index] : [];
+        });
+        const sourceRecords = await this.sourceIdentityStore.recordRenames(
+            pendingIndexes.map((index) => retargets[index]).filter((retarget): retarget is CommentFileRetarget => !!retarget),
+        );
+        const sourceRecordByRetargetIndex = new Map(
+            pendingIndexes.map((retargetIndex, recordIndex) => [retargetIndex, sourceRecords[recordIndex]]),
+        );
         const failures: CommentFileRetargetFailure[] = [];
         const successfulItems: Array<{
             retarget: CommentFileRetarget;
@@ -803,12 +821,15 @@ export class CommentPersistenceController {
                 if (!prepared || prepared.status === "rejected") {
                     throw prepared?.reason ?? new Error(`Missing rename preparation for ${retarget.previousFilePath}`);
                 }
-                const sourceRecord = sourceRecords[index];
+                if (prepared.value.completed) {
+                    continue;
+                }
+                const sourceRecord = sourceRecordByRetargetIndex.get(index);
                 if (!sourceRecord) {
                     throw new Error(`Missing source identity for ${retarget.nextFilePath}`);
                 }
 
-                const previousThreads = prepared.value;
+                const previousThreads = prepared.value.threads;
                 const retargetedThreads = previousThreads && previousThreads.length > 0
                     ? await this.retargetThreads(
                         previousThreads,

@@ -828,7 +828,7 @@ export default class Aside extends Plugin {
                 (candidate) => this.getVaultFileTags(candidate),
             );
         },
-        handleLayoutReady: () => this.pluginLifecycleController.handleLayoutReady(),
+        handleLayoutReady: (context) => this.pluginLifecycleController.handleLayoutReady(context),
         handleFileOpen: (file) => {
             this.workspaceContextController.handleFileOpen(file);
             this.syncPublicFilePublishActions();
@@ -837,25 +837,40 @@ export default class Aside extends Plugin {
             this.workspaceContextController.handleActiveLeafChange(leaf);
             this.syncPublicFilePublishActions();
         },
-        handleFileCreate: async (file) => {
-            await this.pluginLifecycleController.handleFileCreate(file);
+        handleFileCreate: async (file, context) => {
+            await this.pluginLifecycleController.handleFileCreate(file, context);
         },
-        handleFileRename: async (file, oldPath) => {
-            await this.pluginLifecycleController.handleFileRename(file, oldPath);
+        handleFileRename: async (file, oldPath, context) => {
+            await this.pluginLifecycleController.handleFileRename(file, oldPath, context);
+            if (!context.isActive()) {
+                return;
+            }
             this.syncIndexNoteViewClasses();
+            if (!context.isActive()) {
+                return;
+            }
             this.syncPublicFilePublishActions();
         },
-        handleFileDelete: async (file) => {
-            await this.pluginLifecycleController.handleFileDelete(file);
+        handleFileDelete: async (file, context) => {
+            await this.pluginLifecycleController.handleFileDelete(file, context);
+            if (!context.isActive()) {
+                return;
+            }
             this.syncIndexNoteViewClasses();
+            if (!context.isActive()) {
+                return;
+            }
             this.syncPublicFilePublishActions();
         },
-        handleFileModify: async (file) => {
-            await this.pluginLifecycleController.handleFileModify(file);
+        handleFileModify: async (file, context) => {
+            await this.pluginLifecycleController.handleFileModify(file, context);
+            if (!context.isActive()) {
+                return;
+            }
             this.syncPublicFilePublishActions();
         },
-        handleMetadataResolved: async () => {
-            await this.pluginLifecycleController.handleMetadataResolved();
+        handleMetadataResolved: async (context) => {
+            await this.pluginLifecycleController.handleMetadataResolved(context);
         },
         handleEditorChange: (filePath) => {
             this.pluginLifecycleController.handleEditorChange(filePath);

@@ -11,6 +11,7 @@ class CollisionAwareAdapter implements Pick<DataAdapter, "exists" | "mkdir" | "w
     public readonly directories = new Set<string>();
     public readonly files = new Map<string, string>();
     public failNextWriteContaining: string | null = null;
+    public readonly writeAttempts: string[] = [];
 
     async exists(normalizedPath: string): Promise<boolean> {
         return this.directories.has(normalizedPath) || this.files.has(normalizedPath);
@@ -21,6 +22,7 @@ class CollisionAwareAdapter implements Pick<DataAdapter, "exists" | "mkdir" | "w
     }
 
     async write(normalizedPath: string, data: string): Promise<void> {
+        this.writeAttempts.push(normalizedPath);
         if (this.failNextWriteContaining && normalizedPath.includes(this.failNextWriteContaining)) {
             this.failNextWriteContaining = null;
             throw new Error(`Injected sidecar write failure: ${normalizedPath}`);
@@ -116,6 +118,11 @@ function getSidecarStoragePath(filePath: string): string {
     return `.obsidian/plugins/aside/sidenotes/by-note/${noteHash.slice(0, 2)}/${noteHash}.json`;
 }
 
+function getSourceSidecarStoragePath(sourceId: string): string {
+    const sourceHash = hashText(sourceId);
+    return `.obsidian/plugins/aside/sidenotes/by-source/${sourceHash.slice(0, 2)}/${sourceHash}.json`;
+}
+
 function createDeferred() {
     let resolvePromise!: () => void;
     const promise = new Promise<void>((resolve) => {
@@ -198,6 +205,7 @@ function createHarness(files: TFile[], threads: CommentThread[]) {
             currentNoteContentReader = reader;
         },
         getPersistedWriteCount: () => persistedWriteCount,
+        getGeneratedIdCount: () => nextId,
         resetPersistedWriteCount: () => {
             persistedWriteCount = 0;
         },
@@ -239,13 +247,35 @@ test("folder comment retarget isolates a failed sidecar, batches metadata, and r
     assert.equal(harness.commentManager.getThreadById("thread-2")?.filePath, "Published/c.md");
     assert.equal(harness.getPersistedWriteCount(), 2, "source identity and sync each write once");
 
+    const generatedIdCountAfterFirstAttempt = harness.getGeneratedIdCount();
+    const successfulSidecarWriteCounts = [
+        { label: nextPaths[0], storagePath: getSidecarStoragePath(nextPaths[0] ?? "") },
+        { label: "source generated-1", storagePath: getSourceSidecarStoragePath("src-generated-1") },
+        { label: nextPaths[2], storagePath: getSidecarStoragePath(nextPaths[2] ?? "") },
+        { label: "source generated-3", storagePath: getSourceSidecarStoragePath("src-generated-3") },
+    ].map(({ label, storagePath }) => ({
+        label,
+        storagePath,
+        count: harness.adapter.writeAttempts.filter((path) =>
+            path.startsWith(`${storagePath}.tmp-`)).length,
+    }));
+
     harness.resetPersistedWriteCount();
     const replay = await harness.controller.renameStoredCommentsInFolder(retargets);
 
     assert.equal(replay.failures.length, 0);
     assert.equal(harness.commentManager.getThreadById("thread-1")?.filePath, "Published/b.md");
     assert.equal(await harness.adapter.exists(getSidecarStoragePath("Published/b.md")), true);
-    assert.equal(harness.getPersistedWriteCount() <= 1, true);
+    assert.equal(harness.getPersistedWriteCount(), 1, "only the failed item's sync event should persist");
+    assert.equal(harness.getGeneratedIdCount(), generatedIdCountAfterFirstAttempt + 1);
+    for (const { label, storagePath, count } of successfulSidecarWriteCounts) {
+        assert.equal(
+            harness.adapter.writeAttempts.filter((path) =>
+                path.startsWith(`${storagePath}.tmp-`)).length,
+            count,
+            `${label} should not be rewritten during failure-only replay`,
+        );
+    }
 });
 
 test("comment persistence serializes simultaneous saves for one note", async () => {

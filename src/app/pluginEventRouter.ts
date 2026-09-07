@@ -1,4 +1,5 @@
 import type { EventRef, TAbstractFile, TFile, WorkspaceLeaf } from "obsidian";
+import type { PluginEventExecutionContext } from "./pluginEventExecutionContext";
 
 type WorkspaceEventName = "file-open" | "active-leaf-change" | "editor-change";
 type VaultEventName = "create" | "rename" | "delete" | "modify";
@@ -39,14 +40,18 @@ export interface PluginEventRouterHost {
     handleFileCreateMaintenance(file: TAbstractFile | null): void;
     handleFileRenameMaintenance(file: TAbstractFile | null, oldPath: string): void;
     handleFileDeleteMaintenance(file: TAbstractFile | null): void;
-    handleLayoutReady(): void | Promise<void>;
+    handleLayoutReady(context: PluginEventExecutionContext): void | Promise<void>;
     handleFileOpen(file: TFile | null): void;
     handleActiveLeafChange(leaf: WorkspaceLeaf | null): void;
-    handleFileCreate(file: TFile | null): Promise<void>;
-    handleFileRename(file: TAbstractFile | null, oldPath: string): Promise<void>;
-    handleFileDelete(file: TAbstractFile | null): Promise<void>;
-    handleFileModify(file: TFile | null): Promise<void>;
-    handleMetadataResolved(): Promise<void>;
+    handleFileCreate(file: TFile | null, context: PluginEventExecutionContext): Promise<void>;
+    handleFileRename(
+        file: TAbstractFile | null,
+        oldPath: string,
+        context: PluginEventExecutionContext,
+    ): Promise<void>;
+    handleFileDelete(file: TAbstractFile | null, context: PluginEventExecutionContext): Promise<void>;
+    handleFileModify(file: TFile | null, context: PluginEventExecutionContext): Promise<void>;
+    handleMetadataResolved(context: PluginEventExecutionContext): Promise<void>;
     handleEditorChange(filePath: string | null | undefined): void;
     reportAsyncEventError(eventName: AsyncPluginEventName, error: unknown): void;
 }
@@ -84,6 +89,7 @@ type RoutedVaultEvent =
 
 interface VaultEventQueue {
     readonly epoch: number;
+    readonly abortController: AbortController;
     phase: VaultEventRoutingPhase;
     readonly pending: RoutedVaultEvent[];
     drain: Promise<void> | null;
@@ -113,6 +119,7 @@ export class PluginEventRouter {
     }
 
     public resetForReload(): void {
+        this.vaultEventQueue.abortController.abort();
         this.vaultEventQueue.pending.length = 0;
         this.vaultEventEpoch += 1;
         this.vaultMaintenanceEventsRegistered = false;
@@ -171,6 +178,7 @@ export class PluginEventRouter {
     private createVaultEventQueue(): VaultEventQueue {
         return {
             epoch: this.vaultEventEpoch,
+            abortController: new AbortController(),
             phase: VaultEventRoutingPhase.Buffering,
             pending: [],
             drain: null,
@@ -225,24 +233,36 @@ export class PluginEventRouter {
     }
 
     private async runVaultEvent(event: RoutedVaultEvent, queue: VaultEventQueue): Promise<void> {
+        const context = this.createExecutionContext(queue.epoch, queue.abortController.signal);
         await this.runAsyncEvent(
             `vault:${event.kind}`,
-            () => this.handleVaultEvent(event),
+            () => this.handleVaultEvent(event, context),
             () => queue === this.vaultEventQueue,
         );
     }
 
-    private handleVaultEvent(event: RoutedVaultEvent): Promise<void> {
+    private handleVaultEvent(
+        event: RoutedVaultEvent,
+        context: PluginEventExecutionContext,
+    ): Promise<void> {
         switch (event.kind) {
             case "create":
                 return this.host.handleFileCreate(
                     this.host.isTFile(event.file) ? event.file : null,
+                    context,
                 );
             case "rename":
-                return this.host.handleFileRename(event.file, event.oldPath);
+                return this.host.handleFileRename(event.file, event.oldPath, context);
             case "delete":
-                return this.host.handleFileDelete(event.file);
+                return this.host.handleFileDelete(event.file, context);
         }
+    }
+
+    private createExecutionContext(epoch: number, signal: AbortSignal): PluginEventExecutionContext {
+        return {
+            signal,
+            isActive: () => !signal.aborted && this.isCurrentEpoch(epoch),
+        };
     }
 
     private isCurrentEpoch(epoch: number): boolean {
@@ -280,17 +300,19 @@ export class PluginEventRouter {
     }
 
     private async registerLayoutReady(epoch: number): Promise<void> {
+        const signal = this.vaultEventQueue.abortController.signal;
+        const context = this.createExecutionContext(epoch, signal);
         if (this.host.app.workspace.layoutReady) {
             await this.runAsyncEvent(
                 "workspace:layout-ready",
-                () => this.host.handleLayoutReady(),
+                () => this.host.handleLayoutReady(context),
                 () => this.isCurrentEpoch(epoch),
             );
             return;
         }
 
         this.host.app.workspace.onLayoutReady(() => {
-            this.dispatchAsyncEvent("workspace:layout-ready", () => this.host.handleLayoutReady(), epoch);
+            this.dispatchAsyncEvent("workspace:layout-ready", () => this.host.handleLayoutReady(context), epoch);
         });
     }
 
@@ -324,11 +346,12 @@ export class PluginEventRouter {
     }
 
     private registerVaultModifyEvent(epoch: number): void {
+        const context = this.createExecutionContext(epoch, this.vaultEventQueue.abortController.signal);
         this.host.registerEvent(
             this.host.app.vault.on("modify", (file) => {
                 this.dispatchAsyncEvent(
                     "vault:modify",
-                    () => this.host.handleFileModify(this.host.isTFile(file) ? file : null),
+                    () => this.host.handleFileModify(this.host.isTFile(file) ? file : null, context),
                     epoch,
                 );
             }),
@@ -336,11 +359,12 @@ export class PluginEventRouter {
     }
 
     private registerMetadataCacheEvents(epoch: number): void {
+        const context = this.createExecutionContext(epoch, this.vaultEventQueue.abortController.signal);
         this.host.registerEvent(
             this.host.app.metadataCache.on("resolved", () => {
                 this.dispatchAsyncEvent(
                     "metadata-cache:resolved",
-                    () => this.host.handleMetadataResolved(),
+                    () => this.host.handleMetadataResolved(context),
                     epoch,
                 );
             }),
