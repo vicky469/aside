@@ -90,24 +90,39 @@ async function enqueueStoragePathMutation<T>(
     storagePath: string,
     operation: () => Promise<T>,
 ): Promise<T> {
+    return enqueueStoragePathMutations(adapter, [storagePath], operation);
+}
+
+async function enqueueStoragePathMutations<T>(
+    adapter: DataAdapter,
+    storagePaths: readonly string[],
+    operation: () => Promise<T>,
+): Promise<T> {
     let tails = storagePathMutationTails.get(adapter);
     if (!tails) {
         tails = new Map<string, Promise<void>>();
         storagePathMutationTails.set(adapter, tails);
     }
-    const previousTail = tails.get(storagePath) ?? Promise.resolve();
+    const orderedPaths = Array.from(new Set(storagePaths)).sort((left, right) => left.localeCompare(right));
+    const previousTails = Array.from(new Set(
+        orderedPaths.map((storagePath) => tails?.get(storagePath) ?? Promise.resolve()),
+    ));
     const discoveryTail = storageDiscoveryTails.get(adapter) ?? Promise.resolve();
     const result = Promise.all([
-        previousTail.catch(() => {}),
+        ...previousTails.map((tail) => tail.catch(() => {})),
         discoveryTail.catch(() => {}),
     ]).then(operation);
     const nextTail = result.then(() => {}, () => {});
-    tails.set(storagePath, nextTail);
+    for (const storagePath of orderedPaths) {
+        tails.set(storagePath, nextTail);
+    }
     try {
         return await result;
     } finally {
-        if (tails.get(storagePath) === nextTail) {
-            tails.delete(storagePath);
+        for (const storagePath of orderedPaths) {
+            if (tails.get(storagePath) === nextTail) {
+                tails.delete(storagePath);
+            }
         }
     }
 }
@@ -397,35 +412,187 @@ export class SidecarCommentStorage {
     public async rename(
         previousNotePath: string,
         nextNotePath: string,
+        retargetedThreads: CommentThread[],
         context: PluginEventExecutionContext,
     ): Promise<void> {
         if (previousNotePath === nextNotePath || !isPluginEventExecutionActive(context)) {
             return;
         }
 
-        const previousThreads = await this.read(previousNotePath);
-        if (!previousThreads || !isPluginEventExecutionActive(context)) {
+        const [previousStoragePath, nextStoragePath] = await Promise.all([
+            this.getNoteStoragePath(previousNotePath),
+            this.getNoteStoragePath(nextNotePath),
+        ]);
+        if (!isPluginEventExecutionActive(context)) {
             return;
         }
 
-        if (previousThreads.length === 0) {
-            await this.remove(previousNotePath, context);
+        await enqueueStoragePathMutations(
+            this.options.adapter,
+            [previousStoragePath, nextStoragePath],
+            () => this.renameStoragePathsExclusive(
+                previousStoragePath,
+                nextStoragePath,
+                nextNotePath,
+                retargetedThreads,
+                context,
+            ),
+        );
+    }
+
+    private async renameStoragePathsExclusive(
+        previousStoragePath: string,
+        nextStoragePath: string,
+        nextNotePath: string,
+        retargetedThreads: CommentThread[],
+        context: PluginEventExecutionContext,
+    ): Promise<void> {
+        if (!isPluginEventExecutionActive(context)) {
             return;
         }
 
-        await this.write(nextNotePath, previousThreads.map((thread) => ({
+        const previousContent = await this.readCanonicalContentExclusive(previousStoragePath);
+        if (!isPluginEventExecutionActive(context)) {
+            return;
+        }
+        const nextContent = await this.readCanonicalContentExclusive(nextStoragePath);
+        if (!isPluginEventExecutionActive(context)) {
+            return;
+        }
+
+        const normalizedThreads = cloneCommentThreads(retargetedThreads).map((thread) => ({
             ...thread,
             filePath: nextNotePath,
-        })), context);
-        if (!isPluginEventExecutionActive(context)) {
-            return;
-        }
+        }));
+        const payload: StoredSidecarComments = {
+            version: SIDECAR_STORAGE_VERSION,
+            notePath: nextNotePath,
+            threads: normalizedThreads,
+        };
+        const serialized = `${JSON.stringify(payload)}\n`;
+        const tempPath = `${nextStoragePath}.tmp-${createTempFileSuffix()}`;
 
-        const previousStoragePath = await this.getNoteStoragePath(previousNotePath);
-        if (!isPluginEventExecutionActive(context)) {
-            return;
+        try {
+            await ensureDirectory(this.options.adapter, getParentPath(nextStoragePath), context);
+            if (!isPluginEventExecutionActive(context)) {
+                await this.rollbackCompoundRename(
+                    previousStoragePath,
+                    previousContent,
+                    nextStoragePath,
+                    nextContent,
+                    tempPath,
+                );
+                return;
+            }
+            await this.options.adapter.write(tempPath, serialized);
+            if (!isPluginEventExecutionActive(context)) {
+                await this.rollbackCompoundRename(
+                    previousStoragePath,
+                    previousContent,
+                    nextStoragePath,
+                    nextContent,
+                    tempPath,
+                );
+                return;
+            }
+
+            await this.removeCanonicalStoragePathExclusive(nextStoragePath);
+            if (!isPluginEventExecutionActive(context)) {
+                await this.rollbackCompoundRename(
+                    previousStoragePath,
+                    previousContent,
+                    nextStoragePath,
+                    nextContent,
+                    tempPath,
+                );
+                return;
+            }
+            await this.options.adapter.rename(tempPath, nextStoragePath);
+            if (!isPluginEventExecutionActive(context)) {
+                await this.rollbackCompoundRename(
+                    previousStoragePath,
+                    previousContent,
+                    nextStoragePath,
+                    nextContent,
+                    tempPath,
+                );
+                return;
+            }
+
+            await this.removeCanonicalStoragePathExclusive(previousStoragePath);
+            if (!isPluginEventExecutionActive(context)) {
+                await this.rollbackCompoundRename(
+                    previousStoragePath,
+                    previousContent,
+                    nextStoragePath,
+                    nextContent,
+                    tempPath,
+                );
+            }
+        } catch (error) {
+            await this.rollbackCompoundRename(
+                previousStoragePath,
+                previousContent,
+                nextStoragePath,
+                nextContent,
+                tempPath,
+            );
+            if (isPluginEventExecutionActive(context)) {
+                throw error;
+            }
         }
-        await this.removeStoragePath(previousStoragePath, context);
+    }
+
+    private async readCanonicalContentExclusive(storagePath: string): Promise<string | null> {
+        if (!(await this.options.adapter.exists(storagePath))) {
+            return null;
+        }
+        try {
+            return await this.options.adapter.read(storagePath);
+        } catch (error) {
+            if (isMissingFileError(error)) {
+                return null;
+            }
+            throw error;
+        }
+    }
+
+    private async removeCanonicalStoragePathExclusive(storagePath: string): Promise<void> {
+        try {
+            await this.options.adapter.remove(storagePath);
+        } catch (error) {
+            if (!isMissingFileError(error)) {
+                throw error;
+            }
+        }
+    }
+
+    private async restoreCanonicalContentExclusive(
+        storagePath: string,
+        previousContent: string | null,
+    ): Promise<void> {
+        await this.removeCanonicalStoragePathExclusive(storagePath);
+        if (previousContent !== null) {
+            await this.options.adapter.write(storagePath, previousContent);
+        }
+    }
+
+    private async rollbackCompoundRename(
+        previousStoragePath: string,
+        previousContent: string | null,
+        nextStoragePath: string,
+        nextContent: string | null,
+        tempPath: string,
+    ): Promise<void> {
+        const restoreResults = await Promise.allSettled([
+            this.restoreCanonicalContentExclusive(previousStoragePath, previousContent),
+            this.restoreCanonicalContentExclusive(nextStoragePath, nextContent),
+            this.removeCanonicalStoragePathExclusive(tempPath),
+        ]);
+        const failedRestore = restoreResults.find((result) => result.status === "rejected");
+        if (failedRestore?.status === "rejected") {
+            throw failedRestore.reason;
+        }
     }
 
     public async remove(notePath: string, context: PluginEventExecutionContext): Promise<void> {
@@ -451,14 +618,20 @@ export class SidecarCommentStorage {
     }
 
     public async listStoredComments(): Promise<RemovedSidecarComments[]> {
-        const recordsByNotePath = new Map<string, RemovedSidecarComments>();
-        for (const storagePath of await this.getAllStorageFiles()) {
-            const payload = await this.readStoragePayload(storagePath);
-            if (payload) {
-                this.mergeStoredRecord(recordsByNotePath, payload);
+        return enqueueStorageDiscovery(this.options.adapter, async () => {
+            const recordsByNotePath = new Map<string, RemovedSidecarComments>();
+            const storagePaths = await this.listStorageFiles([
+                this.baseDirPath,
+                this.sourceBaseDirPath,
+            ]);
+            for (const storagePath of storagePaths) {
+                const payload = await this.readStoragePayloadExclusive(storagePath);
+                if (payload) {
+                    this.mergeStoredRecord(recordsByNotePath, payload);
+                }
             }
-        }
-        return this.sortStoredRecords(recordsByNotePath);
+            return this.sortStoredRecords(recordsByNotePath);
+        });
     }
 
     public async removeNote(

@@ -99,12 +99,18 @@ export class PluginEventRouter {
     private vaultMaintenanceEventsRegistered = false;
     private vaultEventEpoch = 0;
     private vaultEventQueue = this.createVaultEventQueue();
+    private readonly asyncEventTailsByEpoch = new Map<number, Set<Promise<void>>>();
+    private readonly retiredEpochTails = new Set<Promise<void>>();
 
     constructor(private readonly host: PluginEventRouterHost) {}
 
     public async register(): Promise<void> {
         const epoch = this.vaultEventEpoch;
         this.registerVaultMaintenanceEvents();
+        await this.waitForRetiredEpochs();
+        if (!this.isCurrentEpoch(epoch)) {
+            return;
+        }
         await this.activateVaultEventQueue(this.vaultEventQueue);
         if (!this.isCurrentEpoch(epoch)) {
             return;
@@ -119,11 +125,35 @@ export class PluginEventRouter {
     }
 
     public resetForReload(): void {
-        this.vaultEventQueue.abortController.abort();
-        this.vaultEventQueue.pending.length = 0;
+        const retiredQueue = this.vaultEventQueue;
+        retiredQueue.abortController.abort();
+        retiredQueue.pending.length = 0;
+        this.retainRetiredEpochTail(retiredQueue);
         this.vaultEventEpoch += 1;
         this.vaultMaintenanceEventsRegistered = false;
         this.vaultEventQueue = this.createVaultEventQueue();
+    }
+
+    private retainRetiredEpochTail(queue: VaultEventQueue): void {
+        const tails = [
+            ...(queue.drain ? [queue.drain] : []),
+            ...Array.from(this.asyncEventTailsByEpoch.get(queue.epoch) ?? []),
+        ];
+        this.asyncEventTailsByEpoch.delete(queue.epoch);
+        if (tails.length === 0) {
+            return;
+        }
+
+        const retiredTail = Promise.all(tails.map((tail) => tail.catch(() => {})))
+            .then(() => {});
+        this.retiredEpochTails.add(retiredTail);
+        void retiredTail.then(() => {
+            this.retiredEpochTails.delete(retiredTail);
+        });
+    }
+
+    private async waitForRetiredEpochs(): Promise<void> {
+        await Promise.all(Array.from(this.retiredEpochTails));
     }
 
     public registerVaultMaintenanceEvents(): void {
@@ -277,7 +307,29 @@ export class PluginEventRouter {
         if (!this.isCurrentEpoch(epoch)) {
             return;
         }
-        void this.runAsyncEvent(eventName, handler, () => this.isCurrentEpoch(epoch));
+        const tail = this.runAsyncEvent(eventName, handler, () => this.isCurrentEpoch(epoch));
+        this.trackAsyncEventTail(epoch, tail);
+    }
+
+    private trackAsyncEventTail(epoch: number, tail: Promise<void>): void {
+        let tails = this.asyncEventTailsByEpoch.get(epoch);
+        if (!tails) {
+            tails = new Set<Promise<void>>();
+            this.asyncEventTailsByEpoch.set(epoch, tails);
+        }
+        tails.add(tail);
+        void tail.then(
+            () => this.removeAsyncEventTail(epoch, tail),
+            () => this.removeAsyncEventTail(epoch, tail),
+        );
+    }
+
+    private removeAsyncEventTail(epoch: number, tail: Promise<void>): void {
+        const tails = this.asyncEventTailsByEpoch.get(epoch);
+        tails?.delete(tail);
+        if (tails?.size === 0) {
+            this.asyncEventTailsByEpoch.delete(epoch);
+        }
     }
 
     private async runAsyncEvent(
@@ -303,11 +355,13 @@ export class PluginEventRouter {
         const signal = this.vaultEventQueue.abortController.signal;
         const context = this.createExecutionContext(epoch, signal);
         if (this.host.app.workspace.layoutReady) {
-            await this.runAsyncEvent(
+            const tail = this.runAsyncEvent(
                 "workspace:layout-ready",
                 () => this.host.handleLayoutReady(context),
                 () => this.isCurrentEpoch(epoch),
             );
+            this.trackAsyncEventTail(epoch, tail);
+            await tail;
             return;
         }
 

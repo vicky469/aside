@@ -408,7 +408,7 @@ test("folder comment retarget aborts a stale sync commit before touching reloade
     assert.deepEqual(harness.getPersistedData(), reloadedData);
 });
 
-test("file comment retarget stops between source and path sidecar writes after abort", async () => {
+test("file comment retarget publishes the final path payload before its repairable source write", async () => {
     const sourceWriteStarted = createDeferred();
     const releaseSourceWrite = createDeferred();
     const previousPath = "Drafts/a.md";
@@ -423,10 +423,14 @@ test("file comment retarget stops between source and path sidecar writes after a
     })}\n`);
     const sourceSidecarPath = getSourceSidecarStoragePath("src-generated-1");
     let pathSidecarWritesBeforeAbort = 0;
+    const pathPayloadsAtSourceWrite: Array<{ threads: CommentThread[] }> = [];
     harness.adapter.beforeWrite = async (path) => {
         if (path.startsWith(`${sourceSidecarPath}.tmp-`)) {
             pathSidecarWritesBeforeAbort = harness.adapter.writeAttempts.filter((attemptedPath) =>
                 attemptedPath.startsWith(`${getSidecarStoragePath(nextPath)}.tmp-`)).length;
+            pathPayloadsAtSourceWrite.push(JSON.parse(
+                await harness.adapter.read(getSidecarStoragePath(nextPath)),
+            ) as { threads: CommentThread[] });
             sourceWriteStarted.resolve();
             await releaseSourceWrite.promise;
         }
@@ -437,7 +441,7 @@ test("file comment retarget stops between source and path sidecar writes after a
     };
 
     const staleRename = harness.controller.renameStoredComments(previousPath, nextPath, {
-        selectionCapable: true,
+        selectionCapable: false,
         pageLabelHash: "page-hash",
     }, context);
     await sourceWriteStarted.promise;
@@ -449,11 +453,14 @@ test("file comment retarget stops between source and path sidecar writes after a
     releaseSourceWrite.resolve();
     await staleRename;
 
+    assert.equal(pathPayloadsAtSourceWrite[0]?.threads[0]?.filePath, nextPath);
+    assert.equal(pathPayloadsAtSourceWrite[0]?.threads[0]?.anchorKind, "page");
+    assert.equal(pathPayloadsAtSourceWrite[0]?.threads[0]?.selectedTextHash, "page-hash");
     assert.equal(
         harness.adapter.writeAttempts.filter((path) =>
             path.startsWith(`${getSidecarStoragePath(nextPath)}.tmp-`)).length,
         pathSidecarWritesBeforeAbort,
-        "stale work must not start the path sidecar after the source sidecar await",
+        "stale work must not start a second path-sidecar phase after the source write",
     );
     assert.equal(
         await harness.adapter.exists(sourceSidecarPath),
@@ -462,6 +469,102 @@ test("file comment retarget stops between source and path sidecar writes after a
     );
     assert.deepEqual(reloadedManager.getAllThreads().map((thread) => thread.filePath), ["Reloaded/a.md"]);
     assert.deepEqual(harness.getPersistedData(), reloadedData);
+});
+
+test("file comment retarget retries only the missing source and sync stages after a source-write failure", async () => {
+    const previousPath = "Drafts/a.md";
+    const nextPath = "Published/a.md";
+    const originalThread = createThread(previousPath, "old-thread");
+    const harness = createHarness([createFile(nextPath)], [originalThread]);
+    harness.adapter.files.set(getSidecarStoragePath(previousPath), `${JSON.stringify({
+        version: 1,
+        notePath: previousPath,
+        threads: [originalThread],
+    })}\n`);
+    const sourceSidecarPath = getSourceSidecarStoragePath("src-generated-1");
+    harness.adapter.failNextWriteContaining = sourceSidecarPath;
+
+    await assert.rejects(
+        harness.controller.renameStoredComments(previousPath, nextPath, {
+            selectionCapable: false,
+            pageLabelHash: "page-hash",
+        }, ACTIVE_EVENT_CONTEXT),
+        /Injected sidecar write failure/,
+    );
+
+    assert.equal(await harness.adapter.exists(getSidecarStoragePath(previousPath)), false);
+    assert.equal(await harness.adapter.exists(getSidecarStoragePath(nextPath)), true);
+    assert.equal(await harness.adapter.exists(sourceSidecarPath), false);
+    assert.equal(harness.commentManager.getThreadById("old-thread")?.filePath, previousPath);
+    assert.equal(harness.getPersistedData().sideNoteSyncEventState, undefined);
+    const committedPathWriteCount = harness.adapter.writeAttempts.filter((path) =>
+        path.startsWith(`${getSidecarStoragePath(nextPath)}.tmp-`)).length;
+
+    await harness.controller.renameStoredComments(previousPath, nextPath, {
+        selectionCapable: false,
+        pageLabelHash: "page-hash",
+    }, ACTIVE_EVENT_CONTEXT);
+
+    const repairedSourcePayload = JSON.parse(await harness.adapter.read(sourceSidecarPath)) as {
+        notePath: string;
+        threads: CommentThread[];
+    };
+    const syncState = harness.getPersistedData().sideNoteSyncEventState as {
+        noteSnapshots?: Record<string, { notePath?: string }>;
+    } | undefined;
+    assert.equal(repairedSourcePayload.notePath, nextPath);
+    assert.equal(repairedSourcePayload.threads[0]?.filePath, nextPath);
+    assert.equal(repairedSourcePayload.threads[0]?.selectedTextHash, "page-hash");
+    assert.equal(
+        harness.adapter.writeAttempts.filter((path) =>
+            path.startsWith(`${getSidecarStoragePath(nextPath)}.tmp-`)).length,
+        committedPathWriteCount,
+        "retry should not rewrite the already committed destination sidecar",
+    );
+    assert.equal(
+        Object.values(syncState?.noteSnapshots ?? {}).some((snapshot) => snapshot.notePath === nextPath),
+        true,
+    );
+    assert.equal(harness.commentManager.getThreadById("old-thread")?.filePath, nextPath);
+});
+
+test("file comment retarget does not mistake an unreadable old sidecar for a completed rename", async () => {
+    const previousPath = "Drafts/a.md";
+    const nextPath = "Published/a.md";
+    const originalThread = createThread(previousPath, "old-thread");
+    const harness = createHarness([createFile(nextPath)], [originalThread]);
+    const malformedPreviousContent = "{not valid json\n";
+    harness.adapter.files.set(getSidecarStoragePath(previousPath), malformedPreviousContent);
+    harness.adapter.files.set(getSidecarStoragePath(nextPath), `${JSON.stringify({
+        version: 1,
+        notePath: nextPath,
+        threads: [{
+            ...originalThread,
+            filePath: nextPath,
+            startLine: 0,
+            startChar: 0,
+            endLine: 0,
+            endChar: 0,
+            selectedText: "a",
+            selectedTextHash: "page-hash",
+            anchorKind: "page",
+            orphaned: false,
+        }],
+    })}\n`);
+
+    await assert.rejects(
+        harness.controller.renameStoredComments(previousPath, nextPath, {
+            selectionCapable: false,
+            pageLabelHash: "page-hash",
+        }, ACTIVE_EVENT_CONTEXT),
+        /Unreadable path sidecar/,
+    );
+
+    assert.equal(
+        await harness.adapter.read(getSidecarStoragePath(previousPath)),
+        malformedPreviousContent,
+    );
+    assert.equal(harness.commentManager.getThreadById("old-thread")?.filePath, previousPath);
 });
 
 test("file comment deletion aborts its queued sync write and a new epoch completes", async () => {

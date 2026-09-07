@@ -59,6 +59,17 @@ async function settleAsyncDispatch(): Promise<void> {
     await new Promise<void>((resolve) => setImmediate(resolve));
 }
 
+async function settlesWithinMicrotasks(promise: Promise<unknown>, turnCount = 20): Promise<boolean> {
+    let settled = false;
+    void promise.then(() => {
+        settled = true;
+    });
+    for (let turn = 0; turn < turnCount && !settled; turn += 1) {
+        await Promise.resolve();
+    }
+    return settled;
+}
+
 function createHarness(options: {
     layoutReady?: boolean;
     handleLayoutReady?: (context: EventExecutionContext) => void | Promise<void>;
@@ -732,6 +743,64 @@ test("plugin event router aborts delayed modify persistence across reset and acc
     harness.vaultHandlers.get("modify")?.(createFile("new/note.md"));
     await settleAsyncDispatch();
     assert.deepEqual(mutations, ["new/note.md"]);
+});
+
+test("plugin event router waits for retired maintenance and async tails before activating a reload", async () => {
+    const oldRenameStarted = createDeferred<void>();
+    const oldModifyStarted = createDeferred<void>();
+    const releaseOldRename = createDeferred<void>();
+    const releaseOldModify = createDeferred<void>();
+    const postAwaitMutations: string[] = [];
+    const harness = createHarness({
+        handleFileRename: async (file, oldPath, context) => {
+            if (oldPath === "old/A.md") {
+                oldRenameStarted.resolve(undefined);
+                await releaseOldRename.promise;
+            }
+            if (context.isActive()) {
+                postAwaitMutations.push(`rename:${oldPath}->${file?.path ?? "null"}`);
+            }
+        },
+        handleFileModify: async (file, context) => {
+            if (file?.path === "old/note.md") {
+                oldModifyStarted.resolve(undefined);
+                await releaseOldModify.promise;
+            }
+            if (context.isActive()) {
+                postAwaitMutations.push(`modify:${file?.path ?? "null"}`);
+            }
+            if (file?.path === "old/note.md") {
+                throw new Error("retired modify failed while unwinding");
+            }
+        },
+    });
+
+    await harness.router.register();
+    harness.vaultHandlers.get("rename")?.(createFile("old/B.md"), "old/A.md");
+    harness.vaultHandlers.get("modify")?.(createFile("old/note.md"));
+    await Promise.all([oldRenameStarted.promise, oldModifyStarted.promise]);
+
+    harness.router.resetForReload();
+    harness.router.registerVaultMaintenanceEvents();
+    const registration = harness.router.register();
+    harness.vaultHandlers.get("rename")?.(createFile("new/B.md"), "new/A.md");
+
+    assert.equal(await settlesWithinMicrotasks(registration), false);
+    assert.deepEqual(postAwaitMutations, []);
+
+    releaseOldRename.resolve(undefined);
+    assert.equal(await settlesWithinMicrotasks(registration), false);
+    assert.deepEqual(postAwaitMutations, []);
+
+    releaseOldModify.resolve(undefined);
+    await registration;
+
+    assert.deepEqual(postAwaitMutations, ["rename:new/A.md->new/B.md"]);
+    assert.equal(
+        harness.calls.filter((call) => call === "rename:new/A.md->new/B.md").length,
+        1,
+    );
+    assert.deepEqual(harness.reportedErrors, []);
 });
 
 test("plugin event router snapshots mutable Obsidian file paths for ordered startup replay", async () => {

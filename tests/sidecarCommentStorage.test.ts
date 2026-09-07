@@ -12,6 +12,7 @@ class FakeAdapter implements Pick<DataAdapter, "exists" | "mkdir" | "write" | "r
     public beforeRemove: ((normalizedPath: string) => Promise<void>) | null = null;
     public afterRemove: ((normalizedPath: string) => Promise<void>) | null = null;
     public beforeRename: ((normalizedPath: string, normalizedNewPath: string) => Promise<void>) | null = null;
+    public afterRename: ((normalizedPath: string, normalizedNewPath: string) => Promise<void>) | null = null;
     public afterWrite: ((normalizedPath: string) => Promise<void>) | null = null;
     public readonly removeAttempts: string[] = [];
 
@@ -53,6 +54,7 @@ class FakeAdapter implements Pick<DataAdapter, "exists" | "mkdir" | "write" | "r
 
         this.files.set(normalizedNewPath, content);
         this.files.delete(normalizedPath);
+        await this.afterRename?.(normalizedPath, normalizedNewPath);
     }
 
     async list(normalizedPath: string): Promise<{ files: string[]; folders: string[] }> {
@@ -210,15 +212,210 @@ test("sidecar comment storage renames the hashed file when the note path changes
     await storage.write(originalNotePath, [createThread(originalNotePath)], ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
     const originalStoragePath = await storage.getNoteStoragePath(originalNotePath);
     const renamedStoragePath = await storage.getNoteStoragePath(renamedNotePath);
+    const retargetedThread = {
+        ...createThread(renamedNotePath),
+        anchorKind: "page" as const,
+        selectedText: "",
+        selectedTextHash: "renamed-page-label-hash",
+    };
 
-    await storage.rename(originalNotePath, renamedNotePath, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
+    await storage.rename(
+        originalNotePath,
+        renamedNotePath,
+        [retargetedThread],
+        ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT,
+    );
 
     assert.equal(adapter.files.has(originalStoragePath), false);
     assert.equal(adapter.files.has(renamedStoragePath), true);
 
     const renamedThreads = await storage.read(renamedNotePath);
     assert.ok(renamedThreads);
-    assert.equal(renamedThreads[0].filePath, renamedNotePath);
+    assert.deepEqual(renamedThreads, [retargetedThread]);
+});
+
+test("sidecar rename abort after destination commit restores both prior canonical files", async () => {
+    const adapter = new FakeAdapter();
+    const storage = new SidecarCommentStorage({
+        adapter: adapter as unknown as DataAdapter,
+        pluginDirPath: ".obsidian/plugins/aside",
+        hashText: async (text) => hashText(text),
+    });
+    const previousNotePath = "books/original.md";
+    const nextNotePath = "books/occupied.md";
+    await storage.write(
+        previousNotePath,
+        [createThread(previousNotePath)],
+        ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT,
+    );
+    await storage.write(
+        nextNotePath,
+        [{ ...createThread(nextNotePath), id: "existing-next" }],
+        ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT,
+    );
+    const previousStoragePath = await storage.getNoteStoragePath(previousNotePath);
+    const nextStoragePath = await storage.getNoteStoragePath(nextNotePath);
+    const exactPreviousContent = adapter.files.get(previousStoragePath);
+    const exactNextContent = adapter.files.get(nextStoragePath);
+    const destinationCommitted = createDeferred();
+    const releaseDestinationCommit = createDeferred();
+    const abortController = new AbortController();
+    adapter.afterRename = async (sourcePath, destinationPath) => {
+        if (sourcePath.includes(".json.tmp-") && destinationPath === nextStoragePath) {
+            destinationCommitted.resolve();
+            await releaseDestinationCommit.promise;
+        }
+    };
+    const context = {
+        signal: abortController.signal,
+        isActive: () => !abortController.signal.aborted,
+    };
+
+    const rename = storage.rename(
+        previousNotePath,
+        nextNotePath,
+        [{ ...createThread(nextNotePath), id: "retargeted" }],
+        context,
+    );
+    await destinationCommitted.promise;
+    abortController.abort();
+    releaseDestinationCommit.resolve();
+    await rename;
+
+    assert.equal(adapter.files.get(previousStoragePath), exactPreviousContent);
+    assert.equal(adapter.files.get(nextStoragePath), exactNextContent);
+    assert.deepEqual(
+        (await storage.listStoredComments()).map((record) => ({
+            notePath: record.notePath,
+            threadId: record.threads[0]?.id,
+        })),
+        [
+            { notePath: nextNotePath, threadId: "existing-next" },
+            { notePath: previousNotePath, threadId: "thread-1" },
+        ],
+    );
+    assert.equal(Array.from(adapter.files.keys()).some((path) => path.includes(".json.tmp-")), false);
+});
+
+test("sidecar rename abort after source removal restores the source and removes the new destination", async () => {
+    const adapter = new FakeAdapter();
+    const storage = new SidecarCommentStorage({
+        adapter: adapter as unknown as DataAdapter,
+        pluginDirPath: ".obsidian/plugins/aside",
+        hashText: async (text) => hashText(text),
+    });
+    const previousNotePath = "books/original.md";
+    const nextNotePath = "books/renamed.md";
+    await storage.write(
+        previousNotePath,
+        [createThread(previousNotePath)],
+        ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT,
+    );
+    const previousStoragePath = await storage.getNoteStoragePath(previousNotePath);
+    const nextStoragePath = await storage.getNoteStoragePath(nextNotePath);
+    const exactPreviousContent = adapter.files.get(previousStoragePath);
+    const sourceRemoved = createDeferred();
+    const releaseSourceRemoval = createDeferred();
+    const abortController = new AbortController();
+    adapter.afterRemove = async (storagePath) => {
+        if (storagePath === previousStoragePath) {
+            sourceRemoved.resolve();
+            await releaseSourceRemoval.promise;
+        }
+    };
+    const context = {
+        signal: abortController.signal,
+        isActive: () => !abortController.signal.aborted,
+    };
+
+    const rename = storage.rename(
+        previousNotePath,
+        nextNotePath,
+        [{ ...createThread(nextNotePath), id: "retargeted" }],
+        context,
+    );
+    await sourceRemoved.promise;
+    abortController.abort();
+    releaseSourceRemoval.resolve();
+    await rename;
+
+    assert.equal(adapter.files.get(previousStoragePath), exactPreviousContent);
+    assert.equal(adapter.files.has(nextStoragePath), false);
+    assert.deepEqual(
+        (await storage.listStoredComments()).map((record) => record.notePath),
+        [previousNotePath],
+    );
+});
+
+test("sidecar rename blocks reads and discovery until one fully retargeted state is visible", async () => {
+    const adapter = new FakeAdapter();
+    const storage = new SidecarCommentStorage({
+        adapter: adapter as unknown as DataAdapter,
+        pluginDirPath: ".obsidian/plugins/aside",
+        hashText: async (text) => hashText(text),
+    });
+    const previousNotePath = "books/original.md";
+    const nextNotePath = "books/renamed.md";
+    await storage.write(
+        previousNotePath,
+        [createThread(previousNotePath)],
+        ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT,
+    );
+    const nextStoragePath = await storage.getNoteStoragePath(nextNotePath);
+    const destinationCommitted = createDeferred();
+    const releaseDestinationCommit = createDeferred();
+    adapter.afterRename = async (sourcePath, destinationPath) => {
+        if (sourcePath.includes(".json.tmp-") && destinationPath === nextStoragePath) {
+            destinationCommitted.resolve();
+            await releaseDestinationCommit.promise;
+        }
+    };
+    const retargetedThread = {
+        ...createThread(nextNotePath),
+        id: "fully-retargeted",
+        anchorKind: "page" as const,
+        selectedText: "",
+        selectedTextHash: "next-page-label-hash",
+    };
+
+    const rename = storage.rename(
+        previousNotePath,
+        nextNotePath,
+        [retargetedThread],
+        ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT,
+    );
+    await destinationCommitted.promise;
+    const oldExists = storage.exists(previousNotePath);
+    const nextExists = storage.exists(nextNotePath);
+    const oldRead = storage.read(previousNotePath);
+    const nextRead = storage.read(nextNotePath);
+    const discovery = storage.listStoredComments();
+
+    assert.equal(await settlesWithinMicrotasks(oldExists), false);
+    assert.equal(await settlesWithinMicrotasks(nextExists), false);
+    assert.equal(await settlesWithinMicrotasks(oldRead), false);
+    assert.equal(await settlesWithinMicrotasks(nextRead), false);
+    assert.equal(await settlesWithinMicrotasks(discovery), false);
+
+    releaseDestinationCommit.resolve();
+    await rename;
+
+    assert.equal(await oldExists, false);
+    assert.equal(await nextExists, true);
+    assert.equal(await oldRead, null);
+    assert.deepEqual(await nextRead, [retargetedThread]);
+    assert.deepEqual(
+        (await discovery).map((record) => ({
+            notePath: record.notePath,
+            threadId: record.threads[0]?.id,
+            selectedTextHash: record.threads[0]?.selectedTextHash,
+        })),
+        [{
+            notePath: nextNotePath,
+            threadId: "fully-retargeted",
+            selectedTextHash: "next-page-label-hash",
+        }],
+    );
 });
 
 test("sidecar comment storage writes source-id keyed files and retargets threads on read", async () => {

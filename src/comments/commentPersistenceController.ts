@@ -797,13 +797,44 @@ export class CommentPersistenceController {
         }
         const existingSourceRecord = this.sourceIdentityStore.getRecordByPath(previousFilePath)
             ?? this.sourceIdentityStore.getRecordByPath(nextFilePath);
+        const sourceSidecarExists = existingSourceRecord
+            ? await this.sidecarStorage.existsForSource(existingSourceRecord.sourceId)
+            : false;
+        if (!isPluginEventExecutionActive(context)) {
+            return;
+        }
         const previousSourceThreads = existingSourceRecord
             ? await this.sidecarStorage.readForSource(existingSourceRecord.sourceId, previousFilePath)
             : null;
         if (!isPluginEventExecutionActive(context)) {
             return;
         }
-        const previousThreads = previousSourceThreads ?? await this.sidecarStorage.read(previousFilePath);
+        if (sourceSidecarExists && previousSourceThreads === null) {
+            throw new Error(`Unreadable source sidecar for ${previousFilePath}`);
+        }
+        const previousPathSidecarExists = await this.sidecarStorage.exists(previousFilePath);
+        if (!isPluginEventExecutionActive(context)) {
+            return;
+        }
+        const previousPathThreads = await this.sidecarStorage.read(previousFilePath);
+        if (!isPluginEventExecutionActive(context)) {
+            return;
+        }
+        if (previousPathSidecarExists && previousPathThreads === null) {
+            throw new Error(`Unreadable path sidecar for ${previousFilePath}`);
+        }
+        const nextPathSidecarExists = await this.sidecarStorage.exists(nextFilePath);
+        if (!isPluginEventExecutionActive(context)) {
+            return;
+        }
+        const nextPathThreads = await this.sidecarStorage.read(nextFilePath);
+        if (!isPluginEventExecutionActive(context)) {
+            return;
+        }
+        if (nextPathSidecarExists && nextPathThreads === null) {
+            throw new Error(`Unreadable path sidecar for ${nextFilePath}`);
+        }
+        const previousThreads = previousSourceThreads ?? previousPathThreads ?? nextPathThreads;
         if (!isPluginEventExecutionActive(context)) {
             return;
         }
@@ -811,21 +842,32 @@ export class CommentPersistenceController {
         if (!sourceRecord || !isPluginEventExecutionActive(context)) {
             return;
         }
-        await this.sidecarStorage.rename(previousFilePath, nextFilePath, context);
-        if (!isPluginEventExecutionActive(context)) {
-            return;
-        }
         if (previousThreads && previousThreads.length > 0) {
             const retargetedThreads = await this.retargetThreads(previousThreads, nextFilePath, retargetOptions);
             if (!isPluginEventExecutionActive(context)) {
                 return;
             }
-            if (!await this.writeSourceAndPathSidecars(
+            const pathRenameAlreadyCommitted = !previousPathSidecarExists
+                && nextPathThreads !== null
+                && areCommentThreadListsEqual(nextPathThreads, retargetedThreads);
+            if (!pathRenameAlreadyCommitted) {
+                await this.sidecarStorage.rename(
+                    previousFilePath,
+                    nextFilePath,
+                    retargetedThreads,
+                    context,
+                );
+                if (!isPluginEventExecutionActive(context)) {
+                    return;
+                }
+            }
+            await this.sidecarStorage.writeForSource(
                 sourceRecord.sourceId,
                 nextFilePath,
                 retargetedThreads,
                 context,
-            )) {
+            );
+            if (!isPluginEventExecutionActive(context)) {
                 return;
             }
             await this.syncEventStore.appendLocalEvents(previousFilePath, context, [{
@@ -1029,8 +1071,8 @@ export class CommentPersistenceController {
                     return abortedResult;
                 }
                 if (retargetedThreads.length > 0) {
-                    await this.writeSourceAndPathSidecars(
-                        sourceRecord.sourceId,
+                    await this.sidecarStorage.rename(
+                        retarget.previousFilePath,
                         retarget.nextFilePath,
                         retargetedThreads,
                         context,
@@ -1038,7 +1080,12 @@ export class CommentPersistenceController {
                     if (!isPluginEventExecutionActive(context)) {
                         return abortedResult;
                     }
-                    await this.sidecarStorage.remove(retarget.previousFilePath, context);
+                    await this.sidecarStorage.writeForSource(
+                        sourceRecord.sourceId,
+                        retarget.nextFilePath,
+                        retargetedThreads,
+                        context,
+                    );
                     if (!isPluginEventExecutionActive(context)) {
                         return abortedResult;
                     }
