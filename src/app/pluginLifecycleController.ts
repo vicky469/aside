@@ -3,6 +3,11 @@ import type { CommentManager } from "../commentManager";
 import type { AggregateCommentIndex } from "../index/AggregateCommentIndex";
 import { getPageCommentLabel } from "../core/anchors/commentAnchors";
 import type { CommentThreadRetargetOptions } from "../domain/comments/commentThreadRetarget";
+import type {
+    CommentFileRetarget,
+    CommentFileRetargetResult,
+} from "../domain/comments/folderCommentRetarget";
+import { retargetPathInFolder } from "../core/files/pathScope";
 
 export interface PluginLifecycleHost {
     app: Plugin["app"];
@@ -15,9 +20,18 @@ export interface PluginLifecycleHost {
         nextFilePath: string,
         retargetOptions: CommentThreadRetargetOptions,
     ): Promise<void>;
+    renameAgentRunsInFolder(previousFolderPath: string, nextFolderPath: string): Promise<boolean>;
+    renameScriptRunsInFolder(previousFolderPath: string, nextFolderPath: string): Promise<boolean>;
+    renameStoredCommentsInFolder(
+        retargets: readonly CommentFileRetarget[],
+    ): Promise<CommentFileRetargetResult>;
     deleteStoredComments(filePath: string): Promise<void>;
     deleteStoredCommentsInFolder(folderPath: string): Promise<void>;
     renamePublishedPublicArtifactPath(previousFilePath: string, nextFilePath: string): Promise<void>;
+    renamePublishedPublicArtifactPathsInFolder(
+        previousFolderPath: string,
+        nextFolderPath: string,
+    ): Promise<void>;
     deletePublishedPublicArtifactPath(filePath: string): Promise<void>;
     deletePublishedPublicArtifactPathsInFolder(folderPath: string): Promise<void>;
     clearParsedNoteCache(filePath: string): void;
@@ -37,6 +51,16 @@ export interface PluginLifecycleHost {
     clearTimer(timerId: number): void;
     warn(message: string, error: unknown): void;
     log?(level: "info" | "warn" | "error", area: string, event: string, payload?: Record<string, unknown>): Promise<void>;
+}
+
+export class FolderRenameError extends Error {
+    constructor(
+        message: string,
+        public readonly errors: unknown[],
+    ) {
+        super(message);
+        this.name = "FolderRenameError";
+    }
 }
 
 export class PluginLifecycleController {
@@ -156,18 +180,80 @@ export class PluginLifecycleController {
             return;
         }
 
-        const nextFolderPrefix = `${file.path}/`;
-        let renamedPageNote = false;
-        for (const renamedFile of this.collectFiles(file)) {
-            const relativePath = renamedFile.path.startsWith(nextFolderPrefix)
-                ? renamedFile.path.slice(nextFolderPrefix.length)
-                : renamedFile.path;
-            const previousFilePath = oldPath ? `${oldPath}/${relativePath}` : relativePath;
-            renamedPageNote = await this.applyFileRename(renamedFile, previousFilePath)
-                || renamedPageNote;
+        const renamedPageNoteFiles = this.collectFiles(file)
+            .map((renamedFile) => ({
+                renamedFile,
+                previousFilePath: retargetPathInFolder(renamedFile.path, file.path, oldPath),
+            }))
+            .filter((entry): entry is { renamedFile: TFile; previousFilePath: string } =>
+                entry.previousFilePath !== null
+                && this.host.isPageNoteCapableFile(entry.renamedFile));
+        const commentRetargets: CommentFileRetarget[] = await Promise.all(
+            renamedPageNoteFiles.map(async ({ renamedFile, previousFilePath }) => ({
+                previousFilePath,
+                nextFilePath: renamedFile.path,
+                retargetOptions: {
+                    selectionCapable: this.host.isCommentableFile(renamedFile),
+                    pageLabelHash: await this.host.hashText(getPageCommentLabel(renamedFile.path)),
+                },
+            })),
+        );
+
+        const [publishedResult, agentResult, scriptResult, commentsResult] = await Promise.allSettled([
+            this.host.renamePublishedPublicArtifactPathsInFolder(oldPath, file.path),
+            this.host.renameAgentRunsInFolder(oldPath, file.path),
+            this.host.renameScriptRunsInFolder(oldPath, file.path),
+            this.host.renameStoredCommentsInFolder(commentRetargets),
+        ]);
+        const successfulCommentRetargets = commentsResult.status === "fulfilled"
+            ? commentsResult.value.successfulRetargets
+            : [];
+        const failures: Array<{ path: string; error: unknown }> = [];
+        for (const [domain, result] of [
+            ["published paths", publishedResult],
+            ["agent runs", agentResult],
+            ["script runs", scriptResult],
+        ] as const) {
+            if (result.status === "rejected") {
+                failures.push({ path: domain, error: result.reason });
+            }
         }
-        if (renamedPageNote) {
-            await this.refreshAfterFileRename();
+        if (commentsResult.status === "rejected") {
+            failures.push({ path: "stored comments", error: commentsResult.reason });
+        } else {
+            failures.push(...commentsResult.value.failures.map((failure) => ({
+                path: failure.retarget.previousFilePath,
+                error: failure.error,
+            })));
+        }
+        for (const retarget of successfulCommentRetargets) {
+            try {
+                this.host.clearParsedNoteCache(retarget.previousFilePath);
+                this.host.clearParsedNoteCache(retarget.nextFilePath);
+                this.host.clearDerivedCommentLinksForFile(retarget.previousFilePath);
+            } catch (error) {
+                failures.push({ path: retarget.previousFilePath, error });
+            }
+        }
+        try {
+            this.host.getAggregateCommentIndex().renameFiles(successfulCommentRetargets);
+        } catch (error) {
+            failures.push({ path: "aggregate comment index", error });
+        }
+        if (commentRetargets.length > 0) {
+            try {
+                await this.refreshAfterFileRename();
+            } catch (error) {
+                failures.push({ path: "comment views", error });
+            }
+        }
+        if (failures.length > 0) {
+            throw new FolderRenameError(
+                `Folder rename left ${failures.length} repairable retarget failure(s): ${failures
+                    .map((failure) => failure.path)
+                    .join(", ")}`,
+                failures.map((failure) => failure.error),
+            );
         }
     }
 

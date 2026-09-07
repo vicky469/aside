@@ -82,21 +82,41 @@ type RoutedVaultEvent =
     | { kind: "rename"; file: TAbstractFile | null; oldPath: string }
     | { kind: "delete"; file: TAbstractFile | null };
 
+interface VaultEventQueue {
+    readonly epoch: number;
+    phase: VaultEventRoutingPhase;
+    readonly pending: RoutedVaultEvent[];
+    drain: Promise<void> | null;
+}
+
 export class PluginEventRouter {
     private vaultMaintenanceEventsRegistered = false;
-    private vaultEventRoutingPhase = VaultEventRoutingPhase.Buffering;
-    private readonly bufferedVaultEvents: RoutedVaultEvent[] = [];
-    private vaultEventReplay: Promise<void> | null = null;
+    private vaultEventEpoch = 0;
+    private vaultEventQueue = this.createVaultEventQueue();
 
     constructor(private readonly host: PluginEventRouterHost) {}
 
     public async register(): Promise<void> {
+        const epoch = this.vaultEventEpoch;
         this.registerVaultMaintenanceEvents();
-        await this.replayStartupVaultEvents();
-        await this.registerLayoutReady();
-        this.registerWorkspaceEvents();
-        this.registerVaultModifyEvent();
-        this.registerMetadataCacheEvents();
+        await this.activateVaultEventQueue(this.vaultEventQueue);
+        if (!this.isCurrentEpoch(epoch)) {
+            return;
+        }
+        await this.registerLayoutReady(epoch);
+        if (!this.isCurrentEpoch(epoch)) {
+            return;
+        }
+        this.registerWorkspaceEvents(epoch);
+        this.registerVaultModifyEvent(epoch);
+        this.registerMetadataCacheEvents(epoch);
+    }
+
+    public resetForReload(): void {
+        this.vaultEventQueue.pending.length = 0;
+        this.vaultEventEpoch += 1;
+        this.vaultMaintenanceEventsRegistered = false;
+        this.vaultEventQueue = this.createVaultEventQueue();
     }
 
     public registerVaultMaintenanceEvents(): void {
@@ -105,72 +125,111 @@ export class PluginEventRouter {
         }
 
         this.vaultMaintenanceEventsRegistered = true;
+        const epoch = this.vaultEventEpoch;
         this.host.registerEvent(
             this.host.app.vault.on("create", (file) => {
+                if (!this.isCurrentEpoch(epoch)) {
+                    return;
+                }
                 const createdFile = isTAbstractFile(file) ? file : null;
                 this.host.handleFileCreateMaintenance(createdFile);
                 this.routeVaultEvent({
                     kind: "create",
                     file: createdFile ? snapshotEventFile(createdFile) : null,
-                });
+                }, epoch);
             }),
         );
         this.host.registerEvent(
             this.host.app.vault.on("rename", (file, oldPath) => {
+                if (!this.isCurrentEpoch(epoch)) {
+                    return;
+                }
                 const renamedFile = isTAbstractFile(file) ? file : null;
                 this.host.handleFileRenameMaintenance(renamedFile, oldPath);
                 this.routeVaultEvent({
                     kind: "rename",
                     file: renamedFile ? snapshotEventFile(renamedFile) : null,
                     oldPath,
-                });
+                }, epoch);
             }),
         );
         this.host.registerEvent(
             this.host.app.vault.on("delete", (file) => {
+                if (!this.isCurrentEpoch(epoch)) {
+                    return;
+                }
                 const deletedFile = isTAbstractFile(file) ? file : null;
                 this.host.handleFileDeleteMaintenance(deletedFile);
                 this.routeVaultEvent({
                     kind: "delete",
                     file: deletedFile ? snapshotEventFile(deletedFile) : null,
-                });
+                }, epoch);
             }),
         );
     }
 
-    private replayStartupVaultEvents(): Promise<void> {
-        if (this.vaultEventRoutingPhase === VaultEventRoutingPhase.Live) {
+    private createVaultEventQueue(): VaultEventQueue {
+        return {
+            epoch: this.vaultEventEpoch,
+            phase: VaultEventRoutingPhase.Buffering,
+            pending: [],
+            drain: null,
+        };
+    }
+
+    private activateVaultEventQueue(queue: VaultEventQueue): Promise<void> {
+        if (queue !== this.vaultEventQueue || queue.phase === VaultEventRoutingPhase.Live) {
             return Promise.resolve();
         }
-        if (this.vaultEventRoutingPhase === VaultEventRoutingPhase.Replaying) {
-            return this.vaultEventReplay ?? Promise.resolve();
+        if (queue.phase === VaultEventRoutingPhase.Replaying) {
+            return queue.drain ?? Promise.resolve();
         }
 
-        this.vaultEventRoutingPhase = VaultEventRoutingPhase.Replaying;
-        this.vaultEventReplay = this.drainBufferedVaultEvents();
-        return this.vaultEventReplay;
+        queue.phase = VaultEventRoutingPhase.Replaying;
+        return this.startVaultEventDrain(queue);
     }
 
-    private async drainBufferedVaultEvents(): Promise<void> {
-        let event = this.bufferedVaultEvents.shift();
-        while (event) {
-            await this.runVaultEvent(event);
-            event = this.bufferedVaultEvents.shift();
+    private startVaultEventDrain(queue: VaultEventQueue): Promise<void> {
+        if (queue.drain) {
+            return queue.drain;
         }
-        this.vaultEventRoutingPhase = VaultEventRoutingPhase.Live;
+
+        const drain = Promise.resolve().then(() => this.drainVaultEvents(queue));
+        queue.drain = drain;
+        return drain;
     }
 
-    private routeVaultEvent(event: RoutedVaultEvent): void {
-        if (this.vaultEventRoutingPhase !== VaultEventRoutingPhase.Live) {
-            this.bufferedVaultEvents.push(event);
+    private async drainVaultEvents(queue: VaultEventQueue): Promise<void> {
+        while (queue === this.vaultEventQueue) {
+            const event = queue.pending.shift();
+            if (!event) {
+                queue.drain = null;
+                queue.phase = VaultEventRoutingPhase.Live;
+                return;
+            }
+
+            await this.runVaultEvent(event, queue);
+        }
+    }
+
+    private routeVaultEvent(event: RoutedVaultEvent, epoch: number): void {
+        const queue = this.vaultEventQueue;
+        if (queue.epoch !== epoch) {
             return;
         }
 
-        this.dispatchAsyncEvent(`vault:${event.kind}`, () => this.handleVaultEvent(event));
+        queue.pending.push(event);
+        if (queue.phase === VaultEventRoutingPhase.Live) {
+            void this.startVaultEventDrain(queue);
+        }
     }
 
-    private async runVaultEvent(event: RoutedVaultEvent): Promise<void> {
-        await this.runAsyncEvent(`vault:${event.kind}`, () => this.handleVaultEvent(event));
+    private async runVaultEvent(event: RoutedVaultEvent, queue: VaultEventQueue): Promise<void> {
+        await this.runAsyncEvent(
+            `vault:${event.kind}`,
+            () => this.handleVaultEvent(event),
+            () => queue === this.vaultEventQueue,
+        );
     }
 
     private handleVaultEvent(event: RoutedVaultEvent): Promise<void> {
@@ -186,14 +245,32 @@ export class PluginEventRouter {
         }
     }
 
-    private dispatchAsyncEvent(eventName: AsyncPluginEventName, handler: () => void | Promise<void>): void {
-        void this.runAsyncEvent(eventName, handler);
+    private isCurrentEpoch(epoch: number): boolean {
+        return epoch === this.vaultEventEpoch;
     }
 
-    private async runAsyncEvent(eventName: AsyncPluginEventName, handler: () => void | Promise<void>): Promise<void> {
+    private dispatchAsyncEvent(
+        eventName: AsyncPluginEventName,
+        handler: () => void | Promise<void>,
+        epoch: number,
+    ): void {
+        if (!this.isCurrentEpoch(epoch)) {
+            return;
+        }
+        void this.runAsyncEvent(eventName, handler, () => this.isCurrentEpoch(epoch));
+    }
+
+    private async runAsyncEvent(
+        eventName: AsyncPluginEventName,
+        handler: () => void | Promise<void>,
+        shouldReportError: () => boolean = () => true,
+    ): Promise<void> {
         try {
             await handler();
         } catch (error) {
+            if (!shouldReportError()) {
+                return;
+            }
             try {
                 this.host.reportAsyncEventError(eventName, error);
             } catch {
@@ -202,52 +279,70 @@ export class PluginEventRouter {
         }
     }
 
-    private async registerLayoutReady(): Promise<void> {
+    private async registerLayoutReady(epoch: number): Promise<void> {
         if (this.host.app.workspace.layoutReady) {
-            await this.host.handleLayoutReady();
+            await this.runAsyncEvent(
+                "workspace:layout-ready",
+                () => this.host.handleLayoutReady(),
+                () => this.isCurrentEpoch(epoch),
+            );
             return;
         }
 
         this.host.app.workspace.onLayoutReady(() => {
-            this.dispatchAsyncEvent("workspace:layout-ready", () => this.host.handleLayoutReady());
+            this.dispatchAsyncEvent("workspace:layout-ready", () => this.host.handleLayoutReady(), epoch);
         });
     }
 
-    private registerWorkspaceEvents(): void {
+    private registerWorkspaceEvents(epoch: number): void {
         this.host.registerEvent(
             this.host.app.workspace.on("file-open", (file) => {
+                if (!this.isCurrentEpoch(epoch)) {
+                    return;
+                }
                 this.host.handleFileOpen(file);
             }),
         );
 
         this.host.registerEvent(
             this.host.app.workspace.on("active-leaf-change", (leaf) => {
+                if (!this.isCurrentEpoch(epoch)) {
+                    return;
+                }
                 this.host.handleActiveLeafChange(leaf);
             }),
         );
 
         this.host.registerEvent(
             this.host.app.workspace.on("editor-change", (_editor, info) => {
+                if (!this.isCurrentEpoch(epoch)) {
+                    return;
+                }
                 this.host.handleEditorChange(info?.file?.path);
             }),
         );
     }
 
-    private registerVaultModifyEvent(): void {
+    private registerVaultModifyEvent(epoch: number): void {
         this.host.registerEvent(
             this.host.app.vault.on("modify", (file) => {
                 this.dispatchAsyncEvent(
                     "vault:modify",
                     () => this.host.handleFileModify(this.host.isTFile(file) ? file : null),
+                    epoch,
                 );
             }),
         );
     }
 
-    private registerMetadataCacheEvents(): void {
+    private registerMetadataCacheEvents(epoch: number): void {
         this.host.registerEvent(
             this.host.app.metadataCache.on("resolved", () => {
-                this.dispatchAsyncEvent("metadata-cache:resolved", () => this.host.handleMetadataResolved());
+                this.dispatchAsyncEvent(
+                    "metadata-cache:resolved",
+                    () => this.host.handleMetadataResolved(),
+                    epoch,
+                );
             }),
         );
     }

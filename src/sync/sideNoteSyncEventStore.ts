@@ -36,6 +36,12 @@ export interface SideNoteSyncSnapshotInput {
     coveredNotePath?: string;
 }
 
+export interface SideNoteSyncEventBatchInput {
+    notePath: string;
+    inputs: SideNoteSyncEventInput[];
+    baseRevisionId?: string | null;
+}
+
 export interface SideNoteSyncEventStoreHost {
     readPersistedPluginData(): PersistedPluginData;
     readLatestPersistedPluginData?(): Promise<PersistedPluginData | null>;
@@ -498,6 +504,99 @@ export class SideNoteSyncEventStore {
 
         await this.writeState(state);
         return events.map((event) => cloneEvent(event));
+    }
+
+    public async appendLocalEventBatchesAndCompactSnapshots(
+        batches: readonly SideNoteSyncEventBatchInput[],
+        snapshots: readonly SideNoteSyncSnapshotInput[],
+    ): Promise<{ eventCount: number; removedEventCount: number; snapshotCount: number }> {
+        const nonEmptyBatches = batches.filter((batch) => batch.inputs.length > 0);
+        if (nonEmptyBatches.length === 0 && snapshots.length === 0) {
+            return {
+                eventCount: 0,
+                removedEventCount: 0,
+                snapshotCount: 0,
+            };
+        }
+
+        const cachedState = this.readState();
+        const latestPersistedData = await this.host.readLatestPersistedPluginData?.();
+        const state = latestPersistedData
+            ? mergeSideNoteSyncEventStates(
+                cachedState,
+                normalizeSideNoteSyncEventState(latestPersistedData.sideNoteSyncEventState),
+            )
+            : cachedState;
+        const deviceId = this.host.getDeviceId();
+        let deviceLog = state.deviceLogs[deviceId] ?? {
+            lastClock: 0,
+            events: [],
+        };
+        let eventCount = 0;
+        for (const batch of nonEmptyBatches) {
+            const noteHash = await this.host.hashText(batch.notePath);
+            const createdAt = this.host.now();
+            const startClock = deviceLog.lastClock + 1;
+            const events = batch.inputs.map((input, index): SideNoteSyncEvent => ({
+                schemaVersion: SIDE_NOTE_SYNC_EVENT_SCHEMA_VERSION,
+                eventId: this.host.createEventId(),
+                deviceId,
+                notePath: batch.notePath,
+                noteHash,
+                logicalClock: startClock + index,
+                baseRevisionId: batch.baseRevisionId ?? null,
+                createdAt,
+                op: input.op,
+                payload: input.payload,
+            }));
+            deviceLog = {
+                lastClock: startClock + events.length - 1,
+                events: deviceLog.events.concat(events.map((event) => cloneEvent(event))),
+            };
+            eventCount += events.length;
+        }
+        if (eventCount > 0) {
+            state.deviceLogs[deviceId] = deviceLog;
+            state.processedWatermarks[deviceId] = {
+                ...(state.processedWatermarks[deviceId] ?? {}),
+                [deviceId]: deviceLog.lastClock,
+            };
+        }
+
+        const compactableWatermarks = getCompactableWatermarks(state);
+        const now = this.host.now();
+        for (const snapshot of snapshots) {
+            const noteHash = await this.host.hashText(snapshot.coveredNotePath ?? snapshot.notePath);
+            state.noteSnapshots[noteHash] = {
+                notePath: snapshot.notePath,
+                noteHash,
+                updatedAt: now,
+                coveredWatermarks: { ...compactableWatermarks },
+                threads: cloneCommentThreads(snapshot.threads).map((thread) => ({
+                    ...thread,
+                    filePath: snapshot.notePath,
+                })),
+            };
+        }
+
+        state.compactedWatermarks = getNextCompactedWatermarks(state, compactableWatermarks);
+        let removedEventCount = 0;
+        for (const [eventDeviceId, log] of Object.entries(state.deviceLogs)) {
+            const compactedClock = state.compactedWatermarks[eventDeviceId] ?? 0;
+            const retainedEvents = log.events.filter((event) => event.logicalClock > compactedClock);
+            removedEventCount += log.events.length - retainedEvents.length;
+            state.deviceLogs[eventDeviceId] = {
+                ...log,
+                events: retainedEvents,
+            };
+        }
+
+        await this.writeState(state);
+        return {
+            eventCount,
+            removedEventCount,
+            snapshotCount: snapshots.length,
+        };
     }
 
     public getUnprocessedEvents(): SideNoteSyncEvent[] {

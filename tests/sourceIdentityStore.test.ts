@@ -44,6 +44,36 @@ test("source identity store records renames as current path plus aliases", async
     assert.equal(store.getRecordByPathIncludingAliases("books/original.md")?.sourceId, original.sourceId);
 });
 
+test("source identity store records a folder mapping with one persisted write", async () => {
+    let persistedData: PersistedPluginData = {};
+    let idCounter = 0;
+    let writeCount = 0;
+    const store = createStore({
+        read: () => persistedData,
+        write: async (data) => {
+            writeCount += 1;
+            persistedData = data;
+        },
+        createSourceId: () => `src-${++idCounter}`,
+    });
+    await store.ensureSourceForPath("Drafts/a.md", "fingerprint-a");
+    await store.ensureSourceForPath("Drafts/nested/b.md", "fingerprint-b");
+    writeCount = 0;
+
+    const records = await store.recordRenames([
+        { previousFilePath: "Drafts/a.md", nextFilePath: "Published/a.md" },
+        { previousFilePath: "Drafts/nested/b.md", nextFilePath: "Published/nested/b.md" },
+    ]);
+
+    assert.equal(writeCount, 1);
+    assert.deepEqual(records.map((record) => record.currentPath), [
+        "Published/a.md",
+        "Published/nested/b.md",
+    ]);
+    assert.equal(store.getRecordByPathIncludingAliases("Drafts/a.md")?.currentPath, "Published/a.md");
+    assert.equal(store.getRecordByPathIncludingAliases("Drafts/nested/b.md")?.currentPath, "Published/nested/b.md");
+});
+
 test("source identity state merge preserves aliases and indexes only current paths", () => {
     const left: SourceIdentityState = {
         schemaVersion: 1,

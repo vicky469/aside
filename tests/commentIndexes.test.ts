@@ -78,6 +78,40 @@ test("AggregateCommentIndex updates, renames, deletes, and returns cloned commen
     assert.equal(index.getCommentById("missing"), null);
 });
 
+test("AggregateCommentIndex batches folder retargets into one version update", () => {
+    const index = new AggregateCommentIndex();
+    index.updateFile("Drafts/a.md", [createComment({ filePath: "Drafts/a.md", id: "a" })]);
+    index.updateFile("Drafts/b.pdf", [createComment({
+        filePath: "Drafts/b.pdf",
+        id: "b",
+        anchorKind: "page",
+        selectedText: "b",
+    })]);
+    const versionBeforeRename = index.getVersion();
+
+    index.renameFiles([{
+        previousFilePath: "Drafts/a.md",
+        nextFilePath: "Published/a.md",
+        retargetOptions: { selectionCapable: true, pageLabelHash: "hash-a" },
+    }, {
+        previousFilePath: "Drafts/b.pdf",
+        nextFilePath: "Published/Renamed B.pdf",
+        retargetOptions: { selectionCapable: false, pageLabelHash: "hash-renamed-b" },
+    }]);
+
+    assert.equal(index.getVersion(), versionBeforeRename + 1);
+    assert.equal(index.getCommentById("a")?.filePath, "Published/a.md");
+    assert.deepEqual({
+        filePath: index.getCommentById("b")?.filePath,
+        selectedText: index.getCommentById("b")?.selectedText,
+        selectedTextHash: index.getCommentById("b")?.selectedTextHash,
+    }, {
+        filePath: "Published/Renamed B.pdf",
+        selectedText: "Renamed B",
+        selectedTextHash: "hash-renamed-b",
+    });
+});
+
 test("AggregateCommentIndex deletes every cached file under a folder path", () => {
     const index = new AggregateCommentIndex();
     index.updateFile("Deleted/a.md", [createComment({ filePath: "Deleted/a.md", id: "deleted-a" })]);

@@ -9,6 +9,7 @@ import type {
     PersistedPluginDataUpdater,
 } from "../settings/indexNoteSettingsPlanner";
 import { resolveSourceIdentityCurrentPath } from "../sync/sourceIdentityStore";
+import { retargetPathInFolder } from "../core/files/pathScope";
 import {
     clonePersistedAgentRuns,
     mergePersistedAgentRunsPreservingActive,
@@ -158,6 +159,39 @@ export class AgentRunStore {
                 };
             });
 
+            if (!changed) {
+                return false;
+            }
+
+            await this.persist(nextRuns);
+            this.runs = nextRuns;
+            return true;
+        });
+    }
+
+    public async renameFolder(previousFolderPath: string, nextFolderPath: string): Promise<boolean> {
+        if (previousFolderPath === nextFolderPath) {
+            return false;
+        }
+
+        return this.enqueueMutation(async () => {
+            let changed = false;
+            const nextRuns = this.runs.map((run) => {
+                const nextFilePath = retargetPathInFolder(
+                    run.filePath,
+                    previousFolderPath,
+                    nextFolderPath,
+                );
+                if (!nextFilePath) {
+                    return run;
+                }
+
+                changed = true;
+                return {
+                    ...run,
+                    filePath: nextFilePath,
+                };
+            });
             if (!changed) {
                 return false;
             }

@@ -95,6 +95,7 @@ import {
 	removePublishedPublicArtifactPath,
 	removePublishedPublicArtifactPathsInFolder,
 	renamePublishedPublicArtifactPath as renamePublishedPublicArtifactPathInList,
+	renamePublishedPublicArtifactPathsInFolder as renamePublishedPublicArtifactPathsInFolderInList,
 } from "./core/publish/publishedPublicArtifacts";
 import {
     resolvePublicHtmlPairContext,
@@ -687,13 +688,21 @@ export default class Aside extends Plugin {
             this.agentRunStore.renameFile(previousFilePath, nextFilePath),
         renameScriptRuns: (previousFilePath, nextFilePath) =>
             this.scriptRunStore.renameFile(previousFilePath, nextFilePath),
+        renameAgentRunsInFolder: (previousFolderPath, nextFolderPath) =>
+            this.agentRunStore.renameFolder(previousFolderPath, nextFolderPath),
+        renameScriptRunsInFolder: (previousFolderPath, nextFolderPath) =>
+            this.scriptRunStore.renameFolder(previousFolderPath, nextFolderPath),
         renameStoredComments: (previousFilePath, nextFilePath, retargetOptions) =>
             this.commentPersistenceController.renameStoredComments(previousFilePath, nextFilePath, retargetOptions),
+        renameStoredCommentsInFolder: (retargets) =>
+            this.commentPersistenceController.renameStoredCommentsInFolder(retargets),
         deleteStoredComments: (filePath) => this.commentPersistenceController.deleteStoredComments(filePath),
         deleteStoredCommentsInFolder: (folderPath) =>
             this.commentPersistenceController.deleteStoredCommentsInFolder(folderPath),
         renamePublishedPublicArtifactPath: (previousFilePath, nextFilePath) =>
             this.renamePublishedPublicArtifactPath(previousFilePath, nextFilePath),
+        renamePublishedPublicArtifactPathsInFolder: (previousFolderPath, nextFolderPath) =>
+            this.renamePublishedPublicArtifactPathsInFolder(previousFolderPath, nextFolderPath),
         deletePublishedPublicArtifactPath: (filePath) => this.deletePublishedPublicArtifactPath(filePath),
         deletePublishedPublicArtifactPathsInFolder: (folderPath) =>
             this.deletePublishedPublicArtifactPathsInFolder(folderPath),
@@ -944,6 +953,7 @@ export default class Aside extends Plugin {
 
     onunload() {
         this.unloaded = true;
+        this.pluginEventRouter.resetForReload();
         void this.logEvent("info", "startup", "startup.unload");
         disposeAgentRuntimeProcesses();
         this.updateScriptCommandController.dispose();
@@ -1123,6 +1133,18 @@ export default class Aside extends Plugin {
             this.settings.publishedPublicArtifactPaths,
             previousFilePath,
             nextFilePath,
+            this.settings.publishAllowedRoot,
+        ));
+    }
+
+    private async renamePublishedPublicArtifactPathsInFolder(
+        previousFolderPath: string,
+        nextFolderPath: string,
+    ): Promise<void> {
+        await this.updatePublishedPublicArtifactPaths(renamePublishedPublicArtifactPathsInFolderInList(
+            this.settings.publishedPublicArtifactPaths,
+            previousFolderPath,
+            nextFolderPath,
             this.settings.publishAllowedRoot,
         ));
     }

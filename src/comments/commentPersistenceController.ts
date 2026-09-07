@@ -41,6 +41,11 @@ import {
     retargetCommentThreads,
     type CommentThreadRetargetOptions,
 } from "../domain/comments/commentThreadRetarget";
+import type {
+    CommentFileRetarget,
+    CommentFileRetargetFailure,
+    CommentFileRetargetResult,
+} from "../domain/comments/folderCommentRetarget";
 
 type PersistOptions = {
     immediateAggregateRefresh?: boolean;
@@ -723,6 +728,161 @@ export class CommentPersistenceController {
         await this.enqueueCommentPersistence([previousFilePath, nextFilePath], async () => {
             await this.renameStoredCommentsNow(previousFilePath, nextFilePath, retargetOptions);
         });
+    }
+
+    public async renameStoredCommentsInFolder(
+        retargets: readonly CommentFileRetarget[],
+    ): Promise<CommentFileRetargetResult> {
+        let result: CommentFileRetargetResult = {
+            successfulRetargets: [],
+            failures: [],
+        };
+        await this.enqueueCommentPersistence(
+            retargets.flatMap((retarget) => [retarget.previousFilePath, retarget.nextFilePath]),
+            async () => {
+                result = await this.renameStoredCommentsInFolderNow(retargets);
+            },
+        );
+        return result;
+    }
+
+    private async renameStoredCommentsInFolderNow(
+        retargets: readonly CommentFileRetarget[],
+    ): Promise<CommentFileRetargetResult> {
+        if (retargets.length === 0) {
+            return {
+                successfulRetargets: [],
+                failures: [],
+            };
+        }
+
+        // This is deliberately reconcilable rather than one filesystem transaction:
+        // identities commit once, every sidecar gets an independent attempt, and only
+        // successful sidecars enter the single sync-state commit and in-memory retarget.
+        // Replaying the same mapping can therefore finish any failed descendant.
+        const preparedRetargets = await Promise.allSettled(retargets.map(async (retarget) => {
+            const sourceRecord = this.sourceIdentityStore.getRecordByPathIncludingAliases(retarget.previousFilePath)
+                ?? this.sourceIdentityStore.getRecordByPathIncludingAliases(retarget.nextFilePath);
+            const sourceSidecarExists = sourceRecord
+                ? await this.sidecarStorage.existsForSource(sourceRecord.sourceId)
+                : false;
+            const sourceThreads = sourceRecord
+                ? await this.sidecarStorage.readForSource(sourceRecord.sourceId, retarget.previousFilePath)
+                : null;
+            if (sourceSidecarExists && sourceThreads === null) {
+                throw new Error(`Unreadable source sidecar for ${retarget.previousFilePath}`);
+            }
+
+            const previousPathSidecarExists = await this.sidecarStorage.exists(retarget.previousFilePath);
+            const previousPathThreads = sourceThreads ?? await this.sidecarStorage.read(retarget.previousFilePath);
+            if (!sourceThreads && previousPathSidecarExists && previousPathThreads === null) {
+                throw new Error(`Unreadable path sidecar for ${retarget.previousFilePath}`);
+            }
+
+            const nextPathSidecarExists = previousPathThreads === null
+                ? await this.sidecarStorage.exists(retarget.nextFilePath)
+                : false;
+            const nextPathThreads = previousPathThreads === null
+                ? await this.sidecarStorage.read(retarget.nextFilePath)
+                : null;
+            if (nextPathSidecarExists && nextPathThreads === null) {
+                throw new Error(`Unreadable path sidecar for ${retarget.nextFilePath}`);
+            }
+            return previousPathThreads ?? nextPathThreads;
+        }));
+        const sourceRecords = await this.sourceIdentityStore.recordRenames(retargets);
+        const failures: CommentFileRetargetFailure[] = [];
+        const successfulItems: Array<{
+            retarget: CommentFileRetarget;
+            sourceId: string;
+            threads: CommentThread[];
+        }> = [];
+        for (const [index, retarget] of retargets.entries()) {
+            try {
+                const prepared = preparedRetargets[index];
+                if (!prepared || prepared.status === "rejected") {
+                    throw prepared?.reason ?? new Error(`Missing rename preparation for ${retarget.previousFilePath}`);
+                }
+                const sourceRecord = sourceRecords[index];
+                if (!sourceRecord) {
+                    throw new Error(`Missing source identity for ${retarget.nextFilePath}`);
+                }
+
+                const previousThreads = prepared.value;
+                const retargetedThreads = previousThreads && previousThreads.length > 0
+                    ? await this.retargetThreads(
+                        previousThreads,
+                        retarget.nextFilePath,
+                        retarget.retargetOptions,
+                    )
+                    : [];
+                if (retargetedThreads.length > 0) {
+                    await this.writeSourceAndPathSidecars(
+                        sourceRecord.sourceId,
+                        retarget.nextFilePath,
+                        retargetedThreads,
+                    );
+                    await this.sidecarStorage.remove(retarget.previousFilePath);
+                } else if (previousThreads !== null) {
+                    await this.sidecarStorage.remove(retarget.previousFilePath);
+                }
+                successfulItems.push({
+                    retarget,
+                    sourceId: sourceRecord.sourceId,
+                    threads: retargetedThreads,
+                });
+            } catch (error) {
+                failures.push({ retarget, error });
+            }
+        }
+        const syncedItems = successfulItems.filter((item) => item.threads.length > 0);
+        if (syncedItems.length > 0) {
+            try {
+                const compacted = await this.syncEventStore.appendLocalEventBatchesAndCompactSnapshots(
+                    syncedItems.map((item) => ({
+                        notePath: item.retarget.previousFilePath,
+                        inputs: [{
+                            op: "renameSource",
+                            payload: {
+                                sourceId: item.sourceId,
+                                previousPath: item.retarget.previousFilePath,
+                                nextPath: item.retarget.nextFilePath,
+                                previousNotePath: item.retarget.previousFilePath,
+                                nextNotePath: item.retarget.nextFilePath,
+                            },
+                        }],
+                    })),
+                    syncedItems.flatMap((item) => [{
+                        notePath: item.retarget.nextFilePath,
+                        coveredNotePath: item.retarget.previousFilePath,
+                        threads: item.threads,
+                    }, {
+                        notePath: item.retarget.nextFilePath,
+                        threads: item.threads,
+                    }]),
+                );
+                void this.host.log?.("info", "persistence", "sync.plugin-data.compact", {
+                    removedEventCount: compacted.removedEventCount,
+                    snapshotCount: compacted.snapshotCount,
+                });
+            } catch (error) {
+                for (const item of successfulItems) {
+                    failures.push({ retarget: item.retarget, error });
+                }
+                return {
+                    successfulRetargets: [],
+                    failures,
+                };
+            }
+        }
+
+        this.host.getCommentManager().renameFiles(
+            successfulItems.map((item) => item.retarget),
+        );
+        return {
+            successfulRetargets: successfulItems.map((item) => item.retarget),
+            failures,
+        };
     }
 
     private hasKnownCommentsForDeletedFile(filePath: string, previousThreads: CommentThread[] | null): boolean {

@@ -26,6 +26,12 @@ export interface SourceIdentityStoreHost {
     now(): number;
 }
 
+export interface SourceIdentityPathRetarget {
+    previousFilePath: string;
+    nextFilePath: string;
+    contentFingerprint?: string | null;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
     return !!value && typeof value === "object" && !Array.isArray(value);
 }
@@ -360,33 +366,76 @@ export class SourceIdentityStore {
         nextPath: string,
         contentFingerprint: string | null = null,
     ): Promise<SourceIdentityRecord> {
-        const state = this.readState();
-        const sourceId = getSourceIdByPathIncludingAliases(state, previousPath)
-            ?? getSourceIdByPathIncludingAliases(state, nextPath);
-        if (sourceId && state.sources[sourceId]) {
-            const record = state.sources[sourceId];
-            const nextRecord = this.buildUpdatedRecord(record, {
-                currentPath: nextPath,
-                aliases: [...record.aliases, previousPath, record.currentPath].filter((path) => path !== nextPath),
-                contentFingerprint: contentFingerprint ?? record.contentFingerprint,
-            });
-            state.sources[sourceId] = nextRecord;
-            await this.writeState(state);
-            return cloneRecord(nextRecord);
+        const [record] = await this.recordRenames([{
+            previousFilePath: previousPath,
+            nextFilePath: nextPath,
+            contentFingerprint,
+        }]);
+        if (!record) {
+            throw new Error("Source identity rename did not produce a record.");
+        }
+        return record;
+    }
+
+    public async recordRenames(
+        retargets: readonly SourceIdentityPathRetarget[],
+    ): Promise<SourceIdentityRecord[]> {
+        if (retargets.length === 0) {
+            return [];
         }
 
-        const now = this.host.now();
-        const record: SourceIdentityRecord = {
-            sourceId: this.host.createSourceId(),
-            currentPath: nextPath,
-            aliases: previousPath === nextPath ? [] : [previousPath],
-            contentFingerprint,
-            createdAt: now,
-            updatedAt: now,
-        };
-        state.sources[record.sourceId] = record;
-        await this.writeState(state);
-        return cloneRecord(record);
+        const latestPersistedData = await this.host.readLatestPersistedPluginData?.()
+            ?? this.host.readPersistedPluginData();
+        const latestState = normalizeSourceIdentityState(latestPersistedData.sourceIdentityState);
+        const state = mergeSourceIdentityStates(
+            this.readState(),
+            latestState,
+        );
+        const records: SourceIdentityRecord[] = [];
+        let changed = !areStatesEqual(latestState, state);
+        for (const retarget of retargets) {
+            const previousPath = retarget.previousFilePath;
+            const nextPath = retarget.nextFilePath;
+            const sourceId = getSourceIdByPathIncludingAliases(state, previousPath)
+                ?? getSourceIdByPathIncludingAliases(state, nextPath);
+            if (sourceId && state.sources[sourceId]) {
+                const record = state.sources[sourceId];
+                const nextRecord = this.buildUpdatedRecord(record, {
+                    currentPath: nextPath,
+                    aliases: [...record.aliases, previousPath, record.currentPath]
+                        .filter((path) => path !== nextPath),
+                    contentFingerprint: retarget.contentFingerprint ?? record.contentFingerprint,
+                });
+                state.sources[sourceId] = nextRecord;
+                records.push(cloneRecord(nextRecord));
+                changed = !areRecordsEqual(record, nextRecord) || changed;
+                continue;
+            }
+
+            const now = this.host.now();
+            const record: SourceIdentityRecord = {
+                sourceId: this.host.createSourceId(),
+                currentPath: nextPath,
+                aliases: previousPath === nextPath ? [] : [previousPath],
+                contentFingerprint: retarget.contentFingerprint ?? null,
+                createdAt: now,
+                updatedAt: now,
+            };
+            state.sources[record.sourceId] = record;
+            records.push(cloneRecord(record));
+            changed = true;
+        }
+
+        if (changed) {
+            await this.host.writePersistedPluginData({
+                ...latestPersistedData,
+                sourceIdentityState: cloneState({
+                    ...state,
+                    pathToSourceId: rebuildPathIndex(state.sources),
+                }),
+            });
+        }
+        return records;
     }
 
     public async attachPathToSource(

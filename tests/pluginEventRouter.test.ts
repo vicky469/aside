@@ -56,6 +56,7 @@ async function settleAsyncDispatch(): Promise<void> {
 
 function createHarness(options: {
     layoutReady?: boolean;
+    handleLayoutReady?: () => void | Promise<void>;
     handleFileCreate?: (file: TFile | null) => void | Promise<void>;
     handleFileRename?: (file: TAbstractFile | null, oldPath: string) => void | Promise<void>;
     handleFileDelete?: (file: TAbstractFile | null) => void | Promise<void>;
@@ -130,6 +131,7 @@ function createHarness(options: {
         },
         handleLayoutReady: async () => {
             calls.push("layout-ready");
+            await options.handleLayoutReady?.();
         },
         handleFileOpen: (file: TFile | null) => {
             calls.push(`file-open:${file?.path ?? "null"}`);
@@ -492,12 +494,12 @@ test("plugin event router exposes Obsidian event flow in one module", async () =
         "file-open:docs/a.md",
         "active-leaf-change:leaf",
         "editor-change:docs/a.md",
+        "modify:docs/a.md",
+        "metadata-resolved",
         "create:docs/a.md",
         "create:null",
         "rename:docs/old.md->docs/a.md",
         "delete:docs/a.md",
-        "modify:docs/a.md",
-        "metadata-resolved",
     ]);
 });
 
@@ -553,6 +555,89 @@ test("plugin event router drains startup events in order without losing an event
         "rename:docs/one.md->docs/two.md",
         "delete:docs/two.md",
         "create:docs/live.md",
+    ]);
+});
+
+test("plugin event router serializes live rename then delete and continues after a failure", async () => {
+    const renameStarted = createDeferred<void>();
+    const releaseRename = createDeferred<void>();
+    const failure = new Error("rename failed after persistence");
+    const lifecycleOrder: string[] = [];
+    const harness = createHarness({
+        handleFileRename: async (file, oldPath) => {
+            lifecycleOrder.push(`rename:start:${oldPath}->${file?.path ?? "null"}`);
+            renameStarted.resolve(undefined);
+            await releaseRename.promise;
+            lifecycleOrder.push(`rename:finish:${file?.path ?? "null"}`);
+            throw failure;
+        },
+        handleFileDelete: (file) => {
+            lifecycleOrder.push(`delete:${file?.path ?? "null"}`);
+        },
+    });
+    await harness.router.register();
+
+    const renamed = createFile("docs/B.md");
+    assert.equal(harness.vaultHandlers.get("rename")?.(renamed, "docs/A.md"), undefined);
+    assert.equal(harness.vaultHandlers.get("delete")?.(renamed), undefined);
+    await renameStarted.promise;
+
+    assert.deepEqual(lifecycleOrder, ["rename:start:docs/A.md->docs/B.md"]);
+
+    releaseRename.resolve(undefined);
+    await settleAsyncDispatch();
+
+    assert.deepEqual(lifecycleOrder, [
+        "rename:start:docs/A.md->docs/B.md",
+        "rename:finish:docs/B.md",
+        "delete:docs/B.md",
+    ]);
+    assert.deepEqual(harness.reportedErrors, [{
+        eventName: "vault:rename",
+        error: failure,
+    }]);
+});
+
+test("plugin event router resets startup buffering and ignores stale callbacks and drains", async () => {
+    const oldRenameStarted = createDeferred<void>();
+    const releaseOldRename = createDeferred<void>();
+    const harness = createHarness({
+        handleFileRename: async (_file, oldPath) => {
+            if (oldPath === "old/A.md") {
+                oldRenameStarted.resolve(undefined);
+                await releaseOldRename.promise;
+            }
+        },
+    });
+
+    await harness.router.register();
+    const staleRenameCallback = harness.vaultHandlers.get("rename");
+    const staleDeleteCallback = harness.vaultHandlers.get("delete");
+    staleRenameCallback?.(createFile("old/B.md"), "old/A.md");
+    await oldRenameStarted.promise;
+    staleDeleteCallback?.(createFile("old/B.md"));
+
+    harness.router.resetForReload();
+    harness.router.registerVaultMaintenanceEvents();
+    assert.equal(harness.vaultRegistrationCounts.get("rename"), 2);
+    const currentRenameCallback = harness.vaultHandlers.get("rename");
+
+    staleRenameCallback?.(createFile("stale/B.md"), "stale/A.md");
+    currentRenameCallback?.(createFile("new/B.md"), "new/A.md");
+    releaseOldRename.resolve(undefined);
+    await settleAsyncDispatch();
+
+    assert.deepEqual(harness.maintenanceCalls, [
+        "rename:old/A.md->old/B.md",
+        "delete:old/B.md",
+        "rename:new/A.md->new/B.md",
+    ]);
+    assert.deepEqual(harness.calls, ["rename:old/A.md->old/B.md"]);
+
+    await harness.router.register();
+    assert.deepEqual(harness.calls, [
+        "rename:old/A.md->old/B.md",
+        "rename:new/A.md->new/B.md",
     ]);
 });
 
@@ -616,4 +701,28 @@ test("plugin event router preserves immediate and deferred layout-ready handling
     assert.deepEqual(deferredHarness.calls, []);
     await deferredHarness.getLayoutReadyHandler()?.();
     assert.deepEqual(deferredHarness.calls, ["layout-ready"]);
+});
+
+test("plugin event router reports immediate layout-ready failures and finishes registration", async () => {
+    const failure = new Error("layout failed");
+    const harness = createHarness({
+        layoutReady: true,
+        handleLayoutReady: async () => {
+            throw failure;
+        },
+    });
+
+    await harness.router.register();
+
+    assert.deepEqual(harness.reportedErrors, [{
+        eventName: "workspace:layout-ready",
+        error: failure,
+    }]);
+    assert.deepEqual(Array.from(harness.workspaceHandlers.keys()), [
+        "file-open",
+        "active-leaf-change",
+        "editor-change",
+    ]);
+    assert.equal(harness.vaultHandlers.has("modify"), true);
+    assert.deepEqual(Array.from(harness.metadataCacheHandlers.keys()), ["resolved"]);
 });

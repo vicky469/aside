@@ -220,6 +220,37 @@ test("ScriptRunStore mutates through immutable replacements and preserves other 
     assert.equal(persistedData.agentRuns, retainedAgentRuns);
 });
 
+test("ScriptRunStore retargets every folder descendant with one persisted write", async () => {
+    let persistedData: PersistedPluginData = {
+        scriptRuns: [
+            createRun({ id: "a", filePath: "Drafts/a.md" }),
+            createRun({ id: "b", filePath: "Drafts/nested/b.md" }),
+            createRun({ id: "keep", filePath: "Draftsness/keep.md" }),
+        ],
+    };
+    let writeCount = 0;
+    const store = new ScriptRunStore({
+        readPersistedPluginData: () => persistedData,
+        updatePersistedPluginData: async (updater) => {
+            writeCount += 1;
+            persistedData = updater({ ...persistedData });
+            return { ...persistedData };
+        },
+    });
+    store.load();
+
+    assert.equal(await store.renameFolder("Drafts", "Published"), true);
+
+    assert.equal(writeCount, 1);
+    assert.deepEqual(store.getRuns().map((run) => run.filePath), [
+        "Published/a.md",
+        "Published/nested/b.md",
+        "Draftsness/keep.md",
+    ]);
+    assert.equal(await store.renameFolder("Missing", "Other"), false);
+    assert.equal(writeCount, 1);
+});
+
 test("ScriptRunStore serializes overlapping adds and snapshots caller input before awaiting", async () => {
     let releaseFirstSave = () => {};
     let persistedData: PersistedPluginData = {};

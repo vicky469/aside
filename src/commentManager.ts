@@ -40,6 +40,7 @@ import {
     retargetCommentThreads,
     type CommentThreadRetargetOptions,
 } from "./domain/comments/commentThreadRetarget";
+import type { CommentFileRetarget } from "./domain/comments/folderCommentRetarget";
 
 export type {
     CommentAnchorKind,
@@ -608,15 +609,34 @@ export class CommentManager {
     }
 
     renameFile(oldPath: string, newPath: string, options: CommentThreadRetargetOptions) {
-        const renamedThreads = this.threads.filter((thread) => thread.filePath === oldPath);
-        if (!renamedThreads.length) {
-            return;
-        }
+        this.renameFiles([{
+            previousFilePath: oldPath,
+            nextFilePath: newPath,
+            retargetOptions: options,
+        }]);
+    }
 
-        const retargetedThreads = retargetCommentThreads(renamedThreads, newPath, options);
-        let retargetedIndex = 0;
-        this.setThreads(this.threads.map((thread) =>
-            thread.filePath === oldPath ? retargetedThreads[retargetedIndex++] : thread));
+    renameFiles(retargets: readonly CommentFileRetarget[]) {
+        const retargetByPreviousPath = new Map(
+            retargets.map((retarget) => [retarget.previousFilePath, retarget]),
+        );
+        let changed = false;
+        const nextThreads = this.threads.map((thread) => {
+            const retarget = retargetByPreviousPath.get(thread.filePath);
+            if (!retarget) {
+                return thread;
+            }
+
+            changed = true;
+            return retargetCommentThreads(
+                [thread],
+                retarget.nextFilePath,
+                retarget.retargetOptions,
+            )[0] ?? thread;
+        });
+        if (changed) {
+            this.setThreads(nextThreads);
+        }
     }
 
     async updateCommentCoordinatesForFile(fileContent: string, filePath: string): Promise<void> {

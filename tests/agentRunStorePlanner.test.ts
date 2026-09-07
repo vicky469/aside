@@ -229,6 +229,37 @@ test("AgentRunStore snapshots add input and leaves memory unchanged when persist
     assert.deepEqual(store.getRuns().map((run) => run.id), ["saved-run"]);
 });
 
+test("AgentRunStore retargets every folder descendant with one persisted write", async () => {
+    let persistedData: PersistedPluginData = {
+        agentRuns: [
+            createRun({ id: "a", filePath: "Drafts/a.md" }),
+            createRun({ id: "b", filePath: "Drafts/nested/b.md" }),
+            createRun({ id: "keep", filePath: "Draftsness/keep.md" }),
+        ],
+    };
+    let writeCount = 0;
+    const store = new AgentRunStore({
+        readPersistedPluginData: () => persistedData,
+        updatePersistedPluginData: async (updater) => {
+            writeCount += 1;
+            persistedData = updater({ ...persistedData });
+            return { ...persistedData };
+        },
+    });
+    store.load();
+
+    assert.equal(await store.renameFolder("Drafts", "Published"), true);
+
+    assert.equal(writeCount, 1);
+    assert.deepEqual(store.getRuns().map((run) => run.filePath), [
+        "Published/a.md",
+        "Published/nested/b.md",
+        "Draftsness/keep.md",
+    ]);
+    assert.equal(await store.renameFolder("Missing", "Other"), false);
+    assert.equal(writeCount, 1);
+});
+
 test("AgentRunStore preserves active local runs across external reloads", async () => {
     let persistedData: PersistedPluginData = {
         agentRuns: [createRun({

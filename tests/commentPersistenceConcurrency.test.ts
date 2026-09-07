@@ -10,6 +10,7 @@ import type { PersistedPluginData } from "../src/settings/indexNoteSettingsPlann
 class CollisionAwareAdapter implements Pick<DataAdapter, "exists" | "mkdir" | "write" | "read" | "remove" | "rename" | "list"> {
     public readonly directories = new Set<string>();
     public readonly files = new Map<string, string>();
+    public failNextWriteContaining: string | null = null;
 
     async exists(normalizedPath: string): Promise<boolean> {
         return this.directories.has(normalizedPath) || this.files.has(normalizedPath);
@@ -20,6 +21,10 @@ class CollisionAwareAdapter implements Pick<DataAdapter, "exists" | "mkdir" | "w
     }
 
     async write(normalizedPath: string, data: string): Promise<void> {
+        if (this.failNextWriteContaining && normalizedPath.includes(this.failNextWriteContaining)) {
+            this.failNextWriteContaining = null;
+            throw new Error(`Injected sidecar write failure: ${normalizedPath}`);
+        }
         this.files.set(normalizedPath, data);
     }
 
@@ -138,6 +143,7 @@ function createHarness(files: TFile[], threads: CommentThread[]) {
     const commentManager = new CommentManager(threads);
     const aggregateCommentIndex = new AggregateCommentIndex();
     let persistedData: PersistedPluginData = {};
+    let persistedWriteCount = 0;
     let nextId = 0;
     const noteBody = "# Title\n\nAlpha target omega\n";
     let currentNoteContentReader = async (_file: TFile) => noteBody;
@@ -163,6 +169,7 @@ function createHarness(files: TFile[], threads: CommentThread[]) {
         getSideNoteSyncDeviceId: () => "device-a",
         readPersistedPluginData: () => persistedData,
         writePersistedPluginData: async (data) => {
+            persistedWriteCount += 1;
             persistedData = data;
         },
         isAllCommentsNotePath: () => false,
@@ -190,8 +197,56 @@ function createHarness(files: TFile[], threads: CommentThread[]) {
         setCurrentNoteContentReader: (reader: (file: TFile) => Promise<string>) => {
             currentNoteContentReader = reader;
         },
+        getPersistedWriteCount: () => persistedWriteCount,
+        resetPersistedWriteCount: () => {
+            persistedWriteCount = 0;
+        },
     };
 }
+
+test("folder comment retarget isolates a failed sidecar, batches metadata, and remains replayable", async () => {
+    const previousPaths = ["Drafts/a.md", "Drafts/b.md", "Drafts/c.md"];
+    const nextPaths = ["Published/a.md", "Published/b.md", "Published/c.md"];
+    const threads = previousPaths.map((filePath, index) => createThread(filePath, `thread-${index}`));
+    const harness = createHarness(nextPaths.map(createFile), threads);
+    for (const [index, filePath] of previousPaths.entries()) {
+        harness.adapter.files.set(getSidecarStoragePath(filePath), `${JSON.stringify({
+            version: 1,
+            notePath: filePath,
+            threads: [threads[index]],
+        })}\n`);
+    }
+    const retargets = previousPaths.map((previousFilePath, index) => ({
+        previousFilePath,
+        nextFilePath: nextPaths[index],
+        retargetOptions: {
+            selectionCapable: true,
+            pageLabelHash: `page-hash-${index}`,
+        },
+    }));
+    harness.adapter.failNextWriteContaining = "hash-Published_b.md";
+
+    const first = await harness.controller.renameStoredCommentsInFolder(retargets);
+
+    assert.deepEqual(first.successfulRetargets.map((retarget) => retarget.nextFilePath), [
+        "Published/a.md",
+        "Published/c.md",
+    ]);
+    assert.equal(first.failures.length, 1);
+    assert.equal(first.failures[0]?.retarget.nextFilePath, "Published/b.md");
+    assert.equal(harness.commentManager.getThreadById("thread-0")?.filePath, "Published/a.md");
+    assert.equal(harness.commentManager.getThreadById("thread-1")?.filePath, "Drafts/b.md");
+    assert.equal(harness.commentManager.getThreadById("thread-2")?.filePath, "Published/c.md");
+    assert.equal(harness.getPersistedWriteCount(), 2, "source identity and sync each write once");
+
+    harness.resetPersistedWriteCount();
+    const replay = await harness.controller.renameStoredCommentsInFolder(retargets);
+
+    assert.equal(replay.failures.length, 0);
+    assert.equal(harness.commentManager.getThreadById("thread-1")?.filePath, "Published/b.md");
+    assert.equal(await harness.adapter.exists(getSidecarStoragePath("Published/b.md")), true);
+    assert.equal(harness.getPersistedWriteCount() <= 1, true);
+});
 
 test("comment persistence serializes simultaneous saves for one note", async () => {
     const originalWindow = globalThis.window;
