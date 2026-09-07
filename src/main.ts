@@ -783,8 +783,17 @@ export default class Aside extends Plugin {
                 return;
             }
 
-            this.vaultScriptRegistry.upsert(file.path);
-            this.vaultCapabilityIndex.upsert(file, this.getVaultFileTags(file));
+            if (file instanceof TFile) {
+                this.vaultScriptRegistry.upsert(file.path);
+                this.vaultCapabilityIndex.upsert(file, this.getVaultFileTags(file));
+                return;
+            }
+
+            this.vaultScriptRegistry.seed(this.app.vault.getFiles().map((candidate) => candidate.path));
+            this.vaultCapabilityIndex.seed(
+                this.app.vault.getMarkdownFiles(),
+                (candidate) => this.getVaultFileTags(candidate),
+            );
         },
         handleFileRenameMaintenance: (file, oldPath) => {
             this.vaultScriptRegistry.seed(this.app.vault.getFiles().map((candidate) => candidate.path));

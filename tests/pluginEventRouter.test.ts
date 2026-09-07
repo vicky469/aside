@@ -18,11 +18,28 @@ function createFile(path: string): TFile {
     } as TFile;
 }
 
-function createFolder(path: string): TAbstractFile {
+function createFolder(path: string, children: TAbstractFile[] = []): TAbstractFile {
     return {
         path,
         name: path.split("/").pop() ?? path,
-    } as TAbstractFile;
+        children,
+    } as unknown as TAbstractFile;
+}
+
+function collectFilePaths(file: TAbstractFile | null): string[] {
+    if (!file) {
+        return [];
+    }
+    if ("extension" in file) {
+        return [file.path];
+    }
+
+    const children = (file as TAbstractFile & { children?: unknown }).children;
+    return Array.isArray(children)
+        ? children
+            .filter((child): child is TAbstractFile => !!child && typeof (child as TAbstractFile).path === "string")
+            .flatMap((child) => collectFilePaths(child))
+        : [];
 }
 
 function createDeferred<T>() {
@@ -42,7 +59,7 @@ function createHarness(options: {
     handleFileCreate?: (file: TFile | null) => void | Promise<void>;
     handleFileRename?: (file: TAbstractFile | null, oldPath: string) => void | Promise<void>;
     handleFileDelete?: (file: TAbstractFile | null) => void | Promise<void>;
-    handleFileCreateMaintenance?: (file: TFile | null) => void;
+    handleFileCreateMaintenance?: (file: TAbstractFile | null) => void;
     handleFileRenameMaintenance?: (file: TAbstractFile | null, oldPath: string) => void;
     handleFileDeleteMaintenance?: (file: TAbstractFile | null) => void;
 } = {}) {
@@ -99,7 +116,7 @@ function createHarness(options: {
         isTFile: (value: unknown): value is TFile => !!value
             && typeof (value as TFile).path === "string"
             && typeof (value as TFile).extension === "string",
-        handleFileCreateMaintenance: (file: TFile | null) => {
+        handleFileCreateMaintenance: (file: TAbstractFile | null) => {
             maintenanceCalls.push(`create:${file?.path ?? "null"}`);
             options.handleFileCreateMaintenance?.(file);
         },
@@ -176,7 +193,7 @@ test("plugin event router registers vault maintenance early once and reuses it d
 
     harness.vaultHandlers.get("create")?.(note);
     harness.vaultHandlers.get("create")?.(createFolder("Assets"));
-    assert.deepEqual(harness.maintenanceCalls, ["create:docs/early.md", "create:null"]);
+    assert.deepEqual(harness.maintenanceCalls, ["create:docs/early.md", "create:Assets"]);
     assert.deepEqual(harness.calls, []);
 
     await harness.router.register();
@@ -191,6 +208,33 @@ test("plugin event router registers vault maintenance early once and reuses it d
     assert.equal(harness.vaultRegistrationCounts.get("rename"), 1);
     assert.equal(harness.vaultRegistrationCounts.get("delete"), 1);
     assert.equal(harness.registeredEvents.length, 8);
+});
+
+test("populated startup folder create refreshes registry evidence without invoking file lifecycle", async () => {
+    const registry = new VaultScriptRegistry();
+    let currentPaths: string[] = [];
+    const harness = createHarness({
+        handleFileCreateMaintenance: () => {
+            registry.seed(currentPaths);
+        },
+    });
+    harness.router.registerVaultMaintenanceEvents();
+    const script = createFile("🛠️ scripts/clean.mjs");
+    const folder = createFolder("🛠️ scripts", [script]);
+
+    currentPaths = [script.path];
+    const callbackResult = harness.vaultHandlers.get("create")?.(folder);
+
+    assert.equal(callbackResult, undefined);
+    assert.equal(registry.resolve("/clean")?.path, script.path);
+    assert.deepEqual(harness.maintenanceCalls, ["create:🛠️ scripts"]);
+    assert.deepEqual(harness.calls, []);
+
+    folder.path = "mutated";
+    (folder as TAbstractFile & { children: TAbstractFile[] }).children = [];
+    await harness.router.register();
+
+    assert.deepEqual(harness.calls, ["create:null"]);
 });
 
 test("delayed startup file rename updates registry evidence immediately and replays path effects once", async () => {
@@ -239,32 +283,75 @@ test("delayed startup file rename updates registry evidence immediately and repl
 
 test("delayed startup folder rename reseeds registry immediately and replays the folder retarget once", async () => {
     const registry = new VaultScriptRegistry();
-    registry.seed(["Draft scripts/clean.mjs", "Draft scripts/tidy.js"]);
-    let currentPaths = ["Draft scripts/clean.mjs", "Draft scripts/tidy.js"];
-    const retargetedPaths: string[] = [];
+    registry.seed([
+        "Draft scripts/clean.mjs",
+        "Draft scripts/tidy.js",
+        "Draft scripts/nested/note.md",
+    ]);
+    let currentPaths = [
+        "Draft scripts/clean.mjs",
+        "Draft scripts/tidy.js",
+        "Draft scripts/nested/note.md",
+    ];
+    const receivedFolderPaths: string[] = [];
+    const persistedRetargets: string[] = [];
+    const cacheRetargets: string[] = [];
+    const indexRetargets: string[] = [];
+    const publishingRetargets: string[] = [];
     const harness = createHarness({
         handleFileRenameMaintenance: () => {
             registry.seed(currentPaths);
         },
         handleFileRename: (file, oldPath) => {
-            retargetedPaths.push(`${oldPath}->${file?.path ?? "null"}`);
+            receivedFolderPaths.push(`${oldPath}->${file?.path ?? "null"}`);
+            const nextFolderPrefix = `${file?.path ?? ""}/`;
+            for (const nextFilePath of collectFilePaths(file)) {
+                const previousFilePath = `${oldPath}/${nextFilePath.slice(nextFolderPrefix.length)}`;
+                const retarget = `${previousFilePath}->${nextFilePath}`;
+                persistedRetargets.push(retarget);
+                cacheRetargets.push(retarget);
+                indexRetargets.push(retarget);
+                publishingRetargets.push(retarget);
+            }
         },
     });
     harness.router.registerVaultMaintenanceEvents();
 
-    currentPaths = ["🛠️ scripts/clean.mjs", "🛠️ scripts/tidy.js"];
-    harness.vaultHandlers.get("rename")?.(
-        createFolder("🛠️ scripts"),
+    const cleanScript = createFile("🛠️ scripts/clean.mjs");
+    const tidyScript = createFile("🛠️ scripts/tidy.js");
+    const nestedNote = createFile("🛠️ scripts/nested/note.md");
+    const nestedFolder = createFolder("🛠️ scripts/nested", [nestedNote]);
+    const renamedFolder = createFolder("🛠️ scripts", [cleanScript, nestedFolder, tidyScript]);
+    currentPaths = [cleanScript.path, tidyScript.path, nestedNote.path];
+    const callbackResult = harness.vaultHandlers.get("rename")?.(
+        renamedFolder,
         "Draft scripts",
     );
 
+    assert.equal(callbackResult, undefined);
     assert.equal(registry.resolve("/clean")?.path, "🛠️ scripts/clean.mjs");
     assert.equal(registry.resolve("/tidy")?.path, "🛠️ scripts/tidy.js");
-    assert.deepEqual(retargetedPaths, []);
+    assert.deepEqual(receivedFolderPaths, []);
+
+    renamedFolder.path = "mutated";
+    cleanScript.path = "mutated/clean.mjs";
+    nestedFolder.path = "mutated/nested";
+    nestedNote.path = "mutated/nested/note.md";
+    (renamedFolder as TAbstractFile & { children: TAbstractFile[] }).children = [];
+    (nestedFolder as TAbstractFile & { children: TAbstractFile[] }).children = [];
 
     await harness.router.register();
 
-    assert.deepEqual(retargetedPaths, ["Draft scripts->🛠️ scripts"]);
+    const expectedRetargets = [
+        "Draft scripts/clean.mjs->🛠️ scripts/clean.mjs",
+        "Draft scripts/nested/note.md->🛠️ scripts/nested/note.md",
+        "Draft scripts/tidy.js->🛠️ scripts/tidy.js",
+    ];
+    assert.deepEqual(receivedFolderPaths, ["Draft scripts->🛠️ scripts"]);
+    assert.deepEqual(persistedRetargets, expectedRetargets);
+    assert.deepEqual(cacheRetargets, expectedRetargets);
+    assert.deepEqual(indexRetargets, expectedRetargets);
+    assert.deepEqual(publishingRetargets, expectedRetargets);
 });
 
 test("delayed startup file delete updates registry evidence immediately and replays cleanup once", async () => {
@@ -311,28 +398,59 @@ test("delayed startup file delete updates registry evidence immediately and repl
 
 test("delayed startup folder delete reseeds registry immediately and replays folder cleanup once", async () => {
     const registry = new VaultScriptRegistry();
-    registry.seed(["🛠️ scripts/clean.mjs", "🛠️ scripts/tidy.js"]);
-    let currentPaths = ["🛠️ scripts/clean.mjs", "🛠️ scripts/tidy.js"];
-    const cleanedPaths: string[] = [];
+    registry.seed([
+        "🛠️ scripts/clean.mjs",
+        "🛠️ scripts/nested/note.md",
+    ]);
+    let currentPaths = [
+        "🛠️ scripts/clean.mjs",
+        "🛠️ scripts/nested/note.md",
+    ];
+    const persistedFolderDeletes: string[] = [];
+    const cacheDeletes: string[] = [];
+    const indexFolderDeletes: string[] = [];
+    const publishingFolderDeletes: string[] = [];
     const harness = createHarness({
         handleFileDeleteMaintenance: () => {
             registry.seed(currentPaths);
         },
         handleFileDelete: (file) => {
-            cleanedPaths.push(file?.path ?? "null");
+            const folderPath = file?.path ?? "null";
+            persistedFolderDeletes.push(folderPath);
+            cacheDeletes.push(...collectFilePaths(file));
+            indexFolderDeletes.push(folderPath);
+            publishingFolderDeletes.push(folderPath);
         },
     });
     harness.router.registerVaultMaintenanceEvents();
 
+    const cleanScript = createFile("🛠️ scripts/clean.mjs");
+    const nestedNote = createFile("🛠️ scripts/nested/note.md");
+    const nestedFolder = createFolder("🛠️ scripts/nested", [nestedNote]);
+    const deletedFolder = createFolder("🛠️ scripts", [cleanScript, nestedFolder]);
     currentPaths = [];
-    harness.vaultHandlers.get("delete")?.(createFolder("🛠️ scripts"));
+    const callbackResult = harness.vaultHandlers.get("delete")?.(deletedFolder);
 
+    assert.equal(callbackResult, undefined);
     assert.deepEqual(registry.getRunnableScripts(), []);
-    assert.deepEqual(cleanedPaths, []);
+    assert.deepEqual(persistedFolderDeletes, []);
+
+    deletedFolder.path = "mutated";
+    cleanScript.path = "mutated/clean.mjs";
+    nestedFolder.path = "mutated/nested";
+    nestedNote.path = "mutated/nested/note.md";
+    (deletedFolder as TAbstractFile & { children: TAbstractFile[] }).children = [];
+    (nestedFolder as TAbstractFile & { children: TAbstractFile[] }).children = [];
 
     await harness.router.register();
 
-    assert.deepEqual(cleanedPaths, ["🛠️ scripts"]);
+    assert.deepEqual(persistedFolderDeletes, ["🛠️ scripts"]);
+    assert.deepEqual(cacheDeletes, [
+        "🛠️ scripts/clean.mjs",
+        "🛠️ scripts/nested/note.md",
+    ]);
+    assert.deepEqual(indexFolderDeletes, ["🛠️ scripts"]);
+    assert.deepEqual(publishingFolderDeletes, ["🛠️ scripts"]);
 });
 
 test("plugin event router exposes Obsidian event flow in one module", async () => {
@@ -365,7 +483,7 @@ test("plugin event router exposes Obsidian event flow in one module", async () =
 
     assert.deepEqual(harness.maintenanceCalls, [
         "create:docs/a.md",
-        "create:null",
+        "create:Assets",
         "rename:docs/old.md->docs/a.md",
         "delete:docs/a.md",
     ]);

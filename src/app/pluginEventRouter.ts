@@ -36,7 +36,7 @@ export interface PluginEventRouterHost {
     };
     registerEvent(eventRef: EventRef): void;
     isTFile(value: unknown): value is TFile;
-    handleFileCreateMaintenance(file: TFile | null): void;
+    handleFileCreateMaintenance(file: TAbstractFile | null): void;
     handleFileRenameMaintenance(file: TAbstractFile | null, oldPath: string): void;
     handleFileDeleteMaintenance(file: TAbstractFile | null): void;
     handleLayoutReady(): void | Promise<void>;
@@ -78,7 +78,7 @@ const enum VaultEventRoutingPhase {
 }
 
 type RoutedVaultEvent =
-    | { kind: "create"; file: TFile | null }
+    | { kind: "create"; file: TAbstractFile | null }
     | { kind: "rename"; file: TAbstractFile | null; oldPath: string }
     | { kind: "delete"; file: TAbstractFile | null };
 
@@ -107,7 +107,7 @@ export class PluginEventRouter {
         this.vaultMaintenanceEventsRegistered = true;
         this.host.registerEvent(
             this.host.app.vault.on("create", (file) => {
-                const createdFile = this.host.isTFile(file) ? file : null;
+                const createdFile = isTAbstractFile(file) ? file : null;
                 this.host.handleFileCreateMaintenance(createdFile);
                 this.routeVaultEvent({
                     kind: "create",
@@ -176,7 +176,9 @@ export class PluginEventRouter {
     private handleVaultEvent(event: RoutedVaultEvent): Promise<void> {
         switch (event.kind) {
             case "create":
-                return this.host.handleFileCreate(event.file);
+                return this.host.handleFileCreate(
+                    this.host.isTFile(event.file) ? event.file : null,
+                );
             case "rename":
                 return this.host.handleFileRename(event.file, event.oldPath);
             case "delete":
