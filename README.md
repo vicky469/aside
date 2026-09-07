@@ -55,7 +55,14 @@ For durable storage and sync across devices, use Aside with [Obsidian Sync](http
 - Built-in agent help on desktop Obsidian. Type `@codex`, `@claude`, `@cursor`, `@gemini`, or `@deepseek` in a thread to get a reply, create anchored side notes, or apply explicit edits to the source note.
 - [Agents and scripts](./SCRIPTS.md) explains local agent setup and the `/create-script <request>`, `/update-script /script-name <request>`, `/pdf-to-markdown`, and `/script-name` workflows.
 
-[Advanced features](ADVANCED_FEATURES.md) are documented separately.
+## Optional Advanced Capabilities
+
+Scripts and Publishing are optional advanced capabilities and are off by default for a clean experience. Ordinary agent replies do not require Scripts.
+
+- To create or run trusted local slash and script commands, turn on **Settings → Aside → Scripts (advanced) → Enable scripts**. Turning Scripts off blocks new slash and script command execution and script-oriented Generate or retry actions, but it does not delete registered scripts, history, or saved replies. Disabled script-like text remains ordinary note or agent text. This setting is not a sandbox or security boundary; review every script and run only code you wrote or trust.
+- To publish files from `public/`, turn on **Settings → Aside → Publishing (advanced) → Enable publishing**. Turning Publishing off hides or disables publishing controls, but it does not unpublish remote content or delete saved publishing configuration.
+
+See [Agents and scripts](./SCRIPTS.md) for agent, script, security, and privacy details. [Advanced features](ADVANCED_FEATURES.md) covers Scripts and Cloudflare Pages Publishing setup.
 
 ## How to Get Started
 
