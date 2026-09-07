@@ -15,7 +15,7 @@ In Aside settings, the sections appear in this order: **Sidebar tabs → Scripts
 
 Ordinary agent replies do not require Scripts. To create or run trusted local slash and script commands, turn on **Settings → Aside → Scripts (advanced) → Enable scripts**, then choose the default local agent in the same section.
 
-Turning Scripts off blocks new slash and script command execution and script-oriented Generate or retry actions. It does not delete registered scripts, history, or saved replies. Disabled script-like text remains ordinary note or agent text. The toggle is not a sandbox or security boundary.
+Turning Scripts off blocks new slash and script command execution and script-oriented Generate actions. It does not delete registered scripts, history, or saved replies. Disabled script-like text remains ordinary note or agent text. The toggle is not a sandbox or security boundary.
 
 See [Agents and Scripts](SCRIPTS.md) for agent setup, commands, privacy boundaries, and script registration rules.
 
@@ -25,7 +25,7 @@ Vault scripts are not sandboxed. They run in local Node with your account permis
 
 On desktop Obsidian, Aside can publish Markdown, HTML, and PDF files from the vault-relative `public/` folder to an existing Cloudflare Pages project. To use it, turn on **Settings → Aside → Publishing (advanced) → Enable publishing**.
 
-Turning Publishing off hides or disables publishing controls, but it does not unpublish remote content or delete saved publishing configuration.
+Turning Publishing off hides Publishing settings details and disables new Publish, Republish, and Unpublish actions. It preserves saved publishing configuration—it does not delete it—and does not unpublish existing remote content.
 
 ### Network and Data Access
 

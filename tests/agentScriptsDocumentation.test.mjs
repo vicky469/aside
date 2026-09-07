@@ -4,6 +4,7 @@ import test from "node:test";
 
 const SCRIPTS_SETTINGS_PATH = "Settings → Aside → Scripts (advanced) → Enable scripts";
 const PUBLISHING_SETTINGS_PATH = "Settings → Aside → Publishing (advanced) → Enable publishing";
+const AGENT_TAB_SETTINGS_PATH = "Settings → Aside → Sidebar tabs → Show agent tab";
 const SETTINGS_SECTION_ORDER = "Sidebar tabs → Scripts (advanced) → Publishing (advanced) → Index note";
 
 function readRequiredFile(path) {
@@ -27,8 +28,26 @@ function getLineContaining(markdown, phrase) {
     return line;
 }
 
+function assertUsesGenerateButtonVocabulary(markdown) {
+    assert.match(markdown, /\bGenerate\b/u);
+    assert.doesNotMatch(markdown, /\b(?:Regenerate|retr(?:y|ies))\b/iu);
+}
+
+function assertPublishingDisabledPolicy(markdown) {
+    const disabledPolicy = getParagraphContaining(markdown, "Turning Publishing off");
+
+    assert.match(disabledPolicy, /hides Publishing settings details/iu);
+    assert.match(disabledPolicy, /disables new Publish, Republish, and Unpublish actions/iu);
+    assert.match(
+        disabledPolicy,
+        /preserves saved publishing configuration[^.]*does not delete it/iu,
+    );
+    assert.match(disabledPolicy, /does not unpublish existing remote content/iu);
+}
+
 test("README publishes the complete agent and script entry points", () => {
     const readme = readRequiredFile("README.md");
+    const capabilitiesDefaultPolicy = getParagraphContaining(readme, "Scripts and Publishing");
     const orderedAgentList = /`@codex`, `@claude`, `@cursor`, `@gemini`, (?:and|or) `@deepseek`/gu;
 
     assert.ok(
@@ -37,11 +56,15 @@ test("README publishes the complete agent and script entry points", () => {
     );
     assert.match(readme, /\[Agents and scripts\]\(\.\/SCRIPTS\.md\)/u);
     assert.match(readme, /\[Advanced features\]\(ADVANCED_FEATURES\.md\)/u);
-    assert.match(readme, /optional advanced capabilities/iu);
-    assert.match(readme, /off by default/iu);
+    assert.match(
+        capabilitiesDefaultPolicy,
+        /Scripts and Publishing[^.]*optional advanced capabilities[^.]*off by default/iu,
+    );
     assert.match(readme, /Ordinary agent replies do not require Scripts/iu);
     assert.equal(readme.includes(SCRIPTS_SETTINGS_PATH), true);
     assert.equal(readme.includes(PUBLISHING_SETTINGS_PATH), true);
+    assertUsesGenerateButtonVocabulary(readme);
+    assertPublishingDisabledPolicy(readme);
     for (const command of ["/create-script", "/update-script", "/pdf-to-markdown", "/script-name"]) {
         assert.match(readme, new RegExp(command.replace("/", "\\/"), "u"));
     }
@@ -69,7 +92,7 @@ test("Agents and scripts guide documents setup and everyday workflows", () => {
     assert.match(guide, /no agent service/iu);
     assert.match(guide, /In a side note,[^\n]*type[^\n]*@codex[^\n]*save/iu);
     assert.match(guide, /Show agent tab/u);
-    assert.match(guide, /Settings → Sidebar tabs/u);
+    assert.equal(guide.includes(AGENT_TAB_SETTINGS_PATH), true);
     assert.match(guide, /controls visibility only[^\n]*replies remain[^\n]*List view/iu);
     assert.equal(guide.includes(SCRIPTS_SETTINGS_PATH), true);
     assert.match(scriptsDefaultPolicy, /off by default/iu);
@@ -81,7 +104,7 @@ test("Agents and scripts guide documents setup and everyday workflows", () => {
     assert.match(guide, /\/update-script \/script-name <request>/u);
     assert.match(guide, /\/pdf-to-markdown/u);
     assert.match(guide, /\/clean-citations/u);
-    assert.match(guide, /Regenerate/u);
+    assertUsesGenerateButtonVocabulary(guide);
     assert.match(guide, /one vault script per (?:side note|comment)/iu);
     assert.match(guide, /do not (?:combine|mix).*agent/iu);
 });
@@ -120,8 +143,7 @@ test("Agents and scripts guide explains what disabling Scripts changes and prese
     const disabledPolicy = getParagraphContaining(guide, "Turning Scripts off");
 
     assert.match(disabledPolicy, /blocks new slash and script command execution/iu);
-    assert.match(disabledPolicy, /script-oriented Generate/iu);
-    assert.match(disabledPolicy, /retr(?:y|ies)/iu);
+    assert.match(disabledPolicy, /script-oriented Generate actions/iu);
     assert.match(
         disabledPolicy,
         /does not delete[^.]*registered scripts[^.]*history[^.]*saved replies/iu,
@@ -173,6 +195,7 @@ test("advanced documentation covers the native Scripts and Publishing controls",
     assert.match(advanced, /\[Cloudflare Pages Publishing\]\(#cloudflare-pages-publishing\)/u);
     assert.match(advanced, /^## Cloudflare Pages Publishing$/mu);
     assert.equal(advanced.includes(PUBLISHING_SETTINGS_PATH), true);
+    assertUsesGenerateButtonVocabulary(advanced);
     assert.match(advanced, /^### Network and Data Access$/mu);
     assert.match(advanced, /^### Setup$/mu);
     assert.match(advanced, /^### Publishing Workflow$/mu);
@@ -182,12 +205,6 @@ test("advanced documentation covers the native Scripts and Publishing controls",
 
 test("advanced documentation explains what disabling Publishing preserves", () => {
     const advanced = readRequiredFile("ADVANCED_FEATURES.md");
-    const disabledPolicy = getParagraphContaining(advanced, "Turning Publishing off");
 
-    assert.match(disabledPolicy, /hides or disables publishing controls/iu);
-    assert.match(disabledPolicy, /does not unpublish remote content/iu);
-    assert.match(
-        disabledPolicy,
-        /does not (?:delete saved publishing configuration|unpublish remote content[^.]*\bor delete saved publishing configuration)/iu,
-    );
+    assertPublishingDisabledPolicy(advanced);
 });
