@@ -1,7 +1,6 @@
 import type { PersistedPluginData } from "../settings/indexNoteSettingsPlanner";
 import { isPathInsideFolder } from "../core/files/pathScope";
 import {
-    ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT,
     isPluginEventExecutionActive,
     type PluginEventExecutionContext,
 } from "../core/events/pluginEventExecutionContext";
@@ -272,53 +271,90 @@ export class SourceIdentityStore {
             .sort((left, right) => left.currentPath.localeCompare(right.currentPath));
     }
 
-    public async removeSourceForPath(filePath: string): Promise<SourceIdentityRecord | null> {
-        const latestPersistedData = await this.host.readLatestPersistedPluginData?.()
-            ?? this.host.readPersistedPluginData();
-        const state = normalizeSourceIdentityState(latestPersistedData.sourceIdentityState);
-        const sourceId = state.pathToSourceId[filePath];
-        const record = sourceId ? state.sources[sourceId] : null;
-        if (!sourceId || !record) {
+    public async removeSourceForPath(
+        filePath: string,
+        context: PluginEventExecutionContext,
+    ): Promise<SourceIdentityRecord | null> {
+        if (!isPluginEventExecutionActive(context)) {
             return null;
         }
-
-        delete state.sources[sourceId];
-        await this.host.writePersistedPluginData({
-            ...latestPersistedData,
-            sourceIdentityState: cloneState({
-                ...state,
-                pathToSourceId: rebuildPathIndex(state.sources),
-            }),
-        });
-        return cloneRecord(record);
-    }
-
-    public async removeSourcesInFolder(folderPath: string): Promise<SourceIdentityRecord[]> {
-        const latestPersistedData = await this.host.readLatestPersistedPluginData?.()
-            ?? this.host.readPersistedPluginData();
-        const state = normalizeSourceIdentityState(latestPersistedData.sourceIdentityState);
-        const removedRecords: SourceIdentityRecord[] = [];
-        for (const [sourceId, record] of Object.entries(state.sources)) {
-            if (!isPathInsideFolder(record.currentPath, folderPath)) {
-                continue;
+        try {
+            const latestPersistedData = await this.host.readLatestPersistedPluginData?.()
+                ?? this.host.readPersistedPluginData();
+            if (!isPluginEventExecutionActive(context)) {
+                return null;
+            }
+            const state = normalizeSourceIdentityState(latestPersistedData.sourceIdentityState);
+            const sourceId = state.pathToSourceId[filePath];
+            const record = sourceId ? state.sources[sourceId] : null;
+            if (!sourceId || !record) {
+                return null;
             }
 
-            removedRecords.push(cloneRecord(record));
             delete state.sources[sourceId];
+            if (!isPluginEventExecutionActive(context)) {
+                return null;
+            }
+            await this.host.writePersistedPluginData({
+                ...latestPersistedData,
+                sourceIdentityState: cloneState({
+                    ...state,
+                    pathToSourceId: rebuildPathIndex(state.sources),
+                }),
+            }, context);
+            return isPluginEventExecutionActive(context) ? cloneRecord(record) : null;
+        } catch (error) {
+            if (!isPluginEventExecutionActive(context)) {
+                return null;
+            }
+            throw error;
         }
+    }
 
-        if (removedRecords.length === 0) {
+    public async removeSourcesInFolder(
+        folderPath: string,
+        context: PluginEventExecutionContext,
+    ): Promise<SourceIdentityRecord[]> {
+        if (!isPluginEventExecutionActive(context)) {
             return [];
         }
+        try {
+            const latestPersistedData = await this.host.readLatestPersistedPluginData?.()
+                ?? this.host.readPersistedPluginData();
+            if (!isPluginEventExecutionActive(context)) {
+                return [];
+            }
+            const state = normalizeSourceIdentityState(latestPersistedData.sourceIdentityState);
+            const removedRecords: SourceIdentityRecord[] = [];
+            for (const [sourceId, record] of Object.entries(state.sources)) {
+                if (!isPathInsideFolder(record.currentPath, folderPath)) {
+                    continue;
+                }
 
-        await this.host.writePersistedPluginData({
-            ...latestPersistedData,
-            sourceIdentityState: cloneState({
-                ...state,
-                pathToSourceId: rebuildPathIndex(state.sources),
-            }),
-        });
-        return removedRecords.sort((left, right) => left.currentPath.localeCompare(right.currentPath));
+                removedRecords.push(cloneRecord(record));
+                delete state.sources[sourceId];
+            }
+
+            if (removedRecords.length === 0 || !isPluginEventExecutionActive(context)) {
+                return [];
+            }
+
+            await this.host.writePersistedPluginData({
+                ...latestPersistedData,
+                sourceIdentityState: cloneState({
+                    ...state,
+                    pathToSourceId: rebuildPathIndex(state.sources),
+                }),
+            }, context);
+            return isPluginEventExecutionActive(context)
+                ? removedRecords.sort((left, right) => left.currentPath.localeCompare(right.currentPath))
+                : [];
+        } catch (error) {
+            if (!isPluginEventExecutionActive(context)) {
+                return [];
+            }
+            throw error;
+        }
     }
 
     public async ensureSourceForPath(filePath: string, contentFingerprint: string | null = null): Promise<SourceIdentityRecord> {
@@ -372,22 +408,20 @@ export class SourceIdentityStore {
     public async recordRename(
         previousPath: string,
         nextPath: string,
+        context: PluginEventExecutionContext,
         contentFingerprint: string | null = null,
-    ): Promise<SourceIdentityRecord> {
+    ): Promise<SourceIdentityRecord | null> {
         const [record] = await this.recordRenames([{
             previousFilePath: previousPath,
             nextFilePath: nextPath,
             contentFingerprint,
-        }]);
-        if (!record) {
-            throw new Error("Source identity rename did not produce a record.");
-        }
-        return record;
+        }], context);
+        return record ?? null;
     }
 
     public async recordRenames(
         retargets: readonly SourceIdentityPathRetarget[],
-        context: PluginEventExecutionContext = ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT,
+        context: PluginEventExecutionContext,
     ): Promise<SourceIdentityRecord[]> {
         if (retargets.length === 0 || !isPluginEventExecutionActive(context)) {
             return [];
@@ -489,9 +523,14 @@ export class SourceIdentityStore {
         return cloneRecord(nextRecord);
     }
 
-    public async refreshFromLatestPersistedData(): Promise<boolean> {
+    public async refreshFromLatestPersistedData(
+        context: PluginEventExecutionContext,
+    ): Promise<boolean> {
+        if (!isPluginEventExecutionActive(context)) {
+            return false;
+        }
         const latestPersistedData = await this.host.readLatestPersistedPluginData?.();
-        if (!latestPersistedData) {
+        if (!latestPersistedData || !isPluginEventExecutionActive(context)) {
             return false;
         }
 
@@ -502,11 +541,14 @@ export class SourceIdentityStore {
             return false;
         }
 
+        if (!isPluginEventExecutionActive(context)) {
+            return false;
+        }
         await this.host.writePersistedPluginData({
             ...latestPersistedData,
             sourceIdentityState: cloneState(mergedState),
-        });
-        return true;
+        }, context);
+        return isPluginEventExecutionActive(context);
     }
 
     private buildUpdatedRecord(

@@ -17,6 +17,8 @@ class CollisionAwareAdapter implements Pick<DataAdapter, "exists" | "mkdir" | "w
     public readonly files = new Map<string, string>();
     public failNextWriteContaining: string | null = null;
     public readonly writeAttempts: string[] = [];
+    public beforeWrite: ((normalizedPath: string) => Promise<void>) | null = null;
+    public readonly removeAttempts: string[] = [];
 
     async exists(normalizedPath: string): Promise<boolean> {
         return this.directories.has(normalizedPath) || this.files.has(normalizedPath);
@@ -28,6 +30,7 @@ class CollisionAwareAdapter implements Pick<DataAdapter, "exists" | "mkdir" | "w
 
     async write(normalizedPath: string, data: string): Promise<void> {
         this.writeAttempts.push(normalizedPath);
+        await this.beforeWrite?.(normalizedPath);
         if (this.failNextWriteContaining && normalizedPath.includes(this.failNextWriteContaining)) {
             this.failNextWriteContaining = null;
             throw new Error(`Injected sidecar write failure: ${normalizedPath}`);
@@ -44,6 +47,7 @@ class CollisionAwareAdapter implements Pick<DataAdapter, "exists" | "mkdir" | "w
     }
 
     async remove(normalizedPath: string): Promise<void> {
+        this.removeAttempts.push(normalizedPath);
         this.files.delete(normalizedPath);
     }
 
@@ -126,6 +130,28 @@ function getSidecarStoragePath(filePath: string): string {
 function getSourceSidecarStoragePath(sourceId: string): string {
     const sourceHash = hashText(sourceId);
     return `.obsidian/plugins/aside/sidenotes/by-source/${sourceHash.slice(0, 2)}/${sourceHash}.json`;
+}
+
+function persistedSource(filePath: string, sourceId = "source-1"): PersistedPluginData {
+    return {
+        marker: "reloaded",
+        sourceIdentityState: {
+            schemaVersion: 1,
+            sources: {
+                [sourceId]: {
+                    sourceId,
+                    currentPath: filePath,
+                    aliases: [],
+                    contentFingerprint: null,
+                    createdAt: 1,
+                    updatedAt: 1,
+                },
+            },
+            pathToSourceId: {
+                [filePath]: sourceId,
+            },
+        },
+    } as PersistedPluginData;
 }
 
 function createDeferred() {
@@ -361,6 +387,150 @@ test("folder comment retarget aborts a stale sync commit before touching reloade
     assert.deepEqual(harness.getPersistedData(), reloadedData);
 });
 
+test("file comment retarget stops between source and path sidecar writes after abort", async () => {
+    const sourceWriteStarted = createDeferred();
+    const releaseSourceWrite = createDeferred();
+    const previousPath = "Drafts/a.md";
+    const nextPath = "Published/a.md";
+    const originalThread = createThread(previousPath, "old-thread");
+    const abortController = new AbortController();
+    const harness = createHarness([createFile(nextPath)], [originalThread]);
+    harness.adapter.files.set(getSidecarStoragePath(previousPath), `${JSON.stringify({
+        version: 1,
+        notePath: previousPath,
+        threads: [originalThread],
+    })}\n`);
+    const sourceSidecarPath = getSourceSidecarStoragePath("src-generated-1");
+    let pathSidecarWritesBeforeAbort = 0;
+    harness.adapter.beforeWrite = async (path) => {
+        if (path.startsWith(`${sourceSidecarPath}.tmp-`)) {
+            pathSidecarWritesBeforeAbort = harness.adapter.writeAttempts.filter((attemptedPath) =>
+                attemptedPath.startsWith(`${getSidecarStoragePath(nextPath)}.tmp-`)).length;
+            sourceWriteStarted.resolve();
+            await releaseSourceWrite.promise;
+        }
+    };
+    const context = {
+        signal: abortController.signal,
+        isActive: () => !abortController.signal.aborted,
+    };
+
+    const staleRename = harness.controller.renameStoredComments(previousPath, nextPath, {
+        selectionCapable: true,
+        pageLabelHash: "page-hash",
+    }, context);
+    await sourceWriteStarted.promise;
+    abortController.abort();
+    const reloadedManager = new CommentManager([createThread("Reloaded/a.md", "reloaded-thread")]);
+    const reloadedData = { marker: "reloaded" } as PersistedPluginData;
+    harness.replaceCommentManager(reloadedManager);
+    harness.replacePersistedData(reloadedData);
+    releaseSourceWrite.resolve();
+    await staleRename;
+
+    assert.equal(
+        harness.adapter.writeAttempts.filter((path) =>
+            path.startsWith(`${getSidecarStoragePath(nextPath)}.tmp-`)).length,
+        pathSidecarWritesBeforeAbort,
+        "stale work must not start the path sidecar after the source sidecar await",
+    );
+    assert.equal(
+        await harness.adapter.exists(sourceSidecarPath),
+        false,
+        "stale work must not promote the source temp file after reset",
+    );
+    assert.deepEqual(reloadedManager.getAllThreads().map((thread) => thread.filePath), ["Reloaded/a.md"]);
+    assert.deepEqual(harness.getPersistedData(), reloadedData);
+});
+
+test("file comment deletion aborts its queued sync write and a new epoch completes", async () => {
+    const persistedWriteStarted = createDeferred();
+    const releasePersistedWrite = createDeferred();
+    const abortController = new AbortController();
+    const filePath = "Deleted/file.md";
+    const reloadedData = persistedSource(filePath);
+    let pause = true;
+    const harness = createHarness([], [createThread(filePath)], {
+        beforePersistedWrite: async (_writeCount, context) => {
+            if (pause) {
+                persistedWriteStarted.resolve();
+                await releasePersistedWrite.promise;
+                assert.equal(context?.isActive(), false);
+            }
+        },
+    });
+    harness.replacePersistedData(reloadedData);
+    const context = {
+        signal: abortController.signal,
+        isActive: () => !abortController.signal.aborted,
+    };
+
+    const staleDelete = harness.controller.deleteStoredComments(filePath, context);
+    await persistedWriteStarted.promise;
+    abortController.abort();
+    const reloadedManager = new CommentManager([createThread(filePath, "reloaded-thread")]);
+    harness.replaceCommentManager(reloadedManager);
+    harness.replacePersistedData(reloadedData);
+    pause = false;
+    releasePersistedWrite.resolve();
+    await staleDelete;
+
+    assert.deepEqual(harness.getPersistedData(), reloadedData);
+    assert.deepEqual(reloadedManager.getAllThreads().map((thread) => thread.id), ["reloaded-thread"]);
+
+    await harness.controller.deleteStoredComments(filePath, ACTIVE_EVENT_CONTEXT);
+
+    const nextSourceState = harness.getPersistedData().sourceIdentityState as {
+        pathToSourceId?: Record<string, string>;
+    } | undefined;
+    assert.equal(nextSourceState?.pathToSourceId?.[filePath], undefined);
+    assert.ok(harness.getPersistedData().sideNoteSyncEventState);
+});
+
+test("folder comment deletion aborts its source-state write and a new epoch completes", async () => {
+    const persistedWriteStarted = createDeferred();
+    const releasePersistedWrite = createDeferred();
+    const abortController = new AbortController();
+    const filePath = "Deleted/file.md";
+    const reloadedData = persistedSource(filePath);
+    let pause = true;
+    const harness = createHarness([], [createThread(filePath)], {
+        beforePersistedWrite: async (_writeCount, context) => {
+            if (pause) {
+                persistedWriteStarted.resolve();
+                await releasePersistedWrite.promise;
+                assert.equal(context?.isActive(), false);
+            }
+        },
+    });
+    harness.replacePersistedData(reloadedData);
+    const context = {
+        signal: abortController.signal,
+        isActive: () => !abortController.signal.aborted,
+    };
+
+    const staleDelete = harness.controller.deleteStoredCommentsInFolder("Deleted", context);
+    await persistedWriteStarted.promise;
+    abortController.abort();
+    const reloadedManager = new CommentManager([createThread(filePath, "reloaded-thread")]);
+    harness.replaceCommentManager(reloadedManager);
+    harness.replacePersistedData(reloadedData);
+    pause = false;
+    releasePersistedWrite.resolve();
+    await staleDelete;
+
+    assert.deepEqual(harness.getPersistedData(), reloadedData);
+    assert.deepEqual(reloadedManager.getAllThreads().map((thread) => thread.id), ["reloaded-thread"]);
+
+    await harness.controller.deleteStoredCommentsInFolder("Deleted", ACTIVE_EVENT_CONTEXT);
+
+    const nextSourceState = harness.getPersistedData().sourceIdentityState as {
+        pathToSourceId?: Record<string, string>;
+    } | undefined;
+    assert.equal(nextSourceState?.pathToSourceId?.[filePath], undefined);
+    assert.ok(harness.getPersistedData().sideNoteSyncEventState);
+});
+
 test("comment persistence serializes simultaneous saves for one note", async () => {
     const originalWindow = globalThis.window;
     globalThis.window = {
@@ -562,7 +732,7 @@ test("queued Markdown synchronization keeps its captured path across a rename", 
         renamePromise = harness.controller.renameStoredComments(previousPath, nextPath, {
             selectionCapable: true,
             pageLabelHash: "hash-page",
-        });
+        }, ACTIVE_EVENT_CONTEXT);
 
         releaseFirstRead.resolve();
         await Promise.all([savePromise, modificationPromise, renamePromise]);
@@ -621,7 +791,7 @@ test("comment persistence carries an in-flight save across a note rename", async
         renameSave = harness.controller.renameStoredComments(previousPath, nextPath, {
             selectionCapable: true,
             pageLabelHash: "hash-page",
-        });
+        }, ACTIVE_EVENT_CONTEXT);
         harness.commentManager.appendEntry(thread.id, {
             id: "entry-2",
             body: "reply two",

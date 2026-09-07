@@ -688,37 +688,45 @@ export default class Aside extends Plugin {
         app: this.app,
         getCommentManager: () => this.commentManager,
         getAggregateCommentIndex: () => this.aggregateCommentIndex,
-        renameAgentRuns: (previousFilePath, nextFilePath) =>
-            this.agentRunStore.renameFile(previousFilePath, nextFilePath),
-        renameScriptRuns: (previousFilePath, nextFilePath) =>
-            this.scriptRunStore.renameFile(previousFilePath, nextFilePath),
+        renameAgentRuns: (previousFilePath, nextFilePath, context) =>
+            this.agentRunStore.renameFile(previousFilePath, nextFilePath, context),
+        renameScriptRuns: (previousFilePath, nextFilePath, context) =>
+            this.scriptRunStore.renameFile(previousFilePath, nextFilePath, context),
         renameAgentRunsInFolder: (previousFolderPath, nextFolderPath, context) =>
             this.agentRunStore.renameFolder(previousFolderPath, nextFolderPath, context),
         renameScriptRunsInFolder: (previousFolderPath, nextFolderPath, context) =>
             this.scriptRunStore.renameFolder(previousFolderPath, nextFolderPath, context),
-        renameStoredComments: (previousFilePath, nextFilePath, retargetOptions) =>
-            this.commentPersistenceController.renameStoredComments(previousFilePath, nextFilePath, retargetOptions),
+        renameStoredComments: (previousFilePath, nextFilePath, retargetOptions, context) =>
+            this.commentPersistenceController.renameStoredComments(
+                previousFilePath,
+                nextFilePath,
+                retargetOptions,
+                context,
+            ),
         renameStoredCommentsInFolder: (retargets, context) =>
             this.commentPersistenceController.renameStoredCommentsInFolder(retargets, context),
-        deleteStoredComments: (filePath) => this.commentPersistenceController.deleteStoredComments(filePath),
-        deleteStoredCommentsInFolder: (folderPath) =>
-            this.commentPersistenceController.deleteStoredCommentsInFolder(folderPath),
-        renamePublishedPublicArtifactPath: (previousFilePath, nextFilePath) =>
-            this.renamePublishedPublicArtifactPath(previousFilePath, nextFilePath),
+        deleteStoredComments: (filePath, context) =>
+            this.commentPersistenceController.deleteStoredComments(filePath, context),
+        deleteStoredCommentsInFolder: (folderPath, context) =>
+            this.commentPersistenceController.deleteStoredCommentsInFolder(folderPath, context),
+        renamePublishedPublicArtifactPath: (previousFilePath, nextFilePath, context) =>
+            this.renamePublishedPublicArtifactPath(previousFilePath, nextFilePath, context),
         renamePublishedPublicArtifactPathsInFolder: (previousFolderPath, nextFolderPath, context) =>
             this.renamePublishedPublicArtifactPathsInFolder(previousFolderPath, nextFolderPath, context),
-        deletePublishedPublicArtifactPath: (filePath) => this.deletePublishedPublicArtifactPath(filePath),
-        deletePublishedPublicArtifactPathsInFolder: (folderPath) =>
-            this.deletePublishedPublicArtifactPathsInFolder(folderPath),
+        deletePublishedPublicArtifactPath: (filePath, context) =>
+            this.deletePublishedPublicArtifactPath(filePath, context),
+        deletePublishedPublicArtifactPathsInFolder: (folderPath, context) =>
+            this.deletePublishedPublicArtifactPathsInFolder(folderPath, context),
         clearParsedNoteCache: (filePath) => this.clearParsedNoteCache(filePath),
         clearDerivedCommentLinksForFile: (filePath) => this.derivedCommentMetadataManager.clearDerivedCommentLinksForFile(filePath),
         isCommentableFile: (file): file is TFile => file instanceof TFile && this.isCommentableFile(file),
         isPageNoteCapableFile: (file): file is TFile => file instanceof TFile && this.isPageNoteCapableFile(file),
         hashText: (text) => generateHash(text),
-        loadCommentsForFile: (file) => this.loadCommentsForFile(file),
-        refreshCommentViews: (options) => this.workspaceViewController.refreshCommentViews(options),
+        loadCommentsForFile: (file, context) => this.loadCommentsForFileForEvent(file, context),
+        refreshCommentViews: (options, context) =>
+            this.workspaceViewController.refreshCommentViewsForEvent(options, context),
         refreshEditorDecorations: () => this.refreshEditorDecorations(),
-        refreshAggregateNoteNow: () => this.refreshAggregateNoteNow(),
+        refreshAggregateNoteNow: (context) => this.refreshAggregateNoteNowForEvent(context),
         scheduleAggregateNoteRefresh: () => this.scheduleAggregateNoteRefresh(),
         syncIndexNoteViewClasses: () => this.syncIndexNoteViewClasses(),
         handleMarkdownFileModified: (file) => this.commentPersistenceController.handleMarkdownFileModified(file),
@@ -1147,13 +1155,31 @@ export default class Aside extends Plugin {
         await this.setPublishedPublicArtifactPaths(nextPaths);
     }
 
-    private async renamePublishedPublicArtifactPath(previousFilePath: string, nextFilePath: string): Promise<void> {
-        await this.updatePublishedPublicArtifactPaths(renamePublishedPublicArtifactPathInList(
+    private async updatePublishedPublicArtifactPathsForEvent(
+        nextPaths: string[],
+        context: PluginEventExecutionContext,
+    ): Promise<void> {
+        if (!context.isActive() || this.arePublishedPublicArtifactPathsEqual(nextPaths)) {
+            return;
+        }
+        const updated = await this.indexNoteSettingsController.setPublishedPublicArtifactPaths(nextPaths, context);
+        if (!updated || !context.isActive()) {
+            return;
+        }
+        this.syncPublicFilePublishActions();
+    }
+
+    private async renamePublishedPublicArtifactPath(
+        previousFilePath: string,
+        nextFilePath: string,
+        context: PluginEventExecutionContext,
+    ): Promise<void> {
+        await this.updatePublishedPublicArtifactPathsForEvent(renamePublishedPublicArtifactPathInList(
             this.settings.publishedPublicArtifactPaths,
             previousFilePath,
             nextFilePath,
             this.settings.publishAllowedRoot,
-        ));
+        ), context);
     }
 
     private async renamePublishedPublicArtifactPathsInFolder(
@@ -1170,28 +1196,27 @@ export default class Aside extends Plugin {
         if (!context.isActive()) {
             return;
         }
-        const updated = await this.indexNoteSettingsController.setPublishedPublicArtifactPaths(
-            nextPaths,
-            context,
-        );
-        if (!updated || !context.isActive()) {
-            return;
-        }
-        this.syncPublicFilePublishActions();
+        await this.updatePublishedPublicArtifactPathsForEvent(nextPaths, context);
     }
 
-    private async deletePublishedPublicArtifactPath(filePath: string): Promise<void> {
-        await this.updatePublishedPublicArtifactPaths(removePublishedPublicArtifactPath(
+    private async deletePublishedPublicArtifactPath(
+        filePath: string,
+        context: PluginEventExecutionContext,
+    ): Promise<void> {
+        await this.updatePublishedPublicArtifactPathsForEvent(removePublishedPublicArtifactPath(
             this.settings.publishedPublicArtifactPaths,
             filePath,
-        ));
+        ), context);
     }
 
-    private async deletePublishedPublicArtifactPathsInFolder(folderPath: string): Promise<void> {
-        await this.updatePublishedPublicArtifactPaths(removePublishedPublicArtifactPathsInFolder(
+    private async deletePublishedPublicArtifactPathsInFolder(
+        folderPath: string,
+        context: PluginEventExecutionContext,
+    ): Promise<void> {
+        await this.updatePublishedPublicArtifactPathsForEvent(removePublishedPublicArtifactPathsInFolder(
             this.settings.publishedPublicArtifactPaths,
             folderPath,
-        ));
+        ), context);
     }
 
     private isPublicFilePublishActionView(value: unknown): value is PublicFilePublishActionView {
@@ -2266,6 +2291,39 @@ export default class Aside extends Plugin {
         return comments;
     }
 
+    private async loadCommentsForFileForEvent(
+        file: TFile | null,
+        context: PluginEventExecutionContext,
+    ): Promise<Comment[]> {
+        if (!file || context.signal.aborted || !context.isActive()) {
+            return [];
+        }
+
+        const persistenceController = this.commentPersistenceController;
+        const pairContext = this.getPublicHtmlPairContext(file.path);
+        const comments = await persistenceController.loadCommentsForFileForEvent(file, context);
+        if (!context.isActive()) {
+            return [];
+        }
+        if (!pairContext) {
+            return comments;
+        }
+
+        for (const pairedPath of pairContext.paths) {
+            if (pairedPath === file.path || !context.isActive()) {
+                continue;
+            }
+            const pairedFile = this.getVaultFileByPath(pairedPath);
+            if (pairedFile && this.isPageNoteCapableFile(pairedFile)) {
+                await persistenceController.loadCommentsForFileForEvent(pairedFile, context);
+                if (!context.isActive()) {
+                    return [];
+                }
+            }
+        }
+        return comments;
+    }
+
     public async ensureIndexedCommentsLoaded(): Promise<void> {
         await this.commentPersistenceController.ensureIndexedCommentsLoaded();
     }
@@ -2326,6 +2384,11 @@ export default class Aside extends Plugin {
 
     private async refreshAggregateNoteNow(): Promise<void> {
         await this.commentPersistenceController.refreshAggregateNoteNow();
+    }
+
+    private async refreshAggregateNoteNowForEvent(context: PluginEventExecutionContext): Promise<void> {
+        const persistenceController = this.commentPersistenceController;
+        await persistenceController.refreshAggregateNoteNowForEvent(context);
     }
 
     private getCommentMentionedPageLabels(comment: Comment): string[] {

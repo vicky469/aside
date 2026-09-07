@@ -450,9 +450,14 @@ export class SideNoteSyncEventStore {
         return normalizeSideNoteSyncEventState(this.host.readPersistedPluginData().sideNoteSyncEventState);
     }
 
-    public async refreshFromLatestPersistedData(): Promise<boolean> {
+    public async refreshFromLatestPersistedData(
+        context: PluginEventExecutionContext,
+    ): Promise<boolean> {
+        if (!isPluginEventExecutionActive(context)) {
+            return false;
+        }
         const latestPersistedData = await this.host.readLatestPersistedPluginData?.();
-        if (!latestPersistedData) {
+        if (!latestPersistedData || !isPluginEventExecutionActive(context)) {
             return false;
         }
 
@@ -463,25 +468,36 @@ export class SideNoteSyncEventStore {
             return false;
         }
 
-        await this.host.writePersistedPluginData({
-            ...latestPersistedData,
-            sideNoteSyncEventState: cloneState(mergedState),
-        });
-        return true;
+        try {
+            await this.host.writePersistedPluginData({
+                ...latestPersistedData,
+                sideNoteSyncEventState: cloneState(mergedState),
+            }, context);
+            return isPluginEventExecutionActive(context);
+        } catch (error) {
+            if (!isPluginEventExecutionActive(context)) {
+                return false;
+            }
+            throw error;
+        }
     }
 
     public async appendLocalEvents(
         notePath: string,
+        context: PluginEventExecutionContext,
         inputs: SideNoteSyncEventInput[],
         baseRevisionId: string | null = null,
     ): Promise<SideNoteSyncEvent[]> {
-        if (inputs.length === 0) {
+        if (inputs.length === 0 || !isPluginEventExecutionActive(context)) {
             return [];
         }
 
         const state = this.readState();
         const deviceId = this.host.getDeviceId();
         const noteHash = await this.host.hashText(notePath);
+        if (!isPluginEventExecutionActive(context)) {
+            return [];
+        }
         const deviceLog = state.deviceLogs[deviceId] ?? {
             lastClock: 0,
             events: [],
@@ -510,14 +526,23 @@ export class SideNoteSyncEventStore {
             [deviceId]: state.deviceLogs[deviceId].lastClock,
         };
 
-        await this.writeState(state);
-        return events.map((event) => cloneEvent(event));
+        try {
+            await this.writeState(state, context);
+            return isPluginEventExecutionActive(context)
+                ? events.map((event) => cloneEvent(event))
+                : [];
+        } catch (error) {
+            if (!isPluginEventExecutionActive(context)) {
+                return [];
+            }
+            throw error;
+        }
     }
 
     public async appendLocalEventBatchesAndCompactSnapshots(
         batches: readonly SideNoteSyncEventBatchInput[],
         snapshots: readonly SideNoteSyncSnapshotInput[],
-        context: PluginEventExecutionContext = ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT,
+        context: PluginEventExecutionContext,
     ): Promise<{ eventCount: number; removedEventCount: number; snapshotCount: number }> {
         if (!isPluginEventExecutionActive(context)) {
             return { eventCount: 0, removedEventCount: 0, snapshotCount: 0 };
@@ -679,7 +704,7 @@ export class SideNoteSyncEventStore {
         }
 
         state.processedWatermarks[processorDeviceId] = processorWatermarks;
-        await this.writeState(state);
+        await this.writeState(state, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
     }
 
     public async markWatermarksProcessed(watermarks: Record<string, number>): Promise<void> {
@@ -700,13 +725,14 @@ export class SideNoteSyncEventStore {
             currentWatermarks,
             watermarks,
         );
-        await this.writeState(state);
+        await this.writeState(state, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
     }
 
     public async compactProcessedEventsForSnapshots(
+        context: PluginEventExecutionContext,
         snapshots: SideNoteSyncSnapshotInput[],
     ): Promise<{ removedEventCount: number; snapshotCount: number }> {
-        if (snapshots.length === 0) {
+        if (snapshots.length === 0 || !isPluginEventExecutionActive(context)) {
             return {
                 removedEventCount: 0,
                 snapshotCount: 0,
@@ -719,6 +745,9 @@ export class SideNoteSyncEventStore {
         let snapshotCount = 0;
         for (const snapshot of snapshots) {
             const noteHash = await this.host.hashText(snapshot.coveredNotePath ?? snapshot.notePath);
+            if (!isPluginEventExecutionActive(context)) {
+                return { removedEventCount: 0, snapshotCount: 0 };
+            }
             state.noteSnapshots[noteHash] = {
                 notePath: snapshot.notePath,
                 noteHash,
@@ -747,7 +776,13 @@ export class SideNoteSyncEventStore {
             };
         }
 
-        await this.writeState(state);
+        if (!isPluginEventExecutionActive(context)) {
+            return { removedEventCount: 0, snapshotCount: 0 };
+        }
+        await this.writeState(state, context);
+        if (!isPluginEventExecutionActive(context)) {
+            return { removedEventCount: 0, snapshotCount: 0 };
+        }
         return {
             removedEventCount,
             snapshotCount,
@@ -756,7 +791,7 @@ export class SideNoteSyncEventStore {
 
     private async writeState(
         state: SideNoteSyncEventState,
-        context: PluginEventExecutionContext = ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT,
+        context: PluginEventExecutionContext,
     ): Promise<void> {
         if (!isPluginEventExecutionActive(context)) {
             return;

@@ -7,6 +7,7 @@ import {
     SideNoteSyncEventStore,
 } from "../src/sync/sideNoteSyncEventStore";
 import type { PersistedPluginData } from "../src/settings/indexNoteSettingsPlanner";
+import { ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT } from "../src/app/pluginEventExecutionContext";
 import {
     buildSideNoteSyncEventInputsForThreadDiff,
     decodeSideNoteSyncEventLine,
@@ -538,7 +539,7 @@ test("side-note sync event store appends local events and marks them processed f
         now: () => 1710000000100,
     });
 
-    const events = await store.appendLocalEvents("docs/note.md", [{
+    const events = await store.appendLocalEvents("docs/note.md", ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT, [{
         op: "createThread",
         payload: {
             thread: createThread("docs/note.md"),
@@ -575,7 +576,7 @@ test("side-note sync event store merges latest plugin data before writing stale 
 
     await createStore("device-a", () => deviceAData, (data) => {
         deviceAData = data;
-    }).appendLocalEvents("docs/a.md", [{
+    }).appendLocalEvents("docs/a.md", ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT, [{
         op: "createThread",
         payload: {
             thread: createThread("docs/a.md", { id: "thread-a" }),
@@ -584,7 +585,7 @@ test("side-note sync event store merges latest plugin data before writing stale 
 
     await createStore("device-b", () => deviceBData, (data) => {
         deviceBData = data;
-    }).appendLocalEvents("docs/b.md", [{
+    }).appendLocalEvents("docs/b.md", ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT, [{
         op: "createThread",
         payload: {
             thread: createThread("docs/b.md", { id: "thread-b" }),
@@ -696,7 +697,7 @@ test("side-note sync event store exposes remote events until the current device 
         now: () => 1710000000100,
     });
 
-    await createStore("device-b").appendLocalEvents("docs/note.md", [{
+    await createStore("device-b").appendLocalEvents("docs/note.md", ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT, [{
         op: "createThread",
         payload: {
             thread: createThread("docs/note.md"),
@@ -756,20 +757,20 @@ test("side-note sync event store compacts only globally covered log prefixes", a
     const noteBThread = createThread("docs/b.md", { id: "thread-b" });
 
     const deviceA = createStore("device-a");
-    await deviceA.appendLocalEvents("docs/a.md", [{
+    await deviceA.appendLocalEvents("docs/a.md", ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT, [{
         op: "createThread",
         payload: {
             thread: noteAThread,
         },
     }]);
-    await deviceA.appendLocalEvents("docs/b.md", [{
+    await deviceA.appendLocalEvents("docs/b.md", ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT, [{
         op: "createThread",
         payload: {
             thread: noteBThread,
         },
     }]);
 
-    const compacted = await deviceA.compactProcessedEventsForSnapshots([{
+    const compacted = await deviceA.compactProcessedEventsForSnapshots(ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT, [{
         notePath: "docs/a.md",
         threads: [noteAThread],
     }]);

@@ -147,33 +147,50 @@ export class AgentRunStore {
         });
     }
 
-    public async renameFile(previousFilePath: string, nextFilePath: string): Promise<boolean> {
-        if (previousFilePath === nextFilePath) {
+    public async renameFile(
+        previousFilePath: string,
+        nextFilePath: string,
+        context: PluginEventExecutionContext,
+    ): Promise<boolean> {
+        if (previousFilePath === nextFilePath || !isPluginEventExecutionActive(context)) {
             return false;
         }
 
-        return this.enqueueMutation(async () => {
-            let changed = false;
-            const nextRuns = this.runs.map((run) => {
-                if (run.filePath !== previousFilePath) {
-                    return run;
+        try {
+            return await this.enqueueMutation(async () => {
+                if (!isPluginEventExecutionActive(context)) {
+                    return false;
+                }
+                let changed = false;
+                const nextRuns = this.runs.map((run) => {
+                    if (run.filePath !== previousFilePath) {
+                        return run;
+                    }
+
+                    changed = true;
+                    return {
+                        ...run,
+                        filePath: nextFilePath,
+                    };
+                });
+
+                if (!changed) {
+                    return false;
                 }
 
-                changed = true;
-                return {
-                    ...run,
-                    filePath: nextFilePath,
-                };
+                const persisted = await this.persistEventRuns(nextRuns, context);
+                if (!persisted || !isPluginEventExecutionActive(context)) {
+                    return false;
+                }
+                this.runs = nextRuns;
+                return true;
             });
-
-            if (!changed) {
+        } catch (error) {
+            if (!isPluginEventExecutionActive(context)) {
                 return false;
             }
-
-            await this.persist(nextRuns);
-            this.runs = nextRuns;
-            return true;
-        });
+            throw error;
+        }
     }
 
     public async renameFolder(
@@ -211,7 +228,7 @@ export class AgentRunStore {
                     return false;
                 }
 
-                const persisted = await this.persistFolderRename(nextRuns, context);
+                const persisted = await this.persistEventRuns(nextRuns, context);
                 if (!persisted || !isPluginEventExecutionActive(context)) {
                     return false;
                 }
@@ -226,7 +243,7 @@ export class AgentRunStore {
         }
     }
 
-    private async persistFolderRename(
+    private async persistEventRuns(
         runs: AgentRunRecord[],
         context: PluginEventExecutionContext,
     ): Promise<boolean> {

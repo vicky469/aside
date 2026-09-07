@@ -321,6 +321,42 @@ test("AgentRunStore aborts a queued folder retarget before stale persistence or 
     assert.deepEqual(store.getRuns().map((run) => run.filePath), ["Current/a.md"]);
 });
 
+test("AgentRunStore aborts a queued file retarget before stale persistence or memory commits", async () => {
+    const transactionStarted = createDeferred();
+    const releaseTransaction = createDeferred();
+    const abortController = new AbortController();
+    let persistedData: PersistedPluginData = {
+        agentRuns: [createRun({ id: "old", filePath: "Draft.md" })],
+    };
+    const store = new AgentRunStore({
+        readPersistedPluginData: () => persistedData,
+        updatePersistedPluginData: async (updater) => {
+            transactionStarted.resolve();
+            await releaseTransaction.promise;
+            persistedData = updater({ ...persistedData });
+            throw new Error("stale file persistence failed after abort");
+        },
+    });
+    store.load();
+    const context = {
+        signal: abortController.signal,
+        isActive: () => !abortController.signal.aborted,
+    };
+
+    const staleRename = store.renameFile("Draft.md", "Published.md", context);
+    await transactionStarted.promise;
+    abortController.abort();
+    persistedData = {
+        agentRuns: [createRun({ id: "reloaded", filePath: "Reloaded.md" })],
+    };
+    store.load();
+    releaseTransaction.resolve();
+
+    assert.equal(await staleRename, false);
+    assert.deepEqual((persistedData.agentRuns as AgentRunRecord[]).map((run) => run.filePath), ["Reloaded.md"]);
+    assert.deepEqual(store.getRuns().map((run) => run.filePath), ["Reloaded.md"]);
+});
+
 test("AgentRunStore preserves active local runs across external reloads", async () => {
     let persistedData: PersistedPluginData = {
         agentRuns: [createRun({

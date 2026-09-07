@@ -4,10 +4,13 @@ import test from "node:test";
 import type { DataAdapter } from "obsidian";
 import type { CommentThread } from "../src/commentManager";
 import { SidecarCommentStorage } from "../src/core/storage/sidecarCommentStorage";
+import { ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT } from "../src/app/pluginEventExecutionContext";
 
 class FakeAdapter implements Pick<DataAdapter, "exists" | "mkdir" | "write" | "read" | "remove" | "rename" | "list"> {
     public readonly directories = new Set<string>();
     public readonly files = new Map<string, string>();
+    public beforeRemove: ((normalizedPath: string) => Promise<void>) | null = null;
+    public readonly removeAttempts: string[] = [];
 
     async exists(normalizedPath: string): Promise<boolean> {
         return this.directories.has(normalizedPath) || this.files.has(normalizedPath);
@@ -31,6 +34,8 @@ class FakeAdapter implements Pick<DataAdapter, "exists" | "mkdir" | "write" | "r
     }
 
     async remove(normalizedPath: string): Promise<void> {
+        this.removeAttempts.push(normalizedPath);
+        await this.beforeRemove?.(normalizedPath);
         this.files.delete(normalizedPath);
     }
 
@@ -109,6 +114,14 @@ function createThread(filePath: string): CommentThread {
     };
 }
 
+function createDeferred() {
+    let resolvePromise!: () => void;
+    const promise = new Promise<void>((resolve) => {
+        resolvePromise = resolve;
+    });
+    return { promise, resolve: resolvePromise };
+}
+
 test("sidecar comment storage writes hashed per-note files and reads them back", async () => {
     const adapter = new FakeAdapter();
     const storage = new SidecarCommentStorage({
@@ -120,7 +133,7 @@ test("sidecar comment storage writes hashed per-note files and reads them back",
     const expectedHash = hashText(notePath);
     const expectedPath = `.obsidian/plugins/aside/sidenotes/by-note/${expectedHash.slice(0, 2)}/${expectedHash}.json`;
 
-    await storage.write(notePath, [createThread(notePath)]);
+    await storage.write(notePath, [createThread(notePath)], ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
 
     assert.equal(await storage.exists(notePath), true);
     assert.equal(adapter.directories.has(".obsidian/plugins/aside/sidenotes/by-note"), true);
@@ -156,7 +169,7 @@ test("sidecar comment storage strips legacy resolution state on read and rewrite
     assert.ok(readThreads);
     assert.equal(Object.prototype.hasOwnProperty.call(readThreads[0], "resolved"), false);
 
-    await storage.write(notePath, readThreads);
+    await storage.write(notePath, readThreads, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
 
     const rewrittenPayload = JSON.parse(await adapter.read(storagePath)) as {
         threads: Array<Record<string, unknown>>;
@@ -177,11 +190,11 @@ test("sidecar comment storage renames the hashed file when the note path changes
     const originalNotePath = "books/original.md";
     const renamedNotePath = "books/renamed.md";
 
-    await storage.write(originalNotePath, [createThread(originalNotePath)]);
+    await storage.write(originalNotePath, [createThread(originalNotePath)], ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
     const originalStoragePath = await storage.getNoteStoragePath(originalNotePath);
     const renamedStoragePath = await storage.getNoteStoragePath(renamedNotePath);
 
-    await storage.rename(originalNotePath, renamedNotePath);
+    await storage.rename(originalNotePath, renamedNotePath, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
 
     assert.equal(adapter.files.has(originalStoragePath), false);
     assert.equal(adapter.files.has(renamedStoragePath), true);
@@ -204,7 +217,12 @@ test("sidecar comment storage writes source-id keyed files and retargets threads
     const expectedHash = hashText(sourceId);
     const expectedPath = `.obsidian/plugins/aside/sidenotes/by-source/${expectedHash.slice(0, 2)}/${expectedHash}.json`;
 
-    await storage.writeForSource(sourceId, originalNotePath, [createThread(originalNotePath)]);
+    await storage.writeForSource(
+        sourceId,
+        originalNotePath,
+        [createThread(originalNotePath)],
+        ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT,
+    );
 
     assert.equal(await storage.existsForSource(sourceId), true);
     assert.equal(adapter.files.has(expectedPath), true);
@@ -224,8 +242,13 @@ test("sidecar comment storage writes only under the current Aside plugin directo
     });
     const notePath = "books/example.md";
 
-    await storage.write(notePath, [createThread(notePath)]);
-    await storage.writeForSource("src-example", notePath, [createThread(notePath)]);
+    await storage.write(notePath, [createThread(notePath)], ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
+    await storage.writeForSource(
+        "src-example",
+        notePath,
+        [createThread(notePath)],
+        ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT,
+    );
 
     assert.equal(Array.from(adapter.files.keys()).every((filePath) =>
         filePath.startsWith(".obsidian/plugins/aside/sidenotes/"),
@@ -241,8 +264,8 @@ test("sidecar comment storage removes the sidecar file when the thread list beco
     });
     const notePath = "books/example.md";
 
-    await storage.write(notePath, [createThread(notePath)]);
-    await storage.write(notePath, []);
+    await storage.write(notePath, [createThread(notePath)], ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
+    await storage.write(notePath, [], ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
 
     assert.equal(await storage.exists(notePath), false);
     assert.equal(await storage.read(notePath), null);
@@ -258,11 +281,16 @@ test("sidecar comment storage removes note and source records for one missing no
     const removedNotePath = "books/deleted.md";
     const keptNotePath = "books/kept.md";
 
-    await storage.write(removedNotePath, [createThread(removedNotePath)]);
-    await storage.writeForSource("src-deleted", removedNotePath, [createThread(removedNotePath)]);
-    await storage.write(keptNotePath, [createThread(keptNotePath)]);
+    await storage.write(removedNotePath, [createThread(removedNotePath)], ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
+    await storage.writeForSource(
+        "src-deleted",
+        removedNotePath,
+        [createThread(removedNotePath)],
+        ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT,
+    );
+    await storage.write(keptNotePath, [createThread(keptNotePath)], ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
 
-    const removed = await storage.removeNote(removedNotePath);
+    const removed = await storage.removeNote(removedNotePath, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
     const remaining = await storage.listStoredComments();
 
     assert.equal(removed?.notePath, removedNotePath);
@@ -281,8 +309,13 @@ test("sidecar comment storage lists records across note and source sidecars with
     });
     const notePath = "books/example.md";
 
-    await storage.write(notePath, [createThread(notePath)]);
-    await storage.writeForSource("src-example", notePath, [createThread(notePath)]);
+    await storage.write(notePath, [createThread(notePath)], ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
+    await storage.writeForSource(
+        "src-example",
+        notePath,
+        [createThread(notePath)],
+        ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT,
+    );
 
     const records = await storage.listStoredComments();
 
@@ -302,14 +335,33 @@ test("sidecar comment storage removes note and source sidecars under a deleted f
     const nestedDeletedNotePath = "Deleted/nested/other.md";
     const keptNotePath = "Deletedness/keep.md";
 
-    await storage.write(deletedNotePath, [createThread(deletedNotePath)]);
-    await storage.writeForSource("src-deleted", deletedNotePath, [createThread(deletedNotePath)]);
-    await storage.write(nestedDeletedNotePath, [createThread(nestedDeletedNotePath)]);
-    await storage.writeForSource("src-nested", nestedDeletedNotePath, [createThread(nestedDeletedNotePath)]);
-    await storage.write(keptNotePath, [createThread(keptNotePath)]);
-    await storage.writeForSource("src-kept", keptNotePath, [createThread(keptNotePath)]);
+    await storage.write(deletedNotePath, [createThread(deletedNotePath)], ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
+    await storage.writeForSource(
+        "src-deleted",
+        deletedNotePath,
+        [createThread(deletedNotePath)],
+        ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT,
+    );
+    await storage.write(
+        nestedDeletedNotePath,
+        [createThread(nestedDeletedNotePath)],
+        ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT,
+    );
+    await storage.writeForSource(
+        "src-nested",
+        nestedDeletedNotePath,
+        [createThread(nestedDeletedNotePath)],
+        ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT,
+    );
+    await storage.write(keptNotePath, [createThread(keptNotePath)], ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
+    await storage.writeForSource(
+        "src-kept",
+        keptNotePath,
+        [createThread(keptNotePath)],
+        ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT,
+    );
 
-    const removed = await storage.removeFolder("Deleted");
+    const removed = await storage.removeFolder("Deleted", ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
 
     assert.deepEqual(
         removed.map((record) => ({
@@ -338,12 +390,51 @@ test("sidecar comment storage ignores ENOENT while removing a deleted folder", a
     });
     const deletedNotePath = "Deleted/note.md";
 
-    await storage.write(deletedNotePath, [createThread(deletedNotePath)]);
+    await storage.write(deletedNotePath, [createThread(deletedNotePath)], ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
     const storagePath = await storage.getNoteStoragePath(deletedNotePath);
     adapter.enoentOnRemove.add(storagePath);
 
-    const removed = await storage.removeFolder("Deleted");
+    const removed = await storage.removeFolder("Deleted", ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
 
     assert.deepEqual(removed.map((record) => record.notePath), [deletedNotePath]);
     assert.equal(await storage.exists(deletedNotePath), false);
+});
+
+test("sidecar folder removal stops before later records after its epoch aborts", async () => {
+    const adapter = new FakeAdapter();
+    const storage = new SidecarCommentStorage({
+        adapter: adapter as unknown as DataAdapter,
+        pluginDirPath: ".obsidian/plugins/aside",
+        hashText: async (text) => hashText(text),
+    });
+    const firstPath = "Deleted/a.md";
+    const secondPath = "Deleted/b.md";
+    await storage.write(firstPath, [createThread(firstPath)], ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
+    await storage.write(secondPath, [createThread(secondPath)], ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
+    const removeStarted = createDeferred();
+    const releaseRemove = createDeferred();
+    const abortController = new AbortController();
+    adapter.beforeRemove = async () => {
+        if (adapter.removeAttempts.length === 1) {
+            removeStarted.resolve();
+            await releaseRemove.promise;
+        }
+    };
+    const context = {
+        signal: abortController.signal,
+        isActive: () => !abortController.signal.aborted,
+    };
+
+    const staleRemoval = storage.removeFolder("Deleted", context);
+    await removeStarted.promise;
+    abortController.abort();
+    releaseRemove.resolve();
+
+    assert.deepEqual(await staleRemoval, []);
+    assert.equal(adapter.removeAttempts.length, 1);
+    assert.equal(adapter.files.size, 1);
+
+    adapter.beforeRemove = null;
+    const removed = await storage.removeFolder("Deleted", ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
+    assert.deepEqual(removed.map((record) => record.notePath), [secondPath]);
 });

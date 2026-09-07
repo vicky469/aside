@@ -27,12 +27,21 @@ export interface PluginLifecycleHost {
     app: Plugin["app"];
     getCommentManager(): CommentManager;
     getAggregateCommentIndex(): AggregateCommentIndex;
-    renameAgentRuns(previousFilePath: string, nextFilePath: string): Promise<boolean>;
-    renameScriptRuns(previousFilePath: string, nextFilePath: string): Promise<boolean>;
+    renameAgentRuns(
+        previousFilePath: string,
+        nextFilePath: string,
+        context: PluginEventExecutionContext,
+    ): Promise<boolean>;
+    renameScriptRuns(
+        previousFilePath: string,
+        nextFilePath: string,
+        context: PluginEventExecutionContext,
+    ): Promise<boolean>;
     renameStoredComments(
         previousFilePath: string,
         nextFilePath: string,
         retargetOptions: CommentThreadRetargetOptions,
+        context: PluginEventExecutionContext,
     ): Promise<void>;
     renameAgentRunsInFolder(
         previousFolderPath: string,
@@ -48,25 +57,35 @@ export interface PluginLifecycleHost {
         retargets: readonly CommentFileRetarget[],
         context: PluginEventExecutionContext,
     ): Promise<CommentFileRetargetResult>;
-    deleteStoredComments(filePath: string): Promise<void>;
-    deleteStoredCommentsInFolder(folderPath: string): Promise<void>;
-    renamePublishedPublicArtifactPath(previousFilePath: string, nextFilePath: string): Promise<void>;
+    deleteStoredComments(filePath: string, context: PluginEventExecutionContext): Promise<void>;
+    deleteStoredCommentsInFolder(folderPath: string, context: PluginEventExecutionContext): Promise<void>;
+    renamePublishedPublicArtifactPath(
+        previousFilePath: string,
+        nextFilePath: string,
+        context: PluginEventExecutionContext,
+    ): Promise<void>;
     renamePublishedPublicArtifactPathsInFolder(
         previousFolderPath: string,
         nextFolderPath: string,
         context: PluginEventExecutionContext,
     ): Promise<void>;
-    deletePublishedPublicArtifactPath(filePath: string): Promise<void>;
-    deletePublishedPublicArtifactPathsInFolder(folderPath: string): Promise<void>;
+    deletePublishedPublicArtifactPath(filePath: string, context: PluginEventExecutionContext): Promise<void>;
+    deletePublishedPublicArtifactPathsInFolder(
+        folderPath: string,
+        context: PluginEventExecutionContext,
+    ): Promise<void>;
     clearParsedNoteCache(filePath: string): void;
     clearDerivedCommentLinksForFile(filePath: string): void;
     isCommentableFile(file: TAbstractFile | null): file is TFile;
     isPageNoteCapableFile(file: TAbstractFile | null): file is TFile;
     hashText(text: string): Promise<string>;
-    loadCommentsForFile(file: TFile | null): Promise<unknown>;
-    refreshCommentViews(options?: { skipDataRefresh?: boolean }): Promise<void>;
+    loadCommentsForFile(file: TFile | null, context: PluginEventExecutionContext): Promise<unknown>;
+    refreshCommentViews(
+        options: { skipDataRefresh?: boolean } | undefined,
+        context: PluginEventExecutionContext,
+    ): Promise<void>;
     refreshEditorDecorations(): void;
-    refreshAggregateNoteNow(): Promise<void>;
+    refreshAggregateNoteNow(context: PluginEventExecutionContext): Promise<void>;
     scheduleAggregateNoteRefresh(): void;
     syncIndexNoteViewClasses(): void;
     handleMarkdownFileModified(file: TFile): Promise<void>;
@@ -141,7 +160,7 @@ export class PluginLifecycleController {
         if (!this.isActive(context)) {
             return;
         }
-        await this.host.deleteStoredComments(filePath);
+        await this.host.deleteStoredComments(filePath, context);
         if (!this.isActive(context)) {
             return;
         }
@@ -164,8 +183,8 @@ export class PluginLifecycleController {
             return;
         }
         await Promise.all([
-            Promise.resolve().then(() => this.host.refreshCommentViews()),
-            Promise.resolve().then(() => this.host.refreshAggregateNoteNow()),
+            Promise.resolve().then(() => this.host.refreshCommentViews({ skipDataRefresh: true }, context)),
+            Promise.resolve().then(() => this.host.refreshAggregateNoteNow(context)),
         ]);
     }
 
@@ -190,7 +209,7 @@ export class PluginLifecycleController {
             return;
         }
 
-        await this.host.refreshCommentViews({ skipDataRefresh: true });
+        await this.host.refreshCommentViews({ skipDataRefresh: true }, context);
     }
 
     public async handleMetadataResolved(
@@ -199,7 +218,7 @@ export class PluginLifecycleController {
         if (!this.isActive(context)) {
             return;
         }
-        await this.host.refreshCommentViews({ skipDataRefresh: true });
+        await this.host.refreshCommentViews({ skipDataRefresh: true }, context);
     }
 
     private async applyFileRename(
@@ -210,7 +229,7 @@ export class PluginLifecycleController {
         if (!this.isActive(context)) {
             return false;
         }
-        await this.host.renamePublishedPublicArtifactPath(oldPath, file.path);
+        await this.host.renamePublishedPublicArtifactPath(oldPath, file.path, context);
         if (!this.isActive(context)) {
             return false;
         }
@@ -218,11 +237,11 @@ export class PluginLifecycleController {
             return false;
         }
 
-        await this.host.renameAgentRuns(oldPath, file.path);
+        await this.host.renameAgentRuns(oldPath, file.path, context);
         if (!this.isActive(context)) {
             return false;
         }
-        await this.host.renameScriptRuns(oldPath, file.path);
+        await this.host.renameScriptRuns(oldPath, file.path, context);
         if (!this.isActive(context)) {
             return false;
         }
@@ -234,7 +253,7 @@ export class PluginLifecycleController {
             selectionCapable: this.host.isCommentableFile(file),
             pageLabelHash,
         };
-        await this.host.renameStoredComments(oldPath, file.path, retargetOptions);
+        await this.host.renameStoredComments(oldPath, file.path, retargetOptions, context);
         if (!this.isActive(context)) {
             return false;
         }
@@ -256,7 +275,7 @@ export class PluginLifecycleController {
         }
         const liveFile = this.host.app.vault.getAbstractFileByPath(file.path);
         if (liveFile && this.isFile(liveFile)) {
-            await this.host.loadCommentsForFile(liveFile);
+            await this.host.loadCommentsForFile(liveFile, context);
             if (!this.isActive(context)) {
                 return false;
             }
@@ -276,13 +295,13 @@ export class PluginLifecycleController {
         if (!this.isActive(context)) {
             return;
         }
-        await this.host.refreshCommentViews();
+        await this.host.refreshCommentViews({ skipDataRefresh: true }, context);
     }
 
     public async handleFileRename(
         file: TAbstractFile | null,
         oldPath: string,
-        context: PluginEventExecutionContext = ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT,
+        context: PluginEventExecutionContext,
     ): Promise<void> {
         if (!file || !this.isActive(context)) {
             return;
@@ -456,14 +475,14 @@ export class PluginLifecycleController {
 
     public async handleFileDelete(
         file: TAbstractFile | null,
-        context: PluginEventExecutionContext = ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT,
+        context: PluginEventExecutionContext,
     ): Promise<void> {
         if (!file || !this.isActive(context)) {
             return;
         }
 
         if (this.isFile(file)) {
-            await this.host.deletePublishedPublicArtifactPath(file.path);
+            await this.host.deletePublishedPublicArtifactPath(file.path, context);
             if (!this.isActive(context)) {
                 return;
             }
@@ -480,13 +499,13 @@ export class PluginLifecycleController {
             return;
         }
 
-        await this.host.deletePublishedPublicArtifactPathsInFolder(file.path);
+        await this.host.deletePublishedPublicArtifactPathsInFolder(file.path, context);
         if (!this.isActive(context)) {
             return;
         }
 
         const deletedFiles = this.collectPageNoteCapableFiles(file);
-        await this.host.deleteStoredCommentsInFolder(file.path);
+        await this.host.deleteStoredCommentsInFolder(file.path, context);
         if (!this.isActive(context)) {
             return;
         }

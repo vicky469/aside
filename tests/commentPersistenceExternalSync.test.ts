@@ -9,6 +9,7 @@ import { SideNoteSyncEventStore, type SideNoteSyncEventState } from "../src/sync
 import { parseNoteComments } from "../src/core/storage/noteCommentStorage";
 import { AggregateCommentIndex } from "../src/index/AggregateCommentIndex";
 import { ALL_COMMENTS_NOTE_PATH } from "../src/core/derived/allCommentsNote";
+import { ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT } from "../src/app/pluginEventExecutionContext";
 
 class FakeAdapter implements Pick<DataAdapter, "exists" | "mkdir" | "write" | "read" | "remove" | "rename" | "list"> {
     public readonly directories = new Set<string>();
@@ -627,7 +628,7 @@ test("comment persistence retargets a renamed Markdown sidecar into reloadable D
     await controller.renameStoredComments(originalFile.path, renamedFile.path, {
         selectionCapable: false,
         pageLabelHash: "hash-final proposal",
-    });
+    }, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
     const comments = await controller.loadCommentsForFile(renamedFile);
     const persistedPayload = JSON.parse(
         adapter.files.get(getSidecarStoragePath(renamedFile.path).toLowerCase())
@@ -707,13 +708,13 @@ test("comment persistence controller replays synced plugin-data events into the 
         now: () => 1710000000100 + eventCounter,
     });
 
-    await remoteEventStore.appendLocalEvents(oldFile.path, [{
+    await remoteEventStore.appendLocalEvents(oldFile.path, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT, [{
         op: "createThread",
         payload: {
             thread: createThread(oldFile.path),
         },
     }]);
-    await remoteEventStore.appendLocalEvents(oldFile.path, [{
+    await remoteEventStore.appendLocalEvents(oldFile.path, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT, [{
         op: "renameNote",
         payload: {
             previousNotePath: oldFile.path,
@@ -825,11 +826,11 @@ test("comment persistence converts synced Markdown rename events into DOCX page-
         now: () => 1710000000300 + eventCounter,
     });
 
-    await remoteEventStore.appendLocalEvents(oldFile.path, [{
+    await remoteEventStore.appendLocalEvents(oldFile.path, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT, [{
         op: "createThread",
         payload: { thread: remoteThread },
     }]);
-    await remoteEventStore.appendLocalEvents(oldFile.path, [{
+    await remoteEventStore.appendLocalEvents(oldFile.path, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT, [{
         op: "renameNote",
         payload: {
             previousNotePath: oldFile.path,
@@ -971,7 +972,7 @@ for (const { kind, indexPath } of [
             hashText: async (text) => `hash-${text.replace(/\//g, "_")}`,
             now: () => 1710000000100 + eventCounter,
         });
-        await remoteEventStore.appendLocalEvents(oldFile.path, [{
+        await remoteEventStore.appendLocalEvents(oldFile.path, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT, [{
             op: "renameNote",
             payload: {
                 previousNotePath: oldFile.path,
@@ -1160,13 +1161,13 @@ test("comment persistence controller hydrates compacted snapshots over a stale s
         now: () => 1710000000300 + eventCounter,
     });
 
-    await remoteEventStore.appendLocalEvents(file.path, [{
+    await remoteEventStore.appendLocalEvents(file.path, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT, [{
         op: "createThread",
         payload: {
             thread: remoteThread,
         },
     }]);
-    await remoteEventStore.compactProcessedEventsForSnapshots([{
+    await remoteEventStore.compactProcessedEventsForSnapshots(ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT, [{
         notePath: file.path,
         threads: [remoteThread],
     }]);
@@ -1243,13 +1244,13 @@ test("comment persistence controller stops hydrating snapshots after disposal", 
         now: () => 1710000000300 + eventCounter,
     });
 
-    await remoteEventStore.appendLocalEvents(file.path, [{
+    await remoteEventStore.appendLocalEvents(file.path, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT, [{
         op: "createThread",
         payload: {
             thread: createThread(file.path),
         },
     }]);
-    await remoteEventStore.appendLocalEvents(otherFile.path, [{
+    await remoteEventStore.appendLocalEvents(otherFile.path, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT, [{
         op: "createThread",
         payload: {
             thread: {
@@ -1258,7 +1259,7 @@ test("comment persistence controller stops hydrating snapshots after disposal", 
             },
         },
     }]);
-    await remoteEventStore.compactProcessedEventsForSnapshots([
+    await remoteEventStore.compactProcessedEventsForSnapshots(ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT, [
         {
             notePath: file.path,
             threads: [createThread(file.path)],
@@ -1383,23 +1384,23 @@ test("comment persistence controller refreshes synced plugin data before sidebar
         now: () => 1710000000300 + eventCounter,
     });
 
-    await remoteEventStore.appendLocalEvents(file.path, [{
+    await remoteEventStore.appendLocalEvents(file.path, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT, [{
         op: "createThread",
         payload: {
             thread: remoteThread,
         },
     }]);
-    await remoteEventStore.compactProcessedEventsForSnapshots([{
+    await remoteEventStore.compactProcessedEventsForSnapshots(ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT, [{
         notePath: file.path,
         threads: [remoteThread],
     }]);
-    await remoteEventStore.appendLocalEvents(otherFile.path, [{
+    await remoteEventStore.appendLocalEvents(otherFile.path, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT, [{
         op: "createThread",
         payload: {
             thread: otherRemoteThread,
         },
     }]);
-    await remoteEventStore.compactProcessedEventsForSnapshots([{
+    await remoteEventStore.compactProcessedEventsForSnapshots(ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT, [{
         notePath: otherFile.path,
         threads: [otherRemoteThread],
     }]);
@@ -1512,7 +1513,7 @@ test("comment persistence controller does not recover renamed source notes when 
         hashText: async (text) => `hash-${text.replace(/\//g, "_")}`,
         now: () => 1710000000300 + eventCounter,
     });
-    await remoteEventStore.appendLocalEvents(previousFile.path, [{
+    await remoteEventStore.appendLocalEvents(previousFile.path, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT, [{
         op: "createThread",
         payload: {
             thread: remoteThread,
@@ -1523,7 +1524,7 @@ test("comment persistence controller does not recover renamed source notes when 
             thread: remoteThread2,
         },
     }]);
-    await remoteEventStore.compactProcessedEventsForSnapshots([{
+    await remoteEventStore.compactProcessedEventsForSnapshots(ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT, [{
         notePath: previousFile.path,
         threads: [remoteThread, remoteThread2],
     }]);
@@ -1654,7 +1655,7 @@ test("comment persistence controller recovers renamed source notes from synced s
         hashText: async (text) => `hash-${text.replace(/\//g, "_")}`,
         now: () => 1710000000300 + eventCounter,
     });
-    await remoteEventStore.appendLocalEvents(previousFile.path, [{
+    await remoteEventStore.appendLocalEvents(previousFile.path, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT, [{
         op: "createThread",
         payload: {
             thread: remoteThread,
@@ -1665,7 +1666,7 @@ test("comment persistence controller recovers renamed source notes from synced s
             thread: remoteThread2,
         },
     }]);
-    await remoteEventStore.compactProcessedEventsForSnapshots([{
+    await remoteEventStore.compactProcessedEventsForSnapshots(ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT, [{
         notePath: previousFile.path,
         threads: [remoteThread, remoteThread2],
     }]);
@@ -2011,13 +2012,13 @@ test("comment persistence controller hydrates compacted snapshots into a missing
         now: () => 1710000000100 + eventCounter,
     });
 
-    await remoteEventStore.appendLocalEvents(file.path, [{
+    await remoteEventStore.appendLocalEvents(file.path, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT, [{
         op: "createThread",
         payload: {
             thread: remoteThread,
         },
     }]);
-    await remoteEventStore.compactProcessedEventsForSnapshots([{
+    await remoteEventStore.compactProcessedEventsForSnapshots(ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT, [{
         notePath: file.path,
         threads: [remoteThread],
     }]);
@@ -2104,13 +2105,13 @@ test("comment persistence controller prunes compacted snapshots for missing file
         now: () => 1710000000100 + eventCounter,
     });
 
-    await remoteEventStore.appendLocalEvents(missingPath, [{
+    await remoteEventStore.appendLocalEvents(missingPath, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT, [{
         op: "createThread",
         payload: {
             thread: remoteThread,
         },
     }]);
-    await remoteEventStore.compactProcessedEventsForSnapshots([{
+    await remoteEventStore.compactProcessedEventsForSnapshots(ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT, [{
         notePath: missingPath,
         threads: [remoteThread],
     }]);
@@ -2188,13 +2189,13 @@ test("comment persistence controller records a delete tombstone for synced comme
         now: () => 1710000000100 + remoteEventCounter,
     });
 
-    await remoteEventStore.appendLocalEvents(file.path, [{
+    await remoteEventStore.appendLocalEvents(file.path, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT, [{
         op: "createThread",
         payload: {
             thread: remoteThread,
         },
     }]);
-    await remoteEventStore.compactProcessedEventsForSnapshots([{
+    await remoteEventStore.compactProcessedEventsForSnapshots(ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT, [{
         notePath: file.path,
         threads: [remoteThread],
     }]);
@@ -2237,7 +2238,7 @@ test("comment persistence controller records a delete tombstone for synced comme
         log: async () => {},
     });
 
-    await controller.deleteStoredComments(file.path);
+    await controller.deleteStoredComments(file.path, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
 
     const state = persistedData.sideNoteSyncEventState as SideNoteSyncEventState;
     const localDeleteEvents = state.deviceLogs["device-a"]?.events.filter((event) =>
@@ -2414,13 +2415,13 @@ test("comment persistence controller skips incompatible compacted snapshots for 
         now: () => 1710000000100 + eventCounter,
     });
 
-    await remoteEventStore.appendLocalEvents(file.path, [{
+    await remoteEventStore.appendLocalEvents(file.path, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT, [{
         op: "createThread",
         payload: {
             thread: incompatibleThread,
         },
     }]);
-    await remoteEventStore.compactProcessedEventsForSnapshots([{
+    await remoteEventStore.compactProcessedEventsForSnapshots(ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT, [{
         notePath: file.path,
         threads: [incompatibleThread],
     }]);

@@ -1,6 +1,10 @@
 import type { DataAdapter } from "obsidian";
 import { cloneCommentThread, cloneCommentThreads, type CommentThread } from "../../commentManager";
 import { isPathInsideFolder } from "../files/pathScope";
+import {
+    isPluginEventExecutionActive,
+    type PluginEventExecutionContext,
+} from "../events/pluginEventExecutionContext";
 
 const SIDECAR_STORAGE_VERSION = 1;
 
@@ -33,13 +37,23 @@ function getParentPath(path: string): string {
     return slashIndex <= 0 ? "" : normalized.slice(0, slashIndex);
 }
 
-async function ensureDirectory(adapter: DataAdapter, targetPath: string): Promise<void> {
+async function ensureDirectory(
+    adapter: DataAdapter,
+    targetPath: string,
+    context: PluginEventExecutionContext,
+): Promise<void> {
     const segments = normalizeStoragePath(targetPath).split("/").filter(Boolean);
     let nextPath = "";
     for (const segment of segments) {
+        if (!isPluginEventExecutionActive(context)) {
+            return;
+        }
         nextPath = nextPath ? `${nextPath}/${segment}` : segment;
         if (await adapter.exists(nextPath)) {
             continue;
+        }
+        if (!isPluginEventExecutionActive(context)) {
+            return;
         }
 
         await adapter.mkdir(nextPath);
@@ -157,24 +171,49 @@ export class SidecarCommentStorage {
         }
     }
 
-    public async write(notePath: string, threads: CommentThread[]): Promise<void> {
+    public async write(
+        notePath: string,
+        threads: CommentThread[],
+        context: PluginEventExecutionContext,
+    ): Promise<void> {
+        if (!isPluginEventExecutionActive(context)) {
+            return;
+        }
         const storagePath = await this.getNoteStoragePath(notePath);
-        await this.writeStoragePath(storagePath, notePath, threads);
+        if (!isPluginEventExecutionActive(context)) {
+            return;
+        }
+        await this.writeStoragePath(storagePath, notePath, threads, context);
     }
 
-    public async writeForSource(sourceId: string, notePath: string, threads: CommentThread[]): Promise<void> {
+    public async writeForSource(
+        sourceId: string,
+        notePath: string,
+        threads: CommentThread[],
+        context: PluginEventExecutionContext,
+    ): Promise<void> {
+        if (!isPluginEventExecutionActive(context)) {
+            return;
+        }
         const storagePath = await this.getSourceStoragePath(sourceId);
-        await this.writeStoragePath(storagePath, notePath, threads, sourceId);
+        if (!isPluginEventExecutionActive(context)) {
+            return;
+        }
+        await this.writeStoragePath(storagePath, notePath, threads, context, sourceId);
     }
 
     private async writeStoragePath(
         storagePath: string,
         notePath: string,
         threads: CommentThread[],
+        context: PluginEventExecutionContext,
         sourceId?: string,
     ): Promise<void> {
+        if (!isPluginEventExecutionActive(context)) {
+            return;
+        }
         if (threads.length === 0) {
-            await this.removeStoragePath(storagePath);
+            await this.removeStoragePath(storagePath, context);
             return;
         }
 
@@ -191,46 +230,86 @@ export class SidecarCommentStorage {
         const serialized = `${JSON.stringify(payload)}\n`;
         const tempPath = `${storagePath}.tmp-${createTempFileSuffix()}`;
 
-        await ensureDirectory(this.options.adapter, getParentPath(storagePath));
+        await ensureDirectory(this.options.adapter, getParentPath(storagePath), context);
+        if (!isPluginEventExecutionActive(context)) {
+            return;
+        }
         await this.options.adapter.write(tempPath, serialized);
+        if (!isPluginEventExecutionActive(context)) {
+            return;
+        }
         try {
-            await this.removeStoragePath(storagePath);
+            await this.removeStoragePath(storagePath, context);
+            if (!isPluginEventExecutionActive(context)) {
+                return;
+            }
             await this.options.adapter.rename(tempPath, storagePath);
         } catch (error) {
-            await this.removeStoragePath(tempPath);
+            if (!isPluginEventExecutionActive(context)) {
+                return;
+            }
+            await this.removeStoragePath(tempPath, context);
+            if (!isPluginEventExecutionActive(context)) {
+                return;
+            }
             throw error;
         }
     }
 
-    public async rename(previousNotePath: string, nextNotePath: string): Promise<void> {
-        if (previousNotePath === nextNotePath) {
+    public async rename(
+        previousNotePath: string,
+        nextNotePath: string,
+        context: PluginEventExecutionContext,
+    ): Promise<void> {
+        if (previousNotePath === nextNotePath || !isPluginEventExecutionActive(context)) {
             return;
         }
 
         const previousThreads = await this.read(previousNotePath);
-        if (!previousThreads) {
+        if (!previousThreads || !isPluginEventExecutionActive(context)) {
             return;
         }
 
         if (previousThreads.length === 0) {
-            await this.remove(previousNotePath);
+            await this.remove(previousNotePath, context);
             return;
         }
 
         await this.write(nextNotePath, previousThreads.map((thread) => ({
             ...thread,
             filePath: nextNotePath,
-        })));
+        })), context);
+        if (!isPluginEventExecutionActive(context)) {
+            return;
+        }
 
-        await this.removeStoragePath(await this.getNoteStoragePath(previousNotePath));
+        const previousStoragePath = await this.getNoteStoragePath(previousNotePath);
+        if (!isPluginEventExecutionActive(context)) {
+            return;
+        }
+        await this.removeStoragePath(previousStoragePath, context);
     }
 
-    public async remove(notePath: string): Promise<void> {
-        await this.removeStoragePath(await this.getNoteStoragePath(notePath));
+    public async remove(notePath: string, context: PluginEventExecutionContext): Promise<void> {
+        if (!isPluginEventExecutionActive(context)) {
+            return;
+        }
+        const storagePath = await this.getNoteStoragePath(notePath);
+        if (!isPluginEventExecutionActive(context)) {
+            return;
+        }
+        await this.removeStoragePath(storagePath, context);
     }
 
-    public async removeForSource(sourceId: string): Promise<void> {
-        await this.removeStoragePath(await this.getSourceStoragePath(sourceId));
+    public async removeForSource(sourceId: string, context: PluginEventExecutionContext): Promise<void> {
+        if (!isPluginEventExecutionActive(context)) {
+            return;
+        }
+        const storagePath = await this.getSourceStoragePath(sourceId);
+        if (!isPluginEventExecutionActive(context)) {
+            return;
+        }
+        await this.removeStoragePath(storagePath, context);
     }
 
     public async listStoredComments(): Promise<RemovedSidecarComments[]> {
@@ -244,26 +323,55 @@ export class SidecarCommentStorage {
         return this.sortStoredRecords(recordsByNotePath);
     }
 
-    public async removeNote(notePath: string): Promise<RemovedSidecarComments | null> {
-        const [removed] = await this.removeMatchingRecords((payload) => payload.notePath === notePath);
+    public async removeNote(
+        notePath: string,
+        context: PluginEventExecutionContext,
+    ): Promise<RemovedSidecarComments | null> {
+        const [removed] = await this.removeMatchingRecords(
+            (payload) => payload.notePath === notePath,
+            context,
+        );
         return removed ?? null;
     }
 
-    public async removeFolder(folderPath: string): Promise<RemovedSidecarComments[]> {
-        return this.removeMatchingRecords((payload) => isPathInsideFolder(payload.notePath, folderPath));
+    public async removeFolder(
+        folderPath: string,
+        context: PluginEventExecutionContext,
+    ): Promise<RemovedSidecarComments[]> {
+        return this.removeMatchingRecords(
+            (payload) => isPathInsideFolder(payload.notePath, folderPath),
+            context,
+        );
     }
 
     private async removeMatchingRecords(
         matches: (payload: StoredSidecarComments) => boolean,
+        context: PluginEventExecutionContext,
     ): Promise<RemovedSidecarComments[]> {
+        if (!isPluginEventExecutionActive(context)) {
+            return [];
+        }
         const removedByNotePath = new Map<string, RemovedSidecarComments>();
-        for (const storagePath of await this.getAllStorageFiles()) {
+        const storagePaths = await this.getAllStorageFiles();
+        if (!isPluginEventExecutionActive(context)) {
+            return [];
+        }
+        for (const storagePath of storagePaths) {
+            if (!isPluginEventExecutionActive(context)) {
+                return [];
+            }
             const payload = await this.readStoragePayload(storagePath);
+            if (!isPluginEventExecutionActive(context)) {
+                return [];
+            }
             if (!payload || !matches(payload)) {
                 continue;
             }
 
-            await this.removeStoragePath(storagePath);
+            await this.removeStoragePath(storagePath, context);
+            if (!isPluginEventExecutionActive(context)) {
+                return [];
+            }
             this.mergeStoredRecord(removedByNotePath, payload);
         }
 
@@ -287,14 +395,24 @@ export class SidecarCommentStorage {
             .sort((left, right) => left.notePath.localeCompare(right.notePath));
     }
 
-    private async removeStoragePath(storagePath: string): Promise<void> {
-        if (!(await this.options.adapter.exists(storagePath))) {
+    private async removeStoragePath(
+        storagePath: string,
+        context: PluginEventExecutionContext,
+    ): Promise<void> {
+        if (!isPluginEventExecutionActive(context)) {
+            return;
+        }
+        const exists = await this.options.adapter.exists(storagePath);
+        if (!exists || !isPluginEventExecutionActive(context)) {
             return;
         }
 
         try {
             await this.options.adapter.remove(storagePath);
         } catch (error) {
+            if (!isPluginEventExecutionActive(context)) {
+                return;
+            }
             if (!isMissingFileError(error)) {
                 throw error;
             }

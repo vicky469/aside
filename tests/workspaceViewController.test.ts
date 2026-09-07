@@ -248,6 +248,48 @@ test("workspace view controller syncs visible native and plugin file views while
     assert.equal(harness.controller.clearMarkdownSelection(indexFile.path), false);
 });
 
+test("event-scoped sidebar refresh stops before later views after reset", async () => {
+    let releaseFirst!: () => void;
+    const firstStarted = new Promise<void>((resolve) => {
+        releaseFirst = resolve;
+    });
+    let finishFirst!: () => void;
+    const firstFinished = new Promise<void>((resolve) => {
+        finishFirst = resolve;
+    });
+    const renderCalls: string[] = [];
+    const abortController = new AbortController();
+    const sidebarView = (label: string, renderComments: () => Promise<void>) => ({
+        file: createFile(`docs/${label}.md`),
+        getViewType: () => "aside-view",
+        renderComments,
+    });
+    const harness = createHarness({
+        leaves: [
+            { view: sidebarView("first", async () => {
+                renderCalls.push("first");
+                releaseFirst();
+                await firstFinished;
+            }) },
+            { view: sidebarView("second", async () => {
+                renderCalls.push("second");
+            }) },
+        ],
+    });
+    const context = {
+        signal: abortController.signal,
+        isActive: () => !abortController.signal.aborted,
+    };
+
+    const refresh = harness.controller.refreshCommentViewsForEvent(undefined, context);
+    await firstStarted;
+    abortController.abort();
+    finishFirst();
+    await refresh;
+
+    assert.deepEqual(renderCalls, ["first"]);
+});
+
 test("workspace view controller refreshes index tag views only", () => {
     const indexFile = createFile("Aside index.md");
     const noteFile = createFile("docs/note.md");
