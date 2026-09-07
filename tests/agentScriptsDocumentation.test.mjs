@@ -4,6 +4,7 @@ import test from "node:test";
 
 const SCRIPTS_SETTINGS_PATH = "Settings → Aside → Scripts (advanced) → Enable scripts";
 const PUBLISHING_SETTINGS_PATH = "Settings → Aside → Publishing (advanced) → Enable publishing";
+const SETTINGS_SECTION_ORDER = "Sidebar tabs → Scripts (advanced) → Publishing (advanced) → Index note";
 
 function readRequiredFile(path) {
     assert.equal(existsSync(path), true, `${path} must exist`);
@@ -16,6 +17,14 @@ function getParagraphContaining(markdown, phrase) {
         .find((candidate) => candidate.includes(phrase));
     assert.ok(paragraph, `documentation must include a paragraph containing ${phrase}`);
     return paragraph;
+}
+
+function getLineContaining(markdown, phrase) {
+    const line = markdown
+        .split("\n")
+        .find((candidate) => candidate.includes(phrase));
+    assert.ok(line, `documentation must include a line containing ${phrase}`);
+    return line;
 }
 
 test("README publishes the complete agent and script entry points", () => {
@@ -45,6 +54,10 @@ test("README publishes the complete agent and script entry points", () => {
 
 test("Agents and scripts guide documents setup and everyday workflows", () => {
     const guide = readRequiredFile("SCRIPTS.md");
+    const scriptsDefaultPolicy = getParagraphContaining(
+        guide,
+        "Scripts are an optional advanced capability",
+    );
 
     assert.match(guide, /^# Agents and Scripts$/mu);
     assert.match(guide, /desktop Obsidian/iu);
@@ -59,9 +72,8 @@ test("Agents and scripts guide documents setup and everyday workflows", () => {
     assert.match(guide, /Settings → Sidebar tabs/u);
     assert.match(guide, /controls visibility only[^\n]*replies remain[^\n]*List view/iu);
     assert.equal(guide.includes(SCRIPTS_SETTINGS_PATH), true);
-    assert.match(guide, /optional advanced capability/iu);
-    assert.match(guide, /off by default/iu);
-    assert.match(guide, /Ordinary agent replies do not require Scripts/iu);
+    assert.match(scriptsDefaultPolicy, /off by default/iu);
+    assert.match(scriptsDefaultPolicy, /Ordinary agent replies do not require Scripts/iu);
     assert.match(guide, /default (?:local )?agent[^\n]*Settings → Aside → Scripts \(advanced\)/iu);
     assert.match(guide, /🛠️ scripts\//u);
     assert.match(guide, /first valid request/iu);
@@ -110,9 +122,10 @@ test("Agents and scripts guide explains what disabling Scripts changes and prese
     assert.match(disabledPolicy, /blocks new slash and script command execution/iu);
     assert.match(disabledPolicy, /script-oriented Generate/iu);
     assert.match(disabledPolicy, /retr(?:y|ies)/iu);
-    for (const preserved of ["registered scripts", "history", "saved replies"]) {
-        assert.match(disabledPolicy, new RegExp(preserved, "iu"));
-    }
+    assert.match(
+        disabledPolicy,
+        /does not delete[^.]*registered scripts[^.]*history[^.]*saved replies/iu,
+    );
     assert.match(disabledPolicy, /ordinary note or agent text/iu);
     assert.match(guide, /not a sandbox or security boundary/iu);
     assert.doesNotMatch(guide, /requestKind/u);
@@ -144,21 +157,22 @@ test("Agents and scripts guide explains headless agent access and privacy bounda
 
 test("advanced documentation covers the native Scripts and Publishing controls", () => {
     const advanced = readRequiredFile("ADVANCED_FEATURES.md");
+    const scriptsRow = getLineContaining(advanced, "| [Agents and Scripts]");
+    const publishingRow = getLineContaining(advanced, "| [Cloudflare Pages Publishing]");
+    const settingsOrder = getParagraphContaining(advanced, "sections appear in this order");
 
     assert.equal(existsSync("EXPERIMENTAL_FEATURES.md"), false);
     assert.match(advanced, /^# Advanced Features$/mu);
     assert.match(advanced, /optional advanced capabilities/iu);
-    assert.match(advanced, /off by default/iu);
+    assert.match(scriptsRow, /Scripts off by default/iu);
+    assert.match(publishingRow, /off by default/iu);
+    assert.equal(settingsOrder.includes(SETTINGS_SECTION_ORDER), true);
     assert.match(advanced, /\[Agents and Scripts\]\(SCRIPTS\.md\)/u);
     assert.equal(advanced.includes(SCRIPTS_SETTINGS_PATH), true);
     assert.match(advanced, /Ordinary agent replies do not require Scripts/iu);
     assert.match(advanced, /\[Cloudflare Pages Publishing\]\(#cloudflare-pages-publishing\)/u);
     assert.match(advanced, /^## Cloudflare Pages Publishing$/mu);
     assert.equal(advanced.includes(PUBLISHING_SETTINGS_PATH), true);
-    assert.ok(
-        advanced.indexOf(SCRIPTS_SETTINGS_PATH) < advanced.indexOf(PUBLISHING_SETTINGS_PATH),
-        "Scripts documentation must appear immediately before Publishing documentation",
-    );
     assert.match(advanced, /^### Network and Data Access$/mu);
     assert.match(advanced, /^### Setup$/mu);
     assert.match(advanced, /^### Publishing Workflow$/mu);
@@ -172,5 +186,8 @@ test("advanced documentation explains what disabling Publishing preserves", () =
 
     assert.match(disabledPolicy, /hides or disables publishing controls/iu);
     assert.match(disabledPolicy, /does not unpublish remote content/iu);
-    assert.match(disabledPolicy, /delete saved publishing configuration/iu);
+    assert.match(
+        disabledPolicy,
+        /does not (?:delete saved publishing configuration|unpublish remote content[^.]*\bor delete saved publishing configuration)/iu,
+    );
 });
