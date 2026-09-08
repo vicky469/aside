@@ -28,6 +28,7 @@ export interface IndexSidebarSearchState {
 }
 
 export const INDEX_SIDEBAR_SCOPED_SEARCH_PLACEHOLDER = "Search side notes in selected file";
+export const INDEX_SIDEBAR_GLOBAL_TODO_SEARCH_PLACEHOLDER = "Search todo side notes across your vault";
 
 export type IndexSidebarModeScope =
     | { kind: "unavailable"; rootFilePath: null }
@@ -76,7 +77,7 @@ export function resolveIndexSidebarEmptyStateTexts(options: {
 }
 
 export function shouldShowIndexSidebarSearch(mode: IndexSidebarMode): boolean {
-    return mode === "list";
+    return mode === "list" || mode === "todo" || mode === "agent";
 }
 
 export function shouldUseEmptyIndexDefaultCache(storedThreadCount: number): boolean {
@@ -92,13 +93,24 @@ export function resolveIndexSidebarSearchStateForMode(
         : { searchInputValue: "", searchQuery: "" };
 }
 
-export function resolveIndexSidebarSearchStateForFileScope(
+export function resolveIndexSidebarSearchStateForScope(
     state: IndexSidebarSearchState,
+    mode: IndexSidebarMode,
     rootFilePath: string | null | undefined,
 ): IndexSidebarSearchState {
-    return getNormalizedFilterPath(rootFilePath ?? "")
+    const scope = resolveIndexSidebarModeScope(mode, rootFilePath);
+    return shouldShowIndexSidebarSearch(mode)
+        && (scope.kind === "file" || scope.kind === "global-todo")
         ? { ...state }
         : { searchInputValue: "", searchQuery: "" };
+}
+
+export function resolveIndexSidebarSearchPlaceholder(
+    scopeKind: IndexSidebarModeScope["kind"] | undefined,
+): string {
+    return scopeKind === "global-todo"
+        ? INDEX_SIDEBAR_GLOBAL_TODO_SEARCH_PLACEHOLDER
+        : INDEX_SIDEBAR_SCOPED_SEARCH_PLACEHOLDER;
 }
 
 export function scopeIndexThreadsByFilePaths(

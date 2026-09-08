@@ -7,8 +7,9 @@ import {
     filterIndexThreadsByExistingSourceFiles,
     resolveIndexSidebarEmptyStateTexts,
     resolveIndexSidebarModeScope,
-    resolveIndexSidebarSearchStateForFileScope,
     resolveIndexSidebarSearchStateForMode,
+    resolveIndexSidebarSearchStateForScope,
+    resolveIndexSidebarSearchPlaceholder,
     scopeIndexThreadsByFilePaths,
     scopeIndexThreadsByMode,
     shouldShowGenericIndexEmptyState,
@@ -18,20 +19,26 @@ import {
     shouldUseEmptyIndexDefaultCache,
 } from "../src/ui/views/indexSidebarState";
 
-test("index search is visible only in List", () => {
-    assert.equal(shouldShowIndexSidebarSearch("list"), true);
-    for (const mode of ["todo", "agent", "tags", "thought-trail"] as const) {
+test("index generic search is available in List Todo and Agent", () => {
+    for (const mode of ["list", "todo", "agent"] as const) {
+        assert.equal(shouldShowIndexSidebarSearch(mode), true);
+    }
+    for (const mode of ["tags", "thought-trail"] as const) {
         assert.equal(shouldShowIndexSidebarSearch(mode), false);
     }
 });
 
-test("leaving index List clears visible and applied search", () => {
+test("switching among index card modes preserves generic search", () => {
     const state = { searchInputValue: "odoo", searchQuery: "odoo" };
-    assert.deepEqual(resolveIndexSidebarSearchStateForMode(state, "todo"), {
-        searchInputValue: "",
-        searchQuery: "",
-    });
-    assert.deepEqual(resolveIndexSidebarSearchStateForMode(state, "list"), state);
+    for (const mode of ["list", "todo", "agent"] as const) {
+        assert.deepEqual(resolveIndexSidebarSearchStateForMode(state, mode), state);
+    }
+    for (const mode of ["tags", "thought-trail"] as const) {
+        assert.deepEqual(resolveIndexSidebarSearchStateForMode(state, mode), {
+            searchInputValue: "",
+            searchQuery: "",
+        });
+    }
 });
 
 test("index card modes resolve global todo and gated local modes without a file", () => {
@@ -69,21 +76,27 @@ test("a selected file scopes every index card mode", () => {
     }
 });
 
-test("empty or invalid file scope clears index search state", () => {
+test("global Todo preserves search while unscoped List and Agent clear it", () => {
     const state = { searchInputValue: "odoo", searchQuery: "odoo" };
-    assert.deepEqual(resolveIndexSidebarSearchStateForFileScope(state, null), {
-        searchInputValue: "",
-        searchQuery: "",
-    });
-    assert.deepEqual(resolveIndexSidebarSearchStateForFileScope(state, "   "), {
-        searchInputValue: "",
-        searchQuery: "",
-    });
+    assert.deepEqual(resolveIndexSidebarSearchStateForScope(state, "todo", null), state);
+    for (const mode of ["list", "agent"] as const) {
+        assert.deepEqual(resolveIndexSidebarSearchStateForScope(state, mode, null), {
+            searchInputValue: "",
+            searchQuery: "",
+        });
+    }
+    assert.deepEqual(resolveIndexSidebarSearchStateForScope(state, "agent", "docs/a.md"), state);
 });
 
-test("switching directly between selected files preserves index search state", () => {
-    const state = { searchInputValue: "odoo", searchQuery: "odoo" };
-    assert.deepEqual(resolveIndexSidebarSearchStateForFileScope(state, "docs/b.md"), state);
+test("index generic search copy follows its active scope", () => {
+    assert.equal(
+        resolveIndexSidebarSearchPlaceholder("global-todo"),
+        "Search todo side notes across your vault",
+    );
+    assert.equal(
+        resolveIndexSidebarSearchPlaceholder("file"),
+        "Search side notes in selected file",
+    );
 });
 
 test("the empty-index cache never bypasses live aggregate controls", () => {

@@ -114,10 +114,10 @@ import { clearSidebarSearchHighlights, highlightSidebarSearchMatches } from "./s
 import {
     deriveIndexSidebarListFilePaths,
     filterIndexThreadsByExistingSourceFiles,
-    INDEX_SIDEBAR_SCOPED_SEARCH_PLACEHOLDER,
     resolveIndexSidebarEmptyStateTexts,
-    resolveIndexSidebarSearchStateForFileScope,
+    resolveIndexSidebarSearchPlaceholder,
     resolveIndexSidebarSearchStateForMode,
+    resolveIndexSidebarSearchStateForScope,
     resolveIndexSidebarModeScope,
     scopeIndexThreadsByFilePaths,
     scopeIndexThreadsByMode,
@@ -1149,10 +1149,10 @@ export default class AsideView extends ItemView {
     }
 
     private applyIndexSidebarSearchStateForFileScope(rootFilePath: string | null | undefined): void {
-        const nextState = resolveIndexSidebarSearchStateForFileScope({
+        const nextState = resolveIndexSidebarSearchStateForScope({
             searchInputValue: this.indexSidebarSearchInputValue,
             searchQuery: this.indexSidebarSearchQuery,
-        }, rootFilePath);
+        }, this.indexSidebarMode, rootFilePath);
         if (
             nextState.searchInputValue === this.indexSidebarSearchInputValue
             && nextState.searchQuery === this.indexSidebarSearchQuery
@@ -3854,7 +3854,7 @@ export default class AsideView extends ItemView {
                     ? options.isAllCommentsView
                         ? activePrimaryMode === "tags"
                             ? this.getIndexTagSearchInputOptions()
-                            : this.getIndexSearchInputOptions()
+                            : this.getIndexSearchInputOptions(options.indexModeScope?.kind)
                         : this.getNoteSearchInputOptions()
                     : undefined,
                 pinned: secondaryPlan.showPinned
@@ -4140,10 +4140,12 @@ export default class AsideView extends ItemView {
         };
     }
 
-    private getIndexSearchInputOptions(): SidebarSearchInputOptions {
+    private getIndexSearchInputOptions(
+        scopeKind: IndexSidebarModeScope["kind"] | undefined,
+    ): SidebarSearchInputOptions {
         return {
             value: this.indexSidebarSearchInputValue,
-            placeholder: INDEX_SIDEBAR_SCOPED_SEARCH_PLACEHOLDER,
+            placeholder: resolveIndexSidebarSearchPlaceholder(scopeKind),
             onFocus: (inputEl) => {
                 this.interactionController.claimSidebarInteractionOwnership(inputEl);
             },
