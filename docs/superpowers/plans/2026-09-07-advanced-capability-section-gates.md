@@ -1311,13 +1311,12 @@ Expected: the worktree is clean and the feature branch contains the state, UI, d
 
 ## Verification Record
 
-Task 6 was completed on 2026-09-07 without an install, publish, release, or push:
+Task 6 was refreshed on 2026-09-08 without an install, publish, release, or push:
 
-- Pre-build `git status --short --branch`: clean on `feat/advanced-capability-gates`.
-- `npm run build`: exit 0; 1,575 compiled tests and 171 direct-source tests passed with zero failures, skips, cancellations, or todos. ESLint, typecheck, Obsidian compliance, bundling, the 705,354/750,000-byte size guard, and the integrated release-artifact guard passed.
-- Focused capability verification: 307 compiled behavior tests and 13 direct wiring/documentation tests passed with zero failures, explicitly exercising the off-state and allowed retry/cancellation boundaries.
+- `npm run build`: exit 0; 1,626 compiled tests and 176 direct-source tests passed with zero failures, skips, cancellations, or todos. ESLint, typecheck, Obsidian compliance, bundling, the 717,606/750,000-byte size guard, and the integrated release-artifact guard passed.
+- Full regression coverage includes the off-state and allowed retry/cancellation boundaries plus startup vault-event replay, external settings reload batching, active-run preservation, atomic retry admission, and controller lifecycle-generation isolation.
 - Explicit post-build `npm run release:artifacts:check`: exit 0 for exactly `main.js`, `manifest.json`, and `styles.css`.
-- Manual public-artifact audit: `main.js` 705,354 bytes, `manifest.json` 349 bytes, `styles.css` 97,579 bytes; manifest `aside` / `Aside` version `2.0.103`, minimum app `1.12.7`; no shipped map, embedded source markers, raw TypeScript/JSX-family source, secrets, certificates/private keys, fixtures, or local-only files.
+- Manual public-artifact audit: `main.js` 717,606 bytes, `manifest.json` 349 bytes, `styles.css` 97,579 bytes; manifest `aside` / `Aside` version `2.0.103`, minimum app `1.12.7`; no shipped map, embedded source markers, raw TypeScript/JSX-family source, secrets, certificates/private keys, fixtures, local-only files, or local absolute paths.
 - Generated-artifact policy: `main.js` is ignored by `.gitignore`; `manifest.json` and `styles.css` are tracked and remained unchanged. No generated artifact was staged.
 - Targeted current-surface language audit (historical release notes and historical design records excluded): no contradictory default-on or Experimental-settings wording; legacy `featureFlags` references only detect and remove old persisted data.
-- `git diff main...HEAD --check` and post-build status were clean before adding this documentation-only record.
+- `git diff main...HEAD --check` and post-code-commit status were clean before updating this documentation-only record.
