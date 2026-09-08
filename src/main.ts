@@ -45,7 +45,10 @@ import {
 } from "./vaultScripts/commentScriptController";
 import { ScriptRunStore } from "./vaultScripts/scriptRunStore";
 import { ensureVaultScriptFolder } from "./vaultScripts/vaultScriptFolderProvisioner";
-import { VaultScriptRegistry } from "./vaultScripts/vaultScriptRegistry";
+import {
+    refreshVaultScriptRegistryEvidence,
+    VaultScriptRegistry,
+} from "./vaultScripts/vaultScriptRegistry";
 import { isActionableMention as resolveActionableMention } from "./core/text/actionableMentions";
 import {
     disposeVaultScriptRuntimeProcesses,
@@ -467,7 +470,10 @@ export default class Aside extends Plugin {
         updateSidebarViews: (file) => this.updateSidebarViews(file),
         refreshCommentViews: () => this.workspaceViewController.refreshCommentViews({ skipDataRefresh: true }),
         refreshAggregateNoteNow: () => this.refreshAggregateNoteNow(),
-        hasRegisteredVaultScripts: () => this.vaultScriptRegistry.getRunnableScripts().length > 0,
+        hasRegisteredVaultScripts: () => refreshVaultScriptRegistryEvidence(
+            this.vaultScriptRegistry,
+            this.app.vault.getFiles().map((file) => file.path),
+        ),
         loadData: () => this.loadCurrentData(),
         saveData: (data) => this.saveData(data),
         ensureFolder: (folderPath) => this.ensureVaultFolder(folderPath),
@@ -870,7 +876,7 @@ export default class Aside extends Plugin {
 
         this.commentManager = new CommentManager([]);
         this.vaultScriptRegistry.seed(this.app.vault.getFiles().map((file) => file.path));
-        this.pluginEventRouter.registerVaultMaintenanceEvents();
+        this.pluginEventRouter.registerVaultCreateEvent();
         await this.loadSettings();
         this.scriptRunStore.load();
         this.vaultCapabilityIndex.seed(
@@ -903,6 +909,7 @@ export default class Aside extends Plugin {
         this.derivedCommentMetadataManager.installMetadataCacheAugmentation();
         const activeFile = this.app.workspace.getActiveFile();
         this.workspaceContextController.initializeActiveFiles(activeFile);
+        this.vaultScriptRegistry.seed(this.app.vault.getFiles().map((file) => file.path));
         await this.pluginEventRouter.register();
         this.syncPublicFilePublishActions();
         this.addSettingTab(new AsideSetting(this.app, this));

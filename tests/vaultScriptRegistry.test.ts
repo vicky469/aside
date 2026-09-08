@@ -1,6 +1,9 @@
 import * as assert from "node:assert/strict";
 import test from "node:test";
-import { VaultScriptRegistry } from "../src/vaultScripts/vaultScriptRegistry";
+import {
+    refreshVaultScriptRegistryEvidence,
+    VaultScriptRegistry,
+} from "../src/vaultScripts/vaultScriptRegistry";
 
 test("seed retains only canonical direct runnable script paths", () => {
     const registry = new VaultScriptRegistry();
@@ -15,6 +18,39 @@ test("seed retains only canonical direct runnable script paths", () => {
         Reflect.get(registry, "paths"),
         new Set(["🛠️ scripts/format.js"]),
     );
+});
+
+test("migration evidence removes scripts absent from the current vault snapshot", () => {
+    const registry = new VaultScriptRegistry();
+    registry.seed(["🛠️ scripts/clean.mjs"]);
+
+    const hasRegisteredScripts = refreshVaultScriptRegistryEvidence(registry, []);
+
+    assert.equal(hasRegisteredScripts, false);
+    assert.equal(registry.isRunnableMention("/clean"), false);
+    assert.deepEqual(registry.getRunnableScripts(), []);
+});
+
+test("migration evidence drops scripts renamed outside the runnable folder", () => {
+    const registry = new VaultScriptRegistry();
+    registry.seed(["🛠️ scripts/clean.mjs"]);
+
+    const hasRegisteredScripts = refreshVaultScriptRegistryEvidence(registry, ["drafts/clean.mjs"]);
+
+    assert.equal(hasRegisteredScripts, false);
+    assert.equal(registry.isRunnableMention("/clean"), false);
+    assert.deepEqual(registry.getRunnableScripts(), []);
+});
+
+test("migration evidence discovers files newly renamed into the runnable folder", () => {
+    const registry = new VaultScriptRegistry();
+    registry.seed(["drafts/clean.mjs"]);
+
+    const hasRegisteredScripts = refreshVaultScriptRegistryEvidence(registry, ["🛠️ scripts/clean.mjs"]);
+
+    assert.equal(hasRegisteredScripts, true);
+    assert.equal(registry.isRunnableMention("/clean"), true);
+    assert.equal(registry.resolve("/clean")?.path, "🛠️ scripts/clean.mjs");
 });
 
 test("mutations use canonical paths across equivalent separators", () => {

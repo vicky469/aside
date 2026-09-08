@@ -48,29 +48,38 @@ function isTAbstractFile(value: unknown): value is TAbstractFile {
 }
 
 export class PluginEventRouter {
-    private vaultMaintenanceEventsRegistered = false;
+    private vaultCreateEventRegistered = false;
+    private vaultLifecycleEventsRegistered = false;
 
     constructor(private readonly host: PluginEventRouterHost) {}
 
     public async register(): Promise<void> {
-        this.registerVaultMaintenanceEvents();
+        this.registerVaultEvents();
         await this.registerLayoutReady();
         this.registerWorkspaceEvents();
-        this.registerVaultModifyEvent();
         this.registerMetadataCacheEvents();
     }
 
-    public registerVaultMaintenanceEvents(): void {
-        if (this.vaultMaintenanceEventsRegistered) {
+    public registerVaultCreateEvent(): void {
+        if (this.vaultCreateEventRegistered) {
             return;
         }
 
-        this.vaultMaintenanceEventsRegistered = true;
+        this.vaultCreateEventRegistered = true;
         this.host.registerEvent(
             this.host.app.vault.on("create", async (file) => {
                 await this.host.handleFileCreate(this.host.isTFile(file) ? file : null);
             }),
         );
+    }
+
+    private registerVaultEvents(): void {
+        this.registerVaultCreateEvent();
+        if (this.vaultLifecycleEventsRegistered) {
+            return;
+        }
+
+        this.vaultLifecycleEventsRegistered = true;
         this.host.registerEvent(
             this.host.app.vault.on("rename", async (file, oldPath) => {
                 await this.host.handleFileRename(
@@ -82,6 +91,11 @@ export class PluginEventRouter {
         this.host.registerEvent(
             this.host.app.vault.on("delete", async (file) => {
                 await this.host.handleFileDelete(isTAbstractFile(file) ? file : null);
+            }),
+        );
+        this.host.registerEvent(
+            this.host.app.vault.on("modify", async (file) => {
+                await this.host.handleFileModify(this.host.isTFile(file) ? file : null);
             }),
         );
     }
@@ -113,14 +127,6 @@ export class PluginEventRouter {
         this.host.registerEvent(
             this.host.app.workspace.on("editor-change", (_editor, info) => {
                 this.host.handleEditorChange(info?.file?.path);
-            }),
-        );
-    }
-
-    private registerVaultModifyEvent(): void {
-        this.host.registerEvent(
-            this.host.app.vault.on("modify", async (file) => {
-                await this.host.handleFileModify(this.host.isTFile(file) ? file : null);
             }),
         );
     }
