@@ -315,7 +315,7 @@ Keep focus border, caret, placeholder, sizing, and selection styling unchanged. 
 
 Run the Step 3 commands. Expected: all focused tests pass.
 
-- [ ] **Step 7: Commit fail-open visibility**
+- [x] **Step 7: Commit fail-open visibility**
 
 ```bash
 git add src/ui/views/sidebarDraftComment.ts styles.css tests/sidebarDraftComment.test.ts tests/sidebarDraftVisibilityStyles.test.mjs
@@ -327,7 +327,7 @@ git commit -m "fix(editor): prevent blank draft text"
 **Files:**
 - Modify: `docs/superpowers/specs/2026-09-07-stable-draft-editor-reconciliation-design.md`
 
-- [ ] **Step 1: Run focused regressions together**
+- [x] **Step 1: Run focused regressions together**
 
 ```bash
 ./node_modules/.bin/tsc -p tsconfig.test.json
@@ -337,7 +337,7 @@ node --test tests/sidebarDraftVisibilityStyles.test.mjs
 
 Expected: all focused tests pass with no warnings or errors.
 
-- [ ] **Step 2: Run the complete production verification**
+- [x] **Step 2: Run the complete production verification**
 
 ```bash
 npm run build
@@ -345,11 +345,11 @@ npm run build
 
 Expected: complete tests, lint, typecheck, Obsidian compliance, production bundle, bundle-size guard, and release-artifact guard all pass.
 
-- [ ] **Step 3: Update the tracked spec**
+- [x] **Step 3: Update the tracked spec**
 
 Mark implementation and verification items complete only for behavior proven by Steps 1 and 2. Record the exact focused suites, build result, and privacy check in `Self-Review`. Keep live installation unchecked until artifact comparison succeeds.
 
-- [ ] **Step 4: Inspect the exact development artifact before installation**
+- [x] **Step 4: Inspect the exact development artifact before installation**
 
 Run:
 
@@ -361,7 +361,7 @@ find . -maxdepth 1 -type f \( -name '*.map' -o -name '*.ts' -o -name '*.tsx' -o 
 
 Expected: artifact guard passes; exposure scans return no shipped source maps, embedded source markers, raw source files, or obvious secret-bearing files.
 
-- [ ] **Step 5: Install into `lean-startup` and reload Aside**
+- [x] **Step 5: Install into `lean-startup` and reload Aside**
 
 ```bash
 node scripts/install-built-plugin.mjs --vault ../../lean-startup
@@ -370,7 +370,7 @@ obsidian vault=lean-startup plugin:reload id=aside
 
 Expected: installer copies `main.js`, `manifest.json`, and `styles.css`; Obsidian reloads Aside successfully.
 
-- [ ] **Step 6: Compare installed artifacts and inspect runtime errors**
+- [x] **Step 6: Compare installed artifacts and inspect runtime errors**
 
 ```bash
 cmp -s main.js ../../lean-startup/.obsidian/plugins/aside/main.js
@@ -381,7 +381,7 @@ obsidian vault=lean-startup dev:errors
 
 Expected: all three comparisons exit zero and no Aside runtime errors are reported.
 
-- [ ] **Step 7: Complete the spec and commit verification**
+- [x] **Step 7: Complete the spec and commit verification**
 
 Mark the live-install verification item complete, then run:
 

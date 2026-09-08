@@ -13,19 +13,19 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Separate editable draft body changes from structural draft render identity.
-- [ ] Keep top-level draft card DOM stable across unrelated sidebar refreshes while typing.
-- [ ] Preserve the mounted editor subtree when a nested append or edit draft's surrounding thread must refresh.
-- [ ] Resynchronize the formatted preview before a blurred editor depends on it, with visible textarea text as the safe fallback.
-- [ ] Preserve normal rerenders for draft creation, mode changes, anchor changes, saving, cancellation, and persisted replacement.
+- [x] Separate editable draft body changes from structural draft render identity.
+- [x] Keep top-level draft card DOM stable across unrelated sidebar refreshes while typing.
+- [x] Preserve the mounted editor subtree when a nested append or edit draft's surrounding thread must refresh.
+- [x] Resynchronize the formatted preview before a blurred editor depends on it, with visible textarea text as the safe fallback.
+- [x] Preserve normal rerenders for draft creation, mode changes, anchor changes, saving, cancellation, and persisted replacement.
 
 ### Verification
 
-- [ ] A top-level draft retains node identity, value, focus, selection, textarea scroll, and sidebar viewport across an unrelated refresh.
-- [ ] Nested append and edit drafts retain their mounted editor state when their surrounding thread refreshes.
-- [ ] A nonempty blurred editor cannot present an empty visual surface when its textarea still contains text.
-- [ ] Agent and script status updates remain visible outside the preserved draft subtree.
-- [ ] Focused tests, the complete test suite, production build, and installed `lean-startup` artifact comparison pass.
+- [x] A top-level draft retains node identity, value, focus, selection, textarea scroll, and sidebar viewport across an unrelated refresh.
+- [x] Nested append and edit drafts retain their mounted editor state when their surrounding thread refreshes.
+- [x] A nonempty blurred editor cannot present an empty visual surface when its textarea still contains text.
+- [x] Agent and script status updates remain visible outside the preserved draft subtree.
+- [x] Focused tests, the complete test suite, production build, and installed `lean-startup` artifact comparison pass.
 
 ## Problem
 
@@ -91,8 +91,12 @@ No existing implementation plan covers this exact typing-time reconciliation fai
 ## Self-Review
 
 - Placeholder scan: no placeholders or unresolved decisions remain.
-- Tracking scan: verified existing behavior is checked; implementation and verification work remain unchecked.
-- Plan alignment: the completed anchored-card plan is treated as neighboring infrastructure, not reopened work.
+- Tracking scan: implementation and verification items are complete after local integration into `main`.
+- Focused regressions: 43 checks cover structural signatures, top-level reuse, nested handoff, focus and scroll retention, blur synchronization, and fail-open visibility.
+- Production verification: `npm run build` passed 1,548 compiled tests and 164 source-contract tests, lint, typecheck, Obsidian compliance, bundling, and the 750,000-byte size guard.
+- Artifact security: the release guard passed for `main.js`, `manifest.json`, and `styles.css`; separate scans found no source-map markers, embedded sources, root-level raw TypeScript/JSX, environment files, package credentials, private keys, or certificates.
+- Live installation: all three installed `lean-startup` assets matched the inspected build byte-for-byte after reload, and Obsidian reported no captured errors.
+- Plan alignment: the completed anchored-card plan remains neighboring infrastructure and was not reopened.
 - Consistency: draft text remains canonical in memory while structural reconciliation avoids replacing its mounted editor.
 - Scope: limited to draft identity, editor handoff, preview fallback, and regression coverage.
 - Privacy: only synthetic examples and repository-relative paths appear.
