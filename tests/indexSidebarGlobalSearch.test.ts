@@ -5,30 +5,27 @@ import {
     resolveIndexSidebarGlobalSearchResultLimit,
 } from "../src/ui/views/indexSidebarGlobalSearch";
 
-test("dormant global search limits only nonempty unscoped List queries", () => {
+test("global search bounds active Todo and defensive List queries", () => {
+    for (const mode of ["todo", "list"] as const) {
+        assert.equal(resolveIndexSidebarGlobalSearchResultLimit({
+            mode,
+            rootFilePath: null,
+            query: "design",
+        }), 100);
+    }
     assert.equal(resolveIndexSidebarGlobalSearchResultLimit({
-        mode: "list",
-        rootFilePath: null,
-        query: "design",
-    }), 100);
-    assert.equal(resolveIndexSidebarGlobalSearchResultLimit({
-        mode: "list",
+        mode: "todo",
         rootFilePath: "docs/a.md",
         query: "design",
     }), undefined);
     assert.equal(resolveIndexSidebarGlobalSearchResultLimit({
-        mode: "list",
-        rootFilePath: null,
-        query: "   ",
-    }), undefined);
-    assert.equal(resolveIndexSidebarGlobalSearchResultLimit({
-        mode: "todo",
+        mode: "agent",
         rootFilePath: null,
         query: "design",
     }), undefined);
 });
 
-test("dormant global search owns its complete-match notice", () => {
+test("global search owns its complete-match notice", () => {
     assert.deepEqual(buildIndexSidebarGlobalSearchNotice({
         visibleCount: 100,
         hiddenCount: 37,
