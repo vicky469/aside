@@ -52,8 +52,25 @@ import {
 type PersistOptions = {
     immediateAggregateRefresh?: boolean;
     skipCommentViewRefresh?: boolean;
+    deferCommentViewRefresh?: boolean;
+    deferAggregateRefresh?: boolean;
     refreshEditorDecorations?: boolean;
     refreshMarkdownPreviews?: boolean;
+    isStillValid?: () => boolean;
+};
+
+export interface SyncedSideNoteReplayOptions {
+    deferSurfaceRefresh?: boolean;
+}
+
+type SyncedSideNoteReplayOperation = {
+    changedFilePaths: Set<string>;
+    dataPromise: Promise<number>;
+    surfaceRefreshPromise: Promise<void> | null;
+    pendingSurfaceRefreshes: Map<string, {
+        commentView: boolean;
+        aggregate: boolean;
+    }> | null;
 };
 
 type CommitThreadEntryOptions = PersistOptions & {
@@ -534,8 +551,9 @@ export class CommentPersistenceController {
     private aggregateRefreshQueued = false;
     private aggregateIndexInitialized = false;
     private aggregateIndexInitializationPromise: Promise<void> | null = null;
-    private fullSyncedEventReplayPromise: Promise<number> | null = null;
-    private readonly targetedSyncedEventReplayPromises = new Map<string, Promise<number>>();
+    private fullSyncedEventReplayOperation: SyncedSideNoteReplayOperation | null = null;
+    private readonly targetedSyncedEventReplayOperations = new Map<string, SyncedSideNoteReplayOperation>();
+    private readonly pendingSyncedSurfaceRefreshOperations = new Set<SyncedSideNoteReplayOperation>();
     private readonly commentPersistTails = new Map<string, Promise<void>>();
     private readonly commentPersistPathByFile = new WeakMap<TFile, string>();
     private disposed = false;
@@ -584,6 +602,7 @@ export class CommentPersistenceController {
         this.commentPersistTails.clear();
         this.aggregateRefreshQueued = false;
         this.commentViewRefreshSuppressions.clear();
+        this.pendingSyncedSurfaceRefreshOperations.clear();
     }
 
     public reviveForLoad(): CommentPersistenceController {
@@ -840,33 +859,176 @@ export class CommentPersistenceController {
         );
     }
 
-    public async replaySyncedSideNoteEvents(targetNotePath?: string): Promise<number> {
+    public async replaySyncedSideNoteEvents(
+        targetNotePath?: string,
+        options: SyncedSideNoteReplayOptions = {},
+    ): Promise<number> {
         if (this.disposed) {
             return 0;
         }
 
         const normalizedTargetNotePath = targetNotePath?.trim();
+        let operation: SyncedSideNoteReplayOperation;
         if (normalizedTargetNotePath) {
-            const existingTargetedReplay = this.targetedSyncedEventReplayPromises.get(normalizedTargetNotePath);
-            if (existingTargetedReplay) {
-                return existingTargetedReplay;
+            operation = this.targetedSyncedEventReplayOperations.get(normalizedTargetNotePath)
+                ?? this.createSyncedSideNoteReplayOperation(normalizedTargetNotePath);
+            this.targetedSyncedEventReplayOperations.set(normalizedTargetNotePath, operation);
+        } else {
+            operation = this.fullSyncedEventReplayOperation
+                ?? this.createSyncedSideNoteReplayOperation();
+            this.fullSyncedEventReplayOperation = operation;
+        }
+
+        let appliedEventCount = 0;
+        let firstError: unknown;
+        let hasError = false;
+        try {
+            appliedEventCount = await operation.dataPromise;
+        } catch (error) {
+            firstError = error;
+            hasError = true;
+        }
+        if (!options.deferSurfaceRefresh) {
+            try {
+                await this.completePendingSyncedSideNoteReplaySurfaceRefreshes(operation);
+            } catch (error) {
+                if (!hasError) {
+                    firstError = error;
+                    hasError = true;
+                }
             }
-
-            const targetedReplay = this.replaySyncedSideNoteEventsNow(normalizedTargetNotePath).finally(() => {
-                this.targetedSyncedEventReplayPromises.delete(normalizedTargetNotePath);
-            });
-            this.targetedSyncedEventReplayPromises.set(normalizedTargetNotePath, targetedReplay);
-            return targetedReplay;
         }
-
-        if (this.fullSyncedEventReplayPromise) {
-            return this.fullSyncedEventReplayPromise;
+        if (hasError) {
+            throw firstError;
         }
+        return appliedEventCount;
+    }
 
-        this.fullSyncedEventReplayPromise = this.replaySyncedSideNoteEventsNow().finally(() => {
-            this.fullSyncedEventReplayPromise = null;
+    private createSyncedSideNoteReplayOperation(targetNotePath?: string): SyncedSideNoteReplayOperation {
+        const operation: SyncedSideNoteReplayOperation = {
+            changedFilePaths: new Set<string>(),
+            dataPromise: Promise.resolve(0),
+            surfaceRefreshPromise: null,
+            pendingSurfaceRefreshes: null,
+        };
+        operation.dataPromise = this.replaySyncedSideNoteEventsNow(
+            targetNotePath,
+            operation.changedFilePaths,
+        ).finally(() => {
+            if (targetNotePath) {
+                if (this.targetedSyncedEventReplayOperations.get(targetNotePath) === operation) {
+                    this.targetedSyncedEventReplayOperations.delete(targetNotePath);
+                }
+            } else if (this.fullSyncedEventReplayOperation === operation) {
+                this.fullSyncedEventReplayOperation = null;
+            }
         });
-        return this.fullSyncedEventReplayPromise;
+        return operation;
+    }
+
+    private async completePendingSyncedSideNoteReplaySurfaceRefreshes(
+        operation: SyncedSideNoteReplayOperation,
+    ): Promise<void> {
+        this.initializeSyncedSideNoteReplaySurfaceRefresh(operation);
+        let firstError: unknown;
+        let hasError = false;
+        for (const pendingOperation of Array.from(this.pendingSyncedSurfaceRefreshOperations)) {
+            try {
+                await this.completeSyncedSideNoteReplaySurfaceRefresh(pendingOperation);
+            } catch (error) {
+                if (!hasError) {
+                    firstError = error;
+                    hasError = true;
+                }
+            }
+        }
+        if (hasError) {
+            throw firstError;
+        }
+    }
+
+    private initializeSyncedSideNoteReplaySurfaceRefresh(
+        operation: SyncedSideNoteReplayOperation,
+    ): void {
+        if (operation.pendingSurfaceRefreshes) {
+            return;
+        }
+        operation.pendingSurfaceRefreshes = new Map(
+            Array.from(operation.changedFilePaths, (filePath) => [
+                filePath,
+                { commentView: true, aggregate: true },
+            ]),
+        );
+        if (operation.pendingSurfaceRefreshes.size > 0) {
+            this.pendingSyncedSurfaceRefreshOperations.add(operation);
+        }
+    }
+
+    private async completeSyncedSideNoteReplaySurfaceRefresh(
+        operation: SyncedSideNoteReplayOperation,
+    ): Promise<void> {
+        if (operation.surfaceRefreshPromise) {
+            return operation.surfaceRefreshPromise;
+        }
+        const pendingSurfaceRefreshes = operation.pendingSurfaceRefreshes;
+        if (!pendingSurfaceRefreshes || pendingSurfaceRefreshes.size === 0) {
+            this.pendingSyncedSurfaceRefreshOperations.delete(operation);
+            return;
+        }
+
+        operation.surfaceRefreshPromise = this.runSyncedSideNoteReplaySurfaceRefreshes(
+            pendingSurfaceRefreshes,
+        );
+        try {
+            await operation.surfaceRefreshPromise;
+        } finally {
+            operation.surfaceRefreshPromise = null;
+            if (pendingSurfaceRefreshes.size === 0) {
+                this.pendingSyncedSurfaceRefreshOperations.delete(operation);
+            }
+        }
+    }
+
+    private async runSyncedSideNoteReplaySurfaceRefreshes(
+        pendingSurfaceRefreshes: Map<string, { commentView: boolean; aggregate: boolean }>,
+    ): Promise<void> {
+        let firstError: unknown;
+        let hasError = false;
+        for (const [filePath, pending] of pendingSurfaceRefreshes) {
+            if (pending.commentView) {
+                try {
+                    const options = { skipDataRefresh: true };
+                    if (this.host.isAllCommentsNotePath(filePath)) {
+                        await this.host.refreshAllCommentsSidebarViews(options);
+                    } else {
+                        await this.host.refreshCommentViews(options);
+                    }
+                    pending.commentView = false;
+                } catch (error) {
+                    if (!hasError) {
+                        firstError = error;
+                        hasError = true;
+                    }
+                }
+            }
+            if (pending.aggregate) {
+                try {
+                    this.scheduleAggregateNoteRefresh();
+                    pending.aggregate = false;
+                } catch (error) {
+                    if (!hasError) {
+                        firstError = error;
+                        hasError = true;
+                    }
+                }
+            }
+            if (!pending.commentView && !pending.aggregate) {
+                pendingSurfaceRefreshes.delete(filePath);
+            }
+        }
+        if (hasError) {
+            throw firstError;
+        }
     }
 
     private eventTouchesNotePath(event: SideNoteSyncEvent, notePath: string): boolean {
@@ -882,7 +1044,10 @@ export class CommentPersistenceController {
             || payload?.nextPath === notePath;
     }
 
-    private async replaySyncedSideNoteEventsNow(targetNotePath?: string): Promise<number> {
+    private async replaySyncedSideNoteEventsNow(
+        targetNotePath?: string,
+        changedFilePaths = new Set<string>(),
+    ): Promise<number> {
         if (this.disposed) {
             return 0;
         }
@@ -894,7 +1059,7 @@ export class CommentPersistenceController {
         if (this.disposed) {
             return 0;
         }
-        await this.hydrateSyncedSideNoteSnapshots(targetNotePath);
+        await this.hydrateSyncedSideNoteSnapshots(targetNotePath, changedFilePaths);
         if (this.disposed) {
             return 0;
         }
@@ -1027,7 +1192,11 @@ export class CommentPersistenceController {
                 const parsed = await this.parseAndNormalizeFileComments(targetNotePath, targetNoteContent);
                 await this.syncThreadsIntoVisibleNoteContent(targetFile, parsed.mainContent, noteWasDeleted ? [] : targetThreads);
                 this.clearPendingCommentPersistTimer(targetNotePath);
-                await this.afterCommentsChanged(targetNotePath);
+                changedFilePaths.add(targetNotePath);
+                await this.afterCommentsChanged(targetNotePath, {
+                    deferCommentViewRefresh: true,
+                    deferAggregateRefresh: true,
+                });
             } else {
                 this.host.getAggregateCommentIndex().updateFile(targetNotePath, noteWasDeleted ? [] : targetThreads);
             }
@@ -1313,12 +1482,15 @@ export class CommentPersistenceController {
         const queueKeys = this.getCommentPersistenceQueueKeys(file, filePath);
 
         await this.enqueueCommentPersistence(queueKeys, async () => {
+            if (options.isStillValid?.() === false) {
+                return;
+            }
             await this.writeCommentsForFile(file, filePath, options);
         });
     }
 
     public async persistCommentsForFile(file: TFile, options: PersistOptions = {}): Promise<void> {
-        if (this.disposed) {
+        if (this.disposed || options.isStillValid?.() === false) {
             return;
         }
         if (options.skipCommentViewRefresh) {
@@ -1782,7 +1954,10 @@ export class CommentPersistenceController {
             .sort((left, right) => left.notePath.localeCompare(right.notePath));
     }
 
-    private async hydrateSyncedSideNoteSnapshots(targetNotePath?: string): Promise<number> {
+    private async hydrateSyncedSideNoteSnapshots(
+        targetNotePath?: string,
+        changedFilePaths = new Set<string>(),
+    ): Promise<number> {
         if (this.disposed) {
             return 0;
         }
@@ -1867,7 +2042,11 @@ export class CommentPersistenceController {
                 this.host.getAggregateCommentIndex().updateFile(snapshot.notePath, normalizedThreads);
             }
             this.clearPendingCommentPersistTimer(snapshot.notePath);
-            await this.afterCommentsChanged(snapshot.notePath);
+            changedFilePaths.add(snapshot.notePath);
+            await this.afterCommentsChanged(snapshot.notePath, {
+                deferCommentViewRefresh: true,
+                deferAggregateRefresh: true,
+            });
             hydratedCount += 1;
         }
 
@@ -2074,6 +2253,9 @@ export class CommentPersistenceController {
         options: PersistOptions = {},
         explicitThreads?: CommentThread[],
     ): Promise<string> {
+        if (this.shouldAbortPersist(options)) {
+            return "";
+        }
         this.clearPendingCommentPersistTimer(filePath);
         this.host.getCommentManager().purgeExpiredDeletedComments();
         if (!this.host.isCommentableFile(file)) {
@@ -2094,34 +2276,34 @@ export class CommentPersistenceController {
             threadCount: this.host.getCommentManager().getThreadsForFile(filePath, { includeDeleted: true }).length,
         });
         const currentContent = await this.host.getCurrentNoteContent(file);
-        if (this.disposed) {
+        if (this.shouldAbortPersist(options)) {
             return currentContent;
         }
         const sourceRecord = await this.ensureSourceIdentityForFilePath(filePath, currentContent);
-        if (this.disposed) {
+        if (this.shouldAbortPersist(options)) {
             return currentContent;
         }
         const sourceThreads = await this.sidecarStorage.readForSource(sourceRecord.sourceId, filePath);
-        if (this.disposed) {
+        if (this.shouldAbortPersist(options)) {
             return currentContent;
         }
         const pathThreads = sourceThreads ? null : await this.sidecarStorage.read(filePath);
-        if (this.disposed) {
+        if (this.shouldAbortPersist(options)) {
             return currentContent;
         }
         const previousThreads = sourceThreads ?? pathThreads ?? [];
         const parsedCurrentContent = await this.parseAndNormalizeFileComments(filePath, currentContent);
-        if (this.disposed) {
+        if (this.shouldAbortPersist(options)) {
             return currentContent;
         }
         const threads = explicitThreads
             ?? this.host.getCommentManager().getThreadsForFile(filePath, { includeDeleted: true });
         const synced = await this.syncThreadsIntoVisibleNoteContent(file, parsedCurrentContent.mainContent, threads, filePath);
-        if (this.disposed) {
+        if (this.shouldAbortPersist(options)) {
             return currentContent;
         }
         const normalizedPreviousThreads = await this.normalizeThreadsForFile(filePath, previousThreads);
-        if (this.disposed) {
+        if (this.shouldAbortPersist(options)) {
             return currentContent;
         }
         const eventInputs = buildSideNoteSyncEventInputsForThreadDiff(
@@ -2129,18 +2311,18 @@ export class CommentPersistenceController {
             synced.threads,
         );
         await this.syncEventStore.appendLocalEvents(filePath, eventInputs);
-        if (this.disposed) {
+        if (this.shouldAbortPersist(options)) {
             return currentContent;
         }
         await this.writeSourceAndPathSidecars(sourceRecord.sourceId, filePath, synced.threads);
-        if (this.disposed) {
+        if (this.shouldAbortPersist(options)) {
             return currentContent;
         }
         await this.compactSyncedSideNoteEventsForSnapshots([{
             notePath: filePath,
             threads: synced.threads,
         }]);
-        if (this.disposed) {
+        if (this.shouldAbortPersist(options)) {
             return currentContent;
         }
         await this.afterCommentsChanged(filePath, options);
@@ -2157,16 +2339,17 @@ export class CommentPersistenceController {
         options: PersistOptions = {},
         explicitThreads?: CommentThread[],
     ): Promise<string> {
-        if (!this.isPageNoteCapableFile(file)) {
+        if (!this.isPageNoteCapableFile(file) || this.shouldAbortPersist(options)) {
             return "";
         }
 
+        const sourceThreads = explicitThreads
+            ?? this.host.getCommentManager().getThreadsForFile(filePath, { includeDeleted: true });
         const threads = await this.normalizeThreadsForFile(
             filePath,
-            explicitThreads
-                ?? this.host.getCommentManager().getThreadsForFile(filePath, { includeDeleted: true }),
+            sourceThreads,
         );
-        if (this.disposed) {
+        if (this.shouldAbortPersist(options)) {
             return "";
         }
         void this.host.log?.("info", "persistence", "storage.page.write.begin", {
@@ -2174,15 +2357,15 @@ export class CommentPersistenceController {
             threadCount: threads.length,
         });
         const sourceRecord = await this.ensureSourceIdentityForFilePath(filePath);
-        if (this.disposed) {
+        if (this.shouldAbortPersist(options)) {
             return "";
         }
         const previousThreads = (await this.readSourceOrPathSidecar(sourceRecord, filePath))?.threads ?? [];
-        if (this.disposed) {
+        if (this.shouldAbortPersist(options)) {
             return "";
         }
         const normalizedPreviousThreads = await this.normalizeThreadsForFile(filePath, previousThreads);
-        if (this.disposed) {
+        if (this.shouldAbortPersist(options)) {
             return "";
         }
         const eventInputs = buildSideNoteSyncEventInputsForThreadDiff(
@@ -2190,18 +2373,18 @@ export class CommentPersistenceController {
             threads,
         );
         await this.syncEventStore.appendLocalEvents(filePath, eventInputs);
-        if (this.disposed) {
+        if (this.shouldAbortPersist(options)) {
             return "";
         }
         await this.writeSourceAndPathSidecars(sourceRecord.sourceId, filePath, threads);
-        if (this.disposed) {
+        if (this.shouldAbortPersist(options)) {
             return "";
         }
         await this.compactSyncedSideNoteEventsForSnapshots([{
             notePath: filePath,
             threads,
         }]);
-        if (this.disposed) {
+        if (this.shouldAbortPersist(options)) {
             return "";
         }
         this.host.getAggregateCommentIndex().updateFile(filePath, threads);
@@ -2211,6 +2394,10 @@ export class CommentPersistenceController {
             threadCount: threads.length,
         });
         return "";
+    }
+
+    private shouldAbortPersist(options: PersistOptions): boolean {
+        return this.disposed || options.isStillValid?.() === false;
     }
 
     private async getCanonicalThreadState(file: TFile, noteContent: string, filePath = file.path): Promise<{
@@ -2276,16 +2463,21 @@ export class CommentPersistenceController {
         const viewRefreshOptions = {
             skipDataRefresh: true,
         };
-        if (filePath && this.host.isAllCommentsNotePath(filePath)) {
-            await this.host.refreshAllCommentsSidebarViews(viewRefreshOptions);
-        } else if (!filePath || !this.consumeCommentViewRefreshSuppression(filePath)) {
-            await this.host.refreshCommentViews(viewRefreshOptions);
+        if (!options.deferCommentViewRefresh) {
+            if (filePath && this.host.isAllCommentsNotePath(filePath)) {
+                await this.host.refreshAllCommentsSidebarViews(viewRefreshOptions);
+            } else if (!filePath || !this.consumeCommentViewRefreshSuppression(filePath)) {
+                await this.host.refreshCommentViews(viewRefreshOptions);
+            }
         }
         if (options.refreshEditorDecorations !== false) {
             this.host.refreshEditorDecorations();
         }
         if (options.refreshMarkdownPreviews !== false) {
             this.host.refreshMarkdownPreviews();
+        }
+        if (options.deferAggregateRefresh) {
+            return;
         }
         if (options.immediateAggregateRefresh) {
             await this.refreshAggregateNoteNow();

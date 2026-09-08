@@ -58,6 +58,27 @@ export function getLatestScriptRunForTriggerEntry(
     return null;
 }
 
+export function isLatestScriptRunRetryAttempt(
+    runs: readonly ScriptRunRecord[],
+    attempt: Pick<ScriptRunRecord, "id" | "triggerEntryId" | "outputEntryId">,
+): boolean {
+    const current = getScriptRunById(runs, attempt.id);
+    if (
+        !current
+        || current.triggerEntryId !== attempt.triggerEntryId
+        || current.outputEntryId !== attempt.outputEntryId
+        || current.status === "queued"
+        || current.status === "running"
+    ) {
+        return false;
+    }
+    if (getLatestScriptRunForTriggerEntry(runs, current.triggerEntryId)?.id !== current.id) {
+        return false;
+    }
+    return !current.outputEntryId
+        || getScriptRunByOutputEntryId(runs, current.outputEntryId)?.id === current.id;
+}
+
 export function getScriptRunsForThread(
     runs: readonly ScriptRunRecord[],
     thread: { id: string },

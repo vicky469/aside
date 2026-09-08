@@ -88,14 +88,15 @@ export function replaceOpenMentionQuery(
 export function buildMentionSuggestions(
     scripts: readonly VaultScriptRegistration[],
     rawQuery: string,
+    scriptsEnabled: boolean,
 ): SideNoteMentionSuggestion[] {
     const normalizedRawQuery = rawQuery.trim();
     const query = normalizedRawQuery.replace(/^[@/]/u, "").toLowerCase();
-    const shouldIncludeScripts = !normalizedRawQuery.startsWith("@");
+    const shouldIncludeScripts = scriptsEnabled && !normalizedRawQuery.startsWith("@");
     const shouldIncludeAtBuiltIns = !normalizedRawQuery.startsWith("/");
     const shouldIncludeSlashBuiltIns = !normalizedRawQuery.startsWith("@");
     const shouldFilterBuiltInsByQuery = query.length > 0;
-    const builtInCandidates: SideNoteMentionSuggestion[] = getActionableBuiltInMentions()
+    const builtInCandidates: SideNoteMentionSuggestion[] = getActionableBuiltInMentions(scriptsEnabled)
         .filter((item) => item.mention.startsWith("@")
             ? shouldIncludeAtBuiltIns
             : shouldIncludeSlashBuiltIns)

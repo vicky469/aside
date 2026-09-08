@@ -185,6 +185,7 @@ test("toggleMarkdownBold wraps multiline list selections per content line", () =
 
 const registeredScripts = new Set(["/clean-youtube-transcript"]);
 const isRecognizedMention = (mention: string) => isActionableMention(mention, {
+    scriptsEnabled: true,
     isRunnableVaultScriptMention: (candidate) => registeredScripts.has(candidate.toLowerCase()),
 });
 
@@ -226,6 +227,32 @@ test("renderStyledDraftCommentHtml highlights enabled script-authoring commands"
     assert.equal(
         renderStyledDraftCommentHtml("Use /create-script, /update-script, or /pdf-to-markdown", isRecognizedMention),
         "Use <span class=\"aside-editor-token-mention\">/create-script</span>, <span class=\"aside-editor-token-mention\">/update-script</span>, or <span class=\"aside-editor-token-mention\">/pdf-to-markdown</span>",
+    );
+});
+
+test("renderStyledDraftCommentHtml hides script mentions when Scripts is disabled", () => {
+    const disabledScriptsMention = (mention: string) => isActionableMention(mention, {
+        scriptsEnabled: false,
+        isRunnableVaultScriptMention: (candidate) => candidate.toLowerCase() === "/clean",
+    });
+
+    assert.equal(
+        renderStyledDraftCommentHtml(
+            "@todo @codex @claude @cursor @gemini @deepseek /create-script /update-script /pdf-to-markdown /clean",
+            disabledScriptsMention,
+        ),
+        [
+            "<span class=\"aside-editor-token-mention\">@todo</span>",
+            "<span class=\"aside-editor-token-mention\">@codex</span>",
+            "<span class=\"aside-editor-token-mention\">@claude</span>",
+            "<span class=\"aside-editor-token-mention\">@cursor</span>",
+            "<span class=\"aside-editor-token-mention\">@gemini</span>",
+            "<span class=\"aside-editor-token-mention\">@deepseek</span>",
+            "/create-script",
+            "/update-script",
+            "/pdf-to-markdown",
+            "/clean",
+        ].join(" "),
     );
 });
 

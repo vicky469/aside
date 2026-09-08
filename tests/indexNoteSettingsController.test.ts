@@ -34,6 +34,7 @@ function createSettings(overrides: Partial<AsideSettings> = {}): AsideSettings {
         defaultAgent: overrides.defaultAgent ?? "codex",
         showTodoSidebarTab: overrides.showTodoSidebarTab ?? true,
         showAgentSidebarTab: overrides.showAgentSidebarTab ?? false,
+        scriptsEnabled: overrides.scriptsEnabled ?? false,
         publishedPublicArtifactPaths: overrides.publishedPublicArtifactPaths ?? [],
         publishEnabled: overrides.publishEnabled ?? DEFAULT_PUBLISH_SETTINGS.publishEnabled,
         publishPagesProjectName: overrides.publishPagesProjectName ?? DEFAULT_PUBLISH_SETTINGS.publishPagesProjectName,
@@ -86,14 +87,21 @@ test("loaded settings normalize the default agent and rewrite invalid values", (
 });
 
 function withPublishDefaults(
-    settings: Omit<AsideSettings, keyof typeof DEFAULT_PUBLISH_SETTINGS | "publishedPublicArtifactPaths" | "defaultAgent">,
+    settings: Omit<AsideSettings, keyof typeof DEFAULT_PUBLISH_SETTINGS | "publishedPublicArtifactPaths" | "defaultAgent" | "scriptsEnabled">,
 ): AsideSettings {
     return {
         ...settings,
         defaultAgent: "codex",
+        scriptsEnabled: false,
         publishedPublicArtifactPaths: [],
         ...DEFAULT_PUBLISH_SETTINGS,
     };
+}
+
+function withoutScriptsSetting(settings: AsideSettings = createSettings()): PersistedPluginData {
+    const loaded: PersistedPluginData = { ...settings };
+    delete loaded.scriptsEnabled;
+    return loaded;
 }
 
 function createControllerHarness(options: {
@@ -104,9 +112,14 @@ function createControllerHarness(options: {
     activeSidebarFilePath?: string | null;
     draftHostFilePath?: string | null;
     loadedData?: PersistedPluginData | null;
+    loadData?: () => Promise<PersistedPluginData | null>;
     renameFileError?: Error;
     saveDataError?: Error;
     saveData?: (data: PersistedPluginData) => Promise<void>;
+    ensureFolder?: (
+        folderPath: string,
+    ) => Promise<{ ok: true } | { ok: false; notice: string }>;
+    hasRegisteredVaultScripts?: boolean;
 } = {}) {
     let settings = options.settings ?? createSettings();
     let activeSidebarFile = options.activeSidebarFilePath ? createFile(options.activeSidebarFilePath) : null;
@@ -114,7 +127,9 @@ function createControllerHarness(options: {
     const savedPayloads: PersistedPluginData[] = [];
     const notices: string[] = [];
     const refreshedTargets: Array<string | null> = [];
+    let refreshCommentViewsCount = 0;
     let refreshAggregateNoteCount = 0;
+    let registeredVaultScriptEvidenceReadCount = 0;
     const renamedFiles: Array<{ from: string; to: string }> = [];
     const adapterRenamedFiles: Array<{ from: string; to: string }> = [];
     const deletedFiles: string[] = [];
@@ -233,10 +248,22 @@ function createControllerHarness(options: {
         updateSidebarViews: async (file: TFile | null) => {
             refreshedTargets.push(file?.path ?? null);
         },
+        refreshCommentViews: async () => {
+            refreshCommentViewsCount += 1;
+        },
         refreshAggregateNoteNow: async () => {
             refreshAggregateNoteCount += 1;
         },
-        loadData: async () => options.loadedData ?? null,
+        hasRegisteredVaultScripts: () => {
+            registeredVaultScriptEvidenceReadCount += 1;
+            return options.hasRegisteredVaultScripts ?? false;
+        },
+        loadData: async () => {
+            if (options.loadData) {
+                return options.loadData();
+            }
+            return options.loadedData ?? null;
+        },
         saveData: async (data: PersistedPluginData) => {
             if (options.saveData) {
                 await options.saveData(data);
@@ -249,6 +276,9 @@ function createControllerHarness(options: {
             savedPayloads.push(data);
         },
         ensureFolder: async (folderPath: string) => {
+            if (options.ensureFolder) {
+                return options.ensureFolder(folderPath);
+            }
             if (filesByPath.has(folderPath)) {
                 return {
                     ok: false as const,
@@ -275,7 +305,9 @@ function createControllerHarness(options: {
         savedPayloads,
         notices,
         refreshedTargets,
+        getRefreshCommentViewsCount: () => refreshCommentViewsCount,
         getRefreshAggregateNoteCount: () => refreshAggregateNoteCount,
+        getRegisteredVaultScriptEvidenceReadCount: () => registeredVaultScriptEvidenceReadCount,
         renamedFiles,
         adapterRenamedFiles,
         deletedFiles,
@@ -455,6 +487,80 @@ test("loaded settings resolution defaults Todo on and agents off when missing or
     }
 });
 
+test("loaded settings resolution defaults Scripts off for new and side-note-only state", () => {
+    const sideNoteOnlyState: PersistedPluginData = {
+        ...withoutScriptsSetting(),
+        sideNoteSyncEventState: {
+            sources: {},
+        },
+    };
+
+    for (const loaded of [null, sideNoteOnlyState]) {
+        const resolved = resolveLoadedSettings(loaded, createSettings());
+
+        assert.equal(resolved.settings.scriptsEnabled, false);
+        assert.equal(resolved.shouldRewriteLegacySettings, true);
+    }
+});
+
+test("loaded settings resolution infers Scripts on from run history or registry evidence", () => {
+    const cases: Array<{
+        loaded: PersistedPluginData;
+        hasRegisteredVaultScripts: boolean;
+    }> = [
+        {
+            loaded: { agentRuns: [{ id: "agent-run" }] },
+            hasRegisteredVaultScripts: false,
+        },
+        {
+            loaded: { scriptRuns: [{ id: "script-run" }] },
+            hasRegisteredVaultScripts: false,
+        },
+        {
+            loaded: {},
+            hasRegisteredVaultScripts: true,
+        },
+    ];
+
+    for (const { loaded, hasRegisteredVaultScripts } of cases) {
+        const resolved = resolveLoadedSettings(loaded, createSettings(), {
+            hasRegisteredVaultScripts,
+        });
+
+        assert.equal(resolved.settings.scriptsEnabled, true);
+        assert.equal(resolved.shouldRewriteLegacySettings, true);
+    }
+});
+
+test("loaded settings resolution lets explicit Scripts booleans override migration evidence", () => {
+    for (const scriptsEnabled of [true, false]) {
+        const resolved = resolveLoadedSettings({
+            scriptsEnabled,
+            agentRuns: [{ id: "agent-run" }],
+            scriptRuns: [{ id: "script-run" }],
+        }, createSettings(), {
+            hasRegisteredVaultScripts: true,
+        });
+
+        assert.equal(resolved.settings.scriptsEnabled, scriptsEnabled);
+    }
+});
+
+test("loaded settings resolution infers and rewrites invalid Scripts state", () => {
+    const inferredOn = resolveLoadedSettings({
+        scriptsEnabled: "yes" as unknown as boolean,
+        scriptRuns: [{ id: "script-run" }],
+    }, createSettings());
+    const inferredOff = resolveLoadedSettings({
+        scriptsEnabled: 1 as unknown as boolean,
+    }, createSettings());
+
+    assert.equal(inferredOn.settings.scriptsEnabled, true);
+    assert.equal(inferredOn.shouldRewriteLegacySettings, true);
+    assert.equal(inferredOff.settings.scriptsEnabled, false);
+    assert.equal(inferredOff.shouldRewriteLegacySettings, true);
+});
+
 test("loaded settings resolution preserves explicit agent tab booleans", () => {
     const visible = resolveLoadedSettings({
         showAgentSidebarTab: true,
@@ -592,6 +698,61 @@ test("index note settings controller rewrites legacy settings", async () => {
     assert.equal("preferredAgentTarget" in harness.savedPayloads[0], false);
     assert.equal("confirmDelete" in harness.savedPayloads[0], false);
     assert.equal("enableDebugMode" in harness.savedPayloads[0], false);
+});
+
+test("index note settings controller uses registered vault scripts as migration evidence", async () => {
+    const harness = createControllerHarness({
+        loadedData: withoutScriptsSetting(),
+        hasRegisteredVaultScripts: true,
+    });
+
+    await harness.controller.loadSettings();
+
+    assert.equal(harness.getSettings().scriptsEnabled, true);
+    assert.equal(harness.savedPayloads.at(-1)?.scriptsEnabled, true);
+    assert.equal(harness.getRegisteredVaultScriptEvidenceReadCount(), 1);
+});
+
+test("index note settings controller skips registry evidence for an explicit Scripts boolean", async () => {
+    const harness = createControllerHarness({
+        loadedData: createSettings({ scriptsEnabled: false }),
+        hasRegisteredVaultScripts: true,
+    });
+
+    await harness.controller.loadSettings();
+
+    assert.equal(harness.getSettings().scriptsEnabled, false);
+    assert.equal(harness.getRegisteredVaultScriptEvidenceReadCount(), 0);
+});
+
+test("index note settings controller reads registry evidence once for an invalid Scripts value", async () => {
+    const harness = createControllerHarness({
+        loadedData: {
+            ...withoutScriptsSetting(),
+            scriptsEnabled: "invalid" as unknown as boolean,
+        },
+        hasRegisteredVaultScripts: true,
+    });
+
+    await harness.controller.loadSettings();
+
+    assert.equal(harness.getSettings().scriptsEnabled, true);
+    assert.equal(harness.getRegisteredVaultScriptEvidenceReadCount(), 1);
+});
+
+test("index note settings controller skips registry evidence when run history already proves Scripts usage", async () => {
+    const harness = createControllerHarness({
+        loadedData: {
+            ...withoutScriptsSetting(),
+            scriptRuns: [{ id: "script-run" }],
+        },
+        hasRegisteredVaultScripts: false,
+    });
+
+    await harness.controller.loadSettings();
+
+    assert.equal(harness.getSettings().scriptsEnabled, true);
+    assert.equal(harness.getRegisteredVaultScriptEvidenceReadCount(), 0);
 });
 
 test("index note settings controller migrates a persisted legacy index note on load", async () => {
@@ -817,6 +978,341 @@ test("index note settings controller saves sidebar tab toggles and refreshes ope
         showTodoSidebarTab: false,
         showAgentSidebarTab: false,
     }));
+});
+
+test("Scripts changes refresh every open sidebar in place, including pinned views", async () => {
+    const harness = createControllerHarness({
+        activeSidebarFilePath: "docs/source.md",
+        files: ["docs/source.md"],
+    });
+
+    await harness.controller.setScriptsEnabled(false);
+    assert.equal(harness.savedPayloads.length, 0);
+    assert.deepEqual(harness.refreshedTargets, []);
+    assert.equal(harness.getRefreshCommentViewsCount(), 0);
+
+    await harness.controller.setScriptsEnabled(true);
+
+    assert.equal(harness.getSettings().scriptsEnabled, true);
+    assert.equal(harness.savedPayloads.length, 1);
+    assert.equal(harness.savedPayloads[0]?.scriptsEnabled, true);
+    assert.deepEqual(harness.refreshedTargets, []);
+    assert.equal(harness.getRefreshCommentViewsCount(), 1);
+});
+
+test("capability setters restore persisted state after save failure", async () => {
+    const harness = createControllerHarness({
+        saveDataError: new Error("save failed"),
+    });
+
+    await assert.rejects(harness.controller.setScriptsEnabled(true), /save failed/u);
+    assert.equal(harness.getSettings().scriptsEnabled, false);
+    assert.deepEqual(harness.refreshedTargets, []);
+    assert.equal(harness.getRefreshCommentViewsCount(), 0);
+
+    await assert.rejects(harness.controller.setPublishEnabled(true), /save failed/u);
+    assert.equal(harness.getSettings().publishEnabled, false);
+});
+
+test("overlapping Scripts changes persist the final requested value", async () => {
+    const saveCalls: PersistedPluginData[] = [];
+    const releases: Array<() => void> = [];
+    const harness = createControllerHarness({
+        loadedData: createSettings({ scriptsEnabled: false }),
+        saveData: async (data) => {
+            saveCalls.push(data);
+            await new Promise<void>((resolve) => releases.push(resolve));
+        },
+    });
+    await harness.controller.loadSettings();
+
+    const enable = harness.controller.setScriptsEnabled(true);
+    const disable = harness.controller.setScriptsEnabled(false);
+
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.deepEqual(saveCalls.map((data) => data.scriptsEnabled), [true]);
+    releases.shift()?.();
+    await enable;
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.deepEqual(saveCalls.map((data) => data.scriptsEnabled), [true, false]);
+    releases.shift()?.();
+    await disable;
+
+    assert.equal(harness.getSettings().scriptsEnabled, false);
+    assert.equal(harness.controller.readPersistedPluginData().scriptsEnabled, false);
+});
+
+test("overlapping Publishing changes persist the final requested value", async () => {
+    const saveCalls: PersistedPluginData[] = [];
+    const releases: Array<() => void> = [];
+    const harness = createControllerHarness({
+        loadedData: createSettings({ publishEnabled: false }),
+        saveData: async (data) => {
+            saveCalls.push(data);
+            await new Promise<void>((resolve) => releases.push(resolve));
+        },
+    });
+    await harness.controller.loadSettings();
+
+    const enable = harness.controller.setPublishEnabled(true);
+    const disable = harness.controller.setPublishEnabled(false);
+
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.deepEqual(saveCalls.map((data) => data.publishEnabled), [true]);
+    releases.shift()?.();
+    await enable;
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.deepEqual(saveCalls.map((data) => data.publishEnabled), [true, false]);
+    releases.shift()?.();
+    await disable;
+
+    assert.equal(harness.getSettings().publishEnabled, false);
+    assert.equal(harness.controller.readPersistedPluginData().publishEnabled, false);
+});
+
+test("a failed capability write cannot restore stale state over a later capability request", async () => {
+    const saveCalls: PersistedPluginData[] = [];
+    const pendingSaves: Array<{
+        resolve: () => void;
+        reject: (error: Error) => void;
+    }> = [];
+    const harness = createControllerHarness({
+        loadedData: createSettings({
+            scriptsEnabled: false,
+            publishEnabled: false,
+        }),
+        saveData: async (data) => {
+            saveCalls.push(data);
+            await new Promise<void>((resolve, reject) => pendingSaves.push({ resolve, reject }));
+        },
+    });
+    await harness.controller.loadSettings();
+
+    const enableScripts = harness.controller.setScriptsEnabled(true);
+    const enablePublishing = harness.controller.setPublishEnabled(true);
+
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(saveCalls.length, 1);
+    pendingSaves.shift()?.reject(new Error("save failed"));
+    await assert.rejects(enableScripts, /save failed/u);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(saveCalls.length, 2);
+    assert.equal(saveCalls[1]?.scriptsEnabled, false);
+    assert.equal(saveCalls[1]?.publishEnabled, true);
+    pendingSaves.shift()?.resolve();
+    await enablePublishing;
+
+    assert.equal(harness.getSettings().scriptsEnabled, false);
+    assert.equal(harness.getSettings().publishEnabled, true);
+    assert.equal(harness.controller.readPersistedPluginData().scriptsEnabled, false);
+    assert.equal(harness.controller.readPersistedPluginData().publishEnabled, true);
+});
+
+test("a failed Scripts write cannot leak through a later default-agent save", async () => {
+    const saveCalls: PersistedPluginData[] = [];
+    const pendingSaves: Array<{
+        resolve: () => void;
+        reject: (error: Error) => void;
+    }> = [];
+    const harness = createControllerHarness({
+        loadedData: createSettings({
+            scriptsEnabled: false,
+            defaultAgent: "codex",
+        }),
+        saveData: async (data) => {
+            saveCalls.push(data);
+            await new Promise<void>((resolve, reject) => pendingSaves.push({ resolve, reject }));
+        },
+    });
+    await harness.controller.loadSettings();
+
+    const enableScripts = harness.controller.setScriptsEnabled(true);
+    const setDefaultAgent = harness.controller.setDefaultAgent("claude");
+
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(saveCalls.length, 1);
+    pendingSaves.shift()?.reject(new Error("save failed"));
+    await assert.rejects(enableScripts, /save failed/u);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(saveCalls.length, 2);
+    pendingSaves.shift()?.resolve();
+    await setDefaultAgent;
+
+    assert.equal(harness.getSettings().scriptsEnabled, false);
+    assert.equal(harness.getSettings().defaultAgent, "claude");
+    assert.equal(saveCalls[1]?.scriptsEnabled, false);
+    assert.equal(saveCalls[1]?.defaultAgent, "claude");
+    assert.equal(harness.controller.readPersistedPluginData().scriptsEnabled, false);
+    assert.equal(harness.controller.readPersistedPluginData().defaultAgent, "claude");
+});
+
+test("public settings reload waits for a pending capability save", async () => {
+    let externalData: PersistedPluginData = createSettings({ scriptsEnabled: false });
+    const events: string[] = [];
+    const saveReleases: Array<() => void> = [];
+    const harness = createControllerHarness({
+        settings: createSettings({ scriptsEnabled: false }),
+        loadData: async () => {
+            events.push("load");
+            return externalData;
+        },
+        saveData: async (data) => {
+            events.push("save:start");
+            await new Promise<void>((resolve) => saveReleases.push(resolve));
+            externalData = data;
+            events.push("save:end");
+        },
+    });
+    await harness.controller.loadSettings();
+    events.length = 0;
+
+    const enableScripts = harness.controller.setScriptsEnabled(true);
+    const reloadSettings = harness.controller.loadSettings();
+
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    saveReleases.shift()?.();
+    await enableScripts;
+    await reloadSettings;
+
+    assert.deepEqual(events, ["save:start", "save:end", "load"]);
+    assert.equal(harness.getSettings().scriptsEnabled, true);
+    assert.equal(harness.controller.readPersistedPluginData().scriptsEnabled, true);
+    assert.equal(externalData.scriptsEnabled, true);
+});
+
+test("public settings reload runs after a failed capability save and leaves the queue usable", async () => {
+    let externalData: PersistedPluginData = createSettings({
+        scriptsEnabled: false,
+        defaultAgent: "codex",
+    });
+    const events: string[] = [];
+    const saveReleases: Array<() => void> = [];
+    let saveAttempt = 0;
+    const harness = createControllerHarness({
+        settings: createSettings({
+            scriptsEnabled: false,
+            defaultAgent: "codex",
+        }),
+        loadData: async () => {
+            events.push("load");
+            return externalData;
+        },
+        saveData: async (data) => {
+            saveAttempt += 1;
+            events.push("save:start");
+            if (saveAttempt === 1) {
+                await new Promise<void>((resolve) => saveReleases.push(resolve));
+                events.push("save:error");
+                throw new Error("save failed");
+            }
+            externalData = data;
+            events.push("save:end");
+        },
+    });
+    await harness.controller.loadSettings();
+    events.length = 0;
+
+    const enableScripts = harness.controller.setScriptsEnabled(true);
+    const reloadSettings = harness.controller.loadSettings();
+
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    saveReleases.shift()?.();
+    await assert.rejects(enableScripts, /save failed/u);
+    await reloadSettings;
+
+    assert.deepEqual(events, ["save:start", "save:error", "load"]);
+    assert.equal(harness.getSettings().scriptsEnabled, false);
+    assert.equal(harness.controller.readPersistedPluginData().scriptsEnabled, false);
+    assert.equal(externalData.scriptsEnabled, false);
+
+    await harness.controller.setDefaultAgent("claude");
+    assert.equal(harness.getSettings().defaultAgent, "claude");
+    assert.equal(harness.controller.readPersistedPluginData().defaultAgent, "claude");
+    assert.equal(externalData.defaultAgent, "claude");
+});
+
+test("Publishing initialization is serialized with rapid enable then disable", async () => {
+    const initializationReleases: Array<() => void> = [];
+    const saveReleases: Array<() => void> = [];
+    const saveCalls: PersistedPluginData[] = [];
+    const harness = createControllerHarness({
+        loadedData: createSettings({
+            publishEnabled: false,
+            publishPagesProjectName: "",
+            publishBaseUrl: "",
+        }),
+        ensureFolder: async () => {
+            await new Promise<void>((resolve) => initializationReleases.push(resolve));
+            return { ok: true };
+        },
+        saveData: async (data) => {
+            saveCalls.push(data);
+            await new Promise<void>((resolve) => saveReleases.push(resolve));
+        },
+    });
+    await harness.controller.loadSettings();
+
+    const enable = harness.controller.setPublishEnabled(true, " My Vault ");
+    const disable = harness.controller.setPublishEnabled(false, " My Vault ");
+
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(saveCalls.length, 0);
+    initializationReleases.shift()?.();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(saveCalls.length, 1);
+    saveReleases.shift()?.();
+    await enable;
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(saveCalls.length, 2);
+    saveReleases.shift()?.();
+    await disable;
+
+    assert.deepEqual(saveCalls.map((data) => ({
+        publishEnabled: data.publishEnabled,
+        publishPagesProjectName: data.publishPagesProjectName,
+        publishBaseUrl: data.publishBaseUrl,
+    })), [{
+        publishEnabled: true,
+        publishPagesProjectName: "my-vault",
+        publishBaseUrl: "https://my-vault.pages.dev",
+    }, {
+        publishEnabled: false,
+        publishPagesProjectName: "my-vault",
+        publishBaseUrl: "https://my-vault.pages.dev",
+    }]);
+    assert.equal(harness.getSettings().publishEnabled, false);
+    assert.equal(harness.getSettings().publishPagesProjectName, "my-vault");
+    assert.equal(harness.getSettings().publishBaseUrl, "https://my-vault.pages.dev");
+    assert.equal(harness.controller.readPersistedPluginData().publishEnabled, false);
+    assert.equal(harness.controller.readPersistedPluginData().publishPagesProjectName, "my-vault");
+    assert.equal(harness.controller.readPersistedPluginData().publishBaseUrl, "https://my-vault.pages.dev");
+});
+
+test("disabling capabilities preserves run history and publishing configuration", async () => {
+    const agentRuns = [{ id: "agent-run" }];
+    const scriptRuns = [{ id: "script-run" }];
+    const publishBaseUrl = "https://publish.example.com";
+    const harness = createControllerHarness({
+        loadedData: {
+            ...createSettings({
+                scriptsEnabled: true,
+                publishEnabled: true,
+                publishBaseUrl,
+            }),
+            agentRuns,
+            scriptRuns,
+        },
+    });
+    await harness.controller.loadSettings();
+
+    await harness.controller.setScriptsEnabled(false);
+    await harness.controller.setPublishEnabled(false);
+
+    assert.deepEqual(harness.savedPayloads.at(-1)?.agentRuns, agentRuns);
+    assert.deepEqual(harness.savedPayloads.at(-1)?.scriptRuns, scriptRuns);
+    assert.equal(harness.savedPayloads.at(-1)?.publishBaseUrl, publishBaseUrl);
+    assert.equal(harness.savedPayloads.at(-1)?.scriptsEnabled, false);
+    assert.equal(harness.savedPayloads.at(-1)?.publishEnabled, false);
 });
 
 test("loaded settings resolution normalizes publish settings and rewrites changed values", () => {

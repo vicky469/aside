@@ -1,23 +1,31 @@
 # Advanced Features
 
-Aside keeps powerful local workflows visible in settings while leaving them off or idle until you choose to use them. They can require additional local tools, trusted code, or service configuration.
+Scripts and Publishing are optional advanced capabilities and are off by default for a clean experience. They can require additional local tools, trusted code, or service configuration.
+
+In Aside settings, the sections appear in this order: **Sidebar tabs → Scripts (advanced) → Publishing (advanced) → Index note**.
 
 ## At a Glance
 
 | Feature | Availability | What it does |
 | --- | --- | --- |
-| [Agents and Scripts](SCRIPTS.md) | Desktop Obsidian | Runs supported local agent CLIs and trusted vault scripts from side notes. |
-| [Cloudflare Pages Publishing](#cloudflare-pages-publishing) | Desktop Obsidian | Publishes Markdown, HTML, and PDF content from the vault's `public/` folder. |
+| [Agents and Scripts](SCRIPTS.md) | Desktop Obsidian; Scripts off by default | Gets replies from supported local agent CLIs and optionally runs trusted vault scripts from side notes. |
+| [Cloudflare Pages Publishing](#cloudflare-pages-publishing) | Desktop Obsidian; off by default | Publishes Markdown, HTML, and PDF content from the vault's `public/` folder. |
 
 ## Agents and Scripts
 
-Choose the default local agent under **Settings → Aside → Scripts (advanced)**. See [Agents and Scripts](SCRIPTS.md) for setup, commands, privacy boundaries, and script registration rules.
+Ordinary agent replies do not require Scripts. To create or run trusted local slash and script commands, turn on **Settings → Aside → Scripts (advanced) → Enable scripts**, then choose the default local agent in the same section.
+
+Turning Scripts off blocks new slash and script command execution and script-oriented Generate actions. It does not delete registered scripts, history, or saved replies. Disabled script-like text remains ordinary note or agent text. The toggle is not a sandbox or security boundary.
+
+See [Agents and Scripts](SCRIPTS.md) for agent setup, commands, privacy boundaries, and script registration rules.
 
 Vault scripts are not sandboxed. They run in local Node with your account permissions and inherited environment. Review every script and run only code you wrote or trust.
 
 ## Cloudflare Pages Publishing
 
-On desktop Obsidian, Aside can publish Markdown, HTML, and PDF files from the vault-relative `public/` folder to an existing Cloudflare Pages project.
+On desktop Obsidian, Aside can publish Markdown, HTML, and PDF files from the vault-relative `public/` folder to an existing Cloudflare Pages project. To use it, turn on **Settings → Aside → Publishing (advanced) → Enable publishing**.
+
+Turning Publishing off hides Publishing settings details and disables new Publish, Republish, and Unpublish actions. It preserves saved publishing configuration—it does not delete it—and does not unpublish existing remote content.
 
 ### Network and Data Access
 
@@ -30,7 +38,7 @@ If the user enables a remote HTTPS cache-purge broker, Aside sends the configure
 1. Install Wrangler so `wrangler --version` works in Terminal.
 2. Run `wrangler login` with the Cloudflare account that owns the Pages project.
 3. Create or choose a Cloudflare Pages project.
-4. Open **Settings → Aside → Publishing (advanced)**, turn on **Enable publishing**, and set the Publishing URL to your public Pages URL, for example `https://publish.example.com`.
+4. Turn on **Settings → Aside → Publishing (advanced) → Enable publishing**, and set the Publishing URL to your public Pages URL, for example `https://publish.example.com`.
 5. If you use a custom domain, attach it to the Pages project in Cloudflare first.
 6. Put publishable Markdown, HTML, and PDF files under `public/`. Aside creates `public/` when Publishing is enabled if it does not already exist.
 

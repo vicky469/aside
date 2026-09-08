@@ -28,6 +28,7 @@ import {
 import {
     getIndexNoteParentPath,
     hasPersistedIndexNotePath,
+    needsScriptsMigrationEvidence,
     resolveIndexNotePathChange,
     resolveLoadedSettings,
     shouldApplyNormalizedSettingChange,
@@ -47,7 +48,9 @@ export interface IndexNoteSettingsHost {
     setDraftHostFilePath(filePath: string | null): void;
     getSidebarTargetFile(): TFile | null;
     updateSidebarViews(file: TFile | null): Promise<void>;
+    refreshCommentViews(): Promise<void>;
     refreshAggregateNoteNow(): Promise<void>;
+    hasRegisteredVaultScripts(): boolean;
     loadData(): Promise<PersistedPluginData | null>;
     saveData(data: PersistedPluginData): Promise<void>;
     ensureFolder(folderPath: string): Promise<{ ok: true } | { ok: false; notice: string }>;
@@ -141,23 +144,40 @@ function buildPersistedPluginDataPatch(
 export class IndexNoteSettingsController {
     private persistedPluginData: PersistedPluginData = {};
     private persistedPluginDataWriteQueue: Promise<void> = Promise.resolve();
+    private settingsTransitionQueue: Promise<void> = Promise.resolve();
 
     constructor(private readonly host: IndexNoteSettingsHost) {}
 
     public async loadSettings(): Promise<void> {
+        await this.enqueueSettingsTransition(async () => {
+            await this.loadSettingsNow();
+        });
+    }
+
+    private async loadSettingsNow(): Promise<void> {
         const loaded = await this.host.loadData();
         this.persistedPluginData = clonePersistedPluginData(loaded ?? {});
-        const resolved = resolveLoadedSettings(loaded, this.host.getSettings());
+        const hasRegisteredVaultScripts = needsScriptsMigrationEvidence(loaded)
+            ? this.host.hasRegisteredVaultScripts()
+            : false;
+        const resolved = resolveLoadedSettings(loaded, this.host.getSettings(), {
+            hasRegisteredVaultScripts,
+        });
         this.host.setSettings(resolved.settings);
 
         const migratedLegacyIndexNotePath = await this.migrateLegacyIndexNotePath(loaded);
         if (!migratedLegacyIndexNotePath && resolved.shouldRewriteLegacySettings) {
-            await this.saveSettings();
+            await this.saveSettingsNow();
         }
-
     }
 
     public async saveSettings(): Promise<void> {
+        await this.enqueueSettingsTransition(async () => {
+            await this.saveSettingsNow();
+        });
+    }
+
+    private async saveSettingsNow(): Promise<void> {
         await this.writePersistedPluginData({
             ...this.persistedPluginData,
             ...this.host.getSettings(),
@@ -189,6 +209,12 @@ export class IndexNoteSettingsController {
     }
 
     public async setIndexNotePath(nextPathInput: string): Promise<void> {
+        await this.enqueueSettingsTransition(async () => {
+            await this.applyIndexNotePath(nextPathInput);
+        });
+    }
+
+    private async applyIndexNotePath(nextPathInput: string): Promise<void> {
         const settings = this.host.getSettings();
         const previousPath = this.getAllCommentsNotePath();
         const parentPath = getIndexNoteParentPath(normalizeAllCommentsNotePath(nextPathInput));
@@ -226,7 +252,7 @@ export class IndexNoteSettingsController {
             indexNotePath: plan.nextPath,
         });
         try {
-            await this.saveSettings();
+            await this.saveSettingsNow();
         } catch (saveError) {
             this.host.setSettings(settings);
             if (renamedCurrentIndexFile && currentIndexFile) {
@@ -252,123 +278,174 @@ export class IndexNoteSettingsController {
     }
 
     public async setIndexHeaderImageUrl(nextUrlInput: string): Promise<void> {
-        const settings = this.host.getSettings();
-        const nextUrl = normalizeAllCommentsNoteImageUrl(nextUrlInput);
-        if (!shouldApplyNormalizedSettingChange({
-            currentStoredValue: settings.indexHeaderImageUrl,
-            currentNormalizedValue: this.getIndexHeaderImageUrl(),
-            nextNormalizedValue: nextUrl,
-        })) {
-            return;
-        }
+        await this.enqueueSettingsTransition(async () => {
+            const settings = this.host.getSettings();
+            const nextUrl = normalizeAllCommentsNoteImageUrl(nextUrlInput);
+            if (!shouldApplyNormalizedSettingChange({
+                currentStoredValue: settings.indexHeaderImageUrl,
+                currentNormalizedValue: this.getIndexHeaderImageUrl(),
+                nextNormalizedValue: nextUrl,
+            })) {
+                return;
+            }
 
-        this.host.setSettings({
-            ...settings,
-            indexHeaderImageUrl: nextUrl,
+            this.host.setSettings({
+                ...settings,
+                indexHeaderImageUrl: nextUrl,
+            });
+            await this.saveSettingsNow();
+            await this.host.refreshAggregateNoteNow();
         });
-        await this.saveSettings();
-        await this.host.refreshAggregateNoteNow();
     }
 
     public async setIndexHeaderImageCaption(nextCaptionInput: string): Promise<void> {
-        const settings = this.host.getSettings();
-        const nextCaption = normalizeAllCommentsNoteImageCaption(nextCaptionInput);
-        if (!shouldApplyNormalizedSettingChange({
-            currentStoredValue: settings.indexHeaderImageCaption,
-            currentNormalizedValue: this.getIndexHeaderImageCaption(),
-            nextNormalizedValue: nextCaption,
-        })) {
-            return;
-        }
+        await this.enqueueSettingsTransition(async () => {
+            const settings = this.host.getSettings();
+            const nextCaption = normalizeAllCommentsNoteImageCaption(nextCaptionInput);
+            if (!shouldApplyNormalizedSettingChange({
+                currentStoredValue: settings.indexHeaderImageCaption,
+                currentNormalizedValue: this.getIndexHeaderImageCaption(),
+                nextNormalizedValue: nextCaption,
+            })) {
+                return;
+            }
 
-        this.host.setSettings({
-            ...settings,
-            indexHeaderImageCaption: nextCaption,
+            this.host.setSettings({
+                ...settings,
+                indexHeaderImageCaption: nextCaption,
+            });
+            await this.saveSettingsNow();
+            await this.host.refreshAggregateNoteNow();
         });
-        await this.saveSettings();
-        await this.host.refreshAggregateNoteNow();
     }
 
     public async setAgentRuntimeMode(nextModeInput: AgentRuntimeModePreference): Promise<void> {
-        const settings = this.host.getSettings();
-        const nextMode = normalizeAgentRuntimeModePreference(nextModeInput);
-        if (settings.agentRuntimeMode === nextMode) {
-            return;
-        }
+        await this.enqueueSettingsTransition(async () => {
+            const settings = this.host.getSettings();
+            const nextMode = normalizeAgentRuntimeModePreference(nextModeInput);
+            if (settings.agentRuntimeMode === nextMode) {
+                return;
+            }
 
-        this.host.setSettings({
-            ...settings,
-            agentRuntimeMode: nextMode,
+            this.host.setSettings({
+                ...settings,
+                agentRuntimeMode: nextMode,
+            });
+            await this.saveSettingsNow();
         });
-        await this.saveSettings();
     }
 
     public async setDefaultAgent(target: AsideAgentTarget): Promise<void> {
-        const settings = this.host.getSettings();
-        const defaultAgent = normalizeSupportedAgentTarget(target);
-        if (settings.defaultAgent === defaultAgent) {
-            return;
-        }
+        await this.enqueueSettingsTransition(async () => {
+            const settings = this.host.getSettings();
+            const defaultAgent = normalizeSupportedAgentTarget(target);
+            if (settings.defaultAgent === defaultAgent) {
+                return;
+            }
 
-        this.host.setSettings({
-            ...settings,
-            defaultAgent,
+            this.host.setSettings({
+                ...settings,
+                defaultAgent,
+            });
+            await this.saveSettingsNow();
         });
-        await this.saveSettings();
     }
 
     public async setShowTodoSidebarTab(visible: boolean): Promise<void> {
-        const settings = this.host.getSettings();
-        if (settings.showTodoSidebarTab === visible) {
-            return;
-        }
+        await this.enqueueSettingsTransition(async () => {
+            const settings = this.host.getSettings();
+            if (settings.showTodoSidebarTab === visible) {
+                return;
+            }
 
-        this.host.setSettings({
-            ...settings,
-            showTodoSidebarTab: visible,
+            this.host.setSettings({
+                ...settings,
+                showTodoSidebarTab: visible,
+            });
+            await this.saveSettingsNow();
+            await this.host.updateSidebarViews(this.host.getSidebarTargetFile());
         });
-        await this.saveSettings();
-        await this.host.updateSidebarViews(this.host.getSidebarTargetFile());
     }
 
     public async setShowAgentSidebarTab(visible: boolean): Promise<void> {
-        const settings = this.host.getSettings();
-        if (settings.showAgentSidebarTab === visible) {
-            return;
-        }
+        await this.enqueueSettingsTransition(async () => {
+            const settings = this.host.getSettings();
+            if (settings.showAgentSidebarTab === visible) {
+                return;
+            }
 
-        this.host.setSettings({
-            ...settings,
-            showAgentSidebarTab: visible,
+            this.host.setSettings({
+                ...settings,
+                showAgentSidebarTab: visible,
+            });
+            await this.saveSettingsNow();
+            await this.host.updateSidebarViews(this.host.getSidebarTargetFile());
         });
-        await this.saveSettings();
-        await this.host.updateSidebarViews(this.host.getSidebarTargetFile());
+    }
+
+    public async setScriptsEnabled(enabled: boolean): Promise<void> {
+        await this.enqueueSettingsTransition(async () => {
+            const settings = this.host.getSettings();
+            if (settings.scriptsEnabled === enabled) {
+                return;
+            }
+
+            const nextSettings = {
+                ...settings,
+                scriptsEnabled: enabled,
+            };
+            await this.persistSettingsTransition(settings, nextSettings, ["scriptsEnabled"]);
+            await this.host.refreshCommentViews();
+        });
     }
 
     public async setPublishPagesProjectName(projectName: string): Promise<void> {
-        const settings = this.host.getSettings();
-        const normalizedProjectName = normalizePublishProjectName(projectName);
-        const patch: Partial<PublishSettings> = {
-            publishPagesProjectName: projectName,
-        };
-        if (normalizedProjectName && isDefaultPagesPublishBaseUrl(settings.publishBaseUrl)) {
-            patch.publishBaseUrl = derivePublishBaseUrlFromProjectName(normalizedProjectName);
-        }
+        await this.enqueueSettingsTransition(async () => {
+            const settings = this.host.getSettings();
+            const normalizedProjectName = normalizePublishProjectName(projectName);
+            const patch: Partial<PublishSettings> = {
+                publishPagesProjectName: projectName,
+            };
+            if (normalizedProjectName && isDefaultPagesPublishBaseUrl(settings.publishBaseUrl)) {
+                patch.publishBaseUrl = derivePublishBaseUrlFromProjectName(normalizedProjectName);
+            }
 
-        await this.setPublishSettings(patch);
+            await this.applyPublishSettings(patch);
+        });
     }
 
-    public async setPublishEnabled(enabled: boolean): Promise<void> {
-        if (enabled) {
-            const folderResult = await this.host.ensureFolder("public");
-            if (!folderResult.ok) {
-                this.host.showNotice(folderResult.notice);
-                return;
+    public async setPublishEnabled(
+        enabled: boolean,
+        fallbackProjectName = "",
+    ): Promise<void> {
+        await this.enqueueSettingsTransition(async () => {
+            if (enabled) {
+                const folderResult = await this.host.ensureFolder("public");
+                if (!folderResult.ok) {
+                    this.host.showNotice(folderResult.notice);
+                    return;
+                }
             }
-        }
 
-        await this.setPublishSettings({
-            publishEnabled: enabled,
+            const patch: Partial<PublishSettings> = {
+                publishEnabled: enabled,
+            };
+            if (enabled) {
+                const settings = this.host.getSettings();
+                const configuredProjectName = normalizePublishProjectName(
+                    settings.publishPagesProjectName,
+                );
+                const nextProjectName = configuredProjectName
+                    || normalizePublishProjectName(fallbackProjectName);
+                if (nextProjectName && settings.publishPagesProjectName !== nextProjectName) {
+                    patch.publishPagesProjectName = nextProjectName;
+                }
+                if (!settings.publishBaseUrl) {
+                    patch.publishBaseUrl = derivePublishBaseUrlFromProjectName(nextProjectName);
+                }
+            }
+
+            await this.applyPublishSettings(patch);
         });
     }
 
@@ -474,7 +551,7 @@ export class IndexNoteSettingsController {
         }
 
         try {
-            await this.setIndexNotePath(ALL_COMMENTS_NOTE_PATH);
+            await this.applyIndexNotePath(ALL_COMMENTS_NOTE_PATH);
         } catch (error) {
             if (error instanceof IndexNotePathRollbackError) {
                 throw error;
@@ -496,6 +573,12 @@ export class IndexNoteSettingsController {
     }
 
     private async setPublishSettings(patch: Partial<PublishSettings>): Promise<void> {
+        await this.enqueueSettingsTransition(async () => {
+            await this.applyPublishSettings(patch);
+        });
+    }
+
+    private async applyPublishSettings(patch: Partial<PublishSettings>): Promise<void> {
         const settings = this.host.getSettings();
         const nextPublishSettings = normalizePublishSettings({
             ...settings,
@@ -505,15 +588,50 @@ export class IndexNoteSettingsController {
             ...settings,
             ...nextPublishSettings,
         };
-        const changed = (Object.keys(nextPublishSettings) as Array<keyof PublishSettings>).some((key) =>
-            settings[key] !== nextSettings[key]
-        );
-        if (!changed) {
+        const changedKeys = (Object.keys(nextPublishSettings) as Array<keyof PublishSettings>)
+            .filter((key) => settings[key] !== nextSettings[key]);
+        if (changedKeys.length === 0) {
             return;
         }
 
+        await this.persistSettingsTransition(settings, nextSettings, changedKeys);
+    }
+
+    private async persistSettingsTransition(
+        previousSettings: AsideSettings,
+        nextSettings: AsideSettings,
+        changedKeys: Array<keyof AsideSettings>,
+    ): Promise<void> {
         this.host.setSettings(nextSettings);
-        await this.saveSettings();
+        try {
+            await this.saveSettingsNow();
+        } catch (error) {
+            const currentSettings = this.host.getSettings();
+            const rollbackPatch: Partial<AsideSettings> = {};
+            for (const key of changedKeys) {
+                if (currentSettings[key] === nextSettings[key]) {
+                    Object.assign(rollbackPatch, {
+                        [key]: previousSettings[key],
+                    });
+                }
+            }
+            this.host.setSettings({
+                ...currentSettings,
+                ...rollbackPatch,
+            });
+            throw error;
+        }
+    }
+
+    private enqueueSettingsTransition(
+        transition: () => Promise<void>,
+    ): Promise<void> {
+        const result = this.settingsTransitionQueue.then(transition);
+        this.settingsTransitionQueue = result.then(
+            () => undefined,
+            () => undefined,
+        );
+        return result;
     }
 
 }

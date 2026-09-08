@@ -27,13 +27,54 @@ export interface AsideSettingCatalogEntry {
     render(setting: Setting, context: AsideSettingCatalogContext): void;
 }
 
-export const ASIDE_SETTING_SECTIONS: ReadonlyArray<{
+export interface AsideSettingSectionControl {
+    key: string;
+    name: string;
+    description: string;
+    aliases: readonly string[];
+    keywords: readonly string[];
+    getValue(context: AsideSettingCatalogContext): boolean;
+    setValue(context: AsideSettingCatalogContext, value: boolean): Promise<void>;
+}
+
+export interface AsideSettingSectionDefinition {
     key: AsideSettingSection;
     heading: string;
-}> = [
+    control?: AsideSettingSectionControl;
+}
+
+export const ASIDE_SETTING_SECTIONS: ReadonlyArray<AsideSettingSectionDefinition> = [
     { key: "sidebar", heading: "Sidebar tabs" },
-    { key: "agents", heading: "Scripts (advanced)" },
-    { key: "publishing", heading: "Publishing (advanced)" },
+    {
+        key: "agents",
+        heading: "Scripts (advanced)",
+        control: {
+            key: "scripts-enabled",
+            name: "Enable scripts",
+            description: "Create and run trusted local scripts with your local agent.",
+            aliases: ["vault scripts"],
+            keywords: ["agent", "commands", "automation"],
+            getValue: ({ plugin }) => plugin.settings.scriptsEnabled,
+            setValue: async (context, value) => {
+                await context.plugin.setScriptsEnabled(value);
+            },
+        },
+    },
+    {
+        key: "publishing",
+        heading: "Publishing (advanced)",
+        control: {
+            key: "publish-enabled",
+            name: "Enable publishing",
+            description: "Show advanced publish controls for supported files in the public folder.",
+            aliases: ["Cloudflare Pages"],
+            keywords: ["public folder", "deploy"],
+            getValue: ({ plugin }) => plugin.settings.publishEnabled,
+            setValue: async (context, value) => {
+                await context.plugin.setPublishEnabled(value);
+            },
+        },
+    },
     { key: "index-note", heading: "Index note" },
 ];
 
@@ -47,31 +88,13 @@ function getPublishHost(baseUrl: string): string {
     }
 }
 
-function isPublishingSettingVisible(context: AsideSettingCatalogContext): boolean {
-    return context.plugin.settings.publishEnabled;
-}
-
 function isRemotePurgeSettingVisible(context: AsideSettingCatalogContext): boolean {
-    return isPublishingSettingVisible(context) && context.plugin.settings.publishRemotePurgeEnabled;
+    return context.plugin.settings.publishRemotePurgeEnabled;
 }
 
 const DEFAULT_AGENT_SETTING_DESCRIPTION = `Preferred local agent for /create-script, /update-script, and ${PDF_TO_MARKDOWN_DIRECTIVE}.`;
 
 export const ASIDE_SETTING_CATALOG: readonly AsideSettingCatalogEntry[] = [
-    {
-        key: "default-agent",
-        section: "agents",
-        name: "Default agent",
-        description: DEFAULT_AGENT_SETTING_DESCRIPTION,
-        aliases: getSupportedAgentActors().map((actor) => actor.label),
-        keywords: ["runtime", "availability", "fallback"],
-        render: (setting, context) => {
-            context.renderDefaultAgentSettings(
-                setting,
-                DEFAULT_AGENT_SETTING_DESCRIPTION,
-            );
-        },
-    },
     {
         key: "show-todo-tab",
         section: "sidebar",
@@ -106,20 +129,17 @@ export const ASIDE_SETTING_CATALOG: readonly AsideSettingCatalogEntry[] = [
         },
     },
     {
-        key: "publish-enabled",
-        section: "publishing",
-        name: "Enable publishing",
-        description: "Show advanced publish controls for supported files in the public folder.",
-        aliases: ["Cloudflare Pages"],
-        keywords: ["public folder", "deploy"],
+        key: "default-agent",
+        section: "agents",
+        name: "Default agent",
+        description: DEFAULT_AGENT_SETTING_DESCRIPTION,
+        aliases: getSupportedAgentActors().map((actor) => actor.label),
+        keywords: ["runtime", "availability", "fallback"],
         render: (setting, context) => {
-            setting.addToggle((toggle) => toggle
-                .setValue(context.plugin.settings.publishEnabled)
-                .onChange(async (value) => {
-                    await context.plugin.setPublishEnabled(value);
-                    toggle.setValue(context.plugin.settings.publishEnabled);
-                    context.refresh();
-                }));
+            context.renderDefaultAgentSettings(
+                setting,
+                DEFAULT_AGENT_SETTING_DESCRIPTION,
+            );
         },
     },
     {
@@ -129,7 +149,6 @@ export const ASIDE_SETTING_CATALOG: readonly AsideSettingCatalogEntry[] = [
         description: "Canonical public address for published files. Prefer your custom domain.",
         aliases: ["public URL", "custom domain"],
         keywords: ["https", "Pages address"],
-        visible: isPublishingSettingVisible,
         render: (setting, context) => {
             setting.addText((text) => text
                 .setPlaceholder("https://publish.example.com")
@@ -148,7 +167,6 @@ export const ASIDE_SETTING_CATALOG: readonly AsideSettingCatalogEntry[] = [
         description: "Change to your preferred name or keep the default.",
         aliases: ["Pages project"],
         keywords: ["Cloudflare", "deployment"],
-        visible: isPublishingSettingVisible,
         render: (setting, context) => {
             setting.addText((text) => text
                 .setPlaceholder(PUBLISH_PROJECT_NAME_PLACEHOLDER)
@@ -166,7 +184,6 @@ export const ASIDE_SETTING_CATALOG: readonly AsideSettingCatalogEntry[] = [
         description: "Purge cached custom-domain pages after unpublish and republish.",
         aliases: ["cache invalidation"],
         keywords: ["Cloudflare", "unpublish", "republish"],
-        visible: isPublishingSettingVisible,
         render: (setting, context) => {
             setting.addToggle((toggle) => toggle
                 .setValue(context.plugin.settings.publishRemotePurgeEnabled)
@@ -254,3 +271,52 @@ export const ASIDE_SETTING_CATALOG: readonly AsideSettingCatalogEntry[] = [
         },
     },
 ];
+
+export function isAsideSettingSectionEnabled(
+    section: AsideSettingSectionDefinition,
+    context: AsideSettingCatalogContext,
+): boolean {
+    return section.control?.getValue(context) ?? true;
+}
+
+export function isAsideSettingEntryVisible(
+    entry: AsideSettingCatalogEntry,
+    context: AsideSettingCatalogContext,
+): boolean {
+    const section = ASIDE_SETTING_SECTIONS.find((candidate) => candidate.key === entry.section);
+    if (!section) {
+        return false;
+    }
+    return isAsideSettingSectionEnabled(section, context)
+        && entry.visible?.(context) !== false;
+}
+
+export function getAsideSettingSurfaceKeys(): string[] {
+    return ASIDE_SETTING_SECTIONS.flatMap((section) => [
+        ...(section.control ? [section.control.key] : []),
+        ...ASIDE_SETTING_CATALOG
+            .filter((entry) => entry.section === section.key)
+            .map((entry) => entry.key),
+    ]);
+}
+
+export function renderAsideSettingSectionControl(
+    setting: Setting,
+    section: AsideSettingSectionDefinition,
+    context: AsideSettingCatalogContext,
+): void {
+    const control = section.control;
+    if (!control) {
+        return;
+    }
+    setting.addToggle((toggle) => toggle
+        .setValue(control.getValue(context))
+        .onChange(async (value) => {
+            try {
+                await control.setValue(context, value);
+            } finally {
+                toggle.setValue(control.getValue(context));
+                context.refresh();
+            }
+        }));
+}

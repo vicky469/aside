@@ -10,6 +10,7 @@ import {
     type AgentRunMetadata,
     type AgentRunStreamState,
 } from "../../core/agents/agentRuns";
+import { canRetryAgentRunWithScriptsCapability } from "../../core/scripts/scriptCapabilities";
 import type { AsideAgentTarget } from "../../core/config/agentTargets";
 import {
     getLatestScriptRunForTriggerEntry,
@@ -100,6 +101,7 @@ export interface SidebarPersistedCommentHost {
     activeCommentId: string | null;
     currentFilePath: string | null;
     currentUserLabel: string;
+    scriptsEnabled: boolean;
     isActionableMention: ActionableMentionPredicate;
     showSourceRedirectAction: boolean;
     showBookmarkAndPinControls: boolean;
@@ -169,6 +171,35 @@ export type SidebarCommentRegenerateAction =
     | { kind: "agent-run"; runId: string }
     | { kind: "agent-prompt" }
     | { kind: "script-run"; runId: string };
+
+type SidebarCommentRegenerateHost = Pick<
+    SidebarPersistedCommentHost,
+    | "saveVisibleDraftIfPresent"
+    | "retryAgentRun"
+    | "retryScriptRun"
+    | "retryAgentPromptForComment"
+>;
+
+export async function executeSidebarCommentRegenerateAction(
+    action: SidebarCommentRegenerateAction,
+    comment: Pick<Comment, "id" | "filePath">,
+    host: SidebarCommentRegenerateHost,
+): Promise<boolean> {
+    switch (action.kind) {
+        case "script-run":
+            if (!(await host.saveVisibleDraftIfPresent())) {
+                return false;
+            }
+            return host.retryScriptRun(action.runId);
+        case "agent-run":
+            return host.retryAgentRun(action.runId);
+        case "agent-prompt":
+            return host.retryAgentPromptForComment(comment.id, comment.filePath);
+        default:
+            action satisfies never;
+            return false;
+    }
+}
 
 export function getAgentRunStatusPresentation(status: AgentRunRecord["status"]): AgentRunStatusPresentation {
     switch (status) {
@@ -619,17 +650,21 @@ export function getSidebarCommentRegenerateAction(
     commentId: string,
     commentBody: string,
     threadAgentRuns: readonly AgentRunRecord[],
-    threadScriptRuns: readonly ScriptRunRecord[] = [],
+    threadScriptRuns: readonly ScriptRunRecord[],
+    scriptsEnabled: boolean,
 ): SidebarCommentRegenerateAction | null {
     const retryableScriptRun = getRetryableScriptRunForSidebarComment(commentId, threadScriptRuns);
-    if (retryableScriptRun) {
+    if (scriptsEnabled && retryableScriptRun) {
         return {
             kind: "script-run",
             runId: retryableScriptRun.id,
         };
     }
     const retryableAgentRun = getRetryableAgentRunForSidebarComment(commentId, threadAgentRuns);
-    if (retryableAgentRun) {
+    if (
+        retryableAgentRun
+        && canRetryAgentRunWithScriptsCapability(scriptsEnabled, retryableAgentRun)
+    ) {
         return {
             kind: "agent-run",
             runId: retryableAgentRun.id,
@@ -647,9 +682,16 @@ export function shouldShowRetryActionForSidebarComment(
     commentId: string,
     commentBody: string,
     threadAgentRuns: readonly AgentRunRecord[],
-    threadScriptRuns: readonly ScriptRunRecord[] = [],
+    threadScriptRuns: readonly ScriptRunRecord[],
+    scriptsEnabled: boolean,
 ): boolean {
-    return getSidebarCommentRegenerateAction(commentId, commentBody, threadAgentRuns, threadScriptRuns) !== null;
+    return getSidebarCommentRegenerateAction(
+        commentId,
+        commentBody,
+        threadAgentRuns,
+        threadScriptRuns,
+        scriptsEnabled,
+    ) !== null;
 }
 
 export function getInsertableSidebarCommentMarkdown(
@@ -1221,18 +1263,11 @@ function renderThreadFooterActions(
                 return;
             }
             retryButton.disabled = true;
-            if (
-                regenerateAction.kind === "script-run"
-                && !(await host.saveVisibleDraftIfPresent())
-            ) {
-                retryButton.disabled = options.disableRetryAction === true;
-                return;
-            }
-            const started = regenerateAction.kind === "script-run"
-                ? await host.retryScriptRun(regenerateAction.runId)
-                : regenerateAction.kind === "agent-run"
-                    ? await host.retryAgentRun(regenerateAction.runId)
-                    : await host.retryAgentPromptForComment(comment.id, comment.filePath);
+            const started = await executeSidebarCommentRegenerateAction(
+                regenerateAction,
+                comment,
+                host,
+            );
             if (!started) {
                 retryButton.disabled = options.disableRetryAction === true;
             }
@@ -1426,6 +1461,7 @@ function renderStoredThreadEntry(
             entryComment.comment,
             host.threadAgentRuns,
             host.threadScriptRuns,
+            host.scriptsEnabled,
         );
         const entryInsertMarkdown = !entryComment.deletedAt && !thread.deletedAt
             ? getInsertableSidebarCommentMarkdown(entryComment.id, entry.body || "", host.threadAgentRuns)
@@ -1580,6 +1616,7 @@ export async function renderPersistedCommentCard(
             comment.comment,
             host.threadAgentRuns,
             host.threadScriptRuns,
+            host.scriptsEnabled,
         );
         const parentInsertMarkdown = !comment.deletedAt && !thread.deletedAt
             ? getInsertableSidebarCommentMarkdown(comment.id, entries[0]?.body || "", host.threadAgentRuns)

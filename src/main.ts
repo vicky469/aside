@@ -35,7 +35,10 @@ import {
     IndexNoteOpenController,
     type IndexNoteRefreshContext,
 } from "./app/indexNoteOpenController";
-import { RefreshCoordinator } from "./app/refreshCoordinator";
+import {
+    RefreshCoordinator,
+    runReportedAsyncRefresh,
+} from "./app/refreshCoordinator";
 import { WorkspaceContextController } from "./app/workspaceContextController";
 import type { SidebarUpdateOptions } from "./comments/commentNavigationController";
 import { WorkspaceViewController } from "./app/workspaceViewController";
@@ -46,7 +49,11 @@ import {
 } from "./vaultScripts/commentScriptController";
 import { ScriptRunStore } from "./vaultScripts/scriptRunStore";
 import { ensureVaultScriptFolder } from "./vaultScripts/vaultScriptFolderProvisioner";
-import { VaultScriptRegistry } from "./vaultScripts/vaultScriptRegistry";
+import {
+    refreshVaultScriptRegistry,
+    refreshVaultScriptRegistryEvidence,
+    VaultScriptRegistry,
+} from "./vaultScripts/vaultScriptRegistry";
 import { isActionableMention as resolveActionableMention } from "./core/text/actionableMentions";
 import {
     disposeVaultScriptRuntimeProcesses,
@@ -91,7 +98,6 @@ import {
 import {
 	normalizePublishAllowedRoot,
 	normalizePublishProjectName,
-	derivePublishBaseUrlFromProjectName,
 } from "./core/publish/publishSettings";
 import {
 	removePublishedPublicArtifactPath,
@@ -104,7 +110,14 @@ import {
 import type {
     PublicHtmlPairContext,
 } from "./core/publish/publishPair";
-import type { AgentRunRecord, AgentRunStreamState } from "./core/agents/agentRuns";
+import {
+    type AgentRunRecord,
+    type AgentRunStreamState,
+} from "./core/agents/agentRuns";
+import {
+    canRetryAgentRunWithScriptsCapability,
+    canRetryScriptRunWithScriptsCapability,
+} from "./core/scripts/scriptCapabilities";
 import {
     type AgentRuntimeModePreference,
 } from "./core/agents/agentRuntimePreferences";
@@ -462,7 +475,12 @@ export default class Aside extends Plugin {
         setDraftHostFilePath: (filePath) => this.commentSessionController.setDraftHostFilePath(filePath),
         getSidebarTargetFile: () => this.getSidebarTargetFile(),
         updateSidebarViews: (file) => this.updateSidebarViews(file),
+        refreshCommentViews: () => this.workspaceViewController.refreshCommentViews({ skipDataRefresh: true }),
         refreshAggregateNoteNow: () => this.refreshAggregateNoteNow(),
+        hasRegisteredVaultScripts: () => refreshVaultScriptRegistryEvidence(
+            this.vaultScriptRegistry,
+            this.app.vault.getFiles().map((file) => file.path),
+        ),
         loadData: () => this.loadCurrentData(),
         saveData: (data) => this.saveData(data),
         ensureFolder: (folderPath) => this.ensureVaultFolder(folderPath),
@@ -480,6 +498,7 @@ export default class Aside extends Plugin {
         updatePersistedPluginData: (updater) => this.indexNoteSettingsController.updatePersistedPluginData(updater),
     });
     private readonly commentScriptController = new CommentScriptController({
+        isScriptsEnabled: () => this.isScriptsEnabled(),
         createRunId: () => generateCommentId(),
         now: () => Date.now(),
         getVaultRootPath: () => this.getVaultRootPath(),
@@ -508,6 +527,7 @@ export default class Aside extends Plugin {
         },
     }, this.scriptRunStore);
     private readonly commentAgentController: CommentAgentController = new CommentAgentController({
+        isScriptsEnabled: () => this.isScriptsEnabled(),
         createCommentId: () => generateCommentId(),
         now: () => Date.now(),
         getPluginVersion: () => this.manifest.version,
@@ -724,10 +744,11 @@ export default class Aside extends Plugin {
         log: (level, area, event, payload) => this.logEvent(level, area, event, payload),
     });
     private readonly refreshCoordinator = new RefreshCoordinator({
-        replaySyncedSideNoteEvents: (targetNotePath) =>
-            this.commentPersistenceController.replaySyncedSideNoteEvents(targetNotePath),
+        replaySyncedSideNoteEvents: (targetNotePath, options) =>
+            this.commentPersistenceController.replaySyncedSideNoteEvents(targetNotePath, options),
         refreshCommentViews: (options) => this.workspaceViewController.refreshCommentViews(options),
         scheduleAggregateNoteRefresh: () => this.scheduleAggregateNoteRefresh(),
+        syncPublicFilePublishActions: () => this.syncPublicFilePublishActions(),
     });
     private readonly pluginRegistrationController = new PluginRegistrationController({
         manifestId: this.manifest.id,
@@ -781,14 +802,26 @@ export default class Aside extends Plugin {
             this.registerEvent(eventRef);
         },
         isTFile: (value): value is TFile => value instanceof TFile,
+        handleFileRenameMaintenance: () => {
+            refreshVaultScriptRegistry(
+                this.vaultScriptRegistry,
+                this.app.vault.getFiles().map((candidate) => candidate.path),
+            );
+        },
+        handleFileDeleteMaintenance: () => {
+            refreshVaultScriptRegistry(
+                this.vaultScriptRegistry,
+                this.app.vault.getFiles().map((candidate) => candidate.path),
+            );
+        },
         handleLayoutReady: () => this.pluginLifecycleController.handleLayoutReady(),
         handleFileOpen: (file) => {
             this.workspaceContextController.handleFileOpen(file);
-            this.syncPublicFilePublishActions();
+            this.syncPublicFilePublishActionsSafely();
         },
         handleActiveLeafChange: (leaf) => {
             this.workspaceContextController.handleActiveLeafChange(leaf);
-            this.syncPublicFilePublishActions();
+            this.syncPublicFilePublishActionsSafely();
         },
         handleFileCreate: async (file) => {
             if (file) {
@@ -806,7 +839,7 @@ export default class Aside extends Plugin {
             }
             await this.pluginLifecycleController.handleFileRename(file, oldPath);
             this.syncIndexNoteViewClasses();
-            this.syncPublicFilePublishActions();
+            await this.syncPublicFilePublishActions();
         },
         handleFileDelete: async (file) => {
             this.vaultScriptRegistry.seed(this.app.vault.getFiles().map((candidate) => candidate.path));
@@ -815,17 +848,23 @@ export default class Aside extends Plugin {
             }
             await this.pluginLifecycleController.handleFileDelete(file);
             this.syncIndexNoteViewClasses();
-            this.syncPublicFilePublishActions();
+            await this.syncPublicFilePublishActions();
         },
         handleFileModify: async (file) => {
             await this.pluginLifecycleController.handleFileModify(file);
-            this.syncPublicFilePublishActions();
+            await this.syncPublicFilePublishActions();
         },
         handleMetadataResolved: async () => {
             await this.pluginLifecycleController.handleMetadataResolved();
         },
         handleEditorChange: (filePath) => {
             this.pluginLifecycleController.handleEditorChange(filePath);
+        },
+        reportAsyncEventError: (eventName, error) => {
+            void this.logEvent("error", "events", "events.async-handler.error", {
+                eventName,
+                error,
+            }).catch(() => undefined);
         },
     });
     private activeMarkdownFile: TFile | null = null;
@@ -872,10 +911,10 @@ export default class Aside extends Plugin {
         addIcon(ASIDE_REGENERATE_ICON_ID, ASIDE_REGENERATE_ICON_SVG);
 
         this.commentManager = new CommentManager([]);
-        await this.loadSettings();
         this.vaultScriptRegistry.seed(this.app.vault.getFiles().map((file) => file.path));
-        this.pluginEventRouter.registerVaultCreateEvent();
-        this.scriptRunStore.load();
+        this.pluginEventRouter.registerVaultStartupEvents();
+        await this.loadSettings();
+        await this.scriptRunStore.initializeFromPersistedData();
         this.vaultCapabilityIndex.seed(
             this.app.vault.getMarkdownFiles(),
             (file) => this.getVaultFileTags(file),
@@ -906,8 +945,9 @@ export default class Aside extends Plugin {
         this.derivedCommentMetadataManager.installMetadataCacheAugmentation();
         const activeFile = this.app.workspace.getActiveFile();
         this.workspaceContextController.initializeActiveFiles(activeFile);
+        this.vaultScriptRegistry.seed(this.app.vault.getFiles().map((file) => file.path));
         await this.pluginEventRouter.register();
-        this.syncPublicFilePublishActions();
+        await this.syncPublicFilePublishActions();
         this.addSettingTab(new AsideSetting(this.app, this));
         void this.runStartupPersistenceMaintenance();
     }
@@ -962,12 +1002,17 @@ export default class Aside extends Plugin {
     async onExternalSettingsChange() {
         const agentRunIdsBeforeLoad = this.agentRunStore.getRuns().map((run) => run.id);
         const locallyOwnedAgentRunIds = this.commentAgentController.getLocallyOwnedRunIds();
+        const scriptRunIdsBeforeLoad = this.scriptRunStore.getRuns().map((run) => run.id);
+        const locallyOwnedScriptRunIds = this.commentScriptController.getLocallyOwnedRunIds();
         await this.loadSettings();
         await this.agentRunStore.reloadPreservingActiveRuns(
             locallyOwnedAgentRunIds,
             agentRunIdsBeforeLoad,
         );
-        this.scriptRunStore.load();
+        await this.scriptRunStore.reloadPreservingActiveRuns(
+            locallyOwnedScriptRunIds,
+            scriptRunIdsBeforeLoad,
+        );
         const appliedEventCount = await this.refreshCoordinator.handleExternalPluginDataChange();
         await this.logEvent("info", "persistence", "sync.plugin-data.external-settings", {
             appliedEventCount,
@@ -1014,22 +1059,16 @@ export default class Aside extends Plugin {
         await this.indexNoteSettingsController.setShowAgentSidebarTab(visible);
     }
 
-    public async setPublishEnabled(enabled: boolean): Promise<void> {
-		if (enabled) {
-			const configuredProjectName = normalizePublishProjectName(this.settings.publishPagesProjectName);
-			const nextProjectName = configuredProjectName || normalizePublishProjectName(this.app.vault.getName());
-			if (nextProjectName && this.settings.publishPagesProjectName !== nextProjectName) {
-				await this.setPublishPagesProjectName(nextProjectName);
-			}
+    public async setScriptsEnabled(enabled: boolean): Promise<void> {
+        await this.indexNoteSettingsController.setScriptsEnabled(enabled);
+    }
 
-			if (!this.settings.publishBaseUrl) {
-				await this.setPublishBaseUrl(derivePublishBaseUrlFromProjectName(
-					nextProjectName,
-				));
-			}
-		}
-        await this.indexNoteSettingsController.setPublishEnabled(enabled);
-        this.syncPublicFilePublishActions();
+    public async setPublishEnabled(enabled: boolean): Promise<void> {
+        await this.indexNoteSettingsController.setPublishEnabled(
+            enabled,
+            this.app.vault.getName(),
+        );
+        await this.syncPublicFilePublishActions();
     }
 
     public async setPublishPagesProjectName(projectName: string): Promise<void> {
@@ -1038,28 +1077,28 @@ export default class Aside extends Plugin {
 
     public async setPublishBaseUrl(baseUrl: string): Promise<void> {
         await this.indexNoteSettingsController.setPublishBaseUrl(baseUrl);
-        this.syncPublicFilePublishActions();
+        await this.syncPublicFilePublishActions();
     }
 
     public async setPublishAllowedRoot(allowedRoot: string): Promise<void> {
         await this.indexNoteSettingsController.setPublishAllowedRoot(allowedRoot);
         this.syncIndexNoteViewClasses();
-        this.syncPublicFilePublishActions();
+        await this.syncPublicFilePublishActions();
     }
 
 	public async setPublishRemotePurgeEnabled(enabled: boolean): Promise<void> {
 		await this.indexNoteSettingsController.setPublishRemotePurgeEnabled(enabled);
-		this.syncPublicFilePublishActions();
+		await this.syncPublicFilePublishActions();
 	}
 
 	public async setPublishPurgeBrokerUrl(url: string): Promise<void> {
 		await this.indexNoteSettingsController.setPublishPurgeBrokerUrl(url);
-		this.syncPublicFilePublishActions();
+		await this.syncPublicFilePublishActions();
 	}
 
 	public async setPublishPurgeBrokerSecretName(secretName: string): Promise<void> {
 		await this.indexNoteSettingsController.setPublishPurgeBrokerSecretName(secretName);
-		this.syncPublicFilePublishActions();
+		await this.syncPublicFilePublishActions();
 	}
 
     private async storeResolvedPublishPagesProjectName(projectName: string): Promise<void> {
@@ -1077,7 +1116,7 @@ export default class Aside extends Plugin {
             publishedPublicArtifactPaths: [...paths],
         };
         await this.saveSettings();
-        this.syncPublicFilePublishActions();
+        await this.syncPublicFilePublishActions();
     }
 
     private arePublishedPublicArtifactPathsEqual(nextPaths: string[]): boolean {
@@ -1129,14 +1168,28 @@ export default class Aside extends Plugin {
             && typeof candidate.addAction === "function";
     }
 
-    private syncPublicFilePublishActions(): void {
+    private syncPublicFilePublishActionsSafely(): void {
+        runReportedAsyncRefresh(
+            () => this.syncPublicFilePublishActions(),
+            (error) => {
+                this.warn(
+                    "Failed to refresh public file actions.",
+                    error,
+                    "publish",
+                    "publish.actions.refresh.warn",
+                );
+            },
+        );
+    }
+
+    private syncPublicFilePublishActions(): Promise<void> {
         const views: PublicFilePublishActionView[] = [];
         this.app.workspace.iterateAllLeaves((leaf) => {
             if (this.isPublicFilePublishActionView(leaf.view)) {
                 views.push(leaf.view);
             }
         });
-        void this.publicFilePublishActionController.refreshViews(views);
+        return this.publicFilePublishActionController.refreshViews(views);
     }
 
     private getPublicHtmlPairContext(filePath: string): PublicHtmlPairContext | null {
@@ -1260,25 +1313,33 @@ export default class Aside extends Plugin {
                 url: result.url,
             },
         );
-        this.syncPublicFilePublishActions();
+        await this.syncPublicFilePublishActions();
     }
 
     public getAgentRuns(): AgentRunRecord[] {
         return this.commentAgentController.getAgentRuns();
     }
 
+    public isScriptsEnabled(): boolean {
+        return this.settings.scriptsEnabled;
+    }
+
     public getRunnableVaultScripts() {
-        return this.vaultScriptRegistry.getRunnableScripts();
+        return this.isScriptsEnabled()
+            ? this.vaultScriptRegistry.getRunnableScripts()
+            : [];
     }
 
     public isRunnableVaultScriptMention(mention: string): boolean {
-        return this.vaultScriptRegistry.isRunnableMention(mention);
+        return this.isScriptsEnabled()
+            && this.vaultScriptRegistry.isRunnableMention(mention);
     }
 
     public isActionableMention(mention: string): boolean {
         return resolveActionableMention(mention, {
+            scriptsEnabled: this.isScriptsEnabled(),
             isRunnableVaultScriptMention: (candidate) =>
-                this.vaultScriptRegistry.isRunnableMention(candidate),
+                this.isRunnableVaultScriptMention(candidate),
         });
     }
 
@@ -1401,10 +1462,18 @@ export default class Aside extends Plugin {
     }
 
     public async retryAgentRun(runId: string): Promise<boolean> {
+        const run = this.commentAgentController.getAgentRuns()
+            .find((candidate) => candidate.id === runId) ?? null;
+        if (!canRetryAgentRunWithScriptsCapability(this.isScriptsEnabled(), run)) {
+            return false;
+        }
         return this.commentAgentController.retryRun(runId);
     }
 
     public async retryScriptRun(runId: string): Promise<boolean> {
+        if (!canRetryScriptRunWithScriptsCapability(this.isScriptsEnabled())) {
+            return false;
+        }
         return this.commentScriptController.retryRun(runId);
     }
 
@@ -1798,16 +1867,17 @@ export default class Aside extends Plugin {
     }
 
     private async handleSavedUserEntry(event: SavedUserEntryEvent): Promise<void> {
-        await routeSavedUserEntry(
+        await routeSavedUserEntry({
             event,
-            [
-                this.updateScriptCommandController,
-                this.createScriptCommandController,
-                this.pdfToMarkdownCommandController,
-            ],
-            this.commentScriptController,
-            this.commentAgentController,
-        );
+            isScriptsEnabled: () => this.isScriptsEnabled(),
+            builtInControllers: {
+                updateScript: this.updateScriptCommandController,
+                createScript: this.createScriptCommandController,
+                pdfToMarkdown: this.pdfToMarkdownCommandController,
+            },
+            scriptController: this.commentScriptController,
+            agentController: this.commentAgentController,
+        });
     }
 
     private async publishSnapshotArtifacts(files: PublicHtmlPublishSnapshotFile[]): Promise<PublicHtmlDeploySnapshotResult> {

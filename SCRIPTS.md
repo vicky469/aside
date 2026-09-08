@@ -2,6 +2,8 @@
 
 Aside supports local agents and reusable scripts in desktop Obsidian with a filesystem-backed vault. It can invoke Codex, Claude Code, Cursor, Gemini, and DeepSeek through local CLIs. Aside bundles none of those CLIs and has no agent service of its own. The `@deepseek` mention uses your configured OpenCode CLI and the model selected there, so the label does not guarantee that the active model is DeepSeek.
 
+Scripts are an optional advanced capability and are off by default for a clean experience. Ordinary agent replies do not require Scripts.
+
 ## Security
 
 Vault scripts are **not sandboxed**. They run in local Node with your **local account permissions** and inherited environment. Aside launches Node without a shell, uses the vault root as its working directory, and passes the absolute path of the current Markdown note as the script's only automatic argument. Output is bounded, and each run times out after 60 seconds.
@@ -26,7 +28,15 @@ Do not rely on normal interactive approval prompts. Review the CLI and provider 
 
 Install and sign in to the local CLI you want to use first. In a side note, type `@codex`, `@claude`, `@cursor`, `@gemini`, or `@deepseek` with your request, then save the note. The CLI uses its configured account and model when Aside does not override them, but Aside supplies non-interactive execution and permission-affecting flags. Normal interactive approval behavior is not guaranteed.
 
-The Agent tab is optional and hidden by default. Enable **Settings → Sidebar tabs → Show agent tab** for a focused agent view. This controls visibility only; agent replies remain normal entries in the List view.
+The Agent tab is optional and hidden by default. Enable **Settings → Aside → Sidebar tabs → Show agent tab** for a focused agent view. This controls visibility only; agent replies remain normal entries in the List view.
+
+## Enable Scripts
+
+To create or run trusted local scripts, turn on **Settings → Aside → Scripts (advanced) → Enable scripts**. Then choose the default local agent in the same section for script creation, updates, and PDF conversion.
+
+Turning Scripts off blocks new slash and script command execution plus script-oriented Generate actions. It does not delete registered scripts, history, or saved replies. Disabled script-like text remains ordinary note or agent text.
+
+The Scripts setting is an experience and execution control, not a sandbox or security boundary. The security and privacy warnings above still apply whenever you run scripts or agents.
 
 ## Create or Update a Script
 
@@ -42,7 +52,7 @@ The Agent tab is optional and hidden by default. Enable **Settings → Sidebar t
 3. Type `/` and choose the script, or enter its command directly, such as `/clean-citations`.
 4. Save the comment. Aside runs the script and appends its output to the thread.
 
-Use **Regenerate** on the script reply to run the latest version against the current note again. Use one vault script per comment, and do not mix a script command with an agent mention.
+Use **Generate** on the script reply to run the latest version against the current note again. Use one vault script per comment, and do not mix a script command with an agent mention.
 
 ## Supported Scripts
 

@@ -1,4 +1,5 @@
 import {
+    cloneScriptRunRecords,
     type ScriptRunRecord,
     type ScriptRunStatus,
 } from "../core/scripts/scriptRuns";
@@ -94,4 +95,24 @@ export function normalizePersistedScriptRuns(value: unknown): ScriptRunRecord[] 
     return value
         .map((item) => normalizeScriptRunRecord(item))
         .filter((item): item is ScriptRunRecord => !!item);
+}
+
+export function mergePersistedScriptRunsPreservingActive(
+    persistedRuns: readonly ScriptRunRecord[],
+    localRuns: readonly ScriptRunRecord[],
+    runIdsToPreserve: readonly string[] = [],
+): ScriptRunRecord[] {
+    const preservedRunIds = new Set(runIdsToPreserve);
+    const preservedLocalRuns = localRuns.filter(
+        (run) => preservedRunIds.has(run.id)
+            || run.status === "queued"
+            || run.status === "running",
+    );
+    const preservedLocalRunsById = new Map(preservedLocalRuns.map((run) => [run.id, run]));
+    const persistedRunIds = new Set(persistedRuns.map((run) => run.id));
+
+    return cloneScriptRunRecords([
+        ...persistedRuns.map((run) => preservedLocalRunsById.get(run.id) ?? run),
+        ...preservedLocalRuns.filter((run) => !persistedRunIds.has(run.id)),
+    ]);
 }

@@ -2,11 +2,14 @@ import type { Setting } from "obsidian";
 import {
     ASIDE_SETTING_CATALOG,
     ASIDE_SETTING_SECTIONS,
+    getAsideSettingSurfaceKeys,
+    isAsideSettingEntryVisible,
+    renderAsideSettingSectionControl,
     type AsideSettingCatalogContext,
 } from "./asideSettingCatalog";
 
 export function getLegacyAsideSettingKeys(): string[] {
-    return ASIDE_SETTING_CATALOG.map((entry) => entry.key);
+    return getAsideSettingSurfaceKeys();
 }
 
 export function renderLegacyAsideSettings(
@@ -16,14 +19,21 @@ export function renderLegacyAsideSettings(
 ): void {
     for (const section of ASIDE_SETTING_SECTIONS) {
         const entries = ASIDE_SETTING_CATALOG.filter((entry) =>
-            entry.section === section.key && entry.visible?.(context) !== false);
-        if (entries.length === 0) {
+            entry.section === section.key && isAsideSettingEntryVisible(entry, context));
+        if (!section.control && entries.length === 0) {
             continue;
         }
 
         createSetting(containerEl)
             .setName(section.heading)
             .setHeading();
+
+        if (section.control) {
+            const controlSetting = createSetting(containerEl)
+                .setName(section.control.name)
+                .setDesc(section.control.description);
+            renderAsideSettingSectionControl(controlSetting, section, context);
+        }
 
         for (const entry of entries) {
             const setting = createSetting(containerEl)

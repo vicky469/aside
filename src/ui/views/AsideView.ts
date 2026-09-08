@@ -248,6 +248,7 @@ interface IndexFileFilterState {
 }
 
 type AsideWithVaultScriptMentions = Aside & {
+    isScriptsEnabled(): boolean;
     getRunnableVaultScripts(): readonly VaultScriptRegistration[];
     isActionableMention(mention: string): boolean;
     getScriptRuns(): ScriptRunRecord[];
@@ -1491,6 +1492,7 @@ export default class AsideView extends ItemView {
             getMentionSuggestions: (query) => buildMentionSuggestions(
                 this.plugin.getRunnableVaultScripts(),
                 query,
+                this.plugin.isScriptsEnabled(),
             ),
             openMentionSuggestModal: (options) => {
                 new SideNoteMentionSuggestModal(this.app, options).open();
@@ -2956,6 +2958,7 @@ export default class AsideView extends ItemView {
                         item.draft,
                         this.interactionController.getActiveCommentId(),
                         options.isVisibleDraftSaving && options.visibleDraftComment?.id === item.draft.id,
+                        this.plugin.isScriptsEnabled(),
                     ),
                     threadId: null,
                     render: () => {
@@ -2993,6 +2996,7 @@ export default class AsideView extends ItemView {
                     isSelectedForTagBatch: options.enableTagSelection && this.noteSidebarSelectedTagIds.has(item.thread.id),
                     enablePageThreadReorder: options.enablePageThreadReorder,
                     enableTagSelection: options.enableTagSelection,
+                    scriptsEnabled: this.plugin.isScriptsEnabled(),
                     editDraftComment,
                     appendDraftComment,
                     isSavingDraft: options.isVisibleDraftSaving
@@ -4816,6 +4820,7 @@ export default class AsideView extends ItemView {
             activeCommentId: this.interactionController.getActiveCommentId(),
             currentFilePath,
             currentUserLabel: "You",
+            scriptsEnabled: this.plugin.isScriptsEnabled(),
             isActionableMention: (mention) => this.plugin.isActionableMention(mention),
             showSourceRedirectAction: isIndexView,
             showBookmarkAndPinControls: cardActions.showPin,

@@ -47,6 +47,10 @@ export interface LoadedSettingsResolution {
     shouldRewriteLegacySettings: boolean;
 }
 
+export interface LoadedSettingsEvidence {
+    hasRegisteredVaultScripts: boolean;
+}
+
 export type IndexNotePathChangePlan =
     | { kind: "noop"; nextPath: string }
     | { kind: "missing-parent"; nextPath: string; parentPath: string; notice: string }
@@ -67,6 +71,15 @@ export function hasPersistedIndexNotePath(data: PersistedPluginData | null): boo
     return typeof data?.indexNotePath === "string" && data.indexNotePath.trim().length > 0;
 }
 
+function hasPersistedScriptsUsage(data: PersistedPluginData | null): boolean {
+    return (Array.isArray(data?.agentRuns) && data.agentRuns.length > 0)
+        || (Array.isArray(data?.scriptRuns) && data.scriptRuns.length > 0);
+}
+
+export function needsScriptsMigrationEvidence(data: PersistedPluginData | null): boolean {
+    return typeof data?.scriptsEnabled !== "boolean" && !hasPersistedScriptsUsage(data);
+}
+
 function normalizeSidebarTabToggle(value: unknown, fallback: boolean): boolean {
     return typeof value === "boolean" ? value : fallback;
 }
@@ -81,6 +94,7 @@ function shouldRewriteNormalizedPublishSettings(loaded: PersistedPluginData | nu
 export function resolveLoadedSettings(
     loaded: PersistedPluginData | null,
     defaults: AsideSettings,
+    evidence: LoadedSettingsEvidence = { hasRegisteredVaultScripts: false },
 ): LoadedSettingsResolution {
     const hasIndexNotePathSetting = hasPersistedIndexNotePath(loaded);
     const indexNotePath = normalizeAllCommentsNotePath(hasIndexNotePathSetting
@@ -97,6 +111,10 @@ export function resolveLoadedSettings(
     const showAgentSidebarTab = hasAgentSidebarTabSetting
         ? normalizeSidebarTabToggle(loaded?.showAgentSidebarTab, false)
         : false;
+    const scriptsEnabled = typeof loaded?.scriptsEnabled === "boolean"
+        ? loaded.scriptsEnabled
+        : hasPersistedScriptsUsage(loaded)
+            || evidence.hasRegisteredVaultScripts;
     const publishSettings = normalizePublishSettings(loaded ?? defaults);
     const defaultAgent = normalizeSupportedAgentTarget(
         hasDefaultAgentSetting ? loaded?.defaultAgent : defaults.defaultAgent,
@@ -115,6 +133,7 @@ export function resolveLoadedSettings(
             defaultAgent,
             showTodoSidebarTab,
             showAgentSidebarTab,
+            scriptsEnabled,
             publishedPublicArtifactPaths: normalizePublishedPublicArtifactPaths(
                 loaded?.publishedPublicArtifactPaths ?? defaults.publishedPublicArtifactPaths,
             ),
@@ -132,6 +151,7 @@ export function resolveLoadedSettings(
             || (loaded !== null && !hasDefaultAgentSetting)
             || (hasTodoSidebarTabSetting && typeof loaded?.showTodoSidebarTab !== "boolean")
             || (hasAgentSidebarTabSetting && typeof loaded?.showAgentSidebarTab !== "boolean")
+            || typeof loaded?.scriptsEnabled !== "boolean"
             || (hasOwn(loaded ?? {}, "agentRuntimeMode")
                 && normalizeAgentRuntimeModePreference(loaded?.agentRuntimeMode) !== loaded?.agentRuntimeMode)
             || (hasDefaultAgentSetting && defaultAgent !== loaded?.defaultAgent)
