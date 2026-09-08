@@ -9,7 +9,6 @@ import { SideNoteSyncEventStore, type SideNoteSyncEventState } from "../src/sync
 import { parseNoteComments } from "../src/core/storage/noteCommentStorage";
 import { AggregateCommentIndex } from "../src/index/AggregateCommentIndex";
 import { ALL_COMMENTS_NOTE_PATH } from "../src/core/derived/allCommentsNote";
-import { ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT } from "../src/app/pluginEventExecutionContext";
 
 class FakeAdapter implements Pick<DataAdapter, "exists" | "mkdir" | "write" | "read" | "remove" | "rename" | "list"> {
     public readonly directories = new Set<string>();
@@ -121,14 +120,6 @@ function serializeSidecarThreads(filePath: string, threads: CommentThread[]): st
     })}\n`;
 }
 
-function createDeferred() {
-    let resolvePromise!: () => void;
-    const promise = new Promise<void>((resolve) => {
-        resolvePromise = resolve;
-    });
-    return { promise, resolve: resolvePromise };
-}
-
 test("comment persistence controller syncs external sidecar updates into an open note without rewriting the file", async () => {
     const originalWindow = globalThis.window;
     globalThis.window = {
@@ -206,7 +197,7 @@ test("comment persistence controller syncs external sidecar updates into an open
     });
 
     try {
-        await controller.handleMarkdownFileModified(file, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
+        await controller.handleMarkdownFileModified(file);
 
         assert.equal(processCount, 0);
         assert.equal(adapter.files.size, 2);
@@ -636,7 +627,7 @@ test("comment persistence retargets a renamed Markdown sidecar into reloadable D
     await controller.renameStoredComments(originalFile.path, renamedFile.path, {
         selectionCapable: false,
         pageLabelHash: "hash-final proposal",
-    }, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
+    });
     const comments = await controller.loadCommentsForFile(renamedFile);
     const persistedPayload = JSON.parse(
         adapter.files.get(getSidecarStoragePath(renamedFile.path).toLowerCase())
@@ -716,13 +707,13 @@ test("comment persistence controller replays synced plugin-data events into the 
         now: () => 1710000000100 + eventCounter,
     });
 
-    await remoteEventStore.appendLocalEvents(oldFile.path, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT, [{
+    await remoteEventStore.appendLocalEvents(oldFile.path, [{
         op: "createThread",
         payload: {
             thread: createThread(oldFile.path),
         },
     }]);
-    await remoteEventStore.appendLocalEvents(oldFile.path, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT, [{
+    await remoteEventStore.appendLocalEvents(oldFile.path, [{
         op: "renameNote",
         payload: {
             previousNotePath: oldFile.path,
@@ -834,11 +825,11 @@ test("comment persistence converts synced Markdown rename events into DOCX page-
         now: () => 1710000000300 + eventCounter,
     });
 
-    await remoteEventStore.appendLocalEvents(oldFile.path, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT, [{
+    await remoteEventStore.appendLocalEvents(oldFile.path, [{
         op: "createThread",
         payload: { thread: remoteThread },
     }]);
-    await remoteEventStore.appendLocalEvents(oldFile.path, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT, [{
+    await remoteEventStore.appendLocalEvents(oldFile.path, [{
         op: "renameNote",
         payload: {
             previousNotePath: oldFile.path,
@@ -980,7 +971,7 @@ for (const { kind, indexPath } of [
             hashText: async (text) => `hash-${text.replace(/\//g, "_")}`,
             now: () => 1710000000100 + eventCounter,
         });
-        await remoteEventStore.appendLocalEvents(oldFile.path, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT, [{
+        await remoteEventStore.appendLocalEvents(oldFile.path, [{
             op: "renameNote",
             payload: {
                 previousNotePath: oldFile.path,
@@ -1169,13 +1160,13 @@ test("comment persistence controller hydrates compacted snapshots over a stale s
         now: () => 1710000000300 + eventCounter,
     });
 
-    await remoteEventStore.appendLocalEvents(file.path, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT, [{
+    await remoteEventStore.appendLocalEvents(file.path, [{
         op: "createThread",
         payload: {
             thread: remoteThread,
         },
     }]);
-    await remoteEventStore.compactProcessedEventsForSnapshots(ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT, [{
+    await remoteEventStore.compactProcessedEventsForSnapshots([{
         notePath: file.path,
         threads: [remoteThread],
     }]);
@@ -1252,13 +1243,13 @@ test("comment persistence controller stops hydrating snapshots after disposal", 
         now: () => 1710000000300 + eventCounter,
     });
 
-    await remoteEventStore.appendLocalEvents(file.path, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT, [{
+    await remoteEventStore.appendLocalEvents(file.path, [{
         op: "createThread",
         payload: {
             thread: createThread(file.path),
         },
     }]);
-    await remoteEventStore.appendLocalEvents(otherFile.path, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT, [{
+    await remoteEventStore.appendLocalEvents(otherFile.path, [{
         op: "createThread",
         payload: {
             thread: {
@@ -1267,7 +1258,7 @@ test("comment persistence controller stops hydrating snapshots after disposal", 
             },
         },
     }]);
-    await remoteEventStore.compactProcessedEventsForSnapshots(ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT, [
+    await remoteEventStore.compactProcessedEventsForSnapshots([
         {
             notePath: file.path,
             threads: [createThread(file.path)],
@@ -1392,23 +1383,23 @@ test("comment persistence controller refreshes synced plugin data before sidebar
         now: () => 1710000000300 + eventCounter,
     });
 
-    await remoteEventStore.appendLocalEvents(file.path, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT, [{
+    await remoteEventStore.appendLocalEvents(file.path, [{
         op: "createThread",
         payload: {
             thread: remoteThread,
         },
     }]);
-    await remoteEventStore.compactProcessedEventsForSnapshots(ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT, [{
+    await remoteEventStore.compactProcessedEventsForSnapshots([{
         notePath: file.path,
         threads: [remoteThread],
     }]);
-    await remoteEventStore.appendLocalEvents(otherFile.path, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT, [{
+    await remoteEventStore.appendLocalEvents(otherFile.path, [{
         op: "createThread",
         payload: {
             thread: otherRemoteThread,
         },
     }]);
-    await remoteEventStore.compactProcessedEventsForSnapshots(ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT, [{
+    await remoteEventStore.compactProcessedEventsForSnapshots([{
         notePath: otherFile.path,
         threads: [otherRemoteThread],
     }]);
@@ -1521,7 +1512,7 @@ test("comment persistence controller does not recover renamed source notes when 
         hashText: async (text) => `hash-${text.replace(/\//g, "_")}`,
         now: () => 1710000000300 + eventCounter,
     });
-    await remoteEventStore.appendLocalEvents(previousFile.path, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT, [{
+    await remoteEventStore.appendLocalEvents(previousFile.path, [{
         op: "createThread",
         payload: {
             thread: remoteThread,
@@ -1532,7 +1523,7 @@ test("comment persistence controller does not recover renamed source notes when 
             thread: remoteThread2,
         },
     }]);
-    await remoteEventStore.compactProcessedEventsForSnapshots(ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT, [{
+    await remoteEventStore.compactProcessedEventsForSnapshots([{
         notePath: previousFile.path,
         threads: [remoteThread, remoteThread2],
     }]);
@@ -1663,7 +1654,7 @@ test("comment persistence controller recovers renamed source notes from synced s
         hashText: async (text) => `hash-${text.replace(/\//g, "_")}`,
         now: () => 1710000000300 + eventCounter,
     });
-    await remoteEventStore.appendLocalEvents(previousFile.path, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT, [{
+    await remoteEventStore.appendLocalEvents(previousFile.path, [{
         op: "createThread",
         payload: {
             thread: remoteThread,
@@ -1674,7 +1665,7 @@ test("comment persistence controller recovers renamed source notes from synced s
             thread: remoteThread2,
         },
     }]);
-    await remoteEventStore.compactProcessedEventsForSnapshots(ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT, [{
+    await remoteEventStore.compactProcessedEventsForSnapshots([{
         notePath: previousFile.path,
         threads: [remoteThread, remoteThread2],
     }]);
@@ -2020,13 +2011,13 @@ test("comment persistence controller hydrates compacted snapshots into a missing
         now: () => 1710000000100 + eventCounter,
     });
 
-    await remoteEventStore.appendLocalEvents(file.path, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT, [{
+    await remoteEventStore.appendLocalEvents(file.path, [{
         op: "createThread",
         payload: {
             thread: remoteThread,
         },
     }]);
-    await remoteEventStore.compactProcessedEventsForSnapshots(ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT, [{
+    await remoteEventStore.compactProcessedEventsForSnapshots([{
         notePath: file.path,
         threads: [remoteThread],
     }]);
@@ -2113,13 +2104,13 @@ test("comment persistence controller prunes compacted snapshots for missing file
         now: () => 1710000000100 + eventCounter,
     });
 
-    await remoteEventStore.appendLocalEvents(missingPath, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT, [{
+    await remoteEventStore.appendLocalEvents(missingPath, [{
         op: "createThread",
         payload: {
             thread: remoteThread,
         },
     }]);
-    await remoteEventStore.compactProcessedEventsForSnapshots(ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT, [{
+    await remoteEventStore.compactProcessedEventsForSnapshots([{
         notePath: missingPath,
         threads: [remoteThread],
     }]);
@@ -2197,13 +2188,13 @@ test("comment persistence controller records a delete tombstone for synced comme
         now: () => 1710000000100 + remoteEventCounter,
     });
 
-    await remoteEventStore.appendLocalEvents(file.path, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT, [{
+    await remoteEventStore.appendLocalEvents(file.path, [{
         op: "createThread",
         payload: {
             thread: remoteThread,
         },
     }]);
-    await remoteEventStore.compactProcessedEventsForSnapshots(ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT, [{
+    await remoteEventStore.compactProcessedEventsForSnapshots([{
         notePath: file.path,
         threads: [remoteThread],
     }]);
@@ -2246,7 +2237,7 @@ test("comment persistence controller records a delete tombstone for synced comme
         log: async () => {},
     });
 
-    await controller.deleteStoredComments(file.path, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
+    await controller.deleteStoredComments(file.path);
 
     const state = persistedData.sideNoteSyncEventState as SideNoteSyncEventState;
     const localDeleteEvents = state.deviceLogs["device-a"]?.events.filter((event) =>
@@ -2393,144 +2384,6 @@ test("comment persistence controller prunes missing sidecar records before writi
     assert.deepEqual(snapshot?.threads, []);
 });
 
-test("event aggregate refresh preserves pending normal work, serializes, and wins with deleted state", async () => {
-    const originalWindow = globalThis.window;
-    const timerCallbacks = new Map<number, () => void>();
-    let nextTimerId = 0;
-    globalThis.window = {
-        setTimeout: (callback: () => void) => {
-            nextTimerId += 1;
-            timerCallbacks.set(nextTimerId, callback);
-            return nextTimerId;
-        },
-        clearTimeout: (timerId: number) => {
-            timerCallbacks.delete(timerId);
-        },
-    } as unknown as typeof globalThis.window;
-    const deletedPath = "docs/deleted.md";
-    const indexFile = createFile("Aside index.md");
-    const deletedFile = createFile(deletedPath);
-    const deletedThread = createThread(deletedPath);
-    const adapter = new FakeAdapter();
-    const sidecarPath = getSidecarStoragePath(deletedPath);
-    const sidecarFolder = sidecarPath.slice(0, sidecarPath.lastIndexOf("/"));
-    adapter.directories.add(".obsidian/plugins/aside/sidenotes/by-note");
-    adapter.directories.add(sidecarFolder);
-    adapter.files.set(sidecarPath, serializeSidecarThreads(deletedPath, [deletedThread]));
-    const aggregateCommentIndex = new AggregateCommentIndex();
-    aggregateCommentIndex.updateFile(deletedPath, [deletedThread]);
-    const commentManager = new CommentManager([deletedThread]);
-    const filesByPath = new Map<string, TFile>([
-        [indexFile.path, indexFile],
-        [deletedFile.path, deletedFile],
-    ]);
-    const firstIndexReadStarted = createDeferred();
-    const releaseFirstIndexRead = createDeferred();
-    let indexReadCount = 0;
-    let indexModifyCount = 0;
-    let indexContent = "# Initial\n";
-    let persistedData: PersistedPluginData = {};
-
-    const controller = new CommentPersistenceController({
-        app: {
-            vault: {
-                adapter: adapter as unknown as DataAdapter,
-                getName: () => "dev",
-                getMarkdownFiles: () => [...filesByPath.values()],
-                getAbstractFileByPath: (filePath: string) => filesByPath.get(filePath) ?? null,
-                create: async (_path: string, content: string) => {
-                    indexContent = content;
-                    return indexFile;
-                },
-                modify: async (_file: TFile, content: string) => {
-                    indexModifyCount += 1;
-                    indexContent = content;
-                },
-                process: async () => "",
-            },
-            metadataCache: {
-                getFirstLinkpathDest: () => null,
-            },
-            fileManager: {
-                renameFile: async () => {},
-            },
-        } as never,
-        getAllCommentsNotePath: () => indexFile.path,
-        getIndexHeaderImageUrl: () => "",
-        getIndexHeaderImageCaption: () => "",
-        getMarkdownViewForFile: () => null,
-        getMarkdownFileByPath: (filePath) => filesByPath.get(filePath) ?? null,
-        getCurrentNoteContent: async (file) => {
-            if (file.path !== indexFile.path) {
-                return "# Deleted\n";
-            }
-            indexReadCount += 1;
-            if (indexReadCount === 1) {
-                firstIndexReadStarted.resolve();
-                await releaseFirstIndexRead.promise;
-            }
-            return indexContent;
-        },
-        getStoredNoteContent: async () => "",
-        getParsedNoteComments: (filePath, noteContent) => parseNoteComments(noteContent, filePath),
-        getPluginDataDirPath: () => ".obsidian/plugins/aside",
-        getSideNoteSyncDeviceId: () => "device-a",
-        readPersistedPluginData: () => persistedData,
-        writePersistedPluginData: async (data) => {
-            persistedData = data;
-        },
-        isAllCommentsNotePath: (filePath) => filePath === indexFile.path,
-        isCommentableFile: (candidate): candidate is TFile => !!candidate && candidate.path !== indexFile.path,
-        isMarkdownEditorFocused: () => false,
-        getCommentManager: () => commentManager,
-        getAggregateCommentIndex: () => aggregateCommentIndex,
-        createCommentId: () => "generated-id",
-        hashText: async (text) => `hash-${text.replace(/\//g, "_")}`,
-        syncDerivedCommentLinksForFile: () => {},
-        refreshCommentViews: async () => {},
-        refreshAllCommentsSidebarViews: async () => {},
-        refreshEditorDecorations: () => {},
-        refreshMarkdownPreviews: () => {},
-        getCommentMentionedPageLabels: () => [],
-        syncIndexNoteLeafMode: async () => {},
-        log: async () => {},
-    });
-
-    let oldRefresh: Promise<void> | null = null;
-    let eventRefresh: Promise<void> | null = null;
-    try {
-        controller.scheduleAggregateNoteRefresh();
-        assert.equal(timerCallbacks.size, 1);
-        const expiringEvent = new AbortController();
-        const expiringEventContext = {
-            signal: expiringEvent.signal,
-            isActive: () => !expiringEvent.signal.aborted,
-        };
-        oldRefresh = controller.refreshAggregateNoteNowForEvent(expiringEventContext);
-        await firstIndexReadStarted.promise;
-        expiringEvent.abort();
-        aggregateCommentIndex.deleteFile(deletedPath);
-        eventRefresh = controller.refreshAggregateNoteNowForEvent(ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
-        for (let turn = 0; turn < 20; turn += 1) {
-            await Promise.resolve();
-        }
-        assert.equal(indexReadCount, 1, "event refresh bypassed the aggregate refresh queue");
-
-        releaseFirstIndexRead.resolve();
-        await Promise.all([oldRefresh, eventRefresh]);
-        assert.equal(indexReadCount, 2);
-        assert.equal(indexModifyCount, 2, "the pending normal refresh was discarded with the aborted event");
-        assert.equal(indexContent.includes(deletedPath), false);
-    } finally {
-        releaseFirstIndexRead.resolve();
-        await Promise.allSettled(
-            [oldRefresh, eventRefresh].filter((promise): promise is Promise<void> => promise !== null),
-        );
-        controller.dispose();
-        globalThis.window = originalWindow;
-    }
-});
-
 test("comment persistence controller skips incompatible compacted snapshots for existing files", async () => {
     const originalWindow = globalThis.window;
     globalThis.window = {
@@ -2561,13 +2414,13 @@ test("comment persistence controller skips incompatible compacted snapshots for 
         now: () => 1710000000100 + eventCounter,
     });
 
-    await remoteEventStore.appendLocalEvents(file.path, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT, [{
+    await remoteEventStore.appendLocalEvents(file.path, [{
         op: "createThread",
         payload: {
             thread: incompatibleThread,
         },
     }]);
-    await remoteEventStore.compactProcessedEventsForSnapshots(ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT, [{
+    await remoteEventStore.compactProcessedEventsForSnapshots([{
         notePath: file.path,
         threads: [incompatibleThread],
     }]);

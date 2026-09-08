@@ -5,7 +5,6 @@ import {
 	removePublishedPublicArtifactPath,
 	removePublishedPublicArtifactPathsInFolder,
 	renamePublishedPublicArtifactPath,
-	renamePublishedPublicArtifactPathsInFolder,
 } from "../src/core/publish/publishedPublicArtifacts";
 
 test("renamePublishedPublicArtifactPath follows artifact renames inside the publish root", () => {
@@ -42,17 +41,4 @@ test("removePublishedPublicArtifactPathsInFolder prunes deleted published artifa
 		"public/nested/report.pdf",
 		"publicness/keep.html",
 	], "public"), ["publicness/keep.html"]);
-});
-
-test("renamePublishedPublicArtifactPathsInFolder retargets a published prefix in one pass", () => {
-	assert.deepEqual(renamePublishedPublicArtifactPathsInFolder([
-		"public/drafts/page.html",
-		"public/drafts/nested/report.pdf",
-		"public/drafts/image.png",
-		"public/draftsness/keep.html",
-	], "public/drafts", "public/published", "public/"), [
-		"public/draftsness/keep.html",
-		"public/published/nested/report.pdf",
-		"public/published/page.html",
-	]);
 });

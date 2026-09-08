@@ -4,7 +4,6 @@ import {
 import {
 	normalizePublishAllowedRoot,
 } from "./publishSettings";
-import { retargetPathInFolder } from "../files/pathScope";
 
 function isPublicArtifactPath(path: string): boolean {
 	return /\.(?:pdf|html?)$/iu.test(path);
@@ -86,31 +85,4 @@ export function removePublishedPublicArtifactPathsInFolder(value: unknown, folde
 
 	return normalizePublishedPublicArtifactPaths(value)
 		.filter((artifactPath) => !artifactPath.startsWith(folderPrefix));
-}
-
-export function renamePublishedPublicArtifactPathsInFolder(
-	value: unknown,
-	previousFolderPath: string,
-	nextFolderPath: string,
-	allowedRoot: string,
-): string[] {
-	const paths = new Set<string>();
-	for (const artifactPath of normalizePublishedPublicArtifactPaths(value)) {
-		const nextArtifactPath = retargetPathInFolder(
-			artifactPath,
-			previousFolderPath,
-			nextFolderPath,
-		);
-		if (!nextArtifactPath) {
-			paths.add(artifactPath);
-			continue;
-		}
-
-		const normalizedNextArtifactPath = normalizePublishRootArtifactPath(nextArtifactPath, allowedRoot);
-		if (normalizedNextArtifactPath) {
-			paths.add(normalizedNextArtifactPath);
-		}
-	}
-
-	return [...paths].sort();
 }

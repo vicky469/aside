@@ -1,12 +1,7 @@
 import type { EventRef, TAbstractFile, TFile, WorkspaceLeaf } from "obsidian";
-import type { PluginEventExecutionContext } from "./pluginEventExecutionContext";
 
 type WorkspaceEventName = "file-open" | "active-leaf-change" | "editor-change";
 type VaultEventName = "create" | "rename" | "delete" | "modify";
-type AsyncPluginEventName =
-    | `vault:${VaultEventName}`
-    | "workspace:layout-ready"
-    | "metadata-cache:resolved";
 
 interface WorkspaceEventSource {
     layoutReady: boolean;
@@ -37,123 +32,32 @@ export interface PluginEventRouterHost {
     };
     registerEvent(eventRef: EventRef): void;
     isTFile(value: unknown): value is TFile;
-    handleFileCreateMaintenance(file: TAbstractFile | null): void;
-    handleFileRenameMaintenance(file: TAbstractFile | null, oldPath: string): void;
-    handleFileDeleteMaintenance(file: TAbstractFile | null): void;
-    handleLayoutReady(context: PluginEventExecutionContext): void | Promise<void>;
+    handleLayoutReady(): void | Promise<void>;
     handleFileOpen(file: TFile | null): void;
     handleActiveLeafChange(leaf: WorkspaceLeaf | null): void;
-    handleFileCreate(file: TFile | null, context: PluginEventExecutionContext): Promise<void>;
-    handleFileRename(
-        file: TAbstractFile | null,
-        oldPath: string,
-        context: PluginEventExecutionContext,
-    ): Promise<void>;
-    handleFileDelete(file: TAbstractFile | null, context: PluginEventExecutionContext): Promise<void>;
-    handleFileModify(file: TFile | null, context: PluginEventExecutionContext): Promise<void>;
-    handleMetadataResolved(context: PluginEventExecutionContext): Promise<void>;
+    handleFileCreate(file: TFile | null): Promise<void>;
+    handleFileRename(file: TFile | null, oldPath: string): Promise<void>;
+    handleFileDelete(file: TAbstractFile | null): Promise<void>;
+    handleFileModify(file: TFile | null): Promise<void>;
+    handleMetadataResolved(): Promise<void>;
     handleEditorChange(filePath: string | null | undefined): void;
-    reportAsyncEventError(eventName: AsyncPluginEventName, error: unknown): void;
 }
 
 function isTAbstractFile(value: unknown): value is TAbstractFile {
     return !!value && typeof (value as TAbstractFile).path === "string";
 }
 
-function snapshotEventFile<T extends TAbstractFile>(file: T): T {
-    const prototype = Reflect.getPrototypeOf(file);
-    const snapshot = Object.assign(
-        Object.create(prototype) as object,
-        file,
-    ) as T & { children?: TAbstractFile[] };
-    snapshot.path = file.path;
-    const children = (file as TAbstractFile & { children?: unknown }).children;
-    if (Array.isArray(children)) {
-        snapshot.children = children
-            .filter(isTAbstractFile)
-            .map((child) => snapshotEventFile(child));
-    }
-    return snapshot;
-}
-
-const enum VaultEventRoutingPhase {
-    Buffering = "buffering",
-    Replaying = "replaying",
-    Live = "live",
-}
-
-type RoutedVaultEvent =
-    | { kind: "create"; file: TAbstractFile | null }
-    | { kind: "rename"; file: TAbstractFile | null; oldPath: string }
-    | { kind: "delete"; file: TAbstractFile | null };
-
-interface VaultEventQueue {
-    readonly epoch: number;
-    readonly abortController: AbortController;
-    phase: VaultEventRoutingPhase;
-    readonly pending: RoutedVaultEvent[];
-    drain: Promise<void> | null;
-}
-
 export class PluginEventRouter {
     private vaultMaintenanceEventsRegistered = false;
-    private vaultEventEpoch = 0;
-    private vaultEventQueue = this.createVaultEventQueue();
-    private readonly asyncEventTailsByEpoch = new Map<number, Set<Promise<void>>>();
-    private readonly retiredEpochTails = new Set<Promise<void>>();
 
     constructor(private readonly host: PluginEventRouterHost) {}
 
     public async register(): Promise<void> {
-        const epoch = this.vaultEventEpoch;
         this.registerVaultMaintenanceEvents();
-        await this.waitForRetiredEpochs();
-        if (!this.isCurrentEpoch(epoch)) {
-            return;
-        }
-        await this.activateVaultEventQueue(this.vaultEventQueue);
-        if (!this.isCurrentEpoch(epoch)) {
-            return;
-        }
-        await this.registerLayoutReady(epoch);
-        if (!this.isCurrentEpoch(epoch)) {
-            return;
-        }
-        this.registerWorkspaceEvents(epoch);
-        this.registerVaultModifyEvent(epoch);
-        this.registerMetadataCacheEvents(epoch);
-    }
-
-    public resetForReload(): void {
-        const retiredQueue = this.vaultEventQueue;
-        retiredQueue.abortController.abort();
-        retiredQueue.pending.length = 0;
-        this.retainRetiredEpochTail(retiredQueue);
-        this.vaultEventEpoch += 1;
-        this.vaultMaintenanceEventsRegistered = false;
-        this.vaultEventQueue = this.createVaultEventQueue();
-    }
-
-    private retainRetiredEpochTail(queue: VaultEventQueue): void {
-        const tails = [
-            ...(queue.drain ? [queue.drain] : []),
-            ...Array.from(this.asyncEventTailsByEpoch.get(queue.epoch) ?? []),
-        ];
-        this.asyncEventTailsByEpoch.delete(queue.epoch);
-        if (tails.length === 0) {
-            return;
-        }
-
-        const retiredTail = Promise.all(tails.map((tail) => tail.catch(() => {})))
-            .then(() => {});
-        this.retiredEpochTails.add(retiredTail);
-        void retiredTail.then(() => {
-            this.retiredEpochTails.delete(retiredTail);
-        });
-    }
-
-    private async waitForRetiredEpochs(): Promise<void> {
-        await Promise.all(Array.from(this.retiredEpochTails));
+        await this.registerLayoutReady();
+        this.registerWorkspaceEvents();
+        this.registerVaultModifyEvent();
+        this.registerMetadataCacheEvents();
     }
 
     public registerVaultMaintenanceEvents(): void {
@@ -162,265 +66,69 @@ export class PluginEventRouter {
         }
 
         this.vaultMaintenanceEventsRegistered = true;
-        const epoch = this.vaultEventEpoch;
         this.host.registerEvent(
-            this.host.app.vault.on("create", (file) => {
-                if (!this.isCurrentEpoch(epoch)) {
-                    return;
-                }
-                const createdFile = isTAbstractFile(file) ? file : null;
-                this.host.handleFileCreateMaintenance(createdFile);
-                this.routeVaultEvent({
-                    kind: "create",
-                    file: createdFile ? snapshotEventFile(createdFile) : null,
-                }, epoch);
+            this.host.app.vault.on("create", async (file) => {
+                await this.host.handleFileCreate(this.host.isTFile(file) ? file : null);
             }),
         );
         this.host.registerEvent(
-            this.host.app.vault.on("rename", (file, oldPath) => {
-                if (!this.isCurrentEpoch(epoch)) {
-                    return;
-                }
-                const renamedFile = isTAbstractFile(file) ? file : null;
-                this.host.handleFileRenameMaintenance(renamedFile, oldPath);
-                this.routeVaultEvent({
-                    kind: "rename",
-                    file: renamedFile ? snapshotEventFile(renamedFile) : null,
+            this.host.app.vault.on("rename", async (file, oldPath) => {
+                await this.host.handleFileRename(
+                    this.host.isTFile(file) ? file : null,
                     oldPath,
-                }, epoch);
+                );
             }),
         );
         this.host.registerEvent(
-            this.host.app.vault.on("delete", (file) => {
-                if (!this.isCurrentEpoch(epoch)) {
-                    return;
-                }
-                const deletedFile = isTAbstractFile(file) ? file : null;
-                this.host.handleFileDeleteMaintenance(deletedFile);
-                this.routeVaultEvent({
-                    kind: "delete",
-                    file: deletedFile ? snapshotEventFile(deletedFile) : null,
-                }, epoch);
+            this.host.app.vault.on("delete", async (file) => {
+                await this.host.handleFileDelete(isTAbstractFile(file) ? file : null);
             }),
         );
     }
 
-    private createVaultEventQueue(): VaultEventQueue {
-        return {
-            epoch: this.vaultEventEpoch,
-            abortController: new AbortController(),
-            phase: VaultEventRoutingPhase.Buffering,
-            pending: [],
-            drain: null,
-        };
-    }
-
-    private activateVaultEventQueue(queue: VaultEventQueue): Promise<void> {
-        if (queue !== this.vaultEventQueue || queue.phase === VaultEventRoutingPhase.Live) {
-            return Promise.resolve();
-        }
-        if (queue.phase === VaultEventRoutingPhase.Replaying) {
-            return queue.drain ?? Promise.resolve();
-        }
-
-        queue.phase = VaultEventRoutingPhase.Replaying;
-        return this.startVaultEventDrain(queue);
-    }
-
-    private startVaultEventDrain(queue: VaultEventQueue): Promise<void> {
-        if (queue.drain) {
-            return queue.drain;
-        }
-
-        const drain = Promise.resolve().then(() => this.drainVaultEvents(queue));
-        queue.drain = drain;
-        return drain;
-    }
-
-    private async drainVaultEvents(queue: VaultEventQueue): Promise<void> {
-        while (queue === this.vaultEventQueue) {
-            const event = queue.pending.shift();
-            if (!event) {
-                queue.drain = null;
-                queue.phase = VaultEventRoutingPhase.Live;
-                return;
-            }
-
-            await this.runVaultEvent(event, queue);
-        }
-    }
-
-    private routeVaultEvent(event: RoutedVaultEvent, epoch: number): void {
-        const queue = this.vaultEventQueue;
-        if (queue.epoch !== epoch) {
-            return;
-        }
-
-        queue.pending.push(event);
-        if (queue.phase === VaultEventRoutingPhase.Live) {
-            void this.startVaultEventDrain(queue);
-        }
-    }
-
-    private async runVaultEvent(event: RoutedVaultEvent, queue: VaultEventQueue): Promise<void> {
-        const context = this.createExecutionContext(queue.epoch, queue.abortController.signal);
-        await this.runAsyncEvent(
-            `vault:${event.kind}`,
-            () => this.handleVaultEvent(event, context),
-            () => queue === this.vaultEventQueue,
-        );
-    }
-
-    private handleVaultEvent(
-        event: RoutedVaultEvent,
-        context: PluginEventExecutionContext,
-    ): Promise<void> {
-        switch (event.kind) {
-            case "create":
-                return this.host.handleFileCreate(
-                    this.host.isTFile(event.file) ? event.file : null,
-                    context,
-                );
-            case "rename":
-                return this.host.handleFileRename(event.file, event.oldPath, context);
-            case "delete":
-                return this.host.handleFileDelete(event.file, context);
-        }
-    }
-
-    private createExecutionContext(epoch: number, signal: AbortSignal): PluginEventExecutionContext {
-        return {
-            signal,
-            isActive: () => !signal.aborted && this.isCurrentEpoch(epoch),
-        };
-    }
-
-    private isCurrentEpoch(epoch: number): boolean {
-        return epoch === this.vaultEventEpoch;
-    }
-
-    private dispatchAsyncEvent(
-        eventName: AsyncPluginEventName,
-        handler: () => void | Promise<void>,
-        epoch: number,
-    ): void {
-        if (!this.isCurrentEpoch(epoch)) {
-            return;
-        }
-        const tail = this.runAsyncEvent(eventName, handler, () => this.isCurrentEpoch(epoch));
-        this.trackAsyncEventTail(epoch, tail);
-    }
-
-    private trackAsyncEventTail(epoch: number, tail: Promise<void>): void {
-        let tails = this.asyncEventTailsByEpoch.get(epoch);
-        if (!tails) {
-            tails = new Set<Promise<void>>();
-            this.asyncEventTailsByEpoch.set(epoch, tails);
-        }
-        tails.add(tail);
-        void tail.then(
-            () => this.removeAsyncEventTail(epoch, tail),
-            () => this.removeAsyncEventTail(epoch, tail),
-        );
-    }
-
-    private removeAsyncEventTail(epoch: number, tail: Promise<void>): void {
-        const tails = this.asyncEventTailsByEpoch.get(epoch);
-        tails?.delete(tail);
-        if (tails?.size === 0) {
-            this.asyncEventTailsByEpoch.delete(epoch);
-        }
-    }
-
-    private async runAsyncEvent(
-        eventName: AsyncPluginEventName,
-        handler: () => void | Promise<void>,
-        shouldReportError: () => boolean = () => true,
-    ): Promise<void> {
-        try {
-            await handler();
-        } catch (error) {
-            if (!shouldReportError()) {
-                return;
-            }
-            try {
-                this.host.reportAsyncEventError(eventName, error);
-            } catch {
-                return;
-            }
-        }
-    }
-
-    private async registerLayoutReady(epoch: number): Promise<void> {
-        const signal = this.vaultEventQueue.abortController.signal;
-        const context = this.createExecutionContext(epoch, signal);
+    private async registerLayoutReady(): Promise<void> {
         if (this.host.app.workspace.layoutReady) {
-            const tail = this.runAsyncEvent(
-                "workspace:layout-ready",
-                () => this.host.handleLayoutReady(context),
-                () => this.isCurrentEpoch(epoch),
-            );
-            this.trackAsyncEventTail(epoch, tail);
-            await tail;
+            await this.host.handleLayoutReady();
             return;
         }
 
-        this.host.app.workspace.onLayoutReady(() => {
-            this.dispatchAsyncEvent("workspace:layout-ready", () => this.host.handleLayoutReady(context), epoch);
+        this.host.app.workspace.onLayoutReady(async () => {
+            await this.host.handleLayoutReady();
         });
     }
 
-    private registerWorkspaceEvents(epoch: number): void {
+    private registerWorkspaceEvents(): void {
         this.host.registerEvent(
             this.host.app.workspace.on("file-open", (file) => {
-                if (!this.isCurrentEpoch(epoch)) {
-                    return;
-                }
                 this.host.handleFileOpen(file);
             }),
         );
 
         this.host.registerEvent(
             this.host.app.workspace.on("active-leaf-change", (leaf) => {
-                if (!this.isCurrentEpoch(epoch)) {
-                    return;
-                }
                 this.host.handleActiveLeafChange(leaf);
             }),
         );
 
         this.host.registerEvent(
             this.host.app.workspace.on("editor-change", (_editor, info) => {
-                if (!this.isCurrentEpoch(epoch)) {
-                    return;
-                }
                 this.host.handleEditorChange(info?.file?.path);
             }),
         );
     }
 
-    private registerVaultModifyEvent(epoch: number): void {
-        const context = this.createExecutionContext(epoch, this.vaultEventQueue.abortController.signal);
+    private registerVaultModifyEvent(): void {
         this.host.registerEvent(
-            this.host.app.vault.on("modify", (file) => {
-                this.dispatchAsyncEvent(
-                    "vault:modify",
-                    () => this.host.handleFileModify(this.host.isTFile(file) ? file : null, context),
-                    epoch,
-                );
+            this.host.app.vault.on("modify", async (file) => {
+                await this.host.handleFileModify(this.host.isTFile(file) ? file : null);
             }),
         );
     }
 
-    private registerMetadataCacheEvents(epoch: number): void {
-        const context = this.createExecutionContext(epoch, this.vaultEventQueue.abortController.signal);
+    private registerMetadataCacheEvents(): void {
         this.host.registerEvent(
-            this.host.app.metadataCache.on("resolved", () => {
-                this.dispatchAsyncEvent(
-                    "metadata-cache:resolved",
-                    () => this.host.handleMetadataResolved(context),
-                    epoch,
-                );
+            this.host.app.metadataCache.on("resolved", async () => {
+                await this.host.handleMetadataResolved();
             }),
         );
     }

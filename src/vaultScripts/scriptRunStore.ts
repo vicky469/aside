@@ -9,18 +9,10 @@ import type {
     PersistedPluginDataUpdater,
 } from "../settings/indexNoteSettingsPlanner";
 import { normalizePersistedScriptRuns } from "./scriptRunStorePlanner";
-import { retargetPathInFolder } from "../core/files/pathScope";
-import {
-    isPluginEventExecutionActive,
-    type PluginEventExecutionContext,
-} from "../core/events/pluginEventExecutionContext";
 
 export interface ScriptRunStoreHost {
     readPersistedPluginData(): PersistedPluginData | null;
-    updatePersistedPluginData(
-        updater: PersistedPluginDataUpdater,
-        context?: PluginEventExecutionContext,
-    ): Promise<PersistedPluginData>;
+    updatePersistedPluginData(updater: PersistedPluginDataUpdater): Promise<PersistedPluginData>;
 }
 
 export class ScriptRunStore {
@@ -105,121 +97,34 @@ export class ScriptRunStore {
         });
     }
 
-    public async renameFile(
-        previousFilePath: string,
-        nextFilePath: string,
-        context: PluginEventExecutionContext,
-    ): Promise<boolean> {
-        if (previousFilePath === nextFilePath || !isPluginEventExecutionActive(context)) {
+    public async renameFile(previousFilePath: string, nextFilePath: string): Promise<boolean> {
+        if (previousFilePath === nextFilePath) {
             return false;
         }
 
-        try {
-            return await this.enqueueMutation(async () => {
-                if (!isPluginEventExecutionActive(context)) {
-                    return false;
-                }
-                let changed = false;
-                const nextRuns = this.runs.map((run) => {
-                    if (run.filePath !== previousFilePath) {
-                        return run;
-                    }
 
-                    changed = true;
-                    return {
-                        ...run,
-                        filePath: nextFilePath,
-                    };
-                });
-
-                if (!changed) {
-                    return false;
+        return this.enqueueMutation(async () => {
+            let changed = false;
+            const nextRuns = this.runs.map((run) => {
+                if (run.filePath !== previousFilePath) {
+                    return run;
                 }
 
-                const persisted = await this.persistEventRuns(nextRuns, context);
-                if (!persisted || !isPluginEventExecutionActive(context)) {
-                    return false;
-                }
-                this.runs = nextRuns;
-                return true;
+                changed = true;
+                return {
+                    ...run,
+                    filePath: nextFilePath,
+                };
             });
-        } catch (error) {
-            if (!isPluginEventExecutionActive(context)) {
+
+            if (!changed) {
                 return false;
             }
-            throw error;
-        }
-    }
 
-    public async renameFolder(
-        previousFolderPath: string,
-        nextFolderPath: string,
-        context: PluginEventExecutionContext,
-    ): Promise<boolean> {
-        if (previousFolderPath === nextFolderPath || !isPluginEventExecutionActive(context)) {
-            return false;
-        }
-
-        try {
-            return await this.enqueueMutation(async () => {
-                if (!isPluginEventExecutionActive(context)) {
-                    return false;
-                }
-                let changed = false;
-                const nextRuns = this.runs.map((run) => {
-                    const nextFilePath = retargetPathInFolder(
-                        run.filePath,
-                        previousFolderPath,
-                        nextFolderPath,
-                    );
-                    if (!nextFilePath) {
-                        return run;
-                    }
-
-                    changed = true;
-                    return {
-                        ...run,
-                        filePath: nextFilePath,
-                    };
-                });
-                if (!changed) {
-                    return false;
-                }
-
-                const persisted = await this.persistEventRuns(nextRuns, context);
-                if (!persisted || !isPluginEventExecutionActive(context)) {
-                    return false;
-                }
-                this.runs = nextRuns;
-                return true;
-            });
-        } catch (error) {
-            if (!isPluginEventExecutionActive(context)) {
-                return false;
-            }
-            throw error;
-        }
-    }
-
-    private async persistEventRuns(
-        runs: readonly ScriptRunRecord[],
-        context: PluginEventExecutionContext,
-    ): Promise<boolean> {
-        if (!isPluginEventExecutionActive(context)) {
-            return false;
-        }
-        let applied = false;
-        await this.host.updatePersistedPluginData((persistedData) => {
-            if (!isPluginEventExecutionActive(context)) {
-                return persistedData;
-            }
-            applied = true;
-            return {
-                ...persistedData,
-                scriptRuns: cloneScriptRunRecords(runs),
-            };
-        }, context);
-        return applied && isPluginEventExecutionActive(context);
+            await this.persist(nextRuns);
+            this.runs = nextRuns;
+            return true;
+        });
     }
 
     private async persist(runs: readonly ScriptRunRecord[]): Promise<void> {

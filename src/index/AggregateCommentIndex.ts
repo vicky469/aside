@@ -19,7 +19,6 @@ import {
     retargetCommentThreads,
     type CommentThreadRetargetOptions,
 } from "../domain/comments/commentThreadRetarget";
-import type { CommentFileRetarget } from "../domain/comments/folderCommentRetarget";
 
 function toThreads(items: Array<Comment | CommentThread>): CommentThread[] {
     return items.map((item) => isCommentThreadLike(item) ? cloneCommentThread(item) : commentToThread(item));
@@ -43,31 +42,14 @@ export class AggregateCommentIndex {
     }
 
     renameFile(oldPath: string, newPath: string, options: CommentThreadRetargetOptions): void {
-        this.renameFiles([{
-            previousFilePath: oldPath,
-            nextFilePath: newPath,
-            retargetOptions: options,
-        }]);
-    }
-
-    renameFiles(retargets: readonly CommentFileRetarget[]): void {
-        let changed = false;
-        for (const retarget of retargets) {
-            const threads = this.threadsByFile.get(retarget.previousFilePath);
-            this.threadsByFile.delete(retarget.previousFilePath);
-            if (!threads?.length) {
-                continue;
-            }
-
-            this.threadsByFile.set(
-                retarget.nextFilePath,
-                retargetCommentThreads(threads, retarget.nextFilePath, retarget.retargetOptions),
-            );
-            changed = true;
+        const threads = this.threadsByFile.get(oldPath);
+        this.threadsByFile.delete(oldPath);
+        if (!threads?.length) {
+            return;
         }
-        if (changed) {
-            this.version += 1;
-        }
+
+        this.threadsByFile.set(newPath, retargetCommentThreads(threads, newPath, options));
+        this.version += 1;
     }
 
     deleteFile(filePath: string): void {

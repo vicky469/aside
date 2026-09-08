@@ -10,11 +10,6 @@ type WorkspaceEventName = "file-open" | "active-leaf-change" | "editor-change";
 type VaultEventName = "create" | "rename" | "delete" | "modify";
 type MetadataCacheEventName = "resolved";
 
-interface EventExecutionContext {
-    readonly signal: AbortSignal;
-    isActive(): boolean;
-}
-
 function createFile(path: string): TFile {
     return {
         path,
@@ -23,28 +18,11 @@ function createFile(path: string): TFile {
     } as TFile;
 }
 
-function createFolder(path: string, children: TAbstractFile[] = []): TAbstractFile {
+function createFolder(path: string): TAbstractFile {
     return {
         path,
         name: path.split("/").pop() ?? path,
-        children,
-    } as unknown as TAbstractFile;
-}
-
-function collectFilePaths(file: TAbstractFile | null): string[] {
-    if (!file) {
-        return [];
-    }
-    if ("extension" in file) {
-        return [file.path];
-    }
-
-    const children = (file as TAbstractFile & { children?: unknown }).children;
-    return Array.isArray(children)
-        ? children
-            .filter((child): child is TAbstractFile => !!child && typeof (child as TAbstractFile).path === "string")
-            .flatMap((child) => collectFilePaths(child))
-        : [];
+    } as TAbstractFile;
 }
 
 function createDeferred<T>() {
@@ -55,42 +33,13 @@ function createDeferred<T>() {
     return { promise, resolve };
 }
 
-async function settleAsyncDispatch(): Promise<void> {
-    await new Promise<void>((resolve) => setImmediate(resolve));
-}
-
-async function settlesWithinMicrotasks(promise: Promise<unknown>, turnCount = 20): Promise<boolean> {
-    let settled = false;
-    void promise.then(() => {
-        settled = true;
-    });
-    for (let turn = 0; turn < turnCount && !settled; turn += 1) {
-        await Promise.resolve();
-    }
-    return settled;
-}
-
 function createHarness(options: {
     layoutReady?: boolean;
-    handleLayoutReady?: (context: EventExecutionContext) => void | Promise<void>;
     handleFileCreate?: (file: TFile | null) => void | Promise<void>;
-    handleFileRename?: (
-        file: TAbstractFile | null,
-        oldPath: string,
-        context: EventExecutionContext,
-    ) => void | Promise<void>;
+    handleFileRename?: (file: TFile | null, oldPath: string) => void | Promise<void>;
     handleFileDelete?: (file: TAbstractFile | null) => void | Promise<void>;
-    handleFileModify?: (
-        file: TFile | null,
-        context: EventExecutionContext,
-    ) => void | Promise<void>;
-    handleFileCreateMaintenance?: (file: TAbstractFile | null) => void;
-    handleFileRenameMaintenance?: (file: TAbstractFile | null, oldPath: string) => void;
-    handleFileDeleteMaintenance?: (file: TAbstractFile | null) => void;
 } = {}) {
     const calls: string[] = [];
-    const maintenanceCalls: string[] = [];
-    const reportedErrors: Array<{ eventName: string; error: unknown }> = [];
     const registeredEvents: EventRef[] = [];
     const workspaceHandlers = new Map<WorkspaceEventName, (...args: any[]) => void>();
     const vaultHandlers = new Map<VaultEventName, (...args: any[]) => void>();
@@ -98,7 +47,7 @@ function createHarness(options: {
     const metadataCacheHandlers = new Map<MetadataCacheEventName, (...args: any[]) => void>();
     let layoutReadyHandler: (() => void | Promise<void>) | null = null;
 
-    const routerHost = {
+    const router = new PluginEventRouter({
         app: {
             workspace: {
                 layoutReady: options.layoutReady ?? false,
@@ -135,70 +84,46 @@ function createHarness(options: {
                 },
             },
         },
-        registerEvent: (eventRef: EventRef) => {
+        registerEvent: (eventRef) => {
             registeredEvents.push(eventRef);
         },
-        isTFile: (value: unknown): value is TFile => !!value
+        isTFile: (value): value is TFile => !!value
             && typeof (value as TFile).path === "string"
             && typeof (value as TFile).extension === "string",
-        handleFileCreateMaintenance: (file: TAbstractFile | null) => {
-            maintenanceCalls.push(`create:${file?.path ?? "null"}`);
-            options.handleFileCreateMaintenance?.(file);
-        },
-        handleFileRenameMaintenance: (file: TAbstractFile | null, oldPath: string) => {
-            maintenanceCalls.push(`rename:${oldPath}->${file?.path ?? "null"}`);
-            options.handleFileRenameMaintenance?.(file, oldPath);
-        },
-        handleFileDeleteMaintenance: (file: TAbstractFile | null) => {
-            maintenanceCalls.push(`delete:${file?.path ?? "null"}`);
-            options.handleFileDeleteMaintenance?.(file);
-        },
-        handleLayoutReady: async (context: EventExecutionContext) => {
+        handleLayoutReady: async () => {
             calls.push("layout-ready");
-            await options.handleLayoutReady?.(context);
         },
-        handleFileOpen: (file: TFile | null) => {
+        handleFileOpen: (file) => {
             calls.push(`file-open:${file?.path ?? "null"}`);
         },
-        handleActiveLeafChange: (leaf: WorkspaceLeaf | null) => {
+        handleActiveLeafChange: (leaf) => {
             calls.push(`active-leaf-change:${leaf ? "leaf" : "null"}`);
         },
-        handleFileCreate: async (file: TFile | null) => {
+        handleFileCreate: async (file) => {
             calls.push(`create:${file?.path ?? "null"}`);
             await options.handleFileCreate?.(file);
         },
-        handleFileRename: async (
-            file: TAbstractFile | null,
-            oldPath: string,
-            context: EventExecutionContext,
-        ) => {
+        handleFileRename: async (file, oldPath) => {
             calls.push(`rename:${oldPath}->${file?.path ?? "null"}`);
-            await options.handleFileRename?.(file, oldPath, context);
+            await options.handleFileRename?.(file, oldPath);
         },
-        handleFileDelete: async (file: TAbstractFile | null) => {
+        handleFileDelete: async (file) => {
             calls.push(`delete:${file?.path ?? "null"}`);
             await options.handleFileDelete?.(file);
         },
-        handleFileModify: async (file: TFile | null, context: EventExecutionContext) => {
+        handleFileModify: async (file) => {
             calls.push(`modify:${file?.path ?? "null"}`);
-            await options.handleFileModify?.(file, context);
         },
         handleMetadataResolved: async () => {
             calls.push("metadata-resolved");
         },
-        handleEditorChange: (filePath: string | null | undefined) => {
+        handleEditorChange: (filePath) => {
             calls.push(`editor-change:${filePath ?? "null"}`);
         },
-        reportAsyncEventError: (eventName: string, error: unknown) => {
-            reportedErrors.push({ eventName, error });
-        },
-    };
-    const router = new PluginEventRouter(routerHost);
+    });
 
     return {
         calls,
-        maintenanceCalls,
-        reportedErrors,
         registeredEvents,
         router,
         workspaceHandlers,
@@ -224,12 +149,10 @@ test("plugin event router registers vault maintenance early once and reuses it d
 
     harness.vaultHandlers.get("create")?.(note);
     harness.vaultHandlers.get("create")?.(createFolder("Assets"));
-    assert.deepEqual(harness.maintenanceCalls, ["create:docs/early.md", "create:Assets"]);
-    assert.deepEqual(harness.calls, []);
+    await Promise.resolve();
+    assert.deepEqual(harness.calls, ["create:docs/early.md", "create:null"]);
 
     await harness.router.register();
-
-    assert.deepEqual(harness.calls, ["create:docs/early.md", "create:null"]);
 
     assert.deepEqual(
         Array.from(harness.vaultHandlers.keys()),
@@ -241,162 +164,50 @@ test("plugin event router registers vault maintenance early once and reuses it d
     assert.equal(harness.registeredEvents.length, 8);
 });
 
-test("populated startup folder create refreshes registry evidence without invoking file lifecycle", async () => {
-    const registry = new VaultScriptRegistry();
-    let currentPaths: string[] = [];
-    const harness = createHarness({
-        handleFileCreateMaintenance: () => {
-            registry.seed(currentPaths);
-        },
-    });
-    harness.router.registerVaultMaintenanceEvents();
-    const script = createFile("🛠️ scripts/clean.mjs");
-    const folder = createFolder("🛠️ scripts", [script]);
-
-    currentPaths = [script.path];
-    const callbackResult = harness.vaultHandlers.get("create")?.(folder);
-
-    assert.equal(callbackResult, undefined);
-    assert.equal(registry.resolve("/clean")?.path, script.path);
-    assert.deepEqual(harness.maintenanceCalls, ["create:🛠️ scripts"]);
-    assert.deepEqual(harness.calls, []);
-
-    folder.path = "mutated";
-    (folder as TAbstractFile & { children: TAbstractFile[] }).children = [];
-    await harness.router.register();
-
-    assert.deepEqual(harness.calls, ["create:null"]);
-});
-
-test("delayed startup file rename updates registry evidence immediately and replays path effects once", async () => {
+test("early vault maintenance keeps rename migration evidence and final script actionability live", async () => {
     const registry = new VaultScriptRegistry();
     registry.seed(["drafts/clean.mjs"]);
-    let currentPaths = ["drafts/clean.mjs"];
-    const retargetedPaths: string[] = [];
     const harness = createHarness({
-        handleFileRenameMaintenance: () => {
-            registry.seed(currentPaths);
-        },
         handleFileRename: (file, oldPath) => {
-            retargetedPaths.push(`${oldPath}->${file?.path ?? "null"}`);
-        },
-    });
-    harness.router.registerVaultMaintenanceEvents();
-    const loadedData = createDeferred<Record<string, unknown>>();
-    let persistedScriptsEnabled: boolean | undefined;
-    const delayedSettingsLoad = (async () => {
-        const loaded = await loadedData.promise;
-        const resolved = resolveLoadedSettings(
-            loaded,
-            {} as AsideSettings,
-            { hasRegisteredVaultScripts: registry.getRunnableScripts().length > 0 },
-        );
-        persistedScriptsEnabled = resolved.settings.scriptsEnabled;
-    })();
-
-    currentPaths = ["🛠️ scripts/clean.mjs"];
-    harness.vaultHandlers.get("rename")?.(
-        createFile("🛠️ scripts/clean.mjs"),
-        "drafts/clean.mjs",
-    );
-    assert.equal(registry.resolve("/clean")?.path, "🛠️ scripts/clean.mjs");
-    assert.deepEqual(retargetedPaths, []);
-
-    loadedData.resolve({});
-    await delayedSettingsLoad;
-    await harness.router.register();
-
-    assert.equal(persistedScriptsEnabled, true);
-    assert.equal(registry.isRunnableMention("/clean"), true);
-    assert.equal(registry.resolve("/clean")?.path, "🛠️ scripts/clean.mjs");
-    assert.deepEqual(retargetedPaths, ["drafts/clean.mjs->🛠️ scripts/clean.mjs"]);
-});
-
-test("delayed startup folder rename reseeds registry immediately and replays the folder retarget once", async () => {
-    const registry = new VaultScriptRegistry();
-    registry.seed([
-        "Draft scripts/clean.mjs",
-        "Draft scripts/tidy.js",
-        "Draft scripts/nested/note.md",
-    ]);
-    let currentPaths = [
-        "Draft scripts/clean.mjs",
-        "Draft scripts/tidy.js",
-        "Draft scripts/nested/note.md",
-    ];
-    const receivedFolderPaths: string[] = [];
-    const persistedRetargets: string[] = [];
-    const cacheRetargets: string[] = [];
-    const indexRetargets: string[] = [];
-    const publishingRetargets: string[] = [];
-    const harness = createHarness({
-        handleFileRenameMaintenance: () => {
-            registry.seed(currentPaths);
-        },
-        handleFileRename: (file, oldPath) => {
-            receivedFolderPaths.push(`${oldPath}->${file?.path ?? "null"}`);
-            const nextFolderPrefix = `${file?.path ?? ""}/`;
-            for (const nextFilePath of collectFilePaths(file)) {
-                const previousFilePath = `${oldPath}/${nextFilePath.slice(nextFolderPrefix.length)}`;
-                const retarget = `${previousFilePath}->${nextFilePath}`;
-                persistedRetargets.push(retarget);
-                cacheRetargets.push(retarget);
-                indexRetargets.push(retarget);
-                publishingRetargets.push(retarget);
+            if (file) {
+                registry.rename(oldPath, file.path);
             }
         },
     });
     harness.router.registerVaultMaintenanceEvents();
+    const loadedData = createDeferred<Record<string, unknown>>();
+    let persistedScriptsEnabled: boolean | undefined;
+    const delayedSettingsLoad = (async () => {
+        const loaded = await loadedData.promise;
+        const resolved = resolveLoadedSettings(
+            loaded,
+            {} as AsideSettings,
+            { hasRegisteredVaultScripts: registry.getRunnableScripts().length > 0 },
+        );
+        persistedScriptsEnabled = resolved.settings.scriptsEnabled;
+    })();
 
-    const cleanScript = createFile("🛠️ scripts/clean.mjs");
-    const tidyScript = createFile("🛠️ scripts/tidy.js");
-    const nestedNote = createFile("🛠️ scripts/nested/note.md");
-    const nestedFolder = createFolder("🛠️ scripts/nested", [nestedNote]);
-    const renamedFolder = createFolder("🛠️ scripts", [cleanScript, nestedFolder, tidyScript]);
-    currentPaths = [cleanScript.path, tidyScript.path, nestedNote.path];
-    const callbackResult = harness.vaultHandlers.get("rename")?.(
-        renamedFolder,
-        "Draft scripts",
+    await harness.vaultHandlers.get("rename")?.(
+        createFile("🛠️ scripts/clean.mjs"),
+        "drafts/clean.mjs",
     );
+    loadedData.resolve({});
+    await delayedSettingsLoad;
 
-    assert.equal(callbackResult, undefined);
+    assert.equal(persistedScriptsEnabled, true);
+    assert.equal(registry.isRunnableMention("/clean"), true);
     assert.equal(registry.resolve("/clean")?.path, "🛠️ scripts/clean.mjs");
-    assert.equal(registry.resolve("/tidy")?.path, "🛠️ scripts/tidy.js");
-    assert.deepEqual(receivedFolderPaths, []);
-
-    renamedFolder.path = "mutated";
-    cleanScript.path = "mutated/clean.mjs";
-    nestedFolder.path = "mutated/nested";
-    nestedNote.path = "mutated/nested/note.md";
-    (renamedFolder as TAbstractFile & { children: TAbstractFile[] }).children = [];
-    (nestedFolder as TAbstractFile & { children: TAbstractFile[] }).children = [];
-
-    await harness.router.register();
-
-    const expectedRetargets = [
-        "Draft scripts/clean.mjs->🛠️ scripts/clean.mjs",
-        "Draft scripts/nested/note.md->🛠️ scripts/nested/note.md",
-        "Draft scripts/tidy.js->🛠️ scripts/tidy.js",
-    ];
-    assert.deepEqual(receivedFolderPaths, ["Draft scripts->🛠️ scripts"]);
-    assert.deepEqual(persistedRetargets, expectedRetargets);
-    assert.deepEqual(cacheRetargets, expectedRetargets);
-    assert.deepEqual(indexRetargets, expectedRetargets);
-    assert.deepEqual(publishingRetargets, expectedRetargets);
 });
 
-test("delayed startup file delete updates registry evidence immediately and replays cleanup once", async () => {
+test("early vault maintenance keeps delete migration evidence and final script actionability live", async () => {
     const scriptPath = "🛠️ scripts/clean.mjs";
     const registry = new VaultScriptRegistry();
     registry.seed([scriptPath]);
-    let currentPaths = [scriptPath];
-    const cleanedPaths: string[] = [];
     const harness = createHarness({
-        handleFileDeleteMaintenance: () => {
-            registry.seed(currentPaths);
-        },
         handleFileDelete: (file) => {
-            cleanedPaths.push(file?.path ?? "null");
+            if (file) {
+                registry.remove(file.path);
+            }
         },
     });
     harness.router.registerVaultMaintenanceEvents();
@@ -412,76 +223,13 @@ test("delayed startup file delete updates registry evidence immediately and repl
         persistedScriptsEnabled = resolved.settings.scriptsEnabled;
     })();
 
-    currentPaths = [];
-    harness.vaultHandlers.get("delete")?.(createFile(scriptPath));
-    assert.equal(registry.isRunnableMention("/clean"), false);
-    assert.deepEqual(cleanedPaths, []);
-
+    await harness.vaultHandlers.get("delete")?.(createFile(scriptPath));
     loadedData.resolve({});
     await delayedSettingsLoad;
-    await harness.router.register();
 
     assert.equal(persistedScriptsEnabled, false);
     assert.equal(registry.isRunnableMention("/clean"), false);
     assert.deepEqual(registry.getRunnableScripts(), []);
-    assert.deepEqual(cleanedPaths, [scriptPath]);
-});
-
-test("delayed startup folder delete reseeds registry immediately and replays folder cleanup once", async () => {
-    const registry = new VaultScriptRegistry();
-    registry.seed([
-        "🛠️ scripts/clean.mjs",
-        "🛠️ scripts/nested/note.md",
-    ]);
-    let currentPaths = [
-        "🛠️ scripts/clean.mjs",
-        "🛠️ scripts/nested/note.md",
-    ];
-    const persistedFolderDeletes: string[] = [];
-    const cacheDeletes: string[] = [];
-    const indexFolderDeletes: string[] = [];
-    const publishingFolderDeletes: string[] = [];
-    const harness = createHarness({
-        handleFileDeleteMaintenance: () => {
-            registry.seed(currentPaths);
-        },
-        handleFileDelete: (file) => {
-            const folderPath = file?.path ?? "null";
-            persistedFolderDeletes.push(folderPath);
-            cacheDeletes.push(...collectFilePaths(file));
-            indexFolderDeletes.push(folderPath);
-            publishingFolderDeletes.push(folderPath);
-        },
-    });
-    harness.router.registerVaultMaintenanceEvents();
-
-    const cleanScript = createFile("🛠️ scripts/clean.mjs");
-    const nestedNote = createFile("🛠️ scripts/nested/note.md");
-    const nestedFolder = createFolder("🛠️ scripts/nested", [nestedNote]);
-    const deletedFolder = createFolder("🛠️ scripts", [cleanScript, nestedFolder]);
-    currentPaths = [];
-    const callbackResult = harness.vaultHandlers.get("delete")?.(deletedFolder);
-
-    assert.equal(callbackResult, undefined);
-    assert.deepEqual(registry.getRunnableScripts(), []);
-    assert.deepEqual(persistedFolderDeletes, []);
-
-    deletedFolder.path = "mutated";
-    cleanScript.path = "mutated/clean.mjs";
-    nestedFolder.path = "mutated/nested";
-    nestedNote.path = "mutated/nested/note.md";
-    (deletedFolder as TAbstractFile & { children: TAbstractFile[] }).children = [];
-    (nestedFolder as TAbstractFile & { children: TAbstractFile[] }).children = [];
-
-    await harness.router.register();
-
-    assert.deepEqual(persistedFolderDeletes, ["🛠️ scripts"]);
-    assert.deepEqual(cacheDeletes, [
-        "🛠️ scripts/clean.mjs",
-        "🛠️ scripts/nested/note.md",
-    ]);
-    assert.deepEqual(indexFolderDeletes, ["🛠️ scripts"]);
-    assert.deepEqual(publishingFolderDeletes, ["🛠️ scripts"]);
 });
 
 test("plugin event router exposes Obsidian event flow in one module", async () => {
@@ -510,25 +258,18 @@ test("plugin event router exposes Obsidian event flow in one module", async () =
     harness.vaultHandlers.get("delete")?.(note);
     harness.vaultHandlers.get("modify")?.(note);
     harness.metadataCacheHandlers.get("resolved")?.();
-    await settleAsyncDispatch();
-
-    assert.deepEqual(harness.maintenanceCalls, [
-        "create:docs/a.md",
-        "create:Assets",
-        "rename:docs/old.md->docs/a.md",
-        "delete:docs/a.md",
-    ]);
+    await Promise.resolve();
 
     assert.deepEqual(harness.calls, [
         "file-open:docs/a.md",
         "active-leaf-change:leaf",
         "editor-change:docs/a.md",
-        "modify:docs/a.md",
-        "metadata-resolved",
         "create:docs/a.md",
         "create:null",
         "rename:docs/old.md->docs/a.md",
         "delete:docs/a.md",
+        "modify:docs/a.md",
+        "metadata-resolved",
     ]);
 });
 
@@ -538,318 +279,9 @@ test("plugin event router preserves deleted folder paths", async () => {
 
     await harness.router.register();
     harness.vaultHandlers.get("delete")?.(folder);
-    await settleAsyncDispatch();
+    await Promise.resolve();
 
     assert.deepEqual(harness.calls, ["delete:Deleted"]);
-});
-
-test("plugin event router drains startup events in order without losing an event fired during replay", async () => {
-    const firstRenameStarted = createDeferred<void>();
-    const releaseFirstRename = createDeferred<void>();
-    const replayedPaths: string[] = [];
-    const harness = createHarness({
-        handleFileRename: async (file, oldPath) => {
-            replayedPaths.push(`${oldPath}->${file?.path ?? "null"}`);
-            if (oldPath === "docs/one.md") {
-                firstRenameStarted.resolve(undefined);
-                await releaseFirstRename.promise;
-            }
-        },
-    });
-    harness.router.registerVaultMaintenanceEvents();
-    harness.vaultHandlers.get("rename")?.(createFile("docs/two.md"), "docs/one.md");
-
-    const registration = harness.router.register();
-    await firstRenameStarted.promise;
-    harness.vaultHandlers.get("delete")?.(createFile("docs/two.md"));
-
-    assert.deepEqual(harness.maintenanceCalls, [
-        "rename:docs/one.md->docs/two.md",
-        "delete:docs/two.md",
-    ]);
-    assert.deepEqual(replayedPaths, ["docs/one.md->docs/two.md"]);
-
-    releaseFirstRename.resolve(undefined);
-    await registration;
-
-    assert.deepEqual(harness.calls, [
-        "rename:docs/one.md->docs/two.md",
-        "delete:docs/two.md",
-    ]);
-    assert.deepEqual(replayedPaths, ["docs/one.md->docs/two.md"]);
-
-    harness.vaultHandlers.get("create")?.(createFile("docs/live.md"));
-    await settleAsyncDispatch();
-    assert.deepEqual(harness.calls, [
-        "rename:docs/one.md->docs/two.md",
-        "delete:docs/two.md",
-        "create:docs/live.md",
-    ]);
-});
-
-test("plugin event router serializes live rename then delete and continues after a failure", async () => {
-    const renameStarted = createDeferred<void>();
-    const releaseRename = createDeferred<void>();
-    const failure = new Error("rename failed after persistence");
-    const lifecycleOrder: string[] = [];
-    const harness = createHarness({
-        handleFileRename: async (file, oldPath) => {
-            lifecycleOrder.push(`rename:start:${oldPath}->${file?.path ?? "null"}`);
-            renameStarted.resolve(undefined);
-            await releaseRename.promise;
-            lifecycleOrder.push(`rename:finish:${file?.path ?? "null"}`);
-            throw failure;
-        },
-        handleFileDelete: (file) => {
-            lifecycleOrder.push(`delete:${file?.path ?? "null"}`);
-        },
-    });
-    await harness.router.register();
-
-    const renamed = createFile("docs/B.md");
-    assert.equal(harness.vaultHandlers.get("rename")?.(renamed, "docs/A.md"), undefined);
-    assert.equal(harness.vaultHandlers.get("delete")?.(renamed), undefined);
-    await renameStarted.promise;
-
-    assert.deepEqual(lifecycleOrder, ["rename:start:docs/A.md->docs/B.md"]);
-
-    releaseRename.resolve(undefined);
-    await settleAsyncDispatch();
-
-    assert.deepEqual(lifecycleOrder, [
-        "rename:start:docs/A.md->docs/B.md",
-        "rename:finish:docs/B.md",
-        "delete:docs/B.md",
-    ]);
-    assert.deepEqual(harness.reportedErrors, [{
-        eventName: "vault:rename",
-        error: failure,
-    }]);
-});
-
-test("plugin event router resets startup buffering and ignores stale callbacks and drains", async () => {
-    const oldRenameStarted = createDeferred<void>();
-    const releaseOldRename = createDeferred<void>();
-    const harness = createHarness({
-        handleFileRename: async (_file, oldPath) => {
-            if (oldPath === "old/A.md") {
-                oldRenameStarted.resolve(undefined);
-                await releaseOldRename.promise;
-            }
-        },
-    });
-
-    await harness.router.register();
-    const staleRenameCallback = harness.vaultHandlers.get("rename");
-    const staleDeleteCallback = harness.vaultHandlers.get("delete");
-    staleRenameCallback?.(createFile("old/B.md"), "old/A.md");
-    await oldRenameStarted.promise;
-    staleDeleteCallback?.(createFile("old/B.md"));
-
-    harness.router.resetForReload();
-    harness.router.registerVaultMaintenanceEvents();
-    assert.equal(harness.vaultRegistrationCounts.get("rename"), 2);
-    const currentRenameCallback = harness.vaultHandlers.get("rename");
-
-    staleRenameCallback?.(createFile("stale/B.md"), "stale/A.md");
-    currentRenameCallback?.(createFile("new/B.md"), "new/A.md");
-    releaseOldRename.resolve(undefined);
-    await settleAsyncDispatch();
-
-    assert.deepEqual(harness.maintenanceCalls, [
-        "rename:old/A.md->old/B.md",
-        "delete:old/B.md",
-        "rename:new/A.md->new/B.md",
-    ]);
-    assert.deepEqual(harness.calls, ["rename:old/A.md->old/B.md"]);
-
-    await harness.router.register();
-    assert.deepEqual(harness.calls, [
-        "rename:old/A.md->old/B.md",
-        "rename:new/A.md->new/B.md",
-    ]);
-});
-
-test("plugin event router aborts an in-flight old epoch before it can mutate reloaded state", async () => {
-    const oldRenameStarted = createDeferred<void>();
-    const releaseOldRename = createDeferred<void>();
-    const staleFailure = new Error("stale epoch failure");
-    const postAwaitMutations: string[] = [];
-    const harness = createHarness({
-        handleFileRename: async (file, oldPath, context) => {
-            if (oldPath === "old/A.md") {
-                oldRenameStarted.resolve(undefined);
-                await releaseOldRename.promise;
-            }
-            if (context.isActive()) {
-                postAwaitMutations.push(`${oldPath}->${file?.path ?? "null"}`);
-            }
-            if (oldPath === "old/A.md") {
-                throw staleFailure;
-            }
-        },
-    });
-
-    await harness.router.register();
-    harness.vaultHandlers.get("rename")?.(createFile("old/B.md"), "old/A.md");
-    await oldRenameStarted.promise;
-
-    harness.router.resetForReload();
-    harness.router.registerVaultMaintenanceEvents();
-    harness.vaultHandlers.get("rename")?.(createFile("new/B.md"), "new/A.md");
-    releaseOldRename.resolve(undefined);
-    await settleAsyncDispatch();
-
-    assert.deepEqual(postAwaitMutations, []);
-    assert.deepEqual(harness.reportedErrors, []);
-
-    await harness.router.register();
-    assert.deepEqual(postAwaitMutations, ["new/A.md->new/B.md"]);
-});
-
-test("plugin event router aborts delayed modify persistence across reset and accepts the new epoch", async () => {
-    const oldModifyStarted = createDeferred<void>();
-    const releaseOldModify = createDeferred<void>();
-    const mutations: string[] = [];
-    const harness = createHarness({
-        handleFileModify: async (file, context) => {
-            if (file?.path === "old/note.md") {
-                oldModifyStarted.resolve(undefined);
-                await releaseOldModify.promise;
-                if (!context.isActive()) {
-                    return;
-                }
-                throw new Error("stale modify persistence failure");
-            }
-            if (context.isActive()) {
-                mutations.push(file?.path ?? "null");
-            }
-        },
-    });
-
-    await harness.router.register();
-    harness.vaultHandlers.get("modify")?.(createFile("old/note.md"));
-    await oldModifyStarted.promise;
-
-    harness.router.resetForReload();
-    harness.router.registerVaultMaintenanceEvents();
-    releaseOldModify.resolve(undefined);
-    await settleAsyncDispatch();
-
-    assert.deepEqual(mutations, []);
-    assert.deepEqual(harness.reportedErrors, []);
-
-    await harness.router.register();
-    harness.vaultHandlers.get("modify")?.(createFile("new/note.md"));
-    await settleAsyncDispatch();
-    assert.deepEqual(mutations, ["new/note.md"]);
-});
-
-test("plugin event router waits for retired maintenance and async tails before activating a reload", async () => {
-    const oldRenameStarted = createDeferred<void>();
-    const oldModifyStarted = createDeferred<void>();
-    const releaseOldRename = createDeferred<void>();
-    const releaseOldModify = createDeferred<void>();
-    const postAwaitMutations: string[] = [];
-    const harness = createHarness({
-        handleFileRename: async (file, oldPath, context) => {
-            if (oldPath === "old/A.md") {
-                oldRenameStarted.resolve(undefined);
-                await releaseOldRename.promise;
-            }
-            if (context.isActive()) {
-                postAwaitMutations.push(`rename:${oldPath}->${file?.path ?? "null"}`);
-            }
-        },
-        handleFileModify: async (file, context) => {
-            if (file?.path === "old/note.md") {
-                oldModifyStarted.resolve(undefined);
-                await releaseOldModify.promise;
-            }
-            if (context.isActive()) {
-                postAwaitMutations.push(`modify:${file?.path ?? "null"}`);
-            }
-            if (file?.path === "old/note.md") {
-                throw new Error("retired modify failed while unwinding");
-            }
-        },
-    });
-
-    await harness.router.register();
-    harness.vaultHandlers.get("rename")?.(createFile("old/B.md"), "old/A.md");
-    harness.vaultHandlers.get("modify")?.(createFile("old/note.md"));
-    await Promise.all([oldRenameStarted.promise, oldModifyStarted.promise]);
-
-    harness.router.resetForReload();
-    harness.router.registerVaultMaintenanceEvents();
-    const registration = harness.router.register();
-    harness.vaultHandlers.get("rename")?.(createFile("new/B.md"), "new/A.md");
-
-    assert.equal(await settlesWithinMicrotasks(registration), false);
-    assert.deepEqual(postAwaitMutations, []);
-
-    releaseOldRename.resolve(undefined);
-    assert.equal(await settlesWithinMicrotasks(registration), false);
-    assert.deepEqual(postAwaitMutations, []);
-
-    releaseOldModify.resolve(undefined);
-    await registration;
-
-    assert.deepEqual(postAwaitMutations, ["rename:new/A.md->new/B.md"]);
-    assert.equal(
-        harness.calls.filter((call) => call === "rename:new/A.md->new/B.md").length,
-        1,
-    );
-    assert.deepEqual(harness.reportedErrors, []);
-});
-
-test("plugin event router snapshots mutable Obsidian file paths for ordered startup replay", async () => {
-    const harness = createHarness();
-    const renamedFile = createFile("docs/one.md");
-    harness.router.registerVaultMaintenanceEvents();
-
-    harness.vaultHandlers.get("rename")?.(renamedFile, "docs/original.md");
-    renamedFile.path = "docs/two.md";
-    harness.vaultHandlers.get("rename")?.(renamedFile, "docs/one.md");
-
-    await harness.router.register();
-
-    assert.deepEqual(harness.calls.slice(0, 2), [
-        "rename:docs/original.md->docs/one.md",
-        "rename:docs/one.md->docs/two.md",
-    ]);
-});
-
-test("plugin event router catches and reports rejected void-delivered async vault handlers", async () => {
-    const rejection = new Error("rename failed");
-    const unhandledRejections: unknown[] = [];
-    const onUnhandledRejection = (error: unknown) => {
-        unhandledRejections.push(error);
-    };
-    process.on("unhandledRejection", onUnhandledRejection);
-    try {
-        const harness = createHarness({
-            handleFileRename: async () => {
-                throw rejection;
-            },
-        });
-        await harness.router.register();
-
-        const callbackResult = harness.vaultHandlers.get("rename")?.(
-            createFile("docs/renamed.md"),
-            "docs/original.md",
-        );
-        assert.equal(callbackResult, undefined, "Obsidian event callbacks should remain void-delivered");
-        await settleAsyncDispatch();
-
-        assert.deepEqual(harness.reportedErrors, [{
-            eventName: "vault:rename",
-            error: rejection,
-        }]);
-        assert.deepEqual(unhandledRejections, []);
-    } finally {
-        process.off("unhandledRejection", onUnhandledRejection);
-    }
 });
 
 test("plugin event router preserves immediate and deferred layout-ready handling", async () => {
@@ -863,57 +295,4 @@ test("plugin event router preserves immediate and deferred layout-ready handling
     assert.deepEqual(deferredHarness.calls, []);
     await deferredHarness.getLayoutReadyHandler()?.();
     assert.deepEqual(deferredHarness.calls, ["layout-ready"]);
-});
-
-test("plugin event router reports immediate layout-ready failures and finishes registration", async () => {
-    const failure = new Error("layout failed");
-    const harness = createHarness({
-        layoutReady: true,
-        handleLayoutReady: async () => {
-            throw failure;
-        },
-    });
-
-    await harness.router.register();
-
-    assert.deepEqual(harness.reportedErrors, [{
-        eventName: "workspace:layout-ready",
-        error: failure,
-    }]);
-    assert.deepEqual(Array.from(harness.workspaceHandlers.keys()), [
-        "file-open",
-        "active-leaf-change",
-        "editor-change",
-    ]);
-    assert.equal(harness.vaultHandlers.has("modify"), true);
-    assert.deepEqual(Array.from(harness.metadataCacheHandlers.keys()), ["resolved"]);
-});
-
-test("plugin event router catches a rejected deferred layout-ready callback delivered as void", async () => {
-    const failure = new Error("deferred layout failed");
-    const unhandledRejections: unknown[] = [];
-    const onUnhandledRejection = (error: unknown) => {
-        unhandledRejections.push(error);
-    };
-    process.on("unhandledRejection", onUnhandledRejection);
-    try {
-        const harness = createHarness({
-            handleLayoutReady: async () => {
-                throw failure;
-            },
-        });
-        await harness.router.register();
-
-        const callbackResult = harness.getLayoutReadyHandler()?.();
-        assert.equal(callbackResult, undefined);
-        await settleAsyncDispatch();
-
-        assert.deepEqual(harness.reportedErrors, [{
-            eventName: "workspace:layout-ready",
-            error: failure,
-        }]);
-        assert.deepEqual(unhandledRejections, []);
-    } finally {
-        process.off("unhandledRejection", onUnhandledRejection);
-    }
 });

@@ -1,10 +1,5 @@
 import type { EditorView } from "@codemirror/view";
 import type { MarkdownView, Plugin, TFile } from "obsidian";
-import {
-    ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT,
-    isPluginEventExecutionActive,
-    type PluginEventExecutionContext,
-} from "./pluginEventExecutionContext";
 
 interface FileViewLike {
     file: TFile | null | undefined;
@@ -213,28 +208,13 @@ export class WorkspaceViewController {
     }
 
     public async refreshCommentViews(options: { skipDataRefresh?: boolean } = {}): Promise<void> {
-        await this.refreshSidebarViews(() => true, options, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
-    }
-
-    public async refreshCommentViewsForEvent(
-        options: { skipDataRefresh?: boolean } | undefined,
-        context: PluginEventExecutionContext,
-    ): Promise<void> {
-        await this.refreshSidebarViews(() => true, options ?? {}, context);
+        await this.refreshSidebarViews(() => true, options);
     }
 
     public async refreshAllCommentsSidebarViews(options: { skipDataRefresh?: boolean } = {}): Promise<void> {
-        await this.refreshAllCommentsSidebarViewsForEvent(options, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
-    }
-
-    public async refreshAllCommentsSidebarViewsForEvent(
-        options: { skipDataRefresh?: boolean } | undefined,
-        context: PluginEventExecutionContext,
-    ): Promise<void> {
         await this.refreshSidebarViews(
             (view) => this.host.isAllCommentsNotePath(view.file?.path ?? ""),
-            options ?? {},
-            context,
+            options,
         );
     }
 
@@ -253,25 +233,11 @@ export class WorkspaceViewController {
     private async refreshSidebarViews(
         predicate: (view: SidebarViewLike) => boolean,
         options: { skipDataRefresh?: boolean } = {},
-        context: PluginEventExecutionContext,
     ): Promise<void> {
         const leaves = this.host.app.workspace.getLeavesOfType("aside-view");
         for (const leaf of leaves) {
-            if (!isPluginEventExecutionActive(context)) {
-                return;
-            }
             if (isSidebarViewLike(leaf.view) && predicate(leaf.view)) {
-                try {
-                    await leaf.view.renderComments(options);
-                } catch (error) {
-                    if (!isPluginEventExecutionActive(context)) {
-                        return;
-                    }
-                    throw error;
-                }
-                if (!isPluginEventExecutionActive(context)) {
-                    return;
-                }
+                await leaf.view.renderComments(options);
             }
         }
     }

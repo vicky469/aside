@@ -32,17 +32,6 @@ test("plugin startup has no hidden feature-flag synchronization", () => {
     assert.equal(source.includes("getFeatureFlagStorageKey"), false);
 });
 
-test("plugin unload resets vault event routing before lifecycle teardown", () => {
-    const source = readFileSync("src/main.ts", "utf8");
-    const unloadStart = source.indexOf("onunload()");
-    const maintenanceReset = source.indexOf("this.pluginEventRouter.resetForReload();", unloadStart);
-    const lifecycleTeardown = source.indexOf("this.pluginLifecycleController.handleUnload();", unloadStart);
-
-    assert.ok(unloadStart >= 0);
-    assert.ok(maintenanceReset > unloadStart);
-    assert.ok(maintenanceReset < lifecycleTeardown);
-});
-
 test("plugin refreshes the public inventory during startup maintenance", () => {
     const source = readFileSync("src/main.ts", "utf8");
     const maintenanceStart = source.indexOf("private async runStartupPersistenceMaintenance()");

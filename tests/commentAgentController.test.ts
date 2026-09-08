@@ -20,7 +20,6 @@ import {
 } from "../src/core/agents/agentActorRegistry";
 import type { AsideAgentTarget } from "../src/core/config/agentTargets";
 import { VaultScriptRegistry } from "../src/vaultScripts/vaultScriptRegistry";
-import { ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT } from "../src/app/pluginEventExecutionContext";
 import {
     executeSidebarCommentRegenerateAction,
     getSidebarCommentRegenerateAction,
@@ -1816,11 +1815,7 @@ test("comment agent controller commits a running reply to the run's renamed file
     for (let attempt = 0; attempt < 40 && harness.runtimeCalls.length < 1; attempt += 1) {
         await new Promise((resolve) => setTimeout(resolve, 10));
     }
-    await harness.store.renameFile(
-        "Folder/Note.md",
-        "Folder/Renamed.md",
-        ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT,
-    );
+    await harness.store.renameFile("Folder/Note.md", "Folder/Renamed.md");
     releaseRuntime();
     await waitForAgentQueueToDrain(harness.controller);
 

@@ -6,7 +6,6 @@ import {
     SourceIdentityStore,
     type SourceIdentityState,
 } from "../src/sync/sourceIdentityStore";
-import { ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT } from "../src/app/pluginEventExecutionContext";
 
 function createStore(options: {
     read: () => PersistedPluginData;
@@ -22,14 +21,6 @@ function createStore(options: {
     });
 }
 
-function createDeferred() {
-    let resolvePromise!: () => void;
-    const promise = new Promise<void>((resolve) => {
-        resolvePromise = resolve;
-    });
-    return { promise, resolve: resolvePromise };
-}
-
 test("source identity store records renames as current path plus aliases", async () => {
     let persistedData: PersistedPluginData = {};
     let idCounter = 0;
@@ -42,13 +33,7 @@ test("source identity store records renames as current path plus aliases", async
     });
 
     const original = await store.ensureSourceForPath("books/original.md", "fingerprint-a");
-    const renamed = await store.recordRename(
-        "books/original.md",
-        "books/renamed.md",
-        ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT,
-        "fingerprint-b",
-    );
-    assert.ok(renamed);
+    const renamed = await store.recordRename("books/original.md", "books/renamed.md", "fingerprint-b");
 
     assert.equal(renamed.sourceId, original.sourceId);
     assert.equal(renamed.currentPath, "books/renamed.md");
@@ -57,36 +42,6 @@ test("source identity store records renames as current path plus aliases", async
     assert.equal(store.getRecordByPath("books/renamed.md")?.sourceId, original.sourceId);
     assert.equal(store.getRecordByPath("books/original.md"), null);
     assert.equal(store.getRecordByPathIncludingAliases("books/original.md")?.sourceId, original.sourceId);
-});
-
-test("source identity store records a folder mapping with one persisted write", async () => {
-    let persistedData: PersistedPluginData = {};
-    let idCounter = 0;
-    let writeCount = 0;
-    const store = createStore({
-        read: () => persistedData,
-        write: async (data) => {
-            writeCount += 1;
-            persistedData = data;
-        },
-        createSourceId: () => `src-${++idCounter}`,
-    });
-    await store.ensureSourceForPath("Drafts/a.md", "fingerprint-a");
-    await store.ensureSourceForPath("Drafts/nested/b.md", "fingerprint-b");
-    writeCount = 0;
-
-    const records = await store.recordRenames([
-        { previousFilePath: "Drafts/a.md", nextFilePath: "Published/a.md" },
-        { previousFilePath: "Drafts/nested/b.md", nextFilePath: "Published/nested/b.md" },
-    ], ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
-
-    assert.equal(writeCount, 1);
-    assert.deepEqual(records.map((record) => record.currentPath), [
-        "Published/a.md",
-        "Published/nested/b.md",
-    ]);
-    assert.equal(store.getRecordByPathIncludingAliases("Drafts/a.md")?.currentPath, "Published/a.md");
-    assert.equal(store.getRecordByPathIncludingAliases("Drafts/nested/b.md")?.currentPath, "Published/nested/b.md");
 });
 
 test("source identity state merge preserves aliases and indexes only current paths", () => {
@@ -146,12 +101,7 @@ test("source identity store does not claim a recreated file through a stale alia
     });
 
     const original = await store.ensureSourceForPath("books/original.md", "fingerprint-a");
-    await store.recordRename(
-        "books/original.md",
-        "books/renamed.md",
-        ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT,
-        "fingerprint-b",
-    );
+    await store.recordRename("books/original.md", "books/renamed.md", "fingerprint-b");
     const recreated = await store.ensureSourceForPath("books/original.md", "fingerprint-c");
 
     assert.notEqual(recreated.sourceId, original.sourceId);
@@ -174,10 +124,7 @@ test("source identity store removes deleted paths from persisted state", async (
     const removed = await store.ensureSourceForPath("books/deleted.md", "fingerprint-a");
     const kept = await store.ensureSourceForPath("books/kept.md", "fingerprint-b");
 
-    assert.equal(
-        (await store.removeSourceForPath("books/deleted.md", ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT))?.sourceId,
-        removed.sourceId,
-    );
+    assert.equal((await store.removeSourceForPath("books/deleted.md"))?.sourceId, removed.sourceId);
     assert.equal(store.getRecordByPath("books/deleted.md"), null);
     assert.equal(store.getRecordByPath("books/kept.md")?.sourceId, kept.sourceId);
 });
@@ -197,7 +144,7 @@ test("source identity store removes every source under a deleted folder", async 
     await store.ensureSourceForPath("Deleted/nested/b.md");
     const kept = await store.ensureSourceForPath("Deletedness/c.md");
 
-    const removed = await store.removeSourcesInFolder("Deleted", ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
+    const removed = await store.removeSourcesInFolder("Deleted");
 
     assert.deepEqual(removed.map((record) => record.currentPath), [
         "Deleted/a.md",
@@ -206,98 +153,4 @@ test("source identity store removes every source under a deleted folder", async 
     assert.equal(store.getRecordByPath("Deleted/a.md"), null);
     assert.equal(store.getRecordByPath("Deleted/nested/b.md"), null);
     assert.equal(store.getRecordByPath("Deletedness/c.md")?.sourceId, kept.sourceId);
-});
-
-test("source identity file removal aborts a stale persisted write and a new epoch succeeds", async () => {
-    const writeStarted = createDeferred();
-    const releaseWrite = createDeferred();
-    const abortController = new AbortController();
-    let persistedData: PersistedPluginData = {};
-    let pause = false;
-    const store = new SourceIdentityStore({
-        readPersistedPluginData: () => persistedData,
-        readLatestPersistedPluginData: async () => persistedData,
-        writePersistedPluginData: async (data, context) => {
-            if (pause) {
-                writeStarted.resolve();
-                await releaseWrite.promise;
-            }
-            if (context && !context.isActive()) {
-                throw new Error("stale source removal failed after abort");
-            }
-            persistedData = data;
-        },
-        createSourceId: () => "src-delete",
-        now: () => 1,
-    });
-    await store.ensureSourceForPath("Deleted.md");
-    pause = true;
-    const context = {
-        signal: abortController.signal,
-        isActive: () => !abortController.signal.aborted,
-    };
-
-    const staleDelete = store.removeSourceForPath("Deleted.md", context);
-    await writeStarted.promise;
-    abortController.abort();
-    const reloadedData = persistedData;
-    releaseWrite.resolve();
-
-    assert.equal(await staleDelete, null);
-    assert.deepEqual(persistedData, reloadedData);
-
-    pause = false;
-    assert.equal((await store.removeSourceForPath("Deleted.md", {
-        signal: new AbortController().signal,
-        isActive: () => true,
-    }))?.sourceId, "src-delete");
-});
-
-test("source identity folder removal aborts a stale persisted write and a new epoch succeeds", async () => {
-    const writeStarted = createDeferred();
-    const releaseWrite = createDeferred();
-    const abortController = new AbortController();
-    let persistedData: PersistedPluginData = {};
-    let pause = false;
-    const store = new SourceIdentityStore({
-        readPersistedPluginData: () => persistedData,
-        readLatestPersistedPluginData: async () => persistedData,
-        writePersistedPluginData: async (data, context) => {
-            if (pause) {
-                writeStarted.resolve();
-                await releaseWrite.promise;
-            }
-            if (context && !context.isActive()) {
-                throw new Error("stale source folder removal failed after abort");
-            }
-            persistedData = data;
-        },
-        createSourceId: (() => {
-            let id = 0;
-            return () => `src-${id += 1}`;
-        })(),
-        now: () => 1,
-    });
-    await store.ensureSourceForPath("Deleted/a.md");
-    await store.ensureSourceForPath("Deleted/nested/b.md");
-    pause = true;
-    const context = {
-        signal: abortController.signal,
-        isActive: () => !abortController.signal.aborted,
-    };
-
-    const staleDelete = store.removeSourcesInFolder("Deleted", context);
-    await writeStarted.promise;
-    abortController.abort();
-    const reloadedData = persistedData;
-    releaseWrite.resolve();
-
-    assert.deepEqual(await staleDelete, []);
-    assert.deepEqual(persistedData, reloadedData);
-
-    pause = false;
-    assert.deepEqual((await store.removeSourcesInFolder("Deleted", {
-        signal: new AbortController().signal,
-        isActive: () => true,
-    })).map((record) => record.currentPath), ["Deleted/a.md", "Deleted/nested/b.md"]);
 });

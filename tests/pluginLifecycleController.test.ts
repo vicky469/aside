@@ -2,16 +2,8 @@ import * as assert from "node:assert/strict";
 import test from "node:test";
 import type { TAbstractFile, TFile } from "obsidian";
 import { CommentManager, type Comment } from "../src/commentManager";
-import {
-    FolderRenameError,
-    PluginLifecycleController,
-} from "../src/app/pluginLifecycleController";
+import { PluginLifecycleController } from "../src/app/pluginLifecycleController";
 import { AggregateCommentIndex } from "../src/index/AggregateCommentIndex";
-import type {
-    CommentFileRetarget,
-    CommentFileRetargetResult,
-} from "../src/domain/comments/folderCommentRetarget";
-import { ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT } from "../src/app/pluginEventExecutionContext";
 
 function createFile(path: string): TFile {
     return {
@@ -46,52 +38,10 @@ function createComment(overrides: Partial<Comment> = {}): Comment {
     };
 }
 
-function createDeferred<T>() {
-    let resolve = (_value: T) => {};
-    const promise = new Promise<T>((resolvePromise) => {
-        resolve = resolvePromise;
-    });
-    return { promise, resolve };
-}
-
 function createHarness(options: {
     initialComments?: Comment[];
     refreshThrows?: boolean;
     publishedArtifactPaths?: string[];
-    getFileByPath?: (filePath: string) => TFile | null;
-    loadCommentsForFile?: (
-        file: TFile,
-        context: { readonly signal: AbortSignal; isActive(): boolean },
-    ) => void | Promise<void>;
-    refreshCommentViews?: (
-        context: { readonly signal: AbortSignal; isActive(): boolean },
-    ) => void | Promise<void>;
-    renameStoredCommentsInFolder?: (
-        retargets: readonly CommentFileRetarget[],
-    ) => CommentFileRetargetResult | Promise<CommentFileRetargetResult>;
-    renamePublishedPublicArtifactPath?: (
-        previousFilePath: string,
-        nextFilePath: string,
-        context: { readonly signal: AbortSignal; isActive(): boolean },
-    ) => void | Promise<void>;
-    renameStoredComments?: (
-        previousFilePath: string,
-        nextFilePath: string,
-        context: { readonly signal: AbortSignal; isActive(): boolean },
-    ) => void | Promise<void>;
-    deleteStoredComments?: (
-        filePath: string,
-        context: { readonly signal: AbortSignal; isActive(): boolean },
-    ) => void | Promise<void>;
-    deleteStoredCommentsInFolder?: (
-        folderPath: string,
-        context: { readonly signal: AbortSignal; isActive(): boolean },
-    ) => void | Promise<void>;
-    renameAgentRunsInFolder?: (
-        previousFolderPath: string,
-        nextFolderPath: string,
-        context: { readonly signal: AbortSignal; isActive(): boolean },
-    ) => void | Promise<void>;
 } = {}) {
     const commentManager = new CommentManager(options.initialComments ?? []);
     const aggregateCommentIndex = new AggregateCommentIndex();
@@ -119,117 +69,47 @@ function createHarness(options: {
     let refreshAggregateNoteNowCount = 0;
     let syncIndexNoteViewClassesCount = 0;
     let modifyHandledPath: string | null = null;
-    let modifyContext: { readonly signal: AbortSignal; isActive(): boolean } | null = null;
     let detachSidebarViewsCount = 0;
     const renamedAgentRuns: Array<{ previousFilePath: string; nextFilePath: string }> = [];
     const renamedScriptRuns: Array<{ previousFilePath: string; nextFilePath: string }> = [];
     const renamedStoredComments: Array<{ previousFilePath: string; nextFilePath: string }> = [];
-    const renamedAgentRunFolders: Array<{ previousFolderPath: string; nextFolderPath: string }> = [];
-    const renamedScriptRunFolders: Array<{ previousFolderPath: string; nextFolderPath: string }> = [];
-    const renamedStoredCommentFolders: CommentFileRetarget[][] = [];
     const deletedStoredComments: string[] = [];
     const deletedStoredCommentFolders: string[] = [];
     const renamedPublishedArtifactPaths: Array<{ previousFilePath: string; nextFilePath: string }> = [];
-    const renamedPublishedArtifactFolders: Array<{ previousFolderPath: string; nextFolderPath: string }> = [];
     const deletedPublishedArtifactPaths: string[] = [];
     const deletedPublishedArtifactFolders: string[] = [];
     const hashedTexts: string[] = [];
 
     const controller = new PluginLifecycleController({
-        app: {
-            vault: {
-                getAbstractFileByPath: (filePath: string) =>
-                    options.getFileByPath
-                        ? options.getFileByPath(filePath)
-                        : createFile(filePath),
-            },
-        } as never,
+        app: {} as never,
         getCommentManager: () => commentManager,
         getAggregateCommentIndex: () => aggregateCommentIndex,
-        renameAgentRuns: async (previousFilePath, nextFilePath, _context) => {
+        renameAgentRuns: async (previousFilePath, nextFilePath) => {
             renamedAgentRuns.push({ previousFilePath, nextFilePath });
             return true;
         },
-        renameScriptRuns: async (previousFilePath, nextFilePath, _context) => {
+        renameScriptRuns: async (previousFilePath, nextFilePath) => {
             renamedScriptRuns.push({ previousFilePath, nextFilePath });
             return true;
         },
-        renameStoredComments: async (previousFilePath, nextFilePath, retargetOptions, context) => {
-            await options.renameStoredComments?.(previousFilePath, nextFilePath, context);
-            if (!context.isActive()) {
-                return;
-            }
+        renameStoredComments: async (previousFilePath, nextFilePath, retargetOptions) => {
             renamedStoredComments.push({ previousFilePath, nextFilePath });
             commentManager.renameFile(previousFilePath, nextFilePath, retargetOptions);
         },
-        renameAgentRunsInFolder: async (previousFolderPath, nextFolderPath, context) => {
-            await options.renameAgentRunsInFolder?.(previousFolderPath, nextFolderPath, context);
-            if (!context.isActive()) {
-                return false;
-            }
-            renamedAgentRunFolders.push({ previousFolderPath, nextFolderPath });
-            return true;
-        },
-        renameScriptRunsInFolder: async (previousFolderPath, nextFolderPath, _context) => {
-            renamedScriptRunFolders.push({ previousFolderPath, nextFolderPath });
-            return true;
-        },
-        renameStoredCommentsInFolder: async (retargets, context) => {
-            renamedStoredCommentFolders.push(retargets.map((retarget) => ({
-                ...retarget,
-                retargetOptions: { ...retarget.retargetOptions },
-            })));
-            const result = await options.renameStoredCommentsInFolder?.(retargets) ?? {
-                successfulRetargets: [...retargets],
-                failures: [],
-            };
-            if (!context.isActive()) {
-                return {
-                    successfulRetargets: [],
-                    failures: [],
-                };
-            }
-            for (const retarget of result.successfulRetargets) {
-                commentManager.renameFile(
-                    retarget.previousFilePath,
-                    retarget.nextFilePath,
-                    retarget.retargetOptions,
-                );
-            }
-            return result;
-        },
-        deleteStoredComments: async (filePath, context) => {
-            await options.deleteStoredComments?.(filePath, context);
-            if (!context.isActive()) {
-                return;
-            }
+        deleteStoredComments: async (filePath) => {
             deletedStoredComments.push(filePath);
         },
-        deleteStoredCommentsInFolder: async (folderPath, context) => {
-            await options.deleteStoredCommentsInFolder?.(folderPath, context);
-            if (!context.isActive()) {
-                return;
-            }
+        deleteStoredCommentsInFolder: async (folderPath) => {
             deletedStoredCommentFolders.push(folderPath);
         },
-        renamePublishedPublicArtifactPath: async (previousFilePath, nextFilePath, context) => {
-            await options.renamePublishedPublicArtifactPath?.(previousFilePath, nextFilePath, context);
-            if (context.isActive()) {
-                renamedPublishedArtifactPaths.push({ previousFilePath, nextFilePath });
-            }
+        renamePublishedPublicArtifactPath: async (previousFilePath, nextFilePath) => {
+            renamedPublishedArtifactPaths.push({ previousFilePath, nextFilePath });
         },
-        renamePublishedPublicArtifactPathsInFolder: async (previousFolderPath, nextFolderPath, _context) => {
-            renamedPublishedArtifactFolders.push({ previousFolderPath, nextFolderPath });
+        deletePublishedPublicArtifactPath: async (filePath) => {
+            deletedPublishedArtifactPaths.push(filePath);
         },
-        deletePublishedPublicArtifactPath: async (filePath, context) => {
-            if (context.isActive()) {
-                deletedPublishedArtifactPaths.push(filePath);
-            }
-        },
-        deletePublishedPublicArtifactPathsInFolder: async (folderPath, context) => {
-            if (context.isActive()) {
-                deletedPublishedArtifactFolders.push(folderPath);
-            }
+        deletePublishedPublicArtifactPathsInFolder: async (folderPath) => {
+            deletedPublishedArtifactFolders.push(folderPath);
         },
         clearParsedNoteCache: (filePath) => {
             clearedParsedPaths.push(filePath);
@@ -244,19 +124,12 @@ function createHarness(options: {
             hashedTexts.push(text);
             return `hash:${text}`;
         },
-        loadCommentsForFile: async (file, context) => {
+        loadCommentsForFile: async (file) => {
             if (file) {
-                await options.loadCommentsForFile?.(file, context);
-                if (context.isActive()) {
-                    loadedFiles.push(file.path);
-                }
+                loadedFiles.push(file.path);
             }
         },
-        refreshCommentViews: async (refreshOptions, context) => {
-            await options.refreshCommentViews?.(context);
-            if (!context.isActive()) {
-                return;
-            }
+        refreshCommentViews: async (refreshOptions) => {
             refreshCommentViewsCount += 1;
             refreshCommentViewOptions.push(refreshOptions);
         },
@@ -267,10 +140,7 @@ function createHarness(options: {
 
             refreshEditorDecorationsCount += 1;
         },
-        refreshAggregateNoteNow: async (context) => {
-            if (!context.isActive()) {
-                return;
-            }
+        refreshAggregateNoteNow: async () => {
             refreshAggregateNoteNowCount += 1;
         },
         scheduleAggregateNoteRefresh: () => {
@@ -279,9 +149,8 @@ function createHarness(options: {
         syncIndexNoteViewClasses: () => {
             syncIndexNoteViewClassesCount += 1;
         },
-        handleMarkdownFileModified: async (file, context) => {
+        handleMarkdownFileModified: async (file) => {
             modifyHandledPath = file.path;
-            modifyContext = context;
         },
         detachSidebarViews: () => {
             detachSidebarViewsCount += 1;
@@ -320,17 +189,12 @@ function createHarness(options: {
         getSyncIndexNoteViewClassesCount: () => syncIndexNoteViewClassesCount,
         getDetachSidebarViewsCount: () => detachSidebarViewsCount,
         getModifyHandledPath: () => modifyHandledPath,
-        getModifyContext: () => modifyContext,
         renamedAgentRuns,
         renamedScriptRuns,
         renamedStoredComments,
-        renamedAgentRunFolders,
-        renamedScriptRunFolders,
-        renamedStoredCommentFolders,
         deletedStoredComments,
         deletedStoredCommentFolders,
         renamedPublishedArtifactPaths,
-        renamedPublishedArtifactFolders,
         deletedPublishedArtifactPaths,
         deletedPublishedArtifactFolders,
         hashedTexts,
@@ -355,21 +219,14 @@ test("plugin lifecycle controller refreshes attachment availability for PNG life
     assert.equal(harness.getRefreshCommentViewsCount(), 0);
 
     await harness.controller.handleFileCreate(createFile("assets/image.png"));
-    await harness.controller.handleFileRename(
-        createFile("assets/renamed.png"),
-        "assets/image.png",
-        ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT,
-    );
-    await harness.controller.handleFileDelete(
-        createFile("assets/renamed.png"),
-        ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT,
-    );
+    await harness.controller.handleFileRename(createFile("assets/renamed.png"), "assets/image.png");
+    await harness.controller.handleFileDelete(createFile("assets/renamed.png"));
 
     assert.equal(harness.getRefreshCommentViewsCount(), 3);
     assert.deepEqual(harness.refreshCommentViewOptions, [
         { skipDataRefresh: true },
-        { skipDataRefresh: true },
-        { skipDataRefresh: true },
+        undefined,
+        undefined,
     ]);
 });
 
@@ -389,7 +246,7 @@ test("plugin lifecycle controller keeps renamed comment files and indexes aligne
         initialComments: [createComment({ filePath: originalFile.path })],
     });
 
-    await harness.controller.handleFileRename(renamedFile, originalFile.path, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
+    await harness.controller.handleFileRename(renamedFile, originalFile.path);
 
     assert.equal(harness.commentManager.getCommentById("comment-1")?.filePath, renamedFile.path);
     assert.equal(harness.aggregateCommentIndex.getCommentById("comment-1")?.filePath, renamedFile.path);
@@ -413,462 +270,6 @@ test("plugin lifecycle controller keeps renamed comment files and indexes aligne
     assert.equal(harness.getScheduleAggregateNoteRefreshCount(), 1);
 });
 
-test("plugin lifecycle controller bulk-retargets a production-shaped renamed folder", async () => {
-    const originalFolderPath = "Drafts";
-    const renamedFolder = createFolder("Published", [
-        createFile("Published/one.md"),
-        createFolder("Published/nested", [
-            createFile("Published/nested/two.pdf"),
-        ]),
-    ]);
-    const harness = createHarness({
-        initialComments: [
-            createComment({ id: "one", filePath: "Drafts/one.md" }),
-            createComment({
-                id: "two",
-                filePath: "Drafts/nested/two.pdf",
-                anchorKind: "page",
-                selectedText: "two",
-                selectedTextHash: "hash:two",
-            }),
-        ],
-    });
-
-    await harness.controller.handleFileRename(renamedFolder, originalFolderPath, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
-
-    assert.deepEqual(harness.renamedAgentRuns, []);
-    assert.deepEqual(harness.renamedScriptRuns, []);
-    assert.deepEqual(harness.renamedStoredComments, []);
-    assert.deepEqual(harness.renamedPublishedArtifactPaths, []);
-    assert.deepEqual(harness.renamedAgentRunFolders, [{
-        previousFolderPath: "Drafts",
-        nextFolderPath: "Published",
-    }]);
-    assert.deepEqual(harness.renamedScriptRunFolders, harness.renamedAgentRunFolders);
-    assert.deepEqual(harness.renamedPublishedArtifactFolders, harness.renamedAgentRunFolders);
-    assert.deepEqual(
-        harness.renamedStoredCommentFolders[0]?.map(({ previousFilePath, nextFilePath }) => ({
-            previousFilePath,
-            nextFilePath,
-        })),
-        [
-            { previousFilePath: "Drafts/one.md", nextFilePath: "Published/one.md" },
-            { previousFilePath: "Drafts/nested/two.pdf", nextFilePath: "Published/nested/two.pdf" },
-        ],
-    );
-    assert.equal(harness.commentManager.getCommentById("one")?.filePath, "Published/one.md");
-    assert.equal(harness.commentManager.getCommentById("two")?.filePath, "Published/nested/two.pdf");
-    assert.equal(harness.aggregateCommentIndex.getCommentById("one")?.filePath, "Published/one.md");
-    assert.equal(harness.aggregateCommentIndex.getCommentById("two")?.filePath, "Published/nested/two.pdf");
-    assert.equal(harness.getRefreshCommentViewsCount(), 1);
-    assert.equal(harness.getRefreshEditorDecorationsCount(), 1);
-    assert.equal(harness.getScheduleAggregateNoteRefreshCount(), 1);
-});
-
-test("plugin lifecycle controller bounds persisted folder rename calls for many descendants", async () => {
-    const fileCount = 200;
-    const renamedFolder = createFolder("Published", Array.from(
-        { length: fileCount },
-        (_value, index) => createFile(`Published/nested-${index}/note-${index}.md`),
-    ));
-    const harness = createHarness({
-        initialComments: Array.from({ length: fileCount }, (_value, index) => createComment({
-            id: `comment-${index}`,
-            filePath: `Drafts/nested-${index}/note-${index}.md`,
-        })),
-    });
-
-    await harness.controller.handleFileRename(renamedFolder, "Drafts", ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
-
-    assert.equal(harness.renamedAgentRunFolders.length, 1);
-    assert.equal(harness.renamedScriptRunFolders.length, 1);
-    assert.equal(harness.renamedStoredCommentFolders.length, 1);
-    assert.equal(harness.renamedPublishedArtifactFolders.length, 1);
-    assert.equal(harness.renamedStoredCommentFolders[0]?.length, fileCount);
-    assert.deepEqual(harness.renamedAgentRuns, []);
-    assert.deepEqual(harness.renamedScriptRuns, []);
-    assert.deepEqual(harness.renamedStoredComments, []);
-    assert.deepEqual(harness.renamedPublishedArtifactPaths, []);
-    assert.equal(harness.loadedFiles.length, 0);
-    assert.equal(harness.getRefreshCommentViewsCount(), 1);
-    assert.equal(harness.getRefreshEditorDecorationsCount(), 1);
-    assert.equal(harness.getScheduleAggregateNoteRefreshCount(), 1);
-});
-
-test("plugin lifecycle controller applies later folder retargets after one sidecar failure and can replay", async () => {
-    const failure = new Error("middle sidecar failed");
-    let attempt = 0;
-    const renamedFolder = createFolder("Published", [
-        createFile("Published/a.md"),
-        createFile("Published/b.md"),
-        createFile("Published/c.md"),
-    ]);
-    const harness = createHarness({
-        initialComments: ["a", "b", "c"].map((name) => createComment({
-            id: name,
-            filePath: `Drafts/${name}.md`,
-        })),
-        renameStoredCommentsInFolder: (retargets) => {
-            attempt += 1;
-            if (attempt > 1) {
-                return {
-                    successfulRetargets: [...retargets],
-                    failures: [],
-                };
-            }
-
-            const failedRetarget = retargets[1];
-            return {
-                successfulRetargets: retargets.filter((_retarget, index) => index !== 1),
-                failures: failedRetarget ? [{ retarget: failedRetarget, error: failure }] : [],
-            };
-        },
-    });
-
-    await assert.rejects(
-        harness.controller.handleFileRename(renamedFolder, "Drafts", ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT),
-        (error: unknown) => error instanceof FolderRenameError
-            && error.errors.includes(failure)
-            && error.message.includes("Drafts/b.md"),
-    );
-
-    assert.equal(harness.commentManager.getCommentById("a")?.filePath, "Published/a.md");
-    assert.equal(harness.commentManager.getCommentById("b")?.filePath, "Drafts/b.md");
-    assert.equal(harness.commentManager.getCommentById("c")?.filePath, "Published/c.md");
-    assert.equal(harness.aggregateCommentIndex.getCommentById("a")?.filePath, "Published/a.md");
-    assert.equal(harness.aggregateCommentIndex.getCommentById("b")?.filePath, "Drafts/b.md");
-    assert.equal(harness.aggregateCommentIndex.getCommentById("c")?.filePath, "Published/c.md");
-    assert.equal(harness.getRefreshCommentViewsCount(), 1);
-    assert.equal(harness.renamedAgentRunFolders.length, 1);
-    assert.equal(harness.renamedScriptRunFolders.length, 1);
-    assert.equal(harness.renamedPublishedArtifactFolders.length, 1);
-
-    await harness.controller.handleFileRename(renamedFolder, "Drafts", ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
-
-    assert.equal(harness.commentManager.getCommentById("b")?.filePath, "Published/b.md");
-    assert.equal(harness.aggregateCommentIndex.getCommentById("b")?.filePath, "Published/b.md");
-    assert.equal(harness.renamedStoredCommentFolders.length, 2);
-    assert.deepEqual(
-        harness.renamedStoredCommentFolders[1]?.map((retarget) => retarget.previousFilePath),
-        ["Drafts/b.md"],
-    );
-    assert.equal(harness.renamedAgentRunFolders.length, 1);
-    assert.equal(harness.renamedScriptRunFolders.length, 1);
-    assert.equal(harness.renamedPublishedArtifactFolders.length, 1);
-    for (const path of ["Drafts/a.md", "Published/a.md", "Drafts/c.md", "Published/c.md"]) {
-        assert.equal(
-            harness.clearedParsedPaths.filter((clearedPath) => clearedPath === path).length,
-            1,
-            `${path} should not be cleared again during failure-only replay`,
-        );
-    }
-    assert.equal(harness.getRefreshCommentViewsCount(), 2);
-});
-
-test("plugin lifecycle controller stops post-await rename effects when its publishing epoch is aborted", async () => {
-    const externalRenameStarted = createDeferred<void>();
-    const releaseExternalRename = createDeferred<void>();
-    const abortController = new AbortController();
-    const harness = createHarness({
-        initialComments: [createComment({ filePath: "docs/original.md" })],
-        renamePublishedPublicArtifactPath: async () => {
-            externalRenameStarted.resolve(undefined);
-            await releaseExternalRename.promise;
-        },
-    });
-    const context = {
-        signal: abortController.signal,
-        isActive: () => !abortController.signal.aborted,
-    };
-
-    const rename = harness.controller.handleFileRename(
-        createFile("docs/renamed.md"),
-        "docs/original.md",
-        context,
-    );
-    await externalRenameStarted.promise;
-    abortController.abort();
-    releaseExternalRename.resolve(undefined);
-    await rename;
-
-    assert.equal(harness.renamedPublishedArtifactPaths.length, 0);
-    assert.deepEqual(harness.renamedAgentRuns, []);
-    assert.deepEqual(harness.renamedScriptRuns, []);
-    assert.deepEqual(harness.renamedStoredComments, []);
-    assert.deepEqual(harness.clearedParsedPaths, []);
-    assert.deepEqual(harness.loadedFiles, []);
-    assert.equal(harness.getRefreshCommentViewsCount(), 0);
-    assert.equal(harness.getRefreshEditorDecorationsCount(), 0);
-
-    await harness.controller.handleFileRename(createFile("docs/new.md"), "docs/current.md", {
-        signal: new AbortController().signal,
-        isActive: () => true,
-    });
-    assert.deepEqual(harness.renamedAgentRuns, [{
-        previousFilePath: "docs/current.md",
-        nextFilePath: "docs/new.md",
-    }]);
-    assert.equal(harness.getRefreshCommentViewsCount(), 1);
-});
-
-test("plugin lifecycle controller forwards abort context through later single-file comment persistence", async () => {
-    const commentRenameStarted = createDeferred<void>();
-    const releaseCommentRename = createDeferred<void>();
-    const abortController = new AbortController();
-    const harness = createHarness({
-        initialComments: [createComment({ filePath: "docs/original.md" })],
-        renameStoredComments: async (_previousPath, _nextPath, context) => {
-            commentRenameStarted.resolve(undefined);
-            await releaseCommentRename.promise;
-            assert.equal(context.isActive(), false);
-        },
-    });
-    const context = {
-        signal: abortController.signal,
-        isActive: () => !abortController.signal.aborted,
-    };
-
-    const rename = harness.controller.handleFileRename(
-        createFile("docs/renamed.md"),
-        "docs/original.md",
-        context,
-    );
-    await commentRenameStarted.promise;
-    abortController.abort();
-    releaseCommentRename.resolve(undefined);
-    await rename;
-
-    assert.deepEqual(harness.renamedStoredComments, []);
-    assert.deepEqual(harness.clearedParsedPaths, []);
-    assert.deepEqual(harness.clearedDerivedPaths, []);
-    assert.deepEqual(harness.loadedFiles, []);
-    assert.equal(harness.getRefreshCommentViewsCount(), 0);
-    assert.equal(harness.getRefreshEditorDecorationsCount(), 0);
-});
-
-test("plugin lifecycle controller keeps hydration and view refresh inside the file-rename epoch", async () => {
-    const hydrationStarted = createDeferred<void>();
-    const releaseHydration = createDeferred<void>();
-    const abortController = new AbortController();
-    const postResetMutations: string[] = [];
-    const harness = createHarness({
-        loadCommentsForFile: async (file, context) => {
-            hydrationStarted.resolve(undefined);
-            await releaseHydration.promise;
-            if (context.isActive()) {
-                postResetMutations.push(`hydrate:${file.path}`);
-            }
-        },
-        refreshCommentViews: async (context) => {
-            if (context.isActive()) {
-                postResetMutations.push("refresh");
-            }
-        },
-    });
-    const context = {
-        signal: abortController.signal,
-        isActive: () => !abortController.signal.aborted,
-    };
-
-    const staleRename = harness.controller.handleFileRename(
-        createFile("docs/renamed.md"),
-        "docs/original.md",
-        context,
-    );
-    await hydrationStarted.promise;
-    abortController.abort();
-    releaseHydration.resolve(undefined);
-    await staleRename;
-
-    assert.deepEqual(postResetMutations, []);
-    assert.deepEqual(harness.loadedFiles, []);
-    assert.equal(harness.getRefreshCommentViewsCount(), 0);
-
-    await harness.controller.handleFileRename(
-        createFile("docs/next.md"),
-        "docs/current.md",
-        {
-            signal: new AbortController().signal,
-            isActive: () => true,
-        },
-    );
-    assert.deepEqual(postResetMutations, [
-        "hydrate:docs/next.md",
-        "refresh",
-    ]);
-});
-
-test("plugin lifecycle controller stops file-delete cache and refresh effects after domain abort", async () => {
-    const deleteStarted = createDeferred<void>();
-    const releaseDelete = createDeferred<void>();
-    const abortController = new AbortController();
-    let pause = true;
-    const deletedFile = createFile("docs/deleted.md");
-    const harness = createHarness({
-        initialComments: [createComment({ filePath: deletedFile.path })],
-        deleteStoredComments: async (_filePath, context) => {
-            if (pause) {
-                deleteStarted.resolve(undefined);
-                await releaseDelete.promise;
-                assert.equal(context.isActive(), false);
-            }
-        },
-    });
-    const context = {
-        signal: abortController.signal,
-        isActive: () => !abortController.signal.aborted,
-    };
-
-    const staleDelete = harness.controller.handleFileDelete(deletedFile, context);
-    await deleteStarted.promise;
-    abortController.abort();
-    pause = false;
-    releaseDelete.resolve(undefined);
-    await staleDelete;
-
-    assert.deepEqual(harness.deletedStoredComments, []);
-    assert.equal(harness.commentManager.getCommentsForFile(deletedFile.path).length, 1);
-    assert.deepEqual(harness.clearedParsedPaths, []);
-    assert.equal(harness.getRefreshCommentViewsCount(), 0);
-    assert.equal(harness.getRefreshEditorDecorationsCount(), 0);
-
-    await harness.controller.handleFileDelete(deletedFile, {
-        signal: new AbortController().signal,
-        isActive: () => true,
-    });
-    assert.deepEqual(harness.deletedStoredComments, [deletedFile.path]);
-    assert.equal(harness.commentManager.getCommentsForFile(deletedFile.path).length, 0);
-    assert.equal(harness.getRefreshCommentViewsCount(), 1);
-});
-
-test("plugin lifecycle controller stops folder-delete cache and refresh effects after domain abort", async () => {
-    const deleteStarted = createDeferred<void>();
-    const releaseDelete = createDeferred<void>();
-    const abortController = new AbortController();
-    let pause = true;
-    const folder = createFolder("Deleted", [createFile("Deleted/a.md")]);
-    const harness = createHarness({
-        initialComments: [createComment({ filePath: "Deleted/a.md" })],
-        deleteStoredCommentsInFolder: async (_folderPath, context) => {
-            if (pause) {
-                deleteStarted.resolve(undefined);
-                await releaseDelete.promise;
-                assert.equal(context.isActive(), false);
-            }
-        },
-    });
-    const context = {
-        signal: abortController.signal,
-        isActive: () => !abortController.signal.aborted,
-    };
-
-    const staleDelete = harness.controller.handleFileDelete(folder, context);
-    await deleteStarted.promise;
-    abortController.abort();
-    pause = false;
-    releaseDelete.resolve(undefined);
-    await staleDelete;
-
-    assert.deepEqual(harness.deletedStoredCommentFolders, []);
-    assert.equal(harness.commentManager.getCommentsForFile("Deleted/a.md").length, 1);
-    assert.deepEqual(harness.clearedParsedPaths, []);
-    assert.equal(harness.getRefreshCommentViewsCount(), 0);
-
-    await harness.controller.handleFileDelete(folder, {
-        signal: new AbortController().signal,
-        isActive: () => true,
-    });
-    assert.deepEqual(harness.deletedStoredCommentFolders, ["Deleted"]);
-    assert.equal(harness.commentManager.getCommentsForFile("Deleted/a.md").length, 0);
-    assert.equal(harness.getRefreshCommentViewsCount(), 1);
-});
-
-test("plugin lifecycle controller forwards abort context into an in-flight later folder domain", async () => {
-    const agentRenameStarted = createDeferred<void>();
-    const releaseAgentRename = createDeferred<void>();
-    const abortController = new AbortController();
-    const internalPostAwaitMutations: string[] = [];
-    const harness = createHarness({
-        initialComments: [createComment({ filePath: "Drafts/a.md" })],
-        renameAgentRunsInFolder: async (previousPath, nextPath, context) => {
-            agentRenameStarted.resolve(undefined);
-            await releaseAgentRename.promise;
-            if (context.isActive()) {
-                internalPostAwaitMutations.push(`${previousPath}->${nextPath}`);
-            }
-        },
-    });
-    const context = {
-        signal: abortController.signal,
-        isActive: () => !abortController.signal.aborted,
-    };
-
-    const rename = harness.controller.handleFileRename(
-        createFolder("Published", [createFile("Published/a.md")]),
-        "Drafts",
-        context,
-    );
-    await agentRenameStarted.promise;
-    abortController.abort();
-    releaseAgentRename.resolve(undefined);
-    await rename;
-
-    assert.deepEqual(internalPostAwaitMutations, []);
-    assert.deepEqual(harness.renamedAgentRunFolders, []);
-    assert.deepEqual(harness.clearedParsedPaths, []);
-    assert.equal(harness.getRefreshCommentViewsCount(), 0);
-});
-
-test("plugin lifecycle controller awaits live-file hydration before rename replay completes", async () => {
-    const hydration = createDeferred<void>();
-    const harness = createHarness({
-        loadCommentsForFile: () => hydration.promise,
-    });
-    let renameCompleted = false;
-
-    const rename = harness.controller
-        .handleFileRename(
-            createFile("docs/renamed.md"),
-            "docs/original.md",
-            ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT,
-        )
-        .then(() => {
-            renameCompleted = true;
-        });
-    await new Promise<void>((resolve) => setImmediate(resolve));
-
-    assert.equal(renameCompleted, false);
-
-    hydration.resolve(undefined);
-    await rename;
-    assert.equal(renameCompleted, true);
-});
-
-test("plugin lifecycle controller hydrates only the live target after chained startup renames", async () => {
-    const harness = createHarness({
-        getFileByPath: (filePath) => filePath === "docs/final.md"
-            ? createFile(filePath)
-            : null,
-    });
-
-    await harness.controller.handleFileRename(
-        createFile("docs/intermediate.md"),
-        "docs/original.md",
-        ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT,
-    );
-    await harness.controller.handleFileRename(
-        createFile("docs/final.md"),
-        "docs/intermediate.md",
-        ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT,
-    );
-
-    assert.deepEqual(harness.loadedFiles, ["docs/final.md"]);
-    assert.deepEqual(harness.renamedStoredComments, [
-        { previousFilePath: "docs/original.md", nextFilePath: "docs/intermediate.md" },
-        { previousFilePath: "docs/intermediate.md", nextFilePath: "docs/final.md" },
-    ]);
-});
-
 test("plugin lifecycle controller forwards one consistent retarget context to manager and aggregate index", async () => {
     const originalFile = createFile("docs/source.md");
     const renamedFile = createFile("docs/Final Proposal.docx");
@@ -882,7 +283,7 @@ test("plugin lifecycle controller forwards one consistent retarget context to ma
         })],
     });
 
-    await harness.controller.handleFileRename(renamedFile, originalFile.path, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
+    await harness.controller.handleFileRename(renamedFile, originalFile.path);
 
     const managerComment = harness.commentManager.getCommentById("comment-1");
     const indexComment = harness.aggregateCommentIndex.getCommentById("comment-1");
@@ -921,7 +322,7 @@ for (const { kind, originalPath, renamedPath, selectedText } of [
             ],
         });
 
-        await harness.controller.handleFileRename(renamedFile, originalFile.path, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
+        await harness.controller.handleFileRename(renamedFile, originalFile.path);
 
         assert.equal(harness.commentManager.getCommentById("comment-1")?.filePath, renamedFile.path);
         assert.equal(harness.aggregateCommentIndex.getCommentById("comment-1")?.filePath, renamedFile.path);
@@ -951,7 +352,7 @@ test("plugin lifecycle controller retargets published standalone artifacts on fi
     const renamedFile = createFile("public/renamed.html");
     const harness = createHarness();
 
-    await harness.controller.handleFileRename(renamedFile, originalFile.path, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
+    await harness.controller.handleFileRename(renamedFile, originalFile.path);
 
     assert.deepEqual(harness.renamedPublishedArtifactPaths, [{
         previousFilePath: originalFile.path,
@@ -965,7 +366,7 @@ test("plugin lifecycle controller clears a deleted Markdown comment file", async
         initialComments: [createComment({ filePath: deletedFile.path })],
     });
 
-    await harness.controller.handleFileDelete(deletedFile, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
+    await harness.controller.handleFileDelete(deletedFile);
 
     assert.deepEqual(harness.commentManager.getCommentsForFile(deletedFile.path), []);
     assert.deepEqual(
@@ -998,7 +399,7 @@ for (const { kind, path, selectedText } of [
             ],
         });
 
-        await harness.controller.handleFileDelete(deletedFile, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
+        await harness.controller.handleFileDelete(deletedFile);
 
         assert.deepEqual(harness.commentManager.getCommentsForFile(deletedFile.path), []);
         assert.deepEqual(
@@ -1019,7 +420,7 @@ test("plugin lifecycle controller prunes published standalone artifacts on file 
     const deletedFile = createFile("public/page.html");
     const harness = createHarness();
 
-    await harness.controller.handleFileDelete(deletedFile, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
+    await harness.controller.handleFileDelete(deletedFile);
 
     assert.deepEqual(harness.deletedPublishedArtifactPaths, [deletedFile.path]);
 });
@@ -1062,7 +463,7 @@ test("plugin lifecycle controller clears cached comments under deleted folders",
             createFile("Deleted/nested/proposal.docx"),
         ]),
         createFile("Deleted/c.pdf"),
-    ]), ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
+    ]));
 
     assert.deepEqual(
         harness.commentManager.getAllComments().map((comment) => comment.id).sort(),
@@ -1098,7 +499,7 @@ test("plugin lifecycle controller prunes published standalone artifacts under de
 
     await harness.controller.handleFileDelete(createFolder("public", [
         createFile("public/page.html"),
-    ]), ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
+    ]));
 
     assert.deepEqual(harness.deletedPublishedArtifactFolders, ["public"]);
 });
@@ -1106,18 +507,17 @@ test("plugin lifecycle controller prunes published standalone artifacts under de
 test("plugin lifecycle controller only forwards markdown modify events", async () => {
     const harness = createHarness();
 
-    await harness.controller.handleFileModify(createFile("docs/file.pdf"), ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
+    await harness.controller.handleFileModify(createFile("docs/file.pdf"));
     assert.equal(harness.getModifyHandledPath(), null);
 
-    await harness.controller.handleFileModify(createFile("docs/image.png"), ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
+    await harness.controller.handleFileModify(createFile("docs/image.png"));
     assert.equal(harness.getModifyHandledPath(), null);
 
-    await harness.controller.handleFileModify(createFile("docs/proposal.docx"), ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
+    await harness.controller.handleFileModify(createFile("docs/proposal.docx"));
     assert.equal(harness.getModifyHandledPath(), null);
 
-    await harness.controller.handleFileModify(createFile("docs/file.md"), ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
+    await harness.controller.handleFileModify(createFile("docs/file.md"));
     assert.equal(harness.getModifyHandledPath(), "docs/file.md");
-    assert.equal(harness.getModifyContext(), ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
 });
 
 test("plugin lifecycle controller debounces editor refreshes and reports refresh errors", () => {

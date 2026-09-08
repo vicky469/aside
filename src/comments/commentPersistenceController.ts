@@ -41,16 +41,6 @@ import {
     retargetCommentThreads,
     type CommentThreadRetargetOptions,
 } from "../domain/comments/commentThreadRetarget";
-import type {
-    CommentFileRetarget,
-    CommentFileRetargetFailure,
-    CommentFileRetargetResult,
-} from "../domain/comments/folderCommentRetarget";
-import {
-    ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT,
-    isPluginEventExecutionActive,
-    type PluginEventExecutionContext,
-} from "../core/events/pluginEventExecutionContext";
 
 type PersistOptions = {
     immediateAggregateRefresh?: boolean;
@@ -81,18 +71,6 @@ type LegacySourceCandidate = {
     coveredWatermarks?: Record<string, number>;
 };
 
-interface AggregateRefreshRequest {
-    context: PluginEventExecutionContext;
-    skipPersistenceMaintenance: boolean;
-    resolve(): void;
-    reject(error: unknown): void;
-}
-
-type AggregateRefreshRequestInput = Pick<
-    AggregateRefreshRequest,
-    "context" | "skipPersistenceMaintenance"
->;
-
 export interface CommentPersistenceHost {
     app: Plugin["app"];
     getAllCommentsNotePath(): string;
@@ -107,10 +85,7 @@ export interface CommentPersistenceHost {
     getSideNoteSyncDeviceId(): string;
     readPersistedPluginData(): PersistedPluginData;
     loadPersistedPluginData?(): Promise<PersistedPluginData | null>;
-    writePersistedPluginData(
-        data: PersistedPluginData,
-        context?: PluginEventExecutionContext,
-    ): Promise<void>;
+    writePersistedPluginData(data: PersistedPluginData): Promise<void>;
     isAllCommentsNotePath(filePath: string): boolean;
     isCommentableFile(file: TFile | null): file is TFile;
     isPageNoteCapableFile?(file: TFile | null): file is TFile;
@@ -120,14 +95,8 @@ export interface CommentPersistenceHost {
     createCommentId(): string;
     hashText(text: string): Promise<string>;
     syncDerivedCommentLinksForFile(file: TFile, noteContent: string, comments: Array<Comment | CommentThread>): void;
-    refreshCommentViews(
-        options: { skipDataRefresh?: boolean } | undefined,
-        context: PluginEventExecutionContext,
-    ): Promise<void>;
-    refreshAllCommentsSidebarViews(
-        options: { skipDataRefresh?: boolean } | undefined,
-        context: PluginEventExecutionContext,
-    ): Promise<void>;
+    refreshCommentViews(options?: { skipDataRefresh?: boolean }): Promise<void>;
+    refreshAllCommentsSidebarViews(options?: { skipDataRefresh?: boolean }): Promise<void>;
     refreshEditorDecorations(): void;
     refreshMarkdownPreviews(): void;
     getCommentMentionedPageLabels(comment: Comment): string[];
@@ -553,9 +522,8 @@ export class CommentPersistenceController {
     private readonly syncEventStore: SideNoteSyncEventStore;
     private readonly sourceIdentityStore: SourceIdentityStore;
     private aggregateRefreshTimer: number | null = null;
-    private readonly aggregateRefreshTimerRequests: AggregateRefreshRequestInput[] = [];
     private aggregateRefreshPromise: Promise<void> | null = null;
-    private readonly aggregateRefreshRequests: AggregateRefreshRequest[] = [];
+    private aggregateRefreshQueued = false;
     private aggregateIndexInitialized = false;
     private aggregateIndexInitializationPromise: Promise<void> | null = null;
     private fullSyncedEventReplayPromise: Promise<number> | null = null;
@@ -573,7 +541,7 @@ export class CommentPersistenceController {
         this.syncEventStore = new SideNoteSyncEventStore({
             readPersistedPluginData: () => host.readPersistedPluginData(),
             readLatestPersistedPluginData: () => host.loadPersistedPluginData?.() ?? Promise.resolve(host.readPersistedPluginData()),
-            writePersistedPluginData: (data, context) => host.writePersistedPluginData(data, context),
+            writePersistedPluginData: (data) => host.writePersistedPluginData(data),
             getDeviceId: () => host.getSideNoteSyncDeviceId(),
             createEventId: () => host.createCommentId(),
             hashText: (text) => host.hashText(text),
@@ -582,7 +550,7 @@ export class CommentPersistenceController {
         this.sourceIdentityStore = new SourceIdentityStore({
             readPersistedPluginData: () => host.readPersistedPluginData(),
             readLatestPersistedPluginData: () => host.loadPersistedPluginData?.() ?? Promise.resolve(host.readPersistedPluginData()),
-            writePersistedPluginData: (data, context) => host.writePersistedPluginData(data, context),
+            writePersistedPluginData: (data) => host.writePersistedPluginData(data),
             createSourceId: () => `src-${host.createCommentId()}`,
             now: () => Date.now(),
         });
@@ -603,10 +571,7 @@ export class CommentPersistenceController {
             delete this.pendingCommentPersistTimers[filePath];
         }
         this.commentPersistTails.clear();
-        for (const request of this.aggregateRefreshRequests.splice(0)) {
-            request.resolve();
-        }
-        this.aggregateRefreshTimerRequests.length = 0;
+        this.aggregateRefreshQueued = false;
         this.commentViewRefreshSuppressions.clear();
     }
 
@@ -644,7 +609,7 @@ export class CommentPersistenceController {
         filePath: string,
         noteContent?: string,
     ): Promise<SourceIdentityRecord> {
-        await this.sourceIdentityStore.refreshFromLatestPersistedData(ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
+        await this.sourceIdentityStore.refreshFromLatestPersistedData();
         const fingerprint = noteContent === undefined
             ? null
             : await this.getSourceContentFingerprint(noteContent);
@@ -659,50 +624,13 @@ export class CommentPersistenceController {
         return this.sourceIdentityStore.ensureSourceForPath(filePath, fingerprint);
     }
 
-    private async ensureSourceIdentityForFilePathForEvent(
-        filePath: string,
-        noteContent: string | undefined,
-        context: PluginEventExecutionContext,
-    ): Promise<SourceIdentityRecord | null> {
-        if (!isPluginEventExecutionActive(context)) {
-            return null;
-        }
-        await this.sourceIdentityStore.refreshFromLatestPersistedData(context);
-        if (!isPluginEventExecutionActive(context)) {
-            return null;
-        }
-        const fingerprint = noteContent === undefined
-            ? null
-            : await this.getSourceContentFingerprint(noteContent);
-        if (!isPluginEventExecutionActive(context)) {
-            return null;
-        }
-        const existingRecord = this.sourceIdentityStore.getRecordByPath(filePath);
-        if (
-            existingRecord
-            && existingRecord.currentPath !== filePath
-            && !!this.getPageNoteCapableFileByPath(existingRecord.currentPath)
-        ) {
-            return this.sourceIdentityStore.createSourceForPathForEvent(filePath, fingerprint, context);
-        }
-        return this.sourceIdentityStore.ensureSourceForPathForEvent(filePath, fingerprint, context);
-    }
-
     private async writeSourceAndPathSidecars(
         sourceId: string,
         filePath: string,
         threads: CommentThread[],
-        context: PluginEventExecutionContext,
-    ): Promise<boolean> {
-        if (!isPluginEventExecutionActive(context)) {
-            return false;
-        }
-        await this.sidecarStorage.writeForSource(sourceId, filePath, threads, context);
-        if (!isPluginEventExecutionActive(context)) {
-            return false;
-        }
-        await this.sidecarStorage.write(filePath, threads, context);
-        return isPluginEventExecutionActive(context);
+    ): Promise<void> {
+        await this.sidecarStorage.writeForSource(sourceId, filePath, threads);
+        await this.sidecarStorage.write(filePath, threads);
     }
 
     private async readSourceOrPathSidecar(
@@ -725,45 +653,11 @@ export class CommentPersistenceController {
             return null;
         }
 
-        await this.sidecarStorage.writeForSource(
-            sourceRecord.sourceId,
-            filePath,
-            pathThreads,
-            ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT,
-        );
+        await this.sidecarStorage.writeForSource(sourceRecord.sourceId, filePath, pathThreads);
         return {
             threads: pathThreads,
             source: "path",
         };
-    }
-
-    private async readSourceOrPathSidecarForEvent(
-        sourceRecord: SourceIdentityRecord,
-        filePath: string,
-        context: PluginEventExecutionContext,
-    ): Promise<{
-        threads: CommentThread[];
-        source: "source" | "path";
-    } | null> {
-        if (!isPluginEventExecutionActive(context)) {
-            return null;
-        }
-        const sourceThreads = await this.sidecarStorage.readForSource(sourceRecord.sourceId, filePath);
-        if (!isPluginEventExecutionActive(context)) {
-            return null;
-        }
-        if (sourceThreads) {
-            return { threads: sourceThreads, source: "source" };
-        }
-
-        const pathThreads = await this.sidecarStorage.read(filePath);
-        if (!isPluginEventExecutionActive(context) || !pathThreads) {
-            return null;
-        }
-        await this.sidecarStorage.writeForSource(sourceRecord.sourceId, filePath, pathThreads, context);
-        return isPluginEventExecutionActive(context)
-            ? { threads: pathThreads, source: "path" }
-            : null;
     }
 
     private async retargetThreads(
@@ -786,91 +680,20 @@ export class CommentPersistenceController {
         previousFilePath: string,
         nextFilePath: string,
         retargetOptions: CommentThreadRetargetOptions,
-        context: PluginEventExecutionContext,
     ): Promise<void> {
-        if (!isPluginEventExecutionActive(context)) {
-            return;
-        }
-        await this.sourceIdentityStore.refreshFromLatestPersistedData(context);
-        if (!isPluginEventExecutionActive(context)) {
-            return;
-        }
+        await this.sourceIdentityStore.refreshFromLatestPersistedData();
         const existingSourceRecord = this.sourceIdentityStore.getRecordByPath(previousFilePath)
             ?? this.sourceIdentityStore.getRecordByPath(nextFilePath);
-        const sourceSidecarExists = existingSourceRecord
-            ? await this.sidecarStorage.existsForSource(existingSourceRecord.sourceId)
-            : false;
-        if (!isPluginEventExecutionActive(context)) {
-            return;
-        }
         const previousSourceThreads = existingSourceRecord
             ? await this.sidecarStorage.readForSource(existingSourceRecord.sourceId, previousFilePath)
             : null;
-        if (!isPluginEventExecutionActive(context)) {
-            return;
-        }
-        if (sourceSidecarExists && previousSourceThreads === null) {
-            throw new Error(`Unreadable source sidecar for ${previousFilePath}`);
-        }
-        const previousPathSidecarExists = await this.sidecarStorage.exists(previousFilePath);
-        if (!isPluginEventExecutionActive(context)) {
-            return;
-        }
-        const previousPathThreads = await this.sidecarStorage.read(previousFilePath);
-        if (!isPluginEventExecutionActive(context)) {
-            return;
-        }
-        if (previousPathSidecarExists && previousPathThreads === null) {
-            throw new Error(`Unreadable path sidecar for ${previousFilePath}`);
-        }
-        const nextPathSidecarExists = await this.sidecarStorage.exists(nextFilePath);
-        if (!isPluginEventExecutionActive(context)) {
-            return;
-        }
-        const nextPathThreads = await this.sidecarStorage.read(nextFilePath);
-        if (!isPluginEventExecutionActive(context)) {
-            return;
-        }
-        if (nextPathSidecarExists && nextPathThreads === null) {
-            throw new Error(`Unreadable path sidecar for ${nextFilePath}`);
-        }
-        const previousThreads = previousSourceThreads ?? previousPathThreads ?? nextPathThreads;
-        if (!isPluginEventExecutionActive(context)) {
-            return;
-        }
-        const sourceRecord = await this.sourceIdentityStore.recordRename(previousFilePath, nextFilePath, context);
-        if (!sourceRecord || !isPluginEventExecutionActive(context)) {
-            return;
-        }
+        const previousThreads = previousSourceThreads ?? await this.sidecarStorage.read(previousFilePath);
+        const sourceRecord = await this.sourceIdentityStore.recordRename(previousFilePath, nextFilePath);
+        await this.sidecarStorage.rename(previousFilePath, nextFilePath);
         if (previousThreads && previousThreads.length > 0) {
             const retargetedThreads = await this.retargetThreads(previousThreads, nextFilePath, retargetOptions);
-            if (!isPluginEventExecutionActive(context)) {
-                return;
-            }
-            const pathRenameAlreadyCommitted = !previousPathSidecarExists
-                && nextPathThreads !== null
-                && areCommentThreadListsEqual(nextPathThreads, retargetedThreads);
-            if (!pathRenameAlreadyCommitted) {
-                await this.sidecarStorage.rename(
-                    previousFilePath,
-                    nextFilePath,
-                    retargetedThreads,
-                    context,
-                );
-                if (!isPluginEventExecutionActive(context)) {
-                    return;
-                }
-            }
-            await this.sidecarStorage.writeForSource(
-                sourceRecord.sourceId,
-                nextFilePath,
-                retargetedThreads,
-                context,
-            );
-            if (!isPluginEventExecutionActive(context)) {
-                return;
-            }
-            await this.syncEventStore.appendLocalEvents(previousFilePath, context, [{
+            await this.writeSourceAndPathSidecars(sourceRecord.sourceId, nextFilePath, retargetedThreads);
+            await this.syncEventStore.appendLocalEvents(previousFilePath, [{
                 op: "renameSource",
                 payload: {
                     sourceId: sourceRecord.sourceId,
@@ -880,9 +703,6 @@ export class CommentPersistenceController {
                     nextNotePath: nextFilePath,
                 },
             }]);
-            if (!isPluginEventExecutionActive(context)) {
-                return;
-            }
             await this.compactSyncedSideNoteEventsForSnapshots([{
                 notePath: nextFilePath,
                 coveredNotePath: previousFilePath,
@@ -890,13 +710,7 @@ export class CommentPersistenceController {
             }, {
                 notePath: nextFilePath,
                 threads: retargetedThreads,
-            }], context);
-            if (!isPluginEventExecutionActive(context)) {
-                return;
-            }
-        }
-        if (!isPluginEventExecutionActive(context)) {
-            return;
+            }]);
         }
         this.host.getCommentManager().renameFile(previousFilePath, nextFilePath, retargetOptions);
     }
@@ -905,260 +719,10 @@ export class CommentPersistenceController {
         previousFilePath: string,
         nextFilePath: string,
         retargetOptions: CommentThreadRetargetOptions,
-        context: PluginEventExecutionContext,
     ): Promise<void> {
-        if (!isPluginEventExecutionActive(context)) {
-            return;
-        }
-        try {
-            await this.enqueueCommentPersistence([previousFilePath, nextFilePath], async () => {
-                if (!isPluginEventExecutionActive(context)) {
-                    return;
-                }
-                await this.renameStoredCommentsNow(previousFilePath, nextFilePath, retargetOptions, context);
-            });
-        } catch (error) {
-            if (!isPluginEventExecutionActive(context)) {
-                return;
-            }
-            throw error;
-        }
-    }
-
-    public async renameStoredCommentsInFolder(
-        retargets: readonly CommentFileRetarget[],
-        context: PluginEventExecutionContext,
-    ): Promise<CommentFileRetargetResult> {
-        let result: CommentFileRetargetResult = {
-            successfulRetargets: [],
-            failures: [],
-        };
-        if (!isPluginEventExecutionActive(context)) {
-            return result;
-        }
-        try {
-            await this.enqueueCommentPersistence(
-                retargets.flatMap((retarget) => [retarget.previousFilePath, retarget.nextFilePath]),
-                async () => {
-                    if (!isPluginEventExecutionActive(context)) {
-                        return;
-                    }
-                    result = await this.renameStoredCommentsInFolderNow(retargets, context);
-                },
-            );
-        } catch (error) {
-            if (!isPluginEventExecutionActive(context)) {
-                return result;
-            }
-            throw error;
-        }
-        if (!isPluginEventExecutionActive(context)) {
-            return {
-                successfulRetargets: [],
-                failures: [],
-            };
-        }
-        return result;
-    }
-
-    private async renameStoredCommentsInFolderNow(
-        retargets: readonly CommentFileRetarget[],
-        context: PluginEventExecutionContext,
-    ): Promise<CommentFileRetargetResult> {
-        const abortedResult: CommentFileRetargetResult = {
-            successfulRetargets: [],
-            failures: [],
-        };
-        if (retargets.length === 0 || !isPluginEventExecutionActive(context)) {
-            return {
-                successfulRetargets: [],
-                failures: [],
-            };
-        }
-
-        // This is deliberately reconcilable rather than one filesystem transaction:
-        // identities commit once, every sidecar gets an independent attempt, and only
-        // successful sidecars enter the single sync-state commit and in-memory retarget.
-        // A source/path/snapshot completion marker lets replay skip those successes and
-        // finish only descendants that did not reach the prior sync commit.
-        const snapshots = this.syncEventStore.getSnapshots();
-        const preparedRetargets = await Promise.allSettled(retargets.map(async (retarget) => {
-            const sourceRecord = this.sourceIdentityStore.getRecordByPathIncludingAliases(retarget.previousFilePath)
-                ?? this.sourceIdentityStore.getRecordByPathIncludingAliases(retarget.nextFilePath);
-            const sourceSidecarExists = sourceRecord
-                ? await this.sidecarStorage.existsForSource(sourceRecord.sourceId)
-                : false;
-            const sourceThreads = sourceRecord
-                ? await this.sidecarStorage.readForSource(sourceRecord.sourceId, retarget.previousFilePath)
-                : null;
-            if (sourceSidecarExists && sourceThreads === null) {
-                throw new Error(`Unreadable source sidecar for ${retarget.previousFilePath}`);
-            }
-
-            const previousPathSidecarExists = await this.sidecarStorage.exists(retarget.previousFilePath);
-            const previousPathThreads = await this.sidecarStorage.read(retarget.previousFilePath);
-            if (previousPathSidecarExists && previousPathThreads === null) {
-                throw new Error(`Unreadable path sidecar for ${retarget.previousFilePath}`);
-            }
-
-            const nextPathSidecarExists = await this.sidecarStorage.exists(retarget.nextFilePath);
-            const nextPathThreads = await this.sidecarStorage.read(retarget.nextFilePath);
-            if (nextPathSidecarExists && nextPathThreads === null) {
-                throw new Error(`Unreadable path sidecar for ${retarget.nextFilePath}`);
-            }
-            const previousNoteHash = await this.host.hashText(retarget.previousFilePath);
-            const completed = sourceRecord?.currentPath === retarget.nextFilePath
-                && sourceThreads !== null
-                && !previousPathSidecarExists
-                && nextPathThreads !== null
-                && snapshots.some((snapshot) =>
-                    snapshot.noteHash === previousNoteHash
-                    && snapshot.notePath === retarget.nextFilePath);
-            return {
-                threads: sourceThreads ?? previousPathThreads ?? nextPathThreads,
-                completed,
-            };
-        }));
-        if (!isPluginEventExecutionActive(context)) {
-            return abortedResult;
-        }
-        const pendingIndexes = retargets.flatMap((_retarget, index) => {
-            const prepared = preparedRetargets[index];
-            return prepared?.status === "fulfilled" && !prepared.value.completed ? [index] : [];
+        await this.enqueueCommentPersistence([previousFilePath, nextFilePath], async () => {
+            await this.renameStoredCommentsNow(previousFilePath, nextFilePath, retargetOptions);
         });
-        const sourceRecords = await this.sourceIdentityStore.recordRenames(
-            pendingIndexes.map((index) => retargets[index]).filter((retarget): retarget is CommentFileRetarget => !!retarget),
-            context,
-        );
-        if (!isPluginEventExecutionActive(context)) {
-            return abortedResult;
-        }
-        const sourceRecordByRetargetIndex = new Map(
-            pendingIndexes.map((retargetIndex, recordIndex) => [retargetIndex, sourceRecords[recordIndex]]),
-        );
-        const failures: CommentFileRetargetFailure[] = [];
-        const successfulItems: Array<{
-            retarget: CommentFileRetarget;
-            sourceId: string;
-            threads: CommentThread[];
-        }> = [];
-        for (const [index, retarget] of retargets.entries()) {
-            try {
-                if (!isPluginEventExecutionActive(context)) {
-                    return abortedResult;
-                }
-                const prepared = preparedRetargets[index];
-                if (!prepared || prepared.status === "rejected") {
-                    throw prepared?.reason ?? new Error(`Missing rename preparation for ${retarget.previousFilePath}`);
-                }
-                if (prepared.value.completed) {
-                    continue;
-                }
-                const sourceRecord = sourceRecordByRetargetIndex.get(index);
-                if (!sourceRecord) {
-                    throw new Error(`Missing source identity for ${retarget.nextFilePath}`);
-                }
-
-                const previousThreads = prepared.value.threads;
-                const retargetedThreads = previousThreads && previousThreads.length > 0
-                    ? await this.retargetThreads(
-                        previousThreads,
-                        retarget.nextFilePath,
-                        retarget.retargetOptions,
-                    )
-                    : [];
-                if (!isPluginEventExecutionActive(context)) {
-                    return abortedResult;
-                }
-                if (retargetedThreads.length > 0) {
-                    await this.sidecarStorage.rename(
-                        retarget.previousFilePath,
-                        retarget.nextFilePath,
-                        retargetedThreads,
-                        context,
-                    );
-                    if (!isPluginEventExecutionActive(context)) {
-                        return abortedResult;
-                    }
-                    await this.sidecarStorage.writeForSource(
-                        sourceRecord.sourceId,
-                        retarget.nextFilePath,
-                        retargetedThreads,
-                        context,
-                    );
-                    if (!isPluginEventExecutionActive(context)) {
-                        return abortedResult;
-                    }
-                } else if (previousThreads !== null) {
-                    await this.sidecarStorage.remove(retarget.previousFilePath, context);
-                    if (!isPluginEventExecutionActive(context)) {
-                        return abortedResult;
-                    }
-                }
-                successfulItems.push({
-                    retarget,
-                    sourceId: sourceRecord.sourceId,
-                    threads: retargetedThreads,
-                });
-            } catch (error) {
-                failures.push({ retarget, error });
-            }
-        }
-        const syncedItems = successfulItems.filter((item) => item.threads.length > 0);
-        if (syncedItems.length > 0) {
-            try {
-                const compacted = await this.syncEventStore.appendLocalEventBatchesAndCompactSnapshots(
-                    syncedItems.map((item) => ({
-                        notePath: item.retarget.previousFilePath,
-                        inputs: [{
-                            op: "renameSource",
-                            payload: {
-                                sourceId: item.sourceId,
-                                previousPath: item.retarget.previousFilePath,
-                                nextPath: item.retarget.nextFilePath,
-                                previousNotePath: item.retarget.previousFilePath,
-                                nextNotePath: item.retarget.nextFilePath,
-                            },
-                        }],
-                    })),
-                    syncedItems.flatMap((item) => [{
-                        notePath: item.retarget.nextFilePath,
-                        coveredNotePath: item.retarget.previousFilePath,
-                        threads: item.threads,
-                    }, {
-                        notePath: item.retarget.nextFilePath,
-                        threads: item.threads,
-                    }]),
-                    context,
-                );
-                if (!isPluginEventExecutionActive(context)) {
-                    return abortedResult;
-                }
-                void this.host.log?.("info", "persistence", "sync.plugin-data.compact", {
-                    removedEventCount: compacted.removedEventCount,
-                    snapshotCount: compacted.snapshotCount,
-                });
-            } catch (error) {
-                for (const item of successfulItems) {
-                    failures.push({ retarget: item.retarget, error });
-                }
-                return {
-                    successfulRetargets: [],
-                    failures,
-                };
-            }
-        }
-
-        if (!isPluginEventExecutionActive(context)) {
-            return abortedResult;
-        }
-        this.host.getCommentManager().renameFiles(
-            successfulItems.map((item) => item.retarget),
-        );
-        return {
-            successfulRetargets: successfulItems.map((item) => item.retarget),
-            failures,
-        };
     }
 
     private hasKnownCommentsForDeletedFile(filePath: string, previousThreads: CommentThread[] | null): boolean {
@@ -1183,138 +747,56 @@ export class CommentPersistenceController {
             this.eventTouchesNotePath(event, filePath));
     }
 
-    public async deleteStoredComments(
-        filePath: string,
-        context: PluginEventExecutionContext,
-    ): Promise<void> {
-        if (!isPluginEventExecutionActive(context)) {
-            return;
+    public async deleteStoredComments(filePath: string): Promise<void> {
+        await this.sourceIdentityStore.refreshFromLatestPersistedData();
+        await this.syncEventStore.refreshFromLatestPersistedData();
+        const sourceRecord = this.sourceIdentityStore.getRecordByPath(filePath);
+        const removedSidecar = await this.sidecarStorage.removeNote(filePath);
+        const previousThreads = removedSidecar?.threads ?? (sourceRecord
+            ? await this.sidecarStorage.readForSource(sourceRecord.sourceId, filePath)
+            : null) ?? await this.sidecarStorage.read(filePath);
+        if (this.hasKnownCommentsForDeletedFile(filePath, previousThreads)) {
+            await this.syncEventStore.appendLocalEvents(filePath, [{
+                op: "deleteNote",
+                payload: {
+                    notePath: filePath,
+                    ...(sourceRecord ? { sourceId: sourceRecord.sourceId } : {}),
+                },
+            }]);
         }
-        try {
-            await this.sourceIdentityStore.refreshFromLatestPersistedData(context);
-            if (!isPluginEventExecutionActive(context)) {
-                return;
-            }
-            await this.syncEventStore.refreshFromLatestPersistedData(context);
-            if (!isPluginEventExecutionActive(context)) {
-                return;
-            }
-            const sourceRecord = this.sourceIdentityStore.getRecordByPath(filePath);
-            const removedSidecar = await this.sidecarStorage.removeNote(filePath, context);
-            if (!isPluginEventExecutionActive(context)) {
-                return;
-            }
-            let previousThreads = removedSidecar?.threads ?? null;
-            if (!previousThreads && sourceRecord) {
-                previousThreads = await this.sidecarStorage.readForSource(sourceRecord.sourceId, filePath);
-                if (!isPluginEventExecutionActive(context)) {
-                    return;
-                }
-            }
-            if (!previousThreads) {
-                previousThreads = await this.sidecarStorage.read(filePath);
-            }
-            if (!isPluginEventExecutionActive(context)) {
-                return;
-            }
-            if (this.hasKnownCommentsForDeletedFile(filePath, previousThreads)) {
-                await this.syncEventStore.appendLocalEvents(filePath, context, [{
-                    op: "deleteNote",
-                    payload: {
-                        notePath: filePath,
-                        ...(sourceRecord ? { sourceId: sourceRecord.sourceId } : {}),
-                    },
-                }]);
-                if (!isPluginEventExecutionActive(context)) {
-                    return;
-                }
-            }
-            if (!removedSidecar) {
-                await this.sidecarStorage.remove(filePath, context);
-                if (!isPluginEventExecutionActive(context)) {
-                    return;
-                }
-            }
-            if (sourceRecord && !removedSidecar?.sourceId) {
-                await this.sidecarStorage.removeForSource(sourceRecord.sourceId, context);
-                if (!isPluginEventExecutionActive(context)) {
-                    return;
-                }
-            }
-            await this.sourceIdentityStore.removeSourceForPath(filePath, context);
-            if (!isPluginEventExecutionActive(context)) {
-                return;
-            }
-            await this.compactSyncedSideNoteEventsForSnapshots([{
-                notePath: filePath,
-                threads: [],
-            }], context);
-        } catch (error) {
-            if (!isPluginEventExecutionActive(context)) {
-                return;
-            }
-            throw error;
+        if (!removedSidecar) {
+            await this.sidecarStorage.remove(filePath);
         }
+        if (sourceRecord && !removedSidecar?.sourceId) {
+            await this.sidecarStorage.removeForSource(sourceRecord.sourceId);
+        }
+        await this.sourceIdentityStore.removeSourceForPath(filePath);
+        await this.compactSyncedSideNoteEventsForSnapshots([{
+            notePath: filePath,
+            threads: [],
+        }]);
     }
 
-    public async deleteStoredCommentsInFolder(
-        folderPath: string,
-        context: PluginEventExecutionContext,
-    ): Promise<void> {
-        if (!isPluginEventExecutionActive(context)) {
-            return;
-        }
-        try {
-            await this.deleteStoredCommentsInFolderNow(folderPath, context);
-        } catch (error) {
-            if (!isPluginEventExecutionActive(context)) {
-                return;
-            }
-            throw error;
-        }
-    }
-
-    private async deleteStoredCommentsInFolderNow(
-        folderPath: string,
-        context: PluginEventExecutionContext,
-    ): Promise<void> {
-        await this.sourceIdentityStore.refreshFromLatestPersistedData(context);
-        if (!isPluginEventExecutionActive(context)) {
-            return;
-        }
-        await this.syncEventStore.refreshFromLatestPersistedData(context);
-        if (!isPluginEventExecutionActive(context)) {
-            return;
-        }
+    public async deleteStoredCommentsInFolder(folderPath: string): Promise<void> {
+        await this.sourceIdentityStore.refreshFromLatestPersistedData();
+        await this.syncEventStore.refreshFromLatestPersistedData();
 
         const removedByNotePath = new Map<string, {
             notePath: string;
             sourceId?: string;
             threads: CommentThread[];
         }>();
-        for (const removed of await this.sidecarStorage.removeFolder(folderPath, context)) {
+        for (const removed of await this.sidecarStorage.removeFolder(folderPath)) {
             removedByNotePath.set(removed.notePath, {
                 notePath: removed.notePath,
                 sourceId: removed.sourceId,
                 threads: removed.threads,
             });
         }
-        if (!isPluginEventExecutionActive(context)) {
-            return;
-        }
 
-        for (const sourceRecord of await this.sourceIdentityStore.removeSourcesInFolder(folderPath, context)) {
-            if (!isPluginEventExecutionActive(context)) {
-                return;
-            }
-            await this.sidecarStorage.remove(sourceRecord.currentPath, context);
-            if (!isPluginEventExecutionActive(context)) {
-                return;
-            }
-            await this.sidecarStorage.removeForSource(sourceRecord.sourceId, context);
-            if (!isPluginEventExecutionActive(context)) {
-                return;
-            }
+        for (const sourceRecord of await this.sourceIdentityStore.removeSourcesInFolder(folderPath)) {
+            await this.sidecarStorage.remove(sourceRecord.currentPath);
+            await this.sidecarStorage.removeForSource(sourceRecord.sourceId);
             const existing = removedByNotePath.get(sourceRecord.currentPath);
             removedByNotePath.set(sourceRecord.currentPath, {
                 notePath: sourceRecord.currentPath,
@@ -1326,23 +808,17 @@ export class CommentPersistenceController {
         const removedRecords = Array.from(removedByNotePath.values())
             .sort((left, right) => left.notePath.localeCompare(right.notePath));
         for (const record of removedRecords) {
-            if (!isPluginEventExecutionActive(context)) {
-                return;
-            }
             if (!this.hasKnownCommentsForDeletedFile(record.notePath, record.threads)) {
                 continue;
             }
 
-            await this.syncEventStore.appendLocalEvents(record.notePath, context, [{
+            await this.syncEventStore.appendLocalEvents(record.notePath, [{
                 op: "deleteNote",
                 payload: {
                     notePath: record.notePath,
                     ...(record.sourceId ? { sourceId: record.sourceId } : {}),
                 },
             }]);
-            if (!isPluginEventExecutionActive(context)) {
-                return;
-            }
         }
 
         await this.compactSyncedSideNoteEventsForSnapshots(
@@ -1350,7 +826,6 @@ export class CommentPersistenceController {
                 notePath: record.notePath,
                 threads: [],
             })),
-            context,
         );
     }
 
@@ -1400,11 +875,11 @@ export class CommentPersistenceController {
         if (this.disposed) {
             return 0;
         }
-        await this.sourceIdentityStore.refreshFromLatestPersistedData(ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
+        await this.sourceIdentityStore.refreshFromLatestPersistedData();
         if (this.disposed) {
             return 0;
         }
-        await this.syncEventStore.refreshFromLatestPersistedData(ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
+        await this.syncEventStore.refreshFromLatestPersistedData();
         if (this.disposed) {
             return 0;
         }
@@ -1487,20 +962,13 @@ export class CommentPersistenceController {
                 ? await this.sourceIdentityStore.attachPathToSource(sourceId, targetNotePath, {
                     aliases: [notePath],
                 })
-                : await this.sourceIdentityStore.recordRename(
-                    notePath,
-                    targetNotePath,
-                    ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT,
-                );
-            if (!sourceRecord) {
-                throw new Error(`Source identity rename did not produce a record for ${targetNotePath}.`);
-            }
+                : await this.sourceIdentityStore.recordRename(notePath, targetNotePath);
 
             if (noteWasDeleted) {
-                await this.sidecarStorage.remove(notePath, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
-                await this.sidecarStorage.removeForSource(sourceRecord.sourceId, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
+                await this.sidecarStorage.remove(notePath);
+                await this.sidecarStorage.removeForSource(sourceRecord.sourceId);
                 if (targetNotePath !== notePath) {
-                    await this.sidecarStorage.remove(targetNotePath, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
+                    await this.sidecarStorage.remove(targetNotePath);
                 }
                 this.host.getCommentManager().replaceThreadsForFile(notePath, []);
                 if (targetNotePath !== notePath) {
@@ -1509,14 +977,9 @@ export class CommentPersistenceController {
                 this.host.getAggregateCommentIndex().deleteFile(notePath);
                 this.host.getAggregateCommentIndex().deleteFile(targetNotePath);
             } else {
-                await this.writeSourceAndPathSidecars(
-                    sourceRecord.sourceId,
-                    targetNotePath,
-                    targetThreads,
-                    ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT,
-                );
+                await this.writeSourceAndPathSidecars(sourceRecord.sourceId, targetNotePath, targetThreads);
                 if (targetNotePath !== notePath) {
-                    await this.sidecarStorage.remove(notePath, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
+                    await this.sidecarStorage.remove(notePath);
                     this.host.getCommentManager().replaceThreadsForFile(notePath, []);
                     this.host.getAggregateCommentIndex().deleteFile(notePath);
                 }
@@ -1569,10 +1032,7 @@ export class CommentPersistenceController {
         if (this.disposed) {
             return appliedEventCount;
         }
-        await this.compactSyncedSideNoteEventsForSnapshots(
-            compactionSnapshots,
-            ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT,
-        );
+        await this.compactSyncedSideNoteEventsForSnapshots(compactionSnapshots);
         void this.host.log?.("info", "persistence", "sync.plugin-data.replay.complete", {
             appliedEventCount,
             ...(targetNotePath ? { targetNotePath } : {}),
@@ -1602,26 +1062,17 @@ export class CommentPersistenceController {
                 break;
             }
             const sourceRecord = await this.ensureSourceIdentityForFilePath(file.path, noteContent);
-            await this.writeSourceAndPathSidecars(
-                sourceRecord.sourceId,
-                file.path,
-                normalizedThreads,
-                ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT,
-            );
+            await this.writeSourceAndPathSidecars(sourceRecord.sourceId, file.path, normalizedThreads);
             const eventInputs = buildSideNoteSyncEventInputsForThreadDiff([], normalizedThreads);
             if (eventInputs.length === 0) {
                 continue;
             }
 
-            await this.syncEventStore.appendLocalEvents(
-                file.path,
-                ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT,
-                eventInputs,
-            );
+            await this.syncEventStore.appendLocalEvents(file.path, eventInputs);
             await this.compactSyncedSideNoteEventsForSnapshots([{
                 notePath: file.path,
                 threads: normalizedThreads,
-            }], ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
+            }]);
             migratedCount += 1;
         }
 
@@ -1631,7 +1082,7 @@ export class CommentPersistenceController {
     }
 
     public async migrateSourceIdentitiesOnStartup(): Promise<void> {
-        await this.sourceIdentityStore.refreshFromLatestPersistedData(ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
+        await this.sourceIdentityStore.refreshFromLatestPersistedData();
         const filePaths = await this.getPersistedCommentSourcePaths();
         const snapshotsByPath = new Map(
             this.getLatestSnapshotsByNotePath(this.syncEventStore.getSnapshots())
@@ -1665,12 +1116,7 @@ export class CommentPersistenceController {
             const pathThreads = await this.sidecarStorage.read(file.path);
             if (pathThreads) {
                 const normalizedThreads = await this.normalizeThreadsForFile(file.path, pathThreads);
-                await this.writeSourceAndPathSidecars(
-                    sourceRecord.sourceId,
-                    file.path,
-                    normalizedThreads,
-                    ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT,
-                );
+                await this.writeSourceAndPathSidecars(sourceRecord.sourceId, file.path, normalizedThreads);
                 sourceSidecarCount += 1;
                 continue;
             }
@@ -1688,12 +1134,7 @@ export class CommentPersistenceController {
                     });
                     continue;
                 }
-                await this.writeSourceAndPathSidecars(
-                    sourceRecord.sourceId,
-                    file.path,
-                    normalizedThreads,
-                    ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT,
-                );
+                await this.writeSourceAndPathSidecars(sourceRecord.sourceId, file.path, normalizedThreads);
                 sourceSidecarCount += 1;
             }
         }
@@ -1704,11 +1145,8 @@ export class CommentPersistenceController {
         });
     }
 
-    public async handleMarkdownFileModified(
-        file: TFile,
-        context: PluginEventExecutionContext,
-    ): Promise<void> {
-        if (this.disposed || file.extension !== "md" || !isPluginEventExecutionActive(context)) {
+    public async handleMarkdownFileModified(file: TFile): Promise<void> {
+        if (this.disposed || file.extension !== "md") {
             return;
         }
 
@@ -1716,15 +1154,9 @@ export class CommentPersistenceController {
         try {
             const queueKeys = this.getCommentPersistenceQueueKeys(file, filePath);
             await this.enqueueCommentPersistence(queueKeys, async () => {
-                if (!isPluginEventExecutionActive(context)) {
-                    return;
-                }
-                await this.syncModifiedMarkdownFile(file, filePath, context);
+                await this.syncModifiedMarkdownFile(file, filePath);
             });
         } catch (error) {
-            if (!isPluginEventExecutionActive(context)) {
-                return;
-            }
             console.error("Error syncing note-backed comments:", error);
             void this.host.log?.("error", "persistence", "storage.note.write.error", {
                 filePath,
@@ -1733,75 +1165,38 @@ export class CommentPersistenceController {
         }
     }
 
-    private async syncModifiedMarkdownFile(
-        file: TFile,
-        filePath: string,
-        context: PluginEventExecutionContext,
-    ): Promise<void> {
+    private async syncModifiedMarkdownFile(file: TFile, filePath: string): Promise<void> {
         const fileContent = await this.host.getCurrentNoteContent(file);
-        if (this.disposed || !isPluginEventExecutionActive(context)) {
+        if (this.disposed) {
             return;
         }
-        const sourceRecord = await this.ensureSourceIdentityForFilePathForEvent(filePath, fileContent, context);
-        if (!sourceRecord || !isPluginEventExecutionActive(context)) {
-            return;
-        }
+        const sourceRecord = await this.ensureSourceIdentityForFilePath(filePath, fileContent);
         const storedContent = await this.host.getStoredNoteContent(file);
-        if (this.disposed || !isPluginEventExecutionActive(context)) {
+        if (this.disposed) {
             return;
         }
         const hasSidecar = await this.sidecarStorage.exists(filePath);
-        if (!isPluginEventExecutionActive(context)) {
-            return;
-        }
         if (!hasSidecar && fileContent !== storedContent && this.host.getMarkdownViewForFile(file)) {
             const currentParsed = await this.parseAndNormalizeFileComments(filePath, fileContent);
-            if (!isPluginEventExecutionActive(context)) {
-                return;
-            }
             const storedParsed = await this.parseAndNormalizeFileComments(filePath, storedContent);
-            if (!isPluginEventExecutionActive(context)) {
-                return;
-            }
             if (currentParsed.mainContent === storedParsed.mainContent && storedParsed.threads.length > 0) {
-                const synced = await this.syncThreadsIntoVisibleNoteContentForEvent(
+                const synced = await this.syncThreadsIntoVisibleNoteContent(
                     file,
                     currentParsed.mainContent,
                     storedParsed.threads,
                     filePath,
-                    context,
                 );
-                if (!synced || !isPluginEventExecutionActive(context)) {
-                    return;
-                }
-                if (!(await this.writeSourceAndPathSidecars(
-                    sourceRecord.sourceId,
-                    filePath,
-                    synced.threads,
-                    context,
-                ))) {
-                    return;
-                }
+                await this.writeSourceAndPathSidecars(sourceRecord.sourceId, filePath, synced.threads);
                 await this.syncEventStore.appendLocalEvents(
                     filePath,
-                    context,
                     buildSideNoteSyncEventInputsForThreadDiff([], synced.threads),
                 );
-                if (!isPluginEventExecutionActive(context)) {
-                    return;
-                }
                 await this.compactSyncedSideNoteEventsForSnapshots([{
                     notePath: filePath,
                     threads: synced.threads,
-                }], context);
-                if (!isPluginEventExecutionActive(context)) {
-                    return;
-                }
+                }]);
                 this.clearPendingCommentPersistTimer(filePath);
-                await this.afterCommentsChangedForEvent(filePath, context);
-                if (!isPluginEventExecutionActive(context)) {
-                    return;
-                }
+                await this.afterCommentsChanged(filePath);
                 void this.host.log?.("info", "persistence", "storage.note.external-managed-sync", {
                     filePath,
                     threadCount: synced.threads.length,
@@ -1809,26 +1204,13 @@ export class CommentPersistenceController {
                 return;
             }
         }
-        const parsed = await this.syncFileCommentsFromContentForEvent(file, fileContent, filePath, context);
-        if (!parsed || !isPluginEventExecutionActive(context)) {
-            return;
-        }
+        const parsed = await this.syncFileCommentsFromContent(file, fileContent, filePath);
         if (parsed.source !== "none" || parsed.threads.length > 0) {
-            if (!(await this.writeSourceAndPathSidecars(
-                sourceRecord.sourceId,
-                filePath,
-                parsed.threads,
-                context,
-            ))) {
-                return;
-            }
+            await this.writeSourceAndPathSidecars(sourceRecord.sourceId, filePath, parsed.threads);
         }
 
-        if (!isPluginEventExecutionActive(context)) {
-            return;
-        }
         this.clearPendingCommentPersistTimer(filePath);
-        await this.afterCommentsChangedForEvent(filePath, context);
+        await this.afterCommentsChanged(filePath);
     }
 
     public async loadCommentsForFile(file: TFile | null): Promise<Comment[]> {
@@ -1849,84 +1231,6 @@ export class CommentPersistenceController {
         }
         const parsed = await this.syncFileCommentsFromContent(file, noteContent);
         return parsed.comments;
-    }
-
-    public async loadCommentsForFileForEvent(
-        file: TFile | null,
-        context: PluginEventExecutionContext,
-    ): Promise<Comment[]> {
-        if (
-            this.disposed
-            || !isPluginEventExecutionActive(context)
-            || !file
-            || this.host.isAllCommentsNotePath(file.path)
-            || !this.isPageNoteCapableFile(file)
-        ) {
-            return [];
-        }
-
-        const commentManager = this.host.getCommentManager();
-        const aggregateCommentIndex = this.host.getAggregateCommentIndex();
-        try {
-            const sourceRecord = this.sourceIdentityStore.getRecordByPath(file.path);
-            const sourceThreads = sourceRecord
-                ? await this.sidecarStorage.readForSource(sourceRecord.sourceId, file.path)
-                : null;
-            if (!isPluginEventExecutionActive(context)) {
-                return [];
-            }
-            const pathThreads = sourceThreads === null
-                ? await this.sidecarStorage.read(file.path)
-                : null;
-            if (!isPluginEventExecutionActive(context)) {
-                return [];
-            }
-            const inMemoryThreads = commentManager.getThreadsForFile(file.path, { includeDeleted: true });
-            let threads = sourceThreads ?? pathThreads ?? inMemoryThreads;
-            let mainContent = "";
-            if (this.host.isCommentableFile(file)) {
-                const noteContent = await this.host.getCurrentNoteContent(file);
-                if (!isPluginEventExecutionActive(context)) {
-                    return [];
-                }
-                const parsed = this.host.getParsedNoteComments(file.path, noteContent);
-                mainContent = parsed.mainContent;
-                if (threads.length === 0) {
-                    threads = parsed.threads;
-                }
-            }
-            const normalizedThreads = await this.normalizeThreadsForFile(file.path, threads);
-            if (!isPluginEventExecutionActive(context)) {
-                return [];
-            }
-
-            commentManager.replaceThreadsForFile(file.path, normalizedThreads);
-            if (this.host.isCommentableFile(file)) {
-                await commentManager.updateCommentCoordinatesForFile(mainContent, file.path);
-                if (!isPluginEventExecutionActive(context)) {
-                    return [];
-                }
-            }
-            const syncedThreads = commentManager
-                .getThreadsForFile(file.path, { includeDeleted: true })
-                .map((thread) => ({
-                    ...thread,
-                    entries: thread.entries.map((entry) => ({ ...entry })),
-                }));
-            if (!isPluginEventExecutionActive(context)) {
-                return [];
-            }
-            aggregateCommentIndex.updateFile(file.path, syncedThreads);
-            if (this.host.isCommentableFile(file) && isPluginEventExecutionActive(context)) {
-                this.host.syncDerivedCommentLinksForFile(file, mainContent, syncedThreads);
-            }
-            return syncedThreads.map((thread) => threadToComment(thread));
-        } catch (error) {
-            if (!isPluginEventExecutionActive(context)) {
-                return [];
-            }
-            throw error;
-        }
     }
 
     private async loadStoredPageNoteCommentsForFile(file: TFile): Promise<Comment[]> {
@@ -2125,32 +1429,16 @@ export class CommentPersistenceController {
     }
 
     public scheduleAggregateNoteRefresh(): void {
-        this.scheduleAggregateNoteRefreshRequest(ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT, false);
-    }
-
-    private scheduleAggregateNoteRefreshForEvent(context: PluginEventExecutionContext): void {
-        this.scheduleAggregateNoteRefreshRequest(context, true);
-    }
-
-    private scheduleAggregateNoteRefreshRequest(
-        context: PluginEventExecutionContext,
-        skipPersistenceMaintenance: boolean,
-    ): void {
-        if (this.disposed || !isPluginEventExecutionActive(context)) {
+        if (this.disposed) {
             return;
-        }
-        if (!this.aggregateRefreshTimerRequests.some((request) =>
-            request.context === context
-            && request.skipPersistenceMaintenance === skipPersistenceMaintenance)) {
-            this.aggregateRefreshTimerRequests.push({ context, skipPersistenceMaintenance });
         }
         if (this.aggregateRefreshTimer !== null) {
             window.clearTimeout(this.aggregateRefreshTimer);
         }
+
         this.aggregateRefreshTimer = window.setTimeout(() => {
             this.aggregateRefreshTimer = null;
-            const requests = this.aggregateRefreshTimerRequests.splice(0);
-            void this.enqueueAggregateNoteRefreshRequests(requests).catch(() => {});
+            void this.enqueueAggregateNoteRefresh();
         }, 150);
     }
 
@@ -2158,42 +1446,18 @@ export class CommentPersistenceController {
         if (this.disposed) {
             return;
         }
-        const pendingRequests = this.takeScheduledAggregateNoteRefreshRequests();
-        await this.enqueueAggregateNoteRefreshRequests([
-            ...pendingRequests,
-            {
-                context: ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT,
-                skipPersistenceMaintenance: false,
-            },
-        ]);
-    }
-
-    public async refreshAggregateNoteNowForEvent(
-        context: PluginEventExecutionContext,
-    ): Promise<void> {
-        if (this.disposed || !isPluginEventExecutionActive(context)) {
-            return;
-        }
-        const pendingRequests = this.takeScheduledAggregateNoteRefreshRequests();
-        await this.enqueueAggregateNoteRefreshRequests([
-            ...pendingRequests,
-            { context, skipPersistenceMaintenance: true },
-        ]);
-    }
-
-    public hasPendingAggregateRefresh(): boolean {
-        return this.aggregateRefreshTimer !== null
-            || this.aggregateRefreshTimerRequests.length > 0
-            || this.aggregateRefreshPromise !== null
-            || this.aggregateRefreshRequests.length > 0;
-    }
-
-    private takeScheduledAggregateNoteRefreshRequests(): AggregateRefreshRequestInput[] {
         if (this.aggregateRefreshTimer !== null) {
             window.clearTimeout(this.aggregateRefreshTimer);
             this.aggregateRefreshTimer = null;
         }
-        return this.aggregateRefreshTimerRequests.splice(0);
+
+        await this.enqueueAggregateNoteRefresh();
+    }
+
+    public hasPendingAggregateRefresh(): boolean {
+        return this.aggregateRefreshTimer !== null
+            || this.aggregateRefreshPromise !== null
+            || this.aggregateRefreshQueued;
     }
 
     private clearPendingCommentPersistTimer(filePath: string): void {
@@ -2277,7 +1541,7 @@ export class CommentPersistenceController {
         if (this.disposed) {
             return [];
         }
-        await this.syncEventStore.refreshFromLatestPersistedData(ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
+        await this.syncEventStore.refreshFromLatestPersistedData();
         if (this.disposed) {
             return [];
         }
@@ -2314,11 +1578,11 @@ export class CommentPersistenceController {
         if (this.disposed) {
             return [];
         }
-        await this.sourceIdentityStore.refreshFromLatestPersistedData(ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
+        await this.sourceIdentityStore.refreshFromLatestPersistedData();
         if (this.disposed) {
             return [];
         }
-        await this.syncEventStore.refreshFromLatestPersistedData(ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
+        await this.syncEventStore.refreshFromLatestPersistedData();
         if (this.disposed) {
             return [];
         }
@@ -2352,7 +1616,7 @@ export class CommentPersistenceController {
                 continue;
             }
 
-            await this.deleteStoredComments(filePath, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
+            await this.deleteStoredComments(filePath);
             this.host.getCommentManager().replaceCommentsForFile(filePath, []);
             this.host.getAggregateCommentIndex().deleteFile(filePath);
             prunedCount += 1;
@@ -2447,28 +1711,6 @@ export class CommentPersistenceController {
         };
     }
 
-    private async syncFileCommentsFromContentForEvent(
-        file: TFile,
-        noteContent: string,
-        filePath: string,
-        context: PluginEventExecutionContext,
-    ): Promise<SyncedFileComments | null> {
-        const parsed = await this.getCanonicalThreadStateForEvent(file, noteContent, filePath, context);
-        if (!parsed || !isPluginEventExecutionActive(context)) {
-            return null;
-        }
-        const synced = await this.syncThreadsIntoVisibleNoteContentForEvent(
-            file,
-            parsed.mainContent,
-            parsed.threads,
-            filePath,
-            context,
-        );
-        return synced && isPluginEventExecutionActive(context)
-            ? { ...synced, source: parsed.source }
-            : null;
-    }
-
     private async syncThreadsIntoVisibleNoteContent(
         file: TFile,
         mainContent: string,
@@ -2488,51 +1730,6 @@ export class CommentPersistenceController {
             threads: syncedComments.threads,
             comments: syncedComments.comments,
         };
-    }
-
-    private async syncThreadsIntoVisibleNoteContentForEvent(
-        file: TFile,
-        mainContent: string,
-        threads: CommentThread[],
-        filePath: string,
-        context: PluginEventExecutionContext,
-    ): Promise<VisibleSyncedFileComments | null> {
-        if (!isPluginEventExecutionActive(context)) {
-            return null;
-        }
-        const commentManager = this.host.getCommentManager();
-        commentManager.replaceThreadsForFile(
-            filePath,
-            threads.map((thread) => ({
-                ...thread,
-                entries: thread.entries.map((entry) => ({ ...entry })),
-            })),
-        );
-        if (!isPluginEventExecutionActive(context)) {
-            return null;
-        }
-        await commentManager.updateCommentCoordinatesForFile(mainContent, filePath);
-        if (!isPluginEventExecutionActive(context)) {
-            return null;
-        }
-        const syncedThreads = commentManager
-            .getThreadsForFile(filePath, { includeDeleted: true })
-            .map((thread) => ({
-                ...thread,
-                entries: thread.entries.map((entry) => ({ ...entry })),
-            }));
-        const syncedComments = syncedThreads.map((thread) => threadToComment(thread));
-        if (!isPluginEventExecutionActive(context)) {
-            return null;
-        }
-        this.host.getAggregateCommentIndex().updateFile(filePath, syncedThreads);
-        if (!isPluginEventExecutionActive(context)) {
-            return null;
-        }
-        this.host.syncDerivedCommentLinksForFile(file, mainContent, syncedThreads);
-        return isPluginEventExecutionActive(context)
-            ? { mainContent, threads: syncedThreads, comments: syncedComments }
-            : null;
     }
 
     private async hasKnownCommentsForSnapshot(notePath: string): Promise<boolean> {
@@ -2587,7 +1784,7 @@ export class CommentPersistenceController {
             }
             const file = this.getPageNoteCapableFileByPath(snapshot.notePath);
             if (!this.isPageNoteCapableFile(file)) {
-                await this.deleteStoredComments(snapshot.notePath, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
+                await this.deleteStoredComments(snapshot.notePath);
                 this.host.getCommentManager().replaceCommentsForFile(snapshot.notePath, []);
                 this.host.getAggregateCommentIndex().deleteFile(snapshot.notePath);
                 continue;
@@ -2634,12 +1831,7 @@ export class CommentPersistenceController {
                 continue;
             }
 
-            await this.writeSourceAndPathSidecars(
-                sourceRecord.sourceId,
-                snapshot.notePath,
-                normalizedThreads,
-                ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT,
-            );
+            await this.writeSourceAndPathSidecars(sourceRecord.sourceId, snapshot.notePath, normalizedThreads);
             if (noteContent !== undefined) {
                 const parsed = await this.parseAndNormalizeFileComments(snapshot.notePath, noteContent);
                 await this.syncThreadsIntoVisibleNoteContent(file, parsed.mainContent, normalizedThreads);
@@ -2669,16 +1861,9 @@ export class CommentPersistenceController {
         return hydratedCount;
     }
 
-    private async compactSyncedSideNoteEventsForSnapshots(
-        snapshots: SideNoteSyncSnapshotInput[],
-        context: PluginEventExecutionContext,
-    ): Promise<void> {
-        if (!isPluginEventExecutionActive(context)) {
-            return;
-        }
-        const compacted = await this.syncEventStore.compactProcessedEventsForSnapshots(context, snapshots);
-        if (!isPluginEventExecutionActive(context)
-            || (compacted.removedEventCount === 0 && compacted.snapshotCount === 0)) {
+    private async compactSyncedSideNoteEventsForSnapshots(snapshots: SideNoteSyncSnapshotInput[]): Promise<void> {
+        const compacted = await this.syncEventStore.compactProcessedEventsForSnapshots(snapshots);
+        if (compacted.removedEventCount === 0 && compacted.snapshotCount === 0) {
             return;
         }
 
@@ -2688,18 +1873,9 @@ export class CommentPersistenceController {
         });
     }
 
-    private async readLegacyCacheCandidate(
-        storagePath: string,
-        context: PluginEventExecutionContext,
-    ): Promise<LegacySourceCandidate | null> {
-        if (!isPluginEventExecutionActive(context)) {
-            return null;
-        }
+    private async readLegacyCacheCandidate(storagePath: string): Promise<LegacySourceCandidate | null> {
         try {
             const rawContent = await this.host.app.vault.adapter.read(storagePath);
-            if (!isPluginEventExecutionActive(context)) {
-                return null;
-            }
             const parsed = JSON.parse(rawContent) as unknown;
             if (
                 !parsed
@@ -2716,7 +1892,7 @@ export class CommentPersistenceController {
                 notePath,
                 (parsed as { threads: CommentThread[] }).threads,
             );
-            if (!isPluginEventExecutionActive(context) || threads.length === 0) {
+            if (threads.length === 0) {
                 return null;
             }
 
@@ -2731,31 +1907,17 @@ export class CommentPersistenceController {
         }
     }
 
-    private async readLegacyCacheCandidates(
-        context: PluginEventExecutionContext,
-    ): Promise<LegacySourceCandidate[]> {
-        if (!isPluginEventExecutionActive(context)) {
-            return [];
-        }
+    private async readLegacyCacheCandidates(): Promise<LegacySourceCandidate[]> {
         const cacheDirPath = `${this.host.getPluginDataDirPath()}/cache`;
         try {
             if (!(await this.host.app.vault.adapter.exists(cacheDirPath))) {
                 return [];
             }
-            if (!isPluginEventExecutionActive(context)) {
-                return [];
-            }
 
             const listed = await this.host.app.vault.adapter.list(cacheDirPath);
-            if (!isPluginEventExecutionActive(context)) {
-                return [];
-            }
             const candidates: LegacySourceCandidate[] = [];
             for (const filePath of listed.files.filter((path) => path.endsWith(".json"))) {
-                const candidate = await this.readLegacyCacheCandidate(filePath, context);
-                if (!isPluginEventExecutionActive(context)) {
-                    return [];
-                }
+                const candidate = await this.readLegacyCacheCandidate(filePath);
                 if (candidate) {
                     candidates.push(candidate);
                 }
@@ -2766,14 +1928,7 @@ export class CommentPersistenceController {
         }
     }
 
-    private async findRenamedSourceCandidate(
-        filePath: string,
-        noteContent: string,
-        context: PluginEventExecutionContext,
-    ): Promise<LegacySourceCandidate | null> {
-        if (!isPluginEventExecutionActive(context)) {
-            return null;
-        }
+    private async findRenamedSourceCandidate(filePath: string, noteContent: string): Promise<LegacySourceCandidate | null> {
         const snapshotCandidates: LegacySourceCandidate[] = this.getLatestSnapshotsByNotePath(this.syncEventStore.getSnapshots())
             .filter((snapshot) =>
                 snapshot.notePath !== filePath
@@ -2785,10 +1940,7 @@ export class CommentPersistenceController {
                 origin: "snapshot" as const,
                 coveredWatermarks: snapshot.coveredWatermarks,
             }));
-        const cacheCandidates = await this.readLegacyCacheCandidates(context);
-        if (!isPluginEventExecutionActive(context)) {
-            return null;
-        }
+        const cacheCandidates = await this.readLegacyCacheCandidates();
         const candidates = [...snapshotCandidates, ...cacheCandidates]
             .filter((candidate) =>
                 candidate.notePath !== filePath
@@ -2842,45 +1994,23 @@ export class CommentPersistenceController {
     private async recoverRenamedSourceThreadsForFile(
         file: TFile,
         noteContent: string,
-        filePath: string,
-        context: PluginEventExecutionContext,
+        filePath = file.path,
     ): Promise<CommentThread[] | null> {
-        const candidate = await this.findRenamedSourceCandidate(filePath, noteContent, context);
-        if (!candidate || !isPluginEventExecutionActive(context)) {
+        const candidate = await this.findRenamedSourceCandidate(filePath, noteContent);
+        if (!candidate) {
             return null;
         }
 
         const normalizedThreads = await this.normalizeThreadsForFile(filePath, candidate.threads);
-        if (!isPluginEventExecutionActive(context) || normalizedThreads.length === 0) {
+        if (normalizedThreads.length === 0) {
             return null;
         }
 
         const fingerprint = await this.getSourceContentFingerprint(noteContent);
-        if (!isPluginEventExecutionActive(context)) {
-            return null;
-        }
-        const sourceRecord = await this.sourceIdentityStore.recordRename(
-            candidate.notePath,
-            filePath,
-            context,
-            fingerprint,
-        );
-        if (!sourceRecord || !isPluginEventExecutionActive(context)) {
-            return null;
-        }
-        if (!(await this.writeSourceAndPathSidecars(
-            sourceRecord.sourceId,
-            filePath,
-            normalizedThreads,
-            context,
-        ))) {
-            return null;
-        }
-        await this.sidecarStorage.remove(candidate.notePath, context);
-        if (!isPluginEventExecutionActive(context)) {
-            return null;
-        }
-        await this.syncEventStore.appendLocalEvents(candidate.notePath, context, [{
+        const sourceRecord = await this.sourceIdentityStore.recordRename(candidate.notePath, filePath, fingerprint);
+        await this.writeSourceAndPathSidecars(sourceRecord.sourceId, filePath, normalizedThreads);
+        await this.sidecarStorage.remove(candidate.notePath);
+        await this.syncEventStore.appendLocalEvents(candidate.notePath, [{
             op: "renameSource",
             payload: {
                 sourceId: sourceRecord.sourceId,
@@ -2890,9 +2020,6 @@ export class CommentPersistenceController {
                 nextNotePath: filePath,
             },
         }]);
-        if (!isPluginEventExecutionActive(context)) {
-            return null;
-        }
         await this.compactSyncedSideNoteEventsForSnapshots([{
             notePath: filePath,
             coveredNotePath: candidate.notePath,
@@ -2900,10 +2027,7 @@ export class CommentPersistenceController {
         }, {
             notePath: filePath,
             threads: normalizedThreads,
-        }], context);
-        if (!isPluginEventExecutionActive(context)) {
-            return null;
-        }
+        }]);
         void this.host.log?.("info", "persistence", "sync.plugin-data.rename.recover", {
             previousNotePath: candidate.notePath,
             nextNotePath: filePath,
@@ -2973,27 +2097,18 @@ export class CommentPersistenceController {
             normalizedPreviousThreads,
             synced.threads,
         );
-        await this.syncEventStore.appendLocalEvents(
-            filePath,
-            ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT,
-            eventInputs,
-        );
+        await this.syncEventStore.appendLocalEvents(filePath, eventInputs);
         if (this.disposed) {
             return currentContent;
         }
-        await this.writeSourceAndPathSidecars(
-            sourceRecord.sourceId,
-            filePath,
-            synced.threads,
-            ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT,
-        );
+        await this.writeSourceAndPathSidecars(sourceRecord.sourceId, filePath, synced.threads);
         if (this.disposed) {
             return currentContent;
         }
         await this.compactSyncedSideNoteEventsForSnapshots([{
             notePath: filePath,
             threads: synced.threads,
-        }], ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
+        }]);
         if (this.disposed) {
             return currentContent;
         }
@@ -3043,27 +2158,18 @@ export class CommentPersistenceController {
             normalizedPreviousThreads,
             threads,
         );
-        await this.syncEventStore.appendLocalEvents(
-            filePath,
-            ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT,
-            eventInputs,
-        );
+        await this.syncEventStore.appendLocalEvents(filePath, eventInputs);
         if (this.disposed) {
             return "";
         }
-        await this.writeSourceAndPathSidecars(
-            sourceRecord.sourceId,
-            filePath,
-            threads,
-            ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT,
-        );
+        await this.writeSourceAndPathSidecars(sourceRecord.sourceId, filePath, threads);
         if (this.disposed) {
             return "";
         }
         await this.compactSyncedSideNoteEventsForSnapshots([{
             notePath: filePath,
             threads,
-        }], ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
+        }]);
         if (this.disposed) {
             return "";
         }
@@ -3098,12 +2204,7 @@ export class CommentPersistenceController {
         }
 
         if (storagePlan.shouldRecoverRenamedSource) {
-            const recoveredThreads = await this.recoverRenamedSourceThreadsForFile(
-                file,
-                noteContent,
-                filePath,
-                ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT,
-            );
+            const recoveredThreads = await this.recoverRenamedSourceThreadsForFile(file, noteContent, filePath);
             if (recoveredThreads) {
                 return {
                     mainContent: inlineParsed.mainContent,
@@ -3125,68 +2226,6 @@ export class CommentPersistenceController {
         };
     }
 
-    private async getCanonicalThreadStateForEvent(
-        file: TFile,
-        noteContent: string,
-        filePath: string,
-        context: PluginEventExecutionContext,
-    ): Promise<{
-        mainContent: string;
-        threads: CommentThread[];
-        source: CanonicalCommentStorageSource;
-    } | null> {
-        const inlineParsed = await this.parseAndNormalizeFileComments(filePath, noteContent);
-        if (!isPluginEventExecutionActive(context)) {
-            return null;
-        }
-        const sourceRecord = await this.ensureSourceIdentityForFilePathForEvent(filePath, noteContent, context);
-        if (!sourceRecord || !isPluginEventExecutionActive(context)) {
-            return null;
-        }
-        const sidecarResult = await this.readSourceOrPathSidecarForEvent(sourceRecord, filePath, context);
-        if (!isPluginEventExecutionActive(context)) {
-            return null;
-        }
-        const sidecarThreads = sidecarResult?.threads ?? null;
-        const storagePlan = planCanonicalCommentStorage({
-            sidecarRecordFound: sidecarResult !== null,
-        });
-
-        if (storagePlan.action === "use-sidecar" && sidecarThreads) {
-            const normalizedThreads = await this.normalizeThreadsForFile(filePath, sidecarThreads);
-            return isPluginEventExecutionActive(context)
-                ? {
-                    mainContent: inlineParsed.mainContent,
-                    threads: normalizedThreads,
-                    source: storagePlan.source,
-                }
-                : null;
-        }
-
-        if (storagePlan.shouldRecoverRenamedSource) {
-            const recoveredThreads = await this.recoverRenamedSourceThreadsForFile(
-                file,
-                noteContent,
-                filePath,
-                context,
-            );
-            if (!isPluginEventExecutionActive(context)) {
-                return null;
-            }
-            return {
-                mainContent: inlineParsed.mainContent,
-                threads: recoveredThreads ?? [],
-                source: recoveredThreads ? "sidecar" : storagePlan.source,
-            };
-        }
-
-        return {
-            mainContent: inlineParsed.mainContent,
-            threads: [],
-            source: storagePlan.source,
-        };
-    }
-
     private async afterCommentsChanged(filePath: string | null = null, options: PersistOptions = {}): Promise<void> {
         if (this.disposed) {
             return;
@@ -3195,12 +2234,9 @@ export class CommentPersistenceController {
             skipDataRefresh: true,
         };
         if (filePath && this.host.isAllCommentsNotePath(filePath)) {
-            await this.host.refreshAllCommentsSidebarViews(
-                viewRefreshOptions,
-                ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT,
-            );
+            await this.host.refreshAllCommentsSidebarViews(viewRefreshOptions);
         } else if (!filePath || !this.consumeCommentViewRefreshSuppression(filePath)) {
-            await this.host.refreshCommentViews(viewRefreshOptions, ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT);
+            await this.host.refreshCommentViews(viewRefreshOptions);
         }
         if (options.refreshEditorDecorations !== false) {
             this.host.refreshEditorDecorations();
@@ -3213,33 +2249,6 @@ export class CommentPersistenceController {
         } else {
             this.scheduleAggregateNoteRefresh();
         }
-    }
-
-    private async afterCommentsChangedForEvent(
-        filePath: string | null,
-        context: PluginEventExecutionContext,
-    ): Promise<void> {
-        if (this.disposed || !isPluginEventExecutionActive(context)) {
-            return;
-        }
-        const viewRefreshOptions = { skipDataRefresh: true };
-        if (filePath && this.host.isAllCommentsNotePath(filePath)) {
-            await this.host.refreshAllCommentsSidebarViews(viewRefreshOptions, context);
-        } else if (!filePath || !this.consumeCommentViewRefreshSuppression(filePath)) {
-            await this.host.refreshCommentViews(viewRefreshOptions, context);
-        }
-        if (!isPluginEventExecutionActive(context)) {
-            return;
-        }
-        this.host.refreshEditorDecorations();
-        if (!isPluginEventExecutionActive(context)) {
-            return;
-        }
-        this.host.refreshMarkdownPreviews();
-        if (!isPluginEventExecutionActive(context)) {
-            return;
-        }
-        this.scheduleAggregateNoteRefreshForEvent(context);
     }
 
     private scheduleCommentViewRefreshSuppression(filePath: string, count: number): void {
@@ -3267,106 +2276,43 @@ export class CommentPersistenceController {
         return true;
     }
 
-    private enqueueAggregateNoteRefreshRequests(
-        requests: readonly AggregateRefreshRequestInput[],
-    ): Promise<void> {
+    private async enqueueAggregateNoteRefresh(): Promise<void> {
         if (this.disposed) {
-            return Promise.resolve();
-        }
-        const requestedRefreshes: Promise<void>[] = [];
-        for (const request of requests) {
-            if (!isPluginEventExecutionActive(request.context)) {
-                continue;
-            }
-            requestedRefreshes.push(new Promise<void>((resolve, reject) => {
-                this.aggregateRefreshRequests.push({
-                    ...request,
-                    resolve,
-                    reject,
-                });
-            }));
-        }
-        if (requestedRefreshes.length === 0) {
-            return Promise.resolve();
-        }
-        this.startAggregateNoteRefreshDrain();
-        return Promise.all(requestedRefreshes).then(() => undefined);
-    }
-
-    private startAggregateNoteRefreshDrain(): void {
-        if (this.disposed || this.aggregateRefreshPromise || this.aggregateRefreshRequests.length === 0) {
             return;
         }
-        const drainPromise = this.drainAggregateNoteRefreshes();
-        this.aggregateRefreshPromise = drainPromise;
-        void drainPromise.finally(() => {
-            if (this.aggregateRefreshPromise === drainPromise) {
+        if (this.aggregateRefreshPromise) {
+            this.aggregateRefreshQueued = true;
+            await this.aggregateRefreshPromise;
+            return;
+        }
+
+        do {
+            if (this.disposed) {
+                return;
+            }
+            this.aggregateRefreshQueued = false;
+            this.aggregateRefreshPromise = this.refreshAggregateNote();
+            try {
+                await this.aggregateRefreshPromise;
+            } finally {
                 this.aggregateRefreshPromise = null;
             }
-            this.startAggregateNoteRefreshDrain();
-        });
+        } while (this.aggregateRefreshQueued);
     }
 
-    private async drainAggregateNoteRefreshes(): Promise<void> {
-        while (!this.disposed && this.aggregateRefreshRequests.length > 0) {
-            const requests = this.aggregateRefreshRequests.splice(0);
-            const activeRequests = requests.filter((request) =>
-                isPluginEventExecutionActive(request.context));
-            if (activeRequests.length === 0) {
-                for (const request of requests) {
-                    request.resolve();
-                }
-                continue;
-            }
-            const compositeContext: PluginEventExecutionContext = {
-                signal: new AbortController().signal,
-                isActive: () => activeRequests.some((request) =>
-                    isPluginEventExecutionActive(request.context)),
-            };
-            try {
-                await this.refreshAggregateNote(
-                    compositeContext,
-                    activeRequests.every((request) => request.skipPersistenceMaintenance),
-                );
-                for (const request of requests) {
-                    request.resolve();
-                }
-            } catch (error) {
-                for (const request of requests) {
-                    if (isPluginEventExecutionActive(request.context)) {
-                        request.reject(error);
-                    } else {
-                        request.resolve();
-                    }
-                }
-            }
-        }
+    private async refreshAggregateNote(): Promise<void> {
         if (this.disposed) {
-            for (const request of this.aggregateRefreshRequests.splice(0)) {
-                request.resolve();
-            }
-        }
-    }
-
-    private async refreshAggregateNote(
-        context: PluginEventExecutionContext,
-        skipPersistenceMaintenance: boolean,
-    ): Promise<void> {
-        if (this.disposed || !isPluginEventExecutionActive(context)) {
             return;
         }
         void this.host.log?.("info", "index", "index.refresh.begin", {});
         try {
-            let prunedMissingSourceCount = 0;
-            if (!skipPersistenceMaintenance) {
-                prunedMissingSourceCount = await this.pruneMissingStoredCommentSources();
-                if (this.disposed || !isPluginEventExecutionActive(context)) {
-                    return;
-                }
-                await this.ensureAggregateCommentIndexInitialized();
-                if (this.disposed || !isPluginEventExecutionActive(context)) {
-                    return;
-                }
+            const prunedMissingSourceCount = await this.pruneMissingStoredCommentSources();
+            if (this.disposed) {
+                return;
+            }
+            await this.ensureAggregateCommentIndexInitialized();
+            if (this.disposed) {
+                return;
             }
             const comments = this.host.getAggregateCommentIndex().getAllThreads();
             const noteOptions: AllCommentsNoteBuildOptions = {
@@ -3396,13 +2342,7 @@ export class CommentPersistenceController {
             const existingFile = this.host.getMarkdownFileByPath(allCommentsNotePath);
 
             if (!existingFile) {
-                if (!isPluginEventExecutionActive(context)) {
-                    return;
-                }
                 await this.host.app.vault.create(allCommentsNotePath, nextContent);
-                if (!isPluginEventExecutionActive(context)) {
-                    return;
-                }
                 void this.host.log?.("info", "index", "index.refresh.success", {
                     commentCount: comments.length,
                     created: true,
@@ -3412,25 +2352,19 @@ export class CommentPersistenceController {
             }
 
             const currentContent = await this.host.getCurrentNoteContent(existingFile);
-            if (this.disposed || !isPluginEventExecutionActive(context)) {
+            if (this.disposed) {
                 return;
             }
             const openView = this.host.getMarkdownViewForFile(existingFile);
             const contentChanged = currentContent !== nextContent;
             if (openView) {
                 await this.host.syncIndexNoteLeafMode(openView.leaf);
-                if (!isPluginEventExecutionActive(context)) {
-                    return;
-                }
                 const viewContentChanged = openView.getViewData() !== nextContent;
                 if (viewContentChanged) {
                     openView.setViewData(nextContent, false);
                 }
                 if (contentChanged) {
                     await openView.save();
-                    if (!isPluginEventExecutionActive(context)) {
-                        return;
-                    }
                 }
                 if ((contentChanged || viewContentChanged) && openView.getMode() === "preview") {
                     openView.previewMode.rerender(true);
@@ -3447,13 +2381,7 @@ export class CommentPersistenceController {
             }
 
             if (!openView) {
-                if (!isPluginEventExecutionActive(context)) {
-                    return;
-                }
                 await this.host.app.vault.modify(existingFile, nextContent);
-                if (!isPluginEventExecutionActive(context)) {
-                    return;
-                }
             }
 
             void this.host.log?.("info", "index", "index.refresh.success", {
@@ -3462,9 +2390,6 @@ export class CommentPersistenceController {
                 prunedMissingSourceCount,
             });
         } catch (error) {
-            if (!isPluginEventExecutionActive(context)) {
-                return;
-            }
             void this.host.log?.("error", "index", "index.refresh.error", {
                 error,
             });

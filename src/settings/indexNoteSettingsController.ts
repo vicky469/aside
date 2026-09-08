@@ -34,11 +34,6 @@ import {
     type PersistedPluginData,
     type PersistedPluginDataUpdater,
 } from "./indexNoteSettingsPlanner";
-import {
-    ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT,
-    isPluginEventExecutionActive,
-    type PluginEventExecutionContext,
-} from "../core/events/pluginEventExecutionContext";
 
 export interface IndexNoteSettingsHost {
     app: Plugin["app"];
@@ -159,10 +154,6 @@ export class IndexNoteSettingsController {
     }
 
     private async loadSettingsNow(): Promise<void> {
-        // Maintenance listeners are already live before this wait. Holding reload
-        // installation behind the persistence tail prevents a transaction that
-        // entered the prior event epoch from committing over newly loaded state.
-        await this.persistedPluginDataWriteQueue;
         const loaded = await this.host.loadData();
         this.persistedPluginData = clonePersistedPluginData(loaded ?? {});
         const resolved = resolveLoadedSettings(loaded, this.host.getSettings(), {
@@ -488,51 +479,7 @@ export class IndexNoteSettingsController {
         return clonePersistedPluginData(this.persistedPluginData);
     }
 
-    public async setPublishedPublicArtifactPaths(
-        paths: readonly string[],
-        context: PluginEventExecutionContext,
-    ): Promise<boolean> {
-        let updated = false;
-        try {
-            await this.enqueueSettingsTransition(async () => {
-                if (!isPluginEventExecutionActive(context)) {
-                    return;
-                }
-                const settings = this.host.getSettings();
-                if (settings.publishedPublicArtifactPaths.length === paths.length
-                    && settings.publishedPublicArtifactPaths.every((path, index) => path === paths[index])) {
-                    return;
-                }
-                const nextPaths = [...paths];
-                if (!isPluginEventExecutionActive(context)) {
-                    return;
-                }
-                await this.updatePersistedPluginData((currentData) => ({
-                    ...currentData,
-                    publishedPublicArtifactPaths: nextPaths,
-                }), context);
-                if (!isPluginEventExecutionActive(context)) {
-                    return;
-                }
-                this.host.setSettings({
-                    ...this.host.getSettings(),
-                    publishedPublicArtifactPaths: nextPaths,
-                });
-                updated = true;
-            });
-        } catch (error) {
-            if (!isPluginEventExecutionActive(context)) {
-                return false;
-            }
-            throw error;
-        }
-        return updated;
-    }
-
-    public async writePersistedPluginData(
-        data: PersistedPluginData,
-        context: PluginEventExecutionContext = ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT,
-    ): Promise<void> {
+    public async writePersistedPluginData(data: PersistedPluginData): Promise<void> {
         const patch = buildPersistedPluginDataPatch(this.persistedPluginData, data);
         await this.updatePersistedPluginData((currentData) => {
             const nextData = currentData as Record<string, unknown>;
@@ -543,27 +490,17 @@ export class IndexNoteSettingsController {
                 nextData[key] = clonePersistedPluginDataValue(value);
             }
             return currentData;
-        }, context);
+        });
     }
 
     public updatePersistedPluginData(
         updater: PersistedPluginDataUpdater,
-        context: PluginEventExecutionContext = ALWAYS_ACTIVE_PLUGIN_EVENT_CONTEXT,
     ): Promise<PersistedPluginData> {
         const result = this.persistedPluginDataWriteQueue.then(async () => {
-            if (!isPluginEventExecutionActive(context)) {
-                return clonePersistedPluginData(this.persistedPluginData);
-            }
             const persistedData = this.sanitizePersistedPluginData(updater(
                 clonePersistedPluginData(this.persistedPluginData),
             ));
-            if (!isPluginEventExecutionActive(context)) {
-                return clonePersistedPluginData(this.persistedPluginData);
-            }
             await this.host.saveData(clonePersistedPluginData(persistedData));
-            if (!isPluginEventExecutionActive(context)) {
-                return clonePersistedPluginData(this.persistedPluginData);
-            }
             this.persistedPluginData = clonePersistedPluginData(persistedData);
             return clonePersistedPluginData(persistedData);
         });

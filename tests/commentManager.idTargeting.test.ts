@@ -313,39 +313,6 @@ test("CommentManager keeps id and file lookups current after replacement and ren
     );
 });
 
-test("CommentManager retargets multiple files while rebuilding lookups once", () => {
-    const manager = new CommentManager([
-        { ...createComment("a", 1710000000000, "a"), filePath: "Drafts/a.md" },
-        {
-            ...createComment("b", 1710000001000, "b"),
-            filePath: "Drafts/b.pdf",
-            anchorKind: "page",
-            selectedText: "b",
-        },
-    ]);
-
-    manager.renameFiles([{
-        previousFilePath: "Drafts/a.md",
-        nextFilePath: "Published/a.md",
-        retargetOptions: { selectionCapable: true, pageLabelHash: "hash-a" },
-    }, {
-        previousFilePath: "Drafts/b.pdf",
-        nextFilePath: "Published/Renamed B.pdf",
-        retargetOptions: { selectionCapable: false, pageLabelHash: "hash-renamed-b" },
-    }]);
-
-    assert.equal(manager.getThreadById("a")?.filePath, "Published/a.md");
-    assert.deepEqual({
-        filePath: manager.getThreadById("b")?.filePath,
-        selectedText: manager.getThreadById("b")?.selectedText,
-        selectedTextHash: manager.getThreadById("b")?.selectedTextHash,
-    }, {
-        filePath: "Published/Renamed B.pdf",
-        selectedText: "Renamed B",
-        selectedTextHash: "hash-renamed-b",
-    });
-});
-
 test("CommentManager retargets nested selection anchors when a Markdown file is renamed", () => {
     const thread = commentToThread(createComment("thread-main", 1710000000000, "main"));
     thread.entries.push({
