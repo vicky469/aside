@@ -18,11 +18,7 @@ class FakeElement {
     };
 
     public get isConnected(): boolean {
-        let current: FakeElement = this;
-        while (current.parentElement) {
-            current = current.parentElement;
-        }
-        return current.mountedRoot;
+        return this.mountedRoot || (this.parentElement?.isConnected ?? false);
     }
 
     public appendChild(child: FakeElement): FakeElement {
