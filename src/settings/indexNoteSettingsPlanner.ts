@@ -71,6 +71,15 @@ export function hasPersistedIndexNotePath(data: PersistedPluginData | null): boo
     return typeof data?.indexNotePath === "string" && data.indexNotePath.trim().length > 0;
 }
 
+function hasPersistedScriptsUsage(data: PersistedPluginData | null): boolean {
+    return (Array.isArray(data?.agentRuns) && data.agentRuns.length > 0)
+        || (Array.isArray(data?.scriptRuns) && data.scriptRuns.length > 0);
+}
+
+export function needsScriptsMigrationEvidence(data: PersistedPluginData | null): boolean {
+    return typeof data?.scriptsEnabled !== "boolean" && !hasPersistedScriptsUsage(data);
+}
+
 function normalizeSidebarTabToggle(value: unknown, fallback: boolean): boolean {
     return typeof value === "boolean" ? value : fallback;
 }
@@ -104,8 +113,7 @@ export function resolveLoadedSettings(
         : false;
     const scriptsEnabled = typeof loaded?.scriptsEnabled === "boolean"
         ? loaded.scriptsEnabled
-        : (Array.isArray(loaded?.agentRuns) && loaded.agentRuns.length > 0)
-            || (Array.isArray(loaded?.scriptRuns) && loaded.scriptRuns.length > 0)
+        : hasPersistedScriptsUsage(loaded)
             || evidence.hasRegisteredVaultScripts;
     const publishSettings = normalizePublishSettings(loaded ?? defaults);
     const defaultAgent = normalizeSupportedAgentTarget(

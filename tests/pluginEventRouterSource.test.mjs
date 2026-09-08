@@ -8,31 +8,49 @@ const onloadStart = mainSource.indexOf("async onload()");
 const onloadEnd = mainSource.indexOf("\n    onunload()", onloadStart);
 const onloadSource = mainSource.slice(onloadStart, onloadEnd);
 
-test("main registers only vault create immediately after the initial script-registry seed", () => {
+test("main registers startup vault listeners immediately after the initial script-registry seed", () => {
     const seedIndex = onloadSource.indexOf("this.vaultScriptRegistry.seed(");
-    const earlyRegisterIndex = onloadSource.indexOf("this.pluginEventRouter.registerVaultCreateEvent();");
+    const earlyRegisterIndex = onloadSource.indexOf("this.pluginEventRouter.registerVaultStartupEvents();");
     const loadSettingsIndex = onloadSource.indexOf("await this.loadSettings();");
     const fullRegisterIndex = onloadSource.indexOf("await this.pluginEventRouter.register();");
 
     assert.ok(seedIndex >= 0, "onload should seed the vault script registry");
-    assert.ok(earlyRegisterIndex > seedIndex, "early vault create registration should follow the initial seed");
+    assert.ok(earlyRegisterIndex > seedIndex, "startup vault registration should follow the initial seed");
     assert.ok(loadSettingsIndex > earlyRegisterIndex, "settings migration should observe the seeded registry");
-    assert.ok(fullRegisterIndex > earlyRegisterIndex, "early create registration should precede full routing");
+    assert.ok(fullRegisterIndex > earlyRegisterIndex, "startup vault registration should precede full routing");
     assert.doesNotMatch(
         onloadSource.slice(seedIndex, earlyRegisterIndex),
         /\bawait\b/,
-        "startup must not yield between the initial seed and create registration",
+        "startup must not yield between the initial seed and startup listener registration",
     );
 });
 
-test("main delegates early vault create ownership to the router exactly once", () => {
-    const earlyRegistrationCalls = mainSource.match(/this\.pluginEventRouter\.registerVaultCreateEvent\(\);/g) ?? [];
+test("main delegates startup vault listener ownership to the router exactly once", () => {
+    const earlyRegistrationCalls = mainSource.match(/this\.pluginEventRouter\.registerVaultStartupEvents\(\);/g) ?? [];
     assert.equal(earlyRegistrationCalls.length, 1);
     assert.doesNotMatch(mainSource, /registerVaultMaintenanceEvents/u);
+    assert.doesNotMatch(mainSource, /registerVaultCreateEvent/u);
     assert.doesNotMatch(mainSource, /this\.app\.vault\.on\("create"/);
     assert.doesNotMatch(mainSource, /this\.app\.vault\.on\("rename"/);
     assert.doesNotMatch(mainSource, /this\.app\.vault\.on\("delete"/);
     assert.doesNotMatch(mainSource, /this\.app\.vault\.on\("modify"/);
+});
+
+test("startup rename and delete maintenance refresh only the vault script registry", () => {
+    const routerHostStart = mainSource.indexOf("private readonly pluginEventRouter = new PluginEventRouter({");
+    const renameMaintenanceStart = mainSource.indexOf("handleFileRenameMaintenance:", routerHostStart);
+    const deleteMaintenanceStart = mainSource.indexOf("handleFileDeleteMaintenance:", renameMaintenanceStart);
+    const layoutReadyStart = mainSource.indexOf("handleLayoutReady:", deleteMaintenanceStart);
+    const renameMaintenanceSource = mainSource.slice(renameMaintenanceStart, deleteMaintenanceStart);
+    const deleteMaintenanceSource = mainSource.slice(deleteMaintenanceStart, layoutReadyStart);
+
+    assert.ok(routerHostStart >= 0 && renameMaintenanceStart > routerHostStart);
+    assert.ok(deleteMaintenanceStart > renameMaintenanceStart && layoutReadyStart > deleteMaintenanceStart);
+    for (const maintenanceSource of [renameMaintenanceSource, deleteMaintenanceSource]) {
+        assert.match(maintenanceSource, /refreshVaultScriptRegistry\(/u);
+        assert.doesNotMatch(maintenanceSource, /pluginLifecycleController/u);
+        assert.doesNotMatch(maintenanceSource, /vaultCapabilityIndex/u);
+    }
 });
 
 test("settings migration evidence refreshes the canonical registry from current vault files", () => {
@@ -49,24 +67,28 @@ test("main refreshes the script registry immediately before final router registr
     );
 });
 
-test("full router registration installs vault listeners before its first await", () => {
-    const registerStart = routerSource.indexOf("public async register()");
-    const createRegistrationStart = routerSource.indexOf("public registerVaultCreateEvent()", registerStart);
-    const registerSource = routerSource.slice(registerStart, createRegistrationStart);
-    const vaultEventsStart = routerSource.indexOf("private registerVaultEvents(): void");
-    const layoutReadyStart = routerSource.indexOf("private async registerLayoutReady()", vaultEventsStart);
-    const vaultEventsSource = routerSource.slice(vaultEventsStart, layoutReadyStart);
-    const vaultRegistrationIndex = registerSource.indexOf("this.registerVaultEvents();");
-    const layoutReadyAwaitIndex = registerSource.indexOf("await this.registerLayoutReady();");
+test("full router registration starts activation before its first unrelated await", () => {
+    const registerStart = routerSource.indexOf("public register(): Promise<void>");
+    const completionStart = routerSource.indexOf("private async completeRegistration()", registerStart);
+    const startupRegistrationStart = routerSource.indexOf("public registerVaultStartupEvents()", completionStart);
+    const registerSource = routerSource.slice(registerStart, completionStart);
+    const completionSource = routerSource.slice(completionStart, startupRegistrationStart);
+    const startupEventsEnd = routerSource.indexOf("private async activateVaultLifecycleEvents", startupRegistrationStart);
+    const startupEventsSource = routerSource.slice(startupRegistrationStart, startupEventsEnd);
 
-    assert.ok(registerStart >= 0 && createRegistrationStart > registerStart);
-    assert.ok(vaultEventsStart >= 0 && layoutReadyStart > vaultEventsStart);
-    assert.ok(vaultRegistrationIndex >= 0);
-    assert.ok(layoutReadyAwaitIndex > vaultRegistrationIndex);
-    assert.match(vaultEventsSource, /^private registerVaultEvents\(\): void/u);
-    assert.match(vaultEventsSource, /vault\.on\("rename"/u);
-    assert.match(vaultEventsSource, /vault\.on\("delete"/u);
-    assert.match(vaultEventsSource, /vault\.on\("modify"/u);
+    assert.ok(registerStart >= 0 && completionStart > registerStart);
+    assert.ok(startupRegistrationStart > completionStart && startupEventsEnd > startupRegistrationStart);
+    assert.match(
+        registerSource,
+        /this\.registerVaultStartupEvents\(\);\s*this\.registerVaultModifyEvent\(\);\s*this\.registrationPromise = this\.completeRegistration\(\);/u,
+    );
+    assert.match(
+        completionSource,
+        /await this\.activateVaultLifecycleEvents\(\);\s*await this\.registerLayoutReady\(\);/u,
+    );
+    assert.match(startupEventsSource, /vault\.on\("create"/u);
+    assert.match(startupEventsSource, /vault\.on\("rename"/u);
+    assert.match(startupEventsSource, /vault\.on\("delete"/u);
 });
 
 test("main delegates Scripts settings changes", () => {

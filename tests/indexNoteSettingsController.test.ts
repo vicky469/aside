@@ -129,6 +129,7 @@ function createControllerHarness(options: {
     const refreshedTargets: Array<string | null> = [];
     let refreshCommentViewsCount = 0;
     let refreshAggregateNoteCount = 0;
+    let registeredVaultScriptEvidenceReadCount = 0;
     const renamedFiles: Array<{ from: string; to: string }> = [];
     const adapterRenamedFiles: Array<{ from: string; to: string }> = [];
     const deletedFiles: string[] = [];
@@ -253,7 +254,10 @@ function createControllerHarness(options: {
         refreshAggregateNoteNow: async () => {
             refreshAggregateNoteCount += 1;
         },
-        hasRegisteredVaultScripts: () => options.hasRegisteredVaultScripts ?? false,
+        hasRegisteredVaultScripts: () => {
+            registeredVaultScriptEvidenceReadCount += 1;
+            return options.hasRegisteredVaultScripts ?? false;
+        },
         loadData: async () => {
             if (options.loadData) {
                 return options.loadData();
@@ -303,6 +307,7 @@ function createControllerHarness(options: {
         refreshedTargets,
         getRefreshCommentViewsCount: () => refreshCommentViewsCount,
         getRefreshAggregateNoteCount: () => refreshAggregateNoteCount,
+        getRegisteredVaultScriptEvidenceReadCount: () => registeredVaultScriptEvidenceReadCount,
         renamedFiles,
         adapterRenamedFiles,
         deletedFiles,
@@ -705,6 +710,49 @@ test("index note settings controller uses registered vault scripts as migration 
 
     assert.equal(harness.getSettings().scriptsEnabled, true);
     assert.equal(harness.savedPayloads.at(-1)?.scriptsEnabled, true);
+    assert.equal(harness.getRegisteredVaultScriptEvidenceReadCount(), 1);
+});
+
+test("index note settings controller skips registry evidence for an explicit Scripts boolean", async () => {
+    const harness = createControllerHarness({
+        loadedData: createSettings({ scriptsEnabled: false }),
+        hasRegisteredVaultScripts: true,
+    });
+
+    await harness.controller.loadSettings();
+
+    assert.equal(harness.getSettings().scriptsEnabled, false);
+    assert.equal(harness.getRegisteredVaultScriptEvidenceReadCount(), 0);
+});
+
+test("index note settings controller reads registry evidence once for an invalid Scripts value", async () => {
+    const harness = createControllerHarness({
+        loadedData: {
+            ...withoutScriptsSetting(),
+            scriptsEnabled: "invalid" as unknown as boolean,
+        },
+        hasRegisteredVaultScripts: true,
+    });
+
+    await harness.controller.loadSettings();
+
+    assert.equal(harness.getSettings().scriptsEnabled, true);
+    assert.equal(harness.getRegisteredVaultScriptEvidenceReadCount(), 1);
+});
+
+test("index note settings controller skips registry evidence when run history already proves Scripts usage", async () => {
+    const harness = createControllerHarness({
+        loadedData: {
+            ...withoutScriptsSetting(),
+            scriptRuns: [{ id: "script-run" }],
+        },
+        hasRegisteredVaultScripts: false,
+    });
+
+    await harness.controller.loadSettings();
+
+    assert.equal(harness.getSettings().scriptsEnabled, true);
+    assert.equal(harness.getRegisteredVaultScriptEvidenceReadCount(), 0);
 });
 
 test("index note settings controller migrates a persisted legacy index note on load", async () => {

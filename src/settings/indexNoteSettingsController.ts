@@ -28,6 +28,7 @@ import {
 import {
     getIndexNoteParentPath,
     hasPersistedIndexNotePath,
+    needsScriptsMigrationEvidence,
     resolveIndexNotePathChange,
     resolveLoadedSettings,
     shouldApplyNormalizedSettingChange,
@@ -156,8 +157,11 @@ export class IndexNoteSettingsController {
     private async loadSettingsNow(): Promise<void> {
         const loaded = await this.host.loadData();
         this.persistedPluginData = clonePersistedPluginData(loaded ?? {});
+        const hasRegisteredVaultScripts = needsScriptsMigrationEvidence(loaded)
+            ? this.host.hasRegisteredVaultScripts()
+            : false;
         const resolved = resolveLoadedSettings(loaded, this.host.getSettings(), {
-            hasRegisteredVaultScripts: this.host.hasRegisteredVaultScripts(),
+            hasRegisteredVaultScripts,
         });
         this.host.setSettings(resolved.settings);
 

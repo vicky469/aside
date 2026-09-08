@@ -92,10 +92,17 @@ export class VaultScriptRegistry {
     }
 }
 
+export function refreshVaultScriptRegistry(
+    registry: VaultScriptRegistry,
+    currentVaultPaths: readonly string[],
+): void {
+    registry.seed(currentVaultPaths);
+}
+
 export function refreshVaultScriptRegistryEvidence(
     registry: VaultScriptRegistry,
     currentVaultPaths: readonly string[],
 ): boolean {
-    registry.seed(currentVaultPaths);
+    refreshVaultScriptRegistry(registry, currentVaultPaths);
     return registry.getRunnableScripts().length > 0;
 }

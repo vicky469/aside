@@ -46,6 +46,7 @@ import {
 import { ScriptRunStore } from "./vaultScripts/scriptRunStore";
 import { ensureVaultScriptFolder } from "./vaultScripts/vaultScriptFolderProvisioner";
 import {
+    refreshVaultScriptRegistry,
     refreshVaultScriptRegistryEvidence,
     VaultScriptRegistry,
 } from "./vaultScripts/vaultScriptRegistry";
@@ -784,6 +785,18 @@ export default class Aside extends Plugin {
             this.registerEvent(eventRef);
         },
         isTFile: (value): value is TFile => value instanceof TFile,
+        handleFileRenameMaintenance: () => {
+            refreshVaultScriptRegistry(
+                this.vaultScriptRegistry,
+                this.app.vault.getFiles().map((candidate) => candidate.path),
+            );
+        },
+        handleFileDeleteMaintenance: () => {
+            refreshVaultScriptRegistry(
+                this.vaultScriptRegistry,
+                this.app.vault.getFiles().map((candidate) => candidate.path),
+            );
+        },
         handleLayoutReady: () => this.pluginLifecycleController.handleLayoutReady(),
         handleFileOpen: (file) => {
             this.workspaceContextController.handleFileOpen(file);
@@ -829,6 +842,12 @@ export default class Aside extends Plugin {
         },
         handleEditorChange: (filePath) => {
             this.pluginLifecycleController.handleEditorChange(filePath);
+        },
+        reportAsyncEventError: (eventName, error) => {
+            void this.logEvent("error", "events", "events.async-handler.error", {
+                eventName,
+                error,
+            }).catch(() => undefined);
         },
     });
     private activeMarkdownFile: TFile | null = null;
@@ -876,7 +895,7 @@ export default class Aside extends Plugin {
 
         this.commentManager = new CommentManager([]);
         this.vaultScriptRegistry.seed(this.app.vault.getFiles().map((file) => file.path));
-        this.pluginEventRouter.registerVaultCreateEvent();
+        this.pluginEventRouter.registerVaultStartupEvents();
         await this.loadSettings();
         this.scriptRunStore.load();
         this.vaultCapabilityIndex.seed(
