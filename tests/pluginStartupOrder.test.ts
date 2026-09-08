@@ -32,6 +32,21 @@ test("plugin startup has no hidden feature-flag synchronization", () => {
     assert.equal(source.includes("getFeatureFlagStorageKey"), false);
 });
 
+test("plugin startup queues script-run initialization after settings load", () => {
+    const source = readFileSync("src/main.ts", "utf8");
+    const onloadStart = source.indexOf("async onload()");
+    const unloadStart = source.indexOf("onunload()");
+    const onloadBody = source.slice(onloadStart, unloadStart);
+    const settingsLoad = onloadBody.indexOf("await this.loadSettings();");
+    const scriptRunInitialization = onloadBody.indexOf(
+        "await this.scriptRunStore.initializeFromPersistedData();",
+    );
+
+    assert.ok(settingsLoad >= 0);
+    assert.ok(scriptRunInitialization > settingsLoad);
+    assert.equal(onloadBody.includes("this.scriptRunStore.load();"), false);
+});
+
 test("plugin refreshes the public inventory during startup maintenance", () => {
     const source = readFileSync("src/main.ts", "utf8");
     const maintenanceStart = source.indexOf("private async runStartupPersistenceMaintenance()");
@@ -44,6 +59,32 @@ test("plugin refreshes the public inventory during startup maintenance", () => {
         maintenanceBody,
         /await this\.publicHtmlPublishController\.refreshPublicPublishIndex\(\);/u,
     );
+});
+
+test("plugin startup awaits public file action synchronization", () => {
+    const source = readFileSync("src/main.ts", "utf8");
+    const onloadStart = source.indexOf("async onload()");
+    const unloadStart = source.indexOf("onunload()");
+    const onloadBody = source.slice(onloadStart, unloadStart);
+
+    assert.match(onloadBody, /await this\.syncPublicFilePublishActions\(\);/u);
+});
+
+test("workspace publish action refreshes contain and report rejected promises", () => {
+    const source = readFileSync("src/main.ts", "utf8");
+    const routerHostStart = source.indexOf("private readonly pluginEventRouter = new PluginEventRouter({");
+    const routerHostEnd = source.indexOf("private activeMarkdownFile", routerHostStart);
+    const routerHostSource = source.slice(routerHostStart, routerHostEnd);
+    const safeMethodStart = source.indexOf("private syncPublicFilePublishActionsSafely()");
+    const safeMethodEnd = source.indexOf("private syncPublicFilePublishActions()", safeMethodStart);
+    const safeMethodSource = source.slice(safeMethodStart, safeMethodEnd);
+
+    assert.ok(routerHostStart >= 0 && routerHostEnd > routerHostStart);
+    assert.match(routerHostSource, /handleFileOpen:[\s\S]*this\.syncPublicFilePublishActionsSafely\(\)/u);
+    assert.match(routerHostSource, /handleActiveLeafChange:[\s\S]*this\.syncPublicFilePublishActionsSafely\(\)/u);
+    assert.ok(safeMethodStart >= 0 && safeMethodEnd > safeMethodStart);
+    assert.match(safeMethodSource, /runReportedAsyncRefresh\(/u);
+    assert.match(safeMethodSource, /this\.warn\(/u);
 });
 
 test("metadata changes update tag membership before refreshing visible tag results", () => {

@@ -2,13 +2,17 @@ import {
     cloneScriptRunRecord,
     cloneScriptRunRecords,
     getScriptRunById,
+    isLatestScriptRunRetryAttempt,
     type ScriptRunRecord,
 } from "../core/scripts/scriptRuns";
 import type {
     PersistedPluginData,
     PersistedPluginDataUpdater,
 } from "../settings/indexNoteSettingsPlanner";
-import { normalizePersistedScriptRuns } from "./scriptRunStorePlanner";
+import {
+    mergePersistedScriptRunsPreservingActive,
+    normalizePersistedScriptRuns,
+} from "./scriptRunStorePlanner";
 
 export interface ScriptRunStoreHost {
     readPersistedPluginData(): PersistedPluginData | null;
@@ -22,7 +26,46 @@ export class ScriptRunStore {
     constructor(private readonly host: ScriptRunStoreHost) {}
 
     public load(): void {
-        this.runs = normalizePersistedScriptRuns(
+        this.runs = this.readPersistedRuns();
+    }
+
+    public async initializeFromPersistedData(): Promise<void> {
+        await this.enqueueMutation(() => {
+            this.runs = this.readPersistedRuns();
+            return Promise.resolve();
+        });
+    }
+
+    public async reloadPreservingActiveRuns(
+        runIdsToPreserve: readonly string[] = [],
+        runIdsBeforeLoad?: readonly string[],
+    ): Promise<void> {
+        await this.enqueueMutation(() => {
+            const runIdsBeforeLoadSet = runIdsBeforeLoad
+                ? new Set(runIdsBeforeLoad)
+                : null;
+            const runIdsAddedDuringLoad = runIdsBeforeLoadSet
+                ? this.runs
+                    .filter((run) => !runIdsBeforeLoadSet.has(run.id))
+                    .map((run) => run.id)
+                : [];
+            this.runs = mergePersistedScriptRunsPreservingActive(
+                this.readPersistedRuns(),
+                this.runs,
+                [...runIdsToPreserve, ...runIdsAddedDuringLoad],
+            );
+            return Promise.resolve();
+        });
+    }
+
+    public getActiveRunIds(): string[] {
+        return this.runs
+            .filter((run) => run.status === "queued" || run.status === "running")
+            .map((run) => run.id);
+    }
+
+    private readPersistedRuns(): ScriptRunRecord[] {
+        return normalizePersistedScriptRuns(
             this.host.readPersistedPluginData()?.scriptRuns,
         );
     }
@@ -43,6 +86,28 @@ export class ScriptRunStore {
             await this.persist(nextRuns);
             this.runs = nextRuns;
             return cloneScriptRunRecord(runSnapshot);
+        });
+    }
+
+    public async addRetryRunIfLatest(
+        previousRun: ScriptRunRecord,
+        retryRun: ScriptRunRecord,
+    ): Promise<ScriptRunRecord | null> {
+        const previousSnapshot = cloneScriptRunRecord(previousRun);
+        const retrySnapshot = cloneScriptRunRecord(retryRun);
+        return this.enqueueMutation(async () => {
+            if (
+                retrySnapshot.status !== "queued"
+                || retrySnapshot.retryOfRunId !== previousSnapshot.id
+                || retrySnapshot.triggerEntryId !== previousSnapshot.triggerEntryId
+                || !isLatestScriptRunRetryAttempt(this.runs, previousSnapshot)
+            ) {
+                return null;
+            }
+            const nextRuns = this.runs.concat(cloneScriptRunRecord(retrySnapshot));
+            await this.persist(nextRuns);
+            this.runs = nextRuns;
+            return cloneScriptRunRecord(retrySnapshot);
         });
     }
 

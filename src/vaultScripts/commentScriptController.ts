@@ -2,6 +2,7 @@ import type { CommentManager } from "../commentManager";
 import type { SavedUserEntryEvent } from "../core/comments/savedUserEntry";
 import {
     getLatestScriptRunForTriggerEntry,
+    isLatestScriptRunRetryAttempt,
     type ScriptRunRecord,
 } from "../core/scripts/scriptRuns";
 import { resolveScriptDirective, type ScriptDirectiveResolution } from "./scriptDirectives";
@@ -38,6 +39,7 @@ export interface CommentScriptHost {
             skipCommentViewRefresh?: boolean;
             refreshEditorDecorations?: boolean;
             refreshMarkdownPreviews?: boolean;
+            isStillValid?: () => boolean;
         },
     ): Promise<boolean>;
     editComment(
@@ -48,6 +50,7 @@ export interface CommentScriptHost {
             deferAggregateRefresh?: boolean;
             refreshEditorDecorations?: boolean;
             refreshMarkdownPreviews?: boolean;
+            isStillValid?: () => boolean;
         },
     ): Promise<boolean>;
     refreshCommentViews(): Promise<void>;
@@ -57,6 +60,7 @@ export interface CommentScriptHost {
 }
 
 export interface SavedEntryScriptController {
+    ownsSavedUserEntry(entryId: string): boolean;
     handleSavedUserEntry(event: SavedUserEntryEvent): Promise<boolean>;
 }
 
@@ -91,8 +95,14 @@ export async function routeSavedUserEntry(route: SavedUserEntryRoute): Promise<v
         agentController,
     } = route;
     const fallBackToAgent = async (): Promise<void> => {
+        if (scriptController.ownsSavedUserEntry(event.entryId)) {
+            return;
+        }
         await agentController.handleSavedUserEntry(event);
     };
+    if (scriptController.ownsSavedUserEntry(event.entryId)) {
+        return;
+    }
     if (!isScriptsEnabled()) {
         await fallBackToAgent();
         return;
@@ -160,8 +170,10 @@ export function summarizeScriptError(error: unknown): string {
 
 export class CommentScriptController {
     private executionQueue: Promise<void> = Promise.resolve();
-    private readonly claimingSavedEntryIds = new Set<string>();
-    private readonly retryingRunIds = new Set<string>();
+    private readonly claimingSavedEntryGenerations = new Map<string, number>();
+    private readonly retryingTriggerEntryGenerations = new Map<string, number>();
+    private readonly retryingOutputEntryGenerations = new Map<string, number>();
+    private lifecycleGeneration = 0;
     private disposed = false;
 
     constructor(
@@ -170,36 +182,47 @@ export class CommentScriptController {
     ) {}
 
     public initialize(): void {
+        this.lifecycleGeneration += 1;
         this.disposed = false;
+        this.executionQueue = Promise.resolve();
     }
 
     public dispose(): void {
+        this.lifecycleGeneration += 1;
         this.disposed = true;
-        this.claimingSavedEntryIds.clear();
-        this.retryingRunIds.clear();
+        this.claimingSavedEntryGenerations.clear();
+        this.retryingTriggerEntryGenerations.clear();
+        this.retryingOutputEntryGenerations.clear();
     }
 
     public getRuns(): ScriptRunRecord[] {
         return this.store.getRuns();
     }
 
+    public getLocallyOwnedRunIds(): string[] {
+        return this.store.getActiveRunIds();
+    }
+
     public async reconcilePendingRunsFromPreviousSession(): Promise<boolean> {
         return this.store.failPendingRuns(SCRIPT_SESSION_INTERRUPTED_ERROR, this.host.now());
     }
 
+    public ownsSavedUserEntry(entryId: string): boolean {
+        return this.claimingSavedEntryGenerations.has(entryId)
+            || getLatestScriptRunForTriggerEntry(this.store.getRuns(), entryId) !== null;
+    }
+
     public async handleSavedUserEntry(event: SavedUserEntryEvent): Promise<boolean> {
+        // A stored run is the durable routing receipt for this saved entry. This check
+        // intentionally precedes both the current capability gate and body/registry
+        // resolution so refreshes cannot reroute an already-claimed trigger.
+        if (this.ownsSavedUserEntry(event.entryId)) {
+            return true;
+        }
         if (!this.canStartScriptRun()) {
             return false;
         }
-        // A stored run is the durable routing receipt for this saved entry. This check
-        // intentionally precedes current body/registry resolution so refreshes, edits,
-        // or storage changes cannot reroute or repeat an already-claimed trigger.
-        if (
-            this.claimingSavedEntryIds.has(event.entryId)
-            || getLatestScriptRunForTriggerEntry(this.store.getRuns(), event.entryId)
-        ) {
-            return true;
-        }
+        const generation = this.lifecycleGeneration;
         const resolution = resolveScriptDirective(event.body, this.host.getRegistry());
         if (resolution.kind === "none") {
             return false;
@@ -208,7 +231,7 @@ export class CommentScriptController {
             return false;
         }
 
-        this.claimingSavedEntryIds.add(event.entryId);
+        this.claimingSavedEntryGenerations.set(event.entryId, generation);
         try {
             if (resolution.kind === "rejected") {
                 const rejectedRun = this.buildRejectedRun(event, resolution);
@@ -216,15 +239,37 @@ export class CommentScriptController {
                     return false;
                 }
                 await this.store.addRun(rejectedRun);
-                const outputEntryId = await this.writeOutput(
-                    rejectedRun,
-                    formatScriptResult(resolution.mentionName, resolution.message),
-                );
-                await this.store.updateRun(rejectedRun.id, (current) => ({
-                    ...current,
-                    outputEntryId,
-                }));
-                await this.host.refreshCommentViews();
+                if (!this.isGenerationActive(generation)) {
+                    return true;
+                }
+                let outputEntryId: string;
+                try {
+                    outputEntryId = await this.writeOutput(
+                        rejectedRun,
+                        formatScriptResult(resolution.mentionName, resolution.message),
+                        generation,
+                    );
+                } catch (error) {
+                    if (!this.isGenerationActive(generation)) {
+                        return true;
+                    }
+                    throw error;
+                }
+                if (!this.isGenerationActive(generation)) {
+                    return true;
+                }
+                await this.store.updateRun(rejectedRun.id, (current) => {
+                    if (!this.isGenerationActive(generation)) {
+                        return current;
+                    }
+                    return {
+                        ...current,
+                        outputEntryId,
+                    };
+                });
+                if (this.isGenerationActive(generation)) {
+                    await this.host.refreshCommentViews();
+                }
                 return true;
             }
 
@@ -233,39 +278,59 @@ export class CommentScriptController {
                 return false;
             }
             await this.store.addRun(run);
-            try {
-                await this.appendPendingOutput(run);
-            } catch (error) {
-                const message = summarizeScriptError(error);
-                await this.terminalizeFailedRun(run.id, message);
-                this.host.showNotice(message);
-                await this.refreshCommentViewsBestEffort();
+            if (!this.isGenerationActive(generation)) {
+                await this.terminalizeRunFromRetiredGeneration(run.id, generation);
                 return true;
             }
-            await this.refreshCommentViewsBestEffort();
-            void this.enqueue(run);
+            try {
+                await this.appendPendingOutput(run, generation);
+            } catch (error) {
+                if (!this.isGenerationActive(generation)) {
+                    await this.terminalizeRunFromRetiredGeneration(run.id, generation);
+                    return true;
+                }
+                const message = summarizeScriptError(error);
+                await this.terminalizeFailedRun(run.id, message, generation);
+                this.host.showNotice(message);
+                await this.refreshCommentViewsBestEffort(generation);
+                return true;
+            }
+            if (!this.isGenerationActive(generation)) {
+                await this.terminalizeRunFromRetiredGeneration(run.id, generation);
+                return true;
+            }
+            await this.refreshCommentViewsBestEffort(generation);
+            if (this.isGenerationActive(generation)) {
+                void this.enqueue(run, generation);
+            }
             return true;
         } finally {
-            this.claimingSavedEntryIds.delete(event.entryId);
+            if (this.claimingSavedEntryGenerations.get(event.entryId) === generation) {
+                this.claimingSavedEntryGenerations.delete(event.entryId);
+            }
         }
     }
 
     public async retryRun(runId: string): Promise<boolean> {
-        if (
-            !this.canStartScriptRun()
-            || this.retryingRunIds.has(runId)
-        ) {
+        if (!this.canStartScriptRun()) {
             return false;
         }
         const previous = this.store.getRunById(runId);
-        if (!previous || previous.status === "queued" || previous.status === "running") {
+        if (!previous || !this.isLatestRetryAttempt(previous)) {
+            return false;
+        }
+        const generation = this.lifecycleGeneration;
+        if (!this.claimRetryOwnership(previous, generation)) {
             return false;
         }
 
-        this.retryingRunIds.add(runId);
         try {
             await this.host.loadCommentsForFile(previous.filePath);
-            if (!this.canStartScriptRun()) {
+            if (
+                !this.isGenerationActive(generation)
+                || !this.host.isScriptsEnabled()
+                || !this.isLatestRetryAttempt(previous)
+            ) {
                 return false;
             }
             const trigger = this.host.getCommentManager().getCommentById(previous.triggerEntryId);
@@ -298,13 +363,22 @@ export class CommentScriptController {
                 error: undefined,
             };
             try {
-                await this.store.addRun(next);
+                const added = await this.store.addRetryRunIfLatest(previous, next);
+                if (!added) {
+                    return false;
+                }
             } catch {
-                this.host.showNotice(SCRIPT_RETRY_PERSIST_NOTICE);
-                await this.refreshCommentViewsBestEffort();
+                if (this.isGenerationActive(generation)) {
+                    this.host.showNotice(SCRIPT_RETRY_PERSIST_NOTICE);
+                    await this.refreshCommentViewsBestEffort(generation);
+                }
                 return false;
             }
-            await this.refreshCommentViewsBestEffort();
+            if (!this.isGenerationActive(generation)) {
+                await this.terminalizeRunFromRetiredGeneration(next.id, generation);
+                return false;
+            }
+            await this.refreshCommentViewsBestEffort(generation);
 
             if (reusesExistingOutput && previous.outputEntryId) {
                 let cleared = false;
@@ -312,35 +386,92 @@ export class CommentScriptController {
                     cleared = await this.host.editComment(
                         previous.outputEntryId,
                         "",
-                        { skipCommentViewRefresh: true },
+                        {
+                            skipCommentViewRefresh: true,
+                            isStillValid: () => this.isGenerationActive(generation),
+                        },
                     );
                 } catch {
                     cleared = false;
                 }
-                if (!cleared) {
-                    await this.terminalizeFailedRun(next.id, SCRIPT_RETRY_REPLACE_NOTICE);
-                    this.host.showNotice(SCRIPT_RETRY_REPLACE_NOTICE);
-                    await this.refreshCommentViewsBestEffort();
+                if (!this.isGenerationActive(generation)) {
+                    await this.terminalizeRunFromRetiredGeneration(next.id, generation);
                     return false;
                 }
-                await this.refreshCommentViewsBestEffort();
+                if (!cleared) {
+                    await this.terminalizeFailedRun(
+                        next.id,
+                        SCRIPT_RETRY_REPLACE_NOTICE,
+                        generation,
+                    );
+                    this.host.showNotice(SCRIPT_RETRY_REPLACE_NOTICE);
+                    await this.refreshCommentViewsBestEffort(generation);
+                    return false;
+                }
+                if (!this.isGenerationActive(generation)) {
+                    await this.terminalizeRunFromRetiredGeneration(next.id, generation);
+                    return false;
+                }
+                await this.refreshCommentViewsBestEffort(generation);
             } else {
                 try {
-                    await this.appendPendingOutput(next);
+                    await this.appendPendingOutput(next, generation);
                 } catch (error) {
+                    if (!this.isGenerationActive(generation)) {
+                        await this.terminalizeRunFromRetiredGeneration(next.id, generation);
+                        return false;
+                    }
                     const message = summarizeScriptError(error);
-                    await this.terminalizeFailedRun(next.id, message);
+                    await this.terminalizeFailedRun(next.id, message, generation);
                     this.host.showNotice(message);
-                    await this.refreshCommentViewsBestEffort();
+                    await this.refreshCommentViewsBestEffort(generation);
                     return false;
                 }
-                await this.refreshCommentViewsBestEffort();
+                if (!this.isGenerationActive(generation)) {
+                    await this.terminalizeRunFromRetiredGeneration(next.id, generation);
+                    return false;
+                }
+                await this.refreshCommentViewsBestEffort(generation);
             }
 
-            await this.enqueue(next);
+            if (!this.isGenerationActive(generation)) {
+                await this.terminalizeRunFromRetiredGeneration(next.id, generation);
+                return false;
+            }
+            await this.enqueue(next, generation);
             return true;
         } finally {
-            this.retryingRunIds.delete(runId);
+            this.releaseRetryOwnership(previous, generation);
+        }
+    }
+
+    private isLatestRetryAttempt(run: ScriptRunRecord): boolean {
+        return isLatestScriptRunRetryAttempt(this.store.getRuns(), run);
+    }
+
+    private claimRetryOwnership(run: ScriptRunRecord, generation: number): boolean {
+        if (
+            this.retryingTriggerEntryGenerations.has(run.triggerEntryId)
+            || (run.outputEntryId && this.retryingOutputEntryGenerations.has(run.outputEntryId))
+        ) {
+            return false;
+        }
+        this.retryingTriggerEntryGenerations.set(run.triggerEntryId, generation);
+        if (run.outputEntryId) {
+            this.retryingOutputEntryGenerations.set(run.outputEntryId, generation);
+        }
+        return true;
+    }
+
+    private releaseRetryOwnership(run: ScriptRunRecord, generation: number): void {
+        if (this.retryingTriggerEntryGenerations.get(run.triggerEntryId) === generation) {
+            this.retryingTriggerEntryGenerations.delete(run.triggerEntryId);
+        }
+        if (
+            run.outputEntryId
+            && this.retryingOutputEntryGenerations.get(run.outputEntryId) === generation
+        ) {
+            this.retryingOutputEntryGenerations.delete(run.outputEntryId);
         }
     }
 
@@ -383,10 +514,10 @@ export class CommentScriptController {
         };
     }
 
-    private enqueue(run: ScriptRunRecord): Promise<void> {
-        const execution = this.executionQueue.then(() => this.execute(run));
+    private enqueue(run: ScriptRunRecord, generation: number): Promise<void> {
+        const execution = this.executionQueue.then(() => this.execute(run, generation));
         const recovered = execution.catch(async (error) => {
-            if (this.disposed) return;
+            if (!this.isGenerationActive(generation)) return;
             const current = this.store.getRunById(run.id);
             if (!current || (current.status !== "queued" && current.status !== "running")) {
                 return;
@@ -398,9 +529,12 @@ export class CommentScriptController {
                     "failed",
                     formatScriptResult(current.mentionName, message),
                     message,
+                    generation,
                 );
             } catch (recoveryError) {
-                this.host.showNotice(summarizeScriptError(recoveryError));
+                if (this.isGenerationActive(generation)) {
+                    this.host.showNotice(summarizeScriptError(recoveryError));
+                }
             }
         });
         this.executionQueue = recovered.then(
@@ -410,8 +544,9 @@ export class CommentScriptController {
         return recovered;
     }
 
-    private async execute(run: ScriptRunRecord): Promise<void> {
-        if (this.disposed) {
+    private async execute(run: ScriptRunRecord, generation: number): Promise<void> {
+        if (!this.isGenerationActive(generation)) {
+            await this.terminalizeRunFromRetiredGeneration(run.id, generation);
             return;
         }
         if (!this.isRunScriptCurrent(run)) {
@@ -420,19 +555,31 @@ export class CommentScriptController {
                 "failed",
                 formatScriptResult(run.mentionName, SCRIPT_CHANGED_BEFORE_EXECUTION_ERROR),
                 SCRIPT_CHANGED_BEFORE_EXECUTION_ERROR,
+                generation,
             );
             return;
         }
-        const runningRun = await this.store.updateRun(run.id, (current) => ({
-            ...current,
-            status: "running",
-            startedAt: this.host.now(),
-        }));
-        await this.refreshCommentViewsBestEffort();
-        if (!runningRun) {
+        let started = false;
+        const runningRun = await this.store.updateRun(run.id, (current) => {
+            if (!this.isGenerationActive(generation) || current.status !== "queued") {
+                return current;
+            }
+            started = true;
+            return {
+                ...current,
+                status: "running",
+                startedAt: this.host.now(),
+            };
+        });
+        if (!runningRun || !this.isGenerationActive(generation) || !started) {
+            if (!this.isGenerationActive(generation)) {
+                await this.terminalizeRunFromRetiredGeneration(run.id, generation);
+            }
             return;
         }
-        if (this.disposed) {
+        await this.refreshCommentViewsBestEffort(generation);
+        if (!this.isGenerationActive(generation)) {
+            await this.terminalizeRunFromRetiredGeneration(runningRun.id, generation);
             return;
         }
         if (!this.isRunScriptCurrent(runningRun)) {
@@ -441,6 +588,7 @@ export class CommentScriptController {
                 "failed",
                 formatScriptResult(runningRun.mentionName, SCRIPT_CHANGED_BEFORE_EXECUTION_ERROR),
                 SCRIPT_CHANGED_BEFORE_EXECUTION_ERROR,
+                generation,
             );
             return;
         }
@@ -465,11 +613,12 @@ export class CommentScriptController {
             status = "failed";
             body = formatScriptResult(runningRun.mentionName, runtimeError);
         }
-        if (this.disposed) {
+        if (!this.isGenerationActive(generation)) {
+            await this.terminalizeRunFromRetiredGeneration(runningRun.id, generation);
             return;
         }
 
-        await this.finishRun(runningRun, status, body, runtimeError);
+        await this.finishRun(runningRun, status, body, runtimeError, generation);
     }
 
     private isRunScriptCurrent(run: ScriptRunRecord): boolean {
@@ -480,24 +629,72 @@ export class CommentScriptController {
         return !this.disposed && this.host.isScriptsEnabled();
     }
 
-    private async terminalizeFailedRun(runId: string, error: string): Promise<void> {
-        await this.store.updateRun(runId, (current) => ({
-            ...current,
-            status: "failed",
-            endedAt: this.host.now(),
-            error,
-        }));
+    private isGenerationActive(generation: number): boolean {
+        return !this.disposed && this.lifecycleGeneration === generation;
     }
 
-    private async refreshCommentViewsBestEffort(): Promise<void> {
+    private async terminalizeRunFromRetiredGeneration(
+        runId: string,
+        generation: number,
+    ): Promise<void> {
+        if (this.disposed || this.lifecycleGeneration === generation) {
+            return;
+        }
+        const run = this.store.getRunById(runId);
+        if (!run || (run.status !== "queued" && run.status !== "running")) {
+            return;
+        }
+        await this.store.updateRun(runId, (current) => {
+            if (current.status !== "queued" && current.status !== "running") {
+                return current;
+            }
+            return {
+                ...current,
+                status: "failed",
+                endedAt: this.host.now(),
+                error: SCRIPT_SESSION_INTERRUPTED_ERROR,
+            };
+        });
+    }
+
+    private async terminalizeFailedRun(
+        runId: string,
+        error: string,
+        generation: number,
+    ): Promise<void> {
+        if (!this.isGenerationActive(generation)) {
+            return;
+        }
+        await this.store.updateRun(runId, (current) => {
+            if (
+                !this.isGenerationActive(generation)
+                || (current.status !== "queued" && current.status !== "running")
+            ) {
+                return current;
+            }
+            return {
+                ...current,
+                status: "failed",
+                endedAt: this.host.now(),
+                error,
+            };
+        });
+    }
+
+    private async refreshCommentViewsBestEffort(generation?: number): Promise<void> {
+        if (generation !== undefined && !this.isGenerationActive(generation)) {
+            return;
+        }
         try {
             await this.host.refreshCommentViews();
         } catch (error) {
-            this.host.showNotice(summarizeScriptError(error));
+            if (generation === undefined || this.isGenerationActive(generation)) {
+                this.host.showNotice(summarizeScriptError(error));
+            }
         }
     }
 
-    private async appendPendingOutput(run: ScriptRunRecord): Promise<void> {
+    private async appendPendingOutput(run: ScriptRunRecord, generation: number): Promise<void> {
         const outputEntryId = run.outputEntryId;
         if (!outputEntryId) {
             throw new Error("Unable to save the vault script result.");
@@ -517,6 +714,7 @@ export class CommentScriptController {
                 skipCommentViewRefresh: true,
                 refreshEditorDecorations: false,
                 refreshMarkdownPreviews: false,
+                isStillValid: () => this.isGenerationActive(generation),
             },
         );
         if (!appended) {
@@ -529,29 +727,57 @@ export class CommentScriptController {
         status: "succeeded" | "failed",
         body: string,
         error?: string,
+        generation = this.lifecycleGeneration,
     ): Promise<void> {
+        if (!this.isGenerationActive(generation)) {
+            return;
+        }
+        const currentBeforeOutput = this.store.getRunById(run.id);
+        if (
+            !currentBeforeOutput
+            || (currentBeforeOutput.status !== "queued" && currentBeforeOutput.status !== "running")
+        ) {
+            return;
+        }
         try {
-            const outputEntryId = await this.writeOutput(run, body);
-            if (this.disposed) return;
-            const completedRun = await this.store.updateRun(run.id, (current) => ({
-                ...current,
-                status,
-                endedAt: this.host.now(),
-                outputEntryId,
-                error,
-            }));
-            if (!completedRun) {
+            const outputEntryId = await this.writeOutput(run, body, generation);
+            if (!this.isGenerationActive(generation)) {
+                await this.terminalizeRunFromRetiredGeneration(run.id, generation);
+                return;
+            }
+            let completed = false;
+            await this.store.updateRun(run.id, (current) => {
+                if (
+                    !this.isGenerationActive(generation)
+                    || (current.status !== "queued" && current.status !== "running")
+                ) {
+                    return current;
+                }
+                completed = true;
+                return {
+                    ...current,
+                    status,
+                    endedAt: this.host.now(),
+                    outputEntryId,
+                    error,
+                };
+            });
+            if (!completed) {
                 return;
             }
         } catch (outputError) {
+            if (!this.isGenerationActive(generation)) {
+                await this.terminalizeRunFromRetiredGeneration(run.id, generation);
+                return;
+            }
             const message = summarizeScriptError(outputError);
-            await this.terminalizeFailedRun(run.id, message);
+            await this.terminalizeFailedRun(run.id, message, generation);
             this.host.showNotice(message);
         }
-        await this.refreshCommentViewsBestEffort();
+        await this.refreshCommentViewsBestEffort(generation);
     }
 
-    private async writeOutput(run: ScriptRunRecord, body: string): Promise<string> {
+    private async writeOutput(run: ScriptRunRecord, body: string, generation: number): Promise<string> {
         if (run.outputEntryId) {
             const edited = await this.host.editComment(
                 run.outputEntryId,
@@ -561,6 +787,7 @@ export class CommentScriptController {
                     deferAggregateRefresh: true,
                     refreshEditorDecorations: false,
                     refreshMarkdownPreviews: false,
+                    isStillValid: () => this.isGenerationActive(generation),
                 },
             );
             if (!edited) {
@@ -584,6 +811,7 @@ export class CommentScriptController {
                 skipCommentViewRefresh: true,
                 refreshEditorDecorations: false,
                 refreshMarkdownPreviews: false,
+                isStillValid: () => this.isGenerationActive(generation),
             },
         );
         if (!appended) {

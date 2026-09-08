@@ -680,10 +680,20 @@ test("comment persistence retargets a renamed Markdown sidecar into reloadable D
     assert.equal(persistedPayload.threads?.[0]?.entries[1]?.anchor, undefined);
 });
 
-test("comment persistence controller replays synced plugin-data events into the local sidecar cache", async () => {
+for (const replayOrder of [
+    "deferred-only",
+    "deferred-first",
+    "normal-first",
+    "deferred-first-view-failure",
+] as const) {
+test(`comment persistence coalesces synced data while preserving ${replayOrder} surface behavior`, async () => {
     const originalWindow = globalThis.window;
+    let aggregateScheduleCount = 0;
     globalThis.window = {
-        setTimeout: () => 1,
+        setTimeout: () => {
+            aggregateScheduleCount += 1;
+            return 1;
+        },
         clearTimeout: () => {},
     } as unknown as typeof globalThis.window;
 
@@ -695,6 +705,8 @@ test("comment persistence controller replays synced plugin-data events into the 
     const aggregateCommentIndex = new AggregateCommentIndex();
     let persistedData: PersistedPluginData = {};
     let eventCounter = 0;
+    let refreshCommentViewsCount = 0;
+    let shouldFailViewRefresh = replayOrder === "deferred-first-view-failure";
 
     const remoteEventStore = new SideNoteSyncEventStore({
         readPersistedPluginData: () => persistedData,
@@ -750,7 +762,13 @@ test("comment persistence controller replays synced plugin-data events into the 
         createCommentId: () => "generated-id",
         hashText: async (text) => `hash-${text.replace(/\//g, "_")}`,
         syncDerivedCommentLinksForFile: () => {},
-        refreshCommentViews: async () => {},
+        refreshCommentViews: async () => {
+            refreshCommentViewsCount += 1;
+            if (shouldFailViewRefresh) {
+                shouldFailViewRefresh = false;
+                throw new Error("view refresh failed");
+            }
+        },
         refreshAllCommentsSidebarViews: async () => {},
         refreshEditorDecorations: () => {},
         refreshMarkdownPreviews: () => {},
@@ -760,14 +778,44 @@ test("comment persistence controller replays synced plugin-data events into the 
     });
 
     try {
-        const appliedEventCount = await controller.replaySyncedSideNoteEvents();
+        const firstReplay = replayOrder === "normal-first"
+            ? controller.replaySyncedSideNoteEvents()
+            : controller.replaySyncedSideNoteEvents(undefined, { deferSurfaceRefresh: true });
+        const replayPromises = replayOrder === "deferred-only"
+            ? [firstReplay]
+            : [
+                firstReplay,
+                replayOrder === "deferred-first" || replayOrder === "deferred-first-view-failure"
+                    ? controller.replaySyncedSideNoteEvents()
+                    : controller.replaySyncedSideNoteEvents(undefined, { deferSurfaceRefresh: true }),
+            ];
+        const replayResults = await Promise.allSettled(replayPromises);
         const sidecarPaths = Array.from(adapter.files.keys());
 
-        assert.equal(appliedEventCount, 2);
+        if (replayOrder === "deferred-first-view-failure") {
+            assert.deepEqual(replayResults.map((result) => result.status), ["fulfilled", "rejected"]);
+            assert.equal(replayResults[0].status === "fulfilled" ? replayResults[0].value : null, 2);
+            assert.equal(refreshCommentViewsCount, 1);
+            assert.equal(aggregateScheduleCount, 1);
+
+            assert.equal(await controller.replaySyncedSideNoteEvents(), 0);
+            assert.equal(refreshCommentViewsCount, 2);
+            assert.equal(aggregateScheduleCount, 1);
+        } else {
+            assert.deepEqual(
+                replayResults,
+                replayPromises.map(() => ({ status: "fulfilled", value: 2 })),
+            );
+        }
         assert.equal(commentManager.getCommentsForFile(oldFile.path).length, 0);
         assert.equal(commentManager.getCommentById("thread-1")?.filePath, newFile.path);
         assert.equal(commentManager.getCommentById("thread-1")?.comment, "external body");
         assert.equal(aggregateCommentIndex.getCommentById("thread-1")?.filePath, newFile.path);
+        if (replayOrder !== "deferred-first-view-failure") {
+            const expectedSurfaceRefreshCount = replayOrder === "deferred-only" ? 0 : 1;
+            assert.equal(refreshCommentViewsCount, expectedSurfaceRefreshCount);
+            assert.equal(aggregateScheduleCount, expectedSurfaceRefreshCount);
+        }
         assert.equal(sidecarPaths.some((path) => path.includes("hash-docs_new.md.json")), true);
         assert.equal(sidecarPaths.some((path) => path.includes("hash-docs_old.md.json")), false);
         assert.equal(
@@ -780,6 +828,7 @@ test("comment persistence controller replays synced plugin-data events into the 
         globalThis.window = originalWindow;
     }
 });
+}
 
 test("comment persistence converts synced Markdown rename events into DOCX page-note projections", async () => {
     const originalWindow = globalThis.window;

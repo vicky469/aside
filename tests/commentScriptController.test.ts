@@ -209,6 +209,21 @@ function createHarness(options: {
                 );
             }
             await options.beforeAppendThreadEntryReturn?.();
+            if (appendOptions?.isStillValid?.() === false) {
+                commentManager.replaceThreadsForFile(
+                    commentManager.getCommentById(threadId)?.filePath ?? "",
+                    commentManager.getThreadsForFile(
+                        commentManager.getCommentById(threadId)?.filePath ?? "",
+                        { includeDeleted: true },
+                    ).map((thread) => thread.id === threadId
+                        ? {
+                            ...thread,
+                            entries: thread.entries.filter((candidate) => candidate.id !== entry.id),
+                        }
+                        : thread),
+                );
+                return false;
+            }
             return true;
         },
         editComment: async (commentId, body, editOptions) => {
@@ -221,6 +236,9 @@ function createHarness(options: {
                 refreshMarkdownPreviews: persistenceOptions?.refreshMarkdownPreviews,
             });
             await options.beforeEditComment?.();
+            if (editOptions?.isStillValid?.() === false) {
+                return false;
+            }
             const nextEditResult = editResults.length > 0
                 ? editResults.shift()
                 : editSucceeds;
@@ -651,6 +669,100 @@ test("direct saved-entry handling is inert when Scripts is disabled", async () =
     assert.equal(harness.getRefreshCount(), 0);
 });
 
+test("locally owned run ids include active script receipts only", () => {
+    const harness = createHarness({
+        initialRuns: [
+            createStoredRun({ id: "queued-run", status: "queued", endedAt: undefined }),
+            createStoredRun({
+                id: "running-run",
+                status: "running",
+                startedAt: 20,
+                endedAt: undefined,
+            }),
+            createStoredRun({ id: "succeeded-run", status: "succeeded" }),
+            createStoredRun({ id: "failed-run", status: "failed", error: "failed" }),
+        ],
+    });
+
+    assert.deepEqual(
+        harness.controller.getLocallyOwnedRunIds(),
+        ["queued-run", "running-run"],
+    );
+});
+
+test("saved-entry routing preserves a durable script receipt while Scripts is disabled", async () => {
+    const harness = createHarness({
+        scriptsEnabled: false,
+        initialRuns: [createStoredRun()],
+    });
+    const agentEntryIds: string[] = [];
+
+    await routeSavedUserEntry({
+        event: {
+            threadId: "thread-1",
+            entryId: "thread-1",
+            filePath: "Folder/Note.md",
+            body: "@codex replay this saved entry",
+        },
+        isScriptsEnabled: () => false,
+        builtInControllers: createBuiltInControllers(),
+        scriptController: harness.controller,
+        agentController: {
+            handleSavedUserEntry: async (event) => {
+                agentEntryIds.push(event.entryId);
+            },
+        },
+    });
+
+    assert.deepEqual(agentEntryIds, []);
+    assert.deepEqual(harness.store.getRuns().map((run) => run.id), ["stored-run"]);
+    assert.deepEqual(harness.runtimeCalls, []);
+});
+
+test("saved-entry routing preserves an in-flight script claim after Scripts turns off", async () => {
+    let scriptsEnabled = true;
+    const persistStarted = createDeferred<void>();
+    const releasePersist = createDeferred<void>();
+    let delayNextPersist = true;
+    const harness = createHarness({
+        scriptsEnabled: () => scriptsEnabled,
+        beforePersist: async () => {
+            if (!delayNextPersist) return;
+            delayNextPersist = false;
+            persistStarted.resolve();
+            await releasePersist.promise;
+        },
+    });
+    const event = {
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "/clean",
+    };
+    const agentEntryIds: string[] = [];
+    const route = () => routeSavedUserEntry({
+        event,
+        isScriptsEnabled: () => scriptsEnabled,
+        builtInControllers: createBuiltInControllers(),
+        scriptController: harness.controller,
+        agentController: {
+            handleSavedUserEntry: async (savedEvent) => {
+                agentEntryIds.push(savedEvent.entryId);
+            },
+        },
+    });
+
+    const firstRouting = route();
+    await persistStarted.promise;
+    scriptsEnabled = false;
+    await route();
+    releasePersist.resolve();
+    await firstRouting;
+
+    assert.deepEqual(agentEntryIds, []);
+    assert.equal(harness.store.getRuns().length, 1);
+});
+
 test("a script admitted before Scripts turns off completes after delayed persistence", async () => {
     let scriptsEnabled = true;
     let delayNextPersist = true;
@@ -683,6 +795,100 @@ test("a script admitted before Scripts turns off completes after delayed persist
     assert.equal(harness.appendedEntries.length, 1);
     assert.equal(harness.runtimeCalls.length, 1);
     assert.equal(harness.editedEntries.at(-1)?.body, "Script /clean:\n\ncleaned");
+});
+
+test("a stale generation terminalizes a queued receipt whose persistence finishes after reinitialize", async () => {
+    const persistStarted = createDeferred<void>();
+    const releasePersist = createDeferred<void>();
+    let delayNextPersist = true;
+    const harness = createHarness({
+        beforePersist: async () => {
+            if (!delayNextPersist) return;
+            delayNextPersist = false;
+            persistStarted.resolve();
+            await releasePersist.promise;
+        },
+    });
+
+    const handling = harness.controller.handleSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "/clean",
+    });
+    await persistStarted.promise;
+    harness.controller.dispose();
+    harness.controller.initialize();
+    releasePersist.resolve();
+    assert.equal(await handling, true);
+
+    const staleRun = harness.store.getRuns()[0];
+    assert.equal(staleRun?.status, "failed");
+    assert.equal(staleRun?.error, "The previous vault script run did not finish. Regenerate it to run again.");
+    assert.deepEqual(harness.appendedEntries, []);
+    assert.deepEqual(harness.runtimeCalls, []);
+});
+
+test("a stale generation terminalizes a queued receipt when pending output persistence resumes after reinitialize", async () => {
+    const appendStarted = createDeferred<void>();
+    const releaseAppend = createDeferred<void>();
+    const harness = createHarness({
+        beforeAppendThreadEntryReturn: async () => {
+            appendStarted.resolve();
+            await releaseAppend.promise;
+        },
+    });
+
+    const handling = harness.controller.handleSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "/clean",
+    });
+    await appendStarted.promise;
+    harness.controller.dispose();
+    harness.controller.initialize();
+    releaseAppend.resolve();
+
+    assert.equal(await handling, true);
+    const staleRun = harness.store.getRuns()[0];
+    assert.equal(staleRun?.status, "failed");
+    assert.equal(staleRun?.error, "The previous vault script run did not finish. Regenerate it to run again.");
+    assert.equal(
+        harness.commentManager.getCommentById(staleRun?.outputEntryId ?? ""),
+        undefined,
+    );
+    assert.deepEqual(harness.runtimeCalls, []);
+});
+
+test("a stale generation terminalizes a running receipt when terminal output persistence resumes after reinitialize", async () => {
+    const editStarted = createDeferred<void>();
+    const releaseEdit = createDeferred<void>();
+    const harness = createHarness({
+        beforeEditComment: async () => {
+            editStarted.resolve();
+            await releaseEdit.promise;
+        },
+    });
+
+    await harness.controller.handleSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "/clean",
+    });
+    await editStarted.promise;
+    harness.controller.dispose();
+    harness.controller.initialize();
+    releaseEdit.resolve();
+    await waitForRunStatus(harness, "thread-1", "failed");
+
+    const staleRun = harness.store.getRuns()[0];
+    assert.equal(staleRun?.error, "The previous vault script run did not finish. Regenerate it to run again.");
+    assert.equal(
+        harness.commentManager.getCommentById(staleRun?.outputEntryId ?? "")?.comment,
+        "",
+    );
 });
 
 test("saved entry routing sends only unclaimed entries to the agent controller", async () => {
@@ -780,6 +986,7 @@ test("saved entry routing sends disabled script directives only to the agent con
             },
         }),
         scriptController: {
+            ownsSavedUserEntry: () => false,
             handleSavedUserEntry: async () => {
                 routeCalls.push("script");
                 return true;
@@ -829,6 +1036,7 @@ test("saved entry routing falls back once when Scripts turns off during an earli
             },
         }),
         scriptController: {
+            ownsSavedUserEntry: () => false,
             handleSavedUserEntry: async (event: SavedUserEntryEvent) => {
                 routeCalls.push("script");
                 return scriptHarness.controller.handleSavedUserEntry(event);
@@ -852,6 +1060,46 @@ test("saved entry routing falls back once when Scripts turns off during an earli
     assert.deepEqual(scriptHarness.runtimeCalls, []);
 });
 
+test("saved entry routing rechecks script ownership before fallback after an await", async () => {
+    let scriptsEnabled = true;
+    const firstControllerResult = createDeferred<boolean>();
+    const routeCalls: string[] = [];
+    const scriptHarness = createHarness({ scriptsEnabled: () => scriptsEnabled });
+    const event = {
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "/clean",
+    };
+    const routing = routeSavedUserEntry({
+        event,
+        isScriptsEnabled: () => scriptsEnabled,
+        builtInControllers: createBuiltInControllers({
+            updateScript: {
+                handleSavedUserEntry: async () => {
+                    routeCalls.push("update-script");
+                    return firstControllerResult.promise;
+                },
+            },
+        }),
+        scriptController: scriptHarness.controller,
+        agentController: {
+            handleSavedUserEntry: async () => {
+                routeCalls.push("agent");
+            },
+        },
+    });
+    await waitForCondition(() => routeCalls.length === 1);
+
+    assert.equal(await scriptHarness.controller.handleSavedUserEntry(event), true);
+    scriptsEnabled = false;
+    firstControllerResult.resolve(false);
+    await routing;
+
+    assert.deepEqual(routeCalls, ["update-script"]);
+    assert.equal(scriptHarness.store.getRuns().length, 1);
+});
+
 test("saved entry routing honors an accepted controller after Scripts turns off", async () => {
     let scriptsEnabled = true;
     const acceptedControllerResult = createDeferred<boolean>();
@@ -866,6 +1114,7 @@ test("saved entry routing honors an accepted controller after Scripts turns off"
         isScriptsEnabled: () => scriptsEnabled,
         builtInControllers: createBuiltInControllers(),
         scriptController: {
+            ownsSavedUserEntry: () => false,
             handleSavedUserEntry: async () => {
                 routeCalls.push("script-started");
                 const handled = await acceptedControllerResult.promise;
@@ -915,6 +1164,7 @@ test("saved entry routing tries built-in script-authoring commands before vault 
             },
         }),
         scriptController: {
+            ownsSavedUserEntry: () => false,
             handleSavedUserEntry: async () => {
                 routeCalls.push("script");
                 return true;
@@ -962,6 +1212,7 @@ test("saved entry routing claims pdf-to-markdown before scripts and generic agen
             },
         },
         scriptController: {
+            ownsSavedUserEntry: () => false,
             handleSavedUserEntry: async () => {
                 routeCalls.push("script");
                 return true;
@@ -1015,6 +1266,32 @@ test("rejected directives persist one failed result and bypass runtime and agent
         assert.equal(harness.appendedEntries[0]?.alwaysInsertAfterTarget, true, item.body);
         assert.match(harness.appendedEntries[0]?.body ?? "", new RegExp(item.message.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&"), "u"));
     }
+});
+
+test("a rejected directive remains handled when its output persistence resumes in a newer generation", async () => {
+    const appendStarted = createDeferred<void>();
+    const releaseAppend = createDeferred<void>();
+    const harness = createHarness({
+        beforeAppendThreadEntryReturn: async () => {
+            appendStarted.resolve();
+            await releaseAppend.promise;
+        },
+    });
+
+    const handling = harness.controller.handleSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "/clean and @codex",
+    });
+    await appendStarted.promise;
+    harness.controller.dispose();
+    harness.controller.initialize();
+    releaseAppend.resolve();
+
+    assert.equal(await handling, true);
+    assert.equal(harness.store.getRuns()[0]?.status, "failed");
+    assert.equal(harness.runtimeCalls.length, 0);
 });
 
 test("script processes execute serially", async () => {
@@ -1235,6 +1512,102 @@ test("retryRun claims concurrently before loading and creates only one retry", a
     assert.equal(harness.runtimeCalls.length, 1);
 });
 
+test("retryRun rejects a non-latest attempt for its trigger and output", async () => {
+    const harness = createHarness({
+        initialRuns: [
+            createStoredRun({ id: "older-run", outputEntryId: "reply-1" }),
+            createStoredRun({
+                id: "latest-run",
+                createdAt: 20,
+                retryOfRunId: "older-run",
+                outputEntryId: "reply-1",
+            }),
+        ],
+    });
+
+    assert.equal(await harness.controller.retryRun("older-run"), false);
+    assert.deepEqual(harness.loadedFilePaths, []);
+    assert.deepEqual(harness.runtimeCalls, []);
+    assert.deepEqual(
+        harness.store.getRuns().map((run) => run.id),
+        ["older-run", "latest-run"],
+    );
+});
+
+test("retryRun holds stable trigger and output ownership across a run-id replacement", async () => {
+    const releaseLoad = createDeferred<void>();
+    let loadCount = 0;
+    const harness = createHarness({
+        initialRuns: [createStoredRun({ outputEntryId: "reply-1" })],
+        loadCommentsForFile: async () => {
+            loadCount += 1;
+            if (loadCount === 1) {
+                await releaseLoad.promise;
+            }
+        },
+    });
+    harness.commentManager.appendEntry("thread-1", {
+        id: "reply-1",
+        body: "Previous script output",
+        timestamp: 20,
+    });
+
+    const firstRetry = harness.controller.retryRun("stored-run");
+    await waitForCondition(() => loadCount === 1);
+    await harness.store.addRun(createStoredRun({
+        id: "replacement-run",
+        createdAt: 30,
+        retryOfRunId: "stored-run",
+        outputEntryId: "reply-1",
+    }));
+
+    assert.equal(await harness.controller.retryRun("replacement-run"), false);
+    assert.equal(loadCount, 1);
+    releaseLoad.resolve();
+    assert.equal(await firstRetry, false);
+
+    assert.deepEqual(harness.runtimeCalls, []);
+    assert.deepEqual(harness.editedEntries, []);
+    assert.deepEqual(
+        harness.store.getRuns().map((run) => run.id),
+        ["stored-run", "replacement-run"],
+    );
+});
+
+test("retryRun atomically rejects a predecessor that becomes stale before append", async () => {
+    const persistStarted = createDeferred<void>();
+    const releasePersist = createDeferred<void>();
+    let delayNextPersist = true;
+    const harness = createHarness({
+        initialRuns: [createStoredRun({ outputEntryId: "reply-1" })],
+        beforePersist: async () => {
+            if (!delayNextPersist) return;
+            delayNextPersist = false;
+            persistStarted.resolve();
+            await releasePersist.promise;
+        },
+    });
+    const newerRun = createStoredRun({
+        id: "newer-run",
+        createdAt: 30,
+        retryOfRunId: "stored-run",
+        outputEntryId: "reply-1",
+    });
+
+    const predecessor = harness.store.addRun(newerRun);
+    await persistStarted.promise;
+    const retry = harness.controller.retryRun("stored-run");
+    releasePersist.resolve();
+
+    await predecessor;
+    assert.equal(await retry, false);
+    assert.deepEqual(
+        harness.store.getRuns().map((run) => run.id),
+        ["stored-run", "newer-run"],
+    );
+    assert.deepEqual(harness.runtimeCalls, []);
+});
+
 test("vault-script retry stops silently when Scripts turns off during comment reload", async () => {
     let scriptsEnabled = true;
     const harness = createHarness({
@@ -1380,6 +1753,79 @@ test("dispose leaves active receipts for startup reconciliation without launchin
     assert.equal(firstRun?.status, "running");
     assert.equal(secondRun?.status, "queued");
     assert.equal(harness.appendedEntries.length, 2);
+});
+
+test("reinitialize isolates new work from queued and completing runs in the prior generation", async () => {
+    const releaseOldRuntime = createDeferred<VaultScriptRuntimeResult>();
+    const harness = createHarness({
+        scripts: [
+            "🛠️ scripts/clean.mjs",
+            "🛠️ scripts/other-script.js",
+            "🛠️ scripts/fresh.cjs",
+        ],
+        comments: [
+            createComment({ id: "thread-1", comment: "/clean" }),
+            createComment({ id: "thread-2", comment: "/other-script", timestamp: 20 }),
+            createComment({ id: "thread-3", comment: "/fresh", timestamp: 30 }),
+        ],
+        runVaultScript: async (invocation) => invocation.scriptPath.endsWith("clean.mjs")
+            ? releaseOldRuntime.promise
+            : { stdout: "done", stderr: "" },
+    });
+
+    await harness.controller.handleSavedUserEntry({
+        threadId: "thread-1",
+        entryId: "thread-1",
+        filePath: "Folder/Note.md",
+        body: "/clean",
+    });
+    await waitForRunStatus(harness, "thread-1", "running");
+    await harness.controller.handleSavedUserEntry({
+        threadId: "thread-2",
+        entryId: "thread-2",
+        filePath: "Folder/Note.md",
+        body: "/other-script",
+    });
+    await waitForRunStatus(harness, "thread-2", "queued");
+
+    harness.controller.dispose();
+    harness.controller.initialize();
+    assert.equal(await harness.controller.reconcilePendingRunsFromPreviousSession(), true);
+
+    await harness.controller.handleSavedUserEntry({
+        threadId: "thread-3",
+        entryId: "thread-3",
+        filePath: "Folder/Note.md",
+        body: "/fresh",
+    });
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+        await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+    const freshStartedBeforeOldRuntimeSettled = harness.runtimeCalls.some((invocation) =>
+        invocation.scriptPath.endsWith("fresh.cjs"));
+
+    releaseOldRuntime.resolve({ stdout: "old completion", stderr: "" });
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+        await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+
+    assert.equal(freshStartedBeforeOldRuntimeSettled, true);
+    assert.deepEqual(
+        harness.runtimeCalls.map((invocation) => invocation.scriptPath),
+        ["🛠️ scripts/clean.mjs", "🛠️ scripts/fresh.cjs"],
+    );
+    assert.equal(
+        harness.store.getRuns().find((run) => run.triggerEntryId === "thread-1")?.status,
+        "failed",
+    );
+    assert.equal(
+        harness.store.getRuns().find((run) => run.triggerEntryId === "thread-2")?.status,
+        "failed",
+    );
+    assert.equal(
+        harness.store.getRuns().find((run) => run.triggerEntryId === "thread-3")?.status,
+        "succeeded",
+    );
 });
 
 test("retryRun refuses busy, missing-script, and missing-trigger runs without runtime dispatch", async () => {

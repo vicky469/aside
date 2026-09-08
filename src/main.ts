@@ -34,7 +34,10 @@ import {
     IndexNoteOpenController,
     type IndexNoteRefreshContext,
 } from "./app/indexNoteOpenController";
-import { RefreshCoordinator } from "./app/refreshCoordinator";
+import {
+    RefreshCoordinator,
+    runReportedAsyncRefresh,
+} from "./app/refreshCoordinator";
 import { WorkspaceContextController } from "./app/workspaceContextController";
 import type { SidebarUpdateOptions } from "./comments/commentNavigationController";
 import { WorkspaceViewController } from "./app/workspaceViewController";
@@ -727,8 +730,8 @@ export default class Aside extends Plugin {
         log: (level, area, event, payload) => this.logEvent(level, area, event, payload),
     });
     private readonly refreshCoordinator = new RefreshCoordinator({
-        replaySyncedSideNoteEvents: (targetNotePath) =>
-            this.commentPersistenceController.replaySyncedSideNoteEvents(targetNotePath),
+        replaySyncedSideNoteEvents: (targetNotePath, options) =>
+            this.commentPersistenceController.replaySyncedSideNoteEvents(targetNotePath, options),
         refreshCommentViews: (options) => this.workspaceViewController.refreshCommentViews(options),
         scheduleAggregateNoteRefresh: () => this.scheduleAggregateNoteRefresh(),
         syncPublicFilePublishActions: () => this.syncPublicFilePublishActions(),
@@ -800,11 +803,11 @@ export default class Aside extends Plugin {
         handleLayoutReady: () => this.pluginLifecycleController.handleLayoutReady(),
         handleFileOpen: (file) => {
             this.workspaceContextController.handleFileOpen(file);
-            this.syncPublicFilePublishActions();
+            this.syncPublicFilePublishActionsSafely();
         },
         handleActiveLeafChange: (leaf) => {
             this.workspaceContextController.handleActiveLeafChange(leaf);
-            this.syncPublicFilePublishActions();
+            this.syncPublicFilePublishActionsSafely();
         },
         handleFileCreate: async (file) => {
             if (file) {
@@ -822,7 +825,7 @@ export default class Aside extends Plugin {
             }
             await this.pluginLifecycleController.handleFileRename(file, oldPath);
             this.syncIndexNoteViewClasses();
-            this.syncPublicFilePublishActions();
+            await this.syncPublicFilePublishActions();
         },
         handleFileDelete: async (file) => {
             this.vaultScriptRegistry.seed(this.app.vault.getFiles().map((candidate) => candidate.path));
@@ -831,11 +834,11 @@ export default class Aside extends Plugin {
             }
             await this.pluginLifecycleController.handleFileDelete(file);
             this.syncIndexNoteViewClasses();
-            this.syncPublicFilePublishActions();
+            await this.syncPublicFilePublishActions();
         },
         handleFileModify: async (file) => {
             await this.pluginLifecycleController.handleFileModify(file);
-            this.syncPublicFilePublishActions();
+            await this.syncPublicFilePublishActions();
         },
         handleMetadataResolved: async () => {
             await this.pluginLifecycleController.handleMetadataResolved();
@@ -897,7 +900,7 @@ export default class Aside extends Plugin {
         this.vaultScriptRegistry.seed(this.app.vault.getFiles().map((file) => file.path));
         this.pluginEventRouter.registerVaultStartupEvents();
         await this.loadSettings();
-        this.scriptRunStore.load();
+        await this.scriptRunStore.initializeFromPersistedData();
         this.vaultCapabilityIndex.seed(
             this.app.vault.getMarkdownFiles(),
             (file) => this.getVaultFileTags(file),
@@ -930,7 +933,7 @@ export default class Aside extends Plugin {
         this.workspaceContextController.initializeActiveFiles(activeFile);
         this.vaultScriptRegistry.seed(this.app.vault.getFiles().map((file) => file.path));
         await this.pluginEventRouter.register();
-        this.syncPublicFilePublishActions();
+        await this.syncPublicFilePublishActions();
         this.addSettingTab(new AsideSetting(this.app, this));
         void this.runStartupPersistenceMaintenance();
     }
@@ -985,12 +988,17 @@ export default class Aside extends Plugin {
     async onExternalSettingsChange() {
         const agentRunIdsBeforeLoad = this.agentRunStore.getRuns().map((run) => run.id);
         const locallyOwnedAgentRunIds = this.commentAgentController.getLocallyOwnedRunIds();
+        const scriptRunIdsBeforeLoad = this.scriptRunStore.getRuns().map((run) => run.id);
+        const locallyOwnedScriptRunIds = this.commentScriptController.getLocallyOwnedRunIds();
         await this.loadSettings();
         await this.agentRunStore.reloadPreservingActiveRuns(
             locallyOwnedAgentRunIds,
             agentRunIdsBeforeLoad,
         );
-        this.scriptRunStore.load();
+        await this.scriptRunStore.reloadPreservingActiveRuns(
+            locallyOwnedScriptRunIds,
+            scriptRunIdsBeforeLoad,
+        );
         const appliedEventCount = await this.refreshCoordinator.handleExternalPluginDataChange();
         await this.logEvent("info", "persistence", "sync.plugin-data.external-settings", {
             appliedEventCount,
@@ -1046,7 +1054,7 @@ export default class Aside extends Plugin {
             enabled,
             this.app.vault.getName(),
         );
-        this.syncPublicFilePublishActions();
+        await this.syncPublicFilePublishActions();
     }
 
     public async setPublishPagesProjectName(projectName: string): Promise<void> {
@@ -1055,28 +1063,28 @@ export default class Aside extends Plugin {
 
     public async setPublishBaseUrl(baseUrl: string): Promise<void> {
         await this.indexNoteSettingsController.setPublishBaseUrl(baseUrl);
-        this.syncPublicFilePublishActions();
+        await this.syncPublicFilePublishActions();
     }
 
     public async setPublishAllowedRoot(allowedRoot: string): Promise<void> {
         await this.indexNoteSettingsController.setPublishAllowedRoot(allowedRoot);
         this.syncIndexNoteViewClasses();
-        this.syncPublicFilePublishActions();
+        await this.syncPublicFilePublishActions();
     }
 
 	public async setPublishRemotePurgeEnabled(enabled: boolean): Promise<void> {
 		await this.indexNoteSettingsController.setPublishRemotePurgeEnabled(enabled);
-		this.syncPublicFilePublishActions();
+		await this.syncPublicFilePublishActions();
 	}
 
 	public async setPublishPurgeBrokerUrl(url: string): Promise<void> {
 		await this.indexNoteSettingsController.setPublishPurgeBrokerUrl(url);
-		this.syncPublicFilePublishActions();
+		await this.syncPublicFilePublishActions();
 	}
 
 	public async setPublishPurgeBrokerSecretName(secretName: string): Promise<void> {
 		await this.indexNoteSettingsController.setPublishPurgeBrokerSecretName(secretName);
-		this.syncPublicFilePublishActions();
+		await this.syncPublicFilePublishActions();
 	}
 
     private async storeResolvedPublishPagesProjectName(projectName: string): Promise<void> {
@@ -1094,7 +1102,7 @@ export default class Aside extends Plugin {
             publishedPublicArtifactPaths: [...paths],
         };
         await this.saveSettings();
-        this.syncPublicFilePublishActions();
+        await this.syncPublicFilePublishActions();
     }
 
     private arePublishedPublicArtifactPathsEqual(nextPaths: string[]): boolean {
@@ -1146,14 +1154,28 @@ export default class Aside extends Plugin {
             && typeof candidate.addAction === "function";
     }
 
-    private syncPublicFilePublishActions(): void {
+    private syncPublicFilePublishActionsSafely(): void {
+        runReportedAsyncRefresh(
+            () => this.syncPublicFilePublishActions(),
+            (error) => {
+                this.warn(
+                    "Failed to refresh public file actions.",
+                    error,
+                    "publish",
+                    "publish.actions.refresh.warn",
+                );
+            },
+        );
+    }
+
+    private syncPublicFilePublishActions(): Promise<void> {
         const views: PublicFilePublishActionView[] = [];
         this.app.workspace.iterateAllLeaves((leaf) => {
             if (this.isPublicFilePublishActionView(leaf.view)) {
                 views.push(leaf.view);
             }
         });
-        void this.publicFilePublishActionController.refreshViews(views);
+        return this.publicFilePublishActionController.refreshViews(views);
     }
 
     private getPublicHtmlPairContext(filePath: string): PublicHtmlPairContext | null {
@@ -1277,7 +1299,7 @@ export default class Aside extends Plugin {
                 url: result.url,
             },
         );
-        this.syncPublicFilePublishActions();
+        await this.syncPublicFilePublishActions();
     }
 
     public getAgentRuns(): AgentRunRecord[] {

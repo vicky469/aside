@@ -23,6 +23,7 @@ type PersistOptions = {
     skipCommentViewRefresh?: boolean;
     refreshEditorDecorations?: boolean;
     refreshMarkdownPreviews?: boolean;
+    isStillValid?: () => boolean;
 };
 
 type AppendThreadEntryOptions = PersistOptions & {
@@ -396,20 +397,34 @@ export class CommentMutationController {
             deferAggregateRefresh?: boolean;
             refreshEditorDecorations?: boolean;
             refreshMarkdownPreviews?: boolean;
+            isStillValid?: () => boolean;
         } = {},
     ): Promise<boolean> {
         const latestTarget = await this.loadLatestCommentTarget(commentId);
-        if (!latestTarget) {
+        if (!latestTarget || options.isStillValid?.() === false) {
             return false;
         }
 
-        this.host.getCommentManager().editComment(commentId, newCommentText);
+        const manager = this.host.getCommentManager();
+        const previousCommentText = latestTarget.latestComment.comment;
+        manager.editComment(commentId, newCommentText);
         await this.host.persistCommentsForFile(latestTarget.file, this.buildPersistOptionsForComment(latestTarget.latestComment, {
             immediateAggregateRefresh: options.deferAggregateRefresh !== true,
             skipCommentViewRefresh: options.skipCommentViewRefresh,
             refreshEditorDecorations: options.refreshEditorDecorations,
             refreshMarkdownPreviews: options.refreshMarkdownPreviews,
+            isStillValid: options.isStillValid,
         }));
+        if (options.isStillValid?.() === false) {
+            const current = manager.getCommentById(commentId);
+            if (
+                current?.filePath === latestTarget.file.path
+                && current.comment === newCommentText
+            ) {
+                manager.editComment(commentId, previousCommentText);
+            }
+            return false;
+        }
         return true;
     }
 
@@ -590,10 +605,11 @@ export class CommentMutationController {
         options: AppendThreadEntryOptions = {},
     ): Promise<boolean> {
         const latestTarget = await this.loadLatestCommentTarget(threadId);
-        if (!latestTarget) {
+        if (!latestTarget || options.isStillValid?.() === false) {
             return false;
         }
-        const existingEntry = this.host.getCommentManager().getThreadById(threadId)?.entries.find((candidate) => (
+        const manager = this.host.getCommentManager();
+        const existingEntry = manager.getThreadById(threadId)?.entries.find((candidate) => (
             candidate.id === entry.id
         ));
         if (existingEntry) {
@@ -604,7 +620,7 @@ export class CommentMutationController {
             return true;
         }
 
-        this.host.getCommentManager().appendEntry(threadId, {
+        manager.appendEntry(threadId, {
             id: entry.id,
             body: entry.body,
             timestamp: entry.timestamp,
@@ -613,7 +629,7 @@ export class CommentMutationController {
             options.insertAfterCommentId
             && (options.alwaysInsertAfterTarget || options.insertAfterCommentId !== threadId)
         ) {
-            this.host.getCommentManager().reorderThreadEntries(
+            manager.reorderThreadEntries(
                 threadId,
                 entry.id,
                 options.insertAfterCommentId,
@@ -623,12 +639,31 @@ export class CommentMutationController {
         if (options.refreshBeforePersist) {
             await this.host.refreshCommentViews({ skipDataRefresh: true });
         }
+        if (options.isStillValid?.() === false) {
+            rollbackAppendedEntry(
+                manager,
+                latestTarget.file.path,
+                threadId,
+                entry.id,
+            );
+            return false;
+        }
         await this.host.persistCommentsForFile(latestTarget.file, this.buildPersistOptionsForComment(latestTarget.latestComment, {
             immediateAggregateRefresh: options.immediateAggregateRefresh ?? true,
             skipCommentViewRefresh: options.skipCommentViewRefresh,
             refreshEditorDecorations: options.refreshEditorDecorations,
             refreshMarkdownPreviews: options.refreshMarkdownPreviews,
+            isStillValid: options.isStillValid,
         }));
+        if (options.isStillValid?.() === false) {
+            rollbackAppendedEntry(
+                manager,
+                latestTarget.file.path,
+                threadId,
+                entry.id,
+            );
+            return false;
+        }
         return true;
     }
 

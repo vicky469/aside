@@ -256,6 +256,36 @@ test("ScriptRunStore serializes overlapping adds and snapshots caller input befo
     );
 });
 
+test("ScriptRunStore queues persisted initialization behind an older in-flight mutation", async () => {
+    const replacementRun = createRun({ id: "replacement-run", createdAt: 200 });
+    let persistedData: PersistedPluginData = {};
+    let releaseOldPersist!: () => void;
+    let markOldPersistStarted!: () => void;
+    const oldPersistStarted = new Promise<void>((resolve) => {
+        markOldPersistStarted = resolve;
+    });
+    const store = new ScriptRunStore({
+        readPersistedPluginData: () => persistedData,
+        updatePersistedPluginData: async (updater) => {
+            const oldMutationData = updater({ ...persistedData });
+            markOldPersistStarted();
+            await new Promise<void>((resolve) => {
+                releaseOldPersist = resolve;
+            });
+            return { ...oldMutationData };
+        },
+    });
+
+    const oldAdd = store.addRun(createRun({ id: "old-run" }));
+    await oldPersistStarted;
+    persistedData = { scriptRuns: [replacementRun] };
+    const initialize = store.initializeFromPersistedData();
+    releaseOldPersist();
+    await Promise.all([oldAdd, initialize]);
+
+    assert.deepEqual(store.getRuns().map((run) => run.id), [replacementRun.id]);
+});
+
 test("ScriptRunStore keeps memory unchanged after persistence failure and accepts a later mutation", async () => {
     let persistedData: PersistedPluginData = {};
     let shouldFail = true;
@@ -276,6 +306,87 @@ test("ScriptRunStore keeps memory unchanged after persistence failure and accept
     assert.deepEqual(store.getRuns(), []);
     await store.addRun(createRun({ id: "saved-run" }));
     assert.deepEqual(store.getRuns().map((run) => run.id), ["saved-run"]);
+});
+
+test("ScriptRunStore preserves active local runs across external reloads", async () => {
+    let persistedData: PersistedPluginData = {
+        scriptRuns: [createRun({
+            id: "local-run",
+            status: "running",
+            endedAt: undefined,
+        })],
+    };
+    const store = new ScriptRunStore({
+        readPersistedPluginData: () => persistedData,
+        updatePersistedPluginData: async (updater) => {
+            persistedData = updater({ ...persistedData });
+            return { ...persistedData };
+        },
+    });
+    store.load();
+    persistedData = {
+        scriptRuns: [createRun({ id: "remote-run", createdAt: 50 })],
+    };
+
+    await store.reloadPreservingActiveRuns();
+
+    assert.deepEqual(store.getRuns().map((run) => run.id), ["remote-run", "local-run"]);
+    assert.equal(store.getRunById("local-run")?.status, "running");
+});
+
+test("ScriptRunStore preserves a locally owned run that finishes while settings load", async () => {
+    let persistedData: PersistedPluginData = {
+        scriptRuns: [createRun({
+            id: "local-run",
+            status: "running",
+            endedAt: undefined,
+        })],
+    };
+    const store = new ScriptRunStore({
+        readPersistedPluginData: () => persistedData,
+        updatePersistedPluginData: async (updater) => {
+            persistedData = updater({ ...persistedData });
+            return { ...persistedData };
+        },
+    });
+    store.load();
+    const locallyOwnedRunIds = store.getActiveRunIds();
+    await store.updateRun("local-run", (run) => ({
+        ...run,
+        status: "succeeded",
+        endedAt: 200,
+    }));
+    persistedData = {
+        scriptRuns: [createRun({ id: "remote-run", createdAt: 50 })],
+    };
+
+    await store.reloadPreservingActiveRuns(locallyOwnedRunIds);
+
+    assert.deepEqual(store.getRuns().map((run) => run.id), ["remote-run", "local-run"]);
+    assert.equal(store.getRunById("local-run")?.status, "succeeded");
+});
+
+test("ScriptRunStore preserves a new completed run created during settings load", async () => {
+    const existingRun = createRun({ id: "existing-run", createdAt: 50 });
+    let persistedData: PersistedPluginData = { scriptRuns: [existingRun] };
+    const store = new ScriptRunStore({
+        readPersistedPluginData: () => persistedData,
+        updatePersistedPluginData: async (updater) => {
+            persistedData = updater({ ...persistedData });
+            return { ...persistedData };
+        },
+    });
+    store.load();
+    const runIdsBeforeLoad = store.getRuns().map((run) => run.id);
+    await store.addRun(createRun({ id: "new-completed-run", createdAt: 100 }));
+    persistedData = { scriptRuns: [existingRun] };
+
+    await store.reloadPreservingActiveRuns([], runIdsBeforeLoad);
+
+    assert.deepEqual(
+        store.getRuns().map((run) => run.id),
+        ["existing-run", "new-completed-run"],
+    );
 });
 
 test("agent and script run stores preserve both fields through the shared atomic host", async () => {

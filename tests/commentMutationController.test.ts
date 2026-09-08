@@ -60,12 +60,14 @@ function createHost(options: {
         skipCommentViewRefresh?: boolean;
         refreshEditorDecorations?: boolean;
         refreshMarkdownPreviews?: boolean;
+        isStillValid?: () => boolean;
     }) => Promise<void> | void;
+    loadCommentsForFile?: (file: TFile, manager: CommentManager) => Promise<void> | void;
     now?: number;
     handleSavedUserEntry?: (event: SavedUserEntryEvent) => Promise<void> | void;
     refreshCommentViews?: () => Promise<void> | void;
 } = {}) {
-    const manager = new CommentManager(options.loadedComments ?? options.knownComments ?? []);
+    let manager = new CommentManager(options.loadedComments ?? options.knownComments ?? []);
     let draftComment = options.draftComment ?? null;
     let draftHostFilePath: string | null = draftComment?.filePath ?? null;
     let savingDraftCommentId: string | null = null;
@@ -152,6 +154,7 @@ function createHost(options: {
         isPageNoteCapableFile: (file): file is TFile => !!file && isPageNoteCapablePath(file.path, "Aside index.md"),
         loadCommentsForFile: async (file) => {
             loadedFiles.push(file.path);
+            await options.loadCommentsForFile?.(file, manager);
         },
         persistCommentsForFile: async (file, persistOptions) => {
             persistedFiles.push({
@@ -192,6 +195,10 @@ function createHost(options: {
     return {
         controller: new CommentMutationController(host),
         manager,
+        getCommentManager: () => manager,
+        replaceCommentManager: (nextManager: CommentManager) => {
+            manager = nextManager;
+        },
         notices,
         loadedFiles,
         persistedFiles,
@@ -988,6 +995,124 @@ test("comment mutation controller can refresh an appended entry before persisten
 
     releasePersist();
     assert.equal(await appendPromise, true);
+});
+
+test("comment mutation controller does not append into replacement state after its generation expires during load", async () => {
+    const original = createComment({ id: "thread-1", comment: "Original generation" });
+    const replacement = createComment({ id: original.id, comment: "Replacement generation" });
+    let releaseLoad!: () => void;
+    let markLoadStarted!: () => void;
+    const loadStarted = new Promise<void>((resolve) => {
+        markLoadStarted = resolve;
+    });
+    const host = createHost({
+        knownComments: [original],
+        loadedComments: [],
+        loadCommentsForFile: async (file, manager) => {
+            markLoadStarted();
+            await new Promise<void>((resolve) => {
+                releaseLoad = resolve;
+            });
+            const replacementManager = new CommentManager([replacement]);
+            manager.replaceThreadsForFile(
+                file.path,
+                replacementManager.getThreadsForFile(file.path, { includeDeleted: true }),
+            );
+        },
+    });
+    let valid = true;
+
+    const appendPromise = host.controller.appendThreadEntry(original.id, {
+        id: "stale-script-output",
+        body: "stale output",
+        timestamp: 400,
+    }, {
+        skipCommentViewRefresh: true,
+        isStillValid: () => valid,
+    });
+    await loadStarted;
+    valid = false;
+    releaseLoad();
+
+    assert.equal(await appendPromise, false);
+    assert.equal(host.manager.getCommentById(original.id)?.comment, replacement.comment);
+    assert.equal(host.manager.getCommentById("stale-script-output"), undefined);
+    assert.deepEqual(host.persistedFiles, []);
+});
+
+test("comment mutation controller does not edit replacement state after its generation expires during load", async () => {
+    const original = createComment({ id: "thread-1", comment: "Original generation" });
+    const replacement = createComment({ id: original.id, comment: "Replacement generation" });
+    let releaseLoad!: () => void;
+    let markLoadStarted!: () => void;
+    const loadStarted = new Promise<void>((resolve) => {
+        markLoadStarted = resolve;
+    });
+    const host = createHost({
+        knownComments: [original],
+        loadedComments: [],
+        loadCommentsForFile: async (file, manager) => {
+            markLoadStarted();
+            await new Promise<void>((resolve) => {
+                releaseLoad = resolve;
+            });
+            const replacementManager = new CommentManager([replacement]);
+            manager.replaceThreadsForFile(
+                file.path,
+                replacementManager.getThreadsForFile(file.path, { includeDeleted: true }),
+            );
+        },
+    });
+    let valid = true;
+
+    const editPromise = host.controller.editComment(original.id, "stale output", {
+        skipCommentViewRefresh: true,
+        isStillValid: () => valid,
+    });
+    await loadStarted;
+    valid = false;
+    releaseLoad();
+
+    assert.equal(await editPromise, false);
+    assert.equal(host.manager.getCommentById(original.id)?.comment, replacement.comment);
+    assert.deepEqual(host.persistedFiles, []);
+});
+
+test("expired script mutation rollback stays on its captured manager instance", async () => {
+    const original = createComment({ id: "thread-1", comment: "Original generation" });
+    let markPersistStarted!: () => void;
+    const persistStarted = new Promise<void>((resolve) => {
+        markPersistStarted = resolve;
+    });
+    let releasePersist!: () => void;
+    const host = createHost({
+        knownComments: [original],
+        loadedComments: [original],
+        persistCommentsForFile: async () => {
+            markPersistStarted();
+            await new Promise<void>((resolve) => {
+                releasePersist = resolve;
+            });
+        },
+    });
+    let valid = true;
+    const editPromise = host.controller.editComment(original.id, "coincidentally equal", {
+        isStillValid: () => valid,
+    });
+    await persistStarted;
+
+    const replacement = createComment({
+        id: original.id,
+        comment: "coincidentally equal",
+        timestamp: 999,
+    });
+    host.replaceCommentManager(new CommentManager([replacement]));
+    valid = false;
+    releasePersist();
+
+    assert.equal(await editPromise, false);
+    assert.equal(host.getCommentManager().getCommentById(original.id)?.comment, replacement.comment);
+    assert.equal(host.getCommentManager().getCommentById(original.id)?.timestamp, replacement.timestamp);
 });
 
 test("comment mutation controller does not dispatch edited entries to the agent hook", async () => {

@@ -97,3 +97,22 @@ test("AsideView supplies the live Scripts capability without gating cancellation
     assert.match(streamedControllerMethodSource, /onCancelRun:\s*\(runId\)\s*=>/u);
     assert.doesNotMatch(streamedControllerMethodSource, /scriptsEnabled|isScriptsEnabled/u);
 });
+
+test("external settings reload preserves locally owned script runs across the load boundary", () => {
+    const methodSource = getMethodSource(
+        mainSource,
+        "async onExternalSettingsChange()",
+        "public readPersistedPluginData()",
+    );
+    const beforeLoadSnapshot = methodSource.indexOf("const scriptRunIdsBeforeLoad = this.scriptRunStore.getRuns()");
+    const localOwnershipSnapshot = methodSource.indexOf("this.commentScriptController.getLocallyOwnedRunIds()");
+    const settingsLoad = methodSource.indexOf("await this.loadSettings()");
+    const preservingReload = methodSource.indexOf("await this.scriptRunStore.reloadPreservingActiveRuns(");
+
+    assert.ok(beforeLoadSnapshot >= 0);
+    assert.ok(localOwnershipSnapshot > beforeLoadSnapshot);
+    assert.ok(settingsLoad > localOwnershipSnapshot);
+    assert.ok(preservingReload > settingsLoad);
+    assert.match(methodSource, /locallyOwnedScriptRunIds,\s*scriptRunIdsBeforeLoad,/u);
+    assert.doesNotMatch(methodSource, /this\.scriptRunStore\.load\(\)/u);
+});

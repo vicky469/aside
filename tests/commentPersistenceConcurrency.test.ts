@@ -10,6 +10,7 @@ import type { PersistedPluginData } from "../src/settings/indexNoteSettingsPlann
 class CollisionAwareAdapter implements Pick<DataAdapter, "exists" | "mkdir" | "write" | "read" | "remove" | "rename" | "list"> {
     public readonly directories = new Set<string>();
     public readonly files = new Map<string, string>();
+    public beforeWrite: ((normalizedPath: string, data: string) => Promise<void>) | null = null;
 
     async exists(normalizedPath: string): Promise<boolean> {
         return this.directories.has(normalizedPath) || this.files.has(normalizedPath);
@@ -20,6 +21,7 @@ class CollisionAwareAdapter implements Pick<DataAdapter, "exists" | "mkdir" | "w
     }
 
     async write(normalizedPath: string, data: string): Promise<void> {
+        await this.beforeWrite?.(normalizedPath, data);
         this.files.set(normalizedPath, data);
     }
 
@@ -224,6 +226,65 @@ test("comment persistence serializes simultaneous saves for one note", async () 
         );
     } finally {
         controller.dispose();
+        globalThis.window = originalWindow;
+    }
+});
+
+test("comment persistence skips an expired guarded save when its queued transaction begins", async () => {
+    const originalWindow = globalThis.window;
+    globalThis.window = {
+        setTimeout: () => 1,
+        clearTimeout: () => {},
+    } as unknown as typeof globalThis.window;
+
+    const file = createFile("docs/note.md");
+    const thread = createThread(file.path);
+    const harness = createHarness([file], [thread]);
+    const firstWriteStarted = createDeferred();
+    const releaseFirstWrite = createDeferred();
+    let blockFirstWrite = true;
+    let noteReadCount = 0;
+    harness.setCurrentNoteContentReader(async () => {
+        noteReadCount += 1;
+        return "# Title\n\nAlpha target omega\n";
+    });
+    harness.adapter.beforeWrite = async () => {
+        if (!blockFirstWrite) {
+            return;
+        }
+        blockFirstWrite = false;
+        firstWriteStarted.resolve();
+        await releaseFirstWrite.promise;
+    };
+
+    try {
+        const firstSave = harness.controller.persistCommentsForFile(file);
+        await firstWriteStarted.promise;
+        harness.commentManager.appendEntry(thread.id, {
+            id: "stale-script-output",
+            body: "stale output",
+            timestamp: 1710000002000,
+        });
+        let valid = true;
+        const guardedSave = harness.controller.persistCommentsForFile(file, {
+            isStillValid: () => valid,
+        });
+        valid = false;
+        releaseFirstWrite.resolve();
+
+        await Promise.all([firstSave, guardedSave]);
+
+        assert.equal(noteReadCount, 1);
+        const payload = JSON.parse(await harness.adapter.read(getSidecarStoragePath(file.path))) as {
+            threads: CommentThread[];
+        };
+        assert.deepEqual(
+            payload.threads[0]?.entries.map((entry) => entry.id),
+            ["entry-1"],
+        );
+    } finally {
+        releaseFirstWrite.resolve();
+        harness.controller.dispose();
         globalThis.window = originalWindow;
     }
 });
