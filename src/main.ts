@@ -923,6 +923,20 @@ export default class Aside extends Plugin {
             this.vaultCapabilityIndex.upsert(file, getAllTags(cache) ?? []);
             this.workspaceViewController.refreshIndexTagSearchViews();
         }));
+        this.registerEvent(this.app.metadataCache.on("resolve", (file) => {
+            this.vaultCapabilityIndex.upsert(file, this.getVaultFileTags(file));
+            this.workspaceViewController.refreshIndexTagSearchViews();
+        }));
+        // Restored metadata can become available after the initial seed without
+        // emitting a changed event for every note.
+        this.app.workspace.onLayoutReady(() => {
+            if (this.unloaded) return;
+            this.vaultCapabilityIndex.seed(
+                this.app.vault.getMarkdownFiles(),
+                (file) => this.getVaultFileTags(file),
+            );
+            this.workspaceViewController.refreshIndexTagSearchViews();
+        });
         this.pluginRegistrationController.register();
         this.registerEditorExtension([
             this.commentHighlightController.createEditorHighlightPlugin(),

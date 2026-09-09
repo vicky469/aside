@@ -32,6 +32,24 @@ test("empty index tag queries perform no membership lookups", () => {
     assert.equal(lookupCount, 0);
 });
 
+test("index notes are excluded from tag results and counts, including index-only tags", () => {
+    const options = {
+        query: "灵感",
+        tags: [
+            { tag: "#灵感", usageCount: 7 },
+            { tag: "#灵感/index-only", usageCount: 1 },
+        ],
+        isExcludedFilePath: (path: string) => ["🐰 Aside Index.md", "Aside index.md"].includes(path),
+        getFilesForTag: (tag: string) => tag === "#灵感"
+            ? ["🐰 Aside Index.md", "Aside index.md", "A.md", "B.md", "C.md", "D.md", "notes/index.md"].map(createFile)
+            : [createFile("🐰 Aside Index.md")],
+    };
+    const model = buildIndexTagSearchResult(options);
+    assert.deepEqual(model.tags, [{ tag: "#灵感", tagKey: "灵感", fileCount: 5 }]);
+    assert.deepEqual(model.files.map((file) => file.filePath), ["A.md", "B.md", "C.md", "D.md", "notes/index.md"]);
+    assert.equal(buildIndexTagSearchWindow(model, "灵感", 100).totalCount, 5);
+});
+
 test("all matches deduplicates files and exact filters keep complete membership", () => {
     const shared = createFile("docs/Shared.md");
     const model = buildIndexTagSearchResult({

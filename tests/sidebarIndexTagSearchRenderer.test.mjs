@@ -15,7 +15,7 @@ test("index tag renderer reuses shared tag filters and file rows", () => {
 });
 
 test("index tag renderer owns quiet initial empty and no-match states", () => {
-    assert.match(rendererSource, /Search tags across your vault/);
+    assert.match(rendererSource, /Search tags in the Aside index/);
     assert.match(rendererSource, /No matching tags/);
     assert.match(rendererSource, /aside-index-tag-search-empty/);
 });
@@ -44,7 +44,7 @@ test("AsideView owns a tag-only body fast path and direct file navigation", () =
     assert.match(asideViewSource, /private renderIndexTagSearchBody\(/);
     assert.match(asideViewSource, /private renderIndexTagSearchSidebar\(/);
     assert.match(asideViewSource, /renderSidebarIndexTagSearch\(/);
-    assert.match(asideViewSource, /getIndexedMarkdownFilesForTag/);
+    assert.match(asideViewSource, /buildIndexNoteTagSearchResult/);
     assert.match(asideViewSource, /effectiveIndexSidebarMode === "tags"/);
     assert.match(asideViewSource, /this\.renderIndexTagSearchBody\(shell\.commentsBodyEl\)/);
     assert.ok(
@@ -82,8 +82,8 @@ test("tag query filter and pagination rerender only the tag body", () => {
 
 test("index tag search uses the shared debounce and read-only search copy", () => {
     assert.match(asideViewSource, /NOTE_SIDEBAR_SEARCH_DEBOUNCE_MS/);
-    assert.match(asideViewSource, /placeholder:\s*"Search tags across your vault"/);
-    assert.match(asideViewSource, /ariaLabel:\s*"Search vault tags"/);
+    assert.match(asideViewSource, /placeholder:\s*"Search tags in the Aside index"/);
+    assert.match(asideViewSource, /ariaLabel:\s*"Search Aside index tags"/);
 });
 
 test("metadata refresh keeps the current tag query on the body-only path", () => {

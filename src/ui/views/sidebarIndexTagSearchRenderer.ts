@@ -28,7 +28,7 @@ export function renderSidebarIndexTagSearch(
     container.empty();
     const browserEl = container.createDiv("aside-index-tag-search");
     if (!options.result?.query) {
-        renderEmptyState(browserEl, "Search tags across your vault");
+        renderEmptyState(browserEl, "Search tags in the Aside index");
         return;
     }
     if (options.result.tags.length === 0) {

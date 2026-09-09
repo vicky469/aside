@@ -1,5 +1,9 @@
 import type { TFile } from "obsidian";
 import {
+    buildAllCommentsNoteFileEntries,
+    type AllCommentsNoteSource,
+} from "../../core/derived/allCommentsNote";
+import {
     rankExistingTags,
     type ExistingTagUsage,
 } from "../../core/text/tagSearch";
@@ -45,10 +49,45 @@ function compareFilesByLabelAndPath(left: IndexTagSearchFile, right: IndexTagSea
         || left.filePath.localeCompare(right.filePath);
 }
 
+export function buildIndexNoteTagSearchResult(options: {
+    query: string;
+    comments: readonly AllCommentsNoteSource[];
+    allCommentsNotePath: string;
+    getFile(filePath: string): TFile | null;
+    getSourceFileTags(file: TFile): readonly string[];
+}): IndexTagSearchResult {
+    if (!options.query.trim()) return { query: "", tags: [], files: [] };
+    const entries = buildAllCommentsNoteFileEntries(options.comments, {
+        allCommentsNotePath: options.allCommentsNotePath,
+        hasSourceFile: (path) => options.getFile(path) !== null,
+        getSourceFileTags: (path) => {
+            const file = options.getFile(path);
+            return file ? options.getSourceFileTags(file) : [];
+        },
+    });
+    const tagsByKey = new Map<string, { tag: string; files: TFile[] }>();
+    for (const entry of entries) {
+        const file = options.getFile(entry.filePath);
+        if (!file) continue;
+        for (const tag of entry.tags) {
+            const key = tag.toLowerCase();
+            const membership = tagsByKey.get(key) ?? { tag, files: [] };
+            membership.files.push(file);
+            tagsByKey.set(key, membership);
+        }
+    }
+    return buildIndexTagSearchResult({
+        query: options.query,
+        tags: Array.from(tagsByKey.values(), ({ tag, files }) => ({ tag, usageCount: files.length })),
+        getFilesForTag: (tag) => tagsByKey.get(tag.toLowerCase())?.files ?? [],
+    });
+}
+
 export function buildIndexTagSearchResult(options: {
     query: string;
     tags: readonly ExistingTagUsage[];
     getFilesForTag(tag: string): readonly TFile[];
+    isExcludedFilePath?(filePath: string): boolean;
 }): IndexTagSearchResult {
     const query = options.query.trim();
     const rankedTags = rankExistingTags({
@@ -62,10 +101,12 @@ export function buildIndexTagSearchResult(options: {
         const membershipByPath = new Map<string, TFile>();
         for (const file of options.getFilesForTag(rankedTag.tag)) {
             const filePath = normalizeFilePath(file.path);
-            if (filePath) {
+            if (filePath && !options.isExcludedFilePath?.(filePath)) {
                 membershipByPath.set(filePath, file);
             }
         }
+
+        if (!membershipByPath.size) continue;
 
         tags.push({
             tag: rankedTag.tag,

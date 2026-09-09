@@ -131,7 +131,7 @@ import {
     includeActiveDraftHostInIndexSearchWindow,
 } from "./indexSidebarSearchWindow";
 import {
-    buildIndexTagSearchResult,
+    buildIndexNoteTagSearchResult,
     type IndexTagSearchResult,
 } from "./indexTagSearch";
 import { renderSidebarIndexTagSearch } from "./sidebarIndexTagSearchRenderer";
@@ -1349,10 +1349,18 @@ export default class AsideView extends ItemView {
     }
 
     private refreshIndexTagSearchResult(): void {
-        this.indexTagSearchResult = buildIndexTagSearchResult({
+        this.indexTagSearchResult = buildIndexNoteTagSearchResult({
             query: this.indexTagSearchQuery,
-            tags: this.plugin.getIndexedVaultTagUsage(),
-            getFilesForTag: (tag) => this.plugin.getIndexedMarkdownFilesForTag(tag),
+            comments: this.plugin.getAllIndexedThreads(),
+            allCommentsNotePath: this.plugin.getAllCommentsNotePath(),
+            getFile: (path) => {
+                const file = this.app.vault.getAbstractFileByPath(path);
+                return file instanceof TFile ? file : null;
+            },
+            getSourceFileTags: (file) => {
+                const cache = this.app.metadataCache.getFileCache(file);
+                return cache ? getAllTags(cache) ?? [] : [];
+            },
         });
         if (
             this.indexTagSearchSelectedTagKey !== null
@@ -1790,7 +1798,7 @@ export default class AsideView extends ItemView {
             hasNestedComments: false,
             isAgentMode: false,
             agentOutcomeCounts: { succeeded: 0, failed: 0 },
-            isTagsEnabled: this.plugin.getIndexedVaultTagUsage().length > 0,
+            isTagsEnabled: true,
             isThoughtTrailEnabled: false,
             sidebarThreadGroupCounts: EMPTY_SIDEBAR_THREAD_GROUP_COUNTS,
             noteSidebarContentFilter: "all",
@@ -1869,7 +1877,6 @@ export default class AsideView extends ItemView {
             && options.skipDataRefresh
             && effectiveRequestedIndexMode === "tags"
             && this.indexThoughtTrailToolbarEnabled !== null
-            && this.plugin.getIndexedVaultTagUsage().length > 0
         ) {
             this.renderIndexTagSearchSidebar(file, this.indexThoughtTrailToolbarEnabled);
             return;
@@ -2069,8 +2076,7 @@ export default class AsideView extends ItemView {
             if (isAllCommentsView) {
                 this.indexThoughtTrailToolbarEnabled = isIndexThoughtTrailEnabled;
             }
-            const isIndexTagsEnabled = isAllCommentsView
-                && this.plugin.getIndexedVaultTagUsage().length > 0;
+            const isIndexTagsEnabled = isAllCommentsView;
             let effectiveIndexSidebarMode = this.indexSidebarMode;
             const indexSidebarModeBeforeAvailability = effectiveIndexSidebarMode;
             if (isAllCommentsView) {
@@ -4277,8 +4283,8 @@ export default class AsideView extends ItemView {
     private getIndexTagSearchInputOptions(): SidebarSearchInputOptions {
         return {
             value: this.indexTagSearchInputValue,
-            placeholder: "Search tags across your vault",
-            ariaLabel: "Search vault tags",
+            placeholder: "Search tags in the Aside index",
+            ariaLabel: "Search Aside index tags",
             onFocus: (inputEl) => {
                 this.interactionController.claimSidebarInteractionOwnership(inputEl);
             },
@@ -4519,7 +4525,7 @@ export default class AsideView extends ItemView {
                 succeeded: 0,
                 failed: 0,
             },
-            isTagsEnabled: this.plugin.getIndexedVaultTagUsage().length > 0,
+            isTagsEnabled: true,
             isThoughtTrailEnabled: false,
             sidebarThreadGroupCounts: liveThreadGroupCounts,
             noteSidebarContentFilter: "all",

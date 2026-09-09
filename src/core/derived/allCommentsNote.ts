@@ -465,6 +465,30 @@ function appendFileSections(
     }
 }
 
+export function buildAllCommentsNoteFileEntries(
+    comments: readonly AllCommentsNoteSource[],
+    options: AllCommentsNoteBuildOptions = {},
+): Array<{ filePath: string; tags: string[] }> {
+    const visibleComments = comments.filter((comment) => (
+        !isAllCommentsNotePath(comment.filePath, options.allCommentsNotePath)
+        && (options.hasSourceFile?.(comment.filePath) ?? true)
+    ));
+
+    const filePathsByKey = new Map<string, string>();
+    for (const comment of visibleComments) {
+        filePathsByKey.set(normalizeNotePath(comment.filePath), comment.filePath);
+    }
+    const filePaths = Array.from(filePathsByKey.values()).sort((left, right) => left.localeCompare(right));
+    const tagsByFileKey = mergeTagsByFileKey(
+        buildSourceTagsByFileKey(filePaths, options.getSourceFileTags),
+        buildTagsByFileKey(visibleComments),
+    );
+    return filePaths.map((filePath) => ({
+        filePath,
+        tags: tagsByFileKey.get(normalizeNotePath(filePath)) ?? [],
+    }));
+}
+
 export function buildAllCommentsNoteContent(
     vaultName: string,
     comments: AllCommentsNoteSource[],
@@ -479,25 +503,11 @@ export function buildAllCommentsNoteContent(
         lines.push(`<div class="aside-index-header-caption" style="${ALL_COMMENTS_NOTE_IMAGE_CAPTION_STYLE}">${escapeHtmlText(headerImageCaption)}</div>`);
     }
     lines.push("");
-    const visibleComments = comments.filter((comment) => (
-        !isAllCommentsNotePath(comment.filePath, options.allCommentsNotePath)
-        && (options.hasSourceFile?.(comment.filePath) ?? true)
-    ));
-
-    if (!visibleComments.length) {
-        return `${lines.join("\n").trimEnd()}\n`;
+    const entries = buildAllCommentsNoteFileEntries(comments, options);
+    if (entries.length) {
+        appendFileSections(lines, entries.map((entry) => entry.filePath), vaultName,
+            new Map(entries.map((entry) => [normalizeNotePath(entry.filePath), entry.tags])));
     }
-
-    const filePathsByKey = new Map<string, string>();
-    for (const comment of visibleComments) {
-        filePathsByKey.set(normalizeNotePath(comment.filePath), comment.filePath);
-    }
-    const filePaths = Array.from(filePathsByKey.values()).sort((left, right) => left.localeCompare(right));
-    const tagsByFileKey = mergeTagsByFileKey(
-        buildSourceTagsByFileKey(filePaths, options.getSourceFileTags),
-        buildTagsByFileKey(visibleComments),
-    );
-    appendFileSections(lines, filePaths, vaultName, tagsByFileKey);
 
     return `${lines.join("\n").trimEnd()}\n`;
 }
