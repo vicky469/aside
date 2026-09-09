@@ -1130,7 +1130,10 @@ export default class AsideView extends ItemView {
     }
 
     private applyIndexSidebarSearchStateForMode(mode: IndexSidebarMode): void {
-        this.clearIndexSidebarSearchDebounceTimer();
+        // Card tabs share the pending query as well as the applied query.
+        if (!shouldShowIndexSidebarSearch(mode)) {
+            this.clearIndexSidebarSearchDebounceTimer();
+        }
         if (mode !== "tags") {
             this.clearIndexTagSearchDebounceTimer();
         }
@@ -2091,7 +2094,7 @@ export default class AsideView extends ItemView {
                 isAgentIndexMode: false,
                 agentThreadIds: new Set<string>(),
             });
-            const renderableItems = isAllCommentsView
+            const renderableItems = isAllCommentsView && !this.indexSidebarSearchQuery.trim()
                 ? sortSidebarRenderableItems(
                     buildStoredOrderSidebarItems(
                         searchScopedVisibleThreads,
@@ -2100,7 +2103,7 @@ export default class AsideView extends ItemView {
                     ),
                 )
                 : buildStoredOrderSidebarItems(
-                    pinnedScopedVisibleThreads,
+                    isAllCommentsView ? searchScopedVisibleThreads : pinnedScopedVisibleThreads,
                     topLevelDraftComment,
                     replacedThreadId,
                 );
