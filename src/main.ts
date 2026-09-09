@@ -2242,8 +2242,8 @@ export default class Aside extends Plugin {
         return comments;
     }
 
-    public async ensureIndexedCommentsLoaded(): Promise<void> {
-        await this.commentPersistenceController.ensureIndexedCommentsLoaded();
+    public async ensureIndexedCommentsLoaded(options: { deferAggregateRefresh?: boolean } = {}): Promise<void> {
+        await this.commentPersistenceController.ensureIndexedCommentsLoaded(options);
     }
 
     private async updateSidebarViews(file: TFile | null, options: SidebarUpdateOptions = {}): Promise<void> {

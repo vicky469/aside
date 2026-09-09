@@ -1425,7 +1425,7 @@ export class CommentPersistenceController {
         return threads.map((thread) => threadToComment(thread));
     }
 
-    public async ensureIndexedCommentsLoaded(): Promise<void> {
+    public async ensureIndexedCommentsLoaded(options: { deferAggregateRefresh?: boolean } = {}): Promise<void> {
         if (this.disposed) {
             return;
         }
@@ -1435,7 +1435,11 @@ export class CommentPersistenceController {
         }
         const initializedNow = await this.ensureAggregateCommentIndexInitialized();
         if (initializedNow) {
-            await this.refreshAggregateNoteNow();
+            if (options.deferAggregateRefresh) {
+                this.scheduleAggregateNoteRefresh();
+            } else {
+                await this.refreshAggregateNoteNow();
+            }
         }
     }
 

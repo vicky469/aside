@@ -427,7 +427,7 @@ export default class AsideView extends ItemView {
     private readonly toolbarActionGuard: ToolbarActionGuard = {
         beforeAction: () => this.saveVisibleDraftIfPresent(),
     };
-    private indexSidebarMode: IndexSidebarMode = "todo";
+    private indexSidebarMode: IndexSidebarMode = "list";
     private renderedIndexSidebarMode: IndexSidebarMode | null = null;
     private noteSidebarMode: SidebarPrimaryMode = "list";
     private noteSidebarContentFilter: SidebarContentFilter = "all";
@@ -465,6 +465,8 @@ export default class AsideView extends ItemView {
     private indexFileFilterGraph: IndexFileFilterGraph | null = null;
     private indexThoughtTrailToolbarEnabled: boolean | null = null;
     private indexDefaultSidebarCache: IndexDefaultSidebarCache | null = null;
+    private indexSidebarInitialLoad: Promise<void> | null = null;
+    private indexSidebarDataReady = false;
     private thoughtTrailSource: SidebarThoughtTrailSource = getDefaultSidebarThoughtTrailSource();
     private reorderDragState: SidebarReorderDragState | null = null;
     private reorderDragSourceEl: HTMLElement | null = null;
@@ -1466,7 +1468,7 @@ export default class AsideView extends ItemView {
             containerEl: this.containerEl,
             getCurrentFile: () => this.file,
             getDraftForView: (filePath) => this.plugin.getDraftForView(filePath),
-            renderComments: (options) => this.renderComments(options),
+            renderComments: (options) => this.renderCommentsForInteraction(options),
             saveDraft: (commentId) => this.plugin.saveDraft(commentId),
             cancelDraft: (commentId) => {
                 void this.plugin.cancelDraft(commentId);
@@ -1551,6 +1553,8 @@ export default class AsideView extends ItemView {
     }
 
     async onClose() {
+        this.indexSidebarInitialLoad = null;
+        this.indexSidebarDataReady = false;
         this.unsubscribeFromAgentStreamUpdates?.();
         this.unsubscribeFromAgentStreamUpdates = null;
         this.clearNoteSidebarSearchDebounceTimer();
@@ -1593,7 +1597,6 @@ export default class AsideView extends ItemView {
             : null;
         if (
             nextMode
-            && (nextModeFromState !== "list" || nextMode !== nextModeFromState)
             && nextMode !== this.indexSidebarMode
         ) {
             this.indexSidebarMode = nextMode;
@@ -1717,6 +1720,102 @@ export default class AsideView extends ItemView {
         this.interactionController.clearActiveState();
     }
 
+    private async renderCommentsForInteraction(options: { skipDataRefresh?: boolean } = {}): Promise<void> {
+        await this.renderComments(options);
+        // Highlight/scroll/focus callers need the first DOM render to finish,
+        // unlike background refreshes that can be requested by sync replay.
+        if (this.file && this.plugin.isAllCommentsNotePath(this.file.path)) {
+            await this.indexSidebarInitialLoad;
+        }
+    }
+
+    private startInitialIndexSidebarLoad(): Promise<void> {
+        if (this.indexSidebarInitialLoad) {
+            return this.indexSidebarInitialLoad;
+        }
+        // Replay can request another render. Do not make those renders await
+        // their own replay; let this load trigger the latest view when ready.
+        const load: Promise<void> = Promise.resolve().then(async () => {
+            if (this.indexSidebarInitialLoad !== load) {
+                return;
+            }
+            await this.plugin.ensureIndexedCommentsLoaded({ deferAggregateRefresh: true });
+            if (this.indexSidebarInitialLoad !== load) {
+                return;
+            }
+            this.indexSidebarDataReady = true;
+            if (this.file && this.plugin.isAllCommentsNotePath(this.file.path)) {
+                await this.renderComments({ skipDataRefresh: true });
+            }
+        }).catch((error) => {
+            if (this.indexSidebarInitialLoad === load) {
+                void this.plugin.logEvent("error", "sidebar", "sidebar.index.initial-load.error", { error });
+                if (this.file && this.plugin.isAllCommentsNotePath(this.file.path)) {
+                    this.renderIndexSidebarLoadError(this.file);
+                }
+            }
+        }).finally(() => {
+            if (this.indexSidebarInitialLoad === load) {
+                this.indexSidebarInitialLoad = null;
+            }
+        });
+        this.indexSidebarInitialLoad = load;
+        return load;
+    }
+
+    private renderIndexSidebarLoadError(file: TFile): void {
+        const shell = this.ensureIndexSidebarShell(file.path);
+        shell.commentsBodyEl.empty();
+        const errorEl = shell.commentsBodyEl.createDiv("aside-empty-state aside-section-empty-state");
+        errorEl.createEl("p", { text: "Unable to load side notes." });
+        const retry = errorEl.createEl("button", { text: "Retry" });
+        retry.type = "button";
+        retry.onclick = () => { void this.renderComments({ skipDataRefresh: true }); };
+    }
+
+    private renderInitialIndexSidebarLoading(file: TFile): void {
+        const shell = this.ensureIndexSidebarShell(file.path);
+        shell.toolbarSlotEl.empty();
+        shell.activeFiltersSlotEl.empty();
+        shell.commentsBodyEl.empty();
+        shell.limitNoticeSlotEl.empty();
+        shell.supportSlotEl.empty();
+        const mode = resolveModeWithSidebarModeVisibility(this.indexSidebarMode, this.getSidebarModeVisibility());
+        const scope = resolveIndexSidebarModeScope(mode, this.selectedIndexFileFilterRootPath);
+        this.renderSidebarToolbar(shell.toolbarSlotEl, {
+            isAllCommentsView: true,
+            hasDeletedComments: false,
+            deletedCommentCount: 0,
+            showDeletedComments: this.plugin.shouldShowDeletedComments(),
+            hasNestedComments: false,
+            isAgentMode: false,
+            agentOutcomeCounts: { succeeded: 0, failed: 0 },
+            isTagsEnabled: this.plugin.getIndexedVaultTagUsage().length > 0,
+            isThoughtTrailEnabled: false,
+            sidebarThreadGroupCounts: EMPTY_SIDEBAR_THREAD_GROUP_COUNTS,
+            noteSidebarContentFilter: "all",
+            noteSidebarMode: this.noteSidebarMode,
+            effectiveIndexSidebarMode: mode,
+            addPageCommentAction: null,
+            indexFileFilterOptions: [],
+            selectedIndexFileFilterRootPath: this.selectedIndexFileFilterRootPath,
+            filteredIndexFilePaths: [],
+            indexModeScope: scope,
+        });
+        if (scope.kind === "unavailable") {
+            this.renderIndexSidebarEmptyState(shell.commentsBodyEl, {
+                renderedItemCount: 0,
+                totalScopedCount: 0,
+                filteredIndexFilePaths: [],
+                searchQuery: "",
+                sidebarMode: mode,
+                indexModeScope: scope,
+            });
+        } else {
+            showIndexSidebarListLoadingState(this.containerEl);
+        }
+    }
+
     public async renderComments(options: {
         skipDataRefresh?: boolean;
     } = {}) {
@@ -1733,6 +1832,14 @@ export default class AsideView extends ItemView {
             this.sidebarEmptyStateReason = null;
         }
         const isAllCommentsView = !!file && this.plugin.isAllCommentsNotePath(file.path);
+        if (isAllCommentsView && !this.indexSidebarDataReady) {
+            this.renderInitialIndexSidebarLoading(file);
+            const initialLoad = this.startInitialIndexSidebarLoad();
+            if (!options.skipDataRefresh) {
+                await initialLoad;
+            }
+            return;
+        }
         if (!isAllCommentsView) {
             this.renderedIndexSidebarMode = null;
         }

@@ -10,6 +10,8 @@ function createIndexSidebarListLoadingElement(ownerDocument: Document): HTMLDivE
     const loadingEl = createDetachedObsidianElement(ownerDocument, "div");
     loadingEl.className = "aside-index-list-loading";
     loadingEl.setAttribute("aria-label", INDEX_SIDEBAR_LIST_LOADING_LABEL);
+    loadingEl.setAttribute("role", "status");
+    loadingEl.setAttribute("aria-live", "polite");
 
     for (let dotIndex = 0; dotIndex < INDEX_SIDEBAR_LIST_LOADING_DOT_COUNT; dotIndex += 1) {
         const dotEl = createDetachedObsidianElement(ownerDocument, "span");

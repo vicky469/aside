@@ -72,6 +72,8 @@ class FakeElement {
 function assertTypedRippleLoadingElement(loadingEl: FakeElement): void {
     assert.equal(loadingEl.className, "aside-index-list-loading");
     assert.equal(loadingEl.attributes.get("aria-label"), "Loading comments");
+    assert.equal(loadingEl.attributes.get("role"), "status");
+    assert.equal(loadingEl.attributes.get("aria-live"), "polite");
     assert.equal(loadingEl.children.length, 5);
     assert.deepEqual(
         loadingEl.children.map((child) => [child.className, child.textContent, child.attributes.get("aria-hidden")]),
