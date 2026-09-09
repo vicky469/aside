@@ -52,6 +52,24 @@ test("global index search returns the exact top 100 and a complete match notice"
     });
 });
 
+test("global Todo search returns the exact top 100 and a complete match notice", () => {
+    const threads = Array.from({ length: 137 }, (_, index) => createThread(index));
+    const complete = rankThreadsBySidebarSearchQuery(threads, "architecture");
+    const window = buildIndexSidebarSearchWindow({
+        threads,
+        query: "architecture",
+        mode: "todo",
+        rootFilePath: null,
+    });
+
+    assert.deepEqual(
+        window.items.map((thread) => thread.id),
+        complete.slice(0, 100).map((thread) => thread.id),
+    );
+    assert.equal(window.hiddenMatchCount, 37);
+    assert.equal(window.notice?.primary, "100 of 137 matches shown.");
+});
+
 test("file-scoped index search keeps every exact result and omits the global notice", () => {
     const threads = Array.from({ length: 137 }, (_, index) => createThread(index));
 
@@ -66,6 +84,22 @@ test("file-scoped index search keeps every exact result and omits the global not
     assert.equal(window.totalMatchCount, 137);
     assert.equal(window.hiddenMatchCount, 0);
     assert.equal(window.notice, null);
+});
+
+test("file-scoped Todo and Agent search keep every exact result", () => {
+    const threads = Array.from({ length: 137 }, (_, index) => createThread(index));
+    for (const mode of ["todo", "agent"] as const) {
+        const window = buildIndexSidebarSearchWindow({
+            threads,
+            query: "architecture",
+            mode,
+            rootFilePath: "docs/a.md",
+        });
+
+        assert.equal(window.items.length, 137);
+        assert.equal(window.hiddenMatchCount, 0);
+        assert.equal(window.notice, null);
+    }
 });
 
 test("global index search returns every result when fewer than 100 match", () => {

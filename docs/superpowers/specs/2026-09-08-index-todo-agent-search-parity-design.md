@@ -19,21 +19,21 @@ Use this section as the working checklist. Mark an item done only after the code
 
 ### To Implement
 
-- [ ] Make one policy owner identify Index List, Todo, and Agent as generic side-note-search modes.
-- [ ] Make the shared toolbar plan consume that policy instead of maintaining a second mode list.
-- [ ] Preserve the generic search query when switching among List, Todo, and Agent, and clear it when entering Tags or Thought Trail.
-- [ ] Reuse the existing Index search options, debounce, ranking, reconciliation, highlighting, and focus-restoration paths for Todo and Agent.
-- [ ] Use vault-wide search copy for unscoped Todo and selected-file copy for file-scoped List, Todo, and Agent.
-- [ ] Bound unscoped Todo search to the existing 100-result global window and retain the existing refinement notice.
-- [ ] Keep unscoped Agent gated behind file selection with no inactive toolbar row.
+- [x] Make one policy owner identify Index List, Todo, and Agent as generic side-note-search modes.
+- [x] Make the shared toolbar plan consume that policy instead of maintaining a second mode list.
+- [x] Preserve the generic search query when switching among List, Todo, and Agent, and clear it when entering Tags or Thought Trail.
+- [x] Reuse the existing Index search options, debounce, ranking, reconciliation, highlighting, and focus-restoration paths for Todo and Agent.
+- [x] Use vault-wide search copy for unscoped Todo and selected-file copy for file-scoped List, Todo, and Agent.
+- [x] Bound unscoped Todo search to the existing 100-result global window and retain the existing refinement notice.
+- [x] Keep unscoped Agent gated behind file selection with no inactive toolbar row.
 
 ### Verification
 
-- [ ] Pure state tests cover searchable modes, query preservation, and query clearing.
-- [ ] Toolbar tests cover global Todo search, selected-file Agent search, and unscoped Agent gating.
-- [ ] Search-window tests prove global Todo ranking is bounded and file-scoped Todo and Agent results remain complete.
-- [ ] Composition tests prove Todo and Agent use the shared renderer rather than duplicate inputs.
-- [ ] Focused tests, the complete test suite, lint, typecheck, Obsidian compliance, bundle-size check, and release-artifact inspection pass.
+- [x] Pure state tests cover searchable modes, query preservation, and query clearing.
+- [x] Toolbar tests cover global Todo search, selected-file Agent search, and unscoped Agent gating.
+- [x] Search-window tests prove global Todo ranking is bounded and file-scoped Todo and Agent results remain complete.
+- [x] Composition tests prove Todo and Agent use the shared renderer rather than duplicate inputs.
+- [x] Focused tests, the complete test suite, lint, typecheck, Obsidian compliance, bundle-size check, and release-artifact inspection pass.
 
 ## Product Behavior
 
@@ -74,4 +74,3 @@ The generic side-note query remains transient. Switching among List, Todo, and A
 - Combining Tags search state with side-note search state.
 - Adding a second search component or new styling.
 - Persisting search queries across Obsidian sessions.
-

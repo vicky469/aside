@@ -36,7 +36,7 @@ test("secondary toolbar plan shares valid controls across note and index surface
         }), {
             showRow: true,
             showFileFilter: true,
-            showSearch: false,
+            showSearch: true,
             showPinned: true,
             showNested: true,
             showDeleted: true,
@@ -112,7 +112,7 @@ test("unscoped Index List and Agent omit the secondary row while Todo stays glob
     }), {
         showRow: true,
         showFileFilter: true,
-        showSearch: false,
+        showSearch: true,
         showPinned: true,
         showNested: true,
         showDeleted: true,

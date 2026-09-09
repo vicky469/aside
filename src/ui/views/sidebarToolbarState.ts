@@ -1,6 +1,9 @@
 import type { SidebarPrimaryMode } from "./viewState";
 import { isSidebarListLikeMode } from "./sidebarModeTabs";
-import type { IndexSidebarModeScope } from "./indexSidebarState";
+import {
+    shouldShowIndexSidebarSearch,
+    type IndexSidebarModeScope,
+} from "./indexSidebarState";
 
 export interface SidebarSecondaryToolbarPlanOptions {
     surface: "note" | "index";
@@ -45,7 +48,7 @@ export function resolveSidebarSecondaryToolbarPlan(
     const isNoteListLikeMode = options.surface === "note" && isSidebarListLikeMode(options.mode);
     const isNoteFileMode = options.surface === "note" && options.mode === "list";
     const showSearch = options.surface === "index"
-        ? options.mode === "list" || isIndexTagsMode
+        ? isIndexTagsMode || shouldShowIndexSidebarSearch(options.mode)
         : isSidebarListLikeMode(options.mode);
 
     return {

@@ -21,7 +21,7 @@ test("index search is supplied only through the shared toolbar plan", () => {
     assert.match(asideViewSource, /search:\s*secondaryPlan\.showSearch/);
     assert.match(
         asideViewSource,
-        /activePrimaryMode === "tags"[\s\S]*?\? this\.getIndexTagSearchInputOptions\(\)[\s\S]*?: this\.getIndexSearchInputOptions\(\)/,
+        /activePrimaryMode === "tags"[\s\S]*?\? this\.getIndexTagSearchInputOptions\(\)[\s\S]*?: this\.getIndexSearchInputOptions\(options\.indexModeScope\?\.kind\)/,
     );
     assert.doesNotMatch(asideViewSource, /this\.renderIndexSearchInput\(/);
 });
@@ -34,16 +34,16 @@ test("shared search rendering supports native disabled semantics", () => {
     assert.match(stylesSource, /\.aside-note-search-field\.is-disabled/);
 });
 
-test("index search renders only inside a selected-file toolbar", () => {
+test("index card search reuses scope-aware shared options", () => {
     const methodSource = asideViewSource.match(
         /private getIndexSearchInputOptions\([\s\S]*?\): SidebarSearchInputOptions \{[\s\S]*?\n {4}private getIndexTagSearchInputOptions\(/,
     )?.[0];
 
     assert.ok(methodSource, "missing index search options method");
-    assert.match(methodSource, /placeholder:\s*INDEX_SIDEBAR_SCOPED_SEARCH_PLACEHOLDER/);
-    assert.doesNotMatch(methodSource, /resolveIndexSidebarSearchAvailability\(/);
+    assert.match(methodSource, /resolveIndexSidebarSearchPlaceholder\(scopeKind\)/);
     assert.doesNotMatch(methodSource, /disabled:/);
     assert.doesNotMatch(methodSource, /ariaLabel:/);
+    assert.match(asideViewSource, /this\.getIndexSearchInputOptions\(options\.indexModeScope\?\.kind\)/);
 });
 
 test("one index mode scope drives cards, toolbar, and action policy", () => {

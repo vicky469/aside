@@ -1,5 +1,3 @@
-// @todo Revisit unscoped global Index search after designing a dedicated global-search experience.
-// The active product path requires a selected file; this module is a defensive fallback only.
 import { getNormalizedFilterPath } from "./indexFileFilter";
 import {
     INDEX_SIDEBAR_LIST_LIMIT,
@@ -12,7 +10,8 @@ export function resolveIndexSidebarGlobalSearchResultLimit(options: {
     rootFilePath: string | null | undefined;
     query: string;
 }): number | undefined {
-    return options.mode === "list"
+    const isBoundedGlobalMode = options.mode === "todo" || options.mode === "list";
+    return isBoundedGlobalMode
         && !getNormalizedFilterPath(options.rootFilePath ?? "")
         && !!options.query.trim()
         ? INDEX_SIDEBAR_LIST_LIMIT
