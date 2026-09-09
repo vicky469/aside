@@ -376,7 +376,7 @@ Expected: PASS.
 Run:
 
 ```bash
-rg -n "sourceMappingURL|sourcesContent|/Users/wenqingli/|BEGIN (RSA |OPENSSH |EC )?PRIVATE KEY|AKIA[0-9A-Z]{16}" main.js manifest.json styles.css
+rg -n "sourceMappingURL|sourcesContent|[/]Users[/][^/]+[/]|BEGIN (RSA |OPENSSH |EC )?PRIVATE KEY|AKIA[0-9A-Z]{16}" main.js manifest.json styles.css
 ```
 
 Expected: no matches. The ship set contains no raw TypeScript or JSX-family files because it is exactly the three allowed plugin assets.
