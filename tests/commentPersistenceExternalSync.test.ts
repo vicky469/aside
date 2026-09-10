@@ -1389,6 +1389,131 @@ test("comment persistence controller hydrates compacted snapshots over a stale s
     }
 });
 
+for (const withLiveEvent of [false, true]) {
+    test(`comment persistence does not acknowledge other notes during targeted ${withLiveEvent ? "snapshot and event" : "snapshot"} replay`, async () => {
+        const originalWindow = globalThis.window;
+        globalThis.window = {
+            setTimeout: () => 1,
+            clearTimeout: () => {},
+        } as unknown as typeof globalThis.window;
+
+        const file = createFile("docs/note.md");
+        const otherFile = createFile("docs/other.md");
+        const noteBody = "# Title\n\nAlpha target omega\n";
+        const adapter = new FakeAdapter();
+        const commentManager = new CommentManager([]);
+        const aggregateCommentIndex = new AggregateCommentIndex();
+        let persistedData: PersistedPluginData = {};
+        let eventCounter = 0;
+        const staleThread = createThread(file.path);
+        commentManager.replaceThreadsForFile(file.path, [staleThread]);
+        const remoteThread: CommentThread = {
+            ...createThread(file.path),
+            entries: [
+                ...staleThread.entries,
+                {
+                    id: "entry-2",
+                    body: "mobile reply",
+                    timestamp: 1710000000200,
+                    anchor: {
+                        filePath: file.path,
+                        startLine: 2,
+                        startChar: 6,
+                        endLine: 2,
+                        endChar: 12,
+                        selectedText: "target",
+                        selectedTextHash: "hash-target",
+                        anchorKind: "selection",
+                    },
+                },
+            ],
+            updatedAt: 1710000000200,
+        };
+        adapter.files.set(getSidecarStoragePath(file.path), serializeSidecarThreads(file.path, [staleThread]));
+
+        const remoteEventStore = new SideNoteSyncEventStore({
+            readPersistedPluginData: () => persistedData,
+            writePersistedPluginData: async (data) => {
+                persistedData = data;
+            },
+            getDeviceId: () => "device-b",
+            createEventId: () => `remote-event-${++eventCounter}`,
+            hashText: async (text) => `hash-${text.replace(/\//g, "_")}`,
+            now: () => 1710000000300 + eventCounter,
+        });
+
+        await remoteEventStore.appendLocalEvents(file.path, [{
+            op: "createThread",
+            payload: {
+                thread: remoteThread,
+            },
+        }]);
+        const otherThread = { ...createThread(otherFile.path), id: "other-thread", entries: [{ id: "other-entry", body: "other note", timestamp: 1710000000200 }] };
+        await remoteEventStore.appendLocalEvents(otherFile.path, [{ op: "createThread", payload: { thread: otherThread } }]);
+        await remoteEventStore.compactProcessedEventsForSnapshots([{ notePath: otherFile.path, threads: [otherThread] }, {
+            notePath: file.path,
+            threads: [remoteThread],
+        }]);
+        if (withLiveEvent) {
+            await remoteEventStore.appendLocalEvents(otherFile.path, [{
+                op: "appendEntry",
+                payload: { threadId: otherThread.id, entry: { id: "live-entry", body: "new live reply", timestamp: 1710000000500 } },
+            }]);
+        }
+        const controller = new CommentPersistenceController({
+            app: {
+                vault: {
+                    adapter: adapter as unknown as DataAdapter,
+                    process: async () => "",
+                },
+            } as never,
+            getAllCommentsNotePath: () => "Aside index.md",
+            getIndexHeaderImageUrl: () => "",
+            getIndexHeaderImageCaption: () => "",
+            getMarkdownViewForFile: () => null,
+            getMarkdownFileByPath: (path) => path === file.path ? file : path === otherFile.path ? otherFile : null,
+            getCurrentNoteContent: async () => noteBody,
+            getStoredNoteContent: async () => noteBody,
+            getParsedNoteComments: (filePath, noteContent) => parseNoteComments(noteContent, filePath),
+            getPluginDataDirPath: () => ".obsidian/plugins/aside",
+            getSideNoteSyncDeviceId: () => "device-a",
+            readPersistedPluginData: () => persistedData,
+            writePersistedPluginData: async (data) => {
+                persistedData = data;
+            },
+            isAllCommentsNotePath: () => false,
+            isCommentableFile: (candidate): candidate is TFile => !!candidate && candidate.extension === "md",
+            isMarkdownEditorFocused: () => false,
+            getCommentManager: () => commentManager,
+            getAggregateCommentIndex: () => aggregateCommentIndex,
+            createCommentId: () => "generated-id",
+            hashText: async (text) => `hash-${text.replace(/\//g, "_")}`,
+            syncDerivedCommentLinksForFile: () => {},
+            refreshCommentViews: async () => {},
+            refreshAllCommentsSidebarViews: async () => {},
+            refreshEditorDecorations: () => {},
+            refreshMarkdownPreviews: () => {},
+            getCommentMentionedPageLabels: () => [],
+            syncIndexNoteLeafMode: async () => {},
+            log: async () => {},
+        });
+
+        try {
+            await controller.replaySyncedSideNoteEvents(otherFile.path);
+            const appliedEventCount = await controller.replaySyncedSideNoteEvents(file.path);
+            const thread = commentManager.getThreadById("thread-1");
+
+            assert.equal(appliedEventCount, 0);
+            assert.deepEqual(thread?.entries.map((entry) => entry.body), ["external body", "mobile reply"]);
+            assert.deepEqual(thread?.entries[1]?.anchor, remoteThread.entries[1]?.anchor);
+            assert.equal(aggregateCommentIndex.getCommentById("entry-2")?.comment, "mobile reply");
+        } finally {
+            globalThis.window = originalWindow;
+        }
+    });
+}
+
+
 test("comment persistence controller does not rehydrate snapshot coverage already processed locally", async () => {
     const originalWindow = globalThis.window;
     globalThis.window = {
@@ -1681,7 +1806,7 @@ test("comment persistence controller refreshes synced plugin data before sidebar
         getIndexHeaderImageUrl: () => "",
         getIndexHeaderImageCaption: () => "",
         getMarkdownViewForFile: () => null,
-        getMarkdownFileByPath: (path) => path === file.path ? file : null,
+        getMarkdownFileByPath: (path) => path === file.path ? file : path === otherFile.path ? otherFile : null,
         getCurrentNoteContent: async () => noteBody,
         getStoredNoteContent: async () => noteBody,
         getParsedNoteComments: (filePath, noteContent) => parseNoteComments(noteContent, filePath),
@@ -1722,7 +1847,14 @@ test("comment persistence controller refreshes synced plugin data before sidebar
             (cachedPersistedData.sideNoteSyncEventState as {
                 processedWatermarks?: Record<string, Record<string, number>>;
             }).processedWatermarks?.["device-a"]?.["device-b"],
-            1,
+            undefined,
+        );
+        await controller.replaySyncedSideNoteEvents();
+        assert.equal(aggregateCommentIndex.getCommentById("other-entry")?.comment, "unrelated mobile reply");
+        assert.equal(
+            (cachedPersistedData.sideNoteSyncEventState as SideNoteSyncEventState)
+                .processedWatermarks["device-a"]?.["device-b"],
+            2,
         );
     } finally {
         globalThis.window = originalWindow;
@@ -2650,7 +2782,7 @@ test("comment persistence controller prunes missing sidecar records before writi
     assert.deepEqual(snapshot?.threads, []);
 });
 
-test("comment persistence controller skips incompatible compacted snapshots for existing files", async () => {
+test("comment persistence controller retries deferred snapshots when the Markdown content catches up", async () => {
     const originalWindow = globalThis.window;
     globalThis.window = {
         setTimeout: () => 1,
@@ -2658,7 +2790,7 @@ test("comment persistence controller skips incompatible compacted snapshots for 
     } as unknown as typeof globalThis.window;
 
     const file = createFile("docs/effective.md");
-    const noteBody = "# Effective\n\nThis note has unrelated content.\n";
+    let noteBody = "# Effective\n\nThis note has unrelated content.\n";
     const adapter = new FakeAdapter();
     const commentManager = new CommentManager([]);
     const aggregateCommentIndex = new AggregateCommentIndex();
@@ -2729,19 +2861,25 @@ test("comment persistence controller skips incompatible compacted snapshots for 
         log: async () => {},
     });
 
+    const localThread = { ...createThread(file.path), id: "local-thread", entries: [{ id: "local-entry", body: "local comment", timestamp: 1710000000000 }] };
+    adapter.files.set(getSidecarStoragePath(file.path), serializeSidecarThreads(file.path, [localThread]));
     try {
         const appliedEventCount = await controller.replaySyncedSideNoteEvents();
 
         assert.equal(appliedEventCount, 0);
         assert.equal(commentManager.getCommentById("thread-1"), undefined);
         assert.equal(aggregateCommentIndex.getCommentById("thread-1"), null);
-        assert.equal(adapter.files.has(getSidecarStoragePath(file.path)), false);
+        assert.equal(adapter.files.has(getSidecarStoragePath(file.path)), true);
         assert.equal(
             (persistedData.sideNoteSyncEventState as {
                 processedWatermarks?: Record<string, Record<string, number>>;
             }).processedWatermarks?.["device-a"]?.["device-b"],
-            1,
+            undefined,
         );
+        noteBody = `# Effective\n\n${incompatibleThread.selectedText}\n`;
+        await controller.loadCommentsForFile(file);
+        assert.equal(commentManager.getCommentById("entry-1")?.comment, "external body");
+        assert.equal(commentManager.getCommentById("local-entry")?.comment, "local comment");
     } finally {
         globalThis.window = originalWindow;
     }

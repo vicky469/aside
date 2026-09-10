@@ -377,17 +377,6 @@ function isStrongLegacySourceMatch(candidate: LegacySourceCandidate, targetFileP
     return false;
 }
 
-function mergeSyncWatermarks(
-    left: Record<string, number>,
-    right: Record<string, number>,
-): Record<string, number> {
-    const merged = { ...left };
-    for (const [deviceId, logicalClock] of Object.entries(right)) {
-        merged[deviceId] = Math.max(merged[deviceId] ?? 0, logicalClock);
-    }
-    return merged;
-}
-
 function hasDeleteNoteEvent(events: SideNoteSyncEvent[]): boolean {
     return events.some((event) => event.op === "deleteNote");
 }
@@ -1972,12 +1961,11 @@ export class CommentPersistenceController {
         }
 
         let hydratedCount = 0;
-        let coveredWatermarks: Record<string, number> = {};
+        let hasDeferredSnapshots = false;
         for (const snapshot of snapshots) {
             if (this.disposed) {
                 return hydratedCount;
             }
-            coveredWatermarks = mergeSyncWatermarks(coveredWatermarks, snapshot.coveredWatermarks);
             if (snapshot.threads.length === 0 && !(await this.hasKnownCommentsForSnapshot(snapshot.notePath))) {
                 continue;
             }
@@ -2020,6 +2008,7 @@ export class CommentPersistenceController {
                 normalizedSnapshotThreads.length > 0
                 && !areSnapshotThreadsCompatibleWithFile(normalizedSnapshotThreads, noteContent)
             ) {
+                hasDeferredSnapshots = true;
                 void this.host.log?.("warn", "persistence", "sync.plugin-data.snapshot.skip-incompatible", {
                     targetNotePath: snapshot.notePath,
                     threadCount: normalizedSnapshotThreads.length,
@@ -2057,10 +2046,11 @@ export class CommentPersistenceController {
         if (this.disposed) {
             return hydratedCount;
         }
-        if (!targetNotePath) {
+        if (!targetNotePath && !hasDeferredSnapshots) {
+            // Snapshot coverage describes the whole device log, not just this
+            // note. Only a complete vault-wide hydration can acknowledge it;
+            // deferred notes still need their snapshots when Markdown arrives.
             await this.syncEventStore.markWatermarksProcessed(this.syncEventStore.getCompactedWatermarks());
-        } else {
-            await this.syncEventStore.markWatermarksProcessed(coveredWatermarks);
         }
         if (hydratedCount > 0) {
             void this.host.log?.("info", "persistence", "sync.plugin-data.snapshot.hydrate", {

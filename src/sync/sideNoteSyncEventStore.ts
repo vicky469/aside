@@ -557,10 +557,9 @@ export class SideNoteSyncEventStore {
         }
 
         for (const [eventDeviceId, processedClocks] of processedClocksByDevice.entries()) {
-            const currentClock = Math.max(
-                processorWatermarks[eventDeviceId] ?? 0,
-                state.compactedWatermarks[eventDeviceId] ?? 0,
-            );
+            // A compacted prefix can still contain snapshots this device has
+            // not hydrated. Receiving a later event must not acknowledge them.
+            const currentClock = processorWatermarks[eventDeviceId] ?? 0;
             processorWatermarks[eventDeviceId] = advanceContiguousWatermark(currentClock, processedClocks);
         }
 

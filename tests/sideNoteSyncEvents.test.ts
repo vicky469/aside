@@ -855,5 +855,10 @@ test("side-note sync event store compacts only globally covered log prefixes", a
 
     await deviceC.markEventsProcessed(unprocessedEvents);
 
+    assert.equal(deviceC.readState().processedWatermarks["device-c"]?.["device-a"] ?? 0, 0);
+    assert.equal(deviceC.hasUnprocessedSnapshotCoverage({ "device-a": 1 }), true);
+    // Only acknowledge the compacted prefix after its snapshots have hydrated.
+    await deviceC.markWatermarksProcessed(deviceC.getCompactedWatermarks());
+    await deviceC.markEventsProcessed(unprocessedEvents);
     assert.equal(deviceC.readState().processedWatermarks["device-c"]?.["device-a"], 2);
 });
