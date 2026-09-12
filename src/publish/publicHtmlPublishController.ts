@@ -178,15 +178,64 @@ export class PublicHtmlPublishController {
 			return [this.disabledAction(PUBLIC_PUBLISH_INDEX_OWNER_ONLY_NOTICE, "Markdown")];
 		}
 		if (isMarkdownPath(normalizedPath)) {
-			return this.getMarkdownFileActionStates(normalizedPath);
+			return this.withInventoryOpenAction(normalizedPath, "Markdown", await this.getMarkdownFileActionStates(normalizedPath));
 		}
 		if (isHtmlPath(normalizedPath)) {
-			return this.getHtmlFileActionStates(normalizedPath, "HTML");
+			return this.withInventoryOpenAction(normalizedPath, "HTML", await this.getHtmlFileActionStates(normalizedPath, "HTML"));
 		}
 		if (isPdfPath(normalizedPath)) {
-			return this.getArtifactFileActionStates(normalizedPath);
+			return this.withInventoryOpenAction(normalizedPath, "PDF", await this.getArtifactFileActionStates(normalizedPath));
 		}
 		return [this.disabledAction("Publish supports Markdown, HTML, and PDF files in this version.")];
+	}
+
+	private async withInventoryOpenAction(
+		filePath: string,
+		artifact: PublishArtifactContext,
+		states: PublicHtmlPublishActionState[],
+	): Promise<PublicHtmlPublishActionState[]> {
+		if (!states.some((state) => state.kind === "publish") || states.some((state) => state.kind === "open-published")) {
+			return states;
+		}
+		const settings = this.host.getSettings();
+		const root = normalizePublishAllowedRoot(settings.publishAllowedRoot);
+		if (!filePath.startsWith(root)) return states;
+		const indexPath = buildPublicPublishIndexPath(root);
+		let entries: PublicPublishIndexEntry[];
+		try {
+			if (!(await this.host.fileExists(indexPath))) return states;
+			entries = readPublicPublishIndexEntries(await this.host.readVaultFileFresh(indexPath));
+		} catch {
+			// An unavailable inventory must not prevent normal publish actions.
+			return states;
+		}
+		const expectedUrl = buildPublishPublicUrl({
+			baseUrl: settings.publishBaseUrl,
+			vaultRelativePath: isMarkdownPath(filePath) ? buildPublishedMarkdownArtifactPath(filePath) : filePath,
+		});
+		const entry = entries.find((entry) => entry.path === filePath.slice(root.length));
+		if (entry?.status !== "published" || !entry.publishedUrl) return states;
+		let url: string;
+		try {
+			const published = new URL(entry.publishedUrl);
+			if (published.protocol !== "https:" || published.username || published.password
+				|| published.search || published.hash || published.pathname !== new URL(expectedUrl).pathname) {
+				return states;
+			}
+			// A historical publication may use a custom domain that differs
+			// from this device's current deployment settings.
+			url = published.href;
+		} catch {
+			return states;
+		}
+		// Inventory records are evidence for navigation, not deployment consent.
+		return [...states, {
+			kind: "open-published",
+			label: this.publishActionLabel("open-published", artifact),
+			icon: "external-link",
+			disabled: false,
+			url,
+		}];
 	}
 
 	public async getHtmlFileActionState(htmlPath: string): Promise<PublicHtmlPublishActionState> {
@@ -846,11 +895,9 @@ export class PublicHtmlPublishController {
 			: null;
 		const entriesByPath = new Map<string, PublicPublishIndexEntry>();
 		for (const entry of readPublicPublishIndexEntries(existingMarkdown)) {
-			entriesByPath.set(entry.path, {
-				...entry,
-				publishedUrl: null,
-				status: "unpublished",
-			});
+			// Missing local settings are not evidence that another device
+			// unpublished a file. Explicit operation results below update it.
+			entriesByPath.set(entry.path, { ...entry });
 		}
 
 		const recordPublishedPath = (path: string, publishedArtifactPath: string): void => {

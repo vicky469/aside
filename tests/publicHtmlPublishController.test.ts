@@ -1133,3 +1133,68 @@ test("public html publish controller reads reachable staged files before shadowi
 	]);
 	assert.equal(decodeSnapshotContents(harness.deployCalls.at(-1)![0]).includes("staged.png"), true);
 });
+
+for (const [path, url, label] of [
+	["public/project/index.html", "https://publish.example.com/public/project/index", "HTML"],
+	["public/report.pdf", "https://publish.example.com/public/report.pdf", "PDF"],
+	["public/note.md", "https://publish.example.com/public/note", "Markdown"],
+]) {
+	test(`synced inventory restores the ${label} open link without enabling deployment`, async () => {
+		const harness = createHarness({
+			files: {
+				[path]: "Document",
+				"public/index.md": `| path | published_url | status | last_published_at |\n| --- | --- | --- | --- |\n| ${path.slice(7)} | ${url} | published | ${fixedPublishedAt} |\n`,
+			},
+		});
+		const states = await harness.controller.getFileActionStates(path);
+		assert.deepEqual(states.find((state) => state.kind === "open-published"), {
+			kind: "open-published", label: `Open published ${label}`, icon: "external-link", disabled: false, url,
+		});
+		assert.equal(states.some((state) => state.kind === "update-publish" || state.kind === "unpublish"), false);
+		assert.deepEqual(harness.getPublishedArtifactPaths(), []);
+		assert.deepEqual(harness.deployCalls, []);
+		assert.deepEqual(harness.writes, []);
+	});
+}
+
+test("inventory refresh retains synced publication evidence and honors explicit unpublish", async () => {
+	const harness = createHarness({ files: {
+		"public/project/index.html": "Document",
+		"public/index.md": `| path | published_url | status | last_published_at |\n| --- | --- | --- | --- |\n| project/index.html | https://publish.example.com/public/project/index | published | ${fixedPublishedAt} |\n`,
+	} });
+	await harness.controller.refreshPublicPublishIndex();
+	assert.equal((await harness.controller.getFileActionStates("public/project/index.html")).some((s) => s.kind === "open-published"), true);
+	await harness.controller.refreshPublicPublishIndex([{
+		path: "project/index.html", publishedUrl: null, status: "unpublished", lastPublishedAt: null,
+	}]);
+	assert.equal((await harness.controller.getFileActionStates("public/project/index.html")).some((s) => s.kind === "open-published"), false);
+	assert.deepEqual(harness.getPublishedArtifactPaths(), []);
+	assert.deepEqual(harness.deployCalls, []);
+});
+
+for (const [status, url] of [
+	["unpublished", "https://publish.example.com/public/page"],
+	["published", "https://other.example.com/unrelated-page"],
+	["published", "javascript:alert(1)"],
+	["published", ""],
+]) {
+	test(`inventory does not restore an invalid link: ${status} ${url}`, async () => {
+		const harness = createHarness({ files: {
+			"public/page.html": "Document",
+			"public/index.md": `| path | published_url | status | last_published_at |\n| --- | --- | --- | --- |\n| page.html | ${url} | ${status} | |\n`,
+		} });
+		assert.equal((await harness.controller.getFileActionStates("public/page.html")).some((s) => s.kind === "open-published"), false);
+	});
+}
+
+test("inventory open link retains the published custom domain after settings change", async () => {
+	const harness = createHarness({ files: {
+		"public/project/index.html": "Document",
+		"public/index.md": `| path | published_url | status | last_published_at |\n| --- | --- | --- | --- |\n| project/index.html | https://original.example.com/public/project/index | published | ${fixedPublishedAt} |\n`,
+	} });
+	const action = (await harness.controller.getFileActionStates("public/project/index.html")).find((s) => s.kind === "open-published");
+	assert.ok(action && !action.disabled);
+	assert.equal(action.url, "https://original.example.com/public/project/index");
+	assert.deepEqual(harness.deployCalls, []);
+	assert.deepEqual(harness.getPublishedArtifactPaths(), []);
+});
