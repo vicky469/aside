@@ -47,6 +47,24 @@ test("CommentManager falls back to the end if the reply target disappeared", () 
     assert.deepEqual(manager.getThreadById("thread")?.entries.map((entry) => entry.id), ["thread", "child1", "reply"]);
 });
 
+test("CommentManager pins root and reply cards independently without reordering", () => {
+    const thread = commentToThread(createComment("root", 100, "Parent"));
+    thread.entries.push({ id: "child1", body: "First", timestamp: 200 }, { id: "child2", body: "Second", timestamp: 300 });
+    const manager = new CommentManager([thread]);
+    manager.setCommentPinnedState("child1", true);
+    assert.equal(manager.getCommentById("child1")?.isPinned, true);
+    assert.equal(manager.getThreadById("root")?.isPinned, false);
+    assert.notEqual(manager.getCommentById("child2")?.isPinned, true);
+    manager.setCommentPinnedState("root", true);
+    manager.setCommentPinnedState("child1", false);
+    assert.equal(manager.getCommentById("root")?.isPinned, true);
+    assert.notEqual(manager.getCommentById("child1")?.isPinned, true);
+    assert.deepEqual(manager.getThreadById("root")?.entries.map((entry) => entry.id), ["root", "child1", "child2"]);
+    const restored = new CommentManager(manager.getThreadsForFile("note.md"));
+    assert.equal(restored.getCommentById("root")?.isPinned, true);
+    assert.notEqual(restored.getCommentById("child1")?.isPinned, true);
+});
+
 test("CommentManager edits/deletes by id under timestamp collision", () => {
     const sameTimestamp = Date.now();
     const first = createComment("id-1", sameTimestamp, "first");

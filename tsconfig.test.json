@@ -19,6 +19,7 @@
     "src/commentManager.ts",
     "src/core/**/*.ts",
     "shared/sideNotePromptPolicy.js",
-    "shared/vaultScriptPolicy.js"
+    "shared/vaultScriptPolicy.js",
+    "shared/commentPinState.js"
   ]
 }

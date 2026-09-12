@@ -3,6 +3,7 @@ import { access, copyFile, mkdir, readdir, readFile, rename, rm, writeFile } fro
 import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { normalizeCommentPinState } from "../../shared/commentPinState.js";
 
 function getRepoRoot(metaUrl) {
     return path.resolve(path.dirname(fileURLToPath(metaUrl)), "../..");
@@ -580,6 +581,7 @@ function canonicalizeCommentThreadEntry(value) {
         id: value.id,
         body: value.body,
         timestamp: value.timestamp,
+        ...normalizeCommentPinState(value),
         ...(isFiniteNumber(value.deletedAt) && value.deletedAt > 0 ? { deletedAt: value.deletedAt } : {}),
         ...(anchor ? { anchor } : {}),
     };

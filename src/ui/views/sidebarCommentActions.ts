@@ -109,7 +109,7 @@ export function renderMoveActionButton(
 
 export function renderPinActionButton(
     actionsEl: HTMLDivElement,
-    threadId: string,
+    commentId: string,
     isPinned: boolean,
     host: SidebarPersistedCommentHost,
 ): void {
@@ -131,7 +131,7 @@ export function renderPinActionButton(
     host.setIcon(pinButton, "pin");
     pinButton.onclick = async (event) => {
         await runSidebarPendingButtonAction(pinButton, host, event, async () => {
-            await host.togglePinnedThread(threadId);
+            await host.togglePinnedComment(commentId);
         });
     };
 }

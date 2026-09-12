@@ -1,6 +1,8 @@
 import type { CachedMetadata, MarkdownView, Plugin, TFile, WorkspaceLeaf } from "obsidian";
 import type { Comment, CommentManager, CommentThread, CommentThreadEntry } from "../commentManager";
 import { normalizeCommentThread, threadToComment } from "../commentManager";
+import { cloneCommentThreadEntry } from "../domain/comments/commentThreadNormalization";
+import { mergeCommentPinState } from "../../shared/commentPinState";
 import { getPageCommentLabel } from "../core/anchors/commentAnchors";
 import {
     type AllCommentsNoteBuildOptions,
@@ -382,14 +384,7 @@ function hasDeleteNoteEvent(events: SideNoteSyncEvent[]): boolean {
 }
 
 function cloneThreadEntry(entry: CommentThreadEntry): CommentThreadEntry {
-    const deletedAt = normalizeDeletedAt(entry.deletedAt);
-    return {
-        id: entry.id,
-        body: entry.body,
-        timestamp: entry.timestamp,
-        ...(deletedAt !== undefined ? { deletedAt } : {}),
-        ...(entry.anchor ? { anchor: { ...entry.anchor } } : {}),
-    };
+    return cloneCommentThreadEntry(entry);
 }
 
 function cloneThread(thread: CommentThread): CommentThread {
@@ -405,6 +400,8 @@ function areThreadEntriesEqual(left: CommentThreadEntry, right: CommentThreadEnt
     return left.id === right.id
         && left.body === right.body
         && left.timestamp === right.timestamp
+        && (left.isPinned === true) === (right.isPinned === true)
+        && (left.pinUpdatedAt ?? 0) === (right.pinUpdatedAt ?? 0)
         && normalizeDeletedAt(left.deletedAt) === normalizeDeletedAt(right.deletedAt);
 }
 
@@ -425,9 +422,10 @@ function chooseSnapshotThreadEntry(
     localEntry: CommentThreadEntry,
     snapshotEntry: CommentThreadEntry,
 ): CommentThreadEntry {
-    return getThreadEntryVersion(snapshotEntry) >= getThreadEntryVersion(localEntry)
+    const entry = getThreadEntryVersion(snapshotEntry) >= getThreadEntryVersion(localEntry)
         ? cloneThreadEntry(snapshotEntry)
         : cloneThreadEntry(localEntry);
+    return { ...entry, ...mergeCommentPinState(localEntry, snapshotEntry) };
 }
 
 function mergeThreadEntriesFromSnapshot(

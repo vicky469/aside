@@ -241,6 +241,8 @@ test("update-note-comment preserves every current canonical thread field", async
         timestamp: 1710000000200,
         deletedAt: 1710000000250,
         anchor,
+        isPinned: true,
+        pinUpdatedAt: 1710000000400,
     } satisfies Record<keyof CommentThreadEntry, unknown>;
     const thread = {
         id: "thread-1",

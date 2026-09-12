@@ -1,3 +1,5 @@
+import type { CommentPinState } from "../../../shared/commentPinState";
+
 export type CommentAnchorKind = "selection" | "page";
 
 export interface CommentThreadEntryAnchor {
@@ -12,7 +14,7 @@ export interface CommentThreadEntryAnchor {
     orphaned?: boolean;
 }
 
-export interface CommentThreadEntry {
+export interface CommentThreadEntry extends CommentPinState {
     id: string;
     body: string;
     timestamp: number;

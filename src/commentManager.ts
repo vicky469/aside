@@ -403,6 +403,8 @@ export class CommentManager {
             if (index === 0) {
                 return {
                     ...clonedEntry,
+                    isPinned: sourceThread.isPinned === true,
+                    pinUpdatedAt: sourceThread.updatedAt,
                     anchor: sourceAnchor,
                 };
             }
@@ -575,11 +577,18 @@ export class CommentManager {
         return true;
     }
 
-    setCommentPinnedState(id: string, isPinned: boolean) {
+    setCommentPinnedState(id: string, isPinned: boolean, updatedAt = Date.now()) {
         const thread = this.findThreadById(id);
-        if (thread) {
+        if (!thread) return;
+        if (id === thread.id || id === thread.entries[0]?.id) {
             thread.isPinned = isPinned;
+        } else {
+            const entry = this.lookupIndexes.entryById.get(id)?.entry;
+            if (!entry) return;
+            entry.isPinned = isPinned;
+            entry.pinUpdatedAt = Math.max(updatedAt, (entry.pinUpdatedAt ?? 0) + 1);
         }
+        thread.updatedAt = Math.max(thread.updatedAt, updatedAt);
     }
 
     reanchorCommentThread(

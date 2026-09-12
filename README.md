@@ -45,6 +45,7 @@ For durable storage and sync across devices, use Aside with [Obsidian Sync](http
 ## Features
 
 - Uses a dedicated sidebar for drafting, editing, and deleting comments.
+- Pin any saved card independently, including replies. The pinned filter keeps pinned replies beside their parent context in the original conversation order, and pins sync across devices.
 - Jump through the current sidebar search results with the up/down buttons beside the input, or Enter / Shift+Enter. The counter tracks highlighted matches; tag search navigates matching file rows.
 - Adds page notes for vault files displayed in an Obsidian file-backed view, except the generated `🐰 Aside Index.md`, including files displayed by viewer plugins. Selection-anchored notes remain Markdown-only. Aside does not add previews for formats Obsidian or its installed plugins cannot display.
 - Supports Obsidian-style `[[wikilinks]]` inside side comments to link existing notes or create new markdown notes.

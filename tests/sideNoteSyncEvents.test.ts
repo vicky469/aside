@@ -57,6 +57,33 @@ function createEvent(overrides: Partial<SideNoteSyncEvent> = {}): SideNoteSyncEv
     };
 }
 
+test("reply pins sync independently from concurrent text edits", () => {
+    const before = createThread("docs/note.md");
+    before.entries.push({ id: "child", body: "Reply", timestamp: 1710000000000 });
+    const after = structuredClone(before);
+    after.entries[1].isPinned = true;
+    after.entries[1].pinUpdatedAt = 1710000000100;
+    const inputs = buildSideNoteSyncEventInputsForThreadDiff([before], [after]);
+    assert.deepEqual(inputs.map((input) => input.op), ["setEntryPinned"]);
+    const pin = createEvent({ ...inputs[0], eventId: "pin", logicalClock: 2 });
+    assert.deepEqual(decodeSideNoteSyncEventLine(encodeSideNoteSyncEvent(pin)), pin);
+    const edit = createEvent({
+        eventId: "edit", logicalClock: 3, op: "updateEntry",
+        payload: { threadId: before.id, entryId: "child", previousEntry: before.entries[1], entry: { ...before.entries[1], body: "Edited", timestamp: 1710000000200 } },
+    });
+    const result = reduceSideNoteSyncEvents([before], [pin, edit]);
+    assert.equal(result.threads[0].entries[1].isPinned, true);
+    assert.equal(result.threads[0].entries[1].body, "Edited");
+    assert.notEqual(result.threads[0].isPinned, true);
+    assert.equal(result.threads[0].entries.length, 2);
+    const unpinned = structuredClone(result.threads);
+    unpinned[0].entries[1].isPinned = false;
+    unpinned[0].entries[1].pinUpdatedAt = 1710000000300;
+    const unpinInputs = buildSideNoteSyncEventInputsForThreadDiff(result.threads, unpinned);
+    const unpin = createEvent({ ...unpinInputs[0], eventId: "unpin", logicalClock: 4 });
+    assert.equal(reduceSideNoteSyncEvents([before], [pin, edit, unpin, pin]).threads[0].entries[1].isPinned, false);
+});
+
 test("side-note sync event encoder round-trips event lines and rejects malformed lines", () => {
     const event = createEvent();
     const encoded = encodeSideNoteSyncEvent(event);

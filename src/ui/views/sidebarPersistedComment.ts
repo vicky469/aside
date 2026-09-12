@@ -1,5 +1,6 @@
 import type { Comment, CommentThread, CommentThreadEntry } from "../../commentManager";
 import { getFirstThreadEntry, threadEntryToComment } from "../../commentManager";
+import { getPinnedEntriesWithParentContext } from "../../domain/comments/commentPins";
 import { isOrphanedComment, isPageComment } from "../../core/anchors/commentAnchors";
 import {
     getAgentRunByOutputEntryId,
@@ -142,8 +143,8 @@ export interface SidebarPersistedCommentHost {
     canDeleteEntryInline(entry: CommentThreadEntry): boolean;
     shouldForceRenderEntry(entry: CommentThreadEntry): boolean;
     startEditDraft(commentId: string, hostFilePath: string | null): void;
-    isPinnedThread(threadId: string): boolean;
-    togglePinnedThread(threadId: string): Promise<void> | void;
+    showPinnedEntriesOnly?: boolean;
+    togglePinnedComment(commentId: string): Promise<void> | void;
     startAppendEntryDraft(commentId: string, hostFilePath: string | null): void;
     retryAgentRun(runId: string): Promise<boolean> | boolean;
     retryScriptRun(runId: string): Promise<boolean> | boolean;
@@ -1438,6 +1439,9 @@ function renderStoredThreadEntry(
             renderRestoreButton(entryActionsEl, entryComment.id, host, "Restore deleted side note entry");
             renderPermanentDeleteButton(entryActionsEl, entryComment.id, host, "Permanently delete side note entry");
         } else {
+            if (host.showBookmarkAndPinControls) {
+                renderPinActionButton(entryActionsEl, entry.id, entry.isPinned === true, host);
+            }
             if (host.canEditEntryInline(entry)) {
                 renderEditButton(entryActionsEl, entryComment.id, host, "Edit side note");
             }
@@ -1516,9 +1520,16 @@ export async function renderPersistedCommentCard(
     const deletedRenderableEntries = host.showDeletedComments
         ? getDeletedRenderableThreadEntries(thread, host.agentStream)
         : null;
-    const entries = deletedRenderableEntries?.parentEntry
+    const renderedEntries = deletedRenderableEntries?.parentEntry
         ? [deletedRenderableEntries.parentEntry, ...deletedRenderableEntries.childEntries]
         : getRenderableThreadEntries(thread, host.agentStream);
+    const entries = host.showPinnedEntriesOnly && !host.showDeletedComments
+        ? getPinnedEntriesWithParentContext(renderedEntries, new Set([
+            host.editDraftComment?.id,
+            host.appendDraftComment?.insertAfterEntryId,
+            host.agentStream?.outputEntryId,
+        ].filter((id): id is string => !!id)))
+        : renderedEntries;
     const comment = threadEntryToComment(thread, entries[0]);
     const presentation = buildPersistedCommentPresentation(thread, host.activeCommentId);
     const threadEl = commentsContainer.createDiv("aside-thread-stack");
@@ -1558,13 +1569,14 @@ export async function renderPersistedCommentCard(
             .map((entry) => entry.id),
     );
     const shouldRenderAllStoredChildren = host.showNestedComments
+        || host.showPinnedEntriesOnly === true
         || hasChildEditDraft
         || host.agentStream !== null
         || !!host.appendDraftComment
         || hasScriptReplyEntries;
     const shouldRenderStoredChildren = shouldRenderAllStoredChildren
         || forcedVisibleChildEntryIds.size > 0;
-    const shouldRenderDetailsToggle = shouldRenderThreadNestedToggle({
+    const shouldRenderDetailsToggle = !host.showPinnedEntriesOnly && shouldRenderThreadNestedToggle({
         hasStoredChildEntries,
         hasInlineEditDraft: !!parentEditDraft,
         hasAppendDraftComment: !!host.appendDraftComment,
@@ -1580,7 +1592,7 @@ export async function renderPersistedCommentCard(
         hasAgentReplies: hasAgentReplyEntries,
         hasScriptReplies: hasScriptReplyEntries,
         hasDeletedEntriesVisible: hasVisibleDeletedEntries(thread),
-        hasForcedVisibleChildEntries: forcedVisibleChildEntryIds.size > 0,
+        hasForcedVisibleChildEntries: forcedVisibleChildEntryIds.size > 0 || (host.showPinnedEntriesOnly === true && entries.length > 1),
     });
     const parentAuthor = resolveSidebarCommentAuthor(
         comment.id,
@@ -1626,7 +1638,7 @@ export async function renderPersistedCommentCard(
             renderPermanentDeleteButton(actionsEl, comment.id, host, "Permanently delete side note");
         } else {
             if (canShowHeaderPinAction) {
-                renderPinActionButton(actionsEl, thread.id, host.isPinnedThread(thread.id), host);
+                renderPinActionButton(actionsEl, thread.id, thread.isPinned === true, host);
             }
             if (host.canEditEntryInline(entries[0])) {
                 renderEditButton(actionsEl, comment.id, host, "Edit side note");

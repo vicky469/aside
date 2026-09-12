@@ -112,6 +112,7 @@ import {
 import { buildRootedThoughtTrailScope } from "./sidebarThoughtTrailScope";
 import { clearSidebarSearchHighlights, highlightSidebarSearchMatches } from "./sidebarSearchHighlight";
 import { collectSidebarSearchTargets, SidebarSearchNavigation } from "./sidebarSearchNavigation";
+import { getPinnedCommentThreadIds } from "../../domain/comments/commentPins";
 import {
     deriveIndexSidebarListFilePaths,
     filterIndexThreadsByExistingSourceFiles,
@@ -862,12 +863,8 @@ export default class AsideView extends ItemView {
         searchInput.setSelectionRange(resolvedSelectionStart, resolvedSelectionEnd);
     }
 
-    private syncPinnedSidebarThreadIds<T extends Pick<CommentThread, "id" | "isPinned">>(threads: readonly T[]): void {
-        const nextPinnedThreadIds = new Set(
-            threads
-                .filter((thread) => thread.isPinned === true)
-                .map((thread) => thread.id),
-        );
+    private syncPinnedSidebarThreadIds<T extends Pick<CommentThread, "id" | "isPinned" | "entries">>(threads: readonly T[]): void {
+        const nextPinnedThreadIds = getPinnedCommentThreadIds(threads);
         const hasChanged = nextPinnedThreadIds.size !== this.pinnedSidebarThreadIds.size
             || Array.from(nextPinnedThreadIds).some((threadId) => !this.pinnedSidebarThreadIds.has(threadId));
         if (!hasChanged) {
@@ -876,10 +873,6 @@ export default class AsideView extends ItemView {
 
         this.pinnedSidebarThreadIds = nextPinnedThreadIds;
         this.savePinnedSidebarStateForFilePath(this.file?.path ?? null);
-    }
-
-    private isPinnedSidebarThread(threadId: string): boolean {
-        return this.pinnedSidebarThreadIds.has(threadId);
     }
 
     private getPinnedSidebarFilterThreadIds(): ReadonlySet<string> {
@@ -909,8 +902,8 @@ export default class AsideView extends ItemView {
         await this.rerenderLocalNoteSidebarIfStillShowing(currentFilePath);
     }
 
-    private async togglePinnedSidebarThread(threadId: string): Promise<void> {
-        await this.setSidebarCommentPinnedState(threadId, !this.pinnedSidebarThreadIds.has(threadId));
+    private async togglePinnedSidebarComment(commentId: string): Promise<void> {
+        await this.setSidebarCommentPinnedState(commentId, this.plugin.getCommentById(commentId)?.isPinned !== true);
     }
 
     private getCurrentLocalNoteSidebarFilePath(): string | null {
@@ -3110,7 +3103,7 @@ export default class AsideView extends ItemView {
                 signature: buildPageSidebarThreadRenderSignature({
                     thread: item.thread,
                     activeCommentId: this.interactionController.getActiveCommentId(),
-                    isPinned: this.isPinnedSidebarThread(item.thread.id),
+                    isPinned: item.thread.isPinned === true,
                     showNestedComments,
                     showNestedCommentsByDefault: this.plugin.shouldShowNestedComments(),
                     isSelectedForTagBatch: options.enableTagSelection && this.noteSidebarSelectedTagIds.has(item.thread.id),
@@ -3128,6 +3121,7 @@ export default class AsideView extends ItemView {
                         options.sidebarMode,
                         options.canInlineEditTodoEntries ? "inline-todo" : "static-todo",
                         options.indexModeScope?.kind ?? "note",
+                        this.showPinnedSidebarThreadsOnly ? "pinned-cards" : "all-cards",
                     ].join(":"),
                 }),
                 threadId: item.thread.id,
@@ -3995,6 +3989,7 @@ export default class AsideView extends ItemView {
                         ariaLabel: showNestedComments ? "Hide nested comments" : "Show nested comments",
                         active: showNestedComments,
                         activeVisual: false,
+                        disabled: showPinnedThreadsOnly,
                         onClick: () => {
                             void this.plugin.setShowNestedComments(!showNestedComments);
                         },
@@ -4962,6 +4957,7 @@ export default class AsideView extends ItemView {
             isActionableMention: (mention) => this.plugin.isActionableMention(mention),
             showSourceRedirectAction: isIndexView,
             showBookmarkAndPinControls: cardActions.showPin,
+            showPinnedEntriesOnly: this.showPinnedSidebarThreadsOnly,
             showDeletedComments: this.plugin.shouldShowDeletedComments(),
             enablePageThreadReorder: isIndexView
                 ? cardActions.enableTopLevelReorder
@@ -5057,8 +5053,7 @@ export default class AsideView extends ItemView {
             startEditDraft: (commentId, hostFilePath) => {
                 void this.plugin.startEditDraft(commentId, hostFilePath);
             },
-            isPinnedThread: (threadId) => this.isPinnedSidebarThread(threadId),
-            togglePinnedThread: (threadId) => this.togglePinnedSidebarThread(threadId),
+            togglePinnedComment: (commentId) => this.togglePinnedSidebarComment(commentId),
             startAppendEntryDraft: (commentId, hostFilePath) => {
                 void this.plugin.startAppendEntryDraft(commentId, hostFilePath);
             },

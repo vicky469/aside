@@ -68,6 +68,7 @@ function getThreadEntriesIdentity(thread: CommentThread): string {
     return hashStrings(thread.entries.map((entry) => [
         entry.id,
         entry.timestamp,
+        entry.isPinned === true ? 1 : 0,
         entry.deletedAt ?? "",
         getCachedStringHash(entry.body),
     ].join(":")));

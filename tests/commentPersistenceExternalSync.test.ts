@@ -1301,6 +1301,8 @@ test("comment persistence controller hydrates compacted snapshots over a stale s
                 id: "entry-2",
                 body: "mobile reply",
                 timestamp: 1710000000200,
+                isPinned: true,
+                pinUpdatedAt: 1710000000250,
                 anchor: {
                     filePath: file.path,
                     startLine: 2,
@@ -1384,6 +1386,8 @@ test("comment persistence controller hydrates compacted snapshots over a stale s
         assert.deepEqual(thread?.entries.map((entry) => entry.body), ["external body", "mobile reply"]);
         assert.deepEqual(thread?.entries[1]?.anchor, remoteThread.entries[1]?.anchor);
         assert.equal(aggregateCommentIndex.getCommentById("entry-2")?.comment, "mobile reply");
+        assert.equal(commentManager.getCommentById("entry-2")?.isPinned, true);
+        assert.equal(aggregateCommentIndex.getCommentById("entry-2")?.isPinned, true);
     } finally {
         globalThis.window = originalWindow;
     }

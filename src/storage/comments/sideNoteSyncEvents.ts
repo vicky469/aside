@@ -1,6 +1,7 @@
 import type { CommentThread, CommentThreadEntry, CommentThreadEntryAnchor } from "../../domain/comments/commentThread";
 import { cloneCommentThread, cloneCommentThreads } from "../../domain/comments/commentThreadNormalization";
 import { normalizeDeletedAt, purgeExpiredDeletedThreads } from "../../core/rules/deletedCommentVisibility";
+import { normalizeCommentPinState } from "../../../shared/commentPinState";
 
 export const SIDE_NOTE_SYNC_EVENT_SCHEMA_VERSION = 1;
 export const SIDE_NOTE_SYNC_EVENT_MARKER = "aside-event";
@@ -14,6 +15,7 @@ export type SideNoteSyncOp =
     | "setThreadDeleted"
     | "removeThread"
     | "setThreadPinned"
+    | "setEntryPinned"
     | "updateAnchor"
     | "moveThread"
     | "moveEntry"
@@ -120,6 +122,7 @@ function isSideNoteSyncOp(value: unknown): value is SideNoteSyncOp {
         || value === "setThreadDeleted"
         || value === "removeThread"
         || value === "setThreadPinned"
+        || value === "setEntryPinned"
         || value === "updateAnchor"
         || value === "moveThread"
         || value === "moveEntry"
@@ -146,6 +149,7 @@ function normalizeThreadEntry(candidate: unknown): CommentThreadEntry | null {
         id: candidate.id,
         body: candidate.body,
         timestamp: candidate.timestamp,
+        ...normalizeCommentPinState(candidate),
         ...(deletedAt !== undefined ? { deletedAt } : {}),
         ...(normalizeThreadEntryAnchor(candidate.anchor) ? { anchor: normalizeThreadEntryAnchor(candidate.anchor) } : {}),
     };
@@ -298,7 +302,11 @@ function applyUpdateEntry(threads: CommentThread[], event: SideNoteSyncEvent): C
         && currentEntry.body !== entry.body
         && !thread.entries.some((candidate) => candidate.id === getConflictRecoveryEntryId(event));
     const nextEntries = thread.entries.slice();
-    nextEntries[entryIndex] = entry;
+    // Pin changes have their own operation and must survive concurrent body edits.
+    const { isPinned, pinUpdatedAt, ...updatedContent } = entry;
+    void isPinned;
+    void pinUpdatedAt;
+    nextEntries[entryIndex] = { ...updatedContent, ...normalizeCommentPinState(currentEntry) };
     if (hasConcurrentBodyChange) {
         nextEntries.push(createConflictRecoveryEntry(event, currentEntry));
     }
@@ -448,6 +456,22 @@ function applyDeleteNote(threads: CommentThread[], event: SideNoteSyncEvent): Co
 
 function applyEvent(threads: CommentThread[], event: SideNoteSyncEvent): CommentThread[] {
     switch (event.op) {
+        case "setEntryPinned": {
+            const payload = getPayloadRecord(event);
+            const threadIndex = findThreadIndex(threads, payload?.threadId);
+            if (threadIndex === -1 || typeof payload?.isPinned !== "boolean") return threads;
+            const thread = threads[threadIndex];
+            const entryIndex = findEntryIndex(thread, payload.entryId);
+            if (entryIndex < 1 || thread.deletedAt || thread.entries[entryIndex].deletedAt) return threads;
+            const entries = thread.entries.slice();
+            entries[entryIndex] = {
+                ...entries[entryIndex],
+                ...normalizeCommentPinState({ ...payload, pinUpdatedAt: payload.pinUpdatedAt ?? event.createdAt }),
+            };
+            const next = threads.slice();
+            next[threadIndex] = { ...thread, entries, updatedAt: Math.max(thread.updatedAt, event.createdAt) };
+            return next;
+        }
         case "createThread":
             return applyCreateThread(threads, event);
         case "appendEntry":
@@ -757,6 +781,17 @@ export function buildSideNoteSyncEventInputsForThreadDiff(
                 continue;
             }
 
+            if ((previousEntry.isPinned === true) !== (nextEntry.isPinned === true)) {
+                inputs.push({
+                    op: "setEntryPinned",
+                    payload: {
+                        threadId: nextThread.id,
+                        entryId: nextEntry.id,
+                        isPinned: nextEntry.isPinned === true,
+                        pinUpdatedAt: nextEntry.pinUpdatedAt ?? nextThread.updatedAt,
+                    },
+                });
+            }
             if (!areEntriesEqual(previousEntry, nextEntry)) {
                 inputs.push({
                     op: "updateEntry",

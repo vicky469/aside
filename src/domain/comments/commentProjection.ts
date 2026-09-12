@@ -82,7 +82,7 @@ export function threadEntryToComment(thread: CommentThread, entry: CommentThread
         timestamp: entry.timestamp,
         anchorKind: anchor ? "selection" : normalized.anchorKind,
         orphaned: anchor ? anchor.orphaned === true : normalized.orphaned === true,
-        ...(normalized.id === entry.id && normalized.isPinned === true ? { isPinned: true } : {}),
+        ...((entry.id === normalized.entries[0]?.id ? normalized.isPinned : entry.isPinned) === true ? { isPinned: true } : {}),
         ...(deletedAt !== undefined ? { deletedAt } : {}),
         entryCount: normalized.entries.length,
     };

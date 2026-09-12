@@ -303,8 +303,9 @@ async function clickFakeButtonWithTimerWindow(button: FakeElement): Promise<void
         clearTimeout: (() => {}) as Window["clearTimeout"],
     };
     try {
-        await (onclick as (event: { stopPropagation(): void }) => Promise<void>)({
+        await (onclick as (event: { stopPropagation(): void; preventDefault(): void }) => Promise<void>)({
             stopPropagation: () => {},
+            preventDefault: () => {},
         });
     } finally {
         FakeElement.defaultView = previousDefaultView;
@@ -368,8 +369,7 @@ function createRenderHost(overrides: Partial<SidebarPersistedCommentHost> = {}):
         canDeleteEntryInline: () => true,
         shouldForceRenderEntry: () => false,
         startEditDraft: () => {},
-        isPinnedThread: () => false,
-        togglePinnedThread: () => {},
+        togglePinnedComment: () => {},
         startAppendEntryDraft: () => {},
         retryAgentRun: () => true,
         retryScriptRun: () => true,
@@ -2271,8 +2271,7 @@ test("renderPersistedCommentCard puts agent metadata above status and Add to fil
         canDeleteEntryInline: () => true,
         shouldForceRenderEntry: () => false,
         startEditDraft: () => {},
-        isPinnedThread: () => false,
-        togglePinnedThread: () => {},
+        togglePinnedComment: () => {},
         startAppendEntryDraft: () => {},
         retryAgentRun: () => true,
         retryScriptRun: () => true,
@@ -2406,7 +2405,7 @@ test("renderPersistedCommentCard combines valid index parent actions with the so
         }),
     );
 
-    assert.equal(root.findAllByClass("aside-comment-action-pin").length, 1);
+    assert.equal(root.findAllByClass("aside-comment-action-pin").length, 2);
     assert.equal(root.findAllByClass("aside-comment-action-redirect").length, 2);
     assert.equal(root.findAllByClass("aside-comment-action-edit").length, 1);
     assert.equal(root.findAllByClass("aside-comment-action-delete").length, 1);
@@ -2515,6 +2514,33 @@ test("renderPersistedCommentCard reveals only forced editable children without e
     assert.deepEqual(nestedStateCalls, []);
 });
 
+test("each card has an independent pin control and pinned replies retain parent context", async () => {
+    const thread = createThreadWithEntries({
+        id: "root",
+        entries: [
+            { id: "root", body: "Parent", timestamp: 100 },
+            { id: "child1", body: "Pinned first", timestamp: 200, isPinned: true },
+            { id: "child2", body: "Unpinned second", timestamp: 300 },
+            { id: "child3", body: "Pinned third", timestamp: 400, isPinned: true },
+        ],
+    });
+    const toggled: string[] = [];
+    const root = new FakeElement("div");
+    await renderPersistedCommentCard(root as unknown as HTMLDivElement, thread, createRenderHost({
+        showBookmarkAndPinControls: true,
+        showPinnedEntriesOnly: true,
+        showNestedComments: false,
+        togglePinnedComment: (id) => { toggled.push(id); },
+    }));
+    assert.deepEqual(root.findAllByClass("aside-comment-item").map((card) => card.getAttribute("data-comment-id")), ["root", "child1", "child3"]);
+    const pins = root.findAllByClass("aside-comment-action-pin");
+    assert.equal(pins.length, 3);
+    assert.deepEqual(pins.map((pin) => pin.getAttribute("aria-pressed")), ["false", "true", "true"]);
+    await clickFakeButtonWithTimerWindow(pins[1]);
+    assert.deepEqual(toggled, ["child1"]);
+    assert.deepEqual(thread.entries.map((entry) => entry.id), ["root", "child1", "child2", "child3"]);
+});
+
 test("renderPersistedCommentCard reuses toolbar pin styling for page note pins", async () => {
     const thread = createThreadWithEntries({
         anchorKind: "page",
@@ -2564,8 +2590,7 @@ test("renderPersistedCommentCard reuses toolbar pin styling for page note pins",
         canDeleteEntryInline: () => true,
         shouldForceRenderEntry: () => false,
         startEditDraft: () => {},
-        isPinnedThread: () => true,
-        togglePinnedThread: () => {},
+        togglePinnedComment: () => {},
         startAppendEntryDraft: () => {},
         retryAgentRun: () => true,
         retryScriptRun: () => true,

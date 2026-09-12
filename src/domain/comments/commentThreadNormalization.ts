@@ -2,6 +2,7 @@ import {
     normalizeDeletedAt,
 } from "../../core/rules/deletedCommentVisibility";
 import type { CommentThread, CommentThreadEntry, CommentThreadEntryAnchor } from "./commentThread";
+import { mergeCommentPinState, normalizeCommentPinState } from "../../../shared/commentPinState";
 
 export function cloneCommentThreadEntryAnchor(anchor: CommentThreadEntryAnchor): CommentThreadEntryAnchor {
     return {
@@ -23,6 +24,7 @@ export function cloneCommentThreadEntry(entry: CommentThreadEntry): CommentThrea
         id: entry.id,
         body: entry.body,
         timestamp: entry.timestamp,
+        ...normalizeCommentPinState(entry),
         ...(deletedAt !== undefined ? { deletedAt } : {}),
         ...(entry.anchor ? { anchor: cloneCommentThreadEntryAnchor(entry.anchor) } : {}),
     };
@@ -64,6 +66,7 @@ function mergeDuplicateCommentThreadEntry(
         id: current.id,
         body: useNextBody ? next.body : current.body,
         timestamp: Math.max(current.timestamp, next.timestamp),
+        ...mergeCommentPinState(current, next),
         ...(deletedAt !== undefined ? { deletedAt } : {}),
         ...(anchor ? { anchor } : {}),
     };
