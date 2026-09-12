@@ -1,3 +1,4 @@
+import { mergeRunStates } from "../core/runStateMerge";
 import {
     cloneScriptRunRecords,
     type ScriptRunRecord,
@@ -102,17 +103,5 @@ export function mergePersistedScriptRunsPreservingActive(
     localRuns: readonly ScriptRunRecord[],
     runIdsToPreserve: readonly string[] = [],
 ): ScriptRunRecord[] {
-    const preservedRunIds = new Set(runIdsToPreserve);
-    const preservedLocalRuns = localRuns.filter(
-        (run) => preservedRunIds.has(run.id)
-            || run.status === "queued"
-            || run.status === "running",
-    );
-    const preservedLocalRunsById = new Map(preservedLocalRuns.map((run) => [run.id, run]));
-    const persistedRunIds = new Set(persistedRuns.map((run) => run.id));
-
-    return cloneScriptRunRecords([
-        ...persistedRuns.map((run) => preservedLocalRunsById.get(run.id) ?? run),
-        ...preservedLocalRuns.filter((run) => !persistedRunIds.has(run.id)),
-    ]);
+    return cloneScriptRunRecords(mergeRunStates(persistedRuns, localRuns, runIdsToPreserve));
 }

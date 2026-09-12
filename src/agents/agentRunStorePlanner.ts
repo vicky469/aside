@@ -1,3 +1,4 @@
+import { mergeRunStates } from "../core/runStateMerge";
 import {
     cloneAgentRunRecords,
     normalizeAgentRunFilePaths,
@@ -141,17 +142,5 @@ export function mergePersistedAgentRunsPreservingActive(
     localRuns: readonly AgentRunRecord[],
     runIdsToPreserve: readonly string[] = [],
 ): AgentRunRecord[] {
-    const preservedRunIds = new Set(runIdsToPreserve);
-    const preservedLocalRuns = localRuns.filter(
-        (run) => preservedRunIds.has(run.id)
-            || run.status === "queued"
-            || run.status === "running",
-    );
-    const preservedLocalRunsById = new Map(preservedLocalRuns.map((run) => [run.id, run]));
-    const persistedRunIds = new Set(persistedRuns.map((run) => run.id));
-
-    return cloneAgentRunRecords([
-        ...persistedRuns.map((run) => preservedLocalRunsById.get(run.id) ?? run),
-        ...preservedLocalRuns.filter((run) => !persistedRunIds.has(run.id)),
-    ]);
+    return cloneAgentRunRecords(mergeRunStates(persistedRuns, localRuns, runIdsToPreserve));
 }

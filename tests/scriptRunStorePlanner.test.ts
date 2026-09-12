@@ -328,7 +328,7 @@ test("ScriptRunStore preserves active local runs across external reloads", async
         scriptRuns: [createRun({ id: "remote-run", createdAt: 50 })],
     };
 
-    await store.reloadPreservingActiveRuns();
+    await store.reloadPreservingActiveRuns(["local-run"]);
 
     assert.deepEqual(store.getRuns().map((run) => run.id), ["remote-run", "local-run"]);
     assert.equal(store.getRunById("local-run")?.status, "running");
@@ -414,4 +414,35 @@ test("agent and script run stores preserve both fields through the shared atomic
 
     assert.deepEqual((host.getPersistedData().agentRuns as AgentRunRecord[]).map((run) => run.id), ["agent-run-1"]);
     assert.deepEqual((host.getPersistedData().scriptRuns as ScriptRunRecord[]).map((run) => run.id), ["script-run-1"]);
+});
+
+for (const terminalStatus of ["succeeded", "failed"] as const) {
+    test("ScriptRunStore accepts persisted " + terminalStatus + " over stale running state", async () => {
+        let persistedData: PersistedPluginData = { scriptRuns: [createRun({ status: "running", endedAt: undefined })] };
+        const store = new ScriptRunStore({
+            readPersistedPluginData: () => persistedData,
+            updatePersistedPluginData: async (updater) => { persistedData = updater(persistedData); return persistedData; },
+        });
+        store.load();
+        const runId = store.getRuns()[0]!.id;
+        persistedData = { scriptRuns: [createRun({ status: terminalStatus, endedAt: 200 })] };
+        // Even an ownership snapshot taken before completion cannot revive it.
+        await store.reloadPreservingActiveRuns([runId]);
+        assert.equal(store.getRunById(runId)?.status, terminalStatus);
+        assert.equal(store.getRunById(runId)?.endedAt, 200);
+    });
+}
+
+test("ScriptRunStore does not resurrect a completed local run from stale persisted data", async () => {
+    let persistedData: PersistedPluginData = { scriptRuns: [createRun({ status: "succeeded", endedAt: 200 })] };
+    const store = new ScriptRunStore({
+        readPersistedPluginData: () => persistedData,
+        updatePersistedPluginData: async (updater) => { persistedData = updater(persistedData); return persistedData; },
+    });
+    store.load();
+    const runId = store.getRuns()[0]!.id;
+    persistedData = { scriptRuns: [createRun({ status: "running", endedAt: undefined })] };
+    await store.reloadPreservingActiveRuns();
+    assert.equal(store.getRunById(runId)?.status, "succeeded");
+    assert.equal(store.getRunById(runId)?.endedAt, 200);
 });

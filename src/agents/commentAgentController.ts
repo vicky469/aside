@@ -363,7 +363,6 @@ export class CommentAgentController {
 
     public getLocallyOwnedRunIds(): string[] {
         return Array.from(new Set([
-            ...this.store.getActiveRunIds(),
             ...this.runStreams.keys(),
             ...this.dispatchingRunIds,
             ...this.activeRunExecutions.keys(),

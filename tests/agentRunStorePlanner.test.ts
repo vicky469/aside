@@ -252,7 +252,7 @@ test("AgentRunStore preserves active local runs across external reloads", async 
         })],
     };
 
-    await store.reloadPreservingActiveRuns();
+    await store.reloadPreservingActiveRuns(["local-run"]);
 
     assert.deepEqual(store.getRuns().map((run) => run.id), ["remote-run", "local-run"]);
     assert.equal(store.getRunById("local-run")?.status, "queued");
@@ -326,4 +326,35 @@ test("AgentRunStore preserves a new run completed during external settings load"
         store.getRuns().map((run) => run.id),
         ["existing-run", "new-completed-run"],
     );
+});
+
+for (const terminalStatus of ["succeeded", "failed", "cancelled"] as const) {
+    test("AgentRunStore accepts persisted " + terminalStatus + " over stale running state", async () => {
+        let persistedData: PersistedPluginData = { agentRuns: [createRun({ status: "running", endedAt: undefined })] };
+        const store = new AgentRunStore({
+            readPersistedPluginData: () => persistedData,
+            updatePersistedPluginData: async (updater) => { persistedData = updater(persistedData); return persistedData; },
+        });
+        store.load();
+        const runId = store.getRuns()[0]!.id;
+        persistedData = { agentRuns: [createRun({ status: terminalStatus, endedAt: 200 })] };
+        // Even an ownership snapshot taken before completion cannot revive it.
+        await store.reloadPreservingActiveRuns([runId]);
+        assert.equal(store.getRunById(runId)?.status, terminalStatus);
+        assert.equal(store.getRunById(runId)?.endedAt, 200);
+    });
+}
+
+test("AgentRunStore does not resurrect a completed local run from stale persisted data", async () => {
+    let persistedData: PersistedPluginData = { agentRuns: [createRun({ status: "succeeded", endedAt: 200 })] };
+    const store = new AgentRunStore({
+        readPersistedPluginData: () => persistedData,
+        updatePersistedPluginData: async (updater) => { persistedData = updater(persistedData); return persistedData; },
+    });
+    store.load();
+    const runId = store.getRuns()[0]!.id;
+    persistedData = { agentRuns: [createRun({ status: "running", endedAt: undefined })] };
+    await store.reloadPreservingActiveRuns();
+    assert.equal(store.getRunById(runId)?.status, "succeeded");
+    assert.equal(store.getRunById(runId)?.endedAt, 200);
 });

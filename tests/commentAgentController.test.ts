@@ -4040,3 +4040,13 @@ test("comment agent controller ignores entries without explicit agent mentions",
     assert.deepEqual(harness.notices, []);
     assert.deepEqual(harness.runtimeCalls, []);
 });
+
+test("comment agent controller does not claim saved pending runs without live work", () => {
+    const harness = createHarness({ initialPersistedData: { agentRuns: [{
+        id: "stale-run", threadId: "thread-1", triggerEntryId: "thread-1",
+        filePath: "Folder/Note.md", requestedAgent: "codex", runtime: "direct-cli",
+        status: "running", promptText: "@codex explain", createdAt: 100,
+    }] } });
+    assert.deepEqual(harness.controller.getLocallyOwnedRunIds(), []);
+    harness.controller.dispose();
+});
