@@ -49,6 +49,7 @@ export interface LoadedSettingsResolution {
 
 export interface LoadedSettingsEvidence {
     hasRegisteredVaultScripts: boolean;
+    hasAvailableAgent?: boolean;
 }
 
 export type IndexNotePathChangePlan =
@@ -114,7 +115,8 @@ export function resolveLoadedSettings(
     const scriptsEnabled = typeof loaded?.scriptsEnabled === "boolean"
         ? loaded.scriptsEnabled
         : hasPersistedScriptsUsage(loaded)
-            || evidence.hasRegisteredVaultScripts;
+            || evidence.hasRegisteredVaultScripts
+            || evidence.hasAvailableAgent === true;
     const publishSettings = normalizePublishSettings(loaded ?? defaults);
     const defaultAgent = normalizeSupportedAgentTarget(
         hasDefaultAgentSetting ? loaded?.defaultAgent : defaults.defaultAgent,

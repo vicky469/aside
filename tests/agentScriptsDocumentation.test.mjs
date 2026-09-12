@@ -60,8 +60,10 @@ test("README publishes the complete agent and script entry points", () => {
     assert.match(readme, /\[Advanced features\]\(ADVANCED_FEATURES\.md\)/u);
     assert.match(
         capabilitiesDefaultPolicy,
-        /Scripts and Publishing[^.]*optional advanced capabilities[^.]*off by default/iu,
+        /Scripts defaults on when an agent is available/iu,
     );
+    assert.match(capabilitiesDefaultPolicy, /saved on\/off choice takes precedence/iu);
+    assert.match(capabilitiesDefaultPolicy, /Publishing is off by default/iu);
     assert.match(readme, /Ordinary agent replies do not require Scripts/iu);
     assert.equal(readme.includes(SCRIPTS_SETTINGS_PATH), true);
     assert.equal(readme.includes(PUBLISHING_SETTINGS_PATH), true);
@@ -98,7 +100,8 @@ test("Agents and scripts guide documents setup and everyday workflows", () => {
     assert.equal(guide.includes(AGENT_TAB_SETTINGS_PATH), true);
     assert.match(guide, /controls visibility only[^\n]*replies remain[^\n]*List view/iu);
     assert.equal(guide.includes(SCRIPTS_SETTINGS_PATH), true);
-    assert.match(scriptsDefaultPolicy, /off by default/iu);
+    assert.match(scriptsDefaultPolicy, /defaults on when an agent is available/iu);
+    assert.match(scriptsDefaultPolicy, /saved on\/off choice takes precedence/iu);
     assert.match(scriptsDefaultPolicy, /Ordinary agent replies do not require Scripts/iu);
     assert.match(guide, /default (?:local )?agent[^\n]*Settings → Aside → Scripts \(advanced\)/iu);
     assert.match(guide, /🛠️ scripts\//u);
@@ -191,7 +194,7 @@ test("advanced documentation covers the native Scripts and Publishing controls",
     assert.equal(existsSync("EXPERIMENTAL_FEATURES.md"), false);
     assert.match(advanced, /^# Advanced Features$/mu);
     assert.match(advanced, /optional advanced capabilities/iu);
-    assert.match(scriptsRow, /Scripts off by default/iu);
+    assert.match(scriptsRow, /Scripts defaults on when an agent is available, unless turned off/iu);
     assert.match(publishingRow, /off by default/iu);
     assert.equal(settingsOrder.includes(SETTINGS_SECTION_ORDER), true);
     assert.match(advanced, /\[Agents and Scripts\]\(SCRIPTS\.md\)/u);

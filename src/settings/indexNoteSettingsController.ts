@@ -4,9 +4,11 @@ import {
     type AgentRuntimeModePreference,
 } from "../core/agents/agentRuntimePreferences";
 import {
+    getSupportedAgentActors,
     normalizeSupportedAgentTarget,
 } from "../core/agents/agentActorRegistry";
 import type { AsideAgentTarget } from "../core/config/agentTargets";
+import type { AgentRuntimeDiagnostics } from "../agents/agentRuntimeAdapter";
 import {
     derivePublishBaseUrlFromProjectName,
     isDefaultPagesPublishBaseUrl,
@@ -51,6 +53,7 @@ export interface IndexNoteSettingsHost {
     refreshCommentViews(): Promise<void>;
     refreshAggregateNoteNow(): Promise<void>;
     hasRegisteredVaultScripts(): boolean;
+    getAgentRuntimeDiagnostics(target: AsideAgentTarget): Promise<AgentRuntimeDiagnostics>;
     loadData(): Promise<PersistedPluginData | null>;
     saveData(data: PersistedPluginData): Promise<void>;
     ensureFolder(folderPath: string): Promise<{ ok: true } | { ok: false; notice: string }>;
@@ -160,8 +163,16 @@ export class IndexNoteSettingsController {
         const hasRegisteredVaultScripts = needsScriptsMigrationEvidence(loaded)
             ? this.host.hasRegisteredVaultScripts()
             : false;
+        const agentDiagnostics = needsScriptsMigrationEvidence(loaded) && !hasRegisteredVaultScripts
+            ? await Promise.allSettled(getSupportedAgentActors().map(async (actor) =>
+                this.host.getAgentRuntimeDiagnostics(actor.id)
+            ))
+            : [];
         const resolved = resolveLoadedSettings(loaded, this.host.getSettings(), {
             hasRegisteredVaultScripts,
+            hasAvailableAgent: agentDiagnostics.some((result) =>
+                result.status === "fulfilled" && result.value.status === "available"
+            ),
         });
         this.host.setSettings(resolved.settings);
 

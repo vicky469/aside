@@ -481,6 +481,7 @@ export default class Aside extends Plugin {
             this.vaultScriptRegistry,
             this.app.vault.getFiles().map((file) => file.path),
         ),
+        getAgentRuntimeDiagnostics: (target) => this.getAgentRuntimeDiagnostics(target),
         loadData: () => this.loadCurrentData(),
         saveData: (data) => this.saveData(data),
         ensureFolder: (folderPath) => this.ensureVaultFolder(folderPath),

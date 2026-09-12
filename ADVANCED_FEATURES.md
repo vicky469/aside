@@ -1,6 +1,6 @@
 # Advanced Features
 
-Scripts and Publishing are optional advanced capabilities and are off by default for a clean experience. They can require additional local tools, trusted code, or service configuration.
+Scripts and Publishing are optional advanced capabilities. See [Optional Advanced Capabilities](README.md#optional-advanced-capabilities) for their defaults and saved preferences. They can require additional local tools, trusted code, or service configuration.
 
 In Aside settings, the sections appear in this order: **Sidebar tabs → Scripts (advanced) → Publishing (advanced) → Index note**.
 
@@ -8,7 +8,7 @@ In Aside settings, the sections appear in this order: **Sidebar tabs → Scripts
 
 | Feature | Availability | What it does |
 | --- | --- | --- |
-| [Agents and Scripts](SCRIPTS.md) | Desktop Obsidian; Scripts off by default | Gets replies from supported local agent CLIs and optionally runs trusted vault scripts from side notes. |
+| [Agents and Scripts](SCRIPTS.md) | Desktop Obsidian; Scripts defaults on when an agent is available, unless turned off | Gets replies from supported local agent CLIs and optionally runs trusted vault scripts from side notes. |
 | [Cloudflare Pages Publishing](#cloudflare-pages-publishing) | Desktop Obsidian; off by default | Publishes Markdown, HTML, and PDF content from the vault's `public/` folder. |
 
 ## Agents and Scripts

@@ -57,7 +57,7 @@ For durable storage and sync across devices, use Aside with [Obsidian Sync](http
 
 ## Optional Advanced Capabilities
 
-Scripts and Publishing are optional advanced capabilities and are off by default for a clean experience. Ordinary agent replies do not require Scripts.
+Scripts and Publishing are optional advanced capabilities. Scripts defaults on when an agent is available, or when existing runs or registered vault scripts are found; a saved on/off choice takes precedence. Publishing is off by default. Ordinary agent replies do not require Scripts.
 
 - To create or run trusted local slash and script commands, turn on **Settings → Aside → Scripts (advanced) → Enable scripts**. Turning Scripts off blocks new slash and script command execution and script-oriented Generate actions, but it does not delete registered scripts, history, or saved replies. Disabled script-like text remains ordinary note or agent text. This setting is not a sandbox or security boundary; review every script and run only code you wrote or trust.
 - To publish files from `public/`, turn on **Settings → Aside → Publishing (advanced) → Enable publishing**. Turning Publishing off hides Publishing settings details and disables new Publish, Republish, and Unpublish actions. It preserves saved publishing configuration—it does not delete it—and does not unpublish existing remote content.

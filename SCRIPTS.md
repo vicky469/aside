@@ -2,7 +2,7 @@
 
 Aside supports local agents and reusable scripts in desktop Obsidian with a filesystem-backed vault. It can invoke Codex, Claude Code, Cursor, Gemini, and DeepSeek through local CLIs. Aside bundles none of those CLIs and has no agent service of its own. The `@deepseek` mention uses your configured OpenCode CLI and the model selected there, so the label does not guarantee that the active model is DeepSeek.
 
-Scripts are an optional advanced capability and are off by default for a clean experience. Ordinary agent replies do not require Scripts.
+Scripts are an optional advanced capability. Scripts defaults on when an agent is available; a saved on/off choice takes precedence. See [Optional Advanced Capabilities](README.md#optional-advanced-capabilities) for how existing script usage affects the default. Ordinary agent replies do not require Scripts.
 
 ## Security
 

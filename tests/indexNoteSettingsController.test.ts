@@ -16,6 +16,9 @@ import {
     type PersistedPluginData,
 } from "../src/settings/indexNoteSettingsPlanner";
 import type { AsideSettings } from "../src/ui/settings/AsideSetting";
+import type { AgentRuntimeDiagnostics } from "../src/agents/agentRuntimeAdapter";
+import { getSupportedAgentActors } from "../src/core/agents/agentActorRegistry";
+import type { AsideAgentTarget } from "../src/core/config/agentTargets";
 
 function createFile(path: string): TFile {
     return {
@@ -120,6 +123,7 @@ function createControllerHarness(options: {
         folderPath: string,
     ) => Promise<{ ok: true } | { ok: false; notice: string }>;
     hasRegisteredVaultScripts?: boolean;
+    getAgentRuntimeDiagnostics?: (target: AsideAgentTarget) => Promise<AgentRuntimeDiagnostics>;
 } = {}) {
     let settings = options.settings ?? createSettings();
     let activeSidebarFile = options.activeSidebarFilePath ? createFile(options.activeSidebarFilePath) : null;
@@ -258,6 +262,8 @@ function createControllerHarness(options: {
             registeredVaultScriptEvidenceReadCount += 1;
             return options.hasRegisteredVaultScripts ?? false;
         },
+        getAgentRuntimeDiagnostics: async (target: AsideAgentTarget): Promise<AgentRuntimeDiagnostics> =>
+            options.getAgentRuntimeDiagnostics?.(target) ?? { status: "unavailable", message: "Not installed" },
         loadData: async () => {
             if (options.loadData) {
                 return options.loadData();
@@ -540,10 +546,20 @@ test("loaded settings resolution lets explicit Scripts booleans override migrati
             scriptRuns: [{ id: "script-run" }],
         }, createSettings(), {
             hasRegisteredVaultScripts: true,
+            hasAvailableAgent: true,
         });
 
         assert.equal(resolved.settings.scriptsEnabled, scriptsEnabled);
     }
+});
+
+test("loaded settings resolution defaults Scripts on from available agent evidence", () => {
+    const resolved = resolveLoadedSettings(null, createSettings(), {
+        hasRegisteredVaultScripts: false,
+        hasAvailableAgent: true,
+    });
+
+    assert.equal(resolved.settings.scriptsEnabled, true);
 });
 
 test("loaded settings resolution infers and rewrites invalid Scripts state", () => {
@@ -711,6 +727,58 @@ test("index note settings controller uses registered vault scripts as migration 
     assert.equal(harness.getSettings().scriptsEnabled, true);
     assert.equal(harness.savedPayloads.at(-1)?.scriptsEnabled, true);
     assert.equal(harness.getRegisteredVaultScriptEvidenceReadCount(), 1);
+});
+
+test("Scripts defaults on when any supported agent is available, including a non-default agent", async () => {
+    for (const actor of getSupportedAgentActors()) {
+        for (const loadedData of [null, withoutScriptsSetting()]) {
+            const harness = createControllerHarness({
+                loadedData,
+                getAgentRuntimeDiagnostics: async (target) => {
+                    if (target !== actor.id) throw new Error("Probe failed");
+                    return { status: "available", message: "Ready" };
+                },
+            });
+
+            await harness.controller.loadSettings();
+
+            assert.equal(harness.getSettings().scriptsEnabled, true, actor.id);
+            assert.equal(harness.savedPayloads.at(-1)?.scriptsEnabled, true);
+        }
+    }
+});
+
+test("Scripts stays off when no agent is available or probes fail", async () => {
+    for (const status of ["unavailable", "unsupported", "checking", "error"] as const) {
+        const harness = createControllerHarness({
+            getAgentRuntimeDiagnostics: async () => {
+                if (status === "error") throw new Error("Probe failed");
+                return { status, message: "Not ready" };
+            },
+        });
+
+        await harness.controller.loadSettings();
+
+        assert.equal(harness.getSettings().scriptsEnabled, false);
+    }
+});
+
+test("Scripts preserves saved user choices without probing agents", async () => {
+    for (const scriptsEnabled of [false, true]) {
+        let probeCount = 0;
+        const harness = createControllerHarness({
+            loadedData: createSettings({ scriptsEnabled }),
+            getAgentRuntimeDiagnostics: async () => {
+                probeCount += 1;
+                return { status: "available", message: "Ready" };
+            },
+        });
+
+        await harness.controller.loadSettings();
+
+        assert.equal(harness.getSettings().scriptsEnabled, scriptsEnabled);
+        assert.equal(probeCount, 0);
+    }
 });
 
 test("index note settings controller skips registry evidence for an explicit Scripts boolean", async () => {
