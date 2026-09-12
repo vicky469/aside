@@ -82,6 +82,7 @@ class ControlElement {
     events = new Map<string, Array<(event: Event) => void>>();
     textContent = "";
     disabled = false;
+    hidden = false;
     value = "query";
     type = "";
     createDiv() { return this.createEl(); }
@@ -136,14 +137,16 @@ test("search controls expose buttons, counter, keyboard navigation and pending-q
     assert.equal(counter.textContent, "2/2");
     input.value = "changed query";
     input.fire("input");
-    assert.equal(counter.textContent, "0/0");
+    assert.equal(counter.textContent, "");
+    assert.equal(counter.hidden, true);
     assert.equal(next.disabled, true);
     next.fire("click");
-    assert.equal(counter.textContent, "0/0");
+    assert.equal(counter.textContent, "");
     input.value = "query";
     input.fire("input");
     assert.equal(counter.textContent, "2/2");
     assert.equal(next.disabled, false);
+    assert.equal(counter.hidden, false);
 });
 
 test("search targets use stable card IDs and per-card occurrence order", () => {

@@ -133,7 +133,8 @@ export function renderSidebarSearchNavigation(
         buttons.push(button);
     }
     navigation.observe(({ current, total }) => {
-        counter.textContent = `${current}/${total}`;
+        counter.textContent = total ? `${current}/${total}` : "";
+        counter.hidden = total === 0;
         counter.setAttribute("aria-label", total ? `Match ${current} of ${total}` : "No matches");
         for (const button of buttons) button.disabled = inputEl.disabled || total === 0;
     });

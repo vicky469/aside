@@ -513,13 +513,6 @@
     height: 14px;
 }
 
-.aside-search-match.is-active-search-match,
-.aside-tag-related-file-row.is-active-search-match {
-    background: var(--text-highlight-bg);
-    outline: 2px solid var(--interactive-accent);
-    outline-offset: 1px;
-}
-
 .aside-note-search-field:focus-within {
     border-color: color-mix(in srgb, var(--aside-luxury-accent) 62%, var(--aside-note-toolbar-border) 38%);
     box-shadow: inset 0 0 0 1px var(--aside-luxury-accent-soft);
@@ -696,14 +689,20 @@
     line-height: 1.2;
 }
 
-.aside-search-match {
-    background: color-mix(in srgb, var(--text-highlight-bg, hsla(var(--interactive-accent-hsl), 0.18)) 88%, transparent);
+.aside-search-match,
+.aside-comment-content mark.aside-search-match {
+    background: color-mix(in srgb, var(--text-highlight-bg, #ffe58a) 28%, transparent);
     color: inherit;
     border-radius: 4px;
     padding: 0 0.14em;
-    box-shadow: inset 0 -1px 0 var(--aside-luxury-accent-line);
+    box-shadow: none;
     box-decoration-break: clone;
     -webkit-box-decoration-break: clone;
+}
+
+.aside-search-match.is-active-search-match,
+.aside-comment-content mark.aside-search-match.is-active-search-match {
+    background: color-mix(in srgb, var(--text-highlight-bg, #ffe58a) 88%, transparent);
 }
 
 .aside-tablist {
@@ -1874,7 +1873,7 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
     grid-column: 1;
     min-width: 0;
     display: -webkit-box;
-    overflow: hidden;
+    overflow: clip;
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
     line-clamp: 2;

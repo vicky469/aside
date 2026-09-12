@@ -469,6 +469,8 @@ export default class AsideView extends ItemView {
     private indexDefaultSidebarCache: IndexDefaultSidebarCache | null = null;
     private indexSidebarInitialLoad: Promise<void> | null = null;
     private indexSidebarDataReady = false;
+    private noteSidebarInitialLoad: Promise<void> | null = null;
+    private noteSidebarDataReady = false;
     private thoughtTrailSource: SidebarThoughtTrailSource = getDefaultSidebarThoughtTrailSource();
     private reorderDragState: SidebarReorderDragState | null = null;
     private reorderDragSourceEl: HTMLElement | null = null;
@@ -582,6 +584,8 @@ export default class AsideView extends ItemView {
         const currentFilePath = this.file?.path ?? null;
         const nextFilePath = nextFile?.path ?? null;
         if (currentFilePath !== nextFilePath) {
+            this.noteSidebarInitialLoad = null;
+            this.noteSidebarDataReady = false;
             this.savePinnedSidebarStateForFilePath(currentFilePath);
             this.noteSidebarTagIndex = null;
             this.noteSidebarVisibleTagFilterKey = null;
@@ -1560,6 +1564,8 @@ export default class AsideView extends ItemView {
         this.searchNavigation.observe(null);
         this.indexSidebarInitialLoad = null;
         this.indexSidebarDataReady = false;
+        this.noteSidebarInitialLoad = null;
+        this.noteSidebarDataReady = false;
         this.unsubscribeFromAgentStreamUpdates?.();
         this.unsubscribeFromAgentStreamUpdates = null;
         this.clearNoteSidebarSearchDebounceTimer();
@@ -1731,7 +1737,56 @@ export default class AsideView extends ItemView {
         // unlike background refreshes that can be requested by sync replay.
         if (this.file && this.plugin.isAllCommentsNotePath(this.file.path)) {
             await this.indexSidebarInitialLoad;
+        } else {
+            await this.noteSidebarInitialLoad;
         }
+    }
+
+    private startInitialNoteSidebarLoad(file: TFile): Promise<void> {
+        if (this.noteSidebarInitialLoad) {
+            return this.noteSidebarInitialLoad;
+        }
+        // Sync replay may request lightweight renders while this load is pending.
+        // Those renders keep the loading state instead of awaiting their own replay.
+        const isCurrent = (): boolean => this.noteSidebarInitialLoad === load && this.file?.path === file.path;
+        const load: Promise<void> = Promise.resolve().then(async () => {
+            if (!isCurrent()) return;
+            await this.plugin.loadCommentsForFile(file);
+            if (!isCurrent()) return;
+            this.noteSidebarDataReady = true;
+            await this.renderComments({ skipDataRefresh: true });
+        }).catch((error) => {
+            if (isCurrent()) {
+                void this.plugin.logEvent("error", "sidebar", "sidebar.note.initial-load.error", { error });
+                this.renderSidebarLoadError(file);
+            }
+        }).finally(() => {
+            if (this.noteSidebarInitialLoad === load) {
+                this.noteSidebarInitialLoad = null;
+            }
+        });
+        this.noteSidebarInitialLoad = load;
+        return load;
+    }
+
+    private renderInitialNoteSidebarLoading(file: TFile): void {
+        const shell = this.ensureNoteSidebarShell(file.path);
+        shell.toolbarSlotEl.empty();
+        shell.supportSlotEl.empty();
+        this.searchNavigation.invalidate();
+        showIndexSidebarListLoadingState(this.containerEl);
+    }
+
+    private renderSidebarLoadError(file: TFile): void {
+        const shell = this.plugin.isAllCommentsNotePath(file.path)
+            ? this.ensureIndexSidebarShell(file.path)
+            : this.ensureNoteSidebarShell(file.path);
+        shell.commentsBodyEl.empty();
+        const errorEl = shell.commentsBodyEl.createDiv("aside-empty-state aside-section-empty-state");
+        errorEl.createEl("p", { text: "Unable to load side notes." });
+        const retry = errorEl.createEl("button", { text: "Retry" });
+        retry.type = "button";
+        retry.onclick = () => { void this.renderComments(); };
     }
 
     private startInitialIndexSidebarLoad(): Promise<void> {
@@ -1756,7 +1811,7 @@ export default class AsideView extends ItemView {
             if (this.indexSidebarInitialLoad === load) {
                 void this.plugin.logEvent("error", "sidebar", "sidebar.index.initial-load.error", { error });
                 if (this.file && this.plugin.isAllCommentsNotePath(this.file.path)) {
-                    this.renderIndexSidebarLoadError(this.file);
+                    this.renderSidebarLoadError(this.file);
                 }
             }
         }).finally(() => {
@@ -1766,16 +1821,6 @@ export default class AsideView extends ItemView {
         });
         this.indexSidebarInitialLoad = load;
         return load;
-    }
-
-    private renderIndexSidebarLoadError(file: TFile): void {
-        const shell = this.ensureIndexSidebarShell(file.path);
-        shell.commentsBodyEl.empty();
-        const errorEl = shell.commentsBodyEl.createDiv("aside-empty-state aside-section-empty-state");
-        errorEl.createEl("p", { text: "Unable to load side notes." });
-        const retry = errorEl.createEl("button", { text: "Retry" });
-        retry.type = "button";
-        retry.onclick = () => { void this.renderComments({ skipDataRefresh: true }); };
     }
 
     private renderInitialIndexSidebarLoading(file: TFile): void {
@@ -1837,6 +1882,14 @@ export default class AsideView extends ItemView {
             this.sidebarEmptyStateReason = null;
         }
         const isAllCommentsView = !!file && this.plugin.isAllCommentsNotePath(file.path);
+        if (file && !isAllCommentsView && !this.noteSidebarDataReady) {
+            this.renderInitialNoteSidebarLoading(file);
+            const initialLoad = this.startInitialNoteSidebarLoad(file);
+            if (!options.skipDataRefresh) {
+                await initialLoad;
+            }
+            return;
+        }
         if (isAllCommentsView && !this.indexSidebarDataReady) {
             this.renderInitialIndexSidebarLoading(file);
             const initialLoad = this.startInitialIndexSidebarLoad();

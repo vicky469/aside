@@ -13,7 +13,7 @@ const source = ts.createSourceFile(
 const viewClass = source.statements.find((node): node is ts.ClassDeclaration =>
     ts.isClassDeclaration(node) && node.name?.text === "AsideView",
 )!;
-const memberNames = new Set(["renderComments", "startInitialIndexSidebarLoad", "renderCommentsForInteraction", "onClose"]);
+const memberNames = new Set(["renderComments", "startInitialIndexSidebarLoad", "startInitialNoteSidebarLoad", "renderCommentsForInteraction", "onClose"]);
 const renderMethods = viewClass.members.filter((node) => node.name && memberNames.has(node.name.getText(source)));
 const renderCode = ts.transpileModule(
     `class AsideView { ${renderMethods.map((node) => node.getText(source)).join("\n")} }; new AsideView();`,
@@ -66,12 +66,14 @@ function createStartupHarness() {
         renderVersion: 0,
         indexSidebarInitialLoad: null,
         indexSidebarDataReady: false,
+        noteSidebarDataReady: true,
+        noteSidebarInitialLoad: null,
         file: { path: "🐰 Aside Index.md" },
         indexSidebarMode: "todo",
         selectedIndexFileFilterRootPath: null,
         clearReorderDragState() {},
         renderInitialIndexSidebarLoading() { loadingModes.push(view.indexSidebarMode); },
-        renderIndexSidebarLoadError() { loadErrors.push(view.indexSidebarMode); },
+        renderSidebarLoadError() { loadErrors.push(view.indexSidebarMode); },
         getSidebarModeVisibility: () => ({ showTodoSidebarTab: true, showAgentSidebarTab: false }),
         plugin: {
             isSidebarSupportedFile: () => true,
@@ -111,6 +113,103 @@ test("a lightweight refresh during first Index open waits for Todos and renders 
     assert.deepEqual(h.snapshots, [1], "the newest render must show the loaded Todo");
     assert.equal(h.counts.reads, 1, "concurrent renders share initialization");
     assert.equal(h.counts.replays, 1, "lightweight renders must not replay sync events");
+});
+
+function createNoteStartupHarness(commentCount = 3) {
+    const h = createStartupHarness();
+    h.view.file = { path: "note.md" };
+    h.view.noteSidebarDataReady = false;
+    let loadedCount = 0;
+    let reads = 0;
+    h.view.renderInitialNoteSidebarLoading = () => { h.loadingModes.push("note"); };
+    h.view.renderSidebarLoadError = () => { h.loadErrors.push("note"); };
+    h.view.renderPageSidebar = async () => { h.snapshots.push(loadedCount); };
+    h.view.plugin.loadCommentsForFile = async () => {
+        reads++;
+        h.loadStarted.resolve();
+        await h.releaseLoad.promise;
+        loadedCount = commentCount;
+        return [];
+    };
+    return { ...h, getReads: () => reads };
+}
+
+test("note loading survives background refreshes without showing a false empty state", async () => {
+    const h = createNoteStartupHarness();
+    const initial = h.render();
+    await h.loadStarted.promise;
+    await h.render({ skipDataRefresh: true });
+    const earlySnapshots = h.snapshots.slice();
+    const loadingCount = h.loadingModes.length;
+    h.releaseLoad.resolve();
+    await initial;
+    assert.deepEqual(earlySnapshots, []);
+    assert.equal(loadingCount, 2);
+    assert.deepEqual(h.snapshots, [3]);
+    assert.equal(h.getReads(), 1);
+});
+
+test("cold lightweight note rendering starts loading and focus waits for the cards", async () => {
+    const h = createNoteStartupHarness();
+    let focused = false;
+    const interaction = h.view.renderCommentsForInteraction({ skipDataRefresh: true }).then(() => { focused = true; });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    const focusedBeforeLoad = focused;
+    h.releaseLoad.resolve();
+    await interaction;
+    assert.equal(focusedBeforeLoad, false);
+    assert.equal(h.getReads(), 1);
+    assert.deepEqual(h.snapshots, [3]);
+});
+
+test("failed note loading shows a retryable error instead of an empty note", async () => {
+    const h = createNoteStartupHarness();
+    const load = h.view.plugin.loadCommentsForFile;
+    h.view.plugin.loadCommentsForFile = async () => { throw new Error("storage unavailable"); };
+    await assert.doesNotReject(h.render());
+    assert.deepEqual(h.snapshots, []);
+    assert.deepEqual(h.loadErrors, ["note"]);
+    h.view.plugin.loadCommentsForFile = load;
+    h.releaseLoad.resolve();
+    await h.render();
+    assert.deepEqual(h.snapshots, [3]);
+});
+
+test("note loading cannot replace the sidebar after navigation to another file", async () => {
+    const h = createNoteStartupHarness();
+    const initial = h.render();
+    await h.loadStarted.promise;
+    h.view.file = { path: "other.md" };
+    h.releaseLoad.resolve();
+    await initial;
+    assert.deepEqual(h.snapshots, []);
+    assert.equal(h.view.noteSidebarDataReady, false);
+});
+
+test("an empty note is shown as empty only after loading finishes", async () => {
+    const h = createNoteStartupHarness(0);
+    const initial = h.render();
+    await h.loadStarted.promise;
+    assert.deepEqual(h.snapshots, []);
+    assert.deepEqual(h.loadingModes, ["note"]);
+    h.releaseLoad.resolve();
+    await initial;
+    assert.deepEqual(h.snapshots, [0]);
+    await h.render({ skipDataRefresh: true });
+    assert.equal(h.getReads(), 1, "ready views can render locally without a loading flash");
+});
+
+test("sync replay can request a lightweight note render without awaiting itself", async () => {
+    const h = createNoteStartupHarness();
+    const load = h.view.plugin.loadCommentsForFile;
+    h.view.plugin.loadCommentsForFile = async () => {
+        await h.render({ skipDataRefresh: true });
+        return load();
+    };
+    h.releaseLoad.resolve();
+    await h.render();
+    assert.equal(h.getReads(), 1);
+    assert.deepEqual(h.snapshots, [3]);
 });
 
 test("a cold lightweight render initializes once and later tab switches perform no storage refresh", async () => {
