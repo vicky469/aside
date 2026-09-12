@@ -1,3 +1,5 @@
+import { captureSidebarScrollAnchor } from "./sidebarScrollAnchor";
+
 export interface SidebarItemRenderDescriptor {
     key: string;
     signature: string;
@@ -9,31 +11,6 @@ export interface SidebarItemReconcilerOptions {
     isCurrent?(): boolean;
     onReplaceThread?(threadId: string, previous: HTMLElement, next: HTMLElement): boolean;
     onRemoveThread?(threadId: string): void;
-}
-
-interface SidebarScrollPosition {
-    element: HTMLElement;
-    scrollTop: number;
-    scrollLeft: number;
-}
-
-function captureSidebarScrollPositions(container: HTMLElement): SidebarScrollPosition[] {
-    const positions: SidebarScrollPosition[] = [];
-    for (let element: HTMLElement | null = container; element; element = element.parentElement) {
-        positions.push({
-            element,
-            scrollTop: element.scrollTop,
-            scrollLeft: element.scrollLeft,
-        });
-    }
-    return positions;
-}
-
-function restoreSidebarScrollPositions(positions: readonly SidebarScrollPosition[]): void {
-    positions.forEach(({ element, scrollTop, scrollLeft }) => {
-        element.scrollTop = scrollTop;
-        element.scrollLeft = scrollLeft;
-    });
 }
 
 export async function reconcileSidebarItems(
@@ -89,7 +66,7 @@ export async function reconcileSidebarItems(
         return false;
     }
 
-    const scrollPositions = captureSidebarScrollPositions(container);
+    const restoreScroll = captureSidebarScrollAnchor(container);
     try {
         for (const [key, element] of existingByKey) {
             if (key.startsWith("thread:")) {
@@ -123,7 +100,7 @@ export async function reconcileSidebarItems(
             }
         }
     } finally {
-        restoreSidebarScrollPositions(scrollPositions);
+        restoreScroll();
     }
 
     return true;

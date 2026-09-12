@@ -1,3 +1,4 @@
+import { captureSidebarScrollAnchor } from "./sidebarScrollAnchor";
 import type { AgentRunStreamState } from "../../core/agents/agentRuns";
 import { getAgentRunStatusPresentation } from "./sidebarPersistedComment";
 import { getAgentRunAuthorLabel } from "./agentRunAuthor";
@@ -97,7 +98,19 @@ export class StreamedAgentReplyController {
         private readonly options: StreamedAgentReplyControllerOptions = {},
     ) {}
 
+    private scrollContainerEl: HTMLElement | null = null;
+
     public sync(containerEl: HTMLElement, stream: AgentRunStreamState): void {
+        this.scrollContainerEl = containerEl;
+        const restoreScroll = captureSidebarScrollAnchor(containerEl);
+        try {
+            this.syncNow(containerEl, stream);
+        } finally {
+            restoreScroll();
+        }
+    }
+
+    private syncNow(containerEl: HTMLElement, stream: AgentRunStreamState): void {
         const threadEl = this.findThreadElement(containerEl);
         if (!threadEl) {
             this.clear();
@@ -203,6 +216,16 @@ export class StreamedAgentReplyController {
     }
 
     public clear(): void {
+        const restoreScroll = this.scrollContainerEl ? captureSidebarScrollAnchor(this.scrollContainerEl) : null;
+        try {
+            this.clearNow();
+        } finally {
+            restoreScroll?.();
+            this.scrollContainerEl = null;
+        }
+    }
+
+    private clearNow(): void {
         this.invalidateFinalRender();
         if (this.ownsCard) {
             this.cardEl?.remove();
@@ -341,7 +364,12 @@ export class StreamedAgentReplyController {
                 );
                 return;
             }
-            contentEl.replaceChildren(...renderedNodes);
+            const restoreScroll = this.scrollContainerEl ? captureSidebarScrollAnchor(this.scrollContainerEl) : null;
+            try {
+                contentEl.replaceChildren(...renderedNodes);
+            } finally {
+                restoreScroll?.();
+            }
         }).catch((error) => {
             this.options.onFinalMarkdownRenderError?.(error);
         });

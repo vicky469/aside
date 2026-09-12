@@ -25,6 +25,37 @@ class FakeElement {
     scrollTop = 0;
     scrollLeft = 0;
     renderedHtml = "";
+    height = 0;
+    clientHeight = 0;
+
+    get layoutHeight(): number {
+        return this.height || this.children.reduce((sum, child) => sum + child.layoutHeight, 0);
+    }
+
+    get scrollHeight(): number {
+        return this.children.reduce((sum, child) => sum + child.layoutHeight, 0);
+    }
+
+    getBoundingClientRect(): { top: number; bottom: number; height: number } {
+        const parent = this.parentElement;
+        const preceding = parent ? parent.children.slice(0, parent.children.indexOf(this)) : [];
+        const top = parent ? parent.getBoundingClientRect().top - parent.scrollTop
+            + preceding.reduce((sum, child) => sum + child.layoutHeight, 0) : 0;
+        return { top, bottom: top + this.layoutHeight, height: this.layoutHeight };
+    }
+
+    getAttribute(name: string): string | null {
+        const key = name.slice(5).replace(/-([a-z])/gu, (_match, letter: string) => letter.toUpperCase());
+        return this.dataset[key] ?? null;
+    }
+
+    querySelectorAll(selector: string): FakeElement[] {
+        const attrs = [...selector.matchAll(/\[([^\]]+)\]/gu)].map((match) => match[1]!);
+        return this.children.flatMap((child) => [
+            ...(attrs.some((attr) => child.getAttribute(attr) !== null) ? [child] : []),
+            ...child.querySelectorAll(selector),
+        ]);
+    }
 
     get isConnected(): boolean {
         return this.parentElement !== null;
@@ -290,4 +321,43 @@ test("reconcileSidebarItems removes stale script mention styling after Scripts i
         disabledNode.renderedHtml,
         "<span class=\"aside-editor-token-mention\">@todo</span> /clean",
     );
+});
+
+function createLongThread(signature: string, earlierReplyHeight: number): FakeElement {
+    const thread = createNode("thread:long", signature);
+    for (let index = 0; index < 12; index += 1) {
+        const entry = new FakeElement();
+        entry.dataset.commentId = `entry-${index}`;
+        entry.height = index === 2 ? earlierReplyHeight : 100;
+        thread.insertBefore(entry, null);
+    }
+    return thread;
+}
+
+for (const [beforeHeight, afterHeight] of [[300, 100], [100, 300]]) {
+    test(`sidebar keeps the visible reply in place when an earlier reply changes height ${beforeHeight} to ${afterHeight}`, async () => {
+        const previous = createLongThread("before", beforeHeight!);
+        const next = createLongThread("after", afterHeight!);
+        const container = createContainer([previous]);
+        const viewport = createContainer([container]);
+        viewport.height = viewport.clientHeight = 300;
+        viewport.scrollTop = previous.children[7]!.getBoundingClientRect().top - 40;
+        const beforeTop = previous.children[7]!.getBoundingClientRect().top;
+        await reconcileSidebarItems(container as unknown as HTMLElement, [descriptor("thread:long", "after", async () => next)]);
+        assert.equal(next.children[7]!.getBoundingClientRect().top, beforeTop);
+    });
+}
+
+test("sidebar does not follow a new reply appended below the viewport", async () => {
+    const previous = createLongThread("before", 100);
+    const next = createLongThread("after", 100);
+    const extra = new FakeElement();
+    extra.height = 500;
+    next.insertBefore(extra, null);
+    const container = createContainer([previous]);
+    const viewport = createContainer([container]);
+    viewport.height = viewport.clientHeight = 300;
+    viewport.scrollTop = 400;
+    await reconcileSidebarItems(container as unknown as HTMLElement, [descriptor("thread:long", "after", async () => next)]);
+    assert.equal(viewport.scrollTop, 400);
 });

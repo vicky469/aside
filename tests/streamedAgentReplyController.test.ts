@@ -1101,3 +1101,55 @@ test("streamed agent reply controller identifies the fallback author", () => {
         }
     }
 });
+
+function createScrollFixture() {
+    let earlierHeight = 300;
+    const viewport = {
+        scrollTop: 750, scrollLeft: 0, clientHeight: 300, scrollHeight: 2000, parentElement: null,
+        getBoundingClientRect: () => ({ top: 0 }),
+        querySelectorAll: () => [card],
+    };
+    const card = {
+        getAttribute: (name: string) => name === "data-comment-id" ? "reading-entry" : null,
+        getBoundingClientRect: () => ({ top: 600 + earlierHeight - viewport.scrollTop, bottom: 700 + earlierHeight - viewport.scrollTop }),
+    };
+    return { viewport, card, shrink: () => { earlierHeight = 100; } };
+}
+
+test("final Markdown layout preserves the reading position chosen while rendering", async () => {
+    const fixture = createScrollFixture();
+    let finishRender = () => {};
+    const controller = new StreamedAgentReplyController("thread-1", {
+        renderFinalMarkdown: async (_markdown, container) => {
+            (container as unknown as FakeStreamElement).appendChild(new FakeStreamElement("p"));
+            await new Promise<void>((resolve) => { finishRender = resolve; });
+        },
+    }) as any;
+    const content = new FakeStreamElement("div");
+    const replace = content.replaceChildren.bind(content);
+    content.replaceChildren = (...nodes) => { replace(...nodes); fixture.shrink(); };
+    controller.contentEl = content;
+    controller.scrollContainerEl = fixture.viewport;
+    controller.syncContent(content, {
+        runId: "run-1", threadId: "thread-1", requestedAgent: "codex", runtime: "direct-cli",
+        status: "succeeded", partialText: "**Reply**", startedAt: 100, updatedAt: 101,
+    });
+    // The user's scroll during asynchronous formatting must not be undone.
+    fixture.viewport.scrollTop = 650;
+    const before = fixture.card.getBoundingClientRect().top;
+    finishRender();
+    await Promise.resolve();
+    await Promise.resolve();
+    assert.equal(fixture.card.getBoundingClientRect().top, before);
+});
+
+test("removing a streamed reply preserves the visible card below it", () => {
+    const fixture = createScrollFixture();
+    const controller = new StreamedAgentReplyController("thread-1") as any;
+    controller.scrollContainerEl = fixture.viewport;
+    controller.ownsCard = true;
+    controller.cardEl = { remove: fixture.shrink };
+    const before = fixture.card.getBoundingClientRect().top;
+    controller.clear();
+    assert.equal(fixture.card.getBoundingClientRect().top, before);
+});
