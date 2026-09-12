@@ -5,6 +5,7 @@ import { runInNewContext } from "node:vm";
 import ts from "typescript";
 import { CommentPersistenceController } from "../src/comments/commentPersistenceController";
 import { filterThreadsBySidebarGroupMode } from "../src/ui/views/sidebarThreadGroups";
+import { SidebarSearchNavigation } from "../src/ui/views/sidebarSearchNavigation";
 
 const source = ts.createSourceFile(
     "AsideView.ts", readFileSync("src/ui/views/AsideView.ts", "utf8"), ts.ScriptTarget.Latest, true,
@@ -194,6 +195,7 @@ test("a lightweight refresh cannot hydrate stale records ahead of full sync repl
 test("closing during load suppresses the old render without cancelling a reopened view", async () => {
     const h = createStartupHarness();
     Object.assign(h.view, {
+        searchNavigation: new SidebarSearchNavigation(),
         containerEl: { ownerDocument: { removeEventListener() {} }, removeEventListener() {} },
         interactionController: { cancelPendingRevealedCommentSelectionClear() {} },
         clearNoteSidebarSearchDebounceTimer() {},

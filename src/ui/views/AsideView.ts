@@ -111,6 +111,7 @@ import {
 } from "./sidebarRenderOrder";
 import { buildRootedThoughtTrailScope } from "./sidebarThoughtTrailScope";
 import { clearSidebarSearchHighlights, highlightSidebarSearchMatches } from "./sidebarSearchHighlight";
+import { collectSidebarSearchTargets, SidebarSearchNavigation } from "./sidebarSearchNavigation";
 import {
     deriveIndexSidebarListFilePaths,
     filterIndexThreadsByExistingSourceFiles,
@@ -475,6 +476,7 @@ export default class AsideView extends ItemView {
     private noteSidebarShell: NoteSidebarShell | null = null;
     private indexSidebarShell: IndexSidebarShell | null = null;
     private readonly streamedReplyControllers = new Map<string, StreamedReplyControllerEntry>();
+    private readonly searchNavigation = new SidebarSearchNavigation();
     private unsubscribeFromAgentStreamUpdates: (() => void) | null = null;
 
     private isNonDesktopClient(): boolean {
@@ -1561,6 +1563,8 @@ export default class AsideView extends ItemView {
     }
 
     async onClose() {
+        this.searchNavigation.invalidate();
+        this.searchNavigation.observe(null);
         this.indexSidebarInitialLoad = null;
         this.indexSidebarDataReady = false;
         this.unsubscribeFromAgentStreamUpdates?.();
@@ -3894,6 +3898,7 @@ export default class AsideView extends ItemView {
         });
         const isDeletedToolbarMode = secondaryPlan.showDeleted && showDeletedComments;
 
+        this.searchNavigation.invalidate();
         const toolbarEl = container.createDiv("aside-sidebar-toolbar");
         toolbarEl.classList.toggle("is-index-toolbar", options.isAllCommentsView);
         toolbarEl.classList.toggle("is-note-toolbar", !options.isAllCommentsView);
@@ -4221,6 +4226,7 @@ export default class AsideView extends ItemView {
 
         const trimmedQuery = query.trim();
         if (!trimmedQuery) {
+            this.searchNavigation.setTargets([], "");
             return;
         }
 
@@ -4232,10 +4238,14 @@ export default class AsideView extends ItemView {
         highlightSidebarSearchMatches(container, trimmedQuery, {
             allowedSelectors: selectors,
         });
+        this.searchNavigation.setTargets(collectSidebarSearchTargets(container), JSON.stringify([
+            this.file?.path, this.indexSidebarMode, this.noteSidebarMode, trimmedQuery,
+        ]), trimmedQuery);
     }
 
     private getNoteSearchInputOptions(): SidebarSearchInputOptions {
         return {
+            navigation: this.searchNavigation,
             value: this.noteSidebarSearchInputValue,
             placeholder: "Search side notes in this file",
             onFocus: (inputEl) => {
@@ -4260,6 +4270,7 @@ export default class AsideView extends ItemView {
         scopeKind: IndexSidebarModeScope["kind"] | undefined,
     ): SidebarSearchInputOptions {
         return {
+            navigation: this.searchNavigation,
             value: this.indexSidebarSearchInputValue,
             placeholder: resolveIndexSidebarSearchPlaceholder(scopeKind),
             onFocus: (inputEl) => {
@@ -4282,6 +4293,7 @@ export default class AsideView extends ItemView {
 
     private getIndexTagSearchInputOptions(): SidebarSearchInputOptions {
         return {
+            navigation: this.searchNavigation,
             value: this.indexTagSearchInputValue,
             placeholder: "Search tags in the Aside index",
             ariaLabel: "Search Aside index tags",
@@ -4360,6 +4372,14 @@ export default class AsideView extends ItemView {
                 void this.openIndexTagSearchFile(filePath);
             },
         });
+        this.searchNavigation.setTargets(
+            Array.from(container.querySelectorAll<HTMLElement>(".aside-tag-related-file-row")).map((element) => ({
+                id: element.getAttribute("data-file-path") ?? "",
+                element,
+            })),
+            JSON.stringify(["tags", this.indexTagSearchQuery, this.indexTagSearchSelectedTagKey]),
+            this.indexTagSearchQuery,
+        );
     }
 
     private setIndexTagSearchFilter(tagKey: string | null): void {

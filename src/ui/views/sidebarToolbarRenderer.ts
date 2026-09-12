@@ -9,6 +9,7 @@ import {
     type SidebarModeVisibility,
 } from "./sidebarModeTabs";
 import type { SidebarPrimaryMode } from "./viewState";
+import { renderSidebarSearchNavigation, type SidebarSearchNavigation } from "./sidebarSearchNavigation";
 
 export interface ToolbarActionGuard {
     beforeAction(): Promise<boolean>;
@@ -38,6 +39,7 @@ export interface ToolbarIconButtonOptions {
 }
 
 export interface SidebarSearchInputOptions {
+    navigation?: SidebarSearchNavigation;
     value: string;
     disabled?: boolean;
     ariaLabel?: string;
@@ -200,6 +202,9 @@ export function renderSidebarSearchInput(
             selectionEnd: inputEl.selectionEnd,
         });
     });
+    if (options.navigation) {
+        renderSidebarSearchNavigation(fieldEl, inputEl, options.navigation, setIcon);
+    }
 }
 
 export function renderSidebarSecondaryToolbar(
