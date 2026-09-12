@@ -17,6 +17,36 @@ function createComment(id: string, timestamp: number, text: string): Comment {
     };
 }
 
+test("CommentManager inserts into thread order and keeps new entry lookups writable", () => {
+    const thread = commentToThread(createComment("thread", 100, "Parent"));
+    thread.entries.push(
+        { id: "child1", body: "First", timestamp: 200 },
+        { id: "child2", body: "Second", timestamp: 300 },
+    );
+    const manager = new CommentManager([thread, createComment("unrelated", 100, "Other thread")]);
+    const reply = { id: "reply", body: "New", timestamp: 400 };
+
+    manager.appendEntry(thread.id, reply, "child1");
+    reply.body = "External mutation";
+    assert.equal(manager.getCommentById("reply")?.comment, "New");
+    manager.editComment("reply", "Edited reply");
+
+    assert.deepEqual(manager.getThreadById(thread.id)?.entries.map((entry) => entry.id), ["thread", "child1", "reply", "child2"]);
+    assert.equal(manager.getCommentById("reply")?.comment, "Edited reply");
+    assert.equal(manager.getThreadsForFile("note.md").length, 2);
+    assert.equal(manager.getCommentById("unrelated")?.comment, "Other thread");
+
+    manager.deleteComment("reply", Date.now());
+    assert.ok(manager.getCommentById("reply")?.deletedAt);
+});
+
+test("CommentManager falls back to the end if the reply target disappeared", () => {
+    const manager = new CommentManager([createComment("thread", 100, "Parent")]);
+    manager.appendEntry("thread", { id: "child1", body: "First", timestamp: 200 });
+    manager.appendEntry("thread", { id: "reply", body: "New", timestamp: 300 }, "missing");
+    assert.deepEqual(manager.getThreadById("thread")?.entries.map((entry) => entry.id), ["thread", "child1", "reply"]);
+});
+
 test("CommentManager edits/deletes by id under timestamp collision", () => {
     const sameTimestamp = Date.now();
     const first = createComment("id-1", sameTimestamp, "first");

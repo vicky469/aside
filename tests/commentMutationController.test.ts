@@ -630,11 +630,31 @@ test("failed new-draft persistence rolls back only that draft", async () => {
     assert.equal(host.manager.getCommentById(concurrent.id)?.comment, "Concurrent");
 });
 
+test("saving a reply inserts after its target and preserves that order on reload", async () => {
+    const root = createComment({ id: "thread-1", comment: "Parent" });
+    const draft = toDraft(root, {
+        id: "new-reply", comment: "Reply to child1", mode: "append",
+        threadId: root.id, insertAfterEntryId: "child1", timestamp: 500,
+    });
+    const host = createHost({ draftComment: draft, knownComments: [root] });
+    host.manager.appendEntry(root.id, { id: "child1", body: "First", timestamp: 200 });
+    host.manager.appendEntry(root.id, { id: "old-child2", body: "Second", timestamp: 300 });
+
+    await host.controller.saveDraft(draft.id);
+
+    const savedThreads = host.manager.getThreadsForFile(root.filePath);
+    assert.deepEqual(savedThreads[0]?.entries.map((entry) => entry.id), [root.id, "child1", draft.id, "old-child2"]);
+    const reloaded = new CommentManager(savedThreads);
+    assert.deepEqual(reloaded.getThreadById(root.id)?.entries.map((entry) => entry.id), [root.id, "child1", draft.id, "old-child2"]);
+    assert.equal(reloaded.getCommentById(draft.id)?.comment, draft.comment);
+});
+
 test("comment mutation controller restores an append draft and parent thread when persistence fails", async () => {
     const existing = createComment({ id: "thread-1", comment: "Original" });
     const draft: DraftComment = {
         ...toDraft(existing, { id: "entry-fail-1", comment: "@codex explain", mode: "append" }),
         threadId: existing.id,
+        insertAfterEntryId: "child1",
     };
     const host = createHost({
         draftComment: draft,
@@ -644,6 +664,8 @@ test("comment mutation controller restores an append draft and parent thread whe
             throw new Error("write failed");
         },
     });
+    host.manager.appendEntry(existing.id, { id: "child1", body: "First", timestamp: 200 });
+    host.manager.appendEntry(existing.id, { id: "child2", body: "Second", timestamp: 300 });
     const previousThreads = host.manager.getThreadsForFile(existing.filePath, { includeDeleted: true });
 
     await assert.rejects(host.controller.saveDraft(draft.id), /write failed/);

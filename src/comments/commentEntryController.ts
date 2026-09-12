@@ -86,6 +86,7 @@ export class CommentEntryController {
             timestamp: Date.now(),
             mode: "append",
             threadId: normalizedThreadId,
+            insertAfterEntryId: comment.id,
         };
         this.host.markDraftFileActive(commentFile);
         await this.host.setDraftComment(draft, hostFilePath ?? comment.filePath, {

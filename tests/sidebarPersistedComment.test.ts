@@ -892,39 +892,48 @@ test("shouldRenderThreadNestedToggle hides the toggle only while visible drafts 
     }), true);
 });
 
-test("renderPersistedCommentCard renders a manual continuation after every stored reply", async () => {
-    const root = new FakeElement("div");
-    const thread = createThreadWithEntries({
-        id: "thread-1",
-        entries: [
-            { id: "thread-1", body: "Parent", timestamp: 100 },
-            { id: "entry-2", body: "Child", timestamp: 200 },
-            { id: "entry-3", body: "Later child", timestamp: 300 },
-        ],
-        createdAt: 100,
-        updatedAt: 300,
+for (const [target, expectedOrder] of [
+    ["entry-2", ["entry-2", "draft-1", "entry-3"]],
+    ["thread-1", ["draft-1", "entry-2", "entry-3"]],
+    [undefined, ["entry-2", "entry-3", "draft-1"]],
+    ["missing", ["entry-2", "entry-3", "draft-1"]],
+] as const) {
+    test(`renderPersistedCommentCard places the reply draft after ${target ?? "the last entry"}`, async () => {
+        const root = new FakeElement("div");
+        const thread = createThreadWithEntries({
+            id: "thread-1",
+            entries: [
+                { id: "thread-1", body: "Parent", timestamp: 100 },
+                { id: "entry-2", body: "Child", timestamp: 200 },
+                { id: "entry-3", body: "Later child", timestamp: 300 },
+            ],
+            createdAt: 100,
+            updatedAt: 300,
+        });
+        const appendDraft = {
+            ...createComment({
+                id: "draft-1",
+                comment: "",
+                timestamp: 400,
+            }),
+            mode: "append",
+            threadId: "thread-1",
+            insertAfterEntryId: target,
+        } as const;
+
+        await renderPersistedCommentCard(root as unknown as HTMLDivElement, thread, createRenderHost({
+            appendDraftComment: appendDraft,
+            renderAppendDraft: (container) => {
+                const draftEl = (container as unknown as FakeElement).createDiv("test-append-draft");
+                draftEl.setAttribute("data-comment-id", "draft-1");
+            },
+        }));
+
+        const replies = root.findAllByClass("aside-thread-replies")[0];
+        assert.ok(replies);
+        assert.deepEqual(replies.children.map((child) => child.getAttribute("data-comment-id")), expectedOrder);
     });
-    const appendDraft = {
-        ...createComment({
-            id: "draft-1",
-            comment: "",
-            timestamp: 400,
-        }),
-        mode: "append",
-        threadId: "thread-1",
-    } as const;
-
-    await renderPersistedCommentCard(root as unknown as HTMLDivElement, thread, createRenderHost({
-        appendDraftComment: appendDraft,
-        renderAppendDraft: (container) => {
-            (container as unknown as FakeElement).createDiv("test-append-draft");
-        },
-    }));
-
-    const replies = root.findAllByClass("aside-thread-replies")[0];
-    assert.ok(replies);
-    assert.equal(replies.children.at(-1)?.classList.contains("test-append-draft"), true);
-});
+}
 
 test("getRenderableThreadEntries keeps the persisted agent output entry visible while the live stream is retained", () => {
     const thread = createThreadWithEntries({

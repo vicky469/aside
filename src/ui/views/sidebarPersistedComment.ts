@@ -1688,6 +1688,15 @@ export async function renderPersistedCommentCard(
     }
 
     const childCommentsEl = threadEl.createDiv("aside-thread-replies");
+    const appendDraft = host.appendDraftComment;
+    let appendDraftRendered = false;
+    const renderAppendDraftAfter = (entryId: string | undefined): void => {
+        if (appendDraft && !appendDraftRendered && appendDraft.insertAfterEntryId === entryId) {
+            host.renderAppendDraft(childCommentsEl, appendDraft);
+            appendDraftRendered = true;
+        }
+    };
+    renderAppendDraftAfter(entries[0]?.id);
     if (shouldRenderStoredChildren) {
         const childEntries = shouldRenderAllStoredChildren
             ? entries.slice(1)
@@ -1699,12 +1708,12 @@ export async function renderPersistedCommentCard(
             renderTasks.push(renderStoredThreadEntry(childCommentsEl, thread, entry, host, {
                 inlineEditDraft: entryEditDraft,
             }));
-
+            renderAppendDraftAfter(entry.id);
         }
     }
 
-    if (host.appendDraftComment) {
-        host.renderAppendDraft(childCommentsEl, host.appendDraftComment);
+    if (appendDraft && !appendDraftRendered) {
+        host.renderAppendDraft(childCommentsEl, appendDraft);
     }
 
     await Promise.all(renderTasks);

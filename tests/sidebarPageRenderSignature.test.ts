@@ -77,6 +77,14 @@ function createDraft(overrides: Partial<DraftComment> = {}): DraftComment {
     };
 }
 
+test("draft render signature changes when the insertion target changes", () => {
+    const draft = createDraft();
+    assert.notEqual(
+        buildPageSidebarDraftRenderSignature({ ...draft, insertAfterEntryId: "entry-2" }, draft.id),
+        buildPageSidebarDraftRenderSignature({ ...draft, insertAfterEntryId: "entry-3" }, draft.id),
+    );
+});
+
 function createAgentRun(overrides: Partial<AgentRunRecord> = {}): AgentRunRecord {
     return {
         id: overrides.id ?? "run-1",

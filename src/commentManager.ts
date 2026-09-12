@@ -277,15 +277,26 @@ export class CommentManager {
         this.rebuildLookupIndexes();
     }
 
-    appendEntry(threadId: string, entry: CommentThreadEntry) {
+    appendEntry(threadId: string, entry: CommentThreadEntry, insertAfterEntryId?: string) {
         const thread = this.findThreadById(threadId);
         if (!thread) {
             return;
         }
 
-        thread.entries.push(cloneCommentThreadEntry(entry));
+        const insertedEntry = cloneCommentThreadEntry(entry);
+        const targetIndex = insertAfterEntryId
+            ? thread.entries.findIndex((candidate) => candidate.id === insertAfterEntryId)
+            : -1;
+        if (targetIndex === -1) {
+            thread.entries.push(insertedEntry);
+        } else {
+            thread.entries.splice(targetIndex + 1, 0, insertedEntry);
+        }
         thread.updatedAt = Math.max(thread.updatedAt, entry.timestamp);
-        this.rebuildLookupIndexes();
+        // Existing indexes reference this thread and its entries. Only the new
+        // entry needs indexing; insertion must not scan every thread in the vault.
+        this.lookupIndexes.threadByEntryId.set(entry.id, thread);
+        this.lookupIndexes.entryById.set(entry.id, { thread, entry: insertedEntry });
     }
 
     reorderThreadsForFile(
