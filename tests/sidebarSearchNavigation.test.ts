@@ -21,8 +21,6 @@ test("search navigation moves in display order and wraps in both directions", ()
     const first = target("first");
     const second = target("second");
     navigation.setTargets([first.target, second.target], "query");
-    assert.deepEqual(navigation.getState(), { current: 0, total: 2 });
-    navigation.navigate(1);
     assert.deepEqual(navigation.getState(), { current: 1, total: 2 });
     assert.equal(first.scrolls.length, 1);
     assert.equal(first.classes.has("is-active-search-match"), true);
@@ -56,8 +54,9 @@ test("search navigation retains the selected match across rendering but resets f
     assert.equal(updated.classes.has("is-active-search-match"), true);
     assert.equal(updated.scrolls.length, 0);
     navigation.setTargets([updated.target], "other-note:query");
-    assert.deepEqual(navigation.getState(), { current: 0, total: 1 });
-    assert.equal(updated.classes.size, 0);
+    assert.deepEqual(navigation.getState(), { current: 1, total: 1 });
+    assert.equal(updated.classes.has("is-active-search-match"), true);
+    assert.equal(updated.scrolls.length, 1);
 });
 
 test("invalidating pending search results disables controls and avoids detached targets", () => {
@@ -69,7 +68,7 @@ test("invalidating pending search results disables controls and avoids detached 
     assert.equal(total, 1);
     match.element.isConnected = false;
     navigation.navigate(1);
-    assert.equal(match.scrolls.length, 0);
+    assert.equal(match.scrolls.length, 1, "detached targets must not scroll again");
     assert.equal(total, 0);
     navigation.setTargets([target("new").target], "next");
     navigation.invalidate();
@@ -122,19 +121,19 @@ test("search controls expose buttons, counter, keyboard navigation and pending-q
     assert.equal(next.disabled, true);
     assert.equal(previous.attributes.get("aria-label"), "Previous match (Shift+Enter)");
     navigation.setTargets([target("one").target, target("two").target], "query");
-    assert.equal(counter.textContent, "0/2");
+    assert.equal(counter.textContent, "1/2");
     assert.equal(next.disabled, false);
     next.fire("click");
-    assert.equal(counter.textContent, "1/2");
-    assert.equal(input.fire("keydown", { key: "Enter" }), true);
     assert.equal(counter.textContent, "2/2");
+    assert.equal(input.fire("keydown", { key: "Enter" }), true);
+    assert.equal(counter.textContent, "1/2");
     input.fire("keydown", { key: "Enter", shiftKey: true });
-    assert.equal(counter.textContent, "1/2");
+    assert.equal(counter.textContent, "2/2");
     input.fire("keydown", { key: "Enter", isComposing: true });
-    assert.equal(counter.textContent, "1/2");
+    assert.equal(counter.textContent, "2/2");
     assert.equal(previous.fire("mousedown"), true);
     previous.fire("click");
-    assert.equal(counter.textContent, "2/2");
+    assert.equal(counter.textContent, "1/2");
     input.value = "changed query";
     input.fire("input");
     assert.equal(counter.textContent, "");
@@ -144,9 +143,26 @@ test("search controls expose buttons, counter, keyboard navigation and pending-q
     assert.equal(counter.textContent, "");
     input.value = "query";
     input.fire("input");
-    assert.equal(counter.textContent, "2/2");
+    assert.equal(counter.textContent, "1/2");
     assert.equal(next.disabled, false);
     assert.equal(counter.hidden, false);
+});
+
+test("search selects the first current result and reveals it before scrolling", () => {
+    const steps: string[] = [];
+    const navigation = new SidebarSearchNavigation(() => { steps.push("reveal"); });
+    const stale = target("stale");
+    const first = target("first");
+    first.element.scrollIntoView = () => { steps.push("scroll"); };
+    navigation.setInputQuery("new query");
+    navigation.setTargets([stale.target], "old scope", "old query");
+    assert.deepEqual(navigation.getState(), { current: 0, total: 0 });
+    assert.equal(stale.scrolls.length, 0);
+    navigation.setTargets([first.target, target("second").target], "new scope", "new query");
+    assert.deepEqual(navigation.getState(), { current: 1, total: 2 });
+    assert.deepEqual(steps, ["reveal", "scroll"]);
+    navigation.setTargets([first.target, target("second").target], "new scope", "new query");
+    assert.deepEqual(steps, ["reveal", "scroll"], "ordinary rerenders must not jump the reader back");
 });
 
 test("search targets use stable card IDs and per-card occurrence order", () => {

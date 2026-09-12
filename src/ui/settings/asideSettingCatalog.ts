@@ -164,7 +164,7 @@ export const ASIDE_SETTING_CATALOG: readonly AsideSettingCatalogEntry[] = [
         key: "publish-project-name",
         section: "publishing",
         name: "Project name",
-        description: "Change to your preferred name or keep the default.",
+        description: "Existing Cloudflare Pages project to upload to. Leave blank to resolve it from the publishing URL.",
         aliases: ["Pages project"],
         keywords: ["Cloudflare", "deployment"],
         render: (setting, context) => {

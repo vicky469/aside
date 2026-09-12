@@ -425,10 +425,7 @@ export class IndexNoteSettingsController {
         });
     }
 
-    public async setPublishEnabled(
-        enabled: boolean,
-        fallbackProjectName = "",
-    ): Promise<void> {
+    public async setPublishEnabled(enabled: boolean): Promise<void> {
         await this.enqueueSettingsTransition(async () => {
             if (enabled) {
                 const folderResult = await this.host.ensureFolder("public");
@@ -441,20 +438,6 @@ export class IndexNoteSettingsController {
             const patch: Partial<PublishSettings> = {
                 publishEnabled: enabled,
             };
-            if (enabled) {
-                const settings = this.host.getSettings();
-                const configuredProjectName = normalizePublishProjectName(
-                    settings.publishPagesProjectName,
-                );
-                const nextProjectName = configuredProjectName
-                    || normalizePublishProjectName(fallbackProjectName);
-                if (nextProjectName && settings.publishPagesProjectName !== nextProjectName) {
-                    patch.publishPagesProjectName = nextProjectName;
-                }
-                if (!settings.publishBaseUrl) {
-                    patch.publishBaseUrl = derivePublishBaseUrlFromProjectName(nextProjectName);
-                }
-            }
 
             await this.applyPublishSettings(patch);
         });

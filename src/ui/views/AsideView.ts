@@ -66,6 +66,7 @@ import {
     limitIndexSidebarListItems,
 } from "./indexSidebarListLimit";
 import { showIndexSidebarListLoadingState } from "./sidebarIndexLoadingState";
+import { SidebarAnchorPreviews } from "./sidebarAnchorPreviews";
 import { SidebarInteractionController } from "./sidebarInteractionController";
 import {
     buildPageSidebarDraftRenderSignature,
@@ -479,7 +480,8 @@ export default class AsideView extends ItemView {
     private noteSidebarShell: NoteSidebarShell | null = null;
     private indexSidebarShell: IndexSidebarShell | null = null;
     private readonly streamedReplyControllers = new Map<string, StreamedReplyControllerEntry>();
-    private readonly searchNavigation = new SidebarSearchNavigation();
+    private readonly anchorPreviews = new SidebarAnchorPreviews();
+    private readonly searchNavigation = new SidebarSearchNavigation((target) => this.anchorPreviews.revealMatch(target));
     private unsubscribeFromAgentStreamUpdates: (() => void) | null = null;
 
     private isNonDesktopClient(): boolean {
@@ -584,6 +586,7 @@ export default class AsideView extends ItemView {
         const currentFilePath = this.file?.path ?? null;
         const nextFilePath = nextFile?.path ?? null;
         if (currentFilePath !== nextFilePath) {
+            this.anchorPreviews.dispose();
             this.noteSidebarInitialLoad = null;
             this.noteSidebarDataReady = false;
             this.savePinnedSidebarStateForFilePath(currentFilePath);
@@ -1560,6 +1563,7 @@ export default class AsideView extends ItemView {
     }
 
     async onClose() {
+        this.anchorPreviews.dispose();
         this.searchNavigation.invalidate();
         this.searchNavigation.observe(null);
         this.indexSidebarInitialLoad = null;
@@ -4275,6 +4279,7 @@ export default class AsideView extends ItemView {
         const trimmedQuery = query.trim();
         if (!trimmedQuery) {
             this.searchNavigation.setTargets([], "");
+            this.anchorPreviews.refresh(container);
             return;
         }
 
@@ -4286,6 +4291,7 @@ export default class AsideView extends ItemView {
         highlightSidebarSearchMatches(container, trimmedQuery, {
             allowedSelectors: selectors,
         });
+        this.anchorPreviews.refresh(container);
         this.searchNavigation.setTargets(collectSidebarSearchTargets(container), JSON.stringify([
             this.file?.path, this.indexSidebarMode, this.noteSidebarMode, trimmedQuery,
         ]), trimmedQuery);

@@ -1320,8 +1320,8 @@ test("Publishing initialization is serialized with rapid enable then disable", a
     });
     await harness.controller.loadSettings();
 
-    const enable = harness.controller.setPublishEnabled(true, " My Vault ");
-    const disable = harness.controller.setPublishEnabled(false, " My Vault ");
+    const enable = harness.controller.setPublishEnabled(true);
+    const disable = harness.controller.setPublishEnabled(false);
 
     await new Promise<void>((resolve) => setImmediate(resolve));
     assert.equal(saveCalls.length, 0);
@@ -1341,19 +1341,19 @@ test("Publishing initialization is serialized with rapid enable then disable", a
         publishBaseUrl: data.publishBaseUrl,
     })), [{
         publishEnabled: true,
-        publishPagesProjectName: "my-vault",
-        publishBaseUrl: "https://my-vault.pages.dev",
+        publishPagesProjectName: "",
+        publishBaseUrl: "",
     }, {
         publishEnabled: false,
-        publishPagesProjectName: "my-vault",
-        publishBaseUrl: "https://my-vault.pages.dev",
+        publishPagesProjectName: "",
+        publishBaseUrl: "",
     }]);
     assert.equal(harness.getSettings().publishEnabled, false);
-    assert.equal(harness.getSettings().publishPagesProjectName, "my-vault");
-    assert.equal(harness.getSettings().publishBaseUrl, "https://my-vault.pages.dev");
+    assert.equal(harness.getSettings().publishPagesProjectName, "");
+    assert.equal(harness.getSettings().publishBaseUrl, "");
     assert.equal(harness.controller.readPersistedPluginData().publishEnabled, false);
-    assert.equal(harness.controller.readPersistedPluginData().publishPagesProjectName, "my-vault");
-    assert.equal(harness.controller.readPersistedPluginData().publishBaseUrl, "https://my-vault.pages.dev");
+    assert.equal(harness.controller.readPersistedPluginData().publishPagesProjectName, "");
+    assert.equal(harness.controller.readPersistedPluginData().publishBaseUrl, "");
 });
 
 test("disabling capabilities preserves run history and publishing configuration", async () => {
@@ -1392,7 +1392,7 @@ test("loaded settings resolution normalizes publish settings and rewrites change
         publishWranglerCommand: " wrangler ",
     } as PersistedPluginData, createSettings());
 
-    assert.equal(resolved.settings.publishPagesProjectName, "lean-startup");
+    assert.equal(resolved.settings.publishPagesProjectName, "publish-site");
     assert.equal(resolved.settings.publishBaseUrl, "https://lean-startup.pages.dev");
     assert.equal(resolved.settings.publishAllowedRoot, "public/");
     assert.equal(resolved.settings.publishEnabled, true);
@@ -1552,4 +1552,13 @@ test("index note settings controller rejects invalid folder and file conflicts",
         "docs/index.md already exists. Choose another index note path.",
     ]);
     assert.equal(conflictHarness.savedPayloads.length, 0);
+});
+
+
+test("enabling publishing preserves its explicitly configured target", async () => {
+    const harness = createControllerHarness({ loadedData: createSettings({publishEnabled: false, publishPagesProjectName: "fdechina-publish", publishBaseUrl: "https://publish.fdechina.com"}) });
+    await harness.controller.loadSettings();
+    await harness.controller.setPublishEnabled(true);
+    assert.equal(harness.getSettings().publishPagesProjectName, "fdechina-publish");
+    assert.equal(harness.getSettings().publishBaseUrl, "https://publish.fdechina.com");
 });

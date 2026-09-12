@@ -9,6 +9,8 @@ export interface SidebarSearchNavigationState {
 }
 
 export class SidebarSearchNavigation {
+    constructor(private readonly revealTarget?: (element: HTMLElement) => void) {}
+
     private targets: SidebarSearchTarget[] = [];
     private index = -1;
     private activeId: string | null = null;
@@ -24,14 +26,13 @@ export class SidebarSearchNavigation {
 
     setTargets(targets: SidebarSearchTarget[], context: string, query = context): void {
         this.clearActiveStyle();
-        if (this.context !== context) this.activeId = null;
+        if (this.context !== context || this.query !== query.trim()) this.activeId = null;
         this.context = context;
         this.query = query.trim();
         this.targets = targets;
         this.index = this.activeId === null ? -1 : targets.findIndex((target) => target.id === this.activeId);
         if (this.index === -1) this.activeId = null;
-        if (!this.isPending()) this.targets[this.index]?.element.classList.add("is-active-search-match");
-        this.notify();
+        this.syncActiveMatch();
     }
 
     invalidate(): void {
@@ -48,8 +49,15 @@ export class SidebarSearchNavigation {
 
     setInputQuery(query: string): void {
         this.inputQuery = query.trim();
+        this.syncActiveMatch();
+    }
+
+    private syncActiveMatch(): void {
         if (this.isPending()) {
             this.clearActiveStyle();
+        } else if (this.index === -1 && this.targets.length > 0) {
+            this.navigate(1);
+            return;
         } else {
             this.targets[this.index]?.element.classList.add("is-active-search-match");
         }
@@ -72,6 +80,7 @@ export class SidebarSearchNavigation {
         this.index = nextIndex;
         this.activeId = target.id;
         target.element.classList.add("is-active-search-match");
+        this.revealTarget?.(target.element);
         target.element.scrollIntoView({ block: "center", inline: "nearest", behavior: "auto" });
         this.notify();
     }

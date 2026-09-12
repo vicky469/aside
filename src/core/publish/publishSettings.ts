@@ -48,9 +48,9 @@ export function derivePublishBaseUrlFromProjectName(projectName: string): string
 export function derivePublishPagesProjectName(baseUrl: string): string {
 	try {
 		const hostname = new URL(baseUrl).hostname.toLowerCase();
-		const projectName = hostname.endsWith(`.${DEFAULT_PAGES_DOMAIN_SUFFIX}`)
-			? hostname.slice(0, -(`.${DEFAULT_PAGES_DOMAIN_SUFFIX}`).length)
-			: hostname;
+		if (!hostname.endsWith(`.${DEFAULT_PAGES_DOMAIN_SUFFIX}`)) return "";
+		const projectName = hostname.slice(0, -(`.${DEFAULT_PAGES_DOMAIN_SUFFIX}`).length);
+		if (projectName.includes(".")) return "";
 		const normalized = projectName
 			.replace(/[^a-z0-9]+/gu, "-")
 			.replace(/^-+|-+$/gu, "")
@@ -105,9 +105,7 @@ export function normalizePublishSettings(value: Partial<PublishSettings> | null 
 		|| derivePublishBaseUrlFromProjectName(normalizePublishProjectName(value?.publishPagesProjectName));
 	const storedProjectName = normalizePublishProjectName(value?.publishPagesProjectName);
 	const derivedProjectName = derivePublishPagesProjectName(publishBaseUrl);
-	const publishPagesProjectName = isDefaultPagesPublishBaseUrl(publishBaseUrl)
-		? (derivedProjectName || storedProjectName)
-		: (storedProjectName || derivedProjectName);
+	const publishPagesProjectName = storedProjectName || derivedProjectName;
 	return {
 		publishEnabled: normalizePublishEnabled(value?.publishEnabled),
 		publishPagesProjectName,
@@ -166,8 +164,16 @@ export function validatePublishSettings(
 	}
 
 	const issues: string[] = [];
+	if (!settings.publishPagesProjectName && !settings.publishBaseUrl) {
+		return { ok: false, notice: "Set a Cloudflare Pages project or publishing URL in Aside settings first." };
+	}
 	if (!isValidPublishBaseUrl(settings.publishBaseUrl)) {
 		issues.push("Publish base URL must be an https:// origin with no path, query, or fragment");
+	}
+	if (isDefaultPagesPublishBaseUrl(settings.publishBaseUrl)
+		&& settings.publishPagesProjectName
+		&& derivePublishPagesProjectName(settings.publishBaseUrl) !== settings.publishPagesProjectName) {
+		issues.push("Pages project must match the configured pages.dev publishing URL");
 	}
 	if (!isValidAllowedRoot(settings.publishAllowedRoot)) {
 		issues.push("Allowed publish folder must be a vault-relative folder");

@@ -1,3 +1,5 @@
+import { derivePublishPagesProjectName } from "../core/publish/publishSettings";
+
 type ExecEnv = Record<string, string | undefined>;
 
 type TrackedChildProcess = {
@@ -266,9 +268,10 @@ async function resolveWranglerPagesDeployProjectName(
 	options: WranglerPagesDeployOptions,
 	env: ExecEnv,
 ): Promise<string> {
+	if (options.projectName) return options.projectName;
 	const hostname = getPublishHostname(options.publishBaseUrl);
 	if (!hostname || isDefaultPagesHostname(hostname)) {
-		return options.projectName;
+		return derivePublishPagesProjectName(options.publishBaseUrl ?? "");
 	}
 
 	const cached = resolvedWranglerPagesProjectNameByHostname.get(hostname);
@@ -293,8 +296,7 @@ async function resolveWranglerPagesDeployProjectName(
 			return projectName;
 		}
 	} catch {
-		// Fall back to the configured project name so the deploy path can surface
-		// Wrangler's normal authentication or project-not-found message.
+		// No verified target is available; the caller must stop before uploading.
 	}
 
 	return options.projectName;
@@ -336,6 +338,16 @@ export function runWranglerPagesDeploy(
 		void (async () => {
 			const env = await resolveWranglerExecutionEnv(modules, options.env);
 			const projectName = await resolveWranglerPagesDeployProjectName(modules, options, env);
+			if (!projectName) {
+				resolve({
+					ok: false,
+					projectName: "",
+					notice: "Unable to resolve the publishing target. Set the Cloudflare Pages project in Aside settings and check Wrangler authentication.",
+					stdout: "",
+					stderr: "",
+				});
+				return;
+			}
 			const command = buildWranglerPagesDeployCommand({
 				...options,
 				projectName,

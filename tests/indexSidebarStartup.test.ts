@@ -295,6 +295,7 @@ test("closing during load suppresses the old render without cancelling a reopene
     const h = createStartupHarness();
     Object.assign(h.view, {
         searchNavigation: new SidebarSearchNavigation(),
+        anchorPreviews: { dispose() {} },
         containerEl: { ownerDocument: { removeEventListener() {} }, removeEventListener() {} },
         interactionController: { cancelPendingRevealedCommentSelectionClear() {} },
         clearNoteSidebarSearchDebounceTimer() {},

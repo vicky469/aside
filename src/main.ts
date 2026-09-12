@@ -1079,10 +1079,7 @@ export default class Aside extends Plugin {
     }
 
     public async setPublishEnabled(enabled: boolean): Promise<void> {
-        await this.indexNoteSettingsController.setPublishEnabled(
-            enabled,
-            this.app.vault.getName(),
-        );
+        await this.indexNoteSettingsController.setPublishEnabled(enabled);
         await this.syncPublicFilePublishActions();
     }
 

@@ -105,7 +105,7 @@ test("main delegates Publishing initialization as one controller transition", ()
 
     assert.match(
         methodSource,
-        /await this\.indexNoteSettingsController\.setPublishEnabled\(\s*enabled,\s*this\.app\.vault\.getName\(\),?\s*\);/,
+        /await this\.indexNoteSettingsController\.setPublishEnabled\(enabled\);/,
     );
     assert.doesNotMatch(methodSource, /this\.setPublishPagesProjectName\(/);
     assert.doesNotMatch(methodSource, /this\.setPublishBaseUrl\(/);

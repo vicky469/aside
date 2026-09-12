@@ -742,7 +742,7 @@ test("public html publish controller reports a publish action for unpublished ht
 	});
 });
 
-test("public html publish controller exposes only publish while unpublished", async () => {
+test("public html publish controller exposes publish and the destination link while unpublished", async () => {
 	const harness = createHarness();
 
 	assert.deepEqual(await harness.controller.getHtmlFileActionStates("public/page.html"), [{
@@ -750,6 +750,12 @@ test("public html publish controller exposes only publish while unpublished", as
 		label: "Publish HTML",
 		icon: "upload-cloud",
 		disabled: false,
+	}, {
+		kind: "open-published",
+		label: "Open published HTML",
+		icon: "external-link",
+		disabled: false,
+		url: "https://publish.example.com/public/page",
 	}]);
 });
 
@@ -1139,7 +1145,7 @@ for (const [path, url, label] of [
 	["public/report.pdf", "https://publish.example.com/public/report.pdf", "PDF"],
 	["public/note.md", "https://publish.example.com/public/note", "Markdown"],
 ]) {
-	test(`synced inventory restores the ${label} open link without enabling deployment`, async () => {
+	test(`synced inventory restores all ${label} publication actions without mutating deployment state`, async () => {
 		const harness = createHarness({
 			files: {
 				[path]: "Document",
@@ -1150,7 +1156,7 @@ for (const [path, url, label] of [
 		assert.deepEqual(states.find((state) => state.kind === "open-published"), {
 			kind: "open-published", label: `Open published ${label}`, icon: "external-link", disabled: false, url,
 		});
-		assert.equal(states.some((state) => state.kind === "update-publish" || state.kind === "unpublish"), false);
+		assert.deepEqual(states.map((state) => state.kind), ["unpublish", "update-publish", "open-published"]);
 		assert.deepEqual(harness.getPublishedArtifactPaths(), []);
 		assert.deepEqual(harness.deployCalls, []);
 		assert.deepEqual(harness.writes, []);
@@ -1167,7 +1173,7 @@ test("inventory refresh retains synced publication evidence and honors explicit 
 	await harness.controller.refreshPublicPublishIndex([{
 		path: "project/index.html", publishedUrl: null, status: "unpublished", lastPublishedAt: null,
 	}]);
-	assert.equal((await harness.controller.getFileActionStates("public/project/index.html")).some((s) => s.kind === "open-published"), false);
+	assert.deepEqual((await harness.controller.getFileActionStates("public/project/index.html")).map((s) => s.kind), ["publish", "open-published"]);
 	assert.deepEqual(harness.getPublishedArtifactPaths(), []);
 	assert.deepEqual(harness.deployCalls, []);
 });
@@ -1183,7 +1189,11 @@ for (const [status, url] of [
 			"public/page.html": "Document",
 			"public/index.md": `| path | published_url | status | last_published_at |\n| --- | --- | --- | --- |\n| page.html | ${url} | ${status} | |\n`,
 		} });
-		assert.equal((await harness.controller.getFileActionStates("public/page.html")).some((s) => s.kind === "open-published"), false);
+		const actions = await harness.controller.getFileActionStates("public/page.html");
+		assert.deepEqual(actions.map((s) => s.kind), ["publish", "open-published"]);
+		const open = actions.find((s) => s.kind === "open-published");
+		assert.ok(open && !open.disabled);
+		assert.equal(open.url, "https://publish.example.com/public/page");
 	});
 }
 
@@ -1198,3 +1208,46 @@ test("inventory open link retains the published custom domain after settings cha
 	assert.deepEqual(harness.deployCalls, []);
 	assert.deepEqual(harness.getPublishedArtifactPaths(), []);
 });
+
+for (const filePath of ["public/page.html", "public/note.md", "public/report.pdf"]) {
+	test(`failed republish leaves synced publication metadata unchanged: ${filePath}`, async () => {
+		const publicPath = filePath.replace(/\.md$/u, ".html").replace(/\.html$/u, "");
+		const harness = createHarness({
+			files: {
+				"public/page.html": "<html><body>Example</body></html>",
+				"public/note.md": "# Note",
+				"public/index.md": `| path | published_url | status | last_published_at |\n| --- | --- | --- | --- |\n| ${filePath.slice(7)} | https://publish.example.com/${publicPath} | published | ${fixedPublishedAt} |\n`,
+			},
+			binaryFiles: { "public/report.pdf": "PDF bytes" },
+			deployResult: { ok: false, notice: "Deployment failed" },
+		});
+		assert.equal((await harness.controller.updatePublishedFile(filePath)).ok, false);
+		assert.deepEqual(harness.getPublishedArtifactPaths(), []);
+		assert.deepEqual(harness.writes, []);
+	});
+	for (const action of ["republish", "unpublish"] as const) {
+		test(`explicit ${action} works for a synced publication: ${filePath}`, async () => {
+			const artifactPath = filePath.replace(/\.md$/u, ".html");
+			const publicPath = artifactPath.replace(/\.html$/u, "");
+			const harness = createHarness({
+				files: {
+					"public/page.html": "<html><body>Latest example</body></html>",
+					"public/note.md": "# Latest note",
+					"public/retained.html": "<html><body>Retained</body></html>",
+					"public/index.md": `| path | published_url | status | last_published_at |\n| --- | --- | --- | --- |\n| ${filePath.slice(7)} | https://publish.example.com/${publicPath} | published | ${fixedPublishedAt} |\n`,
+				},
+				binaryFiles: { "public/report.pdf": "PDF bytes" },
+				publishedArtifactPaths: ["public/retained.html"],
+			});
+			const result = action === "republish"
+				? await harness.controller.updatePublishedFile(filePath)
+				: await harness.controller.unpublishFile(filePath);
+			assert.equal(result.ok, true, JSON.stringify(result));
+			const deployed = harness.deployCalls.at(-1)?.map((file) => file.vaultRelativePath) ?? [];
+			assert.equal(deployed.includes("public/retained.html"), true);
+			assert.equal(deployed.includes(artifactPath), action === "republish");
+			assert.deepEqual((await harness.controller.getFileActionStates(filePath)).map((state) => state.kind),
+				action === "republish" ? ["unpublish", "update-publish", "open-published"] : ["publish", "open-published"]);
+		});
+	}
+}

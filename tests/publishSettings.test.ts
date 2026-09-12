@@ -75,7 +75,7 @@ test("normalizePublishSettings preserves configured Pages project for custom dom
 test("normalizePublishSettings derives Pages project from pages.dev publishing URL", () => {
 	const normalized = normalizePublishSettings({
 		publishEnabled: true,
-		publishPagesProjectName: "stale-project",
+		publishPagesProjectName: "",
 		publishBaseUrl: " https://lean-startup.pages.dev/ ",
 		publishAllowedRoot: "public/",
 	} as Parameters<typeof normalizePublishSettings>[0]);
@@ -148,4 +148,25 @@ test("validatePublishSettings rejects incomplete or unsafe publish settings", ()
 		ok: false,
 		notice: "Publish settings are invalid: Publish base URL must be an https:// origin with no path, query, or fragment.",
 	});
+});
+
+
+test("configured project survives normalization and conflicting Pages URLs block publishing", () => {
+    const settings = normalizePublishSettings({publishEnabled: true, publishPagesProjectName: "configured-project", publishBaseUrl: "https://other-project.pages.dev"});
+    assert.equal(settings.publishPagesProjectName, "configured-project");
+    const result = validatePublishSettings(settings);
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.match(result.notice, /project.*match/i);
+});
+
+test("custom domains do not invent project names", () => {
+    assert.equal(normalizePublishSettings({publishBaseUrl: "https://publish.example.com"}).publishPagesProjectName, "");
+});
+
+
+test("enabled publishing without a target requests configuration", () => {
+    assert.deepEqual(validatePublishSettings(normalizePublishSettings({ publishEnabled: true })), {
+        ok: false,
+        notice: "Set a Cloudflare Pages project or publishing URL in Aside settings first.",
+    });
 });

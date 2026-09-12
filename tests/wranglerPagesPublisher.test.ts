@@ -222,7 +222,7 @@ test("runWranglerPagesDeploy resolves custom-domain Pages projects before deploy
 
 	const result = await runWranglerPagesDeploy(modules, {
 		stagingDirPath: "/tmp/stage",
-		projectName: "publish-fdechina-com",
+		projectName: "",
 		publishBaseUrl: "https://publish.fdechina.com",
 		cwd: "/Users/test/vault",
 		env: {
@@ -256,4 +256,31 @@ test("summarizeWranglerFailure maps setup failures to concise user guidance", ()
 		summarizeWranglerFailure(new Error("exit 1"), "", "Project not found: publish-site"),
 		"Cloudflare Pages target was not found. Check your Cloudflare Pages project configuration.",
 	);
+});
+
+
+test("configured publishing project takes precedence over domain discovery", async () => {
+    resetResolvedWranglerExecutionEnvForTests();
+    const calls: string[][] = [];
+    const modules: WranglerRuntimeModules = { childProcess: { execFile(_file, args, _options, callback) {
+        calls.push(args);
+        callback(null, JSON.stringify([{name: "other-project", domains: ["publish.example.com"]}]), "");
+        return createTrackedProcessStub();
+    } } };
+    const result = await runWranglerPagesDeploy(modules, {stagingDirPath: "/tmp/stage", projectName: "configured-project", publishBaseUrl: "https://publish.example.com"});
+    assert.equal(result.ok, true);
+    assert.deepEqual(calls.filter(args => args[0] === "pages"), [["pages", "deploy", "/tmp/stage", "--project-name", "configured-project"]]);
+});
+
+test("unresolved publishing targets fail before upload", async () => {
+    resetResolvedWranglerExecutionEnvForTests();
+    const calls: string[][] = [];
+    const modules: WranglerRuntimeModules = { childProcess: { execFile(_file, args, _options, callback) {
+        calls.push(args);
+        callback(null, "[]", "");
+        return createTrackedProcessStub();
+    } } };
+    const result = await runWranglerPagesDeploy(modules, {stagingDirPath: "/tmp/stage", projectName: "", publishBaseUrl: "https://unconfigured.example.com"});
+    assert.equal(result.ok, false);
+    assert.equal(calls.some(args => args[1] === "deploy"), false);
 });

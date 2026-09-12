@@ -1860,6 +1860,7 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
 
 .aside-comment-meta-value {
     grid-column: 2;
+    grid-row: 1;
     justify-self: end;
     font-size: 0.9em;
     white-space: nowrap;
@@ -1875,11 +1876,45 @@ button.aside-toolbar-icon-button[aria-disabled="true"] {
     display: -webkit-box;
     overflow: clip;
     -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
+    -webkit-line-clamp: 6;
+    line-clamp: 6;
     white-space: normal;
     line-height: 1.25;
     overflow-wrap: anywhere;
+}
+
+.aside-comment-meta-preview.is-expanded {
+    display: block;
+    -webkit-line-clamp: unset;
+    line-clamp: unset;
+    max-height: 22.5em;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+.aside-comment-meta .aside-anchor-preview-toggle {
+    grid-column: 1;
+    justify-self: start;
+    height: auto;
+    min-height: 0;
+    margin-top: 3px;
+    padding: 0;
+    border: none;
+    box-shadow: none;
+    background: none;
+    color: var(--text-muted);
+    font: inherit;
+    font-size: var(--font-smallest);
+    cursor: pointer;
+}
+
+.aside-comment-meta .aside-anchor-preview-toggle:hover {
+    color: var(--text-normal);
+    text-decoration: underline;
+}
+
+.aside-comment-meta .aside-anchor-preview-toggle[hidden] {
+    display: none;
 }
 
 .aside-comment-content {

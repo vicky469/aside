@@ -178,64 +178,66 @@ export class PublicHtmlPublishController {
 			return [this.disabledAction(PUBLIC_PUBLISH_INDEX_OWNER_ONLY_NOTICE, "Markdown")];
 		}
 		if (isMarkdownPath(normalizedPath)) {
-			return this.withInventoryOpenAction(normalizedPath, "Markdown", await this.getMarkdownFileActionStates(normalizedPath));
+			return this.withInventoryPublicationActions(normalizedPath, "Markdown", await this.getMarkdownFileActionStates(normalizedPath));
 		}
 		if (isHtmlPath(normalizedPath)) {
-			return this.withInventoryOpenAction(normalizedPath, "HTML", await this.getHtmlFileActionStates(normalizedPath, "HTML"));
+			return this.withInventoryPublicationActions(normalizedPath, "HTML", await this.getHtmlFileActionStates(normalizedPath, "HTML"));
 		}
 		if (isPdfPath(normalizedPath)) {
-			return this.withInventoryOpenAction(normalizedPath, "PDF", await this.getArtifactFileActionStates(normalizedPath));
+			return this.withInventoryPublicationActions(normalizedPath, "PDF", await this.getArtifactFileActionStates(normalizedPath));
 		}
 		return [this.disabledAction("Publish supports Markdown, HTML, and PDF files in this version.")];
 	}
 
-	private async withInventoryOpenAction(
+	private async withInventoryPublicationActions(
 		filePath: string,
 		artifact: PublishArtifactContext,
 		states: PublicHtmlPublishActionState[],
 	): Promise<PublicHtmlPublishActionState[]> {
-		if (!states.some((state) => state.kind === "publish") || states.some((state) => state.kind === "open-published")) {
+		if (!states.some((state) => state.kind === "publish")) {
 			return states;
 		}
+		const url = await this.readInventoryPublishedUrl(filePath);
+		if (!url) return states;
+		// Reading inventory restores the UI, without enrolling files in a deployment.
+		return this.publishedActionStates(
+			this.host.getSettings(),
+			isMarkdownPath(filePath) ? buildPublishedMarkdownArtifactPath(filePath) : filePath,
+			artifact,
+		).map((state) => state.kind === "open-published" ? { ...state, url } : state);
+	}
+
+	private async readInventoryPublishedUrl(filePath: string): Promise<string | null> {
 		const settings = this.host.getSettings();
 		const root = normalizePublishAllowedRoot(settings.publishAllowedRoot);
-		if (!filePath.startsWith(root)) return states;
+		if (!filePath.startsWith(root)) return null;
 		const indexPath = buildPublicPublishIndexPath(root);
 		let entries: PublicPublishIndexEntry[];
 		try {
-			if (!(await this.host.fileExists(indexPath))) return states;
+			if (!(await this.host.fileExists(indexPath))) return null;
 			entries = readPublicPublishIndexEntries(await this.host.readVaultFileFresh(indexPath));
 		} catch {
 			// An unavailable inventory must not prevent normal publish actions.
-			return states;
+			return null;
 		}
 		const expectedUrl = buildPublishPublicUrl({
 			baseUrl: settings.publishBaseUrl,
 			vaultRelativePath: isMarkdownPath(filePath) ? buildPublishedMarkdownArtifactPath(filePath) : filePath,
 		});
 		const entry = entries.find((entry) => entry.path === filePath.slice(root.length));
-		if (entry?.status !== "published" || !entry.publishedUrl) return states;
-		let url: string;
+		if (entry?.status !== "published" || !entry.publishedUrl) return null;
 		try {
 			const published = new URL(entry.publishedUrl);
 			if (published.protocol !== "https:" || published.username || published.password
 				|| published.search || published.hash || published.pathname !== new URL(expectedUrl).pathname) {
-				return states;
+				return null;
 			}
 			// A historical publication may use a custom domain that differs
 			// from this device's current deployment settings.
-			url = published.href;
+			return published.href;
 		} catch {
-			return states;
+			return null;
 		}
-		// Inventory records are evidence for navigation, not deployment consent.
-		return [...states, {
-			kind: "open-published",
-			label: this.publishActionLabel("open-published", artifact),
-			icon: "external-link",
-			disabled: false,
-			url,
-		}];
 	}
 
 	public async getHtmlFileActionState(htmlPath: string): Promise<PublicHtmlPublishActionState> {
@@ -270,12 +272,7 @@ export class PublicHtmlPublishController {
 					return this.publishedActionStates(settings, pair.htmlPath, artifactContext);
 				}
 
-				return [{
-					kind: "publish",
-					label: this.publishActionLabel("publish", artifactContext),
-					icon: "upload-cloud",
-					disabled: false,
-				}];
+				return this.unpublishedActionStates(settings, pair.htmlPath, artifactContext);
 			}
 		}
 
@@ -283,12 +280,7 @@ export class PublicHtmlPublishController {
 			return this.publishedActionStates(settings, pair.htmlPath, artifactContext);
 		}
 
-		return [{
-			kind: "publish",
-			label: this.publishActionLabel("publish", artifactContext),
-			icon: "upload-cloud",
-			disabled: false,
-		}];
+		return this.unpublishedActionStates(settings, pair.htmlPath, artifactContext);
 	}
 
 	public async publishHtmlFile(htmlPath: string, options: PublishHtmlFileOptions = {}): Promise<PublicHtmlPublishResult> {
@@ -414,12 +406,7 @@ export class PublicHtmlPublishController {
 			return this.publishedActionStates(settings, buildPublishedMarkdownArtifactPath(sourcePath), "Markdown");
 		}
 
-		return [{
-			kind: "publish",
-			label: this.publishActionLabel("publish", "Markdown"),
-			icon: "upload-cloud",
-			disabled: false,
-		}];
+		return this.unpublishedActionStates(settings, buildPublishedMarkdownArtifactPath(sourcePath), "Markdown");
 	}
 
 	private async getArtifactFileActionStates(artifactPath: string): Promise<PublicHtmlPublishActionState[]> {
@@ -442,12 +429,7 @@ export class PublicHtmlPublishController {
 			return this.publishedActionStates(settings, artifact.artifactPath, "PDF");
 		}
 
-		return [{
-			kind: "publish",
-			label: "Publish PDF",
-			icon: "upload-cloud",
-			disabled: false,
-		}];
+		return this.unpublishedActionStates(settings, artifact.artifactPath, "PDF");
 	}
 
 	public async publishFile(filePath: string): Promise<PublicHtmlPublishResult> {
@@ -562,7 +544,7 @@ export class PublicHtmlPublishController {
 			const sourceContents = await this.host.readVaultFile(pair.sourcePath);
 			const sourceFrontmatter = readAsidePublishFrontmatter(sourceContents);
 			if (this.sourceOwnsHtmlPath(settings, pair.sourcePath, sourceFrontmatter, pair.htmlPath)) {
-				if (!sourceFrontmatter.htmlEnabled) {
+				if (!sourceFrontmatter.htmlEnabled && !(await this.readInventoryPublishedUrl(htmlPath))) {
 					return {
 						ok: false,
 						notice: "Publish this HTML file before unpublishing it.",
@@ -599,7 +581,7 @@ export class PublicHtmlPublishController {
 		htmlPath: string,
 	): Promise<PublicHtmlPublishResult> {
 		const publishedArtifactPaths = this.getNormalizedPublishedArtifactPaths(settings);
-		if (!publishedArtifactPaths.includes(htmlPath)) {
+		if (!publishedArtifactPaths.includes(htmlPath) && !(await this.readInventoryPublishedUrl(htmlPath))) {
 			return {
 				ok: false,
 				notice: "Publish this HTML file before unpublishing it.",
@@ -636,7 +618,7 @@ export class PublicHtmlPublishController {
 
 		const sourceContents = await this.host.readVaultFile(sourcePath);
 		const sourceFrontmatter = readAsidePublishFrontmatter(sourceContents);
-		if (!sourceFrontmatter.markdownEnabled) {
+		if (!sourceFrontmatter.markdownEnabled && !(await this.readInventoryPublishedUrl(sourcePath))) {
 			return {
 				ok: false,
 				notice: "Publish this Markdown file before unpublishing it.",
@@ -728,7 +710,7 @@ export class PublicHtmlPublishController {
 			const sourceContents = await this.host.readVaultFile(pair.sourcePath);
 			const sourceFrontmatter = readAsidePublishFrontmatter(sourceContents);
 			if (this.sourceOwnsHtmlPath(settings, pair.sourcePath, sourceFrontmatter, pair.htmlPath)) {
-				if (!sourceFrontmatter.htmlEnabled) {
+				if (!sourceFrontmatter.htmlEnabled && !(await this.readInventoryPublishedUrl(htmlPath))) {
 					return {
 						ok: false,
 						notice: "Publish this HTML file before updating it.",
@@ -751,6 +733,9 @@ export class PublicHtmlPublishController {
 				}
 				await this.host.setPublishedArtifactPaths(nextArtifactPaths);
 
+				if (!sourceFrontmatter.htmlEnabled) {
+					await this.host.writeVaultFile(pair.sourcePath, writeAsidePublishFrontmatter(sourceContents, nextFrontmatter));
+				}
 				return this.buildCachePurgeResult(settings, pair.htmlPath, pair.sourcePath, "republish");
 			}
 		}
@@ -763,7 +748,7 @@ export class PublicHtmlPublishController {
 		htmlPath: string,
 	): Promise<PublicHtmlPublishResult> {
 		const publishedArtifactPaths = this.getNormalizedPublishedArtifactPaths(settings);
-		if (!publishedArtifactPaths.includes(htmlPath)) {
+		if (!publishedArtifactPaths.includes(htmlPath) && !(await this.readInventoryPublishedUrl(htmlPath))) {
 			return {
 				ok: false,
 				notice: "Publish this HTML file before updating it.",
@@ -777,11 +762,15 @@ export class PublicHtmlPublishController {
 			};
 		}
 
+		const nextArtifactPaths = this.getNormalizedPublishedArtifactPaths(settings, { includeArtifactPath: htmlPath });
 		const deployResult = await this.deployEnabledSnapshot(settings, {
-			artifactPaths: publishedArtifactPaths,
+			artifactPaths: nextArtifactPaths,
 		});
 		if (!deployResult.ok) {
 			return deployResult;
+		}
+		if (!publishedArtifactPaths.includes(htmlPath)) {
+			await this.host.setPublishedArtifactPaths(nextArtifactPaths);
 		}
 
 		return this.buildCachePurgeResult(settings, htmlPath, htmlPath, "republish");
@@ -803,18 +792,22 @@ export class PublicHtmlPublishController {
 
 		const sourceContents = await this.host.readVaultFile(sourcePath);
 		const sourceFrontmatter = readAsidePublishFrontmatter(sourceContents);
-		if (!sourceFrontmatter.markdownEnabled) {
+		if (!sourceFrontmatter.markdownEnabled && !(await this.readInventoryPublishedUrl(sourcePath))) {
 			return {
 				ok: false,
 				notice: "Publish this Markdown file before updating it.",
 			};
 		}
 
+		const nextFrontmatter = buildHtmlPublishFrontmatter(sourceFrontmatter, { markdownEnabled: true });
 		const deployResult = await this.deployEnabledSnapshot(settings, {
-			frontmatterBySourcePath: new Map([[sourcePath, sourceFrontmatter]]),
+			frontmatterBySourcePath: new Map([[sourcePath, nextFrontmatter]]),
 		});
 		if (!deployResult.ok) {
 			return deployResult;
+		}
+		if (!sourceFrontmatter.markdownEnabled) {
+			await this.host.writeVaultFile(sourcePath, writeAsidePublishFrontmatter(sourceContents, nextFrontmatter));
 		}
 
 		return this.buildCachePurgeResult(
@@ -970,7 +963,7 @@ export class PublicHtmlPublishController {
 			return artifact;
 		}
 		const publishedArtifactPaths = this.getNormalizedPublishedArtifactPaths(settings);
-		if (!publishedArtifactPaths.includes(artifact.artifactPath)) {
+		if (!publishedArtifactPaths.includes(artifact.artifactPath) && !(await this.readInventoryPublishedUrl(artifactPath))) {
 			return {
 				ok: false,
 				notice: "Publish this PDF before updating it.",
@@ -981,11 +974,15 @@ export class PublicHtmlPublishController {
 			return availability;
 		}
 
+		const nextArtifactPaths = this.getNormalizedPublishedArtifactPaths(settings, { includeArtifactPath: artifact.artifactPath });
 		const deployResult = await this.deployEnabledSnapshot(settings, {
-			artifactPaths: publishedArtifactPaths,
+			artifactPaths: nextArtifactPaths,
 		});
 		if (!deployResult.ok) {
 			return deployResult;
+		}
+		if (!publishedArtifactPaths.includes(artifact.artifactPath)) {
+			await this.host.setPublishedArtifactPaths(nextArtifactPaths);
 		}
 
 		return this.buildCachePurgeResult(settings, artifact.artifactPath, artifact.artifactPath, "republish");
@@ -1289,6 +1286,21 @@ export class PublicHtmlPublishController {
 			disabled: false,
 			url,
 		}];
+	}
+
+	private unpublishedActionStates(
+		settings: PublishSettings,
+		vaultRelativePath: string,
+		artifact: PublishArtifactContext,
+	): PublicHtmlPublishActionState[] {
+		const openAction = this.publishedActionStates(settings, vaultRelativePath, artifact)
+			.filter((state) => state.kind === "open-published");
+		return [{
+			kind: "publish",
+			label: this.publishActionLabel("publish", artifact),
+			icon: "upload-cloud",
+			disabled: false,
+		}, ...openAction];
 	}
 
 	private publishActionLabel(kind: PublicHtmlPublishActionState["kind"], artifact: PublishArtifactContext): string {
